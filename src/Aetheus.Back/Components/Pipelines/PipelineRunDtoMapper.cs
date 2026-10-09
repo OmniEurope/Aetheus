@@ -85,6 +85,13 @@ public static class PipelineRunDtoMapper
         catch (System.Text.Json.JsonException) { return []; }
     }
 
+    /// <summary>Recette R2-103: the author or reason a cancellation recorded on the run, null when none.</summary>
+    private static string? CancellationNote(string? additionalVariablesJson, string variable) =>
+        DeserializeResolvedVariables(additionalVariablesJson).TryGetValue(variable, out var value)
+            && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : null;
+
     private static PipelineRunDto MapRunToDto(PipelineRun r, Dictionary<string, int> stageDepths) => new()
     {
         Id = r.Id,
@@ -93,6 +100,8 @@ public static class PipelineRunDtoMapper
         PipelineName = r.Pipeline?.Name ?? string.Empty,
         Status = r.Status,
         CancellationRequested = HasCancellationRequest(r.AdditionalVariablesJson),
+        CancelledBy = CancellationNote(r.AdditionalVariablesJson, PipelineRunService.CancelledByVariable),
+        CancellationReason = CancellationNote(r.AdditionalVariablesJson, PipelineRunService.CancellationReasonVariable),
         // See RunListProjection: a terminal run never reports a current wait.
         WaitingReason = IsWaitable(r.Status) ? r.WaitingReason : null,
         WaitingSince = IsWaitable(r.Status) ? r.WaitingSince : null,

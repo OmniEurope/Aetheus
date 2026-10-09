@@ -112,7 +112,9 @@ public class ReleasesController(
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Release, id, Permission.Write, ct))
             return Forbid();
-        var result = await service.TriggerReleaseBuildAsync(id, request, ct);
+        var (refusal, authorizedRun) = await AuthorizePipelineLaunchAsync(request.PipelineId, ct);
+        if (refusal is not null) return refusal;
+        var result = await service.TriggerReleaseBuildAsync(id, request, authorizedRun!, ct);
         return AcceptedAtAction(nameof(GetRelease), new { id = result.Id }, result);
     }
 
@@ -128,9 +130,9 @@ public class ReleasesController(
         // on the owning project.
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, release.ProjectId, Permission.Write, ct))
             return Forbid();
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, request.PipelineId, Permission.Write, ct))
-            return Forbid();
-        var result = await service.RollbackReleaseAsync(id, request, ct);
+        var (refusal, authorizedRun) = await AuthorizePipelineLaunchAsync(request.PipelineId, ct);
+        if (refusal is not null) return refusal;
+        var result = await service.RollbackReleaseAsync(id, request, authorizedRun!, ct);
         return AcceptedAtAction(nameof(GetRelease), new { id }, result);
     }
 
@@ -179,8 +181,10 @@ public class ReleasesController(
     public async Task<IActionResult> Webhook(CancellationToken ct)
     {
         var secret = configuration["Webhook:Secret"];
+        // R2-120: without a secret the release webhook is not enabled on this instance: 404 with the
+        // ApiError body (never 503, which reads as an outage), and nothing is read or processed.
         if (string.IsNullOrEmpty(secret))
-            return StatusCode(503, "Webhook not configured");
+            return NotFound(new ApiError { Message = "Release webhook is not enabled on this instance." });
 
         var signature = Request.Headers["X-Hub-Signature-256"].FirstOrDefault()
                      ?? Request.Headers["X-Gitlab-Token"].FirstOrDefault();
@@ -196,5 +200,26 @@ public class ReleasesController(
 
         await service.HandleWebhookAsync(payload, ct);
         return Ok();
+    }
+
+    /// <summary>
+    /// BACK-023: a release build or rollback launches a pipeline, so it needs what the direct pipeline
+    /// route needs: Pipeline.Write, then Server.Admin on every server the prepared run can reach. The
+    /// preparation authorized here is the one the service launches.
+    /// </summary>
+    private async Task<(ActionResult? Refusal, PipelineRunPreparation? Run)> AuthorizePipelineLaunchAsync(
+        int pipelineId, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId, Permission.Write, ct))
+            return (Forbid(), null);
+        var preparation = await pipelineRunService.PrepareRunAsync(pipelineId, ct: ct);
+        if (preparation is null) return (NotFound(), null);
+        var authorizedRun = await pipelineRunService.ResolveRunParametersAsync(preparation, null, ct);
+        foreach (var serverId in authorizedRun.TargetServerIds)
+        {
+            if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Admin, ct))
+                return (Forbid(), null);
+        }
+        return (null, authorizedRun);
     }
 }

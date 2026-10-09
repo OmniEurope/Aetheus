@@ -17,6 +17,10 @@ internal sealed class PipelineModel
     public int? EnvironmentId { get; set; }
     public int? ProjectServerId { get; set; }
 
+    /// <summary>The form's data-annotation rules, for the save entry points outside the form (FRONT-008).</summary>
+    public bool IsValid() =>
+        Validator.TryValidateObject(this, new ValidationContext(this), validationResults: null, validateAllProperties: true);
+
     public CreatePipelineRequest ToCreateRequest() => new()
     {
         Name = Name,

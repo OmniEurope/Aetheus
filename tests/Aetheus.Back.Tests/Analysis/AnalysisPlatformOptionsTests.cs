@@ -27,13 +27,11 @@ public sealed class AnalysisPlatformOptionsTests
     }
 
     [Theory]
-    [InlineData(0, 730, 365, 30, 24)]
-    [InlineData(30, 0, 365, 30, 24)]
-    [InlineData(30, 730, 0, 30, 24)]
-    [InlineData(30, 730, 365, 0, 24)]
-    [InlineData(30, 730, 365, 30, 0)]
+    [InlineData(0, 365, 30, 24)]
+    [InlineData(730, 0, 30, 24)]
+    [InlineData(730, 365, 0, 24)]
+    [InlineData(730, 365, 30, 0)]
     public void IsValid_RejectsUnsafeRetentionValues(
-        int rawDays,
         int findingDays,
         int sbomDays,
         int logDays,
@@ -41,7 +39,6 @@ public sealed class AnalysisPlatformOptionsTests
     {
         var options = new AnalysisPlatformOptions
         {
-            RawReportRetentionDays = rawDays,
             FindingRetentionDays = findingDays,
             SbomRetentionDays = sbomDays,
             LogRetentionDays = logDays,

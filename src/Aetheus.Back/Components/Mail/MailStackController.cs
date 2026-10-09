@@ -12,8 +12,18 @@ namespace Aetheus.Back.Components.Mail;
 public class MailStackController(
     IMailOperationsService operations,
     IMailDiagnosticsService diagnostics,
+    IMailStackPurgeService purge,
     IResourceAuthorizationService authz) : ControllerBase
 {
+    /// <summary>"Réinstaller la messagerie": erases the whole mail stack. Same permission as the setup
+    /// (server Write); the body types back the mail domain or host name.</summary>
+    [HttpPost("purge")]
+    public async Task<ActionResult<MailTaskQueuedDto>> Purge(int serverId, [FromBody] MailPurgeRequest request, CancellationToken ct)
+    {
+        if (!await CanAsync(serverId, Permission.Write, ct)) return Forbid();
+        return Ok(await purge.PurgeAsync(serverId, request, ct));
+    }
+
     [HttpGet("certificate")]
     public async Task<ActionResult<MailCertificateDto>> GetCertificate(int serverId, CancellationToken ct)
     {
@@ -124,6 +134,22 @@ public class MailStackController(
     {
         if (!await CanAsync(serverId, Permission.Read, ct)) return Forbid();
         return Ok(await diagnostics.PreviewMxAsync(domain, ct));
+    }
+
+    /// <summary>Recette R2-080: A record and reverse DNS of the host name the setup assistant proposes.</summary>
+    [HttpGet("prerequisites")]
+    public async Task<ActionResult<MailDiagnosticsDto>> CheckPrerequisites(int serverId, [FromQuery] string hostname, CancellationToken ct)
+    {
+        if (!await CanAsync(serverId, Permission.Read, ct)) return Forbid();
+        return Ok(await diagnostics.CheckPrerequisitesAsync(serverId, hostname, ct));
+    }
+
+    /// <summary>Recette R2-080: queues the outbound port 25 check; same permission as the setup it precedes.</summary>
+    [HttpPost("prerequisites/outbound-smtp")]
+    public async Task<ActionResult<MailTaskQueuedDto>> ProbeOutboundSmtp(int serverId, CancellationToken ct)
+    {
+        if (!await CanAsync(serverId, Permission.Write, ct)) return Forbid();
+        return Ok(await operations.ProbeOutboundSmtpAsync(serverId, ct));
     }
 
     private Task<bool> CanAsync(int serverId, Permission permission, CancellationToken ct) =>

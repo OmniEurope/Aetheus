@@ -254,6 +254,7 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
     public Task<ApiPerformanceReportDto?> GetApiPerformanceAsync(CancellationToken ct = default) =>
         Http.GetFromJsonAsync<ApiPerformanceReportDto>("api/admin/performance", JsonOptions.Web, ct);
 
+
     public async Task<List<SystemLogFileDto>> GetSystemLogFilesAsync()
     {
         return await Http.GetFromJsonAsync<List<SystemLogFileDto>>("api/system-logs/files", JsonOptions.Web) ?? [];
@@ -284,16 +285,6 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
     public async Task<byte[]?> DownloadSystemLogFileAsync(string fileName, CancellationToken ct = default)
     {
         var response = await Http.GetAsync($"api/system-logs/download/{Uri.EscapeDataString(fileName)}", ct);
-        if (!response.IsSuccessStatusCode) return null;
-        return await response.Content.ReadAsByteArrayAsync();
-    }
-
-
-    public async Task<byte[]?> ExportSystemLogsCsvAsync(
-        string? fileName, string? level, string? search, DateTime? dateFrom, DateTime? dateTo, CancellationToken ct = default)
-    {
-        var query = BuildSystemLogFilters(fileName, level, search, dateFrom, dateTo);
-        var response = await Http.GetAsync(QueryHelpers.AddQueryString("api/system-logs/export", query), ct);
         if (!response.IsSuccessStatusCode) return null;
         return await response.Content.ReadAsByteArrayAsync();
     }

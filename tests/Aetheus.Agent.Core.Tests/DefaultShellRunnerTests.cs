@@ -86,6 +86,29 @@ public sealed class DefaultShellRunnerTests
         }
     }
 
+    /// <summary>
+    /// The positive control of the test above: the same witness, left to run, does write its marker.
+    /// Without it a witness that can never write (a quoting slip once made the POSIX one target a
+    /// file named after a literal quote) would let the survival assertion pass whatever happens.
+    /// </summary>
+    [Fact]
+    public async Task DescendantWitness_LeftToRun_WritesItsMarker()
+    {
+        var marker = Path.Combine(Path.GetTempPath(), $"aetheus-descendant-{Guid.NewGuid():N}.marker");
+        var (file, args) = DescendantMarkerCommand(marker);
+        try
+        {
+            var result = await _runner.RunExecAsync(file, args, TestContext.Current.CancellationToken, TimeSpan.FromSeconds(60));
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Equal("child-survived", (await File.ReadAllTextAsync(marker, TestContext.Current.CancellationToken)).Trim());
+        }
+        finally
+        {
+            File.Delete(marker);
+        }
+    }
+
     [Fact]
     public async Task RunAsync_Timeout_CancelsAndTerminatesShellTree()
     {
@@ -129,13 +152,17 @@ public sealed class DefaultShellRunnerTests
     {
         if (OperatingSystem.IsWindows())
         {
+            // Encoded, so no quote crosses the cmd -> powershell boundary: a quoted -Command reached
+            // PowerShell as a string literal, which it printed instead of running, and the marker
+            // was never written.
             var windowsMarker = marker.Replace("'", "''", StringComparison.Ordinal);
-            var child = "powershell.exe -NoLogo -NoProfile -NonInteractive -Command " +
-                $"\"Start-Sleep -Milliseconds 500; [IO.File]::WriteAllText('{windowsMarker}', 'child-survived')\"";
+            var script = $"Start-Sleep -Milliseconds 500; [IO.File]::WriteAllText('{windowsMarker}', 'child-survived')";
+            var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+            var child = $"powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {encoded}";
             return ("cmd.exe", ["/d", "/s", "/c", child]);
         }
 
         var escapedMarker = marker.Replace("'", "'\\''", StringComparison.Ordinal);
-        return ("/bin/sh", ["-c", $"/bin/sh -c 'sleep 0.5; printf child-survived > \\\"{escapedMarker}\\\"' & wait"]);
+        return ("/bin/sh", ["-c", $"/bin/sh -c 'sleep 0.5; printf child-survived > \"{escapedMarker}\"' & wait"]);
     }
 }

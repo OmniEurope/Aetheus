@@ -1012,6 +1012,8 @@ public sealed class AiTaskServiceTests
         definition.Triggers = [trigger];
         _repo.GetDefinitionsForEventAsync(
                 "server.alert",
+                null,
+                9,
                 Arg.Any<CancellationToken>())
             .Returns([definition]);
         _repo.FindDefinitionAsync(definition.Id, Arg.Any<CancellationToken>())
@@ -1024,11 +1026,39 @@ public sealed class AiTaskServiceTests
 
         await _sut.DispatchEventAsync(
             "server.alert",
-            new { severity = "high" },
+            new { severity = "high", ServerId = 9 },
             TestContext.Current.CancellationToken);
 
         Assert.Equal(_time.GetUtcNow().UtcDateTime, trigger.LastTriggeredAt);
         await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DispatchEventAsync_SelectsDefinitionsByTheEventOwner()
+    {
+        _repo.GetDefinitionsForEventAsync(
+                Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        await _sut.DispatchEventAsync(
+            "alert.triggered",
+            new { RuleName = "cpu", ServerId = 41, Threshold = 90 },
+            TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).GetDefinitionsForEventAsync(
+            "alert.triggered", null, 41, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DispatchEventAsync_EventWithoutOwner_StartsNothing()
+    {
+        await _sut.DispatchEventAsync(
+            "SecretExpiring",
+            new { SecretId = 3, DaysRemaining = 2 },
+            TestContext.Current.CancellationToken);
+
+        await _repo.DidNotReceiveWithAnyArgs().GetDefinitionsForEventAsync(default!, default, default, TestContext.Current.CancellationToken);
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1054,6 +1084,8 @@ public sealed class AiTaskServiceTests
         saturated.Triggers = [new AiTaskTrigger { EventType = "server.alert" }];
         _repo.GetDefinitionsForEventAsync(
                 "server.alert",
+                null,
+                9,
                 Arg.Any<CancellationToken>())
             .Returns([cooling, saturated]);
         _repo.FindDefinitionAsync(saturated.Id, Arg.Any<CancellationToken>())
@@ -1064,7 +1096,7 @@ public sealed class AiTaskServiceTests
 
         await _sut.DispatchEventAsync(
             "server.alert",
-            new { severity = "high" },
+            new { severity = "high", ServerId = 9 },
             TestContext.Current.CancellationToken);
 
         await _repo.DidNotReceive().AddTaskAsync(

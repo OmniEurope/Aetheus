@@ -228,7 +228,7 @@ public class PipelineDeploymentGradeGateTests
                 .Returns(new PipelineRun { Id = RunId, PipelineId = pipeline.Id, Pipeline = pipeline, Status = PipelineStatus.Running });
             Repo.GetPipelineProjectIdAsync(Arg.Any<Pipeline>(), Arg.Any<CancellationToken>()).Returns(ProjectId);
             Repo.FindDeploymentGateReleaseAsync(ProjectId, Candidate, Arg.Any<CancellationToken>()).Returns(release);
-            Repo.FindEnvironmentByNameAsync("prod", Arg.Any<CancellationToken>())
+            Repo.FindEnvironmentByNameAsync("prod", Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(new Aetheus.Back.Data.Entities.Environment
                 {
                     Id = ProdEnvironmentId,
@@ -251,7 +251,7 @@ public class PipelineDeploymentGradeGateTests
                 });
 
             var environmentChecks = Substitute.For<IPipelineEnvironmentCheckGuard>();
-            environmentChecks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>())
+            environmentChecks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(true);
             var servers = Substitute.For<IPipelineDispatchServerResolver>();
             servers.ResolveEffectiveStageTarget(Arg.Any<PipelineStageDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>())

@@ -53,27 +53,6 @@ public class ServerMailSectionTests : BunitContext
     // --- Rendering tests ---
 
     [Fact]
-    public void Renders_InstalledState_ShowsStatusBadges()
-    {
-        var cut = RenderSection();
-
-        var markup = cut.Markup;
-        Assert.Contains("Postfix", markup);
-        Assert.Contains("Dovecot", markup);
-        Assert.Contains("Installed", markup);
-    }
-
-    [Fact]
-    public void Renders_NotInstalled_ShowsSetupButton()
-    {
-        var cut = RenderSection(MakeNotInstalledServer());
-
-        var markup = cut.Markup;
-        Assert.Contains("MailSetup", markup);
-        Assert.DoesNotContain("MailDomains", markup);
-    }
-
-    [Fact]
     public void Renders_Installed_ShowsTabsAndDomainGrid()
     {
         var cut = RenderSection();
@@ -96,24 +75,6 @@ public class ServerMailSectionTests : BunitContext
             Assert.Contains("example.com", markup);
             Assert.Contains("test.org", markup);
         });
-    }
-
-    [Fact]
-    public void Renders_VersionInfo_WhenInstalled()
-    {
-        var cut = RenderSection();
-
-        var markup = cut.Markup;
-        Assert.Contains("3.5.6", markup);
-        Assert.Contains("2.3.19", markup);
-    }
-
-    [Fact]
-    public void Renders_QueueCount()
-    {
-        var cut = RenderSection();
-
-        Assert.Contains("3", cut.Markup);
     }
 
     // --- State manipulation via reflection ---
@@ -173,19 +134,6 @@ public class ServerMailSectionTests : BunitContext
     }
 
     [Fact]
-    public async Task ExecuteActionAsync_Success_Shows_TaskQueued()
-    {
-        _handler.SetJsonResponse("api/servers/10/mail/action", true);
-        var cut = RenderSection();
-
-        var method = typeof(ServerMailSection).GetMethod("ExecuteActionAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await (Task)method.Invoke(cut.Instance, [MailAction.RestartPostfix])!;
-
-        var runningField = typeof(ServerMailSection).GetField("_actionRunning", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        Assert.False((bool)runningField.GetValue(cut.Instance)!);
-    }
-
-    [Fact]
     public async Task ShowDnsRecordsAsync_SetsDnsRecordsAndShowsDialog()
     {
         var dns = new MailDnsRecordsDto
@@ -208,5 +156,46 @@ public class ServerMailSectionTests : BunitContext
         Assert.Equal(typeof(MailOperationDialog), dialog.LastComponent);
         Assert.Equal(MailDialogMode.DnsRecords, dialog.LastParameters!["Mode"]);
         Assert.Same(dnsField.GetValue(cut.Instance), dialog.LastParameters["DnsRecords"]);
+    }
+
+    // --- Recette R2-080 / R2-090: what the page opens on ---
+
+    [Fact]
+    public void R2_080_AStackNotInstalled_OpensOnTheSetupAssistant_WithoutTabs()
+    {
+        var cut = RenderSection(MakeNotInstalledServer());
+
+        Assert.Single(cut.FindComponents<ServerMailSetupAssistant>());
+        Assert.Empty(cut.FindComponents<ServerMailStatusList>());
+        Assert.DoesNotContain("MailDomains", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain(_handler.Requests, r => r.Url.Contains("api/servers/10/mail/domains", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void R2_090_AConfiguredStack_OpensOnItsStatus_AboveTheTabs_AndHasNoDiagnosticsTab()
+    {
+        var cut = RenderSection();
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<ServerMailStatusList>()));
+        Assert.Empty(cut.FindComponents<ServerMailSetupAssistant>());
+        var markup = cut.Markup;
+        Assert.True(markup.IndexOf("mail-status", StringComparison.Ordinal) < markup.IndexOf("MailDomains", StringComparison.Ordinal));
+        Assert.DoesNotContain(cut.FindComponents<OmniTabsItem>(), tab => tab.Instance.Key == "diagnostics");
+        Assert.Equal(["domains", "accounts", "aliases", "spam", "queue", "logs", "relations"],
+            cut.FindComponents<OmniTabsItem>().Select(tab => tab.Instance.Key).Distinct().ToArray());
+    }
+
+    [Fact]
+    public void R2_080_PostfixInstalledWithoutAnyDomain_StillOpensOnTheAssistant()
+    {
+        SetupMailApiResponses();
+        _handler.SetJsonResponse("api/servers/10/mail/domains", new PaginatedResult<MailDomainDto>());
+        _handler.SetJsonResponse("api/servers/10/mail/accounts", new PaginatedResult<MailAccountDto>());
+        var server = MakeMailServer();
+        var cut = Render<ServerMailSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
+
+        cut.WaitForAssertion(() => Assert.True(Assert.Single(cut.FindComponents<ServerMailSetupAssistant>()).Instance.StackPresent));
+        Assert.Empty(cut.FindComponents<ServerMailStatusList>());
+        Assert.Contains("MailInstalledNotConfigured", cut.Markup, StringComparison.Ordinal);
     }
 }

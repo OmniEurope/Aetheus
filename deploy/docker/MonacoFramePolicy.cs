@@ -20,5 +20,5 @@ internal static class MonacoFramePolicy
         "frame-ancestors 'self'; " +
         "base-uri 'none'; " +
         "form-action 'none'" +
-        (reportUri is null ? string.Empty : $"; report-uri {reportUri}");
+        CspReporting.Directive(reportUri);
 }

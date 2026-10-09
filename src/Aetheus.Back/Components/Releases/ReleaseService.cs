@@ -108,8 +108,10 @@ public class ReleaseService(
         }
     }
 
-    public async Task<ReleaseDto> TriggerReleaseBuildAsync(int releaseId, TriggerReleaseBuildRequest request, CancellationToken ct = default)
+    public async Task<ReleaseDto> TriggerReleaseBuildAsync(
+        int releaseId, TriggerReleaseBuildRequest request, PipelineRunPreparation authorizedRun, CancellationToken ct = default)
     {
+        EnsureAuthorizedRunMatches(authorizedRun, request.PipelineId);
         var release = await repo.FindReleaseAsync(releaseId, ct).ConfigureAwait(false);
         if (release is null) throw new NotFoundException("Release not found");
 
@@ -122,7 +124,7 @@ public class ReleaseService(
 
         release.Status = ReleaseStatus.Building;
 
-        var runResult = await pipelineLauncher.TriggerRunAsync(request.PipelineId, ct: ct).ConfigureAwait(false);
+        var runResult = await pipelineLauncher.TriggerPreparedRunAsync(authorizedRun, ct: ct).ConfigureAwait(false);
         if (runResult is not null)
             release.PipelineRunId = runResult.Id;
 
@@ -131,8 +133,10 @@ public class ReleaseService(
         return await MapToDtoAsync(release, ct).ConfigureAwait(false);
     }
 
-    public async Task<ReleaseRollbackDto> RollbackReleaseAsync(int releaseId, RollbackReleaseRequest request, CancellationToken ct = default)
+    public async Task<ReleaseRollbackDto> RollbackReleaseAsync(
+        int releaseId, RollbackReleaseRequest request, PipelineRunPreparation authorizedRun, CancellationToken ct = default)
     {
+        EnsureAuthorizedRunMatches(authorizedRun, request.PipelineId);
         var release = await repo.FindReleaseAsync(releaseId, ct).ConfigureAwait(false);
         if (release is null) throw new NotFoundException("Release not found");
         var target = await repo.FindPreviousPublishedWithArtifactAsync(release, ct).ConfigureAwait(false);
@@ -154,10 +158,17 @@ public class ReleaseService(
         };
         await repo.AddRollbackAsync(rollback, ct).ConfigureAwait(false);
         var variables = CreateRollbackVariables(release, target, rollback, backup);
-        var run = await pipelineLauncher.TriggerRunAsync(pipeline.Id, variables, ct: ct).ConfigureAwait(false);
+        var run = await pipelineLauncher.TriggerPreparedRunAsync(authorizedRun, variables, ct: ct).ConfigureAwait(false);
         await CompleteRollbackLaunchAsync(
             release, target, rollback, run, request.RestoreDatabase, ct).ConfigureAwait(false);
         return MapRollback(rollback);
+    }
+
+    private static void EnsureAuthorizedRunMatches(PipelineRunPreparation authorizedRun, int pipelineId)
+    {
+        ArgumentNullException.ThrowIfNull(authorizedRun);
+        if (authorizedRun.PipelineId != pipelineId)
+            throw new BadRequestException("The authorized run does not belong to the requested pipeline.");
     }
 
     private async Task EnsureArtifactAvailableAsync(Release target)

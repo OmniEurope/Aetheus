@@ -219,28 +219,6 @@ public class ProjectServiceTests
     }
 
     [Fact]
-    public async Task DeleteProjectAsync_Found_DeletesAndReturnsTrue()
-    {
-        var project = new Project { Id = 1 };
-        _repo.FindProjectAsync(1, TestContext.Current.CancellationToken).Returns(project);
-
-        var result = await _sut.DeleteProjectAsync(1, ct: TestContext.Current.CancellationToken);
-
-        Assert.True(result);
-        await _repo.Received(1).RemoveProjectAsync(project, TestContext.Current.CancellationToken);
-    }
-
-    [Fact]
-    public async Task DeleteProjectAsync_NotFound_ReturnsFalse()
-    {
-        _repo.FindProjectAsync(99, TestContext.Current.CancellationToken).Returns((Project?)null);
-
-        var result = await _sut.DeleteProjectAsync(99, ct: TestContext.Current.CancellationToken);
-
-        Assert.False(result);
-    }
-
-    [Fact]
     public async Task GetProjectDetailAsync_WithNoPipelineRuns_ReturnsNullLastRun()
     {
         var project = new Project

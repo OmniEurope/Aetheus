@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @namespace Aetheus.Front.Components.Shared
 @using Microsoft.AspNetCore.Components.Forms
 
@@ -203,7 +204,7 @@ else
             <div><strong>@_policies.Count(item => item.IsInherited)</strong><span>@L["QualityGateInheritedCount"]</span></div>
             <div><strong>@_policies.Count(item => !item.IsInherited)</strong><span>@L["QualityGateLocalCount"]</span></div>
         </div>
-        <OmniDataGrid Items="@_policies" TItem="AnalysisPolicyDto"
+        <OmniDataGrid Items="@_policies" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" TItem="AnalysisPolicyDto"
             EmptyText="@L["NoRecords"]" Class="analysis-table quality-gate-table" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
             <Columns>
                 <OmniDataGridColumn Frozen="true" TItem="AnalysisPolicyDto" Property="Name" Title="@L["Name"]" Filterable="true" />
@@ -263,7 +264,7 @@ else
                 </OmniHeading>
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _historyPolicy = null)" Label="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
             </OmniRow>
-            <OmniDataGrid Items="@_revisions" TItem="AnalysisPolicyRevisionDto"
+            <OmniDataGrid Items="@_revisions" ExportTitle="@ExportContext.Title(L["Versions"])" ExportFields="@ExportContext.Fields()" TItem="AnalysisPolicyRevisionDto"
  EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="AnalysisPolicyRevisionDto" Property="Version"

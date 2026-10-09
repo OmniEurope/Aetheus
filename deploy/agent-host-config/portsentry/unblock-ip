@@ -4,22 +4,75 @@
 # /etc/sudoers.d/aetheus-portsentry (NOPASSWD). Removes ONE validated IP from iptables/ip6tables
 # INPUT DROP rules and /etc/hosts.deny. Never evals input.
 set -u
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
 ip="${1:-}"
 # IPv4 or IPv6: hex digits, dots, colons only - no shell metachars, no spaces.
-printf '%s' "$ip" | grep -Eq '^[0-9a-fA-F.:]{2,45}$' || { echo "invalid ip" >&2; exit 1; }
+one_line "$ip" && printf '%s' "$ip" | grep -Eq '^[0-9a-fA-F.:]{2,45}$' || { echo "invalid ip" >&2; exit 1; }
 
-# Firewall removal is best-effort (the rule may not exist). secure_path resolves the binaries.
-iptables  -D INPUT -s "$ip" -j DROP 2>/dev/null || true
-ip6tables -D INPUT -s "$ip" -j DROP 2>/dev/null || true
+# Says "unblocked" only once the address is out of the firewall and of /etc/hosts.deny; a real
+# failure exits non-zero instead of being masked (audit DEP-006). A rule that is absent is not one.
+failed=0
+
+# Removes every INPUT DROP rule for the address from one table. secure_path resolves the binaries.
+# iptables -C answers 0 when the rule exists and 1 when it does not; anything else is a failure.
+# Only the table of the address family is asked: ip6tables refuses an IPv4 address outright.
+unblock_table() {
+    tool="$1"
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "$tool is not installed: no rule to remove"
+        return 0
+    fi
+    removed=0
+    while :; do
+        "$tool" -C INPUT -s "$ip" -j DROP 2>/dev/null
+        rc=$?
+        [ "$rc" -ne 1 ] || break
+        if [ "$rc" -ne 0 ]; then
+            echo "$tool could not check the INPUT rules for $ip (exit $rc)" >&2
+            return 1
+        fi
+        "$tool" -D INPUT -s "$ip" -j DROP || { echo "$tool could not remove the DROP rule for $ip" >&2; return 1; }
+        removed=$((removed + 1))
+        if [ "$removed" -ge 64 ]; then
+            echo "$tool still holds a DROP rule for $ip after $removed removals" >&2
+            return 1
+        fi
+    done
+    echo "$tool: $removed DROP rule(s) removed for $ip"
+}
+case "$ip" in
+    *:*) unblock_table ip6tables || failed=1 ;;
+    *)   unblock_table iptables  || failed=1 ;;
+esac
 
 # Drop matching lines from /etc/hosts.deny (anchored token-boundary filter to a temp, then replace).
 # We only ever DELETE lines - never interpret the file - so no 'spawn' directive can be triggered here.
 # Anchored (dots escaped) so unblocking 10.0.0.1 cannot also strip a deny rule for 10.0.0.10 / 110.0.0.1.
+# grep -v answers 1 when no line is left, which is a valid result; 2 means the file could not be read,
+# and then the file is kept as it is rather than replaced by an empty copy.
 if [ -f /etc/hosts.deny ]; then
-    tmp="$(mktemp)"
-    esc_ip="$(printf '%s' "$ip" | sed 's/[.]/\\./g')"
-    grep -vE "(^|[^0-9A-Fa-f.:])${esc_ip}([^0-9A-Fa-f.:]|\$)" /etc/hosts.deny > "$tmp" 2>/dev/null || true
-    cat "$tmp" > /etc/hosts.deny
-    rm -f "$tmp"
+    if ! tmp="$(mktemp)"; then
+        echo "could not create a temporary file, /etc/hosts.deny left unchanged" >&2
+        failed=1
+    else
+        esc_ip="$(printf '%s' "$ip" | sed 's/[.]/\\./g')"
+        grep -vE "(^|[^0-9A-Fa-f.:])${esc_ip}([^0-9A-Fa-f.:]|\$)" /etc/hosts.deny > "$tmp"
+        rc=$?
+        if [ "$rc" -gt 1 ]; then
+            echo "could not read /etc/hosts.deny (grep exit $rc), file left unchanged" >&2
+            failed=1
+        elif ! cat "$tmp" > /etc/hosts.deny; then
+            echo "could not rewrite /etc/hosts.deny" >&2
+            failed=1
+        fi
+        rm -f "$tmp"
+    fi
 fi
+[ "$failed" -eq 0 ] || exit 1
 echo "unblocked $ip"

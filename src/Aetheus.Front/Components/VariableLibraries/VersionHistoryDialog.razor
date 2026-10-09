@@ -11,7 +11,7 @@
 @* Recette R-286: no change-type column (the version number already orders the changes), the date in
    local time, and each version but the current one can be restored. *@
 <AetheusDataGrid @ref="_grid" Data="@_versions" Count="@_totalCount" TItem="VariableEntryVersionDto"
-                IsLoading="@_loading" LoadData="@LoadDataAsync" PageSize="25"
+                IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="25"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<VariableEntryVersionDto>(_versions, _totalCount))">
     <Columns>

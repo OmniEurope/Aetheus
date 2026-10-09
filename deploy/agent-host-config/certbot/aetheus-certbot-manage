@@ -7,7 +7,14 @@ ACME_WEBROOT=#{ACME_WEBROOT}#
 RENEWAL_DIR=/etc/letsencrypt/renewal
 ACME_ALIAS=/etc/apache2/conf-enabled/aetheus-acme-webroot.conf
 STATE_DIR=/var/lib/aetheus-certbot
-valid_name() { printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$'; }
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
+valid_name() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$'; }
 # authenticator value of a renewal file ("" when absent).
 renewal_authenticator() {
     sed -n 's/^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*//p' "$1" | head -n 1 | tr -d '\r '

@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +43,9 @@ builder.Services.AddAetheusTelemetry(builder.Configuration, options =>
 {
     options.ApplicationVersion = builder.Configuration["App:Version"];
     options.EnvironmentName = builder.Environment.EnvironmentName.ToLowerInvariant();
+    // PLAN-013 lot 1 (R2-113): Aetheus measures its own database, total and largest tables, through the
+    // connection string it already uses; nothing runs while telemetry itself is off.
+    options.DatabaseSize.UsePostgreSql(() => new NpgsqlConnection(builder.Configuration.GetConnectionString("Default")));
 });
 
 // --- Time ---
@@ -287,7 +291,9 @@ builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServe
     o => o.Limits.MaxRequestBodySize = 10_485_760);
 
 // --- SignalR ---
-builder.Services.AddSignalR();
+// SITE-SEC-002: every hub connection is tracked by user so a permission change can close them.
+builder.Services.AddSingleton<Aetheus.Back.Hubs.HubConnectionRegistry>();
+builder.Services.AddSignalR(options => Microsoft.AspNetCore.SignalR.HubOptionsExtensions.AddFilter<Aetheus.Back.Hubs.HubConnectionRegistryFilter>(options));
 
 // --- Controllers ---
 builder.Services.AddControllers(options =>
@@ -368,7 +374,8 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(corsOrigins.Distinct().ToArray())
             .WithHeaders("Authorization", "Content-Type", "X-Api-Version", "X-Requested-With", "x-signalr-user-agent", "x-requested-with", "X-Aetheus-Renewal")
             .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-            .WithExposedHeaders(RequestErrorLoggingMiddleware.CorrelationHeader)
+            .WithExposedHeaders(RequestErrorLoggingMiddleware.CorrelationHeader,
+                Aetheus.Back.Components.Auth.ForcedPasswordChangeMiddleware.RequiredHeader)
             .AllowCredentials()
             .SetPreflightMaxAge(BackendRuntimeDefaults.CorsPreflightMaxAge);
     });
@@ -519,6 +526,8 @@ app.UseAuthorization();
 // Read-only Personal Access Token enforcement (ADR-024 4.5): runs after authorization so
 // HttpContext.User carries the PAT principal; refuses mutating requests made with a read-only PAT.
 app.UseMiddleware<PatScopeEnforcementMiddleware>();
+// SITE-SEC-001: a token minted for an account that must change its password reaches only the change.
+app.UseMiddleware<Aetheus.Back.Components.Auth.ForcedPasswordChangeMiddleware>();
 
 // --- Agent server URL (used by AddAgent wizard) ---
 app.MapGet("/api/servers/agent-server-url", (IConfiguration config, HttpContext httpContext) =>

@@ -8,10 +8,23 @@ namespace Aetheus.Back.Components.Analysis;
 
 public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
 {
+    public Task<AnalysisEvaluation> EvaluateAsync(
+        AnalysisReport report,
+        AnalysisRunContext context,
+        DateTime now,
+        CancellationToken ct = default) =>
+        EvaluateAsync(report, context, now, flaggedMetrics: null, ct);
+
+    /// <summary>
+    /// Evaluates the report and, when <paramref name="flaggedMetrics"/> is given, adds to it every metric
+    /// that made a policy warn or block: the per-file and per-symbol rows over a threshold, which an
+    /// analysis keeps even outside its 50 worst (PLAN-013 lot 3, <see cref="AnalysisMetricRetention"/>).
+    /// </summary>
     public async Task<AnalysisEvaluation> EvaluateAsync(
         AnalysisReport report,
         AnalysisRunContext context,
         DateTime now,
+        ICollection<AnalysisMetric>? flaggedMetrics,
         CancellationToken ct = default)
     {
         var grade = AnalysisGradeEngine.Evaluate(report, context, now);
@@ -52,6 +65,7 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
         foreach (var metric in report.Metrics)
         {
             var counts = EvaluateMetric(metric, report, context, policies, exceptions, decisions);
+            if (counts.Blockers + counts.Warnings > 0) flaggedMetrics?.Add(metric);
             blockerCount += counts.Blockers;
             warningCount += counts.Warnings;
         }
@@ -87,8 +101,10 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
         AnalysisPolicyDecisionSnapshotBuilder decisions)
     {
         var finding = occurrence.AnalysisFinding;
-        var exception = exceptions.FirstOrDefault(item => MatchesException(
-            item, finding, occurrence, report, context.BranchName, context.EnvironmentName));
+        var matchingExceptions = exceptions.Where(item => MatchesException(
+            item, finding, occurrence, report, context.BranchName, context.EnvironmentName)).ToList();
+        // An exception without a policy covers every policy; one naming a policy covers only that one.
+        var exception = matchingExceptions.FirstOrDefault(item => !item.AnalysisPolicyId.HasValue);
         if (exception is not null)
         {
             decisions.AddFinding($"exception:{exception.Id}", FindingDecisionKey(occurrence), "excepted", exception.ExpiresAt, null);
@@ -104,6 +120,13 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
         var counts = default(PolicyCounts);
         foreach (var policy in matched)
         {
+            var scoped = PolicyException(matchingExceptions, policy);
+            if (scoped is not null)
+            {
+                decisions.AddFinding($"exception:{scoped.Id}", FindingDecisionKey(occurrence), "excepted",
+                    scoped.ExpiresAt, AnalysisPolicySnapshot.Serialize(policy));
+                continue;
+            }
             counts = counts.Add(policy.Policy.Behavior);
             decisions.AddFinding(Source(policy), FindingDecisionKey(occurrence), policy.Policy.Behavior.ToString(),
                 null, AnalysisPolicySnapshot.Serialize(policy), finding.Severity.ToString(),
@@ -117,8 +140,9 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
         IReadOnlyList<ResolvedAnalysisPolicy> policies, IReadOnlyList<AnalysisPolicyException> exceptions,
         AnalysisPolicyDecisionSnapshotBuilder decisions)
     {
-        var exception = exceptions.FirstOrDefault(item => MatchesMetricException(
-            item, report, context.BranchName, context.EnvironmentName));
+        var matchingExceptions = exceptions.Where(item => MatchesMetricException(
+            item, report, context.BranchName, context.EnvironmentName)).ToList();
+        var exception = matchingExceptions.FirstOrDefault(item => !item.AnalysisPolicyId.HasValue);
         if (exception is not null)
         {
             decisions.AddMetric($"exception:{exception.Id}", metric.Key, "excepted", exception.ExpiresAt, null, MetricText(metric.Value));
@@ -134,6 +158,13 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
         var counts = default(PolicyCounts);
         foreach (var policy in matched.Where(policy => MetricThresholdMatches(policy.Policy, metric)))
         {
+            var scoped = PolicyException(matchingExceptions, policy);
+            if (scoped is not null)
+            {
+                decisions.AddMetric($"exception:{scoped.Id}", metric.Key, "excepted", scoped.ExpiresAt,
+                    AnalysisPolicySnapshot.Serialize(policy), MetricText(metric.Value));
+                continue;
+            }
             counts = counts.Add(policy.Policy.Behavior);
             decisions.AddMetric(Source(policy), metric.Key, policy.Policy.Behavior.ToString(), null,
                 AnalysisPolicySnapshot.Serialize(policy), MetricText(metric.Value),
@@ -142,6 +173,10 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
         }
         return counts;
     }
+
+    private static AnalysisPolicyException? PolicyException(
+        IReadOnlyList<AnalysisPolicyException> matchingExceptions, ResolvedAnalysisPolicy policy) =>
+        matchingExceptions.FirstOrDefault(item => item.AnalysisPolicyId == policy.Policy.Id);
 
     private readonly record struct PolicyCounts(int Blockers, int Warnings)
     {

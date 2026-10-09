@@ -140,7 +140,9 @@ internal sealed class PipelineRunGateState
             MetricCount = reports.Sum(report => report.MetricCount),
             BlockerCount = reports.Sum(report => report.BlockerCount),
             WarningCount = reports.Sum(report => report.WarningCount),
-            Grade = grades.OrderByDescending(grade => grade.OverallGrade).FirstOrDefault(),
+            // Recette R2-129: domain by domain, as the backend grades a run tree. Taking one run's whole
+            // breakdown showed the quality run's incomplete security domain beside a security run graded A.
+            Grade = grades.Count == 0 ? null : AnalysisGradeMerge.MergeRuns(grades, rootRunId),
             MissingProducers = gates.SelectMany(gate => gate.MissingProducers).Distinct().ToList(),
             Reports = reports,
             Findings = findings,

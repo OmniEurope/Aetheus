@@ -2,12 +2,16 @@
 @namespace Aetheus.Front.Components.Settings
 @* Recette R-390: the user menu's "Theme" opens OE's appearance window, the small draggable window that
    holds theme and palette above the scales. Every row it shows is one Aetheus stores and applies
-   (SiteAppearanceState): theme, palette, text size, density and control size. No theme is OE's own
-   default, Essentiel (user decision 2026-09-29: no separate "Aetheus" theme). *@
+   (SiteAppearanceState). No theme is OE's own default, Essentiel (user decision 2026-09-29: no separate
+   "Aetheus" theme). Decision of 2026-10-06: the whole window, as OE draws it, every row bound: the mode
+   beside the palette, the font, and the moving field under a theme that has one (Givre, Trou noir). *@
 <OmniAppearanceWindow Open="_open" OpenChanged="@(open => _open = open)"
                       Title="@L["Theme"]"
+                      Appearance="Appearance.Appearance" AppearanceChanged="Appearance.SetAppearanceAsync"
                       Preset="Appearance.Preset" PresetChanged="Appearance.SetPresetAsync"
+                      BackdropMotion="Appearance.BackdropMotion" BackdropMotionChanged="Appearance.SetBackdropMotionAsync"
                       Palette="Appearance.Palette" PaletteChanged="Appearance.SetPaletteAsync"
+                      Font="Appearance.Font" FontChanged="Appearance.SetFontAsync"
                       TextSizeLevel="Appearance.TextSizeLevel" TextSizeLevelChanged="Appearance.SetTextSizeLevelAsync"
                       Density="Appearance.Density" DensityChanged="Appearance.SetDensityAsync"
                       ControlSizeLevel="Appearance.ControlSizeLevel" ControlSizeLevelChanged="Appearance.SetControlSizeLevelAsync" />

@@ -3,7 +3,7 @@
 
 <OmniCard Class="iam-detail-card">
     <AetheusDataGrid TItem="AuditLogDto" Data="@_logs" Count="@_count"
-        LoadData="@LoadDataAsync" PageSize="25" IsLoading="@_loading"
+        LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="25" IsLoading="@_loading"
         AllowSorting="true" Density="OmniDensity.Compact"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<AuditLogDto>(_logs, _count))">

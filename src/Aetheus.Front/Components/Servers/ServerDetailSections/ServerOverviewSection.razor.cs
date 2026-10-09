@@ -29,6 +29,11 @@ public partial class ServerOverviewSection : IDisposable
 
     private string ScannerDiagnosticState(string value) => ScannerStateText(ScannerStateOf(value));
 
+    // Recette R2-124: both columns are templates; the export writes the state and the diagnostic line.
+    private Func<string, object?>? _scannerStateExport;
+    private Func<string, object?> ScannerStateExport => _scannerStateExport ??= ScannerDiagnosticState;
+    private static readonly Func<string, object?> ScannerDetailsExport = diagnostic => diagnostic;
+
     private static OmniTone ScannerDiagnosticStyle(string value) => ScannerStateOf(value) switch
     {
         ScannerUnavailable => OmniTone.Danger,
@@ -190,13 +195,29 @@ public partial class ServerOverviewSection : IDisposable
 
     private bool _agentUpdateBusy;
 
+    // Recette R2-111: the update this view queued, until the agent reports its version or it fails.
+    private string? _requestedAgentTarget;
+    private int? _requestedAgentUpdateId;
+
+    internal AgentUpdateOverviewState AgentUpdateState =>
+        AgentUpdateOverviewState.Read(Server, _requestedAgentTarget, _requestedAgentUpdateId);
+
+    /// <summary>The button stays while an update runs, busy, even if the compatibility read changes meanwhile.</summary>
+    private bool ShowAgentUpdateButton => CanWrite && (AgentUpdateAvailable || AgentUpdateState.InProgress);
+
     private async Task UpdateAgentAsync()
     {
-        if (_agentUpdateBusy) return;
+        if (_agentUpdateBusy || AgentUpdateState.InProgress) return;
+        var target = AgentUpdateTarget;
         _agentUpdateBusy = true;
         try
         {
-            await new AgentUpdateRequester(Api, Dialog, Toast, L).RequestAsync(Server);
+            var queued = await new AgentUpdateRequester(Api, Dialog, Toast, L).RequestAsync(Server);
+            if (queued is not null)
+            {
+                _requestedAgentTarget = string.IsNullOrWhiteSpace(queued.TargetVersion) ? target : queued.TargetVersion;
+                _requestedAgentUpdateId = queued.RequestId;
+            }
         }
         finally
         {

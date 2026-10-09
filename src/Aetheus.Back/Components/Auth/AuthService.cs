@@ -136,8 +136,8 @@ public class AuthService(
 
     private async Task HandleFailedLoginAsync(User user, CancellationToken ct)
     {
-        await repo.IncrementFailedLoginAsync(user.Id, ct).ConfigureAwait(false);
-        var newCount = user.FailedLoginCount + 1; // Optimistic - repo already incremented
+        // The stored count, not the snapshot + 1: concurrent failures read the same snapshot.
+        var newCount = await repo.IncrementFailedLoginAsync(user.Id, ct).ConfigureAwait(false);
         if (newCount >= MaxFailedAttempts)
         {
             // Exponential backoff: 15 min × 2^(lockout_round - 1), capped at 24 h

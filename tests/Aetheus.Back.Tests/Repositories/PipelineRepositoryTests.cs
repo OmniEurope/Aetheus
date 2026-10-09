@@ -180,6 +180,54 @@ public class PipelineRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task R2093_PagedLists_PutPipelinesInProgressFirst_MostRecentlyStartedFirst_ThenByName()
+    {
+        // Recette R2-093: a running pipeline stayed at its alphabetical place.
+        var at = new DateTime(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);
+        var alpha = new Pipeline { Name = "Alpha" };
+        var beta = new Pipeline { Name = "Beta" };
+        var yankee = new Pipeline { Name = "Yankee" };
+        var zulu = new Pipeline { Name = "Zulu" };
+        _db.Pipelines.AddRange(alpha, beta, yankee, zulu);
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        _db.PipelineRuns.AddRange(
+            new PipelineRun { PipelineId = alpha.Id, Status = PipelineStatus.Success, StartedAt = at.AddMinutes(30) },
+            new PipelineRun { PipelineId = yankee.Id, Status = PipelineStatus.WaitingForApproval, StartedAt = at },
+            new PipelineRun { PipelineId = zulu.Id, Status = PipelineStatus.Running, StartedAt = at.AddMinutes(10) },
+            new PipelineRun { PipelineId = zulu.Id, Status = PipelineStatus.Failed, StartedAt = at.AddMinutes(-10) });
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var (entities, _) = await _repo.GetPipelinesPagedAsync(null, null, 1, 10, ct: TestContext.Current.CancellationToken);
+        var (projected, _) = await _repo.GetPipelinesPagedProjectedAsync(
+            null, null, null, null, null, 1, 10, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(["Zulu", "Yankee", "Alpha", "Beta"], entities.Select(pipeline => pipeline.Name));
+        Assert.Equal(["Zulu", "Yankee", "Alpha", "Beta"], projected.Select(pipeline => pipeline.Name));
+    }
+
+    [Fact]
+    public async Task R2103_ACancellation_KeepsItsFirstAuthorAndReason_OnTheRunAndItsDto()
+    {
+        var pipeline = new Pipeline { Name = "release-fast" };
+        _db.Pipelines.Add(pipeline);
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var run = new PipelineRun { PipelineId = pipeline.Id, Status = PipelineStatus.Running, StartedAt = DateTime.UtcNow };
+        _db.PipelineRuns.Add(run);
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        await _repo.RequestPipelineRunCancellationAsync(
+            run.Id, PipelineRunCancellation.ByUser("alice"), TestContext.Current.CancellationToken);
+        // The stalled-cancellation recovery re-applies it as the system: the author stays alice.
+        await _repo.RequestPipelineRunCancellationAsync(
+            run.Id, PipelineRunCancellation.BySystem("re-applied"), TestContext.Current.CancellationToken);
+
+        var dto = PipelineRunDtoMapper.MapRunToDto(await _db.PipelineRuns.SingleAsync(TestContext.Current.CancellationToken));
+        Assert.True(dto.CancellationRequested);
+        Assert.Equal("alice", dto.CancelledBy);
+        Assert.Equal("Cancelled by a user", dto.CancellationReason);
+    }
+
+    [Fact]
     public async Task GetPipelinesPagedAsync_FiltersById_WhenAccessibleIdsProvided()
     {
         _db.Pipelines.AddRange(
@@ -540,6 +588,36 @@ public class PipelineRepositoryTests : IDisposable
         var updated = await _db.PipelineRuns.FindAsync([run.Id], TestContext.Current.CancellationToken);
         Assert.Equal(PipelineStatus.Failed, updated!.Status);
         Assert.NotNull(updated.CompletedAt);
+    }
+
+    [Fact]
+    public async Task UpdatePipelineRunStatusAsync_FailedArtifactCollection_TurnsRequestedSuccessIntoFailed()
+    {
+        // BACK-019: a run whose declared artifact was never collected cannot end Success.
+        var pipeline = new Pipeline { Name = "P" };
+        var server = new Server { Name = "linux-01" };
+        _db.Pipelines.Add(pipeline);
+        _db.Servers.Add(server);
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var run = new PipelineRun { PipelineId = pipeline.Id, Status = PipelineStatus.Running };
+        _db.PipelineRuns.Add(run);
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        _db.Tasks.Add(new ServerTask
+        {
+            ServerId = server.Id,
+            PipelineRunId = run.Id,
+            Name = "Collect Artifacts (build)",
+            Command = "[]",
+            Operation = OperationKind.PipelineCollectArtifacts,
+            Status = TaskExecutionStatus.Failed
+        });
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(await _repo.HasFailedArtifactCollectionAsync(run.Id, TestContext.Current.CancellationToken));
+        await _repo.UpdatePipelineRunStatusAsync(run.Id, PipelineStatus.Success, TestContext.Current.CancellationToken);
+
+        var updated = await _db.PipelineRuns.FindAsync([run.Id], TestContext.Current.CancellationToken);
+        Assert.Equal(PipelineStatus.Failed, updated!.Status);
     }
 
     [Fact]
@@ -1126,7 +1204,7 @@ public class PipelineRepositoryTests : IDisposable
     [Fact]
     public async Task FindEnvironmentByNameAsync_ReturnsNull_WhenNotFound()
     {
-        Assert.Null(await _repo.FindEnvironmentByNameAsync("nonexistent", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.FindEnvironmentByNameAsync("nonexistent", null, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -1135,7 +1213,7 @@ public class PipelineRepositoryTests : IDisposable
         _db.Environments.Add(new Data.Entities.Environment { Name = "staging" });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await _repo.FindEnvironmentByNameAsync("staging", ct: TestContext.Current.CancellationToken);
+        var result = await _repo.FindEnvironmentByNameAsync("staging", null, ct: TestContext.Current.CancellationToken);
         Assert.NotNull(result);
         Assert.Equal("staging", result.Name);
     }

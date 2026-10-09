@@ -75,6 +75,29 @@ internal sealed class TeamspeakDataCoordinator(ApiClient api) : IAsyncDisposable
     public Task LoadBansAsync(GridLoadArgs args) =>
         LoadBansCoreAsync(ToQuery(args, "Created", defaultDescending: true), _generation, CurrentToken);
 
+    // Recette R2-124: one page of each list's export, the same query as the grid's load, without
+    // touching the rows the section shows. A page that cannot be read throws and fails the export.
+    public Task<PaginatedResult<TeamspeakClientDto>> ReadClientsExportAsync(GridLoadArgs args)
+    {
+        var query = ToQuery(args, "Nickname");
+        return _api.Teamspeak.GetTeamspeakClientsAsync(_serverId, query.Page, query.PageSize, query.Search,
+            query.SortBy, query.SortDescending, CurrentToken, query.Filters);
+    }
+
+    public Task<PaginatedResult<TeamspeakChannelDto>> ReadChannelsExportAsync(GridLoadArgs args)
+    {
+        var query = ToQuery(args, "Order");
+        return _api.Teamspeak.GetTeamspeakChannelsAsync(_serverId, query.Page, query.PageSize, query.Search,
+            query.SortBy, query.SortDescending, CurrentToken, query.Filters);
+    }
+
+    public Task<PaginatedResult<TeamspeakBanDto>> ReadBansExportAsync(GridLoadArgs args)
+    {
+        var query = ToQuery(args, "Created", defaultDescending: true);
+        return _api.Teamspeak.GetTeamspeakBansAsync(_serverId, query.Page, query.PageSize, query.Search,
+            query.SortBy, query.SortDescending, CurrentToken, query.Filters);
+    }
+
     private static PageQuery ToQuery(GridLoadArgs args, string defaultSort, bool defaultDescending = false)
     {
         var pageSize = args.Top ?? 25;

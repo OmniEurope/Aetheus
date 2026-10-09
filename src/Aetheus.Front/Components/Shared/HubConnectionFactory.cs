@@ -8,8 +8,12 @@ public class HubConnectionFactory(
     IConfiguration config,
     AuthStateProvider auth,
     ILogger<AuthDelegatingHandler> handlerLogger,
-    RealtimeSyncStatus? syncStatus = null)
+    RealtimeSyncStatus? syncStatus = null,
+    ClientErrorReporter? errorReporter = null)
 {
+    /// <summary>An outage at least this long is reported to the system logs once the connection is back.</summary>
+    internal static readonly TimeSpan ReportedOutage = TimeSpan.FromSeconds(60);
+
     /// <summary>
     /// Where every connection built here reports its reconnect catch-up, for the "synchronising"
     /// indicator. The registered singleton in the application; a private one when none is given.
@@ -36,12 +40,11 @@ public class HubConnectionFactory(
                     new AuthDelegatingHandler(auth, handlerLogger) { InnerHandler = inner };
             });
         // A caller can supply a notifying retry policy to surface reconnect-attempt delays to the UI
-        // (the connection-lost dialog countdown). Absent one, the default schedule (0/2/10/30s) applies.
-        var connection = (retryPolicy is not null
-            ? builder.WithAutomaticReconnect(retryPolicy)
-            : builder.WithAutomaticReconnect())
-            .Build();
+        // (the connection-lost dialog countdown). Absent one, the connection retries without end
+        // (EndlessRetryPolicy): SignalR's own schedule gave up after four attempts, about 45 s.
+        var connection = builder.WithAutomaticReconnect(retryPolicy ?? new EndlessRetryPolicy()).Build();
         connection.ReportCatchUpTo(SyncStatus);
+        ReportOutages(connection, hubPath);
 
         lock (_connectionsLock)
         {
@@ -64,6 +67,50 @@ public class HubConnectionFactory(
 
     /// <summary>Announces that the backend behind the open connections has been replaced.</summary>
     public void AnnounceBackendReplaced() => BackendReplaced?.Invoke();
+
+    /// <summary>
+    /// Raised when the page is back in the foreground or the browser back online (layout.js). A socket
+    /// that died in the background is often noticed only later, and events pushed meanwhile are lost
+    /// for good: a view that shows live state fetches it again on this signal (2026-10-06).
+    /// </summary>
+    public event Action? PageResumed;
+
+    /// <summary>Announces that the page is back in the foreground or online again.</summary>
+    public void AnnouncePageResumed() => PageResumed?.Invoke();
+
+    // Recette of 2026-10-06 (no SSH: what happened must be readable in the UI): a connection that closes
+    // on an error, or comes back after a long outage, says so in the system logs (api/client-errors).
+    private void ReportOutages(HubConnection connection, string hubPath)
+    {
+        if (errorReporter is null) return;
+        DateTimeOffset? downSince = null;
+        connection.Reconnecting += _ =>
+        {
+            downSince ??= DateTimeOffset.UtcNow;
+            return Task.CompletedTask;
+        };
+        connection.Reconnected += _ =>
+        {
+            if (downSince is { } since && DateTimeOffset.UtcNow - since >= ReportedOutage)
+            {
+                var seconds = (int)(DateTimeOffset.UtcNow - since).TotalSeconds;
+                errorReporter.Report(Guid.NewGuid().ToString("N"), "Realtime connection restored after an outage",
+                    $"The '{hubPath}' realtime connection was lost at {since:u} and came back after {seconds} s.");
+            }
+            downSince = null;
+            return Task.CompletedTask;
+        };
+        connection.Closed += exception =>
+        {
+            if (exception is not null)
+            {
+                errorReporter.Report(Guid.NewGuid().ToString("N"), "Realtime connection closed on an error",
+                    $"The '{hubPath}' realtime connection closed: {exception.Message}", exception.StackTrace);
+            }
+            downSince = null;
+            return Task.CompletedTask;
+        };
+    }
 
     /// <summary>
     /// Stops every live realtime connection before an explicit logout clears the access token.

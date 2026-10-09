@@ -13,6 +13,14 @@ internal sealed class ImmediateDialogService(AppDialogs dialogs, OmniOverlayServ
     public bool? ConfirmResult { get; set; } = false;
     public string? LastConfirmMessage { get; private set; }
     public OmniConfirmOptions? LastConfirmOptions { get; private set; }
+    public int CloseCount { get; private set; }
+    public object? LastCloseResult { get; private set; }
+
+    public override void Close(object? result = null)
+    {
+        CloseCount++;
+        LastCloseResult = result;
+    }
 
     public override Task<object?> OpenAsync<T>(string title, Dictionary<string, object?>? parameters = null, OmniDialogOptions? options = null)
     {

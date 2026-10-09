@@ -84,6 +84,7 @@ builder.Services.AddScoped<Aetheus.Front.Components.Settings.SiteAppearanceState
 builder.Services.AddScoped<Aetheus.Front.Components.Users.AdminIdentitySearch>();
 builder.Services.AddScoped<Aetheus.Front.Layout.ProjectNavContextService>();
 builder.Services.AddScoped<Aetheus.Front.Components.Shared.NotifyHelper>();
+builder.Services.AddScoped<Aetheus.Front.Components.Shared.GridExportContext>();
 builder.Services.AddScoped<Aetheus.Front.Components.Shared.ClipboardService>();
 builder.Services.AddScoped<Aetheus.Front.Components.Shared.UiActions>();
 builder.Services.AddScoped<Aetheus.Front.Components.Shared.AppDialogs>();
@@ -105,6 +106,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 // 0-a: stale-while-revalidate cache for shared list components. Singleton so the cache survives
 // navigations within the session (the whole point: show last-known list instantly, refresh behind).
 builder.Services.AddSingleton<Aetheus.Front.Components.Shared.ListCacheService>();
+// Recette R2-087: what a page last showed, for a return to it (same session-only memory).
+builder.Services.AddSingleton<Aetheus.Front.Components.Shared.PageStateCache>();
 // Item #1 scaffolding: scoped (per page activation) so the loader resets cleanly when the
 // user closes the server detail view. SignalR group leave happens automatically on dispose.
 builder.Services.AddScoped<Aetheus.Front.Components.Shared.ServerDetailLoader>();

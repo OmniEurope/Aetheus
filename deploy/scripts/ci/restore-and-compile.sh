@@ -49,7 +49,15 @@ NODE="$(sh deploy/scripts/ensure-node-runtime.sh)"
   deploy/scripts/demo-public-source.test.mjs \
   deploy/scripts/nightly-demo-evidence.test.mjs \
   deploy/scripts/record-storage-evidence.test.mjs \
-  deploy/scripts/app-version.test.mjs
+  deploy/scripts/app-version.test.mjs \
+  deploy/scripts/agent-host-helpers.test.mjs \
+  deploy/scripts/deploy-env-file.test.mjs \
+  deploy/scripts/local-docker.test.mjs \
+  deploy/scripts/install-agent-linux.test.mjs \
+  deploy/scripts/seal-assurance-contract.test.mjs \
+  deploy/scripts/save-image-archive.test.mjs \
+  deploy/scripts/run-analyzer-contract-tests.test.mjs \
+  deploy/scripts/run-performance-smoke.test.mjs
 # AetheusRoslynSarif makes every project write what its analyzers found as SARIF 2.1. It is a build
 # flag rather than a separate analysis pass because the analyzers already ran: asking for the report
 # costs nothing here and would cost a second full compile anywhere else.

@@ -20,6 +20,8 @@ internal static class StorageKeys
     public const string ThemeFont = P + "theme_font";
     public const string TextSize = P + "text_size";
     public const string ControlSize = P + "control_size";
+    // Decision of 2026-10-06: whether a theme that moves its field (Givre, Trou noir) may move it.
+    public const string BackdropMotion = P + "backdrop_motion";
     public const string Lang = P + "lang";
     public const string DisplayName = P + "display_name";
     public const string NotifEmail = P + "notif_email";

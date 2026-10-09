@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Security.Claims;
 using Aetheus.Back.Components.Pipelines;
+using Aetheus.Back.Exceptions;
 using Aetheus.Back.Services;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
@@ -41,6 +42,10 @@ public class PipelinesControllerTests
                 Arg.Any<IReadOnlyDictionary<string, string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<PipelineRunPreparation>(0));
+        _runService.GetRetryTargetServerIdsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<int>());
+        _runService.PrepareRerunAsync(Arg.Any<int>(), Arg.Any<RerunMode>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineRerunPlan(Preparation(1), null, null));
         _fleetService.GetItemAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(call => new PipelineFleetItemDto
             {
@@ -650,7 +655,7 @@ public class PipelinesControllerTests
     [Fact]
     public async Task CancelRun_Found_ReturnsNoContent()
     {
-        _runService.CancelRunAsync(10, TestContext.Current.CancellationToken).Returns(true);
+        _runService.CancelRunAsync(10, Arg.Any<PipelineRunCancellation>(), TestContext.Current.CancellationToken).Returns(true);
 
         var response = await _sut.CancelRun(10, TestContext.Current.CancellationToken);
 
@@ -658,9 +663,28 @@ public class PipelinesControllerTests
     }
 
     [Fact]
+    public async Task R2103_CancelRun_NamesTheSignedInUserAsTheAuthor()
+    {
+        // Recette R2-103: nobody could tell who cancelled release-fast #2536.
+        _sut.ControllerContext = new ControllerContext
+        {
+            HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "alice")], "test"))
+            }
+        };
+        _runService.CancelRunAsync(10, Arg.Any<PipelineRunCancellation>(), TestContext.Current.CancellationToken).Returns(true);
+
+        await _sut.CancelRun(10, TestContext.Current.CancellationToken);
+
+        await _runService.Received(1).CancelRunAsync(
+            10, Arg.Is<PipelineRunCancellation>(cancellation => cancellation.By == "alice"), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task CancelRun_NotFound_Returns404()
     {
-        _runService.CancelRunAsync(99, TestContext.Current.CancellationToken).Returns(false);
+        _runService.CancelRunAsync(99, Arg.Any<PipelineRunCancellation>(), TestContext.Current.CancellationToken).Returns(false);
 
         var response = await _sut.CancelRun(99, TestContext.Current.CancellationToken);
 
@@ -769,8 +793,7 @@ public class PipelinesControllerTests
     public async Task RetryFailedSteps_CallerLacksServerAdminOnTarget_ReturnsForbidAndDoesNotRetry()
     {
         _runService.GetPipelineIdForRunAsync(10, Arg.Any<CancellationToken>()).Returns(1);
-        _runService.PrepareRunAsync(1, null, Arg.Any<CancellationToken>())
-            .Returns(Preparation(1, [42]));
+        _runService.GetRetryTargetServerIdsAsync(10, Arg.Any<CancellationToken>()).Returns(new List<int> { 42 });
         _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(),
                 ResourceType.Server, 42, Permission.Admin, Arg.Any<CancellationToken>())
             .Returns(false);
@@ -779,6 +802,63 @@ public class PipelinesControllerTests
 
         Assert.IsType<ForbidResult>(response.Result);
         await _runService.DidNotReceive().RetryFailedStepsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetryFailedSteps_SnapshotTargetsServerTheCurrentDefinitionDoesNot_ReturnsForbid()
+    {
+        // BACK-020: the current definition targets 41, which the caller administers; the run being
+        // retried captured a definition that targets 42. The retry replays the capture.
+        _runService.PrepareRunAsync(1, null, Arg.Any<CancellationToken>()).Returns(Preparation(1, [41]));
+        _runService.GetRetryTargetServerIdsAsync(10, Arg.Any<CancellationToken>()).Returns(new List<int> { 42 });
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(),
+                ResourceType.Server, 42, Permission.Admin, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var response = await _sut.RetryFailedSteps(10, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(response.Result);
+        await _runService.DidNotReceive().RetryFailedStepsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Rerun_SnapshotTargetsServerTheCurrentDefinitionDoesNot_ReturnsForbidBeforeLaunch()
+    {
+        // BACK-020: same shape for a snapshot rerun, with the replayed parameters already applied.
+        _runService.PrepareRunAsync(1, null, Arg.Any<CancellationToken>()).Returns(Preparation(1, [41]));
+        _runService.PrepareRerunAsync(10, RerunMode.SnapshotSameCommit, Arg.Any<CancellationToken>())
+            .Returns(new PipelineRerunPlan(Preparation(1, [42]), null, null));
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(),
+                ResourceType.Server, 42, Permission.Admin, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var response = await _sut.Rerun(10, RerunMode.SnapshotSameCommit, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(response.Result);
+        await _runService.DidNotReceive().TriggerPreparedRunAsync(Arg.Any<PipelineRunPreparation>(),
+            Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>());
+        await _runService.DidNotReceive().RerunAsync(Arg.Any<int>(), Arg.Any<RerunMode>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Rerun_Authorized_LaunchesTheExactPlanItAuthorized()
+    {
+        var parameters = new Dictionary<string, string> { ["runner"] = "b" };
+        var additional = new Dictionary<string, string> { ["X"] = "1" };
+        var plan = new PipelineRerunPlan(Preparation(1, [42]), additional, parameters);
+        _runService.PrepareRerunAsync(10, RerunMode.Current, Arg.Any<CancellationToken>()).Returns(plan);
+        _runService.TriggerPreparedRunAsync(Arg.Any<PipelineRunPreparation>(),
+                Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>())
+            .Returns(new PipelineRunDto { Id = 11, PipelineId = 1 });
+
+        var response = await _sut.Rerun(10, RerunMode.Current, TestContext.Current.CancellationToken);
+
+        Assert.IsType<CreatedAtActionResult>(response.Result);
+        await _runService.Received(1).TriggerPreparedRunAsync(
+            Arg.Is<PipelineRunPreparation>(prepared => ReferenceEquals(prepared, plan.Preparation)),
+            additional, parameters, Arg.Any<CancellationToken>(), Arg.Any<string?>());
     }
 
     [Fact]
@@ -795,6 +875,10 @@ public class PipelinesControllerTests
         var response = await _sut.Preflight(1, TestContext.Current.CancellationToken);
 
         Assert.IsType<ForbidResult>(response.Result);
+        // The controller preflights the prepared run (the PipelineRunPreparation overload); the
+        // id overload is checked too so neither path can run before the Server.Admin refusal.
+        await _runService.DidNotReceive().PreflightAsync(
+            Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>());
         await _runService.DidNotReceive().PreflightAsync(Arg.Any<int>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
     }
 
@@ -873,14 +957,17 @@ public class PipelinesControllerTests
     }
 
     [Fact]
-    public async Task DecideApproval_NotFound_Returns404()
+    public async Task DecideApproval_Refused_LetsItsReasonReachTheResponse()
     {
+        // Recette R2-116: a refusal is no longer turned into a bare 404; ErrorHandlingMiddleware answers
+        // 409 with this message, which the run page shows.
         _approvalService.DecideApprovalAsync(99, Arg.Any<ApprovalDecisionRequest>(), TestContext.Current.CancellationToken)
-            .Returns((PipelineApprovalDto?)null);
+            .Returns<Task<PipelineApprovalDto>>(_ => throw new ConflictException("Approval 99 was already Approved."));
 
-        var response = await _sut.DecideApproval(99, new ApprovalDecisionRequest(), TestContext.Current.CancellationToken);
+        var refusal = await Assert.ThrowsAsync<ConflictException>(() =>
+            _sut.DecideApproval(99, new ApprovalDecisionRequest(), TestContext.Current.CancellationToken));
 
-        Assert.IsType<NotFoundResult>(response.Result);
+        Assert.Equal("Approval 99 was already Approved.", refusal.Message);
     }
 
     // --- Test Results ---

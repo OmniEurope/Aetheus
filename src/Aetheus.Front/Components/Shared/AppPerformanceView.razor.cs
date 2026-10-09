@@ -83,10 +83,6 @@ public partial class AppPerformanceView
     private string FewCallsHint(int minimumCalls) =>
         string.Format(CultureInfo.CurrentCulture, L["AppPerformanceFewCalls"], minimumCalls);
 
-    /// <summary>Recette R2-011: the formats of the grid's export bar.</summary>
-    internal static readonly IReadOnlyList<OmniTableExportFormat> ExportFormats =
-        [OmniTableExportFormat.Markdown, OmniTableExportFormat.Csv];
-
     // The timing columns show "12 ms" or "1.20 s"; the export writes the milliseconds, as numbers.
     private static readonly Func<AppRouteTimingDto, object?> P50Export = route => AppTelemetryMarkdownExport.MillisecondsExport(route.P50Ms);
     private static readonly Func<AppRouteTimingDto, object?> P95Export = route => AppTelemetryMarkdownExport.MillisecondsExport(route.P95Ms);

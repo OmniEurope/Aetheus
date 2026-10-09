@@ -40,7 +40,9 @@ public sealed class ResourceAuthorizationIntegrationTests(PostgresFixture fixtur
         {
             Username = $"reader-{Guid.NewGuid():N}",
             Password = "Reader-Test-Pwd-2026!",
-            Roles = ["Reader"]
+            Roles = ["Reader"],
+            // D1: a flagged account only reaches the password change; this one tests RBAC.
+            MustChangePassword = false
         }, cancellationToken: TestContext.Current.CancellationToken);
         createUserResp.EnsureSuccessStatusCode();
 

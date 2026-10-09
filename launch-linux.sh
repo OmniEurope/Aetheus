@@ -1068,11 +1068,26 @@ if [[ $TEST_BACK -eq 1 || $TEST_FRONT -eq 1 || $TEST_AGENT -eq 1 || $TEST_ANALYZ
         fi
     fi
 
+    # PLAN-015 lot 0: under -c the integration tests run with coverage too, in their own subdirectory:
+    # the product report still merges exactly the three unit suites, the CRAP measure reads every
+    # report under the coverage directory. Without -c they run only when asked (-ti), as before.
+    if [[ $COVERAGE -eq 1 ]]; then
+        INTEGRATION_TEST_DIR="$ROOT/tests/Aetheus.Back.IntegrationTests"
+        invoke_test_run "$INTEGRATION_TEST_DIR" "Running integration tests (Testcontainers) with coverage..." \
+            --coverlet --results-directory "$COVERAGE_DIR/Integration"
+        TEST_LABELS+=("Integration")
+        TEST_PASSED+=("$LAST_TEST_PASSED"); TEST_FAILED+=("$LAST_TEST_FAILED")
+        TEST_SKIPPED+=("$LAST_TEST_SKIPPED"); TEST_TOTAL+=("$LAST_TEST_TOTAL")
+        if [[ $LAST_TEST_EXIT -ne 0 ]]; then
+            echo "${C_RED}INTEGRATION TESTS FAILED - aborting.${C_RESET}"; exit 1
+        fi
+    fi
+
     if [[ $COVERAGE -eq 1 ]] && ! invoke_coverage_report; then
         exit 1
     fi
 
-    if [[ $TEST_INTEGRATION -eq 1 ]]; then
+    if [[ $TEST_INTEGRATION -eq 1 && $COVERAGE -ne 1 ]]; then
         INTEGRATION_TEST_DIR="$ROOT/tests/Aetheus.Back.IntegrationTests"
         invoke_test_run "$INTEGRATION_TEST_DIR" "Running integration tests (Testcontainers)..."
         TEST_LABELS+=("Integration")

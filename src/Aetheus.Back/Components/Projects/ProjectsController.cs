@@ -7,7 +7,10 @@ namespace Aetheus.Back.Components.Projects;
 [Authorize]
 [ProducesResponseType(StatusCodes.Status200OK)]
 [ProducesResponseType(StatusCodes.Status404NotFound)]
-public class ProjectsController(IProjectService projectService, IResourceAuthorizationService authz) : ControllerBase
+public class ProjectsController(
+    IProjectService projectService,
+    IResourceAuthorizationService authz,
+    IProjectDeletionService projectDeletion) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PaginatedResult<ProjectDto>>> GetProjects([FromQuery] ProjectPaginationRequest request, CancellationToken ct)
@@ -53,13 +56,29 @@ public class ProjectsController(IProjectService projectService, IResourceAuthori
         return Ok(project);
     }
 
+    /// <summary>Recette R2-122: what deleting the project would remove, counted per kind, for the
+    /// confirmation to say before anything is deleted. Same permission as the deletion itself.</summary>
+    [HttpGet("{id:int}/deletion-preview")]
+    public async Task<ActionResult<ProjectDeletionPreviewDto>> GetDeletionPreview(int id, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, id, Permission.Admin, ct))
+            return Forbid();
+
+        var preview = await projectDeletion.GetPreviewAsync(id, ct);
+        if (preview is null) return NotFound();
+        return Ok(preview);
+    }
+
+    /// <summary>Recette R2-122: deletes the project and everything it owns; 409 while one of its runs
+    /// has not ended.</summary>
     [HttpDelete("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeleteProject(int id, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, id, Permission.Admin, ct))
             return Forbid();
 
-        var deleted = await projectService.DeleteProjectAsync(id, ct);
+        var deleted = await projectDeletion.DeleteAsync(id, ct);
         if (!deleted) return NotFound();
         return NoContent();
     }

@@ -24,7 +24,7 @@
     <ChildContent>@L["NotificationsNotSentNotice"]</ChildContent>
 </OmniAlert>
 
-<AetheusDataGrid @ref="_grid" TItem="NotificationDeliveryDto" Data="@_rows" Count="@_count" LoadData="@LoadData"
+<AetheusDataGrid @ref="_grid" TItem="NotificationDeliveryDto" Data="@_rows" Count="@_count" LoadData="@LoadData" ExportRead="@ReadExportAsync"
     PageSize="20" AllowSorting="true" IsLoading="@_loading" Density="OmniDensity.Compact" FullHeight="true"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<NotificationDeliveryDto>(_rows, _count))"

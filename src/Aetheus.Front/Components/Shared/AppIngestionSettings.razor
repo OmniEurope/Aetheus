@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @namespace Aetheus.Front.Components.Shared
 @* ADR-021 phase 2: OTLP ingestion key management + per-metric alert thresholds. *@
 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["IngestionKey"]</OmniHeading>
@@ -119,7 +120,7 @@
 
 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["MetricThresholds"]</OmniHeading>
 
-<OmniDataGrid Items="@_thresholds" TItem="AppMetricThresholdDto" EmptyText="@L["NoThresholds"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+<OmniDataGrid Items="@_thresholds" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" TItem="AppMetricThresholdDto" EmptyText="@L["NoThresholds"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="AppMetricThresholdDto" Property="MetricName" Title="@L["Metric"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
         <OmniDataGridColumn TItem="AppMetricThresholdDto" Property="Operator" Title="@L["Operator"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@OperatorText">

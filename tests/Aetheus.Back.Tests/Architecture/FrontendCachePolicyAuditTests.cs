@@ -85,34 +85,47 @@ public sealed class FrontendCachePolicyAuditTests
     /// which is this one. Until it named a collector, those violations were reported nowhere, and the
     /// blocked inline script on a run page could not be identified at all.
     ///
-    /// report-uri alone, deliberately: report-to is delivered through the Reporting API, a
-    /// cross-origin request that would need CORS on an endpoint whose only job is to receive
-    /// beacons. report-uri is deprecated in the spec and implemented everywhere; report-to is the
-    /// opposite trade.
+    /// Recette R2-108 (ZAP 10055-3, "CSP: Notices", finding 1229): the collector is named by report-to
+    /// and the Reporting-Endpoints header, never by report-uri, which the scanner's CSP parser reports
+    /// as deprecated on its own. Both front documents (the shell and the Monaco frame) say it the same way.
     /// </summary>
     [Fact]
     public void Frontend_Csp_ReportsItsViolationsToTheApiCollector()
     {
-        var program = File.ReadAllText(Path.Combine(
-            RepoRoot(), "deploy", "docker", "StaticServer.Program.cs"));
+        var root = RepoRoot();
+        var program = File.ReadAllText(Path.Combine(root, "deploy", "docker", "StaticServer.Program.cs"));
+        var reporting = File.ReadAllText(Path.Combine(root, "deploy", "docker", "CspReporting.cs"));
+        var monaco = File.ReadAllText(Path.Combine(root, "deploy", "docker", "MonacoFramePolicy.cs"));
 
         Assert.Contains("/api/security/csp-report", program, StringComparison.Ordinal);
 
-        // Read the policy expression itself, not the comments around it: the comment explains why
-        // report-to is absent, and a naive search would find the word there and pass on prose.
+        // Read the policy expression itself, not the comments around it.
         var start = program.IndexOf("var contentSecurityPolicy =", StringComparison.Ordinal);
         Assert.True(start >= 0, "The policy is no longer built where this guard reads it.");
         var end = program.IndexOf("// QA scans this container", start, StringComparison.Ordinal);
         Assert.True(end > start, "The policy expression no longer ends where this guard expects.");
         var policy = program[start..end];
-        Assert.Contains("report-uri {cspReportUri}", policy, StringComparison.Ordinal);
-        Assert.DoesNotContain("report-to", policy, StringComparison.Ordinal);
+        Assert.Contains("CspReporting.Directive(cspReportUri)", policy, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-uri", policy, StringComparison.Ordinal);
+        Assert.Contains("CspReporting.Directive(reportUri)", monaco, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-uri {", monaco, StringComparison.Ordinal);
+        Assert.Contains("$\"; report-to {EndpointName}\"", reporting, StringComparison.Ordinal);
+        Assert.DoesNotContain("report-uri {", reporting, StringComparison.Ordinal);
+
+        // The endpoint the report-to name refers to is sent with every response that carries a policy.
+        Assert.Contains("$\"{CspReporting.EndpointName}=\\\"{cspReportUri}\\\"\"", program, StringComparison.Ordinal);
+        Assert.Contains("Headers[\"Reporting-Endpoints\"] = reportingEndpoints", program, StringComparison.Ordinal);
+        Assert.True(
+            program.IndexOf("Headers[\"Reporting-Endpoints\"]", StringComparison.Ordinal)
+            < program.IndexOf("app.UseBlazorFrameworkFiles()", StringComparison.Ordinal),
+            "The reporting endpoint must be registered before static and fallback responses are produced.");
 
         // The route has to be the one the controller actually serves, or the reports land on a 404.
         var controller = File.ReadAllText(Path.Combine(
-            RepoRoot(), "src", "Aetheus.Back", "Components", "Security", "CspReportController.cs"));
+            root, "src", "Aetheus.Back", "Components", "Security", "CspReportController.cs"));
         Assert.Contains("[Route(\"api/security\")]", controller, StringComparison.Ordinal);
         Assert.Contains("[HttpPost(\"csp-report\")]", controller, StringComparison.Ordinal);
+        Assert.Contains("\"application/reports+json\"", controller, StringComparison.Ordinal);
     }
 
     private static string RepoRoot()

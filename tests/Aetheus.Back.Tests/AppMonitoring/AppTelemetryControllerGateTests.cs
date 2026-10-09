@@ -22,10 +22,11 @@ public class AppTelemetryControllerGateTests
         Substitute.For<IAppWebAnalyticsConfigurationService>();
     private readonly IAppMonitoringService _monitoring = Substitute.For<IAppMonitoringService>();
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
+    private readonly IAppTelemetrySendIntervalService _sendInterval = Substitute.For<IAppTelemetrySendIntervalService>();
 
     private AppTelemetryController Build()
     {
-        var controller = new AppTelemetryController(_telemetry, _webAnalytics, _webAnalyticsConfig, _monitoring, _authz)
+        var controller = new AppTelemetryController(_telemetry, _webAnalytics, _webAnalyticsConfig, _monitoring, _authz, _sendInterval)
         {
             ControllerContext = new ControllerContext
             {
@@ -76,6 +77,23 @@ public class AppTelemetryControllerGateTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(["cpu", "mem"], Assert.IsAssignableFrom<List<string>>(ok.Value));
+    }
+
+    [Fact]
+    public async Task TheSendInterval_IsGatedByTheParentProject_AndReturnedToAReader()
+    {
+        AppBelongsToProject(1, 7);
+        var refused = await Build().GetSendInterval(1, TestContext.Current.CancellationToken);
+        Assert.IsType<ForbidResult>(refused.Result);
+        await _sendInterval.DidNotReceive().GetAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+
+        Grant(7, Permission.Read);
+        _sendInterval.GetAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new AppTelemetrySendIntervalDto { ServerIntervalSeconds = 300, ObservedIntervalSeconds = 60 });
+        var result = await Build().GetSendInterval(1, TestContext.Current.CancellationToken);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(60, Assert.IsType<AppTelemetrySendIntervalDto>(ok.Value).ObservedIntervalSeconds);
     }
 
     [Fact]

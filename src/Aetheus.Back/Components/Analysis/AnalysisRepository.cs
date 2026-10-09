@@ -66,6 +66,9 @@ public sealed class AnalysisRepository(AppDbContext db) : IAnalysisRepository
     public async Task AddReportAsync(AnalysisReport report, CancellationToken ct = default)
         => await _reports.AddReportAsync(report, ct).ConfigureAwait(false);
 
+    public Task AddMetricsAsync(int reportId, IReadOnlyCollection<AnalysisMetric> metrics, CancellationToken ct = default)
+        => _reports.AddMetricsAsync(reportId, metrics, ct);
+
     public Task<List<AnalysisPolicy>> GetApplicablePoliciesAsync(
         int organizationId,
         int projectId,

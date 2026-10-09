@@ -433,8 +433,10 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         => await Http.GetFromJsonAsync<List<PendingApprovalDto>>(
             "api/pipelines/approvals/pending", JsonOptions.Web, ct) ?? [];
 
-    public Task<PipelineApprovalDto?> DecideApprovalAsync(
+    /// <summary>Recette R2-116: a refused decision keeps the reason the backend gives (already decided,
+    /// run ended, run not moved), so the page can say why instead of one generic failure.</summary>
+    public Task<ApiOutcome<PipelineApprovalDto, ApiError>> DecideApprovalAsync(
         int approvalId, ApprovalDecisionRequest request, CancellationToken ct = default)
-        => PostJsonAsync<ApprovalDecisionRequest, PipelineApprovalDto>(
+        => PostForApiErrorOutcomeAsync<ApprovalDecisionRequest, PipelineApprovalDto>(
             $"api/pipelines/approvals/{approvalId}/decide", request, ct);
 }

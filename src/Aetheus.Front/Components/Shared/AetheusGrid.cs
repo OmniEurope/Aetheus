@@ -48,6 +48,15 @@ public static class AetheusGrid
     /// Markdown export (for a prompt) is the bar's one blue button; the other formats keep OE's Ghost.
     /// The bar is a zone of its own, so it still holds a single blue button.
     /// </summary>
+    /// <remarks>
+    /// Recette R2-124 (decisions of 2026-10-05), OE 1.6.0: a table has no export bar by default
+    /// (<c>ShowFooterBar</c> off) and offers Markdown alone (for a prompt), never CSV, Excel or PDF: the
+    /// preset and <c>AetheusDataGrid</c> turn those three formats off. A table worth handing to an AI writes
+    /// <c>ShowFooterBar="true"</c> and gets the Markdown button at the end (right) of a bar under its rows, inside
+    /// its frame; a table that must never be exported (a secret value on screen, say) writes
+    /// <c>ExportMarkdown="false"</c>. <c>GridExportCoverageAuditTests</c> holds both to their lists, each
+    /// table with its reason.
+    /// </remarks>
     public static readonly IReadOnlyDictionary<OmniTableExportFormat, OmniButtonVariant> ExportVariants =
         new System.Collections.ObjectModel.ReadOnlyDictionary<OmniTableExportFormat, OmniButtonVariant>(
             new Dictionary<OmniTableExportFormat, OmniButtonVariant> { [OmniTableExportFormat.Markdown] = OmniButtonVariant.Primary });

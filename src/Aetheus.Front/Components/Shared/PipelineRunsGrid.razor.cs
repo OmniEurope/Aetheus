@@ -144,4 +144,8 @@ public partial class PipelineRunsGrid
         if (_expandedRunId == run.RunId)
             _expandedRunId = null;
     }
+
+    /// <summary>Recette R2-124: the export writes the duration the cell shows, a running run's up to now.</summary>
+    private Func<PipelineRunTableItem, object?> DurationExport => _durationExport ??= run => PipelineRunTablePresentation.FormatDuration(run, L);
+    private Func<PipelineRunTableItem, object?>? _durationExport;
 }

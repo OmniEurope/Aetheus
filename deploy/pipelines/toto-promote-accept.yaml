@@ -1,6 +1,6 @@
 # Toto adapter for the reusable application-promotion contract.
 name: toto-promote-accept
-extends: application-promotion@2
+extends: application-promotion@1
 trigger: manual
 variable_libraries:
   - toto-observability

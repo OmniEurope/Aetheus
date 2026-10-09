@@ -414,11 +414,12 @@ public class ServerDockerSectionFinalTests : BunitContext
         var composeTab = cut.FindComponent<DockerComposeTab>();
         typeof(DockerComposeTab).GetField("_composeEditorVisible", Priv)!.SetValue(composeTab.Instance, true);
         typeof(DockerComposeTab).GetField("_composeFileLoading", Priv)!.SetValue(composeTab.Instance, true);
+        typeof(DockerComposeTab).GetField("_composeEditorStack", Priv)!.SetValue(composeTab.Instance, "web");
         await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
         {
             TaskId = 2,
             ServerId = 20,
-            TaskName = "get compose file",
+            TaskName = DockerTaskNames.ComposeFile("web"),
             Status = TaskExecutionStatus.Success,
             Output = "version: '3'"
         }));

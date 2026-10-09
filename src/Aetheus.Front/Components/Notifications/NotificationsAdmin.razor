@@ -17,7 +17,7 @@
 </OmniStack>
 
 <AetheusDataGrid @ref="_channelsGrid" Data="@_channels" Count="@_channelTotalCount"
-    TItem="NotificationChannelDto" IsLoading="@_channelsLoading" LoadData="@LoadChannelsAsync"
+    TItem="NotificationChannelDto" IsLoading="@_channelsLoading" LoadData="@LoadChannelsAsync" ExportRead="@ReadChannelsExportAsync" ExportName="@L["NotificationChannels"]"
     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<NotificationChannelDto>(_channels, _channelTotalCount))"
     PageSize="25" class="omni-u-mb-2xl">
     <EmptyTemplate>
@@ -60,7 +60,7 @@
 </OmniStack>
 
 <AetheusDataGrid @ref="_rulesGrid" Data="@_rules" Count="@_ruleTotalCount"
-    TItem="NotificationRuleDto" IsLoading="@_rulesLoading" LoadData="@LoadRulesAsync"
+    TItem="NotificationRuleDto" IsLoading="@_rulesLoading" LoadData="@LoadRulesAsync" ExportRead="@ReadRulesExportAsync" ExportName="@L["NotificationRules"]"
     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<NotificationRuleDto>(_rules, _ruleTotalCount))"
     PageSize="25">
     <EmptyTemplate>

@@ -10,6 +10,9 @@ namespace Aetheus.Agent.Core.Operations;
 /// </summary>
 internal static class ProcessRunner
 {
+    // How long a killed process tree is given to exit before the runner stops waiting for it.
+    private static readonly TimeSpan KillWait = TimeSpan.FromSeconds(10);
+
     public static async Task<ExecutorResult> RunAsync(
         ProcessStartInfo psi,
         int timeoutSeconds,
@@ -41,36 +44,31 @@ internal static class ProcessRunner
             return new ExecutorResult(-1, false);
         }
 
-        if (standardInput is not null)
-        {
-            try
-            {
-                await process.StandardInput.WriteAsync(standardInput.AsMemory(), timeoutCts.Token).ConfigureAwait(false);
-                process.StandardInput.Close();
-            }
-            catch (IOException)
-            {
-                // The child exited before consuming stdin (e.g. `sudo -n` rejected because the grant is
-                // not provisioned). Its exit code + stderr are captured below; this broken pipe is a
-                // symptom, not the real error - swallow it and let WaitForExit surface the true failure.
-            }
-        }
-
-        var stdout = ExecutorHelper.StreamOutputAsync(process.StandardOutput, TaskLogLevel.Info, onOutput, timeoutCts.Token, logger);
-        // stderr is an output channel, not a semantic failure level: many successful tools use it for
-        // progress and diagnostics. Preserve the channel explicitly in the message and reserve Error for
-        // the exit-code proof below.
-        var stderr = ExecutorHelper.StreamOutputAsync(
-            process.StandardError,
-            TaskLogLevel.Warning,
-            (line, level) => onOutput($"[stderr] {line.TrimEnd()}", level),
-            timeoutCts.Token,
-            logger);
-
+        // From here on the child is ours to stop: a timeout, a task cancellation or any other failure
+        // kills its whole tree before the runner returns, so an apt, a deploy restart or a certbot run
+        // never keeps acting after the task (and the lock it held) is gone.
+        var exited = false;
         try
         {
+            var stdout = ExecutorHelper.StreamOutputAsync(process.StandardOutput, TaskLogLevel.Info, onOutput, timeoutCts.Token, logger);
+            // stderr is an output channel, not a semantic failure level: many successful tools use it for
+            // progress and diagnostics. Preserve the channel explicitly in the message and reserve Error for
+            // the exit-code proof below.
+            var stderr = ExecutorHelper.StreamOutputAsync(
+                process.StandardError,
+                TaskLogLevel.Warning,
+                (line, level) => onOutput($"[stderr] {line.TrimEnd()}", level),
+                timeoutCts.Token,
+                logger);
+
+            // A child that never reads its stdin blocks the write, and a pipe write does not always
+            // observe a token: the wait is bounded here, and the kill below unblocks the write itself.
+            if (standardInput is not null)
+                await WriteStandardInputAsync(process, standardInput).WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+
             await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
             await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+            exited = true;
             await onOutput(
                 $"[process] exit-code={process.ExitCode}",
                 process.ExitCode == 0 ? TaskLogLevel.Info : TaskLogLevel.Error).ConfigureAwait(false);
@@ -79,10 +77,44 @@ internal static class ProcessRunner
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning("Operation timed out after {Timeout}s, killing", timeoutSeconds);
-            try { process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) { /* already exited */ }
-            catch (NotSupportedException) { /* not supported on platform */ }
             return new ExecutorResult(-1, true);
+        }
+        finally
+        {
+            if (!exited)
+                await KillTreeAsync(process, logger).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task WriteStandardInputAsync(Process process, string standardInput)
+    {
+        try
+        {
+            await process.StandardInput.WriteAsync(standardInput.AsMemory()).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // The child exited before consuming stdin (e.g. `sudo -n` rejected because the grant is
+            // not provisioned), or was killed while the write was blocked. Its exit code + stderr are
+            // captured by the caller; this broken pipe is a symptom, not the real error.
+        }
+    }
+
+    private static async Task KillTreeAsync(Process process, ILogger logger)
+    {
+        try { process.Kill(entireProcessTree: true); }
+        catch (InvalidOperationException) { return; /* already exited */ }
+        catch (NotSupportedException) { /* not supported on platform */ }
+
+        using var wait = new CancellationTokenSource(KillWait);
+        try
+        {
+            await process.WaitForExitAsync(wait.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogError("Process {Pid} did not exit within {Wait}s of being killed", process.Id, KillWait.TotalSeconds);
         }
     }
 }

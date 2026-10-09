@@ -82,6 +82,30 @@ public class PipelineVariableResolverTests
         Assert.Equal("1.1.12", vars["APP_VERSION"]);
     }
 
+    /// <summary>
+    /// Recette R2-110: every stage is resolved again from the run, so the release number the run was
+    /// created with reaches each one (app-version.sh composes 1.3.<number>), and a run without one reads 0.
+    /// </summary>
+    [Fact]
+    public async Task ResolveFullVariablesForRunAsync_ExposesTheRunReleaseNumberToEveryStage()
+    {
+        var run = NewRun(project: null, buildNumber: 12);
+        run.ReleaseNumber = 4;
+        var def = new PipelineYamlDefinition
+        {
+            Name = "build",
+            Variables = new Dictionary<string, string> { ["APP_VERSION"] = "1.3.$(BUILD_RELEASENUMBER)" }
+        };
+
+        var vars = await _sut.ResolveFullVariablesForRunAsync(run, def, TestContext.Current.CancellationToken);
+        var withoutNumber = await _sut.ResolveFullVariablesForRunAsync(
+            NewRun(project: null), new PipelineYamlDefinition { Name = "build" }, TestContext.Current.CancellationToken);
+
+        Assert.Equal("4", vars["BUILD_RELEASENUMBER"]);
+        Assert.Equal("1.3.4", vars["APP_VERSION"]);
+        Assert.Equal("0", withoutNumber["BUILD_RELEASENUMBER"]);
+    }
+
     [Fact]
     public async Task ResolveFullVariablesForRunAsync_RunBranchOverridesProjectBranchEverywhere()
     {

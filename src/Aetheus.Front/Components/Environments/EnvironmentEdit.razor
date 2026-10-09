@@ -21,7 +21,15 @@
     </Actions>
 </OmniPageHeader>
 
-@if (!_isNew && _detail is null)
+@if (!_isNew && _notFound)
+{
+    <OmniAlert Severity="OmniSeverity.Warning">@L["EnvironmentNotFound"]</OmniAlert>
+}
+else if (!_isNew && _loadFailed)
+{
+    <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
+}
+else if (!_isNew && _detail is null)
 {
     <AetheusLoader Size="OmniControlSize.Large" />
 }

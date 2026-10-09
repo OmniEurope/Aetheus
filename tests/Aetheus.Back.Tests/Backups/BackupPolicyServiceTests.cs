@@ -56,6 +56,80 @@ public class BackupPolicyServiceTests
         Assert.Equal("0 3 * * *", dto.ScheduleCron);
     }
 
+    [Theory]
+    [InlineData("DbHost")]
+    [InlineData("DbPort")]
+    [InlineData("DbName")]
+    [InlineData("DbUser")]
+    [InlineData("DbPassword")]
+    [InlineData("DbEngine")]
+    [InlineData("FilePaths")]
+    public async Task GetServerForAgentParameterChange_AnyAgentParameterChanged_ReturnsThePolicyServer(string field)
+    {
+        _repo.FindPolicyAsync(4, Arg.Any<CancellationToken>()).Returns(ApprovedPolicy());
+        var request = SameAsApproved();
+        request = field switch
+        {
+            "DbHost" => request with { DbHost = "10.0.0.5" },
+            "DbPort" => request with { DbPort = 5433 },
+            "DbName" => request with { DbName = "other" },
+            "DbUser" => request with { DbUser = "root" },
+            "DbPassword" => request with { DbPassword = "new-secret" },
+            "DbEngine" => request with { DbEngine = BackupDbEngine.MySql },
+            _ => request with { FilePaths = ["/etc"] }
+        };
+
+        Assert.Equal(2, await _sut.GetServerForAgentParameterChangeAsync(4, request, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task GetServerForAgentParameterChange_OnlyNameScheduleOrSamePassword_ReturnsNull()
+    {
+        _repo.FindPolicyAsync(4, Arg.Any<CancellationToken>()).Returns(ApprovedPolicy());
+        var request = SameAsApproved() with
+        {
+            Name = "renamed",
+            Enabled = false,
+            ScheduleCron = "0 5 * * *",
+            RetentionCount = 3,
+            DbPassword = "s3cret"
+        };
+
+        Assert.Null(await _sut.GetServerForAgentParameterChangeAsync(4, request, TestContext.Current.CancellationToken));
+    }
+
+    private static BackupPolicy ApprovedPolicy() => new()
+    {
+        Id = 4,
+        Name = "db",
+        ProjectId = 1,
+        ServerId = 2,
+        DbEngine = BackupDbEngine.Postgres,
+        DbHost = "localhost",
+        DbPort = 5432,
+        DbName = "app",
+        DbUser = "app",
+        DbPasswordEncrypted = "enc:s3cret",
+        FilePathsJson = null,
+        ScheduleCron = "0 3 * * *",
+        RetentionCount = 7
+    };
+
+    private static UpdateBackupPolicyRequest SameAsApproved() => new()
+    {
+        Name = "db",
+        Enabled = true,
+        DbEngine = BackupDbEngine.Postgres,
+        DbHost = "localhost",
+        DbPort = 5432,
+        DbName = "app",
+        DbUser = "app",
+        DbPassword = null,
+        FilePaths = [],
+        ScheduleCron = "0 3 * * *",
+        RetentionCount = 7
+    };
+
     [Fact]
     public async Task Create_InvalidCron_Throws()
     {

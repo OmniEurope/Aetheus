@@ -82,9 +82,12 @@ public partial class VaultsList
 
     private async Task LoadServerVaultsAsync()
     {
-        _serverAll = await Api.Servers.GetServerVaultsAsync(ServerId!.Value);
+        // FRONT-020: a list that arrives after a sign-out is neither cached nor shown.
+        var ticket = Cache.Begin();
+        var vaults = await Api.Servers.GetServerVaultsAsync(ServerId!.Value);
+        if (!Cache.TryStore(ticket, CacheKey, vaults)) return;
+        _serverAll = vaults;
         _totalCount = _serverAll.Count;
-        Cache.Set(CacheKey, _serverAll);
         _filterValues = new VaultFilterValuesDto
         {
             ProjectNames = [.. _serverAll.Select(item => item.ProjectName).OfType<string>()
@@ -99,6 +102,25 @@ public partial class VaultsList
     }
 
     private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.Vault);
+
+    /// <summary>Recette R2-124: one page of the export, the vaults as listed (names and counts, never a
+    /// secret value), in the scope of the list, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<VaultDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        if (IsServerScope)
+        {
+            return Task.FromResult(new PaginatedResult<VaultDto>
+            {
+                Items = args.ToClientPage(_serverAll),
+                TotalCount = args.ClientFilteredCount(_serverAll)
+            });
+        }
+
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(VaultDto.Name));
+        return Api.Variables.GetVaultsAsync(page: page, pageSize: pageSize, projectId: ProjectId,
+            sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
+    }
 
     private async Task OnLoadData(GridLoadArgs args)
     {

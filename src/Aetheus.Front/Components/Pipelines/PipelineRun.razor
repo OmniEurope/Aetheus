@@ -51,7 +51,18 @@ else
     {
             <OmniAlert Severity="OmniSeverity.Info" Title="@L["CancellationAcceptedTitle"]" Class="omni-u-mt-sm">
             @L["CancellationAcceptedDetail"]
+            @if (PipelineRunPresentation.CancelledByText(_run, L) is { } cancelledBy)
+            {
+                <div class="run-cancelled-by">@cancelledBy</div>
+            }
             </OmniAlert>
+    }
+    else if (_run.Status == PipelineStatus.Cancelled && PipelineRunPresentation.CancelledByText(_run, L) is { } cancelledBy)
+    {
+        @* Recette R2-103: who stopped the run, once it is over. *@
+        <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mt-sm"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent>
+            <div class="run-cancelled-by">@cancelledBy</div>
+        </ChildContent></OmniAlert>
     }
     @* PLAN-003 D15: the assurance verdict, the waiting reasons and the incomplete gate used to
        stack up to three banners between the header and the tabs, pushing the content down on
@@ -108,6 +119,13 @@ else
                                 <div class="run-tile-main">
                                     <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Start" Class="run-status-badges">
                                         <OmniBadge Fill="OmniFill.Solid" Tone="@GetRunBadge(_run.Status)">@L.Localize(_run.Status)</OmniBadge>
+                                        @* 2026-10-06: live updates down for more than a few seconds are said here, with
+                                           since when; meanwhile the page reloads a running run by itself. *@
+                                        @if (RunInProgress && _live?.InterruptedSince is { } interruptedSince)
+                                        {
+                                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="run-live-interrupted-badge"
+                                                       title="@L["RunLiveInterruptedTitle"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@string.Format(L["RunLiveInterrupted"].Value, interruptedSince.ToLocalTime().ToString("t"))</ChildContent></OmniBadge>
+                                        }
                                         @* R-497: the grade is the Quality tile's; the candidate verdict sits here, in
                                            short words (its full sentence is the tooltip). Deployable is tri-state: only
                                            a decided verdict is stated, so an undecided seal never reads as a refusal. *@
@@ -141,7 +159,7 @@ else
                         </OmniCard>
                         @if (ShowGateTab && _gateState.Result is { } gate)
                         {
-                            <PipelineRunGateOverview Gate="@gate" GateRequested="@(() => NavigateToTab("gate"))" />
+                            <PipelineRunGateOverview Gate="@gate" RunGrade="@_run.GateGrade" GateRequested="@(() => NavigateToTab("gate"))" />
                         }
                         @if (_run.Parameters.Count > 0)
                         {
@@ -442,6 +460,15 @@ else
                                                renders only the visible rows instead of flooding the DOM and freezing
                                                the tab. ItemSize is the single-line height; wrapped lines are rare in
                                                tool output, so approximate sizing is acceptable here. *@
+                                            @if (_logWindow.HasEarlierLines(_selectedStep.TaskId!.Value))
+                                            {
+                                                @* Recette R2-104 / FRONT-010: the live view keeps the latest lines only;
+                                                   the complete log is read on demand, page by page. *@
+                                                <OmniAlert Severity="OmniSeverity.Info">
+                                                    <span>@L["EarlierLogLinesHidden"]</span>
+                                                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ShowCompleteLogAsync" Busy="@_completeLogLoading"><OmniIcon Name="OmniIconName.ArrowLineUp" /> <span>@L["ShowCompleteLog"]</span></OmniButton>
+                                                </OmniAlert>
+                                            }
                                             <div class="run-logs-lines">
                                                 <AetheusVirtualList Items="@filteredLogs" ItemSize="21" OverscanCount="20" Context="entry">
                                                     <div class="run-log-line @(entry.Log.Level == TaskLogLevel.Error ? "step-log-error" : "")"><span class="run-log-num">@entry.Num</span>@HighlightLogVariables(entry.Log.Message, _logVarRegex)</div>
@@ -460,7 +487,7 @@ else
             @if (ShowGateTab && _gateState.Result is { } gateResult)
             {
                 <OmniTabsItem Key="gate" Title="@L["AnalysisGateTab"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("rule"))" /></Icon><ChildContent>
-                    <PipelineRunGateFindings Gate="@gateResult" RunIds="@_gateState.RunIds" ProjectId="@EffectiveProjectId" ProjectName="@_run?.ProjectName" FindingReopened="@(_ => _gateState.ReopenFindingAsync(Api, _pageCache))" />
+                    <PipelineRunGateFindings Gate="@gateResult" RunGrade="@_run?.GateGrade" BlockingTests="@(AssuranceVerdict?.BlockingTests ?? [])" RunIds="@_gateState.RunIds" ProjectId="@EffectiveProjectId" ProjectName="@_run?.ProjectName" FindingReopened="@(_ => _gateState.ReopenFindingAsync(Api, _pageCache))" />
                 </ChildContent></OmniTabsItem>
             }
 

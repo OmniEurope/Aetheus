@@ -30,6 +30,7 @@ public sealed class PipelineRepository(
     private readonly PipelineTemplateRepository _templates = new(db);
     private readonly PipelineTaskQueueRepository _taskQueue = new(db);
     private readonly PipelineRunDetailRepository _runDetail = new(db);
+    private readonly ProjectReleaseNumberRepository _releaseNumbers = new(db);
 
     // --- Core: pipelines, runs, steps, templates, artifacts, approvals ---
     public Task<(List<Pipeline> Items, int TotalCount)> GetPipelinesPagedAsync(string? search, PipelineTriggerType? triggerType, int page, int pageSize, List<int>? accessibleIds = null, CancellationToken ct = default)
@@ -77,6 +78,15 @@ public sealed class PipelineRepository(
 
     public Task<int> ReserveNextBuildNumberAsync(int pipelineId, CancellationToken ct = default)
         => _core.ReserveNextBuildNumberAsync(pipelineId, ct);
+
+    public Task<int?> AllocateNextReleaseNumberAsync(int projectId, CancellationToken ct = default)
+        => _releaseNumbers.AllocateNextAsync(projectId, ct);
+
+    public Task<int?> GetLatestReleaseNumberAsync(int projectId, CancellationToken ct = default)
+        => _releaseNumbers.GetLatestAsync(projectId, ct);
+
+    public Task<int?> GetRunReleaseNumberAsync(int runId, CancellationToken ct = default)
+        => _releaseNumbers.GetRunReleaseNumberAsync(runId, ct);
 
     public void TrackPipelineStepRun(PipelineStepRun stepRun)
         => _core.TrackPipelineStepRun(stepRun);
@@ -185,6 +195,9 @@ public sealed class PipelineRepository(
     public Task<bool> HasAnyFailedStepInRunAsync(int runId, CancellationToken ct = default)
         => _core.HasAnyFailedStepInRunAsync(runId, ct);
 
+    public Task<bool> HasFailedArtifactCollectionAsync(int runId, CancellationToken ct = default)
+        => _core.HasFailedArtifactCollectionAsync(runId, ct);
+
     public Task<bool> HasAnyContinuableFailedStepInRunAsync(int runId, CancellationToken ct = default)
         => _core.HasAnyContinuableFailedStepInRunAsync(runId, ct);
 
@@ -244,8 +257,8 @@ public sealed class PipelineRepository(
     public Task CancelPendingStepRunsAsync(int runId, CancellationToken ct = default)
         => _core.CancelPendingStepRunsAsync(runId, ct);
 
-    public Task RequestPipelineRunCancellationAsync(int runId, CancellationToken ct = default)
-        => _core.RequestPipelineRunCancellationAsync(runId, ct);
+    public Task RequestPipelineRunCancellationAsync(int runId, PipelineRunCancellation cancellation, CancellationToken ct = default)
+        => _core.RequestPipelineRunCancellationAsync(runId, cancellation, ct);
 
     public Task CancelPendingStepRunsExceptStagesAsync(
         int runId,
@@ -297,8 +310,11 @@ public sealed class PipelineRepository(
     public Task AddApprovalAsync(PipelineApproval approval, CancellationToken ct = default)
         => _core.AddApprovalAsync(approval, ct);
 
-    public Task<Data.Entities.Environment?> FindEnvironmentByNameAsync(string name, CancellationToken ct = default)
-        => _core.FindEnvironmentByNameAsync(name, ct);
+    public Task<Data.Entities.Environment?> FindEnvironmentByNameAsync(string name, int? projectId, CancellationToken ct = default)
+        => _core.FindEnvironmentByNameAsync(name, projectId, ct);
+
+    public Task<int?> GetRunProjectIdAsync(int runId, CancellationToken ct = default)
+        => _core.GetRunProjectIdAsync(runId, ct);
 
     public Task<Data.Entities.Environment?> FindEnvironmentByNameForProjectAsync(string name, int projectId, CancellationToken ct = default)
         => _core.FindEnvironmentByNameForProjectAsync(name, projectId, ct);
@@ -308,6 +324,9 @@ public sealed class PipelineRepository(
 
     public Task<PipelineTemplate?> FindTemplateByNameAsync(string name, int organizationId, CancellationToken ct = default)
         => _templates.FindTemplateByNameAsync(name, organizationId, ct);
+
+    public Task<PipelineTemplate?> FindSharedTemplateByNameAsync(string name, CancellationToken ct = default)
+        => _templates.FindSharedTemplateByNameAsync(name, ct);
 
     public Task<PipelineTemplateVersion?> GetTemplateVersionAsync(int templateId, int version, CancellationToken ct = default)
         => _templates.GetTemplateVersionAsync(templateId, version, ct);

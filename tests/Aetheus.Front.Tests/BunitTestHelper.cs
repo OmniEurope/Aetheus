@@ -20,6 +20,15 @@ internal static class BunitTestHelper
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
+    /// <summary>
+    /// The front is a standalone WebAssembly app, always interactive. OE 1.6.0's forms read RendererInfo on an
+    /// invalid submit (they focus the first invalid field only when a script can run), which bUnit refuses
+    /// until it is set. Setting it builds the renderer, which closes the service collection: call it once the
+    /// component is rendered, never from <see cref="RegisterServices"/>.
+    /// </summary>
+    public static void Interactive(BunitContext ctx) =>
+        ctx.SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("WebAssembly", isInteractive: true));
+
     public static TestHandler RegisterServices(BunitContext ctx, bool authenticated = true, bool isAdmin = false)
     {
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
@@ -117,6 +126,7 @@ internal static class BunitTestHelper
             sp.GetRequiredService<HubConnectionFactory>()));
         ctx.Services.AddSingleton(new ActiveOrganizationService(apiClient, Substitute.For<IJSRuntime>()));
         ctx.Services.AddScoped<NotifyHelper>();
+        ctx.Services.AddScoped<GridExportContext>();
         ctx.Services.AddScoped<ClipboardService>();
         ctx.Services.AddScoped<UiActions>();
         ctx.Services.AddScoped<PipelineRunGate>();
@@ -147,6 +157,7 @@ internal static class BunitTestHelper
         ctx.Services.AddSingleton(permissionService);
         ctx.Services.AddSingleton(TimeProvider.System);
         ctx.Services.AddSingleton<ListCacheService>();
+        ctx.Services.AddSingleton<PageStateCache>();
         ctx.Services.AddSingleton(sp => new TaskTrackerService(
             sp.GetRequiredService<ApiClient>(),
             sp.GetRequiredService<AuthStateProvider>(),

@@ -1,11 +1,25 @@
 # SPDX-License-Identifier: EUPL-1.2
+# Quality evidence for a repository in any language, graded on one versioned scale.
+#
+# The project's quality adapter does what only the project knows (run its tests with coverage, run its
+# own linter) and may leave two files for the platform to publish:
+#   .pipeline-quality/coverage.cobertura.xml   line coverage, Cobertura format
+#   .pipeline-quality/lint.sarif               lint findings, SARIF format
+# The platform adds what needs no project knowledge: C# complexity, Python (Ruff) and Java (PMD) lint,
+# each one reporting "not applicable" on a repository without that language.
+#
+# The steps of one stage run concurrently (ADR-012): every step reading another's output sits in a
+# later stage, and the producers are chained so a small runner never holds more than two of them.
 name: application-quality-template
 trigger: manual
 variables:
   APPLICATION_CI_PIPELINE: application-ci
+  APPLICATION_QUALITY_COVERAGE_REPORT: "false"
+  APPLICATION_QUALITY_LINT_REPORT: "false"
+  APPLICATION_SOURCE_CSHARP: "false"
 
 stages:
-  - name: Quality
+  - name: Restore CI payload
     group: Quality
     execution_role: build
     os: linux
@@ -15,10 +29,149 @@ stages:
         artifact: ApplicationPayload-artifacts
         artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
         timeout_seconds: 1800
+
+  - name: Quality
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Restore CI payload]
+    steps:
       - name: Run project quality adapter
         working_directory: "$(WORKSPACE)"
+        outputs:
+          - APPLICATION_QUALITY_COVERAGE_REPORT
+          - APPLICATION_QUALITY_LINT_REPORT
+          - APPLICATION_SOURCE_CSHARP
         shell: |
           set -eu
           test -f .pipeline/scripts/quality.sh
+          mkdir -p .pipeline-quality
           sh .pipeline/scripts/quality.sh
+          present() { if test -s "$1"; then echo true; else echo false; fi; }
+          echo "##aetheus[setvariable name=APPLICATION_QUALITY_COVERAGE_REPORT]$(present .pipeline-quality/coverage.cobertura.xml)"
+          echo "##aetheus[setvariable name=APPLICATION_QUALITY_LINT_REPORT]$(present .pipeline-quality/lint.sarif)"
+          if find . \( -name .git -o -name node_modules -o -name bin -o -name obj -o -name .pipeline-artifacts \) -prune \
+              -o -type f -name '*.cs' -print | grep -q .; then
+            echo "##aetheus[setvariable name=APPLICATION_SOURCE_CSHARP]true"
+          else
+            echo "##aetheus[setvariable name=APPLICATION_SOURCE_CSHARP]false"
+          fi
         timeout_seconds: 7200
+
+  - name: Publish coverage
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Quality]
+    condition: "eq(variables['APPLICATION_QUALITY_COVERAGE_REPORT'], 'true')"
+    steps:
+      - name: Publish coverage evidence
+        type: coverage
+        target_files:
+          - ".pipeline-quality/coverage.cobertura.xml"
+        # A coverage threshold is never expressed here: the grade below scales it.
+        min_coverage: 0
+
+  - name: Publish lint
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Publish coverage]
+    condition: "eq(variables['APPLICATION_QUALITY_LINT_REPORT'], 'true')"
+    steps:
+      - name: Publish lint evidence
+        type: lint
+        target_files:
+          - ".pipeline-quality/lint.sarif"
+        timeout_seconds: 300
+
+  - name: Measure complexity
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Publish lint]
+    condition: "eq(variables['APPLICATION_SOURCE_CSHARP'], 'true')"
+    steps:
+      - name: Publish complexity and architecture evidence
+        type: complexity
+        timeout_seconds: 900
+
+  - name: Lint source
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Measure complexity]
+    steps:
+      - name: Lint Python
+        type: scanner
+        scanner: ruff
+        timeout_seconds: 1200
+      - name: Check Java quality
+        type: scanner
+        scanner: pmd-java
+        timeout_seconds: 1200
+
+  # The grade counts what any repository produces: the high-severity findings of every quality report
+  # the run published, whichever producer wrote it. Coverage, duplication and complexity are graded
+  # when their evidence exists and shown beside it, but are not required: a repository in a language
+  # without that evidence is not held "incomplete" for it. A project that wants one of them to decide
+  # the grade overrides this step in its own pipeline with `required: true` on that rule.
+  - name: Grade quality
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Lint source]
+    steps:
+      - name: Publish summaries and calculate the versioned quality grade
+        type: analysis-gate
+        analysis_scope: quality
+        analysis_preset: recommended
+        analysis_grading:
+          version: 1
+          minimum_grade: F
+          required_domains:
+            - code-quality
+          rules:
+            - key: grade.quality.high
+              domain: code-quality
+              severity: high
+              direction: lower-is-better
+              a: 0
+              b: 1
+              c: 3
+              d: 5
+              e: 10
+            - key: grade.coverage.line
+              domain: reliability
+              metric: coverage.line.percent
+              category: coverage
+              required: false
+              direction: higher-is-better
+              a: 75
+              b: 65
+              c: 55
+              d: 40
+              e: 20
+            - key: grade.duplication
+              domain: code-quality
+              metric: duplication.percentage
+              category: duplication
+              required: false
+              direction: lower-is-better
+              a: 3
+              b: 5
+              c: 8
+              d: 12
+              e: 20
+            - key: grade.complexity.maximum
+              domain: code-quality
+              metric: complexity.cyclomatic.maximum
+              category: code-quality
+              required: false
+              direction: lower-is-better
+              a: 15
+              b: 20
+              c: 25
+              d: 35
+              e: 50
+        timeout_seconds: 300

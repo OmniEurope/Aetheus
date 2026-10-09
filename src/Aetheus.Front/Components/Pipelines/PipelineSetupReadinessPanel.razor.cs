@@ -50,15 +50,52 @@ public partial class PipelineSetupReadinessPanel
         PipelineSetupReadinessKind.MissingRequiredLibraries => "ReadinessMissingRequiredLibraries",
         PipelineSetupReadinessKind.MissingRequiredVaults => "ReadinessMissingRequiredVaults",
         PipelineSetupReadinessKind.MissingRequiredCapabilities => "ReadinessMissingRequiredCapabilities",
+        PipelineSetupReadinessKind.MissingScannerConfiguration => "ReadinessMissingScannerConfiguration",
         _ => "ReadinessMissingEnvironments"
     };
 
     private static string HintKey(PipelineSetupReadinessKind kind) => $"{TitleKey(kind)}Hint";
 
+    /// <summary>
+    /// Recette R2-121: what a missing file has to do, so the author of a new project knows what to
+    /// write rather than only its name. Null for a file the templates do not document.
+    /// </summary>
+    private string? ItemRole(PipelineSetupReadinessKind kind, string item)
+    {
+        var fileName = item[(item.LastIndexOf('/') + 1)..];
+        var key = kind switch
+        {
+            PipelineSetupReadinessKind.MissingScannerConfiguration when fileName == ".gitleaks.toml"
+                => "ReadinessScannerFileGitleaks",
+            PipelineSetupReadinessKind.MissingAdapterScripts => AdapterRoleKey(fileName),
+            _ => null
+        };
+        return key is null ? null : L[key].Value;
+    }
+
+    /// <summary>The text key of each documented adapter script; a lookup instead of a string switch.</summary>
+    private static readonly System.Collections.Frozen.FrozenDictionary<string, string> AdapterRoleKeys =
+        System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new Dictionary<string, string>
+        {
+            ["ci.sh"] = "ReadinessAdapterCi",
+            ["quality.sh"] = "ReadinessAdapterQuality",
+            ["qa.sh"] = "ReadinessAdapterQa",
+            ["qa-extended.sh"] = "ReadinessAdapterQaExtended",
+            ["deploy-prod.sh"] = "ReadinessAdapterDeployProd",
+            ["release-fast.sh"] = "ReadinessAdapterReleaseFast",
+            ["publish-packages.sh"] = "ReadinessAdapterPublishPackages"
+        }, StringComparer.Ordinal);
+
+    private static string? AdapterRoleKey(string fileName) =>
+        AdapterRoleKeys.TryGetValue(fileName, out var key) ? key
+        : fileName.StartsWith("package-", StringComparison.Ordinal) ? "ReadinessAdapterPackage"
+        : null;
+
     private static string RemediationKey(PipelineSetupReadinessKind kind) => kind switch
     {
         PipelineSetupReadinessKind.NoRepository => "CreateGitRepository",
         PipelineSetupReadinessKind.EmptyBranch or PipelineSetupReadinessKind.MissingAdapterScripts
+            or PipelineSetupReadinessKind.MissingScannerConfiguration
             => "GitRepositories",
         PipelineSetupReadinessKind.MissingEnvironments => "CreateEnvironment",
         _ => "AddServer"
@@ -73,6 +110,7 @@ public partial class PipelineSetupReadinessPanel
     {
         PipelineSetupReadinessKind.NoRepository => $"/git-repositories?projectId={ProjectId}&create=true",
         PipelineSetupReadinessKind.EmptyBranch or PipelineSetupReadinessKind.MissingAdapterScripts
+            or PipelineSetupReadinessKind.MissingScannerConfiguration
             => $"/git-repositories?projectId={ProjectId}",
         PipelineSetupReadinessKind.MissingEnvironments => $"/environments/new?projectId={ProjectId}",
         PipelineSetupReadinessKind.NoRunnerConfigured

@@ -7,11 +7,13 @@ namespace Aetheus.Front.Components.Pipelines;
 public partial class PipelineRun : IAsyncDisposable
 {
     [Inject] private ApiClient Api { get; set; } = default!;
+    [Inject] private PageStateCache PageState { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private ILogger<PipelineRun> Logger { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
+    [Inject] private PendingApprovalsService PendingApprovals { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private ProjectNavContextService ProjectNav { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
@@ -68,21 +70,34 @@ public partial class PipelineRun : IAsyncDisposable
     private async Task LoadRunPageAsync(int runId, int generation, CancellationToken ct)
     {
         if (!await ResetRunPageAsync(runId, generation).ConfigureAwait(false)) return;
-        _logStreamer = new PipelineRunLogStreamer(Api, HubFactory, Logger, _stepLogsCache, InvokeAsync, StateHasChanged);
+        _logStreamer = new PipelineRunLogStreamer(Api, HubFactory, Logger, _logWindow, InvokeAsync, StateHasChanged);
         _baselines = new PipelineRunStageBaselines(Api);
-        _approval = new PipelineRunApprovalController(Api, Toast, ReloadRunAsync);
-        _loading = true;
-        _run = await LoadRootRunAsync(runId, ct).ConfigureAwait(false);
+        _approval = new PipelineRunApprovalController(Api, Toast, ReloadRunAsync, PendingApprovals);
+        // Recette R2-087: a return shows the run as it was left at once; the page-wide loader is for a
+        // first visit. The run is then read again and the page rebuilt from it, as on a first visit.
+        var address = $"pipelines/runs/{runId}";
+        var ticket = PageState.Begin();
+        _loading = !PageState.TryRestore<PipelineRunDto>(address, out var shown);
+        if (!_loading)
+        {
+            _run = shown;
+            _detailsLoading = true;
+            PrepareRootRun();
+            await InvokeAsync(StateHasChanged);
+        }
+        _run = await LoadRootRunAsync(runId, refresh: !_loading, ct).ConfigureAwait(false);
         var approvalLoaded = await _approval.LoadIfWaitingAsync(_run, ct).ConfigureAwait(false);
         if (!IsCurrentLoad(runId, generation)) return;
         _loading = false;
-        if (_run is not null)
+        if (_run is null) PageState.Forget<PipelineRunDto>(address);
+        else
         {
             // Recette R-422: the page shows as soon as the run itself is loaded (header, alerts), and
             // the rest (child runs, gate, metrics, approvals, releases, logs) arrives behind it,
             // in parallel, instead of the whole page waiting for the slowest call.
             _detailsLoading = true;
             PrepareRootRun();
+            PageState.Remember(ticket, address, _run);
             await InvokeAsync(StateHasChanged);
             if (!await EnrichRunAsync(runId, generation, approvalLoaded, ct).ConfigureAwait(false)) return;
             _detailsLoading = false;
@@ -91,7 +106,8 @@ public partial class PipelineRun : IAsyncDisposable
         if (!IsCurrentLoad(runId, generation)) return;
         _live = new PipelineRunLiveConnection(HubFactory, Logger, runId,
             () => LiveChildRunIds(_childRunCache), ReloadRunAsync, RefreshQueueAsync, InvokeAsync,
-            () => AllStepsAcrossChildren().Any(step => step.Status == TaskExecutionStatus.Assigned));
+            () => AllStepsAcrossChildren().Any(step => step.Status == TaskExecutionStatus.Assigned),
+            () => RunInProgress, () => _ = InvokeAsync(StateHasChanged));
         await _live.StartAsync();
     }
 
@@ -137,11 +153,11 @@ public partial class PipelineRun : IAsyncDisposable
         return true;
     }
 
-    private async Task<PipelineRunDto?> LoadRootRunAsync(int runId, CancellationToken ct)
+    private async Task<PipelineRunDto?> LoadRootRunAsync(int runId, bool refresh, CancellationToken ct)
     {
         try
         {
-            return _pageCache.TryGetRun(runId, out var cached)
+            return !refresh && _pageCache.TryGetRun(runId, out var cached)
                 ? cached
                 : await Api.Pipelines.GetPipelineRunAsync(runId, ct);
         }
@@ -229,7 +245,8 @@ public partial class PipelineRun : IAsyncDisposable
         _selectedTab = 0;
         _expandedMatrixGroups.Clear();
         _childRunCache.Clear();
-        _stepLogsCache.Clear();
+        _logWindow.Clear();
+        _completeLogLoading = false;
         _selectedStep = null;
         _userPinnedStep = false;
         _logVarRegex = null;
@@ -328,7 +345,7 @@ public partial class PipelineRun : IAsyncDisposable
                     if (_logStreamer is not null) await _logStreamer.UpdateAsync(_selectedStep);
                     // First time we follow this task, seed its history (the log hub streams only NEW lines
                     // from the join point, it does not replay).
-                    if (runningStep.TaskId is { } tid && !_stepLogsCache.ContainsKey(tid))
+                    if (runningStep.TaskId is { } tid && !_logWindow.HasSnapshot(tid))
                     {
                         await LoadTaskLogSnapshotAsync(tid);
                     }
@@ -468,7 +485,7 @@ public partial class PipelineRun : IAsyncDisposable
     /// <summary>The logs of the coverage or lint step, asked for by its result tab.</summary>
     private async Task LoadResultStepLogsAsync(int taskId)
     {
-        try { _stepLogsCache[taskId] = await Api.Monitoring.GetTaskLogsAsync(taskId) ?? []; }
+        try { _logWindow.ApplySnapshot(taskId, await Api.Monitoring.GetTaskLogsAsync(taskId) ?? [], requested: null); }
         catch (HttpRequestException) { _stepLogsCache[taskId] = []; }
         StateHasChanged();
     }
@@ -560,14 +577,18 @@ public partial class PipelineRun : IAsyncDisposable
         step.ExitCode is { } code ? string.Format(L["FailedStepWithExit"], step.StepName, code) : step.StepName));
     private IReadOnlyList<PipelineStepRunDto> FailedSteps =>
         _run?.Steps.Where(step => step.Status == TaskExecutionStatus.Failed && !step.IsSystem).ToList() ?? [];
-    private Task LoadFailedStepLogsAsync() => PipelineRunLogView.LoadFailedStepLogsAsync(FailedSteps, Api, _stepLogsCache);
+    private Task LoadFailedStepLogsAsync() => PipelineRunLogView.LoadFailedStepLogsAsync(FailedSteps, Api, _logWindow);
     private Task DownloadArtifactAsync(PipelineArtifactDto artifact) => Commands.DownloadArtifactAsync(artifact);
     private Task OpenAiResultAsync(AiRunResultDto result) => PipelineRunAiResults.OpenAsync(Dialog, L, result);
     private Task CopyYamlAsync() => string.IsNullOrEmpty(_run?.YamlSnapshot) ? Task.CompletedTask : Commands.CopyYamlAsync(_run.YamlSnapshot);
     private string? _peekName;
     private bool _yamlWrap;
     private void ClosePeek() => _peekName = null;
-    private readonly Dictionary<int, List<TaskLogDto>> _stepLogsCache = [];
+    // FRONT-010 / recette R2-104: bounded live lines per task, the complete log on demand.
+    private readonly PipelineRunLogWindow _logWindow = new();
+    private Dictionary<int, List<TaskLogDto>> _stepLogsCache => _logWindow.Lines;
+    internal PipelineRunLogWindow LogWindow => _logWindow;
+    private bool _completeLogLoading;
     private bool _logsLoading;
     internal async Task SelectStep(PipelineStepRunDto step)
     {
@@ -581,9 +602,10 @@ public partial class PipelineRun : IAsyncDisposable
             return;
         }
         var taskId = step.TaskId.Value;
-        if (step.Status == TaskExecutionStatus.Running) _stepLogsCache.Remove(taskId);
+        if (step.Status == TaskExecutionStatus.Running) _logWindow.Forget(taskId);
         if (_logStreamer is not null) await _logStreamer.UpdateAsync(_selectedStep);
-        if (_stepLogsCache.ContainsKey(taskId)) return;
+        // A list built from streamed lines alone is not the history: it is read all the same (R2-104).
+        if (_logWindow.HasSnapshot(taskId)) return;
         _logsLoading = true;
         StateHasChanged();
         await LoadTaskLogSnapshotAsync(taskId);
@@ -592,9 +614,24 @@ public partial class PipelineRun : IAsyncDisposable
     private async Task LoadTaskLogSnapshotAsync(int taskId)
     {
         List<TaskLogDto> snapshot;
-        try { snapshot = await Api.Monitoring.GetTaskLogsAsync(taskId) ?? []; }
+        try { snapshot = await Api.Monitoring.GetTaskLogTailAsync(taskId, PipelineRunLogWindow.LiveWindow); }
         catch (HttpRequestException) { snapshot = []; }
-        _stepLogsCache.TryGetValue(taskId, out var streamedDuringSnapshot);
-        _stepLogsCache[taskId] = PipelineRunLogSnapshot.Merge(snapshot, streamedDuringSnapshot ?? []);
+        // Lines streamed while the snapshot was read are kept (merged by id).
+        _logWindow.ApplySnapshot(taskId, snapshot, PipelineRunLogWindow.LiveWindow);
+    }
+
+    /// <summary>Recette R2-104: "Journal complet" reads the selected step's complete log, page by page.</summary>
+    internal async Task ShowCompleteLogAsync()
+    {
+        if (_selectedStep?.TaskId is not { } taskId || _completeLogLoading) return;
+        _completeLogLoading = true;
+        try
+        {
+            await _logWindow.LoadCompleteAsync(taskId, page =>
+                Api.Monitoring.GetTaskLogPageAsync(taskId, page, PipelineRunLogWindow.PageSize, _loadSession.Token));
+        }
+        catch (HttpRequestException) { Toast.Error("Logs", "CompleteLogLoadFailed"); }
+        catch (OperationCanceledException) when (_loadSession.Token.IsCancellationRequested) { }
+        finally { _completeLogLoading = false; }
     }
 }

@@ -8,6 +8,7 @@ public partial class Supervision
 {
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private AuthStateProvider Auth { get; set; } = default!;
 
     private AppMonitoringSummaryDto? _summary;
     private bool _loadFailed;

@@ -104,7 +104,7 @@ public class PipelineGitServiceTests
     [Fact]
     public async Task ReadProjectPipelineYamlAtRevisionAsync_UsesExactCommit()
     {
-        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        const string commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
         SetupRepoWithDiskPath(1, "my-repo", "develop");
         var yaml = "name: deploy\ntrigger: manual\nstages: []";
         _cliMock.GetBlobAsync(Arg.Any<string>(), commit, ".pipeline/deploy.yaml", Arg.Any<CancellationToken>())
@@ -160,7 +160,7 @@ public class PipelineGitServiceTests
     [Fact]
     public async Task ReadProjectConfigAtRevisionAsync_SelectedRepository_UsesExactCommitAndSafePath()
     {
-        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        const string commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
         _gitServiceMock.GetRepositoriesAsync(1, Arg.Any<CancellationToken>()).Returns(
         [
             new GitLightRepoDto { Id = 10, ProjectId = 1, Slug = "first", DefaultBranch = "main" },

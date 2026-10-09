@@ -54,7 +54,7 @@ public sealed class PipelineRequirementsChecker(
         var outcomes = new List<PipelineRequirementOutcome>();
         await CheckLibrariesAsync(requires, projectId, outcomes, ct).ConfigureAwait(false);
         await CheckVaultsAsync(requires, projectId, outcomes, ct).ConfigureAwait(false);
-        await CheckEnvironmentsAsync(requires, outcomes, ct).ConfigureAwait(false);
+        await CheckEnvironmentsAsync(requires, projectId, outcomes, ct).ConfigureAwait(false);
         await CheckCapabilitiesAsync(requires, organizationId, outcomes, ct).ConfigureAwait(false);
         return outcomes;
     }
@@ -93,11 +93,11 @@ public sealed class PipelineRequirementsChecker(
     }
 
     private async Task CheckEnvironmentsAsync(
-        PipelineRequiresDefinition requires, List<PipelineRequirementOutcome> outcomes, CancellationToken ct)
+        PipelineRequiresDefinition requires, int? projectId, List<PipelineRequirementOutcome> outcomes, CancellationToken ct)
     {
         foreach (var name in requires.Environments)
         {
-            var environment = await repo.FindEnvironmentByNameAsync(name, ct).ConfigureAwait(false);
+            var environment = await repo.FindEnvironmentByNameAsync(name, projectId, ct).ConfigureAwait(false);
             outcomes.Add(new PipelineRequirementOutcome(
                 EnvironmentKind, name,
                 environment is not null

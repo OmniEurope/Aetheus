@@ -586,6 +586,40 @@ public class PipelineArtifactOperationExecutorTests
         }
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("[]")]
+    public async Task CollectArtifacts_EmptyWorkspaceWithoutPatterns_FailsWithoutUpload(string target)
+    {
+        var workDir = Directory.CreateTempSubdirectory("prm-artifact-").FullName;
+        try
+        {
+            var api = Substitute.For<IServerApiClient>();
+            var output = new List<string>();
+
+            var result = await NewExecutor(api).ExecuteAsync(
+                OperationKind.PipelineCollectArtifacts,
+                target: target,
+                envVars: new Dictionary<string, string>
+                {
+                    ["AETHEUS_RUN_ID"] = "42",
+                    ["AETHEUS_WORKING_DIR"] = workDir
+                },
+                timeoutSeconds: 60,
+                onOutput: (message, _) => { output.Add(message); return Task.CompletedTask; },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(output, message => message.Contains("holds no file to collect", StringComparison.Ordinal));
+            await api.DidNotReceive().UploadArtifactAsync(
+                Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            Directory.Delete(workDir, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task CollectArtifacts_ExplicitPatternsWithoutMatches_FailsWithoutUpload()
     {
@@ -1346,6 +1380,34 @@ public class PipelineArtifactOperationExecutorTests
             Assert.Equal(1, result.ExitCode);
             Assert.Contains(log, line => line.Contains("no", StringComparison.Ordinal)
                 && line.Contains("source-commit", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(workDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RestoreArtifacts_ArtifactWithoutProvenance_IsRefusedEvenWhenTheWorkspaceHoldsValidMarkers()
+    {
+        // Markers left by an earlier restore must not vouch for an archive that carries none.
+        var workDir = Directory.CreateTempSubdirectory("prm-prov-inherited-").FullName;
+        var log = new List<string>();
+        try
+        {
+            var metadata = Directory.CreateDirectory(Path.Combine(workDir, ".pipeline-artifacts")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(metadata, "source-commit"), RunCommit, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(metadata, "delivery-contract.json"), "{}", TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(metadata, "artifact-provenance.json"), "{}", TestContext.Current.CancellationToken);
+
+            var result = await RestoreWithProvenanceAsync(
+                await ProvenancedArtifactAsync(sourceCommit: null, withContract: false, withManifest: false),
+                workDir, RunCommit, log: log);
+
+            Assert.Equal(1, result.ExitCode);
+            Assert.Contains(log, line => line.Contains("provenance refused", StringComparison.Ordinal));
+            // Refused before extraction: the payload never reaches the workspace.
+            Assert.False(File.Exists(Path.Combine(workDir, "src", "Aetheus.Back", "bin", "Release", "net10.0", "Aetheus.Back.dll")));
         }
         finally
         {

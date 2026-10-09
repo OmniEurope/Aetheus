@@ -14,6 +14,7 @@ public partial class ServerDockerSection : IAsyncDisposable
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private PermissionService Permissions { get; set; } = default!;
 
     [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter, EditorRequired] public int ServerId { get; set; }
@@ -31,6 +32,17 @@ public partial class ServerDockerSection : IAsyncDisposable
     // The two tabs that consume task output of their own; the parent keeps a handle on each to forward.
     private DockerContainersTab? _containersTab;
     private DockerComposeTab? _composeTab;
+
+    /// <summary>
+    /// BACK-012: compose deploy, image build, container shell (and, before them, image delete and prune)
+    /// take Server.Admin on the backend; a user without it is not offered them. Permissions may land after
+    /// this section mounts, hence the subscription.
+    /// </summary>
+    private bool CanAdmin => Permissions.CanAdmin(ResourceType.Server, ServerId);
+
+    protected override void OnInitialized() => Permissions.OnPermissionsChanged += OnPermissionsChanged;
+
+    private void OnPermissionsChanged() => InvokeAsync(StateHasChanged);
 
     protected override void OnParametersSet()
     {
@@ -104,6 +116,7 @@ public partial class ServerDockerSection : IAsyncDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        Permissions.OnPermissionsChanged -= OnPermissionsChanged;
         await _lifetimeCts.CancelAsync();
         _lifetimeCts.Dispose();
     }

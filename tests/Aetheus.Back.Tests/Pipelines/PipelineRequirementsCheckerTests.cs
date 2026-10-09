@@ -79,7 +79,7 @@ public sealed class PipelineRequirementsCheckerTests
     [Fact]
     public async Task AMissingEnvironmentIsRefused()
     {
-        _repo.FindEnvironmentByNameAsync("qa", Arg.Any<CancellationToken>()).Returns((Environment?)null);
+        _repo.FindEnvironmentByNameAsync("qa", Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns((Environment?)null);
 
         var outcome = Assert.Single(await CheckAsync(
             new PipelineRequiresDefinition { Environments = ["qa"] }));
@@ -122,7 +122,7 @@ public sealed class PipelineRequirementsCheckerTests
     {
         LibrariesFound();
         VaultsFound();
-        _repo.FindEnvironmentByNameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.FindEnvironmentByNameAsync(Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns((Environment?)null);
 
         var outcomes = await CheckAsync(new PipelineRequiresDefinition

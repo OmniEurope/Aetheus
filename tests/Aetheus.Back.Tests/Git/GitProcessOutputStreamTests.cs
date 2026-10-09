@@ -62,13 +62,15 @@ public sealed class GitProcessOutputStreamTests
         stopwatch.Stop();
 
         await exited.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(30),
             TestContext.Current.CancellationToken);
         // Lower bound: the 100 ms grace was actually honoured, the process was not killed on sight.
         // Upper bound: the wait is BOUNDED - a blocked process would otherwise hold dispose forever.
         // It is deliberately far above the grace period: the property under test is "finite", and a
-        // tight ceiling only measured scheduler latency on a loaded machine.
-        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(50), TimeSpan.FromSeconds(5));
+        // tight ceiling only measured scheduler latency on a loaded machine. The code bounds its two
+        // waits (grace, then grace after the kill), not Process.Kill(entireProcessTree) itself, which
+        // the OS can hold while it enumerates the tree: 12.5 s on 2026-10-04 with three suites running.
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(50), TimeSpan.FromSeconds(30));
     }
 
     [Fact]

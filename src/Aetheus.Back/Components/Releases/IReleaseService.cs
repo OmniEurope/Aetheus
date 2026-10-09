@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Pipelines;
 
 namespace Aetheus.Back.Components.Releases;
 
@@ -22,8 +23,15 @@ public interface IReleaseService
     Task<ReleaseFilterValuesDto> GetReleaseFilterValuesAsync(
         int? projectId, List<int>? accessibleIds, int? serverId, CancellationToken ct = default);
     Task<List<ReleaseDto>> SyncReleasesAsync(int projectId, CancellationToken ct = default);
-    Task<ReleaseDto> TriggerReleaseBuildAsync(int releaseId, TriggerReleaseBuildRequest request, CancellationToken ct = default);
-    Task<ReleaseRollbackDto> RollbackReleaseAsync(int releaseId, RollbackReleaseRequest request, CancellationToken ct = default);
+    /// <param name="authorizedRun">The run of <c>request.PipelineId</c> the caller was authorized to launch
+    /// (BACK-023); it is the one launched.</param>
+    Task<ReleaseDto> TriggerReleaseBuildAsync(
+        int releaseId, TriggerReleaseBuildRequest request, PipelineRunPreparation authorizedRun, CancellationToken ct = default);
+
+    /// <param name="authorizedRun">The run of <c>request.PipelineId</c> the caller was authorized to launch
+    /// (BACK-023); it is the one launched.</param>
+    Task<ReleaseRollbackDto> RollbackReleaseAsync(
+        int releaseId, RollbackReleaseRequest request, PipelineRunPreparation authorizedRun, CancellationToken ct = default);
     Task<ReleaseDto> PromoteReleaseAsync(int releaseId, CancellationToken ct = default);
     Task<ReleaseDto> CreateReleaseFromPipelineAsync(int projectId, int pipelineRunId, string version, string? changelog,
         string? commitHash = null, string? tagName = null, string? branchName = null,

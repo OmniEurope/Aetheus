@@ -83,20 +83,27 @@ public class EncryptionServiceTests
     }
 
     [Fact]
-    public void EncryptValue_DifferentKeys_ProduceDifferentResults()
+    public void DecryptValue_WithAnotherKey_IsRejected()
     {
-        var config2 = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Auth:EncryptionKey"] = "different-key-for-testing-purposes"
-            })
-            .Build();
-        var sut2 = new EncryptionService(config2, Env(Environments.Development));
+        // Same explicit salt and environment for every instance, so only the configured key differs.
+        // Two ciphertexts always differ (random nonce); what proves the key is used is that only
+        // the same key opens the value.
+        var salt = Convert.ToBase64String(new byte[16]);
+        EncryptionService WithKey(string key) => new(
+            new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Auth:EncryptionKey"] = key,
+                    ["Auth:EncryptionSalt"] = salt
+                })
+                .Build(),
+            Env(Environments.Production));
+        var owner = WithKey("key-a-for-cross-key-test");
 
-        var encrypted1 = _sut.EncryptValue("test");
-        var encrypted2 = sut2.EncryptValue("test");
+        var encrypted = owner.EncryptValue("test");
 
-        Assert.NotEqual(encrypted1, encrypted2);
+        Assert.Equal("test", WithKey("key-a-for-cross-key-test").DecryptValue(encrypted));
+        Assert.ThrowsAny<CryptographicException>(() => WithKey("key-b-for-cross-key-test").DecryptValue(encrypted));
     }
 
     [Fact]

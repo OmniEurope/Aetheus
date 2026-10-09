@@ -67,7 +67,12 @@ public interface IAuthRepository
     Task BumpSecurityStampAsync(int userId, CancellationToken ct = default);
 
     // --- Lockout (F-011) ---
-    Task IncrementFailedLoginAsync(int userId, CancellationToken ct = default);
+    /// <summary>
+    /// Adds one failed attempt in the store itself and returns the count read back afterwards, so
+    /// concurrent failures never overwrite each other's increment and the lockout threshold is
+    /// decided on the stored value, not on the caller's snapshot.
+    /// </summary>
+    Task<int> IncrementFailedLoginAsync(int userId, CancellationToken ct = default);
     Task ResetFailedLoginAsync(int userId, CancellationToken ct = default);
     Task LockoutUserAsync(int userId, DateTime lockoutEndUtc, CancellationToken ct = default);
     Task ClearLockoutAsync(int userId, CancellationToken ct = default);
@@ -87,7 +92,18 @@ public interface IAuthRepository
     Task<int> DeleteAllExpiredRefreshTokensAsync(DateTime utcNow, CancellationToken ct = default);
 
     // --- TOTP (F-010) ---
-    Task<User?> FindUserByIdForUpdateAsync(int userId, CancellationToken ct = default);
+    /// <summary>
+    /// The user, tracked for an update. It takes no row lock: concurrent recovery-code consumes are
+    /// serialized by the conditional replace of <see cref="ReplaceTotpRecoveryCodesAsync"/> (BACK-011).
+    /// </summary>
+    Task<User?> FindUserByIdTrackedAsync(int userId, CancellationToken ct = default);
+    /// <summary>Untracked current recovery-code JSON of one user (re-read after a lost consume race).</summary>
+    Task<string?> GetTotpRecoveryCodesAsync(int userId, CancellationToken ct = default);
+    /// <summary>
+    /// Replaces the recovery-code JSON only while the stored value still equals
+    /// <paramref name="expectedCodes"/>; false when a concurrent consume changed it first. Commits immediately.
+    /// </summary>
+    Task<bool> ReplaceTotpRecoveryCodesAsync(int userId, string expectedCodes, string newCodes, CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);
 }

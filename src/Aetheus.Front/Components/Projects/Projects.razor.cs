@@ -291,14 +291,15 @@ public partial class Projects : IAsyncDisposable
         if (result is ProjectDto created)
         {
             await LoadDataAndRender();
-            // M9DZ: creating from the list keeps you on the list - offer to jump straight into the
-            // freshly created project rather than making the user hunt for it in the grid.
-            var open = await Dialog.Confirm(
-                string.Format(L["OpenNewProjectConfirm"].Value, created.Name),
+            // Recette R2-121: a project is only its record until its pipelines exist. Offer the next
+            // step, the setup wizard for this project, whose readiness check names each missing
+            // prerequisite (repository, runner, environments, libraries, adapters) with its fix.
+            var setUp = await Dialog.Confirm(
+                string.Format(L["SetUpNewProjectPipelinesConfirm"].Value, created.Name),
                 L["ProjectCreated"].Value,
-                new OmniConfirmOptions { OkButtonText = L["OpenProject"].Value, CancelButtonText = L["StayHere"].Value });
-            if (open == true)
-                Nav.NavigateTo($"/projects/{created.Id}/overview");
+                new OmniConfirmOptions { OkButtonText = L["SetUpPipelines"].Value, CancelButtonText = L["StayHere"].Value });
+            if (setUp == true)
+                Nav.NavigateTo($"/pipelines/setup?projectId={created.Id}");
         }
     }
 

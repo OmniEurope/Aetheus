@@ -6,7 +6,7 @@ namespace Aetheus.Back.Components.Mail;
 public class MailInventoryRepository(AppDbContext db) : IMailInventoryRepository
 {
     private static readonly OperationKind[] s_removalKinds =
-        [OperationKind.MailRemoveDomain, OperationKind.MailDeleteAccount, OperationKind.MailRemoveAlias];
+        [OperationKind.MailRemoveDomain, OperationKind.MailDeleteAccount, OperationKind.MailRemoveAlias, OperationKind.MailPurge];
 
     private static readonly TaskExecutionStatus[] s_openStatuses =
         [TaskExecutionStatus.Pending, TaskExecutionStatus.Assigned, TaskExecutionStatus.Running];
@@ -77,6 +77,8 @@ public class MailInventoryRepository(AppDbContext db) : IMailInventoryRepository
             .ConfigureAwait(false);
 
     public void AddDomain(MailDomain domain) => db.MailDomains.Add(domain);
+
+    public void RemoveDomain(MailDomain domain) => db.MailDomains.Remove(domain);
 
     public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 }

@@ -241,6 +241,11 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
             user.MustChangePassword = false;
         else if (isAdmin)
             user.MustChangePassword = true;
+        // A reset by someone else also ends the personal access tokens: the security-stamp rotation above
+        // revokes the JWTs, but a PAT is checked against its own row, not the stamp (SITE-SEC-001).
+        var revokedTokens = isSelf
+            ? 0
+            : await repo.RevokePersonalAccessTokensAsync(user.Id, user.UpdatedAt, ct).ConfigureAwait(false);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         // Evict AFTER the commit (challenge TOCTOU, same class as UpdateUser/Assign/Unassign): evicting
         // before the write lets a concurrent read re-cache the pre-rotation security stamp / role set for
@@ -249,7 +254,9 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         authz.InvalidateRoleCache(user.Username);
         await audit.LogAsync(
             isSelf ? "PasswordChanged" : "PasswordReset",
-            "User", user.Id, user.Username, ct).ConfigureAwait(false);
+            "User", user.Id,
+            revokedTokens > 0 ? $"{user.Username}; {revokedTokens} personal access token(s) revoked" : user.Username,
+            ct).ConfigureAwait(false);
         return true;
     }
 

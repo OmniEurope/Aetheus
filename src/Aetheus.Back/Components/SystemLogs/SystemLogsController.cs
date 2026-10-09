@@ -7,7 +7,7 @@ namespace Aetheus.Back.Components.SystemLogs;
 [ApiController]
 [Route("api/system-logs")]
 [Authorize(Roles = "Admin")]
-public class SystemLogsController(ISystemLogService logService, ISettingsService settings, TimeProvider timeProvider) : ControllerBase
+public class SystemLogsController(ISystemLogService logService, ISettingsService settings) : ControllerBase
 {
     [HttpGet("files")]
     public async Task<ActionResult<List<SystemLogFileDto>>> GetLogFiles(CancellationToken ct)
@@ -34,19 +34,6 @@ public class SystemLogsController(ISystemLogService logService, ISettingsService
         // Recette R-453: the virtualized grid's column sort and header filters travel with each block.
         return Ok(await logService.GetLogEntriesAsync(fileName, level, search, dateFrom, dateTo, page, pageSize, ct,
             sortBy, sortDescending, filters is { Count: > 0 } ? filters : null));
-    }
-
-    [HttpGet("export")]
-    public async Task<IActionResult> ExportCsv(
-        [FromQuery] string? fileName,
-        [FromQuery] string? level,
-        [FromQuery, StringLength(200)] string? search,
-        [FromQuery] DateTime? dateFrom,
-        [FromQuery] DateTime? dateTo,
-        CancellationToken ct = default)
-    {
-        var bytes = await logService.ExportCsvAsync(fileName, level, search, dateFrom, dateTo, ct);
-        return File(bytes, "text/csv", $"system-logs-{timeProvider.GetUtcNow():yyyyMMdd-HHmmss}.csv");
     }
 
     [HttpDelete("purge")]

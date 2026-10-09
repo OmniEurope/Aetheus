@@ -86,16 +86,19 @@ public class DashboardsTests : BunitContext
             new() { Id = 7, Name = "Test", Widgets = [], CreatedAt = DateTime.UtcNow }
         });
 
+        // FRONTTEST-007: the Edit button is clicked, from a page that is not the destination.
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("/dashboards");
         var cut = Render<Dashboards>();
         cut.WaitForState(() => cut.Markup.Contains("Test"));
 
-        var editButtons = cut.FindAll("button").Where(b => b.TextContent.Contains("Edit")).ToList();
-        Assert.NotEmpty(editButtons);
+        cut.FindAll("button").Single(b => b.TextContent.Contains("Edit")).Click();
+
+        Assert.Equal("/dashboards/7", new Uri(nav.Uri).AbsolutePath);
     }
 
     [Fact]
-    public async Task CreateDashboard_AddsToList()
+    public async Task CreateDashboard_CancelledDialog_CreatesNothing()
     {
         _handler.SetJsonResponse("api/dashboards", new List<DashboardDto>());
 
@@ -118,6 +121,33 @@ public class DashboardsTests : BunitContext
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(cut.Instance)!;
         Assert.Empty(dashboards);
         Assert.DoesNotContain(_handler.Requests, r => r.Method == "POST");
+    }
+
+    // FRONTTEST-007: the name dialog answers a name; the dashboard is created under that name and the
+    // reloaded list shows it.
+    [Fact]
+    public async Task CreateDashboard_AddsToList()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "api/dashboards", new List<DashboardDto>());
+        _handler.SetJsonResponse(HttpMethod.Post, "api/dashboards", new DashboardDto { Id = 5, Name = "Ops board", Widgets = [] });
+        var cut = Render<Dashboards>();
+        cut.WaitForState(() => cut.Markup.Contains("NoRecords"));
+        _handler.SetJsonResponse(HttpMethod.Get, "api/dashboards", new List<DashboardDto>
+        {
+            new() { Id = 5, Name = "Ops board", Widgets = [], CreatedAt = DateTime.UtcNow }
+        });
+        var dialog = Spy();
+
+        // Clicked like a user does, so the page re-renders when its handler completes.
+        var click = cut.FindAll("button").First(b => b.TextContent.Contains("Create")).ClickAsync(new());
+        await cut.InvokeAsync(() => dialog.Close("  Ops board  "));
+        await click;
+
+        var body = _handler.RequestDetails.Single(r => r.Method == "POST" && r.Url.EndsWith("api/dashboards", StringComparison.Ordinal)).Body!;
+        var request = System.Text.Json.JsonSerializer.Deserialize<CreateDashboardRequest>(body, JsonOptions.Web)!;
+        Assert.Equal("Ops board", request.Name);
+        cut.WaitForAssertion(() => Assert.Contains("Ops board", cut.Markup));
+        Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniSeverity.Success && toast.Detail == "DashboardCreated");
     }
 
     [Fact]

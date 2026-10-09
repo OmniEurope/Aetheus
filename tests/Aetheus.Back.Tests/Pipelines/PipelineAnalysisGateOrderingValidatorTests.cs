@@ -48,11 +48,25 @@ public sealed class PipelineAnalysisGateOrderingValidatorTests
     }
 
     [Fact]
-    public void Validate_AcceptsProducerBeforeGateInSameStage()
+    public void Validate_RejectsProducerBeforeGateInSameStage()
     {
+        // BACK-016: the steps of a stage run concurrently, so the declaration order is no barrier.
         var stage = Stage("Analysis", [], Step("Publish", "coverage"), Gate("quality"));
 
-        Assert.Empty(PipelineAnalysisGateOrderingValidator.Validate([stage]));
+        var error = Assert.Single(PipelineAnalysisGateOrderingValidator.Validate([stage]));
+
+        Assert.Contains("cannot share stage 'Analysis' with producer 'Publish'", error, StringComparison.Ordinal);
+        Assert.Contains("run concurrently", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_RejectsSecurityScannerBesideItsGate()
+    {
+        var stage = Stage("Security", [], Scanner("Secrets", "gitleaks"), Gate("security"));
+
+        var error = Assert.Single(PipelineAnalysisGateOrderingValidator.Validate([stage]));
+
+        Assert.Contains("cannot share stage 'Security'", error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -62,7 +76,7 @@ public sealed class PipelineAnalysisGateOrderingValidatorTests
 
         var error = Assert.Single(PipelineAnalysisGateOrderingValidator.Validate([stage]));
 
-        Assert.Contains("must run after producer", error, StringComparison.Ordinal);
+        Assert.Contains("cannot share stage 'Analysis'", error, StringComparison.Ordinal);
     }
 
     [Fact]

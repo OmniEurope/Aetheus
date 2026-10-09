@@ -28,7 +28,7 @@ public sealed class MailSectionHelpersTests
     [InlineData("dovecot", "reload", MailAction.ReloadDovecot)]
     [InlineData("dovecot", "restart", MailAction.RestartDovecot)]
     public void SplitButtonItems_MapToTheirOwnAction(string unit, string verb, MailAction expected)
-        => Assert.Equal(expected, ServerMailSection.ServiceAction(unit, verb));
+        => Assert.Equal(expected, ServerMailStatusList.ServiceAction(unit, verb));
 
     [Theory]
     [InlineData(1000, 500, OmniTone.Success)]
@@ -59,4 +59,22 @@ public sealed class MailSectionHelpersTests
         Assert.Equal(OmniTone.Danger, MailUiText.VerdictStyle(MailCheckVerdict.Missing));
     }
 
+    [Fact]
+    public void R2_090_TheServicesFix_StartsEachStoppedUnit()
+        => Assert.Equal([MailAction.StartPostfix, MailAction.StartDovecot, MailAction.RestartOpenDkim],
+            ServerMailStatusList.StartActions("postfix, dovecot,opendkim,unknown"));
+
+    [Fact]
+    public void R2_090_SpfDkimAndDmarcLines_NameTheirDomain()
+    {
+        Assert.Equal("MailDiagSpf:example.com", MailUiText.DiagnosticLabel(L, "spf:example.com"));
+        Assert.Equal("MailDiagDkim:example.com", MailUiText.DiagnosticLabel(L, "dkim:example.com"));
+        Assert.Equal("MailDiagDmarc:example.com", MailUiText.DiagnosticLabel(L, "dmarc:example.com"));
+    }
+
+    [Theory]
+    [InlineData("", "")]
+    [InlineData("example.com", "mx.example.com")]
+    public void R2_080_TheSuggestedHost_IsMxOfTheDomain(string domain, string expected)
+        => Assert.Equal(expected, ServerMailSetupAssistant.SuggestedHost(domain));
 }

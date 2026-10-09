@@ -1,0 +1,120 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R2-090: the mail page opens on its state, one list, each line green or red; the first red line
+   carries what fixes it; all green, a test message proves delivery end to end. The other tools stay
+   below, secondary. *@
+<OmniCard Class="omni-u-mb-lg mail-status">
+    <OmniStack Gap="OmniSpacing.Medium">
+        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["MailStatusTitle"]</OmniHeading>
+            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@(Mail.IsManagedByAetheus ? L["MailManagedByAetheus"] : L["MailAdoptedStack"])</OmniBadge>
+            @if (!string.IsNullOrEmpty(Mail.Hostname))
+            {
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["Hostname"] : @Mail.Hostname</OmniText>
+            }
+            @if (_diagnostics is not null)
+            {
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@string.Format(L["MailDnsCheckedAt"], _diagnostics.CheckedAt.ToString("g"))</OmniText>
+            }
+        </OmniStack>
+
+        @if (CanManage && Mail.HelperVersion < CurrentHelperVersion)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning" Class="mail-helper-outdated">@string.Format(L["MailHelperOutdated"], Mail.HelperVersion)</OmniAlert>
+        }
+
+        @if (_loading && _diagnostics is null)
+        {
+            <AetheusLoader Size="OmniControlSize.Small" />
+        }
+        @if (_diagnostics is not null)
+        {
+            <OmniStack Gap="OmniSpacing.XSmall" Class="mail-status-lines">
+                @foreach (var item in StatusItems)
+                {
+                    <MailCheckLine Label="@MailUiText.DiagnosticLabel(L, item.Key)" IsOk="@(item.Verdict == MailCheckVerdict.Ok)"
+                                   Detail="@LineDetail(item)" />
+                    @if (ReferenceEquals(item, FirstRed))
+                    {
+                        <MailStatusFix Item="@item" Hostname="@Mail.Hostname" CanManage="@CanManage" Busy="@_busy"
+                                       OnStartServices="@StartServicesAsync" OnObtainCertificate="@ObtainCertificateAsync"
+                                       OnInstallCertificate="@InstallCertificateAsync" />
+                    }
+                }
+            </OmniStack>
+            @if (FirstRed is null && StatusItems.Count > 0)
+            {
+                <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-status-all-green">
+                    <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Success" Class="omni-u-m-0">@L["MailStatusAllGreen"]</OmniText>
+                    @if (CanManage)
+                    {
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SendTestAsync" Disabled="@(_deliveryTaskId is not null)"><OmniIcon Name="OmniIconName.PaperPlaneRight" /> <span>@L["MailSendTest"]</span></OmniButton>
+                    }
+                </OmniStack>
+            }
+        }
+
+        @if (_checkTaskId is not null || _deliveryTaskId is not null || _quotaTaskId is not null)
+        {
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <AetheusLoader Size="OmniControlSize.Small" />
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailWaitingForTask"]</OmniText>
+            </OmniStack>
+        }
+
+        @if (_delivery is not null)
+        {
+            <OmniAlert Severity="@(_delivery.IsSent ? OmniSeverity.Success : OmniSeverity.Danger)">
+                @(_delivery.IsSent
+                    ? string.Format(L["MailDeliverySent"], _delivery.QueueId)
+                    : string.Format(L["MailDeliveryFailed"], _delivery.Status, _delivery.Detail))
+            </OmniAlert>
+        }
+
+        @if (_checks.Count > 0)
+        {
+            <OmniStack Gap="OmniSpacing.XSmall" Class="mail-server-checks">
+                <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["MailServerChecks"]</OmniText>
+                @foreach (var check in _checks)
+                {
+                    <MailCheckLine Label="@check.Component" IsOk="@check.IsOk" Detail="@check.Detail" />
+                }
+            </OmniStack>
+        }
+
+        @if (CanManage)
+        {
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-status-tools">
+                <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Postfix"]" Disabled="@_busy" OnClick="@(() => ServiceActionAsync("postfix", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
+                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "start"))"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniMenuItem>
+                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "stop"))"><OmniIcon Name="@MaterialIconMap.Resolve("stop")" /> <span>@L["Stop"]</span></OmniMenuItem>
+                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "restart"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniMenuItem>
+                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "reload"))"><OmniIcon Name="@MaterialIconMap.Resolve("sync")" /> <span>@L["Reload"]</span></OmniMenuItem>
+                </ChildContent></OmniSplitButton>
+                <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Dovecot"]" Disabled="@_busy" OnClick="@(() => ServiceActionAsync("dovecot", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
+                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "start"))"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniMenuItem>
+                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "stop"))"><OmniIcon Name="@MaterialIconMap.Resolve("stop")" /> <span>@L["Stop"]</span></OmniMenuItem>
+                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "restart"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniMenuItem>
+                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "reload"))"><OmniIcon Name="@MaterialIconMap.Resolve("sync")" /> <span>@L["Reload"]</span></OmniMenuItem>
+                </ChildContent></OmniSplitButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RestartOpenDkimAsync" Disabled="@_busy"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["MailRestartOpenDkim"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RunServerCheckAsync" Disabled="@(_checkTaskId is not null)"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailRunServerCheck"]</span></OmniButton>
+                @if (FirstRed is not null)
+                {
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@SendTestAsync" Disabled="@(_deliveryTaskId is not null)"><OmniIcon Name="OmniIconName.PaperPlaneRight" /> <span>@L["MailSendTest"]</span></OmniButton>
+                }
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@MeasureUsageAsync" Disabled="@(_quotaTaskId is not null)"><OmniIcon Name="OmniIconName.ChartBarHorizontal" /> <span>@L["MailMeasureUsage"]</span></OmniButton>
+            </OmniStack>
+        }
+
+        @if (Mail.Diagnostics.Count > 0)
+        {
+            <OmniStack Gap="OmniSpacing.XSmall" Class="mail-collector-findings">
+                <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["MailCollectorFindings"]</OmniText>
+                @foreach (var finding in Mail.Diagnostics)
+                {
+                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@MailUiText.Finding(L, finding)</OmniText>
+                }
+            </OmniStack>
+        }
+    </OmniStack>
+</OmniCard>

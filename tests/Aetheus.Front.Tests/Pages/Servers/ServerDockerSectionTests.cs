@@ -836,12 +836,13 @@ public class ServerDockerSectionTests : BunitContext
         var composeTab = cut.FindComponent<DockerComposeTab>();
         typeof(DockerComposeTab).GetField("_composeEditorVisible", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(composeTab.Instance, true);
         typeof(DockerComposeTab).GetField("_composeFileLoading", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(composeTab.Instance, true);
+        typeof(DockerComposeTab).GetField("_composeEditorStack", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(composeTab.Instance, "monitoring");
 
         await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
         {
             TaskId = 2,
             ServerId = 20,
-            TaskName = "docker compose file read",
+            TaskName = DockerTaskNames.ComposeFile("monitoring"),
             Status = TaskExecutionStatus.Success,
             Output = "version: '3'\nservices:\n  web:\n    image: nginx"
         }));
@@ -850,6 +851,50 @@ public class ServerDockerSectionTests : BunitContext
         var loading = (bool)typeof(DockerComposeTab).GetField("_composeFileLoading", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composeTab.Instance)!;
         Assert.Contains("nginx", content!);
         Assert.False(loading);
+    }
+
+    // FRONT-017: open stack A, then B; A's compose file arrives last. It must not land under B's title,
+    // and Deploy must send B's own file for B.
+    [Fact]
+    public async Task HandleTaskCompleted_LateComposeFileOfPreviousStack_IsIgnoredAndSaveDeploysOwnFile()
+    {
+        var cut = RenderDockerSection();
+        _handler.SetResponse(HttpMethod.Get, "api/servers/20/docker/compose/stack-a/file", System.Net.HttpStatusCode.Accepted);
+        _handler.SetResponse(HttpMethod.Get, "api/servers/20/docker/compose/stack-b/file", System.Net.HttpStatusCode.Accepted);
+        _handler.SetResponse(HttpMethod.Put, "api/servers/20/docker/compose/file", System.Net.HttpStatusCode.Accepted);
+        var composeTab = cut.FindComponent<DockerComposeTab>();
+        var open = typeof(DockerComposeTab).GetMethod("OpenComposeEditorAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await cut.InvokeAsync(() => (Task)open.Invoke(composeTab.Instance, ["stack-a"])!);
+        await cut.InvokeAsync(() => (Task)open.Invoke(composeTab.Instance, ["stack-b"])!);
+
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        {
+            TaskId = 1,
+            ServerId = 20,
+            TaskName = DockerTaskNames.ComposeFile("stack-a"),
+            Status = TaskExecutionStatus.Success,
+            Output = "name: stack-a-file"
+        }));
+        var field = (string name) => typeof(DockerComposeTab).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composeTab.Instance);
+        Assert.Equal(string.Empty, field("_composeEditorContent"));
+        Assert.True((bool)field("_composeFileLoading")!);
+
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        {
+            TaskId = 2,
+            ServerId = 20,
+            TaskName = DockerTaskNames.ComposeFile("stack-b"),
+            Status = TaskExecutionStatus.Success,
+            Output = "name: stack-b-file"
+        }));
+        Assert.Equal("name: stack-b-file", field("_composeEditorContent"));
+
+        var save = typeof(DockerComposeTab).GetMethod("SaveComposeFileAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await cut.InvokeAsync(() => (Task)save.Invoke(composeTab.Instance, [])!);
+        var body = _handler.RequestDetails.Last(r => r.Method == "PUT" && r.Url.Contains("docker/compose/file")).Body!;
+        Assert.Contains("\"stackName\":\"stack-b\"", body);
+        Assert.Contains("stack-b-file", body);
+        Assert.DoesNotContain("stack-a-file", body);
     }
 
     [Fact]

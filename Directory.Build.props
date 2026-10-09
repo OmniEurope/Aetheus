@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <!-- Single SemVer source for every Aetheus assembly and distributed agent archive. -->
-    <VersionPrefix>1.2.0</VersionPrefix>
+    <VersionPrefix>1.3.0</VersionPrefix>
     <!-- Central version for production runtime images and the browser runtime packs.
          Server-side test hosts keep the runtime bundled with the pinned SDK. -->
     <AetheusRuntimeImageVersion>10.0.12</AetheusRuntimeImageVersion>
@@ -61,12 +61,18 @@
   </Target>
 
   <!-- Husky.NET: auto-install git hooks on restore from the primary checkout only. Linked
-       worktrees share the primary repository's hooks configuration and cannot safely rewrite it. -->
+       worktrees share the primary repository's hooks configuration and cannot safely rewrite it.
+       Incremental: `dotnet tool restore` + `dotnet husky install` cost ~6 s and ran on every build;
+       they now run again only when the tool manifest changes or the installed hooks folder
+       (.husky/_, gitignored, where the stamp lives) is gone. -->
   <Target Name="HuskyInstall" BeforeTargets="Restore;CollectPackageReferences"
+          Inputs="$(MSBuildThisFileDirectory)dotnet-tools.json"
+          Outputs="$(MSBuildThisFileDirectory).husky/_/aetheus-install.stamp"
           Condition="'$(MSBuildProjectName)' == 'Aetheus.Back' and Exists('$(MSBuildThisFileDirectory).git/config') and '$(HUSKY)' != '0' and '$(CI)' != 'true' and '$(DOTNET_RUNNING_IN_CONTAINER)' != 'true'">
     <Exec Command="dotnet tool restore" StandardOutputImportance="Low" StandardErrorImportance="High" />
     <Exec Command="dotnet husky install" StandardOutputImportance="Low" StandardErrorImportance="High"
           WorkingDirectory="$(MSBuildThisFileDirectory)" />
+    <Touch Files="$(MSBuildThisFileDirectory).husky/_/aetheus-install.stamp" AlwaysCreate="true" />
   </Target>
 
 </Project>

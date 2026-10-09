@@ -10,7 +10,7 @@
     </OmniAlert>
 }
 <AetheusDataGrid @ref="_grid" TItem="TaskLogDto" Data="@_logs" Count="@_totalCount" IsLoading="@_loading"
-    LoadData="@LoadLogsAsync" PageSize="50" Virtualize="@AetheusGrid.RemoteVirtualization"
+    LoadData="@LoadLogsAsync" ExportRead="@ReadExportAsync" PageSize="50" Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<TaskLogDto>(_logs, _totalCount))"
     FullHeight="true" class="aetheus-grid-fullheight">
     <EmptyTemplate>

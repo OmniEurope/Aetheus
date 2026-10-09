@@ -21,9 +21,6 @@ public sealed partial class PipelineSetupReadinessService(
     [GeneratedRegex(@"\.pipeline/scripts/[A-Za-z0-9._-]+\.sh", RegexOptions.CultureInvariant)]
     private static partial Regex AdapterScriptPattern { get; }
 
-    /// <summary>Directory the adapter scripts live in, listed once instead of probed per file.</summary>
-    private const string AdapterDirectory = ".pipeline/scripts";
-
     public async Task<PipelineSetupReadinessDto> CheckAsync(
         int projectId,
         IReadOnlyList<string> templateNames,
@@ -257,41 +254,89 @@ public sealed partial class PipelineSetupReadinessService(
             return (false, branch);
         }
 
-        if (required.Count == 0) return (true, branch);
+        AddMissing(PipelineSetupReadinessKind.MissingAdapterScripts,
+            await FindMissingFilesAsync(repository.Id, branch, required, ct).ConfigureAwait(false), checks);
+        // Recette R2-121: a platform scanner that reads its configuration from the repository fails
+        // without it, exactly like a missing adapter.
+        AddMissing(PipelineSetupReadinessKind.MissingScannerConfiguration,
+            await FindMissingFilesAsync(repository.Id, branch, RequiredScannerFiles(stages), ct).ConfigureAwait(false),
+            checks);
 
-        List<GitLightTreeEntryDto> entries;
-        try
-        {
-            entries = await git.GetTreeAsync(repository.Id, branch, AdapterDirectory, ct).ConfigureAwait(false);
-        }
-        catch (InvalidOperationException exception)
-        {
-            // A repository whose branch or adapter directory cannot be listed is reported as an
-            // absent adapter set, not as a silent pass: the run would fail on the same test -f.
-            logger.LogWarning(
-                exception,
-                "Setup readiness could not list '{Directory}' on '{Branch}' of repository {RepositoryId}.",
-                AdapterDirectory, branch, repository.Id);
-            entries = [];
-        }
+        return (true, branch);
+    }
 
-        var present = entries
-            .Where(entry => entry.Type == GitTreeEntryType.Blob)
-            .Select(entry => entry.Name)
-            .ToHashSet(StringComparer.Ordinal);
-
-        var missing = required
-            .Where(path => !present.Contains(path[(path.LastIndexOf('/') + 1)..]))
-            .ToList();
-
+    private static void AddMissing(
+        PipelineSetupReadinessKind kind, List<string> missing, List<PipelineSetupReadinessCheckDto> checks)
+    {
         if (missing.Count > 0)
             checks.Add(new PipelineSetupReadinessCheckDto
             {
-                Kind = PipelineSetupReadinessKind.MissingAdapterScripts,
+                Kind = kind,
                 Severity = PipelineSetupReadinessSeverity.Blocking,
                 Items = missing
             });
+    }
 
-        return (true, branch);
+    /// <summary>
+    /// The repository files the selected scanner steps read, taken from the scanner manifest itself:
+    /// the value of a <c>--config</c> argument inside the scanned source (<c>/src/.gitleaks.toml</c>).
+    /// A path the scanner merely accepts when present (an ignore file) is not a <c>--config</c>.
+    /// </summary>
+    internal static List<string> RequiredScannerFiles(IEnumerable<PipelineStageDefinition> stages) =>
+        stages
+            .SelectMany(stage => stage.Steps)
+            .Where(step => string.Equals(step.Type, "scanner", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(step.Scanner))
+            .Select(step => ScannerManifestCatalog.Find(step.Scanner!))
+            .OfType<ScannerManifestEntry>()
+            .SelectMany(scanner => scanner.Arguments
+                .Zip(scanner.Arguments.Skip(1))
+                .Where(pair => pair.First == "--config" && pair.Second.StartsWith(ScannedSourceRoot, StringComparison.Ordinal))
+                .Select(pair => pair.Second[ScannedSourceRoot.Length..]))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>Where a scanner container sees the repository.</summary>
+    private const string ScannedSourceRoot = "/src/";
+
+    /// <summary>
+    /// The paths among <paramref name="paths"/> absent from the branch, each directory listed once.
+    /// A directory that cannot be listed counts as holding nothing, never as a silent pass: the run
+    /// would fail on the same missing file.
+    /// </summary>
+    private async Task<List<string>> FindMissingFilesAsync(
+        int repositoryId, string branch, IReadOnlyCollection<string> paths, CancellationToken ct)
+    {
+        var missing = new List<string>();
+        foreach (var directory in paths.GroupBy(path => path.Contains('/') ? path[..path.LastIndexOf('/')] : string.Empty))
+        {
+            var present = await ListFileNamesAsync(repositoryId, branch, directory.Key, ct).ConfigureAwait(false);
+            missing.AddRange(directory.Where(path => !present.Contains(path[(path.LastIndexOf('/') + 1)..])));
+        }
+        return missing;
+    }
+
+    private async Task<HashSet<string>> ListFileNamesAsync(
+        int repositoryId, string branch, string directory, CancellationToken ct)
+    {
+        List<GitLightTreeEntryDto> entries;
+        try
+        {
+            entries = await git.GetTreeAsync(repositoryId, branch, directory.Length == 0 ? null : directory, ct)
+                .ConfigureAwait(false);
+        }
+        catch (InvalidOperationException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Setup readiness could not list '{Directory}' on '{Branch}' of repository {RepositoryId}.",
+                directory, branch, repositoryId);
+            entries = [];
+        }
+        return entries
+            .Where(entry => entry.Type == GitTreeEntryType.Blob)
+            .Select(entry => entry.Name)
+            .ToHashSet(StringComparer.Ordinal);
     }
 }

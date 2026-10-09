@@ -412,7 +412,29 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command.Contains("web") && t.Command.Contains("up -d")), TestContext.Current.CancellationToken);
+            IsPayloadOperation(t, OperationKind.DockerComposeUp, "web", "AETHEUS_DOCKER_COMPOSE_B64",
+                "version: '3'\nservices:\n  web:\n    image: nginx")), TestContext.Current.CancellationToken);
+    }
+
+    // BACK-012: the payload travels in an env var of a typed operation, not in a shell string the
+    // agent's command validator refuses (it rejected every pipe of the former printf | base64 form).
+    private static bool IsPayloadOperation(ServerTask task, OperationKind kind, string target, string variable, string payload)
+    {
+        var env = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(task.EnvironmentVariables)!;
+        return task.Executor == ExecutorType.Operation
+            && task.Operation == kind
+            && task.Command == target
+            && env.TryGetValue(variable, out var encoded)
+            && System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded)) == payload;
+    }
+
+    [Fact]
+    public async Task SaveComposeFileAsync_StackNameComposeRefuses_RejectedBeforeQueueing()
+    {
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.SaveComposeFileAsync(1, new DockerComposeFileSaveRequest { StackName = "Web.Stack", Content = "services: {}" },
+                ct: TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -440,7 +462,8 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command.Contains("docker exec -i abc123def456")), TestContext.Current.CancellationToken);
+            IsPayloadOperation(t, OperationKind.DockerExecScript, "abc123def456", "AETHEUS_DOCKER_EXEC_B64", "ls -la")),
+            TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -516,7 +539,8 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command.Contains("docker build -t myapp:latest")), TestContext.Current.CancellationToken);
+            IsPayloadOperation(t, OperationKind.DockerBuildImage, "myapp:latest", "AETHEUS_DOCKER_DOCKERFILE_B64", "FROM nginx:alpine")),
+            TestContext.Current.CancellationToken);
     }
 
     [Fact]

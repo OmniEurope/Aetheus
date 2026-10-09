@@ -23,15 +23,23 @@ public static class WebhookSsrfGuard
         return false;
     }
 
-    private static bool IsForbiddenIpv4(byte[] bytes) =>
-        bytes[0] == 10
-        || bytes[0] == 172 && bytes[1] is >= 16 and <= 31
-        || bytes[0] == 192 && bytes[1] == 168
-        || bytes[0] == 169 && bytes[1] == 254
-        || bytes[0] == 100 && bytes[1] is >= 64 and <= 127
-        || bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 0
-        || bytes[0] == 198 && bytes[1] is 18 or 19
-        || bytes[0] is 0 or >= 224;
+    /// <summary>The forbidden IPv4 ranges as network and mask: private (10/8, 172.16/12, 192.168/16),
+    /// link-local (169.254/16), carrier-grade NAT (100.64/10), IETF protocol (192.0.0/24), benchmarking
+    /// (198.18/15), "this network" (0/8), and multicast plus reserved (224/3).</summary>
+    private static readonly (uint Network, uint Mask)[] ForbiddenIpv4Ranges =
+    [
+        Range(10, 0, 0, 8), Range(172, 16, 0, 12), Range(192, 168, 0, 16), Range(169, 254, 0, 16),
+        Range(100, 64, 0, 10), Range(192, 0, 0, 24), Range(198, 18, 0, 15), Range(0, 0, 0, 8), Range(224, 0, 0, 3)
+    ];
+
+    private static (uint Network, uint Mask) Range(byte a, byte b, byte c, int prefixBits) =>
+        (((uint)a << 24) | ((uint)b << 16) | ((uint)c << 8), uint.MaxValue << (32 - prefixBits));
+
+    private static bool IsForbiddenIpv4(byte[] bytes)
+    {
+        var value = ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
+        return ForbiddenIpv4Ranges.Any(range => (value & range.Mask) == range.Network);
+    }
 
     private static bool IsForbiddenIpv6(IPAddress address)
     {

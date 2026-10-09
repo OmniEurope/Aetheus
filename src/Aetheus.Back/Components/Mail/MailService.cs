@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
+using Npgsql;
 
 namespace Aetheus.Back.Components.Mail;
 
@@ -29,6 +31,11 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         [MailAction.RestartSpamFilter] = (OperationKind.MailServiceControl, "rspamd:restart"),
         [MailAction.RestartOpenDkim] = (OperationKind.MailServiceControl, "opendkim:restart")
     };
+
+    private const string SetupAlreadyRunning = "A mail setup or reinstall is already running on this server.";
+
+    // One setup recorded and queued at a time per server inside this process (recette R2-101).
+    private static readonly ConcurrentDictionary<int, SemaphoreSlim> s_setupGates = new();
 
     private Task QueueTaskAsync(ServerTask task, CancellationToken ct = default)
         => TaskQueuePersistence.PersistAndNotifyAsync(repo.AddTaskAsync, taskService, task, ct);
@@ -289,7 +296,7 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         return new MailTaskQueuedDto { TaskId = task.Id };
     }
 
-    public async Task SetupAsync(int serverId, MailSetupRequest request, CancellationToken ct = default)
+    public async Task<MailTaskQueuedDto> SetupAsync(int serverId, MailSetupRequest request, CancellationToken ct = default)
     {
         if (!MailCommandHelper.IsValidDomainName(request.Hostname))
             throw new BadRequestException("Invalid hostname.");
@@ -315,6 +322,27 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
             throw new BadRequestException(
                 "Mail setup is not enabled on this server. Re-run the agent installer with the mail-setup " +
                 "capability (--enable-mail-setup) to grant the controlled-sudo helper.");
+        // Recette R2-101: two simultaneous setups of a NEW domain both passed the open-task check below,
+        // both inserted the domain, and the second died on the unique index with HTTP 500. The check, the
+        // records and the queued task now form one step per server, so the second request sees the first
+        // one's task and is refused like any setup launched while another runs.
+        var gate = s_setupGates.GetOrAdd(serverId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await QueueSetupAsync(serverId, request, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<MailTaskQueuedDto> QueueSetupAsync(int serverId, MailSetupRequest request, CancellationToken ct)
+    {
+        // Recette R2-085: one "Configurer" launched two full setups 3 s apart (tasks 23257 and 23258).
+        if (await repo.HasOpenTaskAsync(serverId, MailStackPurgeService.StackRebuildKinds, ct).ConfigureAwait(false))
+            throw new ConflictException(SetupAlreadyRunning);
 
         // S-FEAT-W8KN: dispatch the typed MailSetup operation instead of a free-form shell pipeline.
         // The non-root agent could never run the old apt/postconf/systemctl pipeline directly; it now
@@ -337,27 +365,71 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         // like every other secret-bearing task instead of leaving plaintext JSON in the DB - the
         // backend decrypts it only when the task is dispatched to the agent (TaskService env mapping).
         task.EnvironmentVariables = TaskEnvProtection.Protect(encryption, JsonSerializer.Serialize(env));
+
+        // Recette R2-101: the records are written FIRST and the task is queued only once they are saved.
+        // A setup re-run on a domain already recorded used to queue its task, then die on the unique
+        // (ServerId, Name) index with HTTP 500: the setup ran while the screen announced a failure.
+        try
+        {
+            await RecordSetupAsync(serverId, request, ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // The per-server gate only spans this process: a concurrent writer elsewhere (another replica,
+            // the heartbeat inventory adopting the domain) recorded it first. Nothing is queued.
+            throw new ConflictException(SetupAlreadyRunning);
+        }
         await QueueTaskAsync(task, ct).ConfigureAwait(false);
 
-        // Create domain and account records
-        var domain = new MailDomain
-        {
-            ServerId = serverId,
-            Name = request.Domain,
-            DkimSelector = request.DkimSelector
-        };
-        await repo.AddDomainAsync(domain, ct).ConfigureAwait(false);
-
-        var account = new MailAccount
-        {
-            MailDomainId = domain.Id,
-            Email = request.AdminEmail,
-            QuotaMb = request.QuotaMb,
-            IsActive = true
-        };
-        await repo.AddAccountAsync(account, ct).ConfigureAwait(false);
-
         await audit.LogAsync("MailSetup", "Mail", serverId, request.Domain, ct).ConfigureAwait(false);
+        // R2-085: the page keeps "Configurer" busy until this task completes.
+        return new MailTaskQueuedDto { TaskId = task.Id };
+    }
+
+    /// <summary>Creates the domain and its admin mailbox, or updates them when a previous setup (or the
+    /// heartbeat inventory) already recorded them: a setup can be run again on a known domain.</summary>
+    private async Task RecordSetupAsync(int serverId, MailSetupRequest request, CancellationToken ct)
+    {
+        // The address is unique across every server: one recorded on another server's domain is a real
+        // conflict, refused before anything is written or queued.
+        var account = await repo.FindAccountByEmailAsync(request.AdminEmail, ct).ConfigureAwait(false);
+        if (account is not null && account.MailDomain.ServerId != serverId)
+            throw new ConflictException($"The address {request.AdminEmail} already belongs to a mail domain on another server.");
+
+        var domain = await repo.FindDomainByNameAsync(serverId, request.Domain, ct).ConfigureAwait(false);
+        if (domain is null)
+        {
+            domain = new MailDomain
+            {
+                ServerId = serverId,
+                Name = request.Domain,
+                DkimSelector = request.DkimSelector
+            };
+            await repo.AddDomainAsync(domain, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            domain.DkimSelector = request.DkimSelector;
+            domain.IsActive = true;
+            await repo.UpdateDomainAsync(domain, ct).ConfigureAwait(false);
+        }
+
+        if (account is null)
+        {
+            await repo.AddAccountAsync(new MailAccount
+            {
+                MailDomainId = domain.Id,
+                Email = request.AdminEmail,
+                QuotaMb = request.QuotaMb,
+                IsActive = true
+            }, ct).ConfigureAwait(false);
+            return;
+        }
+
+        account.MailDomainId = domain.Id;
+        account.QuotaMb = request.QuotaMb;
+        account.IsActive = true;
+        await repo.UpdateAccountAsync(account, ct).ConfigureAwait(false);
     }
 
     public async Task<MailDnsRecordsDto> GetDnsRecordsAsync(int serverId, int domainId, CancellationToken ct = default)

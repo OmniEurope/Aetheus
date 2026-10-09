@@ -153,6 +153,11 @@ public sealed record PipelineRunDto
     /// <summary>True after the cancellation request has been durably accepted, while mandatory
     /// teardown may still keep the run active.</summary>
     public bool CancellationRequested { get; init; }
+    /// <summary>Recette R2-103: who asked for the cancellation (a user name, or "system"), null when
+    /// the run was never cancelled or was cancelled before the author was recorded.</summary>
+    public string? CancelledBy { get; init; }
+    /// <summary>Why the run was cancelled, beside <see cref="CancelledBy"/>.</summary>
+    public string? CancellationReason { get; init; }
     /// <summary>Internal projection bridge used to hydrate <see cref="Warnings"/> after EF materialization.</summary>
     [JsonIgnore]
     public string? ProjectedWarningsJson { get; init; }
@@ -393,6 +398,14 @@ public sealed record PipelineYamlDefinition
     /// the launch, which is what the registry is for.
     /// </summary>
     public string? ObservedPortPolicy { get; init; }
+
+    /// <summary>
+    /// Recette R2-110: YAML key <c>release_number:</c>. <c>allocate</c> makes every run of this pipeline
+    /// take the project's next release number (<c>BUILD_RELEASENUMBER</c>, the last number of the
+    /// application version), for the pipelines that produce a release. Absent, a run inherits the
+    /// number of the run that started it, or reads the latest one.
+    /// </summary>
+    public string? ReleaseNumber { get; init; }
 
     /// <summary>What this definition needs an installation to provide before it can run: the
     /// <c>requires:</c> block. One declaration read by the launch preflight and by the setup wizard,

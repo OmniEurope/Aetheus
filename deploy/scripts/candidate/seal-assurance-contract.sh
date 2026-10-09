@@ -24,6 +24,9 @@
 #                                      variable carries it, so the calling step passes it by name.
 #   AETHEUS_RESUME_SOURCE_RUN_ID       the run a checkpoint resume reused, when there was one
 #   AETHEUS_CHECKPOINT_*_RUN_ID        the CI, Quality and Security runs a resume reused
+#   AETHEUS_DEPLOY_MINIMUM_GRADE       optional; the production minimum the reported verdict is
+#                                      measured against, E (aetheus-deploy-prod's value) by default.
+#                                      It changes the reported verdict, not the gate; an invalid value fails.
 #
 # Publishes CANDIDATE_ASSURANCE_GRADE, CANDIDATE_DEPLOYABLE and CANDIDATE_BLOCKING_TESTS.
 set -eu
@@ -83,18 +86,30 @@ AETHEUS_CHECKPOINT_SECURITY_RUN_ID="${AETHEUS_CHECKPOINT_SECURITY_RUN_ID:-}" \
 # published green and only refused hours later, by aetheus-deploy-prod. Say it here, on
 # the run that produced it, and name the tests responsible: the grade already decided the
 # candidate cannot ship, so discovering that at deployment time is a reporting gap.
+# "Deployable" also requires the overall grade to reach the production minimum: with every
+# required test Passed, an analysis graded F still makes the overall grade F, which
+# aetheus-deploy-prod refuses (DEP-013). The run stays green either way; only the verdict it
+# reports is at stake. AETHEUS_DEPLOY_MINIMUM_GRADE defaults to aetheus-deploy-prod's own value.
 "$NODE" -e '
   const contract = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  const minimum = process.argv[2];
+  const scale = ["A", "B", "C", "D", "E", "F"];
+  if (!scale.includes(minimum)) throw new Error(`Invalid production minimum grade: ${minimum}.`);
   const blocking = Object.entries(contract.tests ?? {})
     .filter(([, t]) => t.required === true && t.status !== "Passed")
     .map(([name, t]) => `${name}=${t.status}`);
-  console.log(`##aetheus[setvariable name=CANDIDATE_DEPLOYABLE]${blocking.length === 0}`);
+  const gradeReached = scale.indexOf(contract.overallGrade) !== -1
+    && scale.indexOf(contract.overallGrade) <= scale.indexOf(minimum);
+  const deployable = blocking.length === 0 && gradeReached;
+  console.log(`##aetheus[setvariable name=CANDIDATE_DEPLOYABLE]${deployable}`);
   console.log(`##aetheus[setvariable name=CANDIDATE_BLOCKING_TESTS]${blocking.join(",")}`);
-  if (blocking.length === 0) {
+  if (deployable) {
     console.log(`Candidate is deployable: assurance grade ${contract.overallGrade}.`);
-  } else {
+  } else if (blocking.length > 0) {
     // stderr: the run stays green on purpose, so the one line that says the candidate
     // cannot ship has to stand out in the log instead of scrolling past as ordinary output.
     console.error(`Candidate is NOT deployable. Assurance grade ${contract.overallGrade}. Blocking required tests: ${blocking.join(", ")}. aetheus-deploy-prod will refuse this candidate.`);
+  } else {
+    console.error(`Candidate is NOT deployable. Assurance grade ${contract.overallGrade} is below the production minimum ${minimum}. aetheus-deploy-prod will refuse this candidate.`);
   }
-' .pipeline-artifacts/assurance-contract.json
+' .pipeline-artifacts/assurance-contract.json "${AETHEUS_DEPLOY_MINIMUM_GRADE:-E}"

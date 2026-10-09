@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Collections.Frozen;
 using System.Text;
 
 namespace Aetheus.Front.Components.Git;
@@ -48,32 +49,34 @@ internal static class GitRepositoryViewHelpers
     public static string InferLanguage(string path)
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
-        return InferCommonLanguage(ext) ?? InferSpecializedLanguage(ext) ?? "plaintext";
+        return LanguagesByExtension.TryGetValue(ext, out var language) ? language : "plaintext";
     }
 
-    private static string? InferCommonLanguage(string extension) => extension switch
-    {
-        ".cs" => "csharp",
-        ".js" => "javascript",
-        ".ts" => "typescript",
-        ".json" => "json",
-        ".xml" or ".csproj" or ".sln" or ".props" => "xml",
-        ".yaml" or ".yml" => "yaml",
-        ".html" or ".htm" => "html",
-        ".css" => "css",
-        ".scss" => "scss",
-        ".md" => "markdown",
-        _ => null
-    };
-
-    private static string? InferSpecializedLanguage(string extension) => extension switch
-    {
-        ".py" => "python",
-        ".sh" or ".bash" => "shell",
-        ".ps1" => "powershell",
-        ".sql" => "sql",
-        ".dockerfile" => "dockerfile",
-        ".razor" => "razor",
-        _ => null
-    };
+    /// <summary>The editor language of each known extension; a lookup instead of a string switch.</summary>
+    private static readonly FrozenDictionary<string, string> LanguagesByExtension =
+        new Dictionary<string, string>
+        {
+            [".cs"] = "csharp",
+            [".js"] = "javascript",
+            [".ts"] = "typescript",
+            [".json"] = "json",
+            [".xml"] = "xml",
+            [".csproj"] = "xml",
+            [".sln"] = "xml",
+            [".props"] = "xml",
+            [".yaml"] = "yaml",
+            [".yml"] = "yaml",
+            [".html"] = "html",
+            [".htm"] = "html",
+            [".css"] = "css",
+            [".scss"] = "scss",
+            [".md"] = "markdown",
+            [".py"] = "python",
+            [".sh"] = "shell",
+            [".bash"] = "shell",
+            [".ps1"] = "powershell",
+            [".sql"] = "sql",
+            [".dockerfile"] = "dockerfile",
+            [".razor"] = "razor"
+        }.ToFrozenDictionary(StringComparer.Ordinal);
 }

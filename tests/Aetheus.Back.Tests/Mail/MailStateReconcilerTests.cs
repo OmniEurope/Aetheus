@@ -149,6 +149,27 @@ public sealed class MailStateReconcilerTests : IDisposable
     }
 
     [Fact]
+    public async Task APurgeInProgress_AdoptsNothingBack()
+    {
+        // "Réinstaller la messagerie" dropped the rows; a heartbeat taken while the host is being erased
+        // still lists them and must not bring them back (the same domain could no longer be set up).
+        _db.Tasks.Add(new ServerTask
+        {
+            ServerId = ServerId,
+            Name = "Mail - erase the mail stack (reinstall)",
+            Operation = OperationKind.MailPurge,
+            Command = "-",
+            Status = TaskExecutionStatus.Running
+        });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await _sut.ReconcileAsync(ServerId, AdoptedServer(), TestContext.Current.CancellationToken);
+
+        Assert.False(result.HasChanges);
+        Assert.False(await _db.MailDomains.AnyAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task AccountOwnedByAnotherServer_IsSkipped()
     {
         var other = new MailDomain { ServerId = 99, Name = "second.test" };

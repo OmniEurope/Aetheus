@@ -58,8 +58,6 @@
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="OnDownloadAsync" Class="@(_isDownloading ? "btn-busy" : null)" Busy="@(_isDownloading)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Download"]</span></OmniButton>
         }
 
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="OnExportCsvAsync" Class="@(_isExporting ? "btn-busy" : null)" Busy="@(_isExporting)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["ExportCsv"]</span></OmniButton>
-
         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="OnPurgeAsync" title="@L["PurgeLogs"]"><OmniIcon Name="OmniIconName.Broom" /> <span>@L["Purge"]</span></OmniButton>
     </OmniRow>
 </OmniCard>
@@ -72,8 +70,8 @@
    block as it scrolls (remote virtualization); the filters of the bar above, the column sort and the
    header filters travel with each block and the API applies them to the whole log, not to the rows
    already on screen. *@
-<AetheusDataGrid @ref="_grid" TItem="SystemLogEntryDto" Data="@_items" Count="@_total" IsLoading="@_loading"
-                 LoadData="@LoadDataAsync" PageSize="50" Virtualize="@AetheusGrid.RemoteVirtualization"
+<AetheusDataGrid ShowFooterBar="true" @ref="_grid" TItem="SystemLogEntryDto" Data="@_items" Count="@_total" IsLoading="@_loading"
+                 LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="50" Virtualize="@AetheusGrid.RemoteVirtualization"
                  VirtualData="@(() => new OmniDataGridResult<SystemLogEntryDto>(_items, _total))"
                  FullHeight="true" RowClick="@OnRowClick" class="omni-u-mb-lg">
     <EmptyTemplate>

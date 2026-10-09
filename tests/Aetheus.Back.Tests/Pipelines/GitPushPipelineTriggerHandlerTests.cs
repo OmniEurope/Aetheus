@@ -105,7 +105,7 @@ public sealed class GitPushPipelineTriggerHandlerTests
         _runService.PrepareAutomatedRunAsync(
                 pipeline.Id, "GitPush", Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>())
             .Returns(preparation);
-        _runService.CancelRunAsync(415, Arg.Any<CancellationToken>()).Returns(true);
+        _runService.CancelRunAsync(415, Arg.Is<PipelineRunCancellation>(c => c.By == PipelineRunCancellation.SystemAuthor), Arg.Any<CancellationToken>()).Returns(true);
         _runService.TriggerPreparedAutomatedRunAsync(
                 preparation, "GitPush", Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>())
             .Returns(new PipelineRunDto { Id = 416, PipelineId = pipeline.Id });
@@ -118,7 +118,7 @@ public sealed class GitPushPipelineTriggerHandlerTests
                 variables["WEBHOOK_REF"] == "refs/heads/develop"
                 && variables["AETHEUS_SOURCE_COMMIT"] == commit),
             Arg.Any<CancellationToken>());
-        await _runService.Received(1).CancelRunAsync(415, Arg.Any<CancellationToken>());
+        await _runService.Received(1).CancelRunAsync(415, Arg.Is<PipelineRunCancellation>(c => c.By == PipelineRunCancellation.SystemAuthor), Arg.Any<CancellationToken>());
         // The automated entry point: a refused replacement leaves a failed run carrying the reason.
         await _runService.Received(1).TriggerPreparedAutomatedRunAsync(
             preparation, "GitPush", Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());

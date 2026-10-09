@@ -62,6 +62,51 @@ public class LogsControllerIntegrationTests : IClassFixture<CustomWebApplication
         Assert.Empty(logs);
     }
 
+    // ──── GetTaskLogPage (recette R2-104) ────
+
+    [Fact]
+    public async Task GetTaskLogPage_PagesTheCompleteLogFromItsFirstLine_InLogOrder()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, taskId) = await SeedServerAndTaskAsync();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            // One batch: the context stamps every line with the same Timestamp, so only the id keeps their
+            // order from one page to the next.
+            db.TaskLogs.AddRange(Enumerable.Range(0, 450).Select(i => new TaskLog
+            {
+                TaskId = taskId,
+                Level = TaskLogLevel.Info,
+                Message = $"line {i:D3}"
+            }));
+            await db.SaveChangesAsync(ct);
+        }
+
+        var pages = new List<PaginatedResult<TaskLogDto>>();
+        for (var page = 1; page <= 3; page++)
+            pages.Add((await _client.GetFromJsonAsync<PaginatedResult<TaskLogDto>>(
+                $"/api/logs/task/{taskId}/page?page={page}&pageSize=200", TestJsonOptions.Default, ct))!);
+
+        Assert.All(pages, page => Assert.Equal(450, page.TotalCount));
+        Assert.Equal([200, 200, 50], pages.Select(page => page.Items.Count));
+        Assert.Equal(Enumerable.Range(0, 450).Select(i => $"line {i:D3}"),
+            pages.SelectMany(page => page.Items).Select(line => line.Message));
+        // Ask for more and the page stays at 200 lines (pagination is clamped like every list).
+        var oversized = await _client.GetFromJsonAsync<PaginatedResult<TaskLogDto>>(
+            $"/api/logs/task/{taskId}/page?page=1&pageSize=5000", TestJsonOptions.Default, ct);
+        Assert.Equal(200, oversized!.Items.Count);
+    }
+
+    [Fact]
+    public async Task GetTaskLogPage_UnknownTask_Returns404()
+    {
+        var response = await _client.GetAsync("/api/logs/task/987654/page?page=1&pageSize=200",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     // ──── AppendLog (Agent) ────
 
     [Fact]

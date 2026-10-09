@@ -16,7 +16,7 @@ else
     </OmniStack>
 
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_servers" TItem="ProjectServerDto"
-                        Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync"
+                        Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
                         PageSize="25" EmptyText="@L["NoRecords"]" class="aetheus-clickable-rows"
                         Virtualize="@AetheusGrid.RemoteVirtualization"
                         VirtualData="@(() => new OmniDataGridResult<ProjectServerDto>(_servers, _totalCount))"
@@ -50,7 +50,7 @@ else
                         <OmniBadge Fill="OmniFill.Solid" Tone="@GetTypeBadge(s.Type)">@L[s.Type.ToString()]</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="ProjectServerDto" Title="@L["Status"]" Width="120px" Sortable="false" Filterable="false" >
+                <OmniDataGridColumn TItem="ProjectServerDto" Title="@L["Status"]" ExportValue="@StatusExport" Width="120px" Sortable="false" Filterable="false" >
                     <Template Context="s">
                         @if (s.Type == ProjectServerType.AgentServer && s.ServerStatus.HasValue)
                         {

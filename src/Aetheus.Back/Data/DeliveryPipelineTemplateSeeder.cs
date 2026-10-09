@@ -1,13 +1,23 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.Data;
 
 public sealed class DeliveryPipelineTemplateSeeder(
     AppDbContext db,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ILogger<DeliveryPipelineTemplateSeeder>? logger = null,
+    IAuditService? audit = null,
+    IPostgresLeaderLease? lease = null)
 {
     private const string ResourceRoot = "DeliveryPipelineTemplates/";
+
+    /// <summary>The organization the shipped templates are seeded in; every other organization extends
+    /// them from there (recette R2-121).</summary>
+    internal const string PlatformOrganizationSlug = "aetheus";
 
     internal static readonly IReadOnlyDictionary<string, (string Description, string Category, string[] Resources)> Definitions =
         new Dictionary<string, (string, string, string[])>(StringComparer.Ordinal)
@@ -19,27 +29,35 @@ public sealed class DeliveryPipelineTemplateSeeder(
             ["application-candidate"] = (
                 "Reusable build-once candidate orchestration with production baseline, QA and immutable release.",
                 "Application Delivery",
-                ["application-candidate-v1.yaml", "application-candidate-v2.yaml", "application-candidate-v3.yaml", "application-candidate-v4.yaml", "application-candidate-v5.yaml", "application-candidate-v6.yaml", "application-candidate-v7.yaml"]),
+                ["application-candidate-v1.yaml", "application-candidate-v2.yaml"]),
             ["application-promotion"] = (
                 "Reusable promotion orchestration deploying and verifying an already-qualified candidate.",
                 "Application Delivery",
-                ["application-promotion-v1.yaml", "application-promotion-v2.yaml"]),
+                ["application-promotion-v1.yaml"]),
             ["application-ci"] = (
                 "Run the project's CI adapter and package its immutable application payload.",
                 "Application Delivery",
                 ["generic/application-ci.yaml"]),
             ["application-quality"] = (
-                "Run the project's quality adapter against immutable CI evidence.",
+                "Run the project's quality adapter, then publish and grade coverage, lint and complexity evidence for any language.",
                 "Quality",
                 ["generic/application-quality.yaml"]),
             ["application-security"] = (
-                "Run the project's security adapter against immutable CI evidence.",
+                "Scan secrets, code, dependencies and infrastructure files with the platform's scanners and grade the findings.",
                 "Security",
                 ["generic/application-security.yaml"]),
             ["application-qa"] = (
                 "Run the project's QA adapter against the immutable application payload.",
                 "Quality",
                 ["generic/application-qa.yaml"]),
+            ["application-qa-extended"] = (
+                "Run the project's extended QA adapter, the nightly's heavy validation, against the immutable application payload.",
+                "Quality",
+                ["generic/application-qa-extended.yaml"]),
+            ["application-security-history"] = (
+                "Scan the repository's whole Git history for secrets and grade it, the nightly extension of the security pipeline.",
+                "Security",
+                ["generic/application-security-history.yaml"]),
             ["application-nightly"] = (
                 "Scheduled complete assurance and drift checks.",
                 "Quality",
@@ -47,8 +65,7 @@ public sealed class DeliveryPipelineTemplateSeeder(
             ["host-bluegreen-deploy"] = (
                 "Reusable blue-green host cutover built from native step types, with an advisory evidence stage and an automatic rollback.",
                 "Application Delivery",
-                ["host-bluegreen-deploy-v1.yaml", "host-bluegreen-deploy-v2.yaml", "host-bluegreen-deploy-v3.yaml",
-                 "host-bluegreen-deploy-v4.yaml", "host-bluegreen-deploy-v5.yaml", "host-bluegreen-deploy-v6.yaml"]),
+                ["host-bluegreen-deploy-v1.yaml"]),
             ["host-bluegreen-revert"] = (
                 "Return traffic to the colour a blue-green commit kept in reserve (N-1), in seconds.",
                 "Application Delivery",
@@ -82,9 +99,26 @@ public sealed class DeliveryPipelineTemplateSeeder(
     public async Task SeedAsync(CancellationToken ct = default)
     {
         var organizationId = await db.Organizations
-            .Where(organization => organization.Slug == "aetheus")
+            .Where(organization => organization.Slug == PlatformOrganizationSlug)
             .Select(organization => organization.Id)
             .SingleAsync(ct).ConfigureAwait(false);
+        // Two backend colours can start together. The whole catalog write runs under one advisory
+        // lock, not only the R2-094 reset: a version a release adds (application-candidate v2,
+        // R2-121) was otherwise inserted by both colours, and the second insert broke the
+        // (TemplateId, Version) unique index and the start of that colour. The colour that waited
+        // reads the catalog only once it holds the lock, so it finds the work done.
+        if (lease is not null && db.Database.IsRelational())
+            await lease.RunSerializedAsync(DeliveryTemplateVersionReset.LockName,
+                token => SeedCatalogAsync(organizationId, token), ct).ConfigureAwait(false);
+        else
+            await SeedCatalogAsync(organizationId, ct).ConfigureAwait(false);
+    }
+
+    private async Task SeedCatalogAsync(int organizationId, CancellationToken ct)
+    {
+        // First, before anything is tracked: a colour that waited for the other one to renumber must
+        // not hold the versions that colour removed (it would then see two v1 rows).
+        await ResetVersionNumberingOnceAsync(organizationId, ct).ConfigureAwait(false);
         await ArchiveLegacyCatalogAsync(organizationId, ct).ConfigureAwait(false);
         var names = Definitions.Keys.ToArray();
         var existing = await db.PipelineTemplates
@@ -175,8 +209,7 @@ public sealed class DeliveryPipelineTemplateSeeder(
                 else if (!string.Equals(
                              Normalize(version.YamlContent),
                              Normalize(seededVersion.Yaml),
-                             StringComparison.Ordinal) &&
-                         !IsRecognizedHistoricalVersion(name, seededVersion.Version, version.YamlContent))
+                             StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
                         $"Seeded delivery template '{name}@{seededVersion.Version}' differs from its immutable published version.");
@@ -189,6 +222,23 @@ public sealed class DeliveryPipelineTemplateSeeder(
         }
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Recette R2-094: the one-time restart of every shipped template at v1. It runs under the catalog
+    /// lock <see cref="SeedAsync"/> holds and re-reads its marker there: the second of two colours
+    /// starting together finds the work done and changes nothing.
+    /// </summary>
+    private async Task ResetVersionNumberingOnceAsync(int organizationId, CancellationToken ct)
+    {
+        // The first shipped file is v1. With one file per template that was also the last; once a
+        // template ships a v2 (application-candidate, R2-121), renumbering a database that never ran the
+        // reset must still give v1 the v1 content, or the seeding below would refuse its own v1.
+        var shipped = Definitions.ToDictionary(
+            entry => entry.Key, entry => ReadResource(entry.Value.Resources[0]), StringComparer.Ordinal);
+        var reset = new DeliveryTemplateVersionReset(
+            db, timeProvider, logger ?? (ILogger)NullLogger.Instance, audit);
+        await reset.RunAsync(organizationId, shipped, ct).ConfigureAwait(false);
     }
 
     internal static string ReadResource(string fileName)
@@ -289,38 +339,14 @@ public sealed class DeliveryPipelineTemplateSeeder(
     private static string Normalize(string value) =>
         value.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
 
-    private static bool IsRecognizedHistoricalVersion(string name, int version, string yamlContent) =>
-        string.Equals(name, "application-candidate", StringComparison.Ordinal) &&
-        version == 3 &&
-        string.Equals(
-            Normalize(yamlContent),
-            Normalize(ReadResource("application-candidate-v3-legacy-advisory.yaml")),
-            StringComparison.Ordinal);
-
-    private static string GetChangelogEntry(string name, int version) =>
-        (name, version) switch
-        {
-            (_, 1) => "Initial reusable application delivery contract.",
-            ("application-candidate", 3) =>
-                "Isolate baseline contract inspection in a pinned, networkless container.",
-            ("application-candidate", 4) =>
-                "Make quality and security gates advisory while preserving their grades.",
-            ("application-candidate", 5) =>
-                "Propagate reproducible cache, differential format and bounded Gitleaks history modes.",
-            ("application-candidate", 6) =>
-                "Make optional assurance capabilities composable for generated application pipeline sets.",
-            ("application-candidate", 7) =>
-                "Complete every enabled assurance producer before immutable candidate publication.",
-            ("host-bluegreen-deploy", 2) =>
-                "Carry the run's Compose interpolation variables into the cutover steps.",
-            ("host-bluegreen-deploy", 3) =>
-                "Separate the cutover's Compose variables from the identity only the starting step receives.",
-            ("host-bluegreen-deploy", 4) =>
-                "Let the rollback run after a failure that never produced the run's image tags.",
-            ("host-bluegreen-deploy", 5) =>
-                "Hand one Compose variable list to every step; the control plane forwards what each step can resolve.",
-            ("host-bluegreen-deploy", 6) =>
-                "Arm a host-side confirmation window after the switch; the replaced colour stays in reserve.",
-            _ => "Require an explicit immutable candidate release version."
-        };
+    // Recette R2-094: every shipped template restarted at v1. A v2 file added later gets its own
+    // changelog line here, beside the version it describes.
+    private static string GetChangelogEntry(string name, int version) => (name, version) switch
+    {
+        (_, 1) => "Initial reusable application delivery contract.",
+        ("application-candidate", 2) =>
+            "Releases the generic CI payload (ApplicationPayload-artifacts), skips the quality, security and QA "
+            + "stages of pipelines the project does not have, and lets the baseline restore export its own identity (R2-121).",
+        _ => $"Published delivery template version {version}."
+    };
 }

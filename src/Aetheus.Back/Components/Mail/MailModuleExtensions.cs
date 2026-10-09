@@ -21,6 +21,7 @@ public static class MailModuleExtensions
         services.AddScoped<IMailStateReconciler, MailStateReconciler>();
         services.AddScoped<IDomainEventHandler<MailInventoryReportedEvent>, MailInventoryReconciliationHandler>();
         services.AddScoped<IMailOperationsService, MailOperationsService>();
+        services.AddScoped<IMailStackPurgeService, MailStackPurgeService>();
         services.AddSingleton<IMailDnsResolver, DnsClientMailResolver>();
         services.AddScoped<IMailDnsVerifier, MailDnsVerifier>();
         services.AddScoped<IMailDiagnosticsService, MailDiagnosticsService>();

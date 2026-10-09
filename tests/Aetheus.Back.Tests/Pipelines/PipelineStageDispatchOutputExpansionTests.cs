@@ -67,7 +67,7 @@ public class PipelineStageDispatchOutputExpansionTests
         repo.FindCandidateTargetServerIdsAsync(
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
             Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns([]);
-        repo.FindEnvironmentByNameAsync("prod", Arg.Any<CancellationToken>())
+        repo.FindEnvironmentByNameAsync("prod", Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(new Aetheus.Back.Data.Entities.Environment
             {
                 Id = 1,
@@ -78,7 +78,7 @@ public class PipelineStageDispatchOutputExpansionTests
         repo.TryTransitionPipelineRunStatusAsync(
             Arg.Any<int>(), PipelineStatus.Running, PipelineStatus.WaitingForApproval, Arg.Any<CancellationToken>())
             .Returns(true);
-        environmentChecks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>())
+        environmentChecks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(true);
         finalizer.IsRunActiveAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
         servers.CheckDeploymentPolicy(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<Server>()).Returns((string?)null);

@@ -54,133 +54,11 @@ public class ServerMailSectionRenderTests : BunitContext
     // ── Render ────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void R2_059_AnUnconfiguredMailStack_SaysSo_AndGuidesTheSetup()
-    {
-        var cut = RenderSection(MakeMailServer(installed: false));
-
-        Assert.Contains("MailNotConfigured", cut.Markup, StringComparison.Ordinal);
-        Assert.DoesNotContain(">NotInstalled<", cut.Markup, StringComparison.Ordinal);
-        var guide = cut.Find(".mail-setup-guide");
-        Assert.Equal(4, guide.QuerySelectorAll(".mail-setup-guide-steps > li").Length);
-        Assert.Contains("MailGuidePrerequisites", guide.TextContent, StringComparison.Ordinal);
-        Assert.Contains(cut.FindAll("button"), button => button.TextContent.Contains("MailSetupAction", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Renders_InstalledMail_ShowsPostfixVersion()
-    {
-        var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("3.5.6"), TimeSpan.FromSeconds(2));
-        Assert.Contains("3.5.6", cut.Markup);
-    }
-
-    [Fact]
-    public void Renders_NotInstalled_ProducesMarkup()
-    {
-        var server = MakeMailServer(installed: false);
-        var cut = RenderSection(server);
-
-        // The not-installed path renders the setup CTA and never loads the domain grid: no
-        // mail/domains GET is issued (OnParametersSetAsync only loads data when Mail.IsInstalled).
-        Assert.Contains("MailSetup", cut.Markup);
-        Assert.DoesNotContain(_handler.Requests, r => r.Url.Contains("api/servers/10/mail/domains"));
-    }
-
-    [Fact]
     public void Renders_WithDomains_ShowsDomainNames()
     {
         var cut = RenderSection();
         cut.WaitForState(() => cut.Markup.Contains("example.com"), TimeSpan.FromSeconds(2));
         Assert.Contains("example.com", cut.Markup);
-    }
-
-    [Fact]
-    public void Renders_InstalledMail_DoesNotRequestRoutingDiagnosticsOnMount()
-    {
-        var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("example.com"), TimeSpan.FromSeconds(2));
-        Assert.DoesNotContain(_handler.Requests, request => request.Url.Contains("mail/diagnostics", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void SetupWizard_KeepsWhatWasTyped_WhenTheDialogRendersAgain()
-    {
-        // R-511: the dialog frame re-renders its content on every key press with the same parameters.
-        var model = new MailDialogModel();
-        var cut = Render<MailOperationDialog>(p => p
-            .Add(x => x.Mode, MailDialogMode.Setup)
-            .Add(x => x.Model, model));
-
-        cut.Find("#oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-11").Input("mail.example.org");
-        cut.Render(p => p.Add(x => x.Mode, MailDialogMode.Setup).Add(x => x.Model, model));
-
-        Assert.Equal("mail.example.org",
-            cut.Find("#oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-11").GetAttribute("value"));
-        Assert.DoesNotContain("MailSetupDoesNotMoveMail", cut.Markup);
-    }
-
-    [Fact]
-    public void SetupWizard_ShowsCurrentMxWithoutAnOvhAlert()
-    {
-        _handler.SetJsonResponse("api/servers/10/mail/mx-preview?domain=example.com", new MailMxPreviewDto
-        {
-            Domain = "example.com",
-            Hosts = ["mx1.ovh.net"],
-            Verdict = MailCheckVerdict.Ok
-        });
-        var cut = Render<MailOperationDialog>(p => p
-            .Add(x => x.Mode, MailDialogMode.Setup)
-            .Add(x => x.ServerId, 10)
-            .Add(x => x.Model, new MailDialogModel
-            {
-                Hostname = "mx.example.com",
-                Domain = "example.com",
-                Email = "postmaster@example.com",
-                Password = "a-long-enough-password"
-            }));
-
-        cut.FindAll("button").First(button => button.TextContent.Contains("MailCheckCurrentRouting", StringComparison.Ordinal)).Click();
-
-        cut.WaitForState(() => cut.Markup.Contains("MailCurrentMxHosts"), TimeSpan.FromSeconds(2));
-        Assert.Contains(_handler.Requests, request => request.Url.Contains("mail/mx-preview?domain=example.com", StringComparison.Ordinal));
-
-        cut.FindAll("button").First(button => button.TextContent.Contains("Next", StringComparison.Ordinal)).Click();
-        cut.FindAll("button").First(button => button.TextContent.Contains("Next", StringComparison.Ordinal)).Click();
-        Assert.DoesNotContain("MailOvhRoutingNotice", cut.Markup);
-        Assert.Contains("MailSetupSummary", cut.Markup);
-    }
-
-    [Fact]
-    public void R2_060_TheSetupSteps_AreNumberedOneToThree_AndEachFieldExplainsItself()
-    {
-        var cut = Render<MailOperationDialog>(p => p
-            .Add(x => x.Mode, MailDialogMode.Setup)
-            .Add(x => x.Model, new MailDialogModel()));
-
-        var steps = cut.FindComponents<OmniStepsItem>();
-        Assert.Equal(["MailSetupStepServer", "MailSetupStepAdmin", "MailSetupStepOptions"], steps.Select(step => step.Instance.Title).ToArray());
-        Assert.DoesNotContain(">4<", cut.Find(".mail-setup-steps").InnerHtml, StringComparison.Ordinal);
-        Assert.Equal(["MailHostnameHelp", "MailDomainHelp", "MailDkimSelectorHelp"],
-            cut.FindComponents<OmniFormField>().Select(field => field.Instance.Help).Where(help => help is not null).ToArray());
-    }
-
-    [Fact]
-    public void R2_060_Next_RefusesABareHostName_AndStaysOnTheStep()
-    {
-        var cut = Render<MailOperationDialog>(p => p
-            .Add(x => x.Mode, MailDialogMode.Setup)
-            .Add(x => x.Model, new MailDialogModel { Hostname = "vps2577917", Domain = "example.com" }));
-
-        cut.FindAll("button").First(button => button.TextContent.Contains("Next", StringComparison.Ordinal)).Click();
-
-        Assert.Contains("MailHostnameInvalid", cut.Find(".mail-setup-step-errors").TextContent, StringComparison.Ordinal);
-        Assert.NotEmpty(cut.FindAll("#oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-11"));
-
-        cut.Find("#oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-11").Input("mx.example.com");
-        cut.FindAll("button").First(button => button.TextContent.Contains("Next", StringComparison.Ordinal)).Click();
-
-        Assert.Empty(cut.FindAll(".mail-setup-step-errors"));
-        Assert.NotEmpty(cut.FindAll("#oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-14"));
     }
 
     [Fact]
@@ -227,34 +105,6 @@ public class ServerMailSectionRenderTests : BunitContext
     }
 
     // ── ExecuteActionAsync ────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task ExecuteActionAsync_Start_CompletesAndClearsRunning()
-    {
-        var cut = RenderSection();
-        var method = typeof(ServerMailSection).GetMethod("ExecuteActionAsync", Priv)!;
-
-        await cut.InvokeAsync(async () =>
-            await (Task)method.Invoke(cut.Instance, [MailAction.StartPostfix])!);
-
-        var running = (bool)typeof(ServerMailSection)
-            .GetField("_actionRunning", Priv)!
-            .GetValue(cut.Instance)!;
-        Assert.False(running);
-    }
-
-    [Fact]
-    public async Task ExecuteActionAsync_Stop_CompletesAndClearsRunning()
-    {
-        var cut = RenderSection();
-        var method = typeof(ServerMailSection).GetMethod("ExecuteActionAsync", Priv)!;
-
-        await cut.InvokeAsync(async () =>
-            await (Task)method.Invoke(cut.Instance, [MailAction.StopPostfix])!);
-
-        Assert.False((bool)typeof(ServerMailSection)
-            .GetField("_actionRunning", Priv)!.GetValue(cut.Instance)!);
-    }
 
     // ── Mail dialog model validation ─────────────────────────────────────────
 

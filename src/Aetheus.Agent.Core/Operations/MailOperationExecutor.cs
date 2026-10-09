@@ -24,7 +24,7 @@ public sealed class MailOperationExecutor(
     internal const string ManageHelperPath = MailManageCommandBuilder.ManageHelperPath;
 
     public bool CanHandle(OperationKind kind) =>
-        kind is >= OperationKind.MailStartPostfix and <= OperationKind.MailQuotaReport;
+        kind is >= OperationKind.MailStartPostfix and <= OperationKind.MailPurge;
 
     public Task<ExecutorResult> ExecuteAsync(
         OperationKind kind,

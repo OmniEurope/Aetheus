@@ -20,6 +20,9 @@ public sealed class AetheusTelemetryOptions
     public int MaxExportQueueSize { get; set; } = 2048;
     public int MaxExportBatchSize { get; set; } = 512;
 
+    /// <summary>PLAN-013 lot 1: the optional database size measurement, off until the host enables it.</summary>
+    public DatabaseSizeOptions DatabaseSize { get; set; } = new();
+
     internal void Validate()
     {
         if (!Enabled)
@@ -27,6 +30,7 @@ public sealed class AetheusTelemetryOptions
         ValidateIdentity();
         ValidateEndpoints();
         ValidateExportLimits();
+        DatabaseSize.Validate();
     }
 
     private void ValidateIdentity()

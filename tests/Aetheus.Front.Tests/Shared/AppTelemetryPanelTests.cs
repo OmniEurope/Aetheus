@@ -20,6 +20,12 @@ public class AppTelemetryPanelTests : BunitContext
             new() { Id = 5, ProjectId = 1, Name = "toto-qa", CurrentStatus = AppHealthStatus.Up, HasIngestKey = true }
         });
         _handler.SetJsonResponse("metrics/names", new List<string> { "http.server.request.duration" });
+        _handler.SetJsonResponse("/send-interval", new AppTelemetrySendIntervalDto
+        {
+            ServerIntervalSeconds = 300,
+            Profile = DataRetentionProfile.Standard,
+            ObservedIntervalSeconds = 60
+        });
         _handler.SetJsonResponse("thresholds", new List<AppMetricThresholdDto>());
         _handler.SetJsonResponse("/logs", new PaginatedResult<AppLogEntryDto>());
         _handler.SetJsonResponse("/errors", new PaginatedResult<AppErrorEventDto>());
@@ -60,6 +66,22 @@ public class AppTelemetryPanelTests : BunitContext
         Assert.Contains("Errors", cut.Markup);
         Assert.Contains("Ingestion", cut.Markup);
         Assert.Contains("WebAnalyticsPagesTab", cut.Markup);
+    }
+
+    [Fact]
+    public void TheSendInterval_IsStatedAboveTheTabs_ForTheSelectedApplication()
+    {
+        SeedTelemetry();
+        var cut = Render<AppTelemetryPanel>(p => p.Add(c => c.ProjectId, 1));
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid=telemetry-send-interval]")));
+        Assert.Contains(_handler.Requests, r => r.Url.Contains("apps/5/send-interval", StringComparison.Ordinal));
+        // In the header, before the sub-tabs: the line covers every figure and chart under it.
+        var note = cut.Find("[data-testid=telemetry-send-interval]");
+        var tabs = cut.Find("[role='tab']");
+        Assert.Equal(AngleSharp.Dom.DocumentPositions.Following, note.CompareDocumentPosition(tabs) & AngleSharp.Dom.DocumentPositions.Following);
+        Assert.Contains("TelemetrySendIntervalSetting", note.TextContent);
+        Assert.Contains("TelemetrySendIntervalObservedDiffers", note.TextContent);
     }
 
     [Fact]

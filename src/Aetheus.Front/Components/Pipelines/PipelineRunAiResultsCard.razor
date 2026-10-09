@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 
 @* Extracted from PipelineRun.razor (audit 360, A360-75): the page sat 8 lines over the 600-line
    budget, which is why the size guard could not be extended to .razor files. This block was the
@@ -10,7 +11,7 @@
         <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">
             <OmniIcon Name="OmniIconName.Brain" Class="run-tile-icon" /> @L["AiRunResults"]
         </OmniText>
-        <OmniDataGrid Items="@Results" TItem="AiRunResultDto"
+        <OmniDataGrid Items="@Results" ExportTitle="@ExportContext.Title(L["AiRunResults"])" ExportFields="@ExportContext.Fields()" TItem="AiRunResultDto"
  Class="omni-u-w-100" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
             <Columns>
                 <OmniDataGridColumn Frozen="true" TItem="AiRunResultDto" Property="ProfileName" Title="@L["AiRunnerProfile"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect">

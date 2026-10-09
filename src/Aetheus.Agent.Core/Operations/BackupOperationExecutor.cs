@@ -158,9 +158,18 @@ public sealed class BackupOperationExecutor(
         }
         finally
         {
-            await DropScratchDatabaseAsync(
-                engine, host, port, user, pwd, scratch, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
-            bundle?.Dispose();
+            // The scratch database holds restored production data: drop it on its own bounded budget,
+            // because the task token is already cancelled when the restore was interrupted.
+            try
+            {
+                using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(timeoutSeconds, 30)));
+                await DropScratchDatabaseAsync(
+                    engine, host, port, user, pwd, scratch, timeoutSeconds, onOutput, cleanupCts.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                bundle?.Dispose();
+            }
         }
 
         await onOutput($"Restore-check: {(result.Verified ? "VERIFIED" : "FAILED")} - {result.Message}", result.Verified ? TaskLogLevel.Info : TaskLogLevel.Error).ConfigureAwait(false);

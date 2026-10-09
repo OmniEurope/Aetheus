@@ -22,6 +22,7 @@ public interface IPipelineScannerManifestPreflight
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         string? upstreamPipeline,
+        string? upstreamTemplate,
         int? organizationId,
         CancellationToken ct);
 }
@@ -42,12 +43,13 @@ public sealed class PipelineScannerManifestPreflight(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         string? upstreamPipeline,
+        string? upstreamTemplate,
         int? organizationId,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(resolvedVariables);
-        if (!PipelineScannerTaskFactory.RequiresCandidateScannerManifest(upstreamPipeline)) return null;
+        if (!PipelineScannerTaskFactory.RequiresCandidateScannerManifest(upstreamPipeline, upstreamTemplate)) return null;
 
         var scannerStages = YamlParsingHelper.FlattenJobs(definition)
             .Where(stage => stage.Steps.Any(step =>

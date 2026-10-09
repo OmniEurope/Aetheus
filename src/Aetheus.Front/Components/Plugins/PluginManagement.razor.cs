@@ -85,6 +85,14 @@ public partial class PluginManagement : IAsyncDisposable
         catch (HttpRequestException) { _filterValues = new PluginFilterValuesDto(); }
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    internal Task<PaginatedResult<PluginRegistrationDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest("Name");
+        return Api.Settings.GetPluginsPageAsync(page, pageSize, _search, sortBy, sortDescending, filters: args.ToApiFilters());
+    }
+
     internal async Task OnLoadDataAsync(GridLoadArgs args)
     {
         (_currentPage, _pageSize) = args.ToPageRequest();

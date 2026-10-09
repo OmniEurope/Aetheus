@@ -11,6 +11,7 @@ public partial class Performance : IAsyncDisposable
     [Inject] private ClientApiTimings BrowserTimings { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
+    [Inject] private GridExportContext ExportContext { get; set; } = default!;
 
     /// <summary>Calls of this session shown, slowest first.</summary>
     private const int BrowserCallsShown = 20;
@@ -88,20 +89,48 @@ public partial class Performance : IAsyncDisposable
     /// whether the cap dropped the oldest samples. A number without its window invites the wrong
     /// conclusion.</summary>
     private string WindowText => _report is { Since: { } since }
-        ? string.Format(CultureInfo.CurrentCulture, L["PerformanceWindow"], _report.SampleCount, since.ToLocalTime().ToString("g"))
+        ? string.Format(CultureInfo.CurrentCulture, L["PerformanceWindow"], since.ToLocalTime().ToString("g"))
           + (_report.Truncated ? " " + L["PerformanceTruncated"] : string.Empty)
         : L["PerformanceNoSamples"];
+
+    private string SampleCountText => (_report?.SampleCount ?? 0).ToString("N0", CultureInfo.CurrentCulture);
+
+    private string RoutesCountText => (_report?.Endpoints.Count ?? 0).ToString("N0", CultureInfo.CurrentCulture);
+
+    private ApiEndpointTimingDto? SlowestRoute => _report?.Endpoints.MaxBy(endpoint => endpoint.P95Ms);
+
+    private string SlowestP95Text => SlowestRoute is { } route ? Milliseconds(route.P95Ms) : "-";
+
+    private string? SlowestRouteText => SlowestRoute is { } route ? string.Concat(route.Method, " ", route.Route) : null;
+
+    private ApiCallTimingDto? SlowestCall => _report?.Slowest.MaxBy(call => call.DurationMs);
+
+    private string SlowestCallText => SlowestCall is { } call ? Milliseconds(call.DurationMs) : "-";
+
+    private string? SlowestCallRouteText => SlowestCall is { } call ? string.Concat(call.Method, " ", call.Route) : null;
 
     /// <summary>Recette R-454: the tab slugs, in the order of the tabs.</summary>
     private static readonly string[] TabSlugs = ["slowest", "routes", "browser"];
 
     /// <summary>
-    /// Recette R-454: every row of the three tables in one Markdown file, raw, for an AI to read. Built
-    /// when the button is pressed: the report on screen and every call this browser session kept (not
-    /// only the slowest shown).
+    /// Recette R2-124: the header of each table's export, the page's source and address, then the server
+    /// window the page writes above the tabs, so a file read alone still says since when the figures count.
     /// </summary>
-    private OmniMarkdownTableExport<PerformanceExportRow> CreateExport() =>
-        PerformanceMarkdownExport.Create(_report ?? new ApiPerformanceReportDto(), BrowserTimings.Snapshot(), key => L[key].Value);
+    private IReadOnlyList<OmniTableExportField> ExportFields =>
+        [.. ExportContext.Fields(), .. WindowFields(_report ?? new ApiPerformanceReportDto(), key => L[key].Value)];
+
+    /// <summary>The server window as export header lines: start in UTC, requests measured, cap reached.</summary>
+    internal static IReadOnlyList<OmniTableExportField> WindowFields(ApiPerformanceReportDto report, Func<string, string> text)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        ArgumentNullException.ThrowIfNull(text);
+        return
+        [
+            new(text("PerformanceExportSince"), report.Since is { } since ? AppTelemetryMarkdownExport.IsoUtc(since) : text("ExportNone")),
+            new(text("PerformanceExportSamples"), report.SampleCount.ToString(CultureInfo.InvariantCulture)),
+            new(text("PerformanceExportTruncated"), text(report.Truncated ? "Yes" : "No"))
+        ];
+    }
 
     private static string Milliseconds(double value) =>
         value >= 1000

@@ -20,6 +20,8 @@ public class OrganizationServiceTests
     {
         _repo.GetMembersForNotificationAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
+        _repo.GetProjectOrganizationIdsAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
+            .Returns([]);
         _sut = new OrganizationService(_repo, _authz, TimeProvider.System, Substitute.For<IAdminChangeNotifier>(), _userNotifier, Substitute.For<IAuditService>());
     }
 
@@ -371,6 +373,29 @@ public class OrganizationServiceTests
         await _sut.AssignProjectsAsync(1, [10, 20], TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AssignProjectsAsync(1, Arg.Any<List<int>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AssignProjectsAsync_EvictsTheSourceOrganizationMembersAsWellAsTheTarget()
+    {
+        _repo.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(new Organization { Id = 1 });
+        _repo.CountExistingProjectsAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>()).Returns(1);
+        // The source is read before the move: afterwards every project already belongs to org 1.
+        _repo.GetProjectOrganizationIdsAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>()).Returns([2]);
+        _repo.GetMembersForNotificationAsync(1, Arg.Any<CancellationToken>()).Returns([(11, "target-member")]);
+        _repo.GetMembersForNotificationAsync(2, Arg.Any<CancellationToken>()).Returns([(22, "source-member"), (11, "target-member")]);
+
+        await _sut.AssignProjectsAsync(1, [10], TestContext.Current.CancellationToken);
+
+        Received.InOrder(() =>
+        {
+            _repo.GetProjectOrganizationIdsAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>());
+            _repo.AssignProjectsAsync(1, Arg.Any<List<int>>(), Arg.Any<CancellationToken>());
+        });
+        _authz.Received(1).InvalidateRoleCache("source-member");
+        _authz.Received(1).InvalidateRoleCache("target-member");
+        await _userNotifier.Received(1).NotifyPermissionsChangedAsync(22, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _userNotifier.Received(1).NotifyPermissionsChangedAsync(11, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

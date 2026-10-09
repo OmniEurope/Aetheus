@@ -188,18 +188,18 @@ public class ArtifactServiceTests
     }
 
     [Fact]
-    public async Task PublishArtifactAsync_NullProjectId_UsesZeroAsDefault()
+    public async Task PublishArtifactAsync_NoOwningProject_RefusedBeforeAnyByteOrRowIsWritten()
     {
+        // BACK-009: this used to store the file and the row, then fail in retention with a null
+        // ProjectId, leaving an orphan behind a 500.
         _repoMock.GetRunPipelineContextAsync(1, Arg.Any<CancellationToken>())
             .Returns((PipelineId: 10, ProjectId: (int?)null));
-        _storageMock.SaveArtifactAsync(0, 10, 1, Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
-            .Returns(("path/file.zip", "sha0"));
-        _storageMock.GetArtifactSize(Arg.Any<string>()).Returns(0L);
 
-        var result = await _sut.PublishArtifactAsync(1, "build", null, 0, Stream.Null, ct: TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.PublishArtifactAsync(1, "build", null, 0, Stream.Null, ct: TestContext.Current.CancellationToken));
 
-        Assert.NotNull(result);
-        await _storageMock.Received(1).SaveArtifactAsync(0, 10, 1, Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+        await _storageMock.DidNotReceiveWithAnyArgs().SaveArtifactAsync(default, default, default, default!, default!, TestContext.Current.CancellationToken);
+        await _repoMock.DidNotReceive().AddAsync(Arg.Any<PipelineArtifact>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -57,8 +57,26 @@ public sealed class PipelineCheckpointReuseService(
     IPipelineRunParameterResolver parameterResolver,
     IPostgresLeaderLease operationLock) : IPipelineCheckpointReuseService
 {
-    private static readonly HashSet<string> ResumableCheckpointPipelines =
-        new(["aetheus-ci", "aetheus-quality", "aetheus-security"], StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Recette R2-121: the three children a resumed candidate may adopt, by role. A child plays a role
+    /// when it extends the role's shipped template (how the setup wizard creates <c>portfolio-ci</c>)
+    /// or carries the self-deploy pipeline's historical name; the preview names it as the candidate's
+    /// own variable does, which for aetheus-candidate is the historical name again.
+    /// </summary>
+    private static readonly CheckpointRole[] ResumableRoles =
+    [
+        new("aetheus-ci", DeliveryTemplateNames.Ci, "APPLICATION_CI_PIPELINE", "AETHEUS_CHECKPOINT_CI_RUN_ID"),
+        new("aetheus-quality", DeliveryTemplateNames.Quality, "APPLICATION_QUALITY_PIPELINE", "AETHEUS_CHECKPOINT_QUALITY_RUN_ID"),
+        new("aetheus-security", DeliveryTemplateNames.Security, "APPLICATION_SECURITY_PIPELINE", "AETHEUS_CHECKPOINT_SECURITY_RUN_ID")
+    ];
+
+    private sealed record CheckpointRole(
+        string LegacyPipelineName, string TemplateName, string PipelineVariable, string CheckpointVariable);
+
+    private static CheckpointRole? RoleOf(Pipeline target, string targetName) =>
+        Array.Find(ResumableRoles, role =>
+            string.Equals(targetName, role.LegacyPipelineName, StringComparison.OrdinalIgnoreCase)
+            || DeliveryTemplateNames.Is(target.TemplateReferenceName, role.TemplateName));
 
     public async Task<bool> TryReuseCheckpointAsync(
         PipelineRun currentParent,
@@ -73,7 +91,7 @@ public sealed class PipelineCheckpointReuseService(
         ArgumentNullException.ThrowIfNull(currentParent);
         ArgumentNullException.ThrowIfNull(target);
 
-        if (!ResumableCheckpointPipelines.Contains(targetName)) return false;
+        if (RoleOf(target, targetName) is not { } role) return false;
         if (!TryGetResumeSourceRunId(currentParent, out var sourceParentRunId)) return false;
         var sourceParent = await GetCompatibleSourceParentAsync(
             currentParent, sourceParentRunId, ct).ConfigureAwait(false);
@@ -94,7 +112,7 @@ public sealed class PipelineCheckpointReuseService(
             return false;
 
         await CompleteCheckpointReuseAsync(
-            currentParent, targetName, sourceParentRunId, checkpoint.Id, artifacts.Count, stepRun, now, ct)
+            currentParent, targetName, role, sourceParentRunId, checkpoint.Id, artifacts.Count, stepRun, now, ct)
             .ConfigureAwait(false);
         return true;
     }
@@ -106,8 +124,13 @@ public sealed class PipelineCheckpointReuseService(
         var source = await repo.GetRunDetailAsync(sourceRunId, ct).ConfigureAwait(false);
         if (source is null) return null;
         var items = new List<PipelineCheckpointResumeItemDto>();
-        foreach (var pipelineName in ResumableCheckpointPipelines.Order(StringComparer.Ordinal))
+        var sourceVariables = DeserializeResolvedVariables(source.ResolvedVariablesJson);
+        foreach (var role in ResumableRoles)
         {
+            var pipelineName = sourceVariables.TryGetValue(role.PipelineVariable, out var named)
+                && !string.IsNullOrWhiteSpace(named)
+                    ? named.Trim()
+                    : role.LegacyPipelineName;
             var childId = await repo.FindTriggeredRunIdByPipelineNameAsync(sourceRunId, pipelineName, ct)
                 .ConfigureAwait(false);
             if (childId is not { } runId)
@@ -289,6 +312,7 @@ public sealed class PipelineCheckpointReuseService(
     private async Task CompleteCheckpointReuseAsync(
         PipelineRun currentParent,
         string targetName,
+        CheckpointRole role,
         int sourceParentRunId,
         int checkpointRunId,
         int artifactCount,
@@ -301,14 +325,7 @@ public sealed class PipelineCheckpointReuseService(
         foreach (var output in await repo.GetSuccessfulStepOutputsAsync(checkpointRunId, ct).ConfigureAwait(false))
             foreach (var (name, value) in DeserializeResolvedVariables(output.OutputVariablesJson))
                 outputs[name] = value;
-        var checkpointVariable = targetName switch
-        {
-            "aetheus-ci" => "AETHEUS_CHECKPOINT_CI_RUN_ID",
-            "aetheus-quality" => "AETHEUS_CHECKPOINT_QUALITY_RUN_ID",
-            "aetheus-security" => "AETHEUS_CHECKPOINT_SECURITY_RUN_ID",
-            _ => throw new InvalidOperationException("Unsupported checkpoint pipeline.")
-        };
-        outputs[checkpointVariable] = checkpointRunId.ToString();
+        outputs[role.CheckpointVariable] = checkpointRunId.ToString();
         stepRun.Status = TaskExecutionStatus.Success;
         stepRun.ExitCode = 0;
         stepRun.StartedAt = now;

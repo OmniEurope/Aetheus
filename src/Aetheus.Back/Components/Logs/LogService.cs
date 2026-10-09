@@ -14,6 +14,20 @@ public class LogService(ILogRepository repo, IHubContext<LogHub> logHub, ISecret
         return MapLogs(logs, static log => log.Message);
     }
 
+    public async Task<PaginatedResult<TaskLogDto>> GetTaskLogPageAsync(int taskId, int page, int pageSize, CancellationToken ct = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        var (items, total) = await repo.GetTaskLogPageAsync(taskId, page, pageSize, ct).ConfigureAwait(false);
+        return new PaginatedResult<TaskLogDto>
+        {
+            Items = MapLogs(items, static log => log.Message),
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
     public Task<List<string>> GetTaskOutputVariableLinesAsync(int taskId, CancellationToken ct = default) =>
         repo.GetTaskOutputVariableLinesAsync(taskId, ct);
 
@@ -100,6 +114,9 @@ public class LogService(ILogRepository repo, IHubContext<LogHub> logHub, ISecret
         {
             var dtos = group.Select(log => new TaskLogDto
             {
+                // FRONT-010: the persisted id travels with the line, so the run page can tell a streamed
+                // line from the same line read again in a snapshot or a page of the full log.
+                Id = log.Id,
                 TaskId = log.TaskId,
                 Level = log.Level,
                 Message = log.Message,

@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 
 <OmniCard Class="omni-u-mb-lg">
     <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-md">@L["Essentials"]</OmniText>
@@ -48,11 +49,21 @@
                 <span class="essential-label">@L["AgentVersion"]</span>
                 <span class="essential-value">@FormatAgentVersionWithTarget()</span>
                 @* Recette R2-033: the update is asked where its need is read, under the version. *@
-                @if (AgentUpdateAvailable && CanWrite)
+                @{ var agentUpdate = AgentUpdateState; }
+                @if (ShowAgentUpdateButton)
                 {
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UpdateAgentAsync" Busy="@_agentUpdateBusy" title="@L["UpdateAgent"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Update"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UpdateAgentAsync" Busy="@(_agentUpdateBusy || agentUpdate.InProgress)" title="@L["UpdateAgent"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Update"]</span></OmniButton>
                     </OmniStack>
+                }
+                @* Recette R2-111: from the confirmation until the agent reports the new version, or the failure and its reason. *@
+                @if (agentUpdate.InProgress)
+                {
+                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="agent-update-overview-state" role="status">@string.Format(L["AgentUpdateInProgressTo"], agentUpdate.InProgressTarget)</OmniText>
+                }
+                else if (agentUpdate.Failed)
+                {
+                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="agent-update-overview-state" role="alert">@(string.IsNullOrWhiteSpace(agentUpdate.FailureDiagnostic) ? L["AgentUpdateFailed"].Value : string.Format(L["AgentUpdateFailedWithReason"], agentUpdate.FailureDiagnostic))</OmniText>
                 }
             </div>
         </div>
@@ -291,10 +302,10 @@
     }
     else
     {
-            <OmniDataGrid Items="@Server.ScannerCapabilities" TItem="string" Class="analysis-table" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+            <OmniDataGrid Items="@Server.ScannerCapabilities" ExportTitle="@ExportContext.Title(L["AnalysisScannerCapabilities"])" ExportFields="@ExportContext.Fields()" TItem="string" Class="analysis-table" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
             <Columns>
-                <OmniDataGridColumn Frozen="true" TItem="string" Key="ScannerState" Title="@L["Status"]" Width="9rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@ScannerStates" FormatFilterValue="@ScannerStateText" FilterPredicate="@MatchesScannerState"><Template Context="diagnostic"><OmniBadge Fill="OmniFill.Solid" Tone="@ScannerDiagnosticStyle(diagnostic)">@ScannerDiagnosticState(diagnostic)</OmniBadge></Template></OmniDataGridColumn>
-                <OmniDataGridColumn TItem="string" Title="@L["Details"]" Sortable="false"><Template Context="diagnostic">@diagnostic</Template></OmniDataGridColumn>
+                <OmniDataGridColumn Frozen="true" TItem="string" Key="ScannerState" ExportValue="@ScannerStateExport" Title="@L["Status"]" Width="9rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@ScannerStates" FormatFilterValue="@ScannerStateText" FilterPredicate="@MatchesScannerState"><Template Context="diagnostic"><OmniBadge Fill="OmniFill.Solid" Tone="@ScannerDiagnosticStyle(diagnostic)">@ScannerDiagnosticState(diagnostic)</OmniBadge></Template></OmniDataGridColumn>
+                <OmniDataGridColumn TItem="string" ExportValue="@ScannerDetailsExport" Title="@L["Details"]" Sortable="false"><Template Context="diagnostic">@diagnostic</Template></OmniDataGridColumn>
             </Columns>
         </OmniDataGrid>
     }

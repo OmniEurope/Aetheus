@@ -57,6 +57,10 @@ public sealed class MailStateReconciler(
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var pass = new Pass(now, await repo.GetRecentRemovalTargetsAsync(serverId, now - Grace, ct).ConfigureAwait(false));
+        // "Réinstaller la messagerie": the purge dropped the rows it is erasing on the host. A heartbeat taken
+        // while it runs (or just after) still lists them and would adopt them back.
+        if (pass.IsBeingRemoved(OperationKind.MailPurge, "-"))
+            return MailReconciliationResult.Empty;
         var domains = await repo.GetTrackedInventoryAsync(serverId, ct).ConfigureAwait(false);
 
         if (mail.DomainsCollected)

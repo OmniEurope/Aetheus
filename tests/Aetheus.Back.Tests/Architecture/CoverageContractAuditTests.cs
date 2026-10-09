@@ -55,7 +55,10 @@ public sealed class CoverageContractAuditTests
         var linuxLauncher = File.ReadAllText(Path.Combine(root, "launch-linux.sh"));
 
         Assert.Contains("@(\"--coverlet\")", launcher, StringComparison.Ordinal);
-        Assert.Contains("$resultDirectory = if ($Coverage) { $coverageDir } else", launcher, StringComparison.Ordinal);
+        Assert.Contains("elseif ($Coverage) { $coverageDir } else", launcher, StringComparison.Ordinal);
+        // PLAN-015 lot 0: the integration coverage lands beside the product reports, never among them.
+        Assert.Contains("-ResultDirectory (Join-Path $coverageDir \"Integration\")", launcher, StringComparison.Ordinal);
+        Assert.Contains("--coverlet --results-directory \"$COVERAGE_DIR/Integration\"", linuxLauncher, StringComparison.Ordinal);
         Assert.DoesNotContain("\"--results-directory\", $coverageDir", launcher, StringComparison.Ordinal);
         Assert.Contains("\"coverage.cobertura.*.xml\"", launcher, StringComparison.Ordinal);
         Assert.Contains("--coverlet --results-directory \"$COVERAGE_DIR\"", linuxLauncher, StringComparison.Ordinal);

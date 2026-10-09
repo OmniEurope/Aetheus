@@ -11,7 +11,13 @@ internal sealed class DebouncedAsyncAction(
     private Task? _pendingTask;
     private bool _disposed;
 
-    internal CancellationToken LifetimeToken => _lifetime.Token;
+    /// <summary>
+    /// The lifetime's token. Once DisposeAsync has started it is a cancelled token, never the disposed
+    /// source's: the run page's queue poll read it on every tick and once more when it stopped, after the
+    /// source was disposed, and threw ObjectDisposedException (recette R2-100). <c>_disposed</c> is set
+    /// before the source is cancelled and disposed.
+    /// </summary>
+    internal CancellationToken LifetimeToken => _disposed ? new CancellationToken(canceled: true) : _lifetime.Token;
 
     internal Task ScheduleAsync()
     {

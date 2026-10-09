@@ -132,6 +132,10 @@ public sealed class ScannerOperationExecutor(
             invocation.Scanner, invocation.ScanRoot, invocation.CancellationToken).ConfigureAwait(false);
         var trustedHarnessPath = await ScannerContainerProcessBuilder.ExtractEmbeddedHarnessAsync(
             invocation.Scanner, invocation.ScanRoot, invocation.CancellationToken).ConfigureAwait(false);
+        if (ScannerApiSpecifications.IsPartitioned(effectiveEnvironment))
+            return await RunPartitionsAndPublishAsync(
+                invocation, sourceDirectory, reportPath, rulesDirectory, cacheDirectory, trustedHarnessPath,
+                scannerVersion, effectiveEnvironment, resources.Egress).ConfigureAwait(false);
         var process = await CreateScannerProcessAsync(
             invocation, sourceDirectory, reportPath, rulesDirectory, cacheDirectory,
             trustedHarnessPath, effectiveEnvironment, resources.Egress).ConfigureAwait(false);
@@ -232,37 +236,72 @@ public sealed class ScannerOperationExecutor(
         string scannerVersion,
         IReadOnlyDictionary<string, string> effectiveEnvironment)
     {
-        await invocation.OnOutput(
-            $"Scanner {invocation.Scanner.Name} {scannerVersion} started ({invocation.Scanner.Execution}, network={invocation.Scanner.Network}).",
-            TaskLogLevel.Info).ConfigureAwait(false);
+        await LogStartedAsync(invocation, scannerVersion).ConfigureAwait(false);
+        var run = await RunToReportAsync(
+            invocation, process, reportPath, cacheDirectory, effectiveEnvironment, string.Empty).ConfigureAwait(false);
+        return run.Failure ?? await PublishSuccessfulReportAsync(
+            invocation, reportPath, rulesDirectory, scannerVersion, run.ExitCode).ConfigureAwait(false);
+    }
+
+    private static Task LogStartedAsync(ScanInvocation invocation, string scannerVersion) => invocation.OnOutput(
+        $"Scanner {invocation.Scanner.Name} {scannerVersion} started ({invocation.Scanner.Execution}, network={invocation.Scanner.Network}).",
+        TaskLogLevel.Info);
+
+    /// <summary>Runs one scanner process and checks its report; <paramref name="scope"/> prefixes every failure.</summary>
+    private async Task<(ExecutorResult? Failure, int ExitCode)> RunToReportAsync(
+        ScanInvocation invocation,
+        ProcessStartInfo process,
+        string reportPath,
+        string? cacheDirectory,
+        IReadOnlyDictionary<string, string> effectiveEnvironment,
+        string scope)
+    {
         var executionRunner = new ScannerProcessExecutionRunner(processRunner, timeProvider);
         var (result, outputQuotaExceeded) = await executionRunner.RunAsync(
             invocation.Scanner, process, reportPath, invocation.OutputDirectory, cacheDirectory,
             invocation.TimeoutSeconds, invocation.OnOutput, invocation.CancellationToken).ConfigureAwait(false);
+        var status = AnalysisReportStatus.Error;
+        string? error;
         if (outputQuotaExceeded)
-            return await FailAsync(invocation, AnalysisReportStatus.Error,
-                "Scanner output or persistent cache exceeded its configured quota.").ConfigureAwait(false);
-        if (result.TimedOut)
-            return await FailAsync(invocation, AnalysisReportStatus.TimedOut,
-                $"Scanner timed out after {invocation.TimeoutSeconds} seconds.").ConfigureAwait(false);
-        if (result.ExitCode != 0 && !invocation.Scanner.FindingExitCodes.Contains(result.ExitCode))
-            return await FailAsync(invocation, AnalysisReportStatus.Error,
-                $"Scanner exited with code {result.ExitCode}.").ConfigureAwait(false);
+            error = "Scanner output or persistent cache exceeded its configured quota.";
+        else if (result.TimedOut)
+            (status, error) = (AnalysisReportStatus.TimedOut, $"Scanner timed out after {invocation.TimeoutSeconds} seconds.");
+        else if (result.ExitCode != 0 && !invocation.Scanner.FindingExitCodes.Contains(result.ExitCode))
+            error = $"Scanner exited with code {result.ExitCode}.";
+        else
+            error = await CheckReportAsync(invocation, reportPath, effectiveEnvironment).ConfigureAwait(false);
+        return error is null
+            ? (null, result.ExitCode)
+            : (await FailAsync(invocation, status, scope + error).ConfigureAwait(false), result.ExitCode);
+    }
 
-        var preparationError = await PrepareReportForPublicationAsync(
-            invocation.Scanner, reportPath, effectiveEnvironment, invocation.CancellationToken).ConfigureAwait(false);
-        if (preparationError is not null)
-            return await FailAsync(invocation, AnalysisReportStatus.Error, preparationError).ConfigureAwait(false);
-        var file = new FileInfo(reportPath);
-        if (file.Length <= 0 || file.Length > invocation.Scanner.MaxReportBytes)
+    /// <summary>R2-099: the definitions of one step, scanned in sequence, published as one report.</summary>
+    private async Task<ExecutorResult> RunPartitionsAndPublishAsync(
+        ScanInvocation invocation, string sourceDirectory, string reportPath, string? rulesDirectory,
+        string? cacheDirectory, string? trustedHarnessPath, string scannerVersion,
+        IReadOnlyDictionary<string, string> environment, RestrictedScannerEgress? egress)
+    {
+        await LogStartedAsync(invocation, scannerVersion).ConfigureAwait(false);
+        var outcome = await ScannerApiSpecifications.ScanInSequenceAsync(
+            invocation, environment, reportPath,
+            async (partition, partitionEnvironment, partitionReport, scope) =>
+            {
+                var process = await CreateScannerProcessAsync(
+                    partition, sourceDirectory, partitionReport, rulesDirectory, cacheDirectory,
+                    trustedHarnessPath, partitionEnvironment, egress).ConfigureAwait(false);
+                return process.Failure is not null
+                    ? (process.Failure, 0)
+                    : await RunToReportAsync(
+                        partition, process.Process!, partitionReport, cacheDirectory, partitionEnvironment, scope)
+                        .ConfigureAwait(false);
+            }).ConfigureAwait(false);
+        if (outcome.Failure is not null) return outcome.Failure;
+        var merged = new FileInfo(reportPath);
+        if (merged.Length > invocation.Scanner.MaxReportBytes)
             return await FailAsync(invocation, AnalysisReportStatus.Error,
-                $"Scanner report size {file.Length} is outside the allowed range.").ConfigureAwait(false);
-        if (!await ValidateReportStructureAsync(
-                invocation.Scanner, reportPath, invocation.CancellationToken).ConfigureAwait(false))
-            return await FailAsync(invocation, AnalysisReportStatus.Error,
-                "Scanner report does not match its declared format.").ConfigureAwait(false);
+                $"Merged scanner report size {merged.Length} is outside the allowed range.").ConfigureAwait(false);
         return await PublishSuccessfulReportAsync(
-            invocation, reportPath, rulesDirectory, scannerVersion, result.ExitCode).ConfigureAwait(false);
+            invocation, reportPath, rulesDirectory, scannerVersion, outcome.ExitCode).ConfigureAwait(false);
     }
 
     private async Task<ExecutorResult> PublishSuccessfulReportAsync(
@@ -368,21 +407,6 @@ public sealed class ScannerOperationExecutor(
                 "Scanner is not applicable: no supported source file was detected.",
                 onOutput, cancellationToken).ConfigureAwait(false);
         return null;
-    }
-
-    private static async Task<string?> PrepareReportForPublicationAsync(
-        ScannerManifestEntry scanner,
-        string reportPath,
-        IReadOnlyDictionary<string, string> effectiveEnvVars,
-        CancellationToken cancellationToken)
-    {
-        if (!File.Exists(reportPath))
-            return "Scanner completed without producing the required report.";
-
-        return await GitleaksHistoryReportAnnotator.AnnotateAsync(
-                scanner, reportPath, effectiveEnvVars, cancellationToken).ConfigureAwait(false)
-            ? null
-            : "Gitleaks history report metadata is missing or invalid.";
     }
 
     private async Task CleanupAsync(

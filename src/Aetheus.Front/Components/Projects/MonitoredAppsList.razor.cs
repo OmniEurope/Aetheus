@@ -78,11 +78,14 @@ public partial class MonitoredAppsList : IAsyncDisposable
     {
         try
         {
+            // FRONT-020: a list that arrives after a sign-out is neither cached nor shown.
+            var ticket = Cache.Begin();
             var apps = await Api.Monitoring.GetMonitoredAppsAsync(ProjectId);
+            if (!Cache.IsCurrent(ticket)) return;
             if (live && _grid is not null) await _grid.Refresh();
             _apps = apps;
             await LoadSamplesAsync();
-            Cache.Set(CacheKey, new CachedMonitoringData(_apps, _samples));
+            Cache.TryStore(ticket, CacheKey, new CachedMonitoringData(_apps, _samples));
         }
         catch (HttpRequestException)
         {
@@ -173,4 +176,10 @@ public partial class MonitoredAppsList : IAsyncDisposable
             _hubConnection = null;
         }
     }
+
+    /// <summary>Recette R2-124: the export writes the uptimes the cells show.</summary>
+    private Func<MonitoredAppDto, object?> Uptime24hExport => _uptime24hExport ??= app => FormatUptime(app.Uptime24h);
+    private Func<MonitoredAppDto, object?> Uptime7dExport => _uptime7dExport ??= app => FormatUptime(app.Uptime7d);
+    private Func<MonitoredAppDto, object?>? _uptime24hExport;
+    private Func<MonitoredAppDto, object?>? _uptime7dExport;
 }

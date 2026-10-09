@@ -6,13 +6,14 @@ namespace Aetheus.Front.Components.Pipelines;
 /// Live log streaming (S-TECH-32) for the selected running step, with a 2s poll fallback. Extracted
 /// from the former <c>PipelineRun.Logs.cs</c> partial into a real collaborator: it owns the log hub
 /// connection, the streaming task id and the poll timer, while the component keeps the shared
-/// <paramref name="logsCache"/> (read by the rest of the view) and supplies UI-refresh callbacks.
+/// <paramref name="logs"/> (read by the rest of the view) and supplies UI-refresh callbacks. FRONT-010:
+/// streamed and polled lines go through the window, which keeps them bounded.
 /// </summary>
 internal sealed class PipelineRunLogStreamer(
     ApiClient api,
     HubConnectionFactory hubFactory,
     ILogger logger,
-    Dictionary<int, List<TaskLogDto>> logsCache,
+    PipelineRunLogWindow logs,
     Func<Func<Task>, Task> invokeAsync,
     Action stateHasChanged) : IAsyncDisposable
 {
@@ -68,17 +69,14 @@ internal sealed class PipelineRunLogStreamer(
         await _pollGate.WaitAsync(ct);
         try
         {
-            var logs = await api.Monitoring.GetTaskLogsAsync(taskId, ct) ?? [];
+            var tail = await api.Monitoring.GetTaskLogTailAsync(taskId, PipelineRunLogWindow.LiveWindow, ct);
             if (_disposed || generation != _selectionGeneration || _streamingTaskId != taskId) return;
             await invokeAsync(() =>
             {
                 if (_disposed || generation != _selectionGeneration || _streamingTaskId != taskId)
                     return Task.CompletedTask;
-                if (!logsCache.TryGetValue(taskId, out var current) || !SnapshotsEqual(current, logs))
-                {
-                    logsCache[taskId] = logs;
+                if (logs.ApplySnapshot(taskId, tail, PipelineRunLogWindow.LiveWindow))
                     stateHasChanged();
-                }
                 return Task.CompletedTask;
             });
         }
@@ -87,14 +85,6 @@ internal sealed class PipelineRunLogStreamer(
         {
             _pollGate.Release();
         }
-    }
-
-    private static bool SnapshotsEqual(IReadOnlyList<TaskLogDto> current, IReadOnlyList<TaskLogDto> next)
-    {
-        if (current.Count != next.Count) return false;
-        for (var i = 0; i < current.Count; i++)
-            if (current[i] != next[i]) return false;
-        return true;
     }
 
     private async Task StopPollingAsync()
@@ -157,21 +147,11 @@ internal sealed class PipelineRunLogStreamer(
         });
     }
 
-    private Task AppendStreamedLogsAsync(IEnumerable<TaskLogDto> logs)
+    private Task AppendStreamedLogsAsync(IEnumerable<TaskLogDto> streamed)
     {
         if (_disposed || _streamingTaskId is not { } taskId) return Task.CompletedTask;
-        var changed = false;
-        foreach (var log in logs.Where(log => log.TaskId == taskId))
-        {
-            if (!logsCache.TryGetValue(taskId, out var list))
-            {
-                list = [];
-                logsCache[taskId] = list;
-            }
-            list.Add(log);
-            changed = true;
-        }
-        if (changed) stateHasChanged();
+        var own = streamed.Where(log => log.TaskId == taskId).ToList();
+        if (own.Count > 0 && logs.AppendStreamed(taskId, own)) stateHasChanged();
         return Task.CompletedTask;
     }
 

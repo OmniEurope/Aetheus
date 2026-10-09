@@ -294,12 +294,18 @@ public class GitLightCliWriter(GitProcessRunner git, ILogger<GitLightCliWriter> 
     }
 
     /// <summary>F-038: conservative refname validation (subset of git-check-ref-format).</summary>
-    private static bool IsValidRefName(string branch)
-    {
-        if (string.IsNullOrWhiteSpace(branch) || branch.Length > 255) return false;
-        if (branch.StartsWith('-') || branch.StartsWith('/') || branch.EndsWith('/')) return false;
-        if (branch.EndsWith(".lock", StringComparison.Ordinal) || branch.EndsWith('.')) return false;
-        if (branch.Contains("..", StringComparison.Ordinal) || branch.Contains("//", StringComparison.Ordinal)) return false;
-        return branch.All(c => !char.IsControl(c) && c is not (' ' or '~' or '^' or ':' or '?' or '*' or '[' or '\\'));
-    }
+    private static bool IsValidRefName(string branch) =>
+        !string.IsNullOrWhiteSpace(branch) && branch.Length <= 255
+        && !HasForbiddenRefEdge(branch) && !HasForbiddenRefSequence(branch)
+        && branch.AsSpan().IndexOfAny(ForbiddenRefCharacters) < 0 && !branch.Any(char.IsControl);
+
+    private static readonly System.Buffers.SearchValues<char> ForbiddenRefCharacters =
+        System.Buffers.SearchValues.Create(" ~^:?*[\\");
+
+    private static bool HasForbiddenRefEdge(string branch) =>
+        branch.StartsWith('-') || branch.StartsWith('/') || branch.EndsWith('/')
+        || branch.EndsWith(".lock", StringComparison.Ordinal) || branch.EndsWith('.');
+
+    private static bool HasForbiddenRefSequence(string branch) =>
+        branch.Contains("..", StringComparison.Ordinal) || branch.Contains("//", StringComparison.Ordinal);
 }

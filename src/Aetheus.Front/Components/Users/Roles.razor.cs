@@ -79,6 +79,15 @@ public partial class Roles : IAsyncDisposable
         return _grid is not null ? _grid.GoToPage(0, forceReload: true) : LoadPageAsync();
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    private Task<PaginatedResult<RoleDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(20);
+        var (sortBy, sortDescending) = ResolveSort(args);
+        return Api.Auth.GetRoleDtosAsync(page, pageSize, Search.Search, sortBy: sortBy, sortDescending: sortDescending,
+            filters: args.ToApiFilters());
+    }
+
     private async Task LoadPageAsync()
     {
         var showLoading = _silentRefreshDepth == 0;

@@ -64,7 +64,6 @@ public sealed class AlertEvaluatorService(
             maximumWindowSeconds,
             ct).ConfigureAwait(false);
 
-        var changedRules = false;
         foreach (var serverGroup in serverGroups)
         {
             if (!metricsByServer.TryGetValue(serverGroup.Key, out var serverMetrics)
@@ -94,12 +93,16 @@ public sealed class AlertEvaluatorService(
                     (timeProvider.GetUtcNow().UtcDateTime - rule.LastTriggeredAt.Value).TotalSeconds < rule.SustainedSeconds * 2)
                     continue;
 
+                // BACK-004: the cooldown is reserved and committed before anything is emitted, so a
+                // second evaluator that read the same cooldown cannot emit the same alert again.
+                var triggeredAt = timeProvider.GetUtcNow().UtcDateTime;
+                if (!await alertRepo.TryReserveTriggerAsync(rule.Id, rule.LastTriggeredAt, triggeredAt, ct).ConfigureAwait(false))
+                    continue;
+                rule.LastTriggeredAt = triggeredAt;
+
                 logger.LogWarning(
                     "Alert '{RuleName}' triggered: server {ServerId} {Metric} {Operator} {Threshold} for {Seconds}s",
                     rule.Name, rule.ServerId, rule.Metric, rule.Operator, rule.Threshold, rule.SustainedSeconds);
-
-                rule.LastTriggeredAt = timeProvider.GetUtcNow().UtcDateTime;
-                changedRules = true;
 
                 await notificationService.SendEventAsync("alert.triggered", new
                 {
@@ -124,11 +127,6 @@ public sealed class AlertEvaluatorService(
                     TriggeredAt = rule.LastTriggeredAt ?? timeProvider.GetUtcNow().UtcDateTime
                 }, ct).ConfigureAwait(false);
             }
-        }
-
-        if (changedRules)
-        {
-            await alertRepo.SaveChangesAsync(ct).ConfigureAwait(false);
         }
     }
 

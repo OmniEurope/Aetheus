@@ -7,10 +7,10 @@
 <OmniDataGridColumn Frozen="true" TItem="AnalysisFindingDto" Property="Id" Title="ID" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
     <Template Context="finding"><OmniLink Href="@FindingHref(finding.Id, RunId)">@($"#{finding.Id}")</OmniLink></Template>
 </OmniDataGridColumn>
-<OmniDataGridColumn TItem="AnalysisFindingDto" Property="Severity" Title="@L["Severity"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" DefaultFilterValue="@Defaults?.Severity">
+<OmniDataGridColumn TItem="AnalysisFindingDto" Property="Severity" ExportValue="@SeverityExport" Title="@L["Severity"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" DefaultFilterValue="@Defaults?.Severity">
     <Template Context="finding"><OmniBadge Fill="OmniFill.Solid" Tone="@AnalysisPresentation.SeverityBadge(finding.Severity)">@L.Localize(finding.Severity)</OmniBadge></Template>
 </OmniDataGridColumn>
-<OmniDataGridColumn TItem="AnalysisFindingDto" Property="Category" Title="@L["Category"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@CategoryText">
+<OmniDataGridColumn TItem="AnalysisFindingDto" Property="Category" ExportValue="@CategoryExport" Title="@L["Category"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@CategoryText">
     <Template Context="finding">@L.Localize(finding.Category)</Template>
 </OmniDataGridColumn>
 <OmniDataGridColumn TItem="AnalysisFindingDto" Property="RuleId" Title="@L["AnalysisRule"]" Width="12rem" Filterable="true" />
@@ -22,7 +22,7 @@
     </Template>
 </OmniDataGridColumn>
 @* The location is the latest occurrence's: a list read from the server cannot sort or filter on it. *@
-<OmniDataGridColumn TItem="AnalysisFindingDto" Key="Location" Property="LatestOccurrence.FilePath" Title="@L["AnalysisExactLocation"]" Width="19rem" Sortable="@LocalData" Filterable="@LocalData">
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="Location" Property="LatestOccurrence.FilePath" ExportValue="@LocationExport" Title="@L["AnalysisExactLocation"]" Width="19rem" Sortable="@LocalData" Filterable="@LocalData">
     <Template Context="finding">
         @if (string.IsNullOrWhiteSpace(finding.LatestOccurrence?.FilePath))
         {
@@ -38,12 +38,12 @@
 </OmniDataGridColumn>
 @if (ShowStatus)
 {
-    <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Status" Title="@L["Status"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" DefaultFilterValue="@Defaults?.Status">
+    <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Status" ExportValue="@StatusExport" Title="@L["Status"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" DefaultFilterValue="@Defaults?.Status">
         <Template Context="finding"><OmniBadge Fill="OmniFill.Solid" Tone="@AnalysisPresentation.FindingStatusBadge(finding.Status)">@L.Localize(finding.Status)</OmniBadge></Template>
     </OmniDataGridColumn>
 }
 @* Recette R-221: the "New" shortcut filters on this column, so it is a filter the user can see and lift. *@
-<OmniDataGridColumn TItem="AnalysisFindingDto" Key="@FindingColumnDefaults.IsNewColumn" Property="LatestOccurrence.IsNew" Title="@L["AnalysisGateNewBadge"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText" DefaultFilterValue="@Defaults?.IsNew">
+<OmniDataGridColumn TItem="AnalysisFindingDto" Key="@FindingColumnDefaults.IsNewColumn" Property="LatestOccurrence.IsNew" ExportValue="@IsNewExport" Title="@L["AnalysisGateNewBadge"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText" DefaultFilterValue="@Defaults?.IsNew">
     <Template Context="finding">@if (finding.LatestOccurrence?.IsNew == true) { <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["AnalysisGateNewBadge"]</OmniBadge> }</Template>
 </OmniDataGridColumn>
 @if (ShowOwnership)

@@ -48,11 +48,13 @@ public partial class ApiReference
 
         try
         {
+            // FRONT-020: a spec that arrives after a sign-out is neither cached nor shown.
+            var ticket = Cache.Begin();
             using var doc = await Api.Servers.GetOpenApiSpecAsync();
-            if (doc is not null)
+            if (doc is not null && Cache.IsCurrent(ticket))
             {
                 Parse(doc);
-                Cache.Set(CacheKey, _endpoints.ToList());
+                Cache.TryStore(ticket, CacheKey, _endpoints.ToList());
             }
         }
         catch (HttpRequestException ex)

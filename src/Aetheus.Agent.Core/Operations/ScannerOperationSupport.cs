@@ -84,6 +84,36 @@ internal static class ScannerOperationSupport
         ScannerManifestEntry scanner, string path, CancellationToken ct) =>
         ScannerOperationValidator.ValidateReportStructureAsync(scanner, path, ct);
 
+    /// <summary>The report checks of one scanner run, in order; null when the report can be published.</summary>
+    internal static async Task<string?> CheckReportAsync(
+        ScanInvocation invocation, string reportPath, IReadOnlyDictionary<string, string> effectiveEnvironment)
+    {
+        var preparationError = await PrepareReportForPublicationAsync(
+            invocation.Scanner, reportPath, effectiveEnvironment, invocation.CancellationToken).ConfigureAwait(false);
+        if (preparationError is not null) return preparationError;
+        var file = new FileInfo(reportPath);
+        if (file.Length <= 0 || file.Length > invocation.Scanner.MaxReportBytes)
+            return $"Scanner report size {file.Length} is outside the allowed range.";
+        return await ScannerOperationValidator.ValidateReportStructureAsync(invocation.Scanner, reportPath, invocation.CancellationToken).ConfigureAwait(false)
+            ? null
+            : "Scanner report does not match its declared format.";
+    }
+
+    private static async Task<string?> PrepareReportForPublicationAsync(
+        ScannerManifestEntry scanner,
+        string reportPath,
+        IReadOnlyDictionary<string, string> effectiveEnvVars,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(reportPath))
+            return "Scanner completed without producing the required report.";
+
+        return await GitleaksHistoryReportAnnotator.AnnotateAsync(
+                scanner, reportPath, effectiveEnvVars, cancellationToken).ConfigureAwait(false)
+            ? null
+            : "Gitleaks history report metadata is missing or invalid.";
+    }
+
     internal static string BuildRawArtifactName(
         ScannerManifestEntry scanner,
         IReadOnlyDictionary<string, string> envVars)

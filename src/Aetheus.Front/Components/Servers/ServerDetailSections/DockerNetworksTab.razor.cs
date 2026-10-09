@@ -38,4 +38,7 @@ public partial class DockerNetworksTab
             || n.Name.Contains(_networkSearch, StringComparison.OrdinalIgnoreCase)
             || n.Driver.Contains(_networkSearch, StringComparison.OrdinalIgnoreCase))
         .ToList();
+
+    /// <summary>Recette R2-124: the export writes the whole network id, the cell its first twelve characters.</summary>
+    private static readonly Func<DockerNetworkDto, object?> IdExport = network => network.NetworkId;
 }

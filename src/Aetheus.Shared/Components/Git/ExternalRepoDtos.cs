@@ -5,14 +5,18 @@ namespace Aetheus.Shared.Components.Git;
 
 /// <summary>
 /// Request to attach an external Git repository to a project as its mirror-backed source
-/// (Features:ExternalRepos). Credentials are write-only here - never echoed back in <see cref="ExternalRepoDto"/>.
+/// (always available since recette R-295 removed the Features:ExternalRepos flag). Credentials are
+/// write-only here - never echoed back in <see cref="ExternalRepoDto"/>.
 /// </summary>
 /// <remarks>
-/// Pipeline-clone prerequisite: once attached, the project's <c>RepositoryUrl</c> points at the internal
-/// mirror over the backend's smart-HTTP path, which requires HTTP Basic auth. A pipeline that clones it
-/// must supply <c>GIT_USERNAME</c> / <c>GIT_PASSWORD</c> variables (these are NOT injected automatically);
-/// otherwise the clone step fails with a 401. The external credential supplied here never reaches the
-/// agent - it is used only by the backend to refresh the mirror.
+/// Pipeline clone: a runner clones the internal mirror over the backend's smart-HTTP path, never the
+/// external remote. When a run's repository is a mirror on the current clone endpoint
+/// (<c>MirrorCloneUrl.IsCurrentInternalClone</c>), <c>PipelineSystemTaskFactory</c> mints a run-scoped,
+/// time-limited clone token (<c>GitRunCloneToken</c>, bound to the run and its project), registers it as
+/// a masked runtime secret and injects it as <c>GIT_USERNAME</c> / <c>GIT_PASSWORD</c> into that clone
+/// task only; for any other repository URL those two variables are removed from the clone task. A
+/// pipeline therefore needs no durable credential to clone the mirror. The external credential supplied
+/// here never reaches the agent: it stays in the backend, which uses it to import and refresh the mirror.
 /// </remarks>
 public sealed record AttachExternalRepoRequest : GitRepositoryCoordinatesRequest
 {

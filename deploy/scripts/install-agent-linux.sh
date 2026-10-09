@@ -446,7 +446,7 @@ Disable options (use on --upgrade to revoke previously-enabled capabilities):
   --disable-apache-manage         Remove Apache write/reload privileges.
   --disable-rkhunter-manage       Remove rkhunter scan/update/propupd privileges.
   --disable-certbot-introspection Remove Certbot read ACL.
-  --disable-docker                Don't add agent to docker group.
+  --disable-docker                Remove the agent account from the docker group.
   --disable-teamspeak             Don't add agent to teamspeak group / provision TS.
   --disable-cron-manage           Remove cron-apply helper + sudoers.
   --disable-portsentry-manage     Remove unblock-ip helper + sudoers.
@@ -513,7 +513,22 @@ ENABLE_PATCH_MANAGE=0      # opt-in: apt-get upgrade -y (fleet OS patching, argv
 ENABLE_FIREWALL_MANAGE=0   # opt-in: ufw control via root-owned helper (firewall) - ADR-024 4.2
 ENABLE_MAIL_SETUP=0        # opt-in: root-owned mail-setup helper (full postfix/dovecot/opendkim setup)
 ENABLE_TEAMSPEAK_SETUP=0   # opt-in: root-owned teamspeak-setup helper (full TS3 server install)
-POSTURE_EXPLICIT=0         # set if any --enable-* flag was passed explicitly
+POSTURE_EXPLICIT=0         # set if any --enable-*/--disable-* flag or module was passed explicitly
+# The capabilities those flags named, space-delimited. On an upgrade or a reinstall the existing
+# posture is kept for every other capability: one flag changes what it names and nothing else. A
+# single global "explicit" switch used to make derive_existing_posture ignore the whole host, so
+# --disable-cron-manage also revoked Apache, certbot and deployment (audit DEP-021).
+EXPLICIT_CAPABILITIES=" "
+mark_explicit() {
+    POSTURE_EXPLICIT=1
+    for _capability in "$@"; do
+        EXPLICIT_CAPABILITIES="$EXPLICIT_CAPABILITIES$_capability "
+    done
+}
+is_explicit() {
+    case "$EXPLICIT_CAPABILITIES" in *" $1 "*) return 0 ;; esac
+    return 1
+}
 
 # Capability modules (higher-level than the granular --enable-* flags below).
 #   pipeline-runner    : ON by default. Installs Git, sshpass and optional Buildx
@@ -585,47 +600,47 @@ while [ "$#" -gt 0 ]; do
         --acme-webroot)
             ACME_WEBROOT_OVERRIDE="$(require_web_root "$2")"
             shift 2 ;;
-        --enable-service-control)       ENABLE_SERVICE_CONTROL=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-apache-introspection)  ENABLE_APACHE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-apache-manage)         ENABLE_APACHE_MANAGE=1; ENABLE_APACHE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-rkhunter-manage)       ENABLE_RKHUNTER_MANAGE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-certbot-introspection) ENABLE_CERTBOT=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-certbot-manage)        ENABLE_CERTBOT_MANAGE=1; ENABLE_CERTBOT=1; ENABLE_APACHE_MANAGE=1; ENABLE_APACHE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-docker)                ENABLE_DOCKER=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-teamspeak)             ENABLE_TEAMSPEAK=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-cron-manage)           ENABLE_CRON_MANAGE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-portsentry-manage)     ENABLE_PORTSENTRY_MANAGE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-service-enable)        ENABLE_SERVICE_ENABLE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-package-manage)        ENABLE_PACKAGE_MANAGE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-patch-manage)          ENABLE_PATCH_MANAGE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-firewall-manage)       ENABLE_FIREWALL_MANAGE=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-mail-setup)            ENABLE_MAIL_SETUP=1; POSTURE_EXPLICIT=1; shift ;;
-        --enable-teamspeak-setup)       ENABLE_TEAMSPEAK_SETUP=1; ENABLE_TEAMSPEAK=1; POSTURE_EXPLICIT=1; shift ;;
-        --disable-service-control)       ENABLE_SERVICE_CONTROL=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-apache-introspection)  ENABLE_APACHE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-apache-manage)         ENABLE_APACHE_MANAGE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-rkhunter-manage)       ENABLE_RKHUNTER_MANAGE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-certbot-introspection) ENABLE_CERTBOT=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-certbot-manage)        ENABLE_CERTBOT_MANAGE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-docker)                ENABLE_DOCKER=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-teamspeak)             ENABLE_TEAMSPEAK=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-cron-manage)           ENABLE_CRON_MANAGE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-portsentry-manage)     ENABLE_PORTSENTRY_MANAGE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-service-enable)        ENABLE_SERVICE_ENABLE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-package-manage)        ENABLE_PACKAGE_MANAGE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-patch-manage)          ENABLE_PATCH_MANAGE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-firewall-manage)       ENABLE_FIREWALL_MANAGE=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-mail-setup)            ENABLE_MAIL_SETUP=0; POSTURE_EXPLICIT=1; shift ;;
-        --disable-teamspeak-setup)       ENABLE_TEAMSPEAK_SETUP=0; POSTURE_EXPLICIT=1; shift ;;
-        --enable-all)                    ENABLE_SERVICE_CONTROL=1; ENABLE_APACHE=1; ENABLE_APACHE_MANAGE=1; ENABLE_RKHUNTER_MANAGE=1; ENABLE_CERTBOT=1; ENABLE_CERTBOT_MANAGE=1; ENABLE_DOCKER=1; ENABLE_TEAMSPEAK=1; ENABLE_CRON_MANAGE=1; ENABLE_PORTSENTRY_MANAGE=1; ENABLE_SERVICE_ENABLE=1; ENABLE_PACKAGE_MANAGE=1; ENABLE_PATCH_MANAGE=1; ENABLE_FIREWALL_MANAGE=1; ENABLE_MAIL_SETUP=1; ENABLE_TEAMSPEAK_SETUP=1; POSTURE_EXPLICIT=1; shift ;;
-        --disable-all)                   ENABLE_SERVICE_CONTROL=0; ENABLE_APACHE=0; ENABLE_APACHE_MANAGE=0; ENABLE_RKHUNTER_MANAGE=0; ENABLE_CERTBOT=0; ENABLE_CERTBOT_MANAGE=0; ENABLE_DOCKER=0; ENABLE_TEAMSPEAK=0; ENABLE_CRON_MANAGE=0; ENABLE_PORTSENTRY_MANAGE=0; ENABLE_SERVICE_ENABLE=0; ENABLE_PACKAGE_MANAGE=0; ENABLE_PATCH_MANAGE=0; ENABLE_FIREWALL_MANAGE=0; ENABLE_MAIL_SETUP=0; ENABLE_TEAMSPEAK_SETUP=0; POSTURE_EXPLICIT=1; shift ;;
+        --enable-service-control)       ENABLE_SERVICE_CONTROL=1; mark_explicit SERVICE_CONTROL; shift ;;
+        --enable-apache-introspection)  ENABLE_APACHE=1; mark_explicit APACHE; shift ;;
+        --enable-apache-manage)         ENABLE_APACHE_MANAGE=1; ENABLE_APACHE=1; mark_explicit APACHE_MANAGE APACHE; shift ;;
+        --enable-rkhunter-manage)       ENABLE_RKHUNTER_MANAGE=1; mark_explicit RKHUNTER_MANAGE; shift ;;
+        --enable-certbot-introspection) ENABLE_CERTBOT=1; mark_explicit CERTBOT; shift ;;
+        --enable-certbot-manage)        ENABLE_CERTBOT_MANAGE=1; ENABLE_CERTBOT=1; ENABLE_APACHE_MANAGE=1; ENABLE_APACHE=1; mark_explicit CERTBOT_MANAGE CERTBOT APACHE_MANAGE APACHE; shift ;;
+        --enable-docker)                ENABLE_DOCKER=1; mark_explicit DOCKER; shift ;;
+        --enable-teamspeak)             ENABLE_TEAMSPEAK=1; mark_explicit TEAMSPEAK; shift ;;
+        --enable-cron-manage)           ENABLE_CRON_MANAGE=1; mark_explicit CRON_MANAGE; shift ;;
+        --enable-portsentry-manage)     ENABLE_PORTSENTRY_MANAGE=1; mark_explicit PORTSENTRY_MANAGE; shift ;;
+        --enable-service-enable)        ENABLE_SERVICE_ENABLE=1; mark_explicit SERVICE_ENABLE; shift ;;
+        --enable-package-manage)        ENABLE_PACKAGE_MANAGE=1; mark_explicit PACKAGE_MANAGE; shift ;;
+        --enable-patch-manage)          ENABLE_PATCH_MANAGE=1; mark_explicit PATCH_MANAGE; shift ;;
+        --enable-firewall-manage)       ENABLE_FIREWALL_MANAGE=1; mark_explicit FIREWALL_MANAGE; shift ;;
+        --enable-mail-setup)            ENABLE_MAIL_SETUP=1; mark_explicit MAIL_SETUP; shift ;;
+        --enable-teamspeak-setup)       ENABLE_TEAMSPEAK_SETUP=1; ENABLE_TEAMSPEAK=1; mark_explicit TEAMSPEAK_SETUP TEAMSPEAK; shift ;;
+        --disable-service-control)       ENABLE_SERVICE_CONTROL=0; mark_explicit SERVICE_CONTROL; shift ;;
+        --disable-apache-introspection)  ENABLE_APACHE=0; mark_explicit APACHE; shift ;;
+        --disable-apache-manage)         ENABLE_APACHE_MANAGE=0; mark_explicit APACHE_MANAGE; shift ;;
+        --disable-rkhunter-manage)       ENABLE_RKHUNTER_MANAGE=0; mark_explicit RKHUNTER_MANAGE; shift ;;
+        --disable-certbot-introspection) ENABLE_CERTBOT=0; mark_explicit CERTBOT; shift ;;
+        --disable-certbot-manage)        ENABLE_CERTBOT_MANAGE=0; mark_explicit CERTBOT_MANAGE; shift ;;
+        --disable-docker)                ENABLE_DOCKER=0; mark_explicit DOCKER; shift ;;
+        --disable-teamspeak)             ENABLE_TEAMSPEAK=0; mark_explicit TEAMSPEAK; shift ;;
+        --disable-cron-manage)           ENABLE_CRON_MANAGE=0; mark_explicit CRON_MANAGE; shift ;;
+        --disable-portsentry-manage)     ENABLE_PORTSENTRY_MANAGE=0; mark_explicit PORTSENTRY_MANAGE; shift ;;
+        --disable-service-enable)        ENABLE_SERVICE_ENABLE=0; mark_explicit SERVICE_ENABLE; shift ;;
+        --disable-package-manage)        ENABLE_PACKAGE_MANAGE=0; mark_explicit PACKAGE_MANAGE; shift ;;
+        --disable-patch-manage)          ENABLE_PATCH_MANAGE=0; mark_explicit PATCH_MANAGE; shift ;;
+        --disable-firewall-manage)       ENABLE_FIREWALL_MANAGE=0; mark_explicit FIREWALL_MANAGE; shift ;;
+        --disable-mail-setup)            ENABLE_MAIL_SETUP=0; mark_explicit MAIL_SETUP; shift ;;
+        --disable-teamspeak-setup)       ENABLE_TEAMSPEAK_SETUP=0; mark_explicit TEAMSPEAK_SETUP; shift ;;
+        --enable-all)                    ENABLE_SERVICE_CONTROL=1; ENABLE_APACHE=1; ENABLE_APACHE_MANAGE=1; ENABLE_RKHUNTER_MANAGE=1; ENABLE_CERTBOT=1; ENABLE_CERTBOT_MANAGE=1; ENABLE_DOCKER=1; ENABLE_TEAMSPEAK=1; ENABLE_CRON_MANAGE=1; ENABLE_PORTSENTRY_MANAGE=1; ENABLE_SERVICE_ENABLE=1; ENABLE_PACKAGE_MANAGE=1; ENABLE_PATCH_MANAGE=1; ENABLE_FIREWALL_MANAGE=1; ENABLE_MAIL_SETUP=1; ENABLE_TEAMSPEAK_SETUP=1; mark_explicit SERVICE_CONTROL APACHE APACHE_MANAGE RKHUNTER_MANAGE CERTBOT CERTBOT_MANAGE DOCKER TEAMSPEAK CRON_MANAGE PORTSENTRY_MANAGE SERVICE_ENABLE PACKAGE_MANAGE PATCH_MANAGE FIREWALL_MANAGE MAIL_SETUP TEAMSPEAK_SETUP; shift ;;
+        --disable-all)                   ENABLE_SERVICE_CONTROL=0; ENABLE_APACHE=0; ENABLE_APACHE_MANAGE=0; ENABLE_RKHUNTER_MANAGE=0; ENABLE_CERTBOT=0; ENABLE_CERTBOT_MANAGE=0; ENABLE_DOCKER=0; ENABLE_TEAMSPEAK=0; ENABLE_CRON_MANAGE=0; ENABLE_PORTSENTRY_MANAGE=0; ENABLE_SERVICE_ENABLE=0; ENABLE_PACKAGE_MANAGE=0; ENABLE_PATCH_MANAGE=0; ENABLE_FIREWALL_MANAGE=0; ENABLE_MAIL_SETUP=0; ENABLE_TEAMSPEAK_SETUP=0; ENABLE_DEPLOYMENT=0; MODULE_DEPLOYMENT=0; mark_explicit SERVICE_CONTROL APACHE APACHE_MANAGE RKHUNTER_MANAGE CERTBOT CERTBOT_MANAGE DOCKER TEAMSPEAK CRON_MANAGE PORTSENTRY_MANAGE SERVICE_ENABLE PACKAGE_MANAGE PATCH_MANAGE FIREWALL_MANAGE MAIL_SETUP TEAMSPEAK_SETUP DEPLOYMENT; shift ;;
         --allow-insecure-certs) ALLOW_INSECURE_CERTS=1; shift ;;
         --module)
             case "$2" in
                 pipeline-runner)     MODULE_PIPELINE_RUNNER=1 ;;
                 no-pipeline-runner)  MODULE_PIPELINE_RUNNER=0 ;;
                 server-management)   MODULE_SERVER_MANAGEMENT=1 ;;
-                deployment)          MODULE_DEPLOYMENT=1; POSTURE_EXPLICIT=1 ;;
+                deployment)          MODULE_DEPLOYMENT=1; mark_explicit DEPLOYMENT ;;
                 *) log_warn "Unknown module '$2' (expected: pipeline-runner | server-management | deployment)" ;;
             esac
             shift 2 ;;
@@ -643,7 +658,8 @@ if [ "$MODULE_SERVER_MANAGEMENT" -eq 1 ]; then
     ENABLE_SERVICE_CONTROL=1; ENABLE_APACHE=1; ENABLE_APACHE_MANAGE=1
     ENABLE_RKHUNTER_MANAGE=1; ENABLE_CERTBOT=1; ENABLE_DOCKER=1; ENABLE_TEAMSPEAK=1
     ENABLE_CRON_MANAGE=1; ENABLE_PORTSENTRY_MANAGE=1; ENABLE_SERVICE_ENABLE=1
-    ENABLE_PACKAGE_MANAGE=1; ENABLE_MAIL_SETUP=1; ENABLE_TEAMSPEAK_SETUP=1; POSTURE_EXPLICIT=1
+    ENABLE_PACKAGE_MANAGE=1; ENABLE_MAIL_SETUP=1; ENABLE_TEAMSPEAK_SETUP=1
+    mark_explicit SERVICE_CONTROL APACHE APACHE_MANAGE RKHUNTER_MANAGE CERTBOT DOCKER TEAMSPEAK         CRON_MANAGE PORTSENTRY_MANAGE SERVICE_ENABLE PACKAGE_MANAGE MAIL_SETUP TEAMSPEAK_SETUP
 fi
 
 # The deployment module is independent (not part of server-management): it provisions the deploy
@@ -718,10 +734,39 @@ install_agent_update_supervisor() {
     systemctl enable --now aetheus-agent-upgrade.path
 }
 
+# --disable-docker or --disable-all on a host where the agent account is already in the docker group:
+# the membership is removed, otherwise "fully sandboxed" kept a root-equivalent socket access (audit
+# DEP-019). Only the agent's own account is touched, and only when it is the dedicated system account
+# this installer creates (home $WORK_DIR, no login shell); any other account is reported, not changed.
+# The running agent keeps its old groups until it restarts, which every install and upgrade does.
+revoke_docker_group() {
+    is_explicit DOCKER || return 0
+    id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker || return 0
+    _agent_entry="$(getent passwd "$AGENT_USER" 2>/dev/null || true)"
+    _agent_home="$(printf '%s' "$_agent_entry" | cut -d: -f6)"
+    _agent_shell="$(printf '%s' "$_agent_entry" | cut -d: -f7)"
+    case "$_agent_shell" in
+        /bin/false|/usr/sbin/nologin|/sbin/nologin|/usr/bin/false) _agent_dedicated=1 ;;
+        *) _agent_dedicated=0 ;;
+    esac
+    if [ "$_agent_home" != "$WORK_DIR" ] || [ "$_agent_dedicated" -ne 1 ]; then
+        log_warn "  $AGENT_USER is in the docker group but is not the dedicated agent account (home '$_agent_home', shell '$_agent_shell'): membership left as it is. DECISION REQUIRED: remove it by hand if that is intended."
+        return 0
+    fi
+    log_info "  Removing $AGENT_USER from the docker group (docker disabled)..."
+    if ! gpasswd -d "$AGENT_USER" docker >/dev/null; then
+        log_error "  Could not remove $AGENT_USER from the docker group: the agent keeps docker access."
+        return 1
+    fi
+}
+
 ensure_docker_group() {
     # Opt-in only (--enable-docker). Docker-group membership is ~= root, so it is
     # not granted by default. DockerCollector needs it for `docker ps -a` etc.
     if [ "$ENABLE_DOCKER" -ne 1 ]; then
+        # A failed removal is logged and shown in the posture summary; it does not abort an upgrade
+        # half-way through.
+        revoke_docker_group || true
         return 0
     fi
     if ! getent group docker >/dev/null 2>&1; then
@@ -997,84 +1042,93 @@ apply_read_acls() {
 }
 
 # On --upgrade, re-derive the elevation posture from what is already on the box so
-# an upgrade never silently widens *or* drops what the operator chose. Explicit
-# --enable-* flags on the upgrade command take precedence over the detected state.
+# an upgrade never silently widens *or* drops what the operator chose. A capability named by an
+# --enable-*/--disable-* flag or a module on this command keeps the value the command gave it; every
+# other one keeps what the host shows (audit DEP-021). preserve only ever turns a capability on.
+preserve() {
+    is_explicit "$1" && return 0
+    eval "ENABLE_$1=1"
+    [ -z "${2:-}" ] || log_info "  Preserving existing $2."
+}
 derive_existing_posture() {
-    if [ "$POSTURE_EXPLICIT" -eq 1 ]; then
-        return 0
-    fi
     if [ -f "$SUDOERS_FILE" ]; then
-        ENABLE_SERVICE_CONTROL=1
-        log_info "  Preserving existing service-control sudoers rule."
+        preserve SERVICE_CONTROL "service-control sudoers rule"
     fi
     if [ -f "$APACHE_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_APACHE_MANAGE=1
-        ENABLE_APACHE=1  # implies the read ACL too
-        log_info "  Preserving existing Apache-manage sudoers rule."
+        preserve APACHE_MANAGE "Apache-manage sudoers rule"
+        preserve APACHE  # implies the read ACL too
     fi
     if [ -f "$RKHUNTER_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_RKHUNTER_MANAGE=1
-        log_info "  Preserving existing RKHunter-manage sudoers rule."
+        preserve RKHUNTER_MANAGE "RKHunter-manage sudoers rule"
     fi
     # certbot-manage was historically absent from this derivation, so every reinstall
     # silently revoked it via apply_sudoers and the production HTTPS issuance broke.
     if [ -f "$CERTBOT_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_CERTBOT_MANAGE=1
-        ENABLE_CERTBOT=1        # implies the read ACL
-        ENABLE_APACHE_MANAGE=1  # certbot-manage drives apache2ctl through the helper
-        ENABLE_APACHE=1
-        log_info "  Preserving existing Certbot-manage sudoers rule."
+        preserve CERTBOT_MANAGE "Certbot-manage sudoers rule"
+        preserve CERTBOT        # implies the read ACL
+        preserve APACHE_MANAGE  # certbot-manage drives apache2ctl through the helper
+        preserve APACHE
     fi
     if [ -f "$CRON_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_CRON_MANAGE=1
-        log_info "  Preserving existing cron-manage sudoers rule."
+        preserve CRON_MANAGE "cron-manage sudoers rule"
     fi
     if [ -f "$PORTSENTRY_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_PORTSENTRY_MANAGE=1
-        log_info "  Preserving existing portsentry-manage sudoers rule."
+        preserve PORTSENTRY_MANAGE "portsentry-manage sudoers rule"
     fi
     if [ -f "$SERVICE_ENABLE_SUDOERS_FILE" ]; then
-        ENABLE_SERVICE_ENABLE=1
-        log_info "  Preserving existing service-enable sudoers rule."
+        preserve SERVICE_ENABLE "service-enable sudoers rule"
     fi
     if [ -f "$PACKAGE_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_PACKAGE_MANAGE=1
-        log_info "  Preserving existing package-manage sudoers rule."
+        preserve PACKAGE_MANAGE "package-manage sudoers rule"
     fi
     if [ -f "$PATCH_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_PATCH_MANAGE=1
-        log_info "  Preserving existing patch-manage sudoers rule."
+        preserve PATCH_MANAGE "patch-manage sudoers rule"
     fi
     if [ -f "$FIREWALL_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_FIREWALL_MANAGE=1
-        log_info "  Preserving existing firewall-manage sudoers rule."
+        preserve FIREWALL_MANAGE "firewall-manage sudoers rule"
     fi
     if [ -f "$MAIL_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_MAIL_SETUP=1
-        log_info "  Preserving existing mail-setup sudoers rule."
+        preserve MAIL_SETUP "mail-setup sudoers rule"
     fi
     if [ -f "$TEAMSPEAK_SETUP_SUDOERS_FILE" ]; then
-        ENABLE_TEAMSPEAK_SETUP=1
-        log_info "  Preserving existing teamspeak-setup sudoers rule."
+        preserve TEAMSPEAK_SETUP "teamspeak-setup sudoers rule"
     fi
     if [ -f "$DEPLOY_MANAGE_SUDOERS_FILE" ]; then
-        ENABLE_DEPLOYMENT=1
-        log_info "  Preserving existing deployment-module sudoers rule."
+        preserve DEPLOYMENT "deployment-module sudoers rule"
     fi
     if command -v getfacl >/dev/null 2>&1; then
         if getfacl -p /etc/apache2 2>/dev/null | grep -q "user:$AGENT_USER:"; then
-            ENABLE_APACHE=1; log_info "  Preserving existing Apache read ACL."
+            preserve APACHE "Apache read ACL"
         fi
         if getfacl -p /etc/letsencrypt 2>/dev/null | grep -q "user:$AGENT_USER:"; then
-            ENABLE_CERTBOT=1; log_info "  Preserving existing Certbot read ACL."
+            preserve CERTBOT "Certbot read ACL"
         fi
     fi
     if id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
-        ENABLE_DOCKER=1; log_info "  Preserving existing docker-group membership."
+        preserve DOCKER "docker-group membership"
     fi
     if id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx teamspeak || [ -d "$INSTALL_DIR/teamspeak" ]; then
-        ENABLE_TEAMSPEAK=1; log_info "  Preserving existing TeamSpeak access provisioning."
+        preserve TEAMSPEAK "TeamSpeak access provisioning"
     fi
+}
+
+# Purges the agent's own state from the work dir before a reinstall: SQLite offline queue, cached
+# logs, enrollment state and keys, run workspaces. The deployment tree ($DEPLOY_BASE_DIR, each
+# application's releases, current and secrets) is not agent state and stays: wiping it on a return to
+# enrolment left every deployed application unable to start until it was delivered again (audit
+# DEP-020). The directory itself is kept so the chown below stays idempotent.
+purge_agent_work_dir() {
+    [ -d "$WORK_DIR" ] || return 0
+    [ -n "$(ls -A "$WORK_DIR" 2>/dev/null)" ] || return 0
+    log_info "  Purging agent state from the work dir ($WORK_DIR)..."
+    for _entry in "${WORK_DIR:?}"/* "${WORK_DIR:?}"/.[!.]* "${WORK_DIR:?}"/..?*; do
+        [ -e "$_entry" ] || [ -L "$_entry" ] || continue
+        if [ "$_entry" = "$DEPLOY_BASE_DIR" ]; then
+            log_info "  Keeping the deployment tree ($DEPLOY_BASE_DIR)."
+            continue
+        fi
+        rm -rf "$_entry" 2>/dev/null || true
+    done
 }
 
 write_sudoers() {
@@ -1703,6 +1757,8 @@ print_posture_summary() {
     log_info "  Elevation posture (server-management; all OFF by default - opt in with --module server-management or --enable-*):"
     if [ "$ENABLE_SERVICE_CONTROL" -eq 1 ]; then
         log_info "    service-control : ON  (sudoers rule installed; NoNewPrivileges=false)"
+    elif sudo_grant_enabled; then
+        log_info "    service-control : off (no service-control sudoers; another grant keeps NoNewPrivileges=false)"
     else
         log_info "    service-control : off (no sudoers; NoNewPrivileges=true, full sandbox)"
     fi
@@ -1718,7 +1774,15 @@ print_posture_summary() {
         log_info "    rkhunter manage : off (cannot run rkhunter scan/update/propupd)"
     fi
     [ "$ENABLE_CERTBOT" -eq 1 ] && log_info "    certbot read ACL: ON" || log_info "    certbot read ACL: off"
-    [ "$ENABLE_DOCKER"  -eq 1 ] && log_info "    docker group    : ON" || log_info "    docker group    : off"
+    if [ "$ENABLE_DOCKER" -eq 1 ]; then
+        log_info "    docker group    : ON"
+    elif id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+        # Said as it is: off was asked, but the account is still a member (not the dedicated account,
+        # or gpasswd failed), so the agent still has root-equivalent access to the Docker socket.
+        log_warn "    docker group    : off requested, but $AGENT_USER is STILL a member of the docker group"
+    else
+        log_info "    docker group    : off"
+    fi
     [ "$ENABLE_TEAMSPEAK" -eq 1 ] && log_info "    teamspeak access: ON" || log_info "    teamspeak access: off"
     if [ "$ENABLE_CRON_MANAGE" -eq 1 ]; then
         log_info "    cron manage     : ON  (root helper ${CRON_HELPER_PATH}; sudoers ${CRON_MANAGE_SUDOERS_FILE})"
@@ -1790,6 +1854,18 @@ print_posture_summary() {
     fi
 }
 
+# Whether any capability that installs a sudoers grant (apply_sudoers) is on. The sandbox of the agent
+# unit is derived from it, so a grant can never be installed and then blocked by NoNewPrivileges.
+sudo_grant_enabled() {
+    for _grant in "$ENABLE_SERVICE_CONTROL" "$ENABLE_APACHE_MANAGE" "$ENABLE_CERTBOT_MANAGE" \
+        "$ENABLE_RKHUNTER_MANAGE" "$ENABLE_CRON_MANAGE" "$ENABLE_PORTSENTRY_MANAGE" \
+        "$ENABLE_SERVICE_ENABLE" "$ENABLE_PACKAGE_MANAGE" "$ENABLE_PATCH_MANAGE" \
+        "$ENABLE_FIREWALL_MANAGE" "$ENABLE_MAIL_SETUP" "$ENABLE_TEAMSPEAK_SETUP" "$ENABLE_DEPLOYMENT"; do
+        [ "$_grant" -eq 1 ] && return 0
+    done
+    return 1
+}
+
 write_systemd_unit() {
     log_info "Writing systemd unit: $SYSTEMD_UNIT_PATH"
     EXEC_START="$INSTALL_DIR/Aetheus.Agent.Linux"
@@ -1798,12 +1874,12 @@ write_systemd_unit() {
     fi
 
     # NoNewPrivileges neutralises ALL sudo/setuid escalation - so it can only be true when no sudo
-    # grant is in play. service-control is the canonical one; S-FEAT-W8KN's package-manage also runs
-    # `sudo -n apt-get`, so it must relax NNP too (otherwise the grant is dead on arrival). When
-    # relaxed we document the regression; the rest of the sandbox still applies.
-    if [ "$ENABLE_SERVICE_CONTROL" -eq 1 ] || [ "$ENABLE_PACKAGE_MANAGE" -eq 1 ] || [ "$ENABLE_PATCH_MANAGE" -eq 1 ] || [ "$ENABLE_FIREWALL_MANAGE" -eq 1 ] || [ "$ENABLE_MAIL_SETUP" -eq 1 ] || [ "$ENABLE_TEAMSPEAK_SETUP" -eq 1 ] || [ "$ENABLE_DEPLOYMENT" -eq 1 ] || [ "$ENABLE_APACHE_MANAGE" -eq 1 ] || [ "$ENABLE_CERTBOT_MANAGE" -eq 1 ]; then
-        NNP_BLOCK="# RELAXED: a sudo grant (--enable-service-control / --enable-package-manage /
-# --enable-mail-setup / --enable-teamspeak-setup / --enable-apache-manage / --enable-certbot-manage /
+    # grant is in play. Every grant apply_sudoers installs counts (sudo_grant_enabled): cron,
+    # portsentry, service-enable and rkhunter were once left out, and their grants were dead on
+    # arrival under NoNewPrivileges=true (audit DEP-018). When relaxed we document the regression;
+    # the rest of the sandbox still applies.
+    if sudo_grant_enabled; then
+        NNP_BLOCK="# RELAXED: a sudo grant (any --enable-* capability that installs a sudoers drop-in, or
 # --module deployment) requires NoNewPrivileges=false (sudo needs setgid(0) for 'systemctl reload
 # apache2', the certbot helper, etc.). This is a deliberate trade-off (sudo escalation surface) -
 # disable those capabilities to restore NoNewPrivileges=true.
@@ -1828,19 +1904,32 @@ NoNewPrivileges=true"
 CapabilityBoundingSet="
     fi
 
-    # Package/mail/deploy operations genuinely need broad system writes. Apache/certbot only need
-    # narrow, pre-created trees, so retain ProtectSystem=strict and open those exact paths.
+    # Package/mail/deploy operations genuinely need broad system writes, and so do the portsentry and
+    # TeamSpeak setup helpers (apt-get install, /etc/default, /etc/systemd/system, /opt). Apache,
+    # certbot, cron and rkhunter only need narrow trees, so retain ProtectSystem=strict and open those
+    # exact paths (audit DEP-018: cron, portsentry, rkhunter and TeamSpeak setup had none).
     READ_WRITE_PATHS_BLOCK=""
     if [ "$ENABLE_PACKAGE_MANAGE" -eq 1 ] || [ "$ENABLE_PATCH_MANAGE" -eq 1 ] \
        || [ "$ENABLE_FIREWALL_MANAGE" -eq 1 ] || [ "$ENABLE_MAIL_SETUP" -eq 1 ] \
-       || [ "$ENABLE_DEPLOYMENT" -eq 1 ]; then
-        PROTECT_SYSTEM_BLOCK="# RELAXED: package/mail/deploy grants write broad system paths, so the read-only system mount is off.
+       || [ "$ENABLE_DEPLOYMENT" -eq 1 ] || [ "$ENABLE_PORTSENTRY_MANAGE" -eq 1 ] \
+       || [ "$ENABLE_TEAMSPEAK_SETUP" -eq 1 ]; then
+        PROTECT_SYSTEM_BLOCK="# RELAXED: package/mail/deploy/portsentry/TeamSpeak grants write broad system paths, so the read-only system mount is off.
 ProtectSystem=false"
     else
         PROTECT_SYSTEM_BLOCK="ProtectSystem=strict"
         if [ "$ENABLE_APACHE_MANAGE" -eq 1 ]; then
             mkdir -p /etc/apache2
             READ_WRITE_PATHS_BLOCK="$READ_WRITE_PATHS_BLOCK /etc/apache2"
+        fi
+        if [ "$ENABLE_CRON_MANAGE" -eq 1 ]; then
+            # cron-apply writes /etc/cron.d/aetheus-<id> from inside this unit's mount namespace.
+            mkdir -p /etc/cron.d
+            READ_WRITE_PATHS_BLOCK="$READ_WRITE_PATHS_BLOCK /etc/cron.d"
+        fi
+        if [ "$ENABLE_RKHUNTER_MANAGE" -eq 1 ]; then
+            # rkhunter --update/--propupd write its database, and every run rewrites its log. The '-'
+            # lets the unit start before rkhunter is installed.
+            READ_WRITE_PATHS_BLOCK="$READ_WRITE_PATHS_BLOCK -/var/lib/rkhunter -/var/log"
         fi
         if [ "$ENABLE_CERTBOT_MANAGE" -eq 1 ]; then
             # The helpers run inside this unit's mount namespace: the ACME web root receives the
@@ -1879,8 +1968,9 @@ BindPaths=-/root/snap"
     fi
 
     ADDRESS_FAMILIES="AF_UNIX AF_INET AF_INET6"
-    if [ "$ENABLE_MAIL_SETUP" -eq 1 ]; then
-        # Postfix postqueue uses getifaddrs(), which needs a netlink socket under this unit's sandbox.
+    if [ "$ENABLE_MAIL_SETUP" -eq 1 ] || [ "$ENABLE_PORTSENTRY_MANAGE" -eq 1 ]; then
+        # Postfix postqueue uses getifaddrs(), which needs a netlink socket under this unit's sandbox,
+        # and so does iptables-nft, through which unblock-ip removes a DROP rule.
         ADDRESS_FAMILIES="$ADDRESS_FAMILIES AF_NETLINK"
     fi
 
@@ -2459,12 +2549,7 @@ if [ -f "$INSTALL_DIR/appsettings.json" ]; then
     rm -f "$INSTALL_DIR/appsettings.json"
 fi
 
-# Purge work dir contents: SQLite offline queue, cached logs, enrollment state.
-# Keep the directory itself so chown below stays idempotent.
-if [ -d "$WORK_DIR" ] && [ -n "$(ls -A "$WORK_DIR" 2>/dev/null)" ]; then
-    log_info "  Purging work dir ($WORK_DIR)..."
-    rm -rf "${WORK_DIR:?}"/* "${WORK_DIR:?}"/.[!.]* 2>/dev/null || true
-fi
+purge_agent_work_dir
 
 # --- Move files to INSTALL_DIR if needed ---
 if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then

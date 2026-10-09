@@ -37,9 +37,11 @@
                   OnRowClick="@EffectiveRowClick" OnRowUpdate="@RowUpdate" RowRender="@RowRender"
                   EditMode="@EditMode" ShowEditColumn="false" FillAvailableHeight="@FullHeight" VirtualBlockSize="@PageSize"
                   KeyOf="@EffectiveKeyOf" NewRowHighlight="@NewRowHighlight"
-                  ExportFormats="@ExportFormats" ExportPosition="@ExportPosition" ExportTitle="@ExportTitle"
-                  ExportFields="@ExportFields" ExportFileName="@ExportFileName" ExportVariants="@ExportVariants" ExportLoad="@ExportLoad"
-                  OnExportError="@OnExportError"
+                  ShowFooterBar="@Exports" FooterBarExport="OmniDataGridBarExport.End"
+                  ExportMarkdown="@ExportMarkdown" ExportCsv="false" ExportExcel="false" ExportPdf="false"
+                  ExportTitle="@EffectiveExportTitle"
+                  ExportFields="@EffectiveExportFields" ExportFileName="@EffectiveExportFileName" ExportVariants="@ExportVariants" ExportLoad="@EffectiveExportLoad"
+                  OnExportError="@EffectiveExportError"
                   Class="@GridCssClass" @attributes="OtherAttributes">
         <Columns>@Columns</Columns>
     </OmniDataGrid>

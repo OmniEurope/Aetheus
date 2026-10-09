@@ -39,6 +39,15 @@ public partial class ServerLogsSection
     /// Recette R-210 / R-224: every block the grid asks for goes to the API with the header filters and
     /// the sort, so the count and the rows describe the whole log of the server.
     /// </summary>
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<TaskLogDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(defaultPageSize: 50);
+        var sort = args.Sorts?.FirstOrDefault();
+        return Api.Servers.GetServerLogsAsync(ServerId, page, pageSize, args.ToApiFilters(),
+            sortBy: sort?.Property, sortDescending: sort?.SortOrder == GridSortOrder.Descending);
+    }
+
     private async Task LoadLogsAsync(GridLoadArgs args)
     {
         var serverId = ServerId;

@@ -62,8 +62,10 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Refuses_To_Move_The_Branch_Backwards_So_A_Rollback_Leaves_It_Alone()
+    public async Task R2105_A_Branch_Already_Past_The_Commit_Contains_It_And_Is_Left_Alone()
     {
+        // Recette R2-105: 'main' pushed past the deployed candidate (and the rollback case, an older
+        // release deployed): the branch already holds the commit, it is not moved backwards.
         var first = Commit("one");
         var second = Commit("two");
         SetBareRef("refs/heads/main", second);
@@ -71,8 +73,25 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
         var result = await _sut.TryFastForwardAsync(
             ProjectId, "main", first, TestContext.Current.CancellationToken);
 
-        Assert.Equal(GitBranchAdvanceOutcome.NotFastForward, result.Outcome);
+        Assert.Equal(GitBranchAdvanceOutcome.AlreadyContains, result.Outcome);
+        Assert.Equal(second, result.PreviousSha);
         Assert.Equal(second, ReadBareRef("refs/heads/main"));
+    }
+
+    [Fact]
+    public async Task Refuses_To_Move_A_Diverged_Branch()
+    {
+        var root = Commit("one");
+        var onMain = Commit("two");
+        RunGit(_work, $"reset --quiet --hard {root}");
+        var released = Commit("three");
+        SetBareRef("refs/heads/main", onMain);
+
+        var result = await _sut.TryFastForwardAsync(
+            ProjectId, "main", released, TestContext.Current.CancellationToken);
+
+        Assert.Equal(GitBranchAdvanceOutcome.NotFastForward, result.Outcome);
+        Assert.Equal(onMain, ReadBareRef("refs/heads/main"));
     }
 
     [Fact]
@@ -157,6 +176,61 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
 
     private void SetBareRef(string reference, string sha) =>
         RunGit(_work, $"push --quiet origin +{sha}:{reference}");
+
+    [Fact]
+    public async Task ReleaseTag_IsCreatedOnTheDeployedCommit_AndAReplayFindsItThere()
+    {
+        Commit("one");
+        var deployed = Commit("two");
+        var ct = TestContext.Current.CancellationToken;
+
+        var created = await _sut.TryCreateTagAsync(ProjectId, "v1.3.15", deployed, ct);
+        var replay = await _sut.TryCreateTagAsync(ProjectId, "v1.3.15", deployed, ct);
+
+        Assert.Equal(GitTagOutcome.Created, created.Outcome);
+        Assert.Equal(Slug, created.RepositorySlug);
+        Assert.Equal(deployed, ReadBareRef("refs/tags/v1.3.15"));
+        Assert.Equal(GitTagOutcome.AlreadyThere, replay.Outcome);
+    }
+
+    [Fact]
+    public async Task ReleaseTag_OnAnotherCommit_IsNeverMoved()
+    {
+        var first = Commit("one");
+        var second = Commit("two");
+        SetBareRef("refs/tags/v1.3.15", first);
+
+        var result = await _sut.TryCreateTagAsync(ProjectId, "v1.3.15", second, TestContext.Current.CancellationToken);
+
+        Assert.Equal(GitTagOutcome.OnAnotherCommit, result.Outcome);
+        Assert.Equal(first, result.ExistingSha);
+        Assert.Equal(first, ReadBareRef("refs/tags/v1.3.15"));
+    }
+
+    [Theory]
+    [InlineData("v1..3")]
+    [InlineData("v1.3 15")]
+    [InlineData("v1.3.15.lock")]
+    public async Task ReleaseTag_WithANameGitRefuses_IsRefused_AndNothingIsWritten(string tag)
+    {
+        var commit = Commit("one");
+
+        var result = await _sut.TryCreateTagAsync(ProjectId, tag, commit, TestContext.Current.CancellationToken);
+
+        Assert.Equal(GitTagOutcome.Refused, result.Outcome);
+        Assert.Equal(string.Empty, RunGit(_bare, "tag --list").Trim());
+    }
+
+    [Fact]
+    public async Task ReleaseTag_ForACommitNoRepositoryHolds_ReportsCommitNotFound()
+    {
+        Commit("one");
+
+        var result = await _sut.TryCreateTagAsync(
+            ProjectId, "v1.3.15", "abcdefabcdefabcdefabcdefabcdefabcdefabcd", TestContext.Current.CancellationToken);
+
+        Assert.Equal(GitTagOutcome.CommitNotFound, result.Outcome);
+    }
 
     private string ReadBareRef(string reference) =>
         RunGit(_bare, $"rev-parse --verify {reference}").Trim();

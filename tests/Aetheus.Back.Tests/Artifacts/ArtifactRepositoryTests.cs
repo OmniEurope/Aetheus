@@ -30,6 +30,28 @@ public class ArtifactRepositoryTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    [Fact]
+    public async Task GetRunPipelineContextAsync_ResolvesTheProjectOfEnvironmentAndProjectServerPipelines()
+    {
+        // BACK-009: these pipelines have no direct ProjectId by design; their artifacts still have
+        // a project, which carries their quota and retention.
+        _db.Environments.Add(new Aetheus.Back.Data.Entities.Environment { Id = 7, Name = "prod", ProjectId = 40 });
+        _db.ProjectServers.Add(new ProjectServer { Id = 8, ProjectId = 41 });
+        _db.Pipelines.AddRange(
+            new Pipeline { Id = 3, Name = "env-owned", EnvironmentId = 7 },
+            new Pipeline { Id = 4, Name = "project-server-owned", ProjectServerId = 8 },
+            new Pipeline { Id = 5, Name = "legacy-unowned" });
+        _db.PipelineRuns.AddRange(
+            new PipelineRun { Id = 3, PipelineId = 3, Status = PipelineStatus.Running },
+            new PipelineRun { Id = 4, PipelineId = 4, Status = PipelineStatus.Running },
+            new PipelineRun { Id = 5, PipelineId = 5, Status = PipelineStatus.Running });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal((3, (int?)40), await _repo.GetRunPipelineContextAsync(3, TestContext.Current.CancellationToken));
+        Assert.Equal((4, (int?)41), await _repo.GetRunPipelineContextAsync(4, TestContext.Current.CancellationToken));
+        Assert.Equal((5, (int?)null), await _repo.GetRunPipelineContextAsync(5, TestContext.Current.CancellationToken));
+    }
+
     private PipelineArtifact MakeArtifact(
         int pipelineId = 1, int projectId = 1, int runId = 1,
         ArtifactRetentionPolicy policy = ArtifactRetentionPolicy.Build,
@@ -777,6 +799,64 @@ public class ArtifactRepositoryTests : IDisposable
             17, currentCommit, artifactName, TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, required);
+    }
+
+    /// <summary>
+    /// Recette R2-121: a project onboarded through the setup wizard names its pipelines after itself
+    /// (portfolio-candidate, portfolio-release-fast); what makes them a candidate or a fast release is
+    /// the shipped template they extend, not the aetheus-* name of the self-deploy pipelines.
+    /// </summary>
+    [Theory]
+    [InlineData("portfolio-candidate", "application-candidate", "QaRuntime-artifacts", true)]
+    [InlineData("portfolio-release-fast", "application-release-fast", "QaRuntime-artifacts", false)]
+    [InlineData("portfolio-release-fast", "application-release-fast", "ApplicationPayload-artifacts", true)]
+    [InlineData("portfolio-ci", "application-ci", "ApplicationPayload-artifacts", false)]
+    public async Task RequiresPreviousDeployedArtifactAsync_RecognisesTheContractByTemplate(
+        string pipelineName,
+        string templateName,
+        string artifactName,
+        bool expected)
+    {
+        const string previousCommit = "8888888888888888888888888888888888888888";
+        const string currentCommit = "9999999999999999999999999999999999999999";
+        _db.Projects.Add(new Project { Id = 18, Name = "Portfolio" });
+        _db.Pipelines.Add(new Pipeline
+        {
+            Id = 180,
+            ProjectId = 18,
+            Name = pipelineName,
+            TemplateReferenceName = templateName,
+            TemplateReferenceVersion = 1
+        });
+        _db.PipelineRuns.Add(new PipelineRun
+        {
+            Id = 180,
+            PipelineId = 180,
+            Status = PipelineStatus.Success,
+            CommitHash = previousCommit
+        });
+        var payload = MakeArtifact(
+            pipelineId: 180, projectId: 18, runId: 180, name: "ApplicationPayload-artifacts");
+        await _repo.AddAsync(payload, TestContext.Current.CancellationToken);
+        var release = new Release
+        {
+            Id = 180,
+            ProjectId = 18,
+            PipelineRunId = 180,
+            Version = "c-previous",
+            Status = ReleaseStatus.Deployed,
+            PublishedAt = new DateTime(2026, 1, 4, 0, 0, 0, DateTimeKind.Utc)
+        };
+        release.Artifacts.Add(payload);
+        _db.Releases.Add(release);
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, await _repo.RequiresPreviousDeployedArtifactAsync(
+            18, currentCommit, artifactName, TestContext.Current.CancellationToken));
+        Assert.Equal(templateName != "application-ci", await _repo.HasDeployedRollbackContractReleaseAsync(
+            18, TestContext.Current.CancellationToken));
+        Assert.Equal(templateName != "application-ci", await _repo.HasPublishedRollbackContractReleaseAsync(
+            18, TestContext.Current.CancellationToken));
     }
 
     [Fact]

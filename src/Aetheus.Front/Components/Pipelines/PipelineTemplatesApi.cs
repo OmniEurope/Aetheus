@@ -8,30 +8,48 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>Pipeline templates and their versions. The only sub-client holding state: a template list cache, invalidated explicitly by its own writers.</summary>
-public sealed class PipelineTemplatesApi(HttpClient http) : ApiClientBase(http)
+/// <summary>
+/// Pipeline templates and their versions. The only sub-client holding state: a template list cache,
+/// invalidated by every writer of this client (create, update, delete, import, extract, promote) and,
+/// FRONT-012, bounded to <see cref="CacheLifetime"/> so a change made in another session (seen by no
+/// writer here) reaches the pages that never listen to the hub.
+/// </summary>
+public sealed class PipelineTemplatesApi(HttpClient http, TimeProvider? time = null) : ApiClientBase(http)
 {
+    public static readonly TimeSpan CacheLifetime = TimeSpan.FromMinutes(1);
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
     private List<PipelineTemplateSummaryDto>? _templateCache;
+    private DateTimeOffset _templateCachedAt;
 
 
     public async Task<List<PipelineTemplateSummaryDto>> GetPipelineTemplatesAsync()
     {
-        if (_templateCache is not null) return _templateCache;
-        _templateCache = await Http.GetFromJsonAsync<List<PipelineTemplateSummaryDto>>("api/pipelines/templates", JsonOptions.Web) ?? [];
-        return _templateCache;
+        if (_templateCache is not null && _time.GetUtcNow() - _templateCachedAt < CacheLifetime) return _templateCache;
+        var templates = await Http.GetFromJsonAsync<List<PipelineTemplateSummaryDto>>("api/pipelines/templates", JsonOptions.Web) ?? [];
+        _templateCache = templates;
+        _templateCachedAt = _time.GetUtcNow();
+        return templates;
     }
 
 
-    public Task<PipelineTemplateDto?> ExtractPipelineTemplateAsync(
-        int pipelineId, ExtractPipelineTemplateRequest request, CancellationToken ct = default) =>
-        PostJsonAsync<ExtractPipelineTemplateRequest, PipelineTemplateDto>(
-            $"api/pipelines/{pipelineId}/extract-template", request, ct);
+    public async Task<PipelineTemplateDto?> ExtractPipelineTemplateAsync(
+        int pipelineId, ExtractPipelineTemplateRequest request, CancellationToken ct = default)
+    {
+        var dto = await PostJsonAsync<ExtractPipelineTemplateRequest, PipelineTemplateDto>(
+            $"api/pipelines/{pipelineId}/extract-template", request, ct).ConfigureAwait(false);
+        if (dto != null) InvalidateTemplateCache();
+        return dto;
+    }
 
 
-    public Task<PipelineTemplateDto?> PromotePipelineTemplateAsync(
-        int pipelineId, PromotePipelineTemplateRequest request, CancellationToken ct = default) =>
-        PostJsonAsync<PromotePipelineTemplateRequest, PipelineTemplateDto>(
-            $"api/pipelines/{pipelineId}/promote-template", request, ct);
+    public async Task<PipelineTemplateDto?> PromotePipelineTemplateAsync(
+        int pipelineId, PromotePipelineTemplateRequest request, CancellationToken ct = default)
+    {
+        var dto = await PostJsonAsync<PromotePipelineTemplateRequest, PipelineTemplateDto>(
+            $"api/pipelines/{pipelineId}/promote-template", request, ct).ConfigureAwait(false);
+        if (dto != null) InvalidateTemplateCache();
+        return dto;
+    }
 
 
     public void InvalidateTemplateCache() => _templateCache = null;

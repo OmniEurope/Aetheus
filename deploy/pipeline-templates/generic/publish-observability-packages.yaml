@@ -43,6 +43,15 @@ stages:
         type: restore-artifacts
         artifact: Package-artifacts
         artifact_source_pipeline: "$(APPLICATION_PACKAGE_BROWSER_ANALYTICS_PIPELINE)"
+
+  # Its own stage: the steps of one stage run concurrently (ADR-012), and the publication reads the
+  # three packages the restores above write.
+  - name: Publish
+    group: Release
+    execution_role: build
+    os: linux
+    depends_on: [PublishPackages]
+    steps:
       - name: Publish qualified package set
         working_directory: "$(WORKSPACE)"
         shell: |

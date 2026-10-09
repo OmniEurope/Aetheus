@@ -79,13 +79,33 @@ public static class PipelineAnalysisGradingValidator
         if (!TryParseDirection(rule.Direction, out _))
             errors.Add($"analysis grading rule '{label}' direction must be higher-is-better or lower-is-better.");
         ValidateRuleCategory(scope, rule, label, errors);
-        if (!PipelineAnalysisGateRuleValidator.TryParseEnum<AnalysisSeverity>(rule.Severity, out _))
-            errors.Add($"analysis grading rule '{label}' severity is invalid.");
-        if (string.IsNullOrWhiteSpace(rule.Metric) == string.IsNullOrWhiteSpace(rule.Severity))
-            errors.Add($"analysis grading rule '{label}' must target exactly one metric or finding severity.");
+        ValidateTarget(rule, label, errors);
         if (TooLong(rule.Metric, 300)) errors.Add($"analysis grading rule '{label}' metric is too long.");
         ValidateBands(rule, label, errors);
     }
+
+    // A rule grades exactly one thing: a metric, one severity's finding count, or the weighted score of
+    // the open findings (recette R2-119), which only a lower-is-better direction can grade.
+    private static void ValidateTarget(
+        PipelineAnalysisGradeRuleDefinition rule,
+        string label,
+        ICollection<string> errors)
+    {
+        if (!PipelineAnalysisGateRuleValidator.TryParseEnum<AnalysisSeverity>(rule.Severity, out _))
+            errors.Add($"analysis grading rule '{label}' severity is invalid.");
+        var targets = new[] { rule.Metric, rule.Severity, rule.FindingScore }
+            .Count(value => !string.IsNullOrWhiteSpace(value));
+        if (targets != 1)
+            errors.Add($"analysis grading rule '{label}' must target exactly one metric, finding severity or finding score.");
+        if (string.IsNullOrWhiteSpace(rule.FindingScore)) return;
+        if (!IsWeightedFindingScore(rule))
+            errors.Add($"analysis grading rule '{label}' finding_score must be '{AnalysisFindingScore.Weighted}'.");
+        if (TryParseDirection(rule.Direction, out var direction) && direction != AnalysisMetricDirection.LowerIsBetter)
+            errors.Add($"analysis grading rule '{label}' finding score must be graded lower-is-better.");
+    }
+
+    public static bool IsWeightedFindingScore(PipelineAnalysisGradeRuleDefinition rule) =>
+        string.Equals(rule.FindingScore?.Trim(), AnalysisFindingScore.Weighted, StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateRuleCategory(
         string? scope,
@@ -128,10 +148,17 @@ public static class PipelineAnalysisGradingValidator
         string label,
         ICollection<string> errors)
     {
-        var values = new[] { rule.A, rule.B, rule.C, rule.D, rule.E };
+        // A weighted finding score may leave E open: above D is E, and only a critical finding gives F
+        // (recette R2-119). Every other rule needs its five thresholds.
+        var weighted = IsWeightedFindingScore(rule);
+        var values = weighted && !rule.E.HasValue
+            ? new[] { rule.A, rule.B, rule.C, rule.D }
+            : new[] { rule.A, rule.B, rule.C, rule.D, rule.E };
         if (values.Any(value => !value.HasValue || !double.IsFinite(value.Value)))
         {
-            errors.Add($"analysis grading rule '{label}' must define finite A, B, C, D and E thresholds.");
+            errors.Add(weighted
+                ? $"analysis grading rule '{label}' must define finite A, B, C and D thresholds (E is optional)."
+                : $"analysis grading rule '{label}' must define finite A, B, C, D and E thresholds.");
             return;
         }
         if (!TryParseDirection(rule.Direction, out var direction)) return;

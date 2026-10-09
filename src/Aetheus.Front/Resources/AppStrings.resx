@@ -31,7 +31,7 @@
   <data name="Settings" xml:space="preserve"><value>Settings</value></data>
   <data name="Login" xml:space="preserve"><value>Login</value></data>
   <data name="PublicDemo" xml:space="preserve"><value>Public demo</value></data>
-  <data name="PublicDemoCredentials" xml:space="preserve"><value>Username: admin · Password: aetheus-demo</value></data>
+  <data name="PublicDemoFillForm" xml:space="preserve"><value>Fill in the form</value></data>
   <data name="Logout" xml:space="preserve"><value>Logout</value></data>
   <data name="Username" xml:space="preserve"><value>Username</value></data>
   <data name="About" xml:space="preserve"><value>About</value></data>
@@ -144,7 +144,6 @@
   <data name="Enum_GitMirrorStatus_Error" xml:space="preserve"><value>Error</value></data>
   <data name="Active" xml:space="preserve"><value>Active</value></data>
   <data name="Archived" xml:space="preserve"><value>Archived</value></data>
-  <data name="DeleteProjectConfirm" xml:space="preserve"><value>Are you sure you want to delete this project?</value></data>
   <data name="Docker" xml:space="preserve"><value>Docker</value></data>
   <data name="Containers" xml:space="preserve"><value>Containers</value></data>
   <data name="DockerActionSent" xml:space="preserve"><value>{0} command sent for {1}</value></data>
@@ -349,8 +348,6 @@
   <data name="RepositoryUrl" xml:space="preserve"><value>Repository URL</value></data>
   <data name="TagsCommaSeparated" xml:space="preserve"><value>Tags (comma-separated)</value></data>
   <data name="ProjectCreated" xml:space="preserve"><value>Project created.</value></data>
-  <data name="OpenNewProjectConfirm" xml:space="preserve"><value>Open the new project "{0}" now?</value></data>
-  <data name="OpenProject" xml:space="preserve"><value>Open</value></data>
   <data name="StayHere" xml:space="preserve"><value>Stay here</value></data>
   <data name="ProjectUpdated" xml:space="preserve"><value>Project updated.</value></data>
   <data name="PipelineCreated" xml:space="preserve"><value>Pipeline created.</value></data>
@@ -451,16 +448,18 @@
   <data name="ApprovalTimeoutMinutes" xml:space="preserve"><value>Approval timeout (minutes)</value></data>
   <data name="ApprovalInstructions" xml:space="preserve"><value>Approval instructions</value></data>
   <data name="Approval" xml:space="preserve"><value>Approval</value></data>
-  <data name="ApprovalRequiredTitle" xml:space="preserve"><value>Deployment approval required</value></data>
+  <data name="EnvironmentApprovalTitle" xml:space="preserve"><value>Allow the deployment to {0}</value></data>
+  <data name="PipelineApprovalTitle" xml:space="preserve"><value>Confirm that the new version works</value></data>
   <data name="ApprovalMissingTitle" xml:space="preserve"><value>No approval to make</value></data>
   <data name="ApprovalMissingDetail" xml:space="preserve"><value>This run waits for an approval that no longer exists. The backend re-applies the recorded decision on its next reconciliation pass, usually within a minute; if the run stays here after that, cancel it.</value></data>
   <data name="ApprovalLoadFailedDetail" xml:space="preserve"><value>The pending approval could not be loaded. Reload the page; if it keeps failing, the backend is not answering.</value></data>
-  <data name="ApprovalRequiredDetail" xml:space="preserve"><value>This run is waiting for a human to approve the "{0}" stage against the "{1}" environment before it continues.</value></data>
-  <data name="PipelineApprovalRequiredDetail" xml:space="preserve"><value>This run is waiting for a human to approve the "{0}" stage, an approval the pipeline itself asks for, before it continues.</value></data>
+  <data name="ApprovalRequiredDetail" xml:space="preserve"><value>This run is waiting for a human to allow the "{1}" environment before it continues. The authorisation holds for the whole run (first stage concerned: "{0}").</value></data>
+  <data name="PipelineApprovalRequiredDetail" xml:space="preserve"><value>This run is waiting for a human to confirm, at the "{0}" stage, that the new version works before it continues.</value></data>
   <data name="ApprovalCommentsOptional" xml:space="preserve"><value>Comments (optional)</value></data>
   <data name="Approve" xml:space="preserve"><value>Approve</value></data>
   <data name="Reject" xml:space="preserve"><value>Reject</value></data>
-  <data name="ApprovalDecisionFailed" xml:space="preserve"><value>The approval decision could not be recorded.</value></data>
+  <data name="ApprovalDecisionFailed" xml:space="preserve"><value>The approval decision was not applied.</value></data>
+  <data name="ApprovalDecisionFailedStatus" xml:space="preserve"><value>The server answered {0} without giving a reason.</value></data>
   <data name="SecretUpdated" xml:space="preserve"><value>Secret updated.</value></data>
   <data name="SecretRotated" xml:space="preserve"><value>Secret rotated.</value></data>
   <data name="RotateSecretConfirm" xml:space="preserve"><value>Rotate the value of secret '{0}'? A new version will be recorded.</value></data>
@@ -783,6 +782,8 @@
   <data name="PipelineRunnerDisabledToast" xml:space="preserve"><value>Pipeline runner disabled.</value></data>
   <data name="AgentUpdateInProgress" xml:space="preserve"><value>Agent update in progress</value></data>
   <data name="AgentUpdateFailed" xml:space="preserve"><value>Agent update failed</value></data>
+  <data name="AgentUpdateInProgressTo" xml:space="preserve"><value>Update in progress to {0}</value></data>
+  <data name="AgentUpdateFailedWithReason" xml:space="preserve"><value>Agent update failed: {0}</value></data>
   <data name="AgentUpdateTimeoutHint" xml:space="preserve"><value>No progress received - the agent may be offline or unreachable.</value></data>
   <data name="AgentUpdateRestartingHint" xml:space="preserve"><value>Waiting for the agent to come back online…</value></data>
   <data name="AgentUpdateDoneHint" xml:space="preserve"><value>Agent restarted on v{0}.</value></data>
@@ -844,6 +845,9 @@
   <data name="DockerfilePlaceholder" xml:space="preserve"><value># Paste your Dockerfile here...</value></data>
   <data name="CopyToClipboard" xml:space="preserve"><value>Copy to clipboard</value></data>
   <data name="CopyLogs" xml:space="preserve"><value>Copy logs</value></data>
+  <data name="EarlierLogLinesHidden" xml:space="preserve"><value>Only the latest lines of this step are shown. The earlier ones are kept on the server.</value></data>
+  <data name="ShowCompleteLog" xml:space="preserve"><value>Complete log</value></data>
+  <data name="CompleteLogLoadFailed" xml:space="preserve"><value>The complete log could not be loaded.</value></data>
   <data name="ExecutedCommand" xml:space="preserve"><value>Executed command</value></data>
   <data name="Output" xml:space="preserve"><value>Output</value></data>
   <data name="OutputHidden" xml:space="preserve"><value>Output hidden</value></data>
@@ -1158,20 +1162,29 @@
   <data name="RunCancelledDetail" xml:space="preserve"><value>The cancellation request was recorded. Mandatory teardown will finish before the run becomes Cancelled.</value></data>
   <data name="CancellationAcceptedTitle" xml:space="preserve"><value>Cancellation accepted</value></data>
   <data name="CancellationAcceptedDetail" xml:space="preserve"><value>No new work will start. Running work is stopping and mandatory teardown will finish before the run becomes Cancelled.</value></data>
+  <data name="RunCancelledBy" xml:space="preserve"><value>Cancelled by {0}.</value></data>
+  <data name="RunCancelledBySystem" xml:space="preserve"><value>Cancelled by Aetheus (automatic cancellation).</value></data>
   <data name="ChildCurrentStage" xml:space="preserve"><value>What the triggered run is doing now</value></data>
   <data name="Digest" xml:space="preserve"><value>Digest</value></data>
   <data name="DigestUnavailable" xml:space="preserve"><value>not recorded</value></data>
   <data name="CandidateNotDeployableTitle" xml:space="preserve"><value>This candidate cannot be deployed</value></data>
   <data name="CandidateNotDeployableDetail" xml:space="preserve"><value>The assurance seal refused the package. The run itself may be green: what it built is not cleared for production.</value></data>
   <data name="CandidateBlockingTests" xml:space="preserve"><value>Blocking tests</value></data>
+  <data name="GateSealedGradeTitle" xml:space="preserve"><value>Sealed candidate grade</value></data>
+  <data name="GateSealedGradeDetail" xml:space="preserve"><value>The run list and this tab show the grade sealed by the candidate&apos;s assurance contract. The analysis below, taken alone, grades {0}.</value></data>
+  <data name="LatestGradeOpenFindings" xml:space="preserve"><value>Open the findings of this graded run</value></data>
+  <data name="LastSuccessOpenRun" xml:space="preserve"><value>Open this successful run</value></data>
   <data name="CandidateDeployableShort" xml:space="preserve"><value>Candidate cleared</value></data>
   <data name="CandidateNotDeployableShort" xml:space="preserve"><value>Candidate refused</value></data>
   <data name="CandidateDeployableTitle" xml:space="preserve"><value>Candidate cleared for deployment</value></data>
   <data name="AssuranceGrade" xml:space="preserve"><value>Assurance grade</value></data>
   <data name="PendingApprovalsTooltip" xml:space="preserve"><value>{0} approval(s) waiting for a decision</value></data>
   <data name="PendingApprovalsTitle" xml:space="preserve"><value>Approvals waiting</value></data>
-  <data name="PendingApprovalLine" xml:space="preserve"><value> - stage {0}, environment {1}, requested {2}</value></data>
-  <data name="PendingPipelineApprovalLine" xml:space="preserve"><value> - stage {0}, pipeline approval, requested {1}</value></data>
+  <data name="PendingApprovalsTabTitle" xml:space="preserve"><value>● {0} approval(s) waiting</value></data>
+  <data name="RunLiveInterrupted" xml:space="preserve"><value>Live updates interrupted since {0}</value></data>
+  <data name="RunLiveInterruptedTitle" xml:space="preserve"><value>Live updates are down: the page reloads itself every 15 seconds and reconnects as soon as it can.</value></data>
+  <data name="PendingApprovalLine" xml:space="preserve"><value> - allow the deployment to {1} (stage {0}), requested {2}</value></data>
+  <data name="PendingPipelineApprovalLine" xml:space="preserve"><value> - confirm that the new version works (stage {0}), requested {1}</value></data>
   <data name="ReleaseNotQualified" xml:space="preserve"><value>Not qualified</value></data>
   <data name="ReleaseNotQualifiedHint" xml:space="preserve"><value>No sealed assurance contract: this release was not built by a qualifying candidate (for example release-fast).</value></data>
   <data name="Redeploy" xml:space="preserve"><value>Redeploy</value></data>
@@ -1411,8 +1424,6 @@
   <data name="UnexpectedServerError" xml:space="preserve"><value>An unexpected server error occurred.</value></data>
   <data name="RequestFailed" xml:space="preserve"><value>Request failed ({0}).</value></data>
   <data name="Mail" xml:space="preserve"><value>Mail</value></data>
-  <data name="MailQueueCount" xml:space="preserve"><value>{0} in queue</value></data>
-  <data name="MailSetup" xml:space="preserve"><value>Mail</value></data>
   <data name="MailSetupCapabilityRequired" xml:space="preserve"><value>Mail setup is not enabled on this server. Re-run the agent installer with the mail-setup capability (--enable-mail-setup).</value></data>
   <data name="MailInstalledNotConfigured" xml:space="preserve"><value>Postfix/Dovecot are installed but the mail stack is not configured (no domain). Run Setup to provision virtual mailboxes, Dovecot authentication, and DKIM.</value></data>
   <data name="MailDomains" xml:space="preserve"><value>Domains</value></data>
@@ -1433,7 +1444,6 @@
   <data name="AdminPassword" xml:space="preserve"><value>Admin Password</value></data>
   <data name="Install" xml:space="preserve"><value>Install</value></data>
   <data name="NoMailDomains" xml:space="preserve"><value>No mail domains configured</value></data>
-  <data name="MailSetupSummary" xml:space="preserve"><value>Summary</value></data>
   <data name="Previous" xml:space="preserve"><value>Previous</value></data>
   <data name="Next" xml:space="preserve"><value>Next</value></data>
   <data name="Sender" xml:space="preserve"><value>Sender</value></data>
@@ -1574,7 +1584,6 @@
   <data name="LogLevel" xml:space="preserve"><value>Level</value></data>
   <data name="AllLevels" xml:space="preserve"><value>All levels</value></data>
   <data name="SearchLogs" xml:space="preserve"><value>Search logs…</value></data>
-  <data name="ExportCsv" xml:space="preserve"><value>Export CSV</value></data>
   <data name="LogsExportTitle" xml:space="preserve"><value>Logs of {0}</value></data>
   <data name="LogsExportFailed" xml:space="preserve"><value>Export failed: a page of the log could not be read, no file was produced.</value></data>
   <data name="LogsExportPeriodValue" xml:space="preserve"><value>last {0} hours</value></data>
@@ -1591,7 +1600,6 @@
   <data name="Download" xml:space="preserve"><value>Download</value></data>
   <data name="DownloadFailed" xml:space="preserve"><value>Download failed.</value></data>
   <data name="DownloadZip" xml:space="preserve"><value>Download zip</value></data>
-  <data name="ExportFailed" xml:space="preserve"><value>Export failed.</value></data>
   <data name="ServiceLogs" xml:space="preserve"><value>Service Logs</value></data>
   <data name="LogLines" xml:space="preserve"><value>Lines</value></data>
   <data name="FollowingLogs" xml:space="preserve"><value>Refreshed every 30 s</value></data>
@@ -2283,6 +2291,8 @@
   <data name="AnalysisCriticalVulnerabilities" xml:space="preserve"><value>Critical vulnerabilities</value></data>
   <data name="AnalysisHighVulnerabilities" xml:space="preserve"><value>High-severity vulnerabilities</value></data>
   <data name="AnalysisMediumVulnerabilities" xml:space="preserve"><value>Medium-severity vulnerabilities</value></data>
+  <data name="AnalysisOpenFindingsScore" xml:space="preserve"><value>Open findings (weighted score)</value></data>
+  <data name="AnalysisCriticalFindingNotDeliverable" xml:space="preserve"><value>An open critical finding gives F: not deliverable.</value></data>
   <data name="AnalysisTestedLines" xml:space="preserve"><value>Lines covered by tests</value></data>
   <data name="AnalysisTestedBranches" xml:space="preserve"><value>Code branches covered by tests</value></data>
   <data name="AnalysisMaximumComplexity" xml:space="preserve"><value>Most complex code path</value></data>
@@ -2441,6 +2451,7 @@
   <data name="AuditAction_Organization.ProjectsAssigned" xml:space="preserve"><value>Projects assigned</value></data>
   <data name="AuditAction_AccessedUnmasked" xml:space="preserve"><value>Unmasked logs viewed</value></data>
   <data name="AuditAction_AdvancedBranchAfterDeploy" xml:space="preserve"><value>Branch advanced after deployment</value></data>
+  <data name="AuditAction_TaggedReleaseAfterDeploy" xml:space="preserve"><value>Release tagged after deployment</value></data>
   <data name="AuditAction_AgentSelfUpdateAll" xml:space="preserve"><value>Agent update requested on every server</value></data>
   <data name="AuditAction_AgentUpdateConfirmationFailed" xml:space="preserve"><value>Agent update not confirmed</value></data>
   <data name="AuditAction_AgentUpdateConfirmed" xml:space="preserve"><value>Agent update confirmed</value></data>
@@ -2539,6 +2550,7 @@
   <data name="AuditAction_MailSetup" xml:space="preserve"><value>Mail server set up</value></data>
   <data name="AuditAction_MailSpamConfigure" xml:space="preserve"><value>Spam filter configured</value></data>
   <data name="AuditAction_MailSpamInstall" xml:space="preserve"><value>Spam filter installed</value></data>
+  <data name="AuditAction_MailPurge" xml:space="preserve"><value>Mail stack erased (reinstall)</value></data>
   <data name="AuditAction_MailSpamLearn" xml:space="preserve"><value>Spam filter trained</value></data>
   <data name="AuditAction_MailStartDovecot" xml:space="preserve"><value>Dovecot started</value></data>
   <data name="AuditAction_MailStartPostfix" xml:space="preserve"><value>Postfix started</value></data>
@@ -2631,10 +2643,14 @@
   <data name="AuditAction_TeamspeakUnban" xml:space="preserve"><value>TeamSpeak ban lifted</value></data>
   <data name="AuditAction_TemplatePublicationCompensated" xml:space="preserve"><value>Template publication compensated</value></data>
   <data name="AuditAction_TemplateVersionAdopted" xml:space="preserve"><value>Template version adopted</value></data>
+  <data name="AuditAction_TemplateVersionsReset" xml:space="preserve"><value>Template versions restarted at v1</value></data>
+  <data name="AuditAction_TemplateVersionRepinned" xml:space="preserve"><value>Template version repinned to v1</value></data>
   <data name="AuditAction_Tested" xml:space="preserve"><value>Tested</value></data>
   <data name="AuditAction_TotpDisabled" xml:space="preserve"><value>Two-factor authentication disabled</value></data>
   <data name="AuditAction_TotpEnabled" xml:space="preserve"><value>Two-factor authentication enabled</value></data>
   <data name="AuditAction_Triggered" xml:space="preserve"><value>Triggered</value></data>
+  <data name="AuditAction_Cancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="AuditAction_ApprovalDecision" xml:space="preserve"><value>Approval decision</value></data>
   <data name="AuditAction_UnlinkedProjectServer" xml:space="preserve"><value>Project server unlinked</value></data>
   <data name="AuditAction_Unlisted" xml:space="preserve"><value>Package unlisted</value></data>
   <data name="AuditAction_UnlockedUser" xml:space="preserve"><value>User unlocked</value></data>
@@ -2659,13 +2675,13 @@
   <data name="DatabasePipelineHint" xml:space="preserve"><value>Include schema migration and compatibility checks.</value></data>
   <data name="SelectPipelineCapabilities" xml:space="preserve"><value>Select the assurance and delivery capabilities to generate.</value></data>
   <data name="CiPipelineHint" xml:space="preserve"><value>Compile, test and produce immutable artifacts.</value></data>
-  <data name="QualityPipelineHint" xml:space="preserve"><value>Coverage, tests, formatting and code-quality evidence.</value></data>
-  <data name="SecurityPipelineHint" xml:space="preserve"><value>Secrets, dependencies, SAST, container and SBOM checks.</value></data>
+  <data name="QualityPipelineHint" xml:space="preserve"><value>Coverage and lint left by the project's adapter, C#, Python and Java analysis, graded A to F.</value></data>
+  <data name="SecurityPipelineHint" xml:space="preserve"><value>Secrets, code (SAST), dependencies and infrastructure files, graded A to F.</value></data>
   <data name="QaPipelineHint" xml:space="preserve"><value>Disposable environment and dynamic validation.</value></data>
   <data name="Candidate" xml:space="preserve"><value>Candidate</value></data>
   <data name="CandidatePipelineHint" xml:space="preserve"><value>Coordinate the complete qualified candidate flow.</value></data>
   <data name="Nightly" xml:space="preserve"><value>Nightly</value></data>
-  <data name="NightlyPipelineHint" xml:space="preserve"><value>Schedule complete assurance and drift checks.</value></data>
+  <data name="NightlyPipelineHint" xml:space="preserve"><value>Every night: CI, quality, security, secret history, QA and extended QA for the pipelines selected here.</value></data>
   <data name="ProductionDeployment" xml:space="preserve"><value>Production deployment</value></data>
   <data name="ProductionPipelineHint" xml:space="preserve"><value>Deploy a qualified candidate and verify readiness.</value></data>
   <data name="FastDeploy" xml:space="preserve"><value>Fast deployment</value></data>
@@ -2934,7 +2950,7 @@
   <data name="CoverageTierGood" xml:space="preserve"><value>good (80 % or more)</value></data>
   <data name="CoverageTierFair" xml:space="preserve"><value>fair (50 to 80 %)</value></data>
   <data name="CoverageTierLow" xml:space="preserve"><value>low (under 50 %)</value></data>
-  <data name="StepUsualDuration" xml:space="preserve"><value>(average {0})</value></data>
+  <data name="StepUsualDuration" xml:space="preserve"><value>(~{0})</value></data>
   <data name="StepUsualDurationHint" xml:space="preserve"><value>Average duration of this step over the last successful runs</value></data>
   <data name="Supervision" xml:space="preserve"><value>Supervision</value></data>
   <data name="SupervisionDescription" xml:space="preserve"><value>Every supervised application, all projects together: its status, the people online, and the last event it sent.</value></data>
@@ -2953,12 +2969,10 @@
   <data name="PerformanceThisBrowser" xml:space="preserve"><value>This browser</value></data>
   <data name="PerformanceThisBrowserHint" xml:space="preserve"><value>The slowest API calls of this session, as this browser waited for them: network and server together.</value></data>
   <data name="PerformanceNoSamples" xml:space="preserve"><value>No measurement yet.</value></data>
-  <data name="PerformanceWindow" xml:space="preserve"><value>{0} requests measured by the server since {1} (24 hours at most; the window restarts with the instance).</value></data>
+  <data name="PerformanceWindow" xml:space="preserve"><value>Since {0}; 24 hours at most, the window restarts with the instance.</value></data>
+  <data name="PerformanceTileRequests" xml:space="preserve"><value>Measured requests</value></data>
+  <data name="PerformanceTileSlowestCall" xml:space="preserve"><value>Slowest call</value></data>
   <data name="PerformanceTruncated" xml:space="preserve"><value>The cap was reached: the oldest requests of the window were dropped.</value></data>
-  <data name="PerformanceExportMarkdown" xml:space="preserve"><value>Export everything to Markdown</value></data>
-  <data name="PerformanceExportMarkdownHint" xml:space="preserve"><value>Every row of the three tables, raw, in one Markdown file for an AI to read. The browser table holds every call of this session, not only the slowest.</value></data>
-  <data name="PerformanceExportTitle" xml:space="preserve"><value>Aetheus API performance</value></data>
-  <data name="PerformanceExportTable" xml:space="preserve"><value>Table</value></data>
   <data name="PerformanceExportSince" xml:space="preserve"><value>Server window since (UTC)</value></data>
   <data name="PerformanceExportSamples" xml:space="preserve"><value>Requests measured by the server</value></data>
   <data name="PerformanceExportTruncated" xml:space="preserve"><value>Cap reached (oldest requests dropped)</value></data>
@@ -3013,12 +3027,8 @@
   <data name="SessionEnd_no_refresh_token_at_startup" xml:space="preserve"><value>Reason: the session expired and could not be renewed.</value></data>
   <data name="MailManagedByAetheus" xml:space="preserve"><value>Provisioned by Aetheus</value></data>
   <data name="MailAdoptedStack" xml:space="preserve"><value>Existing configuration (adopted)</value></data>
-  <data name="MailHelperOutdated" xml:space="preserve"><value>The mail helpers on this server are outdated (version {0}). Re-run the agent installer with --enable-mail-setup to deploy version 2.</value></data>
-  <data name="MailTlsCertificate" xml:space="preserve"><value>TLS certificate</value></data>
-  <data name="MailTlsSelfSigned" xml:space="preserve"><value>Self-signed</value></data>
+  <data name="MailHelperOutdated" xml:space="preserve"><value>The mail helpers on this server are outdated (version {0}). Re-run the agent installer with --enable-mail-setup to deploy version 3.</value></data>
   <data name="MailTlsValidUntil" xml:space="preserve"><value>Valid until {0}</value></data>
-  <data name="MailTlsUnreadable" xml:space="preserve"><value>Certificate not readable by the agent</value></data>
-  <data name="MailTlsNone" xml:space="preserve"><value>No certificate configured</value></data>
   <data name="MailObtainCertificate" xml:space="preserve"><value>Obtain a certificate</value></data>
   <data name="MailInstallCertificate" xml:space="preserve"><value>Install the certificate</value></data>
   <data name="MailAcmeEmail" xml:space="preserve"><value>Let's Encrypt account email</value></data>
@@ -3035,8 +3045,6 @@
   <data name="MailLearnTitle" xml:space="preserve"><value>Train the spam filter</value></data>
   <data name="MailRawMessage" xml:space="preserve"><value>Raw message (headers and body)</value></data>
   <data name="MailIsSpam" xml:space="preserve"><value>This message is spam</value></data>
-  <data name="MailOpenDkim" xml:space="preserve"><value>OpenDKIM</value></data>
-  <data name="MailDiagnostics" xml:space="preserve"><value>Diagnostics</value></data>
   <data name="MailRunServerCheck" xml:space="preserve"><value>Check the server configuration</value></data>
   <data name="MailSendTest" xml:space="preserve"><value>Send a test email</value></data>
   <data name="MailDeliverySent" xml:space="preserve"><value>Delivered (queue id {0})</value></data>
@@ -3067,6 +3075,21 @@
   <data name="MailServerChecks" xml:space="preserve"><value>Server checks</value></data>
   <data name="MailCollectorFindings" xml:space="preserve"><value>Inventory findings</value></data>
   <data name="MailWaitingForTask" xml:space="preserve"><value>Waiting for the server task</value></data>
+  <data name="MailReinstall" xml:space="preserve"><value>Reinstall mail</value></data>
+  <data name="MailReinstallAction" xml:space="preserve"><value>Reinstall</value></data>
+  <data name="MailReinstallConfirm" xml:space="preserve"><value>Reinstall</value></data>
+  <data name="MailReinstallErasesTitle" xml:space="preserve"><value>Everything is erased on this server</value></data>
+  <data name="MailReinstallErasesConfiguration" xml:space="preserve"><value>The Postfix, Dovecot and OpenDKIM configuration, and the spam filter Aetheus installed.</value></data>
+  <data name="MailReinstallErasesMailboxes" xml:space="preserve"><value>Every mailbox and all its mail, with no way back.</value></data>
+  <data name="MailReinstallErasesDkim" xml:space="preserve"><value>The DKIM key: after the new setup, a new DKIM record has to be published in the DNS.</value></data>
+  <data name="MailReinstallAfter" xml:space="preserve"><value>The page then returns to "Mail not configured": run "Configure" to set it up again.</value></data>
+  <data name="MailReinstallTypeToConfirm" xml:space="preserve"><value>Type {0} to confirm</value></data>
+  <data name="MailReinstallRunning" xml:space="preserve"><value>Erasing the mail stack</value></data>
+  <data name="MailReinstallSucceeded" xml:space="preserve"><value>The mail stack was erased. Run "Configure" to set it up again.</value></data>
+  <data name="MailReinstallFailed" xml:space="preserve"><value>Erasing the mail stack failed ({0}): {1}</value></data>
+  <data name="MailReinstallHelperRequired" xml:space="preserve"><value>The mail helper of this server cannot erase the stack yet (version {0}, {1} required): update the agent of this server.</value></data>
+  <data name="MailReinstallNoName" xml:space="preserve"><value>Neither a mail domain nor the mail host name of this server is known yet: wait for the next agent heartbeat.</value></data>
+  <data name="MailReinstallNoLog" xml:space="preserve"><value>no log line</value></data>
   <data name="MailDiagInstalled" xml:space="preserve"><value>Mail stack detected</value></data>
   <data name="MailDiagCapability" xml:space="preserve"><value>Mail management capability (sudo helper)</value></data>
   <data name="MailDiagHelperVersion" xml:space="preserve"><value>Mail helper version</value></data>
@@ -3369,11 +3392,8 @@
   <data name="RequiredField" xml:space="preserve"><value>This field is required.</value></data>
   <data name="All" xml:space="preserve"><value>All</value></data>
   <data name="MailSetupSteps" xml:space="preserve"><value>Setup steps</value></data>
-  <data name="MailSetupStepServer" xml:space="preserve"><value>Server and domain</value></data>
-  <data name="MailSetupStepAdmin" xml:space="preserve"><value>Administrator account</value></data>
-  <data name="MailSetupStepOptions" xml:space="preserve"><value>Options</value></data>
   <data name="MailHostnameHelp" xml:space="preserve"><value>The full name of this mail server, for example mx.yourdomain.com. It names the server, is the target of the MX record and the name on the certificate. Create an A record from this name to the server&apos;s IP address, and the reverse DNS (PTR) of that address back to this name.</value></data>
-  <data name="MailDomainHelp" xml:space="preserve"><value>The domain of the addresses served: what follows the @, for example yourdomain.com. The setup does not change the DNS; the records to publish are shown afterwards.</value></data>
+  <data name="MailDomainHelp" xml:space="preserve"><value>The domain of the addresses served: what follows the @, for example yourdomain.com.</value></data>
   <data name="MailDkimSelectorHelp" xml:space="preserve"><value>A free label (letters, digits, - and _) naming the DKIM signing key in the DNS: the record will be selector._domainkey.domain. Pick one that differs from another provider&apos;s on the same domain.</value></data>
   <data name="MailAdminEmailHelp" xml:space="preserve"><value>The first mailbox created, in the domain above, for example postmaster@yourdomain.com. It also receives the DMARC reports.</value></data>
   <data name="MailAdminPasswordHelp" xml:space="preserve"><value>The password of this mailbox, at least 12 characters.</value></data>
@@ -3391,11 +3411,178 @@
   <data name="ServiceActionNounStart" xml:space="preserve"><value>Start</value></data>
   <data name="ServiceActionNounStop" xml:space="preserve"><value>Stop</value></data>
   <data name="ServiceActionNounRestart" xml:space="preserve"><value>Restart</value></data>
-  <data name="MailNotConfigured" xml:space="preserve"><value>Mail not set up</value></data>
-  <data name="MailNotConfiguredTitle" xml:space="preserve"><value>Mail is not set up on this server yet</value></data>
-  <data name="MailSetupAction" xml:space="preserve"><value>Set up</value></data>
-  <data name="MailGuideServicesNotEnough" xml:space="preserve"><value>Postfix or Dovecot installed alone from the Services tab are not enough: the mailboxes, DKIM signing and encryption are set up by “Set up”.</value></data>
-  <data name="MailGuidePrerequisites" xml:space="preserve"><value>First: pick a full name for this server (for example mx.yourdomain.com), create its A record to the server&apos;s IP address and the reverse DNS (PTR) of that address to the name, and check with the host that outgoing port 25 is open.</value></data>
-  <data name="MailGuideRunSetup" xml:space="preserve"><value>Then “Set up”: server name, domain, DKIM selector, then the administrator mailbox; each field explains what it expects.</value></data>
-  <data name="MailGuideAfterSetup" xml:space="preserve"><value>Afterwards: obtain the certificate, test sending and receiving, publish SPF, DKIM and DMARC (Diagnostics tab), and point the MX record to this server last.</value></data>
+  <data name="EnvironmentNotFound" xml:space="preserve"><value>Environment not found (it may have been deleted).</value></data>
+  <data name="PipelineFormInvalid" xml:space="preserve"><value>Some fields of the form are invalid (name, description): fix them before saving.</value></data>
+  <data name="AppDatabaseTab" xml:space="preserve"><value>Database</value></data>
+  <data name="AppDatabaseNoData" xml:space="preserve"><value>No database measurement received from this application yet.</value></data>
+  <data name="AppDatabaseNoDataHint" xml:space="preserve"><value>It comes from the Aetheus.Telemetry package, with telemetry enabled and the database size measurement turned on (DatabaseSize.UsePostgreSql).</value></data>
+  <data name="AppDatabaseTotal" xml:space="preserve"><value>Database size</value></data>
+  <data name="AppDatabaseLargestTable" xml:space="preserve"><value>Largest table</value></data>
+  <data name="AppDatabaseMeasuredAt" xml:space="preserve"><value>Last measurement</value></data>
+  <data name="AppDatabaseNoTables" xml:space="preserve"><value>No table measured.</value></data>
+  <data name="AppDatabaseTable" xml:space="preserve"><value>Table</value></data>
+  <data name="AppDatabaseRows" xml:space="preserve"><value>Rows (estimate)</value></data>
+  <data name="AppDatabaseTrend" xml:space="preserve"><value>Over 24 h</value></data>
+  <data name="AppDatabaseTrendDay" xml:space="preserve"><value>{0} over 24 hours</value></data>
+  <data name="AppDatabaseTrendUnknown" xml:space="preserve"><value>No measurement 24 hours ago yet</value></data>
+  <data name="AppDatabaseNote" xml:space="preserve"><value>Sizes include indexes and TOAST, as pg_total_relation_size counts them; row counts are the planner estimates (pg_class.reltuples). Space freed by deleted rows comes back only after VACUUM FULL.</value></data>
+  <data name="SizeMegabytes" xml:space="preserve"><value>{0} MB</value></data>
+  <data name="SizeKilobytes" xml:space="preserve"><value>{0} kB</value></data>
+  <data name="ProjectDeletionTitle" xml:space="preserve"><value>Delete the project</value></data>
+  <data name="ProjectDeletionPreviewFailed" xml:space="preserve"><value>What the deletion would remove could not be read, so the project cannot be deleted from here.</value></data>
+  <data name="ProjectDeletionIrreversible" xml:space="preserve"><value>This cannot be undone</value></data>
+  <data name="ProjectDeletionIntro" xml:space="preserve"><value>Deleting the project also deletes everything that belongs to it:</value></data>
+  <data name="ProjectDeletionNothingElse" xml:space="preserve"><value>The project holds nothing else: only the project itself will be deleted.</value></data>
+  <data name="ProjectDeletionKeptOutside" xml:space="preserve"><value>Servers stay registered (only their link to the project goes), and backup archives stay on their hosts.</value></data>
+  <data name="ProjectDeletionActiveRuns" xml:space="preserve"><value>{0} pipeline run(s) of this project are in progress. Cancel them or wait for them to end before deleting the project.</value></data>
+  <data name="ProjectDeletionTypeName" xml:space="preserve"><value>Type the project name ({0}) to confirm</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Pipelines" xml:space="preserve"><value>Pipelines</value></data>
+  <data name="Enum_ProjectDeletionItemKind_PipelineRuns" xml:space="preserve"><value>Pipeline runs</value></data>
+  <data name="Enum_ProjectDeletionItemKind_PipelineStepRuns" xml:space="preserve"><value>Pipeline steps run</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Tasks" xml:space="preserve"><value>Agent tasks</value></data>
+  <data name="Enum_ProjectDeletionItemKind_TaskLogLines" xml:space="preserve"><value>Task log lines</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Approvals" xml:space="preserve"><value>Approvals</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Artifacts" xml:space="preserve"><value>Artifacts (files included)</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Environments" xml:space="preserve"><value>Environments</value></data>
+  <data name="Enum_ProjectDeletionItemKind_MonitoredApps" xml:space="preserve"><value>Monitored applications</value></data>
+  <data name="Enum_ProjectDeletionItemKind_TelemetryRecords" xml:space="preserve"><value>Telemetry and analytics records</value></data>
+  <data name="Enum_ProjectDeletionItemKind_BackupPolicies" xml:space="preserve"><value>Backup policies</value></data>
+  <data name="Enum_ProjectDeletionItemKind_ProjectServers" xml:space="preserve"><value>Project servers (links)</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Vaults" xml:space="preserve"><value>Vaults</value></data>
+  <data name="Enum_ProjectDeletionItemKind_VaultSecrets" xml:space="preserve"><value>Vault secrets</value></data>
+  <data name="Enum_ProjectDeletionItemKind_VariableLibraries" xml:space="preserve"><value>Variable libraries</value></data>
+  <data name="Enum_ProjectDeletionItemKind_ServiceConnections" xml:space="preserve"><value>Service connections</value></data>
+  <data name="Enum_ProjectDeletionItemKind_PackageFeeds" xml:space="preserve"><value>Package feeds</value></data>
+  <data name="Enum_ProjectDeletionItemKind_PortReservations" xml:space="preserve"><value>Port reservations</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Subscriptions" xml:space="preserve"><value>Subscriptions</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Releases" xml:space="preserve"><value>Releases</value></data>
+  <data name="Enum_ProjectDeletionItemKind_GitRepositories" xml:space="preserve"><value>Git repositories</value></data>
+  <data name="Enum_ProjectDeletionItemKind_GitConnections" xml:space="preserve"><value>Git connections</value></data>
+  <data name="Enum_ProjectDeletionItemKind_AnalysisReports" xml:space="preserve"><value>Analysis reports</value></data>
+  <data name="Enum_ProjectDeletionItemKind_AnalysisFindings" xml:space="preserve"><value>Analysis findings</value></data>
+  <data name="Enum_ProjectDeletionItemKind_WorkItems" xml:space="preserve"><value>Work items</value></data>
+  <data name="Enum_ProjectDeletionItemKind_TestSuites" xml:space="preserve"><value>Test suites</value></data>
+  <data name="Enum_ProjectDeletionItemKind_AiTasks" xml:space="preserve"><value>AI tasks</value></data>
+  <data name="SetUpNewProjectPipelinesConfirm" xml:space="preserve"><value>Project "{0}" created. Set up its pipelines now? The wizard checks the repository, the runner, the environments, the libraries and the adapter scripts, and links to the page that fixes each missing one.</value></data>
+  <data name="SetUpPipelines" xml:space="preserve"><value>Set up pipelines</value></data>
+  <data name="QaExtended" xml:space="preserve"><value>Extended QA</value></data>
+  <data name="QaExtendedPipelineHint" xml:space="preserve"><value>Heavy validation the nightly runs (performance, long scenarios), through the project's qa-extended.sh adapter.</value></data>
+  <data name="SecurityHistory" xml:space="preserve"><value>Secret history</value></data>
+  <data name="SecurityHistoryPipelineHint" xml:space="preserve"><value>Secret scan of the whole Git history, run by the nightly.</value></data>
+  <data name="ReadinessMissingScannerConfiguration" xml:space="preserve"><value>Scanner configuration missing</value></data>
+  <data name="ReadinessMissingScannerConfigurationHint" xml:space="preserve"><value>The security scanners read these files from the repository and stop without them. Commit them before the first run.</value></data>
+  <data name="ReadinessScannerFileGitleaks" xml:space="preserve"><value>Gitleaks rules; the two lines [extend] and useDefault = true apply the default rules</value></data>
+  <data name="ReadinessAdapterCi" xml:space="preserve"><value>builds and tests the project, then leaves the payload to deliver in .pipeline-artifacts/</value></data>
+  <data name="ReadinessAdapterQuality" xml:space="preserve"><value>runs the tests with coverage and the project's linter; may leave .pipeline-quality/coverage.cobertura.xml and .pipeline-quality/lint.sarif</value></data>
+  <data name="ReadinessAdapterQa" xml:space="preserve"><value>deploys the payload restored in .pipeline-artifacts/ to a disposable environment and validates it</value></data>
+  <data name="ReadinessAdapterQaExtended" xml:space="preserve"><value>runs the heavy nightly validation (performance, long scenarios) on the restored payload</value></data>
+  <data name="ReadinessAdapterDeployProd" xml:space="preserve"><value>deploys the restored candidate payload to production</value></data>
+  <data name="ReadinessAdapterReleaseFast" xml:space="preserve"><value>builds and deploys directly, without a candidate</value></data>
+  <data name="ReadinessAdapterPublishPackages" xml:space="preserve"><value>publishes the restored packages to their registry</value></data>
+  <data name="ReadinessAdapterPackage" xml:space="preserve"><value>builds and tests one package and leaves it in .pipeline-artifacts/packages/</value></data>
+  <data name="MailAssistantTitle" xml:space="preserve"><value>Set up mail</value></data>
+  <data name="MailAssistantIntro" xml:space="preserve"><value>Each step says what to do and checks it. Configure stays unavailable until the A record, the reverse DNS and outbound port 25 are verified.</value></data>
+  <data name="MailStepDomain" xml:space="preserve"><value>Domain</value></data>
+  <data name="MailStepDomainText" xml:space="preserve"><value>Type the mail domain, the part after the @. The host name and the administrator address fill in from it; change them if you need to.</value></data>
+  <data name="MailStepARecord" xml:space="preserve"><value>A record</value></data>
+  <data name="MailStepARecordText" xml:space="preserve"><value>At the DNS provider of the domain, create an A record so that {0} points to this server ({1}). Other mail servers and the certificate find the server through it.</value></data>
+  <data name="MailStepReverseDns" xml:space="preserve"><value>Reverse DNS</value></data>
+  <data name="MailStepReverseDnsText" xml:space="preserve"><value>At the hosting provider of the server (not at the domain registrar), set the reverse DNS (PTR) of {0} to {1}. Receiving servers reject or file as spam the mail of an address whose reverse DNS does not name its sender.</value></data>
+  <data name="MailStepOutbound" xml:space="preserve"><value>Outbound port 25</value></data>
+  <data name="MailStepOutboundText" xml:space="preserve"><value>Many hosting providers block outbound port 25, and a server that cannot reach it never delivers. The agent of this server connects to a public mail server ({0}) on port 25, reads its greeting and leaves without sending anything.</value></data>
+  <data name="MailOutboundNeedsAgentUpdate" xml:space="preserve"><value>The agent of this server is too old to run this check: update the agent first.</value></data>
+  <data name="MailStepConfigure" xml:space="preserve"><value>Mailbox and options</value></data>
+  <data name="MailStepConfigureText" xml:space="preserve"><value>Create the administrator mailbox and choose the options. Configure then installs and sets up Postfix, Dovecot and OpenDKIM.</value></data>
+  <data name="MailAfterSetupTitle" xml:space="preserve"><value>Then, on this page</value></data>
+  <data name="MailAfterSetupCertificate" xml:space="preserve"><value>Certificate: obtain the Let's Encrypt certificate of the host name.</value></data>
+  <data name="MailAfterSetupDnsRecords" xml:space="preserve"><value>SPF, DKIM and DMARC: publish the TXT records the status gives you to copy.</value></data>
+  <data name="MailAfterSetupMx" xml:space="preserve"><value>MX: point the MX of the domain at the host name.</value></data>
+  <data name="MailCheckPrerequisite" xml:space="preserve"><value>Check</value></data>
+  <data name="MailPrerequisiteCheckFailed" xml:space="preserve"><value>The check could not run. Try again.</value></data>
+  <data name="MailDiagOutbound" xml:space="preserve"><value>Outbound port 25 reachable</value></data>
+  <data name="MailNotChecked" xml:space="preserve"><value>Not checked</value></data>
+  <data name="MailStatusToFix" xml:space="preserve"><value>To fix</value></data>
+  <data name="MailConfigure" xml:space="preserve"><value>Configure</value></data>
+  <data name="MailConfigureNeedsPrerequisites" xml:space="preserve"><value>Configure needs the three checks above in green: go back to the red step.</value></data>
+  <data name="MailSetupRunning" xml:space="preserve"><value>Configuration in progress...</value></data>
+  <data name="MailSetupFailed" xml:space="preserve"><value>The configuration did not complete ({0}). See the task log.</value></data>
+  <data name="MailSpamFilterHelp" xml:space="preserve"><value>rspamd filters incoming spam. It can also be installed later from the Spam filter tab.</value></data>
+  <data name="MailAcmeEmailHelp" xml:space="preserve"><value>The address Let's Encrypt writes to before the certificate expires.</value></data>
+  <data name="MailStatusTitle" xml:space="preserve"><value>Mail status</value></data>
+  <data name="MailStatusAllGreen" xml:space="preserve"><value>Everything is green. Send a test message to check delivery end to end.</value></data>
+  <data name="MailStartServices" xml:space="preserve"><value>Start them</value></data>
+  <data name="MailFixServices" xml:space="preserve"><value>Stopped: {0}. Start them; the line turns green on the next heartbeat.</value></data>
+  <data name="MailFixCertificate" xml:space="preserve"><value>Postfix has no valid certificate for {0}. Obtain a Let's Encrypt certificate (the A record of the host name must point to the server), or install one already issued.</value></data>
+  <data name="MailFixCertificateNoHost" xml:space="preserve"><value>The mail host name is not known yet: wait for the next heartbeat.</value></data>
+  <data name="MailFixARecord" xml:space="preserve"><value>At the DNS provider of the domain, create this record:</value></data>
+  <data name="MailFixReverseDns" xml:space="preserve"><value>At the hosting provider of the server, set the reverse DNS of its address to the host name:</value></data>
+  <data name="MailFixMx" xml:space="preserve"><value>Point the MX of the domain at this server with this record:</value></data>
+  <data name="MailFixTxt" xml:space="preserve"><value>Publish this TXT record at the DNS provider of the domain:</value></data>
+  <data name="MailFixDkimUnknown" xml:space="preserve"><value>The DKIM key of this domain has not been read yet; it appears after the next heartbeat.</value></data>
+  <data name="MailFixUnknown" xml:space="preserve"><value>This check could not run (DNS resolver, or data not collected yet). It runs again on the next heartbeat.</value></data>
+  <data name="MailFixRecheck" xml:space="preserve"><value>The line turns green once the DNS answers; it is checked again on every heartbeat.</value></data>
+  <data name="MailDiagSpf" xml:space="preserve"><value>SPF of {0}</value></data>
+  <data name="MailDiagDkim" xml:space="preserve"><value>DKIM of {0}</value></data>
+  <data name="MailDiagDmarc" xml:space="preserve"><value>DMARC of {0}</value></data>
+  <data name="DataRetention" xml:space="preserve"><value>Data retention</value></data>
+  <data name="DataRetentionHelp" xml:space="preserve"><value>How much data this project keeps. A profile sets every value; an empty field keeps the profile&apos;s value.</value></data>
+  <data name="DataRetentionProfileLabel" xml:space="preserve"><value>Profile</value></data>
+  <data name="Enum_DataRetentionProfile_Light" xml:space="preserve"><value>Light</value></data>
+  <data name="Enum_DataRetentionProfile_Standard" xml:space="preserve"><value>Standard</value></data>
+  <data name="Enum_DataRetentionProfile_Complete" xml:space="preserve"><value>Complete</value></data>
+  <data name="DataRetentionExportInterval" xml:space="preserve"><value>Telemetry send interval (minutes)</value></data>
+  <data name="DataRetentionTelemetryDetail" xml:space="preserve"><value>Telemetry detail (days)</value></data>
+  <data name="DataRetentionAggregates" xml:space="preserve"><value>Hourly aggregates (months)</value></data>
+  <data name="DataRetentionAnalysisDetail" xml:space="preserve"><value>Analysis detail (days)</value></data>
+  <data name="DataRetentionAppLogs" xml:space="preserve"><value>Application logs (days)</value></data>
+  <data name="DataRetentionProfileValue" xml:space="preserve"><value>Profile: {0}</value></data>
+  <data name="DataRetentionSaved" xml:space="preserve"><value>Data retention saved</value></data>
+  <data name="DataRetentionLoadFailed" xml:space="preserve"><value>The data retention setting could not be loaded.</value></data>
+  <data name="AuditAction_DataRetentionUpdated" xml:space="preserve"><value>Data retention updated</value></data>
+  <data name="DataRetentionStorageBudget" xml:space="preserve"><value>Storage budget (MB)</value></data>
+  <data name="DataRetentionDefaultValue" xml:space="preserve"><value>Default: {0}</value></data>
+  <data name="NotificationEvent_project_storage_quota" xml:space="preserve"><value>Project storage budget reached</value></data>
+  <data name="ProjectStorage" xml:space="preserve"><value>Storage per project</value></data>
+  <data name="ProjectStorageEmpty" xml:space="preserve"><value>No project yet.</value></data>
+  <data name="ProjectStorageUsed" xml:space="preserve"><value>Used</value></data>
+  <data name="ProjectStorageBudget" xml:space="preserve"><value>Budget</value></data>
+  <data name="ProjectStorageShare" xml:space="preserve"><value>Share</value></data>
+  <data name="ProjectStorageLargestTable" xml:space="preserve"><value>Largest table</value></data>
+  <data name="ProjectStorageMeasuredNote" xml:space="preserve"><value>Rows of each project times the bytes per row of the database measurement of {0}. Over its budget, a project loses its oldest detail first; grades and totals stay.</value></data>
+  <data name="ProjectStorageEstimatedNote" xml:space="preserve"><value>Rows of each project times fixed bytes per row: Aetheus has no recent measurement of its own database. Over its budget, a project loses its oldest detail first; grades and totals stay.</value></data>
+  <data name="ReclaimSpace" xml:space="preserve"><value>Reclaim space</value></data>
+  <data name="ReclaimSpaceAction" xml:space="preserve"><value>Reclaim</value></data>
+  <data name="ReclaimSpaceHelp" xml:space="preserve"><value>A purge deletes rows but the table keeps its size on disk. Reclaiming rewrites one table (VACUUM FULL): the table is locked while it runs, which may take several minutes for a large one. Refused while a pipeline runs.</value></data>
+  <data name="ReclaimSpaceConfirm" xml:space="preserve"><value>Rewrite the table {0} to give its free space back? It stays locked until the end.</value></data>
+  <data name="ReclaimSpacePipelinesRunning" xml:space="preserve"><value>{0} pipeline runs are in progress: reclaiming waits until they have ended.</value></data>
+  <data name="ReclaimSpaceRunning" xml:space="preserve"><value>Reclaiming the space of {0}...</value></data>
+  <data name="ReclaimSpaceStarted" xml:space="preserve"><value>Reclaiming the space of {0} started.</value></data>
+  <data name="ReclaimSpaceRefused" xml:space="preserve"><value>Refused: a pipeline is running or another table is being processed.</value></data>
+  <data name="ReclaimSpaceBefore" xml:space="preserve"><value>Before</value></data>
+  <data name="ReclaimSpaceAfter" xml:space="preserve"><value>After</value></data>
+  <data name="ReclaimSpaceRequestedBy" xml:space="preserve"><value>Requested by</value></data>
+  <data name="ReclaimSpaceInProgress" xml:space="preserve"><value>In progress</value></data>
+  <data name="ReclaimSpaceDone" xml:space="preserve"><value>Done</value></data>
+  <data name="ReclaimSpaceFailedShort" xml:space="preserve"><value>Failed</value></data>
+  <data name="AuditAction_ReclaimSpaceStarted" xml:space="preserve"><value>Space reclaim started</value></data>
+  <data name="AuditAction_ReclaimSpaceCompleted" xml:space="preserve"><value>Space reclaimed</value></data>
+  <data name="AuditAction_ReclaimSpaceFailed" xml:space="preserve"><value>Space reclaim failed</value></data>
+  <data name="ReclaimSpaceStartedAt" xml:space="preserve"><value>Started</value></data>
+  <data name="TelemetrySendIntervalSetting" xml:space="preserve"><value>Sent {0} ({1}): one point {2}</value></data>
+  <data name="TelemetrySendIntervalProfile" xml:space="preserve"><value>{0} profile</value></data>
+  <data name="TelemetrySendIntervalOverride" xml:space="preserve"><value>project setting</value></data>
+  <data name="TelemetrySendIntervalHourly" xml:space="preserve"><value>Beyond 24 hours, the chart shows one point per hour (hourly average).</value></data>
+  <data name="TelemetrySendIntervalObservedDiffers" xml:space="preserve"><value>Observed interval: one point {0}. The application does not follow the server interval: it only applies from Aetheus.Telemetry 1.1.0, which reads it again every 15 minutes.</value></data>
+  <data name="TelemetrySendIntervalUnobserved" xml:space="preserve"><value>The server interval only applies from Aetheus.Telemetry 1.1.0; an older version keeps its own interval.</value></data>
+  <data name="TelemetrySendIntervalPackageHelp" xml:space="preserve"><value>Applied by Aetheus.Telemetry 1.1.0 or later, which reads this setting again every 15 minutes; an older version keeps its own interval.</value></data>
+  <data name="TelemetryEveryMinutesShort" xml:space="preserve"><value>every {0} min</value></data>
+  <data name="TelemetryEveryMinuteShort" xml:space="preserve"><value>every minute</value></data>
+  <data name="TelemetryEverySecondsShort" xml:space="preserve"><value>every {0} s</value></data>
+  <data name="TelemetryEveryMinutesLong" xml:space="preserve"><value>every {0} minutes</value></data>
+  <data name="TelemetryEveryMinuteLong" xml:space="preserve"><value>per minute</value></data>
+  <data name="TelemetryEverySecondsLong" xml:space="preserve"><value>every {0} seconds</value></data>
+  <data name="GridExportFailed" xml:space="preserve"><value>Export failed: a page of the table could not be read, no file was produced.</value></data>
+  <data name="GridExportUntitled" xml:space="preserve"><value>Aetheus table</value></data>
+  <data name="GridExportSource" xml:space="preserve"><value>Source</value></data>
+  <data name="GridExportAddress" xml:space="preserve"><value>Page address</value></data>
 </root>

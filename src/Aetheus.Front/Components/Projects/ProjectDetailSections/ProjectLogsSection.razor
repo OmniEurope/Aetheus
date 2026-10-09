@@ -10,7 +10,7 @@ else
        grid header filters search; virtualized, no pager (R-049). Recette R-212: each header filter is a
        real column filter of the project's logs endpoint. *@
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_result.Items" TItem="TaskLogDto"
-        Count="@_result.TotalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync"
+        Count="@_result.TotalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
         PageSize="25" EmptyText="@L["NoLogs"]"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<TaskLogDto>(_result.Items, _result.TotalCount))">

@@ -71,10 +71,22 @@ public static class MailUiText
     /// <summary>Label of a diagnostics row; <c>mx:&lt;domain&gt;</c> rows carry the domain.</summary>
     public static string DiagnosticLabel(IStringLocalizer<AppStrings> l, string key)
     {
-        if (key.StartsWith("mx:", StringComparison.Ordinal))
-            return string.Format(System.Globalization.CultureInfo.CurrentCulture, l["MailDiagMx"], key[3..]);
-        return s_diagnosticKeys.TryGetValue(key, out var resource) ? l[resource] : key;
+        // Recette R2-090: SPF, DKIM and DMARC lines carry their domain like the MX line.
+        foreach (var (prefix, resource) in s_domainKeys)
+        {
+            if (key.StartsWith(prefix, StringComparison.Ordinal))
+                return string.Format(System.Globalization.CultureInfo.CurrentCulture, l[resource], key[prefix.Length..]);
+        }
+        return s_diagnosticKeys.TryGetValue(key, out var label) ? l[label] : key;
     }
+
+    private static readonly (string Prefix, string Resource)[] s_domainKeys =
+    [
+        ("mx:", "MailDiagMx"),
+        ("spf:", "MailDiagSpf"),
+        ("dkim:", "MailDiagDkim"),
+        ("dmarc:", "MailDiagDmarc")
+    ];
 
     /// <summary>Localised detail when the code is known, otherwise the raw detail (addresses, counts, host names).</summary>
     public static string Detail(IStringLocalizer<AppStrings> l, string detail) =>

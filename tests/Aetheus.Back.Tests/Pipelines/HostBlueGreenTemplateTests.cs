@@ -16,12 +16,11 @@ namespace Aetheus.Back.Tests.Pipelines;
 public sealed class HostBlueGreenTemplateTests
 {
     /// <summary>
-    /// The version a consuming pipeline should extend. Earlier versions stay published and immutable;
-    /// every contract below is asserted against the current one, so a new version cannot quietly drop
-    /// one. It pinned v2 for three releases, which left v3 and v4 unchecked: it now follows the
-    /// latest the seeder publishes (asserted below).
+    /// The version a consuming pipeline should extend. Recette R2-094 restarted the numbering: v1 holds
+    /// what was published as v6, and the older contents are gone. Every contract below is asserted
+    /// against the latest the seeder publishes (asserted below), so a new version cannot quietly drop one.
     /// </summary>
-    private const string Resource = "host-bluegreen-deploy-v6.yaml";
+    private const string Resource = "host-bluegreen-deploy-v1.yaml";
 
     [Fact]
     public void Resource_IsTheLatestPublishedVersion()
@@ -32,12 +31,12 @@ public sealed class HostBlueGreenTemplateTests
     }
 
     /// <summary>
-    /// v5 removes the per-step subsets v3 and v4 introduced: the control plane now decides per step
-    /// what it can forward, so a consumer maintains one list. A subset left behind would be a
-    /// variable nothing reads, and a consumer still setting it would believe it did something.
+    /// One Compose list, no per-step subset: the control plane decides per step what it can forward,
+    /// so a consumer maintains one list. A subset left behind would be a variable nothing reads, and a
+    /// consumer still setting it would believe it did something.
     /// </summary>
     [Fact]
-    public void V5_DeclaresOneComposeListAndNoPerStepSubset()
+    public void Template_DeclaresOneComposeListAndNoPerStepSubset()
     {
         var definition = Parse();
 
@@ -45,16 +44,6 @@ public sealed class HostBlueGreenTemplateTests
         var yaml = DeliveryPipelineTemplateSeeder.ReadResource(Resource);
         Assert.DoesNotContain("$(BG_COMPOSE_ENV_CUTOVER)", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("$(BG_COMPOSE_ENV_ROLLBACK)", yaml, StringComparison.Ordinal);
-    }
-
-    /// <summary>v4 is published and immutable; it keeps its subsets for the consumers pinned on it.</summary>
-    [Fact]
-    public void PublishedV4_KeepsItsCutoverAndRollbackSubsets()
-    {
-        var v4 = DeliveryPipelineTemplateSeeder.ReadResource("host-bluegreen-deploy-v4.yaml");
-
-        Assert.Contains("compose_env: \"$(BG_COMPOSE_ENV_CUTOVER)\"", v4, StringComparison.Ordinal);
-        Assert.Contains("compose_env: \"$(BG_COMPOSE_ENV_ROLLBACK)\"", v4, StringComparison.Ordinal);
     }
 
     private static PipelineYamlDefinition Parse() =>
@@ -243,18 +232,5 @@ public sealed class HostBlueGreenTemplateTests
         Assert.Equal(5, blueGreenSteps.Length);
         Assert.All(blueGreenSteps, step => Assert.Equal("$(BG_COMPOSE_ENV)", step.ComposeEnv));
         Assert.Equal(string.Empty, definition.Variables["BG_COMPOSE_ENV"]);
-    }
-
-    /// <summary>
-    /// v1 is published and immutable - the seeder refuses a version whose content changed - so it is
-    /// pinned here rather than merely left alone. It also documents what v2 adds.
-    /// </summary>
-    [Fact]
-    public void PublishedV1_StaysWithoutTheComposeInputsThatV2Adds()
-    {
-        var v1 = DeliveryPipelineTemplateSeeder.ReadResource("host-bluegreen-deploy-v1.yaml");
-
-        Assert.DoesNotContain("BG_COMPOSE_ENV", v1, StringComparison.Ordinal);
-        Assert.Contains("type: bluegreen-switch", v1, StringComparison.Ordinal);
     }
 }

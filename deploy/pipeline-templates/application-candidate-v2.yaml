@@ -1,4 +1,13 @@
 # SPDX-License-Identifier: EUPL-1.2
+# v2 (recette R2-121), for projects onboarded through the setup wizard. Against v1:
+# - the released artifact defaults to ApplicationPayload-artifacts, the payload application-ci packages
+#   (v1 named Package-artifacts, which no generic pipeline produces);
+# - the baseline restore exports the deployed baseline's identity itself, so v1's separate export step,
+#   which ran beside the restore (the steps of a stage run concurrently, ADR-012) and needed Node on the
+#   runner, is gone; the DELIVERY_BASELINE_* defaults below describe a first release;
+# - Quality, Security and QA run only for the pipelines the project has (APPLICATION_*_ENABLED, written
+#   by the wizard); a stage skipped that way counts as done for the next one.
+# v1 is unchanged and stays what aetheus-candidate pins.
 name: application-candidate-template
 trigger: manual
 parameters:
@@ -11,8 +20,15 @@ variables:
   APPLICATION_QUALITY_PIPELINE: application-quality
   APPLICATION_SECURITY_PIPELINE: application-security
   APPLICATION_QA_PIPELINE: application-qa
-  APPLICATION_ARTIFACT_NAME: Package-artifacts
+  APPLICATION_ARTIFACT_NAME: ApplicationPayload-artifacts
+  APPLICATION_QUALITY_ENABLED: "true"
+  APPLICATION_SECURITY_ENABLED: "true"
+  APPLICATION_QA_ENABLED: "true"
   CANDIDATE_VERSION: "c-$(BUILD_SOURCEVERSION)"
+  DELIVERY_BASELINE_BOOTSTRAP: "true"
+  DELIVERY_BASELINE_CANDIDATE_VERSION: ""
+  DELIVERY_BASELINE_SOURCE_SHA: ""
+  DELIVERY_BASELINE_CONTRACT_SHA256: ""
 
 stages:
   - name: Baseline
@@ -22,31 +38,11 @@ stages:
     steps:
       - name: Restore factually deployed baseline contract
         type: restore-artifacts
-        release: current-deployed
+        release: previous-deployed
+        artifact: "$(APPLICATION_ARTIFACT_NAME)"
         target_directory: .delivery-baseline
         allow_missing: true
         timeout_seconds: 1200
-      - name: Export immutable baseline identity
-        working_directory: "$(WORKSPACE)"
-        shell: |
-          set -eu
-          CONTRACT=".delivery-baseline/.pipeline-artifacts/delivery-contract.json"
-          if test -s "$CONTRACT"; then
-            node - "$CONTRACT" <<'NODE'
-          const fs = require("node:fs");
-          const crypto = require("node:crypto");
-          const path = process.argv[2];
-          const bytes = fs.readFileSync(path);
-          const contract = JSON.parse(bytes);
-          console.log("##aetheus[setvariable name=DELIVERY_BASELINE_BOOTSTRAP]false");
-          console.log(`##aetheus[setvariable name=DELIVERY_BASELINE_CANDIDATE_VERSION]${contract.candidateVersion}`);
-          console.log(`##aetheus[setvariable name=DELIVERY_BASELINE_SOURCE_SHA]${contract.sourceSha}`);
-          console.log(`##aetheus[setvariable name=DELIVERY_BASELINE_CONTRACT_SHA256]${crypto.createHash("sha256").update(bytes).digest("hex")}`);
-          NODE
-          else
-            echo "##aetheus[setvariable name=DELIVERY_BASELINE_BOOTSTRAP]true"
-          fi
-        timeout_seconds: 120
 
   - name: CI
     group: Build
@@ -69,6 +65,7 @@ stages:
     execution_role: build
     os: linux
     depends_on: [CI]
+    condition: "eq(variables['APPLICATION_QUALITY_ENABLED'], 'true')"
     steps:
       - name: Produce quality evidence and evaluate its gate
         type: trigger
@@ -80,6 +77,7 @@ stages:
     execution_role: build
     os: linux
     depends_on: [CI]
+    condition: "eq(variables['APPLICATION_SECURITY_ENABLED'], 'true')"
     steps:
       - name: Produce security evidence and evaluate its gate
         type: trigger
@@ -91,6 +89,7 @@ stages:
     execution_role: build
     os: linux
     depends_on: [Quality, Security]
+    condition: "eq(variables['APPLICATION_QA_ENABLED'], 'true')"
     steps:
       - name: Validate V, dynamic security, rollback V-1 and teardown
         type: trigger

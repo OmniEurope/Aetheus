@@ -22,6 +22,7 @@ public partial class PipelinesList : IAsyncDisposable
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private ILogger<PipelinesList> Logger { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
+    [Inject] private PageStateCache PageState { get; set; } = default!;
 
     /// <summary>Name of the page-header outlet the list fills with its actions (recette R-124): the list has no toolbar row of its own. The
     /// three hosts pass it to their <see cref="PageHeader"/> as <c>ActionsSection</c>.</summary>
@@ -101,9 +102,13 @@ public partial class PipelinesList : IAsyncDisposable
         _triggerOptions = [.. Enum.GetValues<PipelineTriggerType>().Select(trigger => new OmniOption<PipelineTriggerType>(trigger, L.Localize(trigger)))];
 
         // The tabs render once the overview is in, so the remembered tab is known before they do.
-        _loading = true;
+        // Recette R2-087: a return shows the list as it was left, filters included, and refreshes it.
+        _stateTicket = PageState.Begin();
+        _overviewLoaded = RestoreState();
+        _loading = !_overviewLoaded;
         await Views.RestoreAsync();
         await LoadOverviewAsync();
+        RememberState();
 
         await StartHubAsync();
     }
@@ -126,7 +131,7 @@ public partial class PipelinesList : IAsyncDisposable
 
     /// <summary>The catalogue as the table shows it: every filter applied, starred pipelines first
     /// (recette R-119).</summary>
-    private IReadOnlyList<PipelineDependencyDto> FilteredCatalog => PipelineCatalogView.OrderFavoritesFirst(
+    private IReadOnlyList<PipelineDependencyDto> FilteredCatalog => PipelineCatalogView.DefaultOrder(
         FilteredBeforeStatus.Where(item => PipelineCatalogView.MatchesAny(item, _statusFilters, _fleetItems)),
         _favoritePipelineIds);
 
@@ -294,6 +299,39 @@ public partial class PipelinesList : IAsyncDisposable
         }
     }
 
+    private string StateAddress => $"pipelines-list:{ServerId}:{ProjectId}";
+
+    private bool RestoreState()
+    {
+        if (!PageState.TryRestore<PipelinesListState>(StateAddress, out var state)) return false;
+        _pipelines = state.Pipelines;
+        _recentRuns = state.RecentRuns;
+        _fleetItems = state.FleetItems;
+        _templateOptions = state.TemplateOptions;
+        _fleetAvailable = state.FleetAvailable;
+        _favoritePipelineIds = state.FavoritePipelineIds;
+        _totalCount = state.TotalCount;
+        _search = state.Search;
+        _triggerFilters = state.TriggerFilters;
+        // A ?templateId= link chooses its model; otherwise the reader's last choice comes back.
+        if (TemplateId is null) _templateFilterIds = state.TemplateFilterIds;
+        _statusFilters.UnionWith(state.StatusFilters);
+        _favoritesOnly = state.FavoritesOnly;
+        _withChildrenOnly = state.WithChildrenOnly;
+        return true;
+    }
+
+    // FRONT-020: the session this page was opened in; once signed out, its state is not remembered.
+    private ListCacheService.Ticket _stateTicket;
+
+    private void RememberState()
+    {
+        if (!_overviewLoaded) return;
+        PageState.Remember(_stateTicket, StateAddress, new PipelinesListState(_pipelines, _recentRuns, _fleetItems, _templateOptions,
+            _fleetAvailable, _favoritePipelineIds, _totalCount, _search, _triggerFilters, _templateFilterIds,
+            [.. _statusFilters], _favoritesOnly, _withChildrenOnly));
+    }
+
     private Task ApplyFilters()
     {
         return InvokeAsync(StateHasChanged);
@@ -396,6 +434,12 @@ public partial class PipelinesList : IAsyncDisposable
 
     private async Task StartHubAsync()
     {
+        // Recette R2-100: the page can be left while its overview loads. DisposeAsync then cancels and
+        // disposes the live lifetime, and reading its Token here threw ObjectDisposedException into the
+        // error boundary. Cancellation always precedes disposal, so IsCancellationRequested (which never
+        // throws) says the page is gone; the token is read once, while the source is alive.
+        if (_liveLifetime.IsCancellationRequested) return;
+        var lifetime = _liveLifetime.Token;
         try
         {
             _hubConnection = HubFactory.Create("pipelines");
@@ -424,6 +468,8 @@ public partial class PipelinesList : IAsyncDisposable
             Logger.LogDebug(exception, "Pipeline live connection was unavailable during initial startup");
         }
 
+        // Left while the first hub started: DisposeAsync has run, a hub created now would never be disposed.
+        if (lifetime.IsCancellationRequested) return;
         try
         {
             _entityHub = HubFactory.Create("entities");
@@ -443,7 +489,8 @@ public partial class PipelinesList : IAsyncDisposable
             Logger.LogDebug(exception, "Pipeline entity live connection was unavailable during initial startup");
         }
 
-        _liveRecoveryTask = RecoverLiveConnectionsAsync(_liveLifetime.Token);
+        if (lifetime.IsCancellationRequested) return;
+        _liveRecoveryTask = RecoverLiveConnectionsAsync(lifetime);
     }
 
     private async Task RecoverLiveConnectionsAsync(CancellationToken ct)
@@ -497,8 +544,14 @@ public partial class PipelinesList : IAsyncDisposable
         }
     }
 
+    private bool _disposed;
+
     public async ValueTask DisposeAsync()
     {
+        // Disposed once: a second call would Cancel() the already disposed live lifetime.
+        if (_disposed) return;
+        _disposed = true;
+        RememberState();
         Permissions.OnPermissionsChanged -= OnPermissionsChanged;
         _liveLifetime.Cancel();
         if (_liveRecoveryTask is not null)

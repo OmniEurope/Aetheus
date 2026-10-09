@@ -87,4 +87,7 @@ public partial class ServerMailQueueTab
         < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
         _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
     };
+
+    /// <summary>Recette R2-124: the export writes the size as the cell does.</summary>
+    private static readonly Func<MailQueueItemDto, object?> SizeExport = item => FormatBytes(item.SizeBytes);
 }

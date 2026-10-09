@@ -1,0 +1,154 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R2-080: the first configuration, step by step on the page. Recette R-512: every field carries
+   its "?" help (OmniFormField.Help, shown on hover and keyboard focus). *@
+<OmniCard Class="omni-u-mb-lg mail-setup-assistant">
+    <OmniStack Gap="OmniSpacing.Medium">
+        <OmniHeading Level="OmniHeadingLevel.H5">@L["MailAssistantTitle"]</OmniHeading>
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@(StackPresent ? L["MailInstalledNotConfigured"] : L["MailAssistantIntro"])</OmniText>
+        @if (!Server.MailSetupAvailable)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning" Class="mail-setup-capability">@L["MailSetupCapabilityRequired"]</OmniAlert>
+        }
+
+        <OmniWizard Value="@_step" ValueChanged="@OnStepChangedAsync" Label="@L["MailSetupSteps"]"
+                    FinishText="@L["MailConfigure"]" OnFinish="@ConfigureAsync">
+            <OmniWizardStep Title="@L["MailStepDomain"]" Validate="@(() => ValidateStepAsync(StepDomain))">
+                <OmniStack Gap="OmniSpacing.Medium">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailStepDomainText"]</OmniText>
+                    <OmniFormField Label="@L["DomainName"]" Help="@L["MailDomainHelp"]" For="mail-setup-domain">
+                        <OmniTextBox Id="mail-setup-domain" Value="@_model.Domain" ValueChanged="@((string value) => OnDomainChanged(value))"
+                                     ValueExpression="@(() => _model.Domain)" Placeholder="@L["PlaceholderDomain"]" />
+                    </OmniFormField>
+                    <OmniFormField Label="@L["Hostname"]" Help="@L["MailHostnameHelp"]" For="mail-setup-hostname">
+                        <OmniTextBox Id="mail-setup-hostname" @bind-Value="_model.Hostname" Placeholder="@L["PlaceholderMailHost"]" />
+                    </OmniFormField>
+                    <OmniFormField Label="@L["DkimSelector"]" Help="@L["MailDkimSelectorHelp"]" For="mail-setup-dkim">
+                        <OmniTextBox Id="mail-setup-dkim" @bind-Value="_model.DkimSelector" Placeholder="default" />
+                    </OmniFormField>
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckMxAsync" Disabled="@(!CanCheckMx)" Busy="@_checkingMx"><OmniIcon Name="OmniIconName.Database" /> <span>@L["MailCheckCurrentRouting"]</span></OmniButton>
+                        @if (_mxCheckFailed || (PreviewMatchesDomain && _mxPreview!.Verdict == MailCheckVerdict.Unknown))
+                        {
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailRoutingCheckFailed"]</OmniText>
+                        }
+                        else if (PreviewMatchesDomain && _mxPreview!.Verdict == MailCheckVerdict.Missing)
+                        {
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailNoCurrentMx"]</OmniText>
+                        }
+                        else if (PreviewMatchesDomain)
+                        {
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 mail-current-mx">@string.Format(L["MailCurrentMxHosts"], string.Join(", ", _mxPreview!.Hosts))</OmniText>
+                        }
+                    </OmniStack>
+                    @if (_stepErrors.Count > 0)
+                    {
+                        <OmniAlert Severity="OmniSeverity.Danger" Class="mail-setup-step-errors">@foreach (var error in _stepErrors) { <div>@error</div> }</OmniAlert>
+                    }
+                </OmniStack>
+            </OmniWizardStep>
+
+            <OmniWizardStep Title="@L["MailStepARecord"]" CanContinue="@ARecordOk">
+                <OmniStack Gap="OmniSpacing.Medium">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["MailStepARecordText"], Host, ServerIp)</OmniText>
+                    <OmniCodeBlock Title="@($"A {Host}")" Code="@ServerIp" Inline="true" />
+                    <MailCheckLine Label="@L["MailDiagHostnameDns"]" IsOk="@(ARecord is null ? null : ARecordOk)"
+                                   Detail="@(ARecord is null ? null : MailUiText.Detail(L, ARecord.Detail))" Class="mail-prereq-a" />
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckDnsAsync" Busy="@_checkingDns" Class="mail-prereq-check"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailCheckPrerequisite"]</span></OmniButton>
+                        @if (_dnsCheckFailed)
+                        {
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0">@L["MailPrerequisiteCheckFailed"]</OmniText>
+                        }
+                    </OmniStack>
+                </OmniStack>
+            </OmniWizardStep>
+
+            <OmniWizardStep Title="@L["MailStepReverseDns"]" CanContinue="@ReverseDnsOk">
+                <OmniStack Gap="OmniSpacing.Medium">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["MailStepReverseDnsText"], ServerIp, Host)</OmniText>
+                    <OmniCodeBlock Title="@($"PTR {ServerIp}")" Code="@Host" Inline="true" />
+                    <MailCheckLine Label="@L["MailDiagReverseDns"]" IsOk="@(ReverseDns is null ? null : ReverseDnsOk)"
+                                   Detail="@(ReverseDns is null ? null : MailUiText.Detail(L, ReverseDns.Detail))" Class="mail-prereq-ptr" />
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckDnsAsync" Busy="@_checkingDns" Class="mail-prereq-check"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailCheckPrerequisite"]</span></OmniButton>
+                        @if (_dnsCheckFailed)
+                        {
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0">@L["MailPrerequisiteCheckFailed"]</OmniText>
+                        }
+                    </OmniStack>
+                </OmniStack>
+            </OmniWizardStep>
+
+            <OmniWizardStep Title="@L["MailStepOutbound"]" CanContinue="@OutboundOk">
+                <OmniStack Gap="OmniSpacing.Medium">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["MailStepOutboundText"], MailOutboundProbe.Target)</OmniText>
+                    <MailCheckLine Label="@L["MailDiagOutbound"]" IsOk="@_outbound?.IsOk" Detail="@_outbound?.Detail" Class="mail-prereq-outbound" />
+                    @if (!AgentCanProbe)
+                    {
+                        <OmniAlert Severity="OmniSeverity.Warning" Class="mail-outbound-agent-old">@L["MailOutboundNeedsAgentUpdate"]</OmniAlert>
+                    }
+                    else
+                    {
+                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ProbeOutboundAsync" Busy="@(_probeQueuing || _probeTaskId is not null)" Class="mail-prereq-check"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailCheckPrerequisite"]</span></OmniButton>
+                            @if (_probeTaskId is not null)
+                            {
+                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailWaitingForTask"]</OmniText>
+                            }
+                        </OmniStack>
+                    }
+                </OmniStack>
+            </OmniWizardStep>
+
+            <OmniWizardStep Title="@L["MailStepConfigure"]" CanContinue="@CanConfigure" Validate="@(() => ValidateStepAsync(StepConfigure))">
+                <OmniStack Gap="OmniSpacing.Medium">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailStepConfigureText"]</OmniText>
+                    <OmniFormField Label="@L["AdminEmail"]" Help="@L["MailAdminEmailHelp"]" For="mail-setup-admin">
+                        <OmniTextBox Id="mail-setup-admin" @bind-Value="_model.Email" Placeholder="admin@example.com" />
+                    </OmniFormField>
+                    <OmniFormField Label="@L["AdminPassword"]" Help="@L["MailAdminPasswordHelp"]" For="mail-setup-password">
+                        <OmniPassword Id="mail-setup-password" @bind-Value="_model.Password" Autocomplete="new-password" />
+                    </OmniFormField>
+                    <OmniFormField Help="@L["MailQuotaHelp"]" For="mail-setup-quota"><LabelContent>@($"{L["Quota"]} (MB)")</LabelContent><ChildContent>
+                        <OmniNumeric Id="mail-setup-quota" @bind-Value="_model.QuotaMb" Minimum="10" Maximum="102400" />
+                    </ChildContent></OmniFormField>
+                    <OmniFormField Label="@L["MailSpamFilter"]" Help="@L["MailSpamFilterHelp"]" For="mail-setup-spam">
+                        <OmniCheckBox Id="mail-setup-spam" @bind-Value="_model.EnableSpamFilter">@L["MailSetupSpamFilter"]</OmniCheckBox>
+                    </OmniFormField>
+                    <OmniStack Gap="OmniSpacing.XSmall" Class="mail-setup-prerequisites">
+                        <MailCheckLine Label="@L["MailDiagHostnameDns"]" IsOk="@(ARecord is null ? null : ARecordOk)" />
+                        <MailCheckLine Label="@L["MailDiagReverseDns"]" IsOk="@(ReverseDns is null ? null : ReverseDnsOk)" />
+                        <MailCheckLine Label="@L["MailDiagOutbound"]" IsOk="@_outbound?.IsOk" />
+                    </OmniStack>
+                    @if (!PrerequisitesOk)
+                    {
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0 mail-configure-blocked">@L["MailConfigureNeedsPrerequisites"]</OmniText>
+                    }
+                    <OmniStack Gap="OmniSpacing.XSmall">
+                        <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["MailAfterSetupTitle"]</OmniText>
+                        <ol class="mail-after-setup">
+                            <li>@L["MailAfterSetupCertificate"]</li>
+                            <li>@L["MailAfterSetupDnsRecords"]</li>
+                            <li>@L["MailAfterSetupMx"]</li>
+                        </ol>
+                    </OmniStack>
+                    @if (SetupBusy)
+                    {
+                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-setup-running">
+                            <AetheusLoader Size="OmniControlSize.Small" />
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailSetupRunning"]</OmniText>
+                        </OmniStack>
+                    }
+                    @if (_setupFailure is { } failure)
+                    {
+                        <OmniAlert Severity="OmniSeverity.Danger" Class="mail-setup-failed">@string.Format(L["MailSetupFailed"], L.Localize(failure))</OmniAlert>
+                    }
+                    @if (_stepErrors.Count > 0)
+                    {
+                        <OmniAlert Severity="OmniSeverity.Danger" Class="mail-setup-step-errors">@foreach (var error in _stepErrors) { <div>@error</div> }</OmniAlert>
+                    }
+                </OmniStack>
+            </OmniWizardStep>
+        </OmniWizard>
+    </OmniStack>
+</OmniCard>

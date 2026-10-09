@@ -351,6 +351,7 @@ public sealed class AiTaskRepositoryTests : IDisposable
                 Id = 1,
                 Name = "on-push",
                 ProfileId = 1,
+                ProjectId = 5,
                 Triggers = [new AiTaskTrigger { Id = 1, EventType = "push" }]
             },
             new AiTaskDefinition
@@ -358,6 +359,7 @@ public sealed class AiTaskRepositoryTests : IDisposable
                 Id = 2,
                 Name = "on-push-disabled",
                 ProfileId = 1,
+                ProjectId = 5,
                 Enabled = false,
                 Triggers = [new AiTaskTrigger { Id = 2, EventType = "push" }]
             },
@@ -366,14 +368,62 @@ public sealed class AiTaskRepositoryTests : IDisposable
                 Id = 3,
                 Name = "on-release",
                 ProfileId = 1,
+                ProjectId = 5,
                 Triggers = [new AiTaskTrigger { Id = 3, EventType = "release" }]
             });
         await SaveAsync();
         _db.ChangeTracker.Clear();
 
-        var matched = await _repository.GetDefinitionsForEventAsync("push", Ct);
+        var matched = await _repository.GetDefinitionsForEventAsync("push", 5, null, Ct);
 
         Assert.Equal(["on-push"], matched.Select(definition => definition.Name));
+    }
+
+    [Fact]
+    public async Task GetDefinitionsForEventAsync_OnlyTheEventOwnersDefinitionsAcrossOrganizations()
+    {
+        // Two organizations, each with a server and its own AI definition on the same event type.
+        _db.AiRunnerProfiles.AddRange(Profile(1, "org-one", organizationId: 1), Profile(2, "org-two", organizationId: 2));
+        _db.Servers.AddRange(
+            new Server { Id = 10, Name = "server-a", OrganizationId = 1 },
+            new Server { Id = 20, Name = "server-b", OrganizationId = 2 });
+        _db.AiTaskDefinitions.AddRange(
+            new AiTaskDefinition
+            {
+                Id = 1,
+                Name = "server-a-alert",
+                ProfileId = 1,
+                ServerId = 10,
+                Triggers = [new AiTaskTrigger { Id = 1, EventType = "alert.triggered" }]
+            },
+            new AiTaskDefinition
+            {
+                Id = 2,
+                Name = "server-b-alert",
+                ProfileId = 2,
+                ServerId = 20,
+                Triggers = [new AiTaskTrigger { Id = 2, EventType = "alert.triggered" }]
+            },
+            new AiTaskDefinition
+            {
+                Id = 3,
+                Name = "project-alert",
+                ProfileId = 2,
+                ProjectId = 30,
+                Triggers = [new AiTaskTrigger { Id = 3, EventType = "alert.triggered" }]
+            });
+        await SaveAsync();
+        _db.ChangeTracker.Clear();
+
+        var forServerA = await _repository.GetDefinitionsForEventAsync("alert.triggered", null, 10, Ct);
+        var forServerB = await _repository.GetDefinitionsForEventAsync("alert.triggered", null, 20, Ct);
+        var forProject = await _repository.GetDefinitionsForEventAsync("alert.triggered", 30, null, Ct);
+        var unowned = await _repository.GetDefinitionsForEventAsync("alert.triggered", null, null, Ct);
+
+        Assert.Equal(["server-a-alert"], forServerA.Select(definition => definition.Name));
+        Assert.Equal(["server-b-alert"], forServerB.Select(definition => definition.Name));
+        Assert.Equal(["project-alert"], forProject.Select(definition => definition.Name));
+        Assert.Empty(unowned);
     }
 
     // ---------- execution target resolution ----------

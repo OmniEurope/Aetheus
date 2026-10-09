@@ -27,6 +27,34 @@ public sealed class AetheusGridPresetsTests : BunitContext
         Assert.Equal(OmniDataGridHeaderWrap.Truncate, grid.HeaderWrap); // R-538: titles on one line
     }
 
+    /// <summary>Recette R2-124 (second decision of 2026-10-05), OE 1.6.0: a raw grid has no export bar by
+    /// default; it shows Markdown (blue), alone, when the grid shows its footer bar; the opt-out written on
+    /// the grid wins.</summary>
+    [Fact]
+    public void RawGrid_HasNoExportBarByDefault_MarkdownOnlyWhenAsked_AndTheOptOutWins()
+    {
+        var grid = Render<OmniDataGrid<string>>(parameters => parameters.Add(g => g.Items, ["a"]));
+
+        Assert.False(grid.Instance.ShowFooterBar);
+        Assert.False(grid.Instance.ExportCsv);
+        Assert.False(grid.Instance.ExportExcel);
+        Assert.False(grid.Instance.ExportPdf);
+        Assert.Empty(grid.FindAll(".omni-data-grid__export-button"));
+
+        var markdown = Render<OmniDataGrid<string>>(parameters => parameters
+            .Add(g => g.Items, ["a"])
+            .Add(g => g.ShowFooterBar, true));
+        Assert.Equal(OmniButtonVariant.Primary, markdown.Instance.ExportVariants![OmniTableExportFormat.Markdown]);
+        Assert.Contains("omni-button--primary", Assert.Single(markdown.FindAll(".omni-data-grid__bar--footer .omni-data-grid__export-button")).ClassList);
+        Assert.Equal(OmniDataGridBarExport.End, markdown.Instance.FooterBarExport);
+
+        var optedOut = Render<OmniDataGrid<string>>(parameters => parameters
+            .Add(g => g.Items, ["a"])
+            .Add(g => g.ShowFooterBar, true)
+            .Add(g => g.ExportMarkdown, false));
+        Assert.Empty(optedOut.FindAll(".omni-data-grid__export-button"));
+    }
+
     [Fact]
     public void RawGrid_WrittenSetting_WinsOverThePreset()
     {

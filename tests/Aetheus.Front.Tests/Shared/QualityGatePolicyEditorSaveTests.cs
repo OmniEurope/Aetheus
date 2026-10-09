@@ -41,6 +41,7 @@ public sealed class QualityGatePolicyEditorSaveTests : BunitContext
             .Add(component => component.ProjectId, 4)
             .Add(component => component.CanEdit, true)
             .Add(component => component.InitialPolicies, new List<AnalysisPolicyDto> { Local() }));
+        BunitTestHelper.Interactive(this);
         cut.WaitForState(() => cut.Markup.Contains("No cycles"), TimeSpan.FromSeconds(3));
         cut.Find("button[title='Edit']").Click();
         cut.WaitForState(() => cut.FindAll("form").Count > 0, TimeSpan.FromSeconds(3));

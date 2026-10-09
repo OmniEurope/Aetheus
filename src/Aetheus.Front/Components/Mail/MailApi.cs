@@ -113,8 +113,9 @@ public sealed class MailApi(HttpClient http) : ApiClientBase(http)
         => PostJsonNoBodyAsync<MailLogRequest>($"api/servers/{serverId}/mail/logs", request, ct);
 
 
-    public Task<ApiStatus> SetupMailAsync(int serverId, MailSetupRequest request, CancellationToken ct = default)
-        => PostJsonNoBodyAsync<MailSetupRequest>($"api/servers/{serverId}/mail/setup", request, ct);
+    /// <summary>Queues the full setup and returns the id of its task (null when refused).</summary>
+    public Task<MailTaskQueuedDto?> SetupMailAsync(int serverId, MailSetupRequest request, CancellationToken ct = default)
+        => PostJsonAsync<MailSetupRequest, MailTaskQueuedDto>($"api/servers/{serverId}/mail/setup", request, ct);
 
 
     public async Task<MailDnsRecordsDto?> GetMailDnsRecordsAsync(int serverId, int domainId, CancellationToken ct = default)
@@ -197,6 +198,11 @@ public sealed class MailApi(HttpClient http) : ApiClientBase(http)
         => PostJsonAsync<MailTestDeliveryRequest, MailTaskQueuedDto>($"api/servers/{serverId}/mail/test-delivery", request, ct);
 
 
+    /// <summary>"Réinstaller la messagerie": queues the purge of the whole mail stack (the domain typed back).</summary>
+    public Task<MailTaskQueuedDto?> PurgeMailStackAsync(int serverId, MailPurgeRequest request, CancellationToken ct = default)
+        => PostJsonAsync<MailPurgeRequest, MailTaskQueuedDto>($"api/servers/{serverId}/mail/purge", request, ct);
+
+
     public Task<MailTaskQueuedDto?> RefreshMailQueueAsync(int serverId, CancellationToken ct = default)
         => PostNoBodyAsync<MailTaskQueuedDto>($"api/servers/{serverId}/mail/queue/refresh", ct);
 
@@ -222,4 +228,12 @@ public sealed class MailApi(HttpClient http) : ApiClientBase(http)
 
     public Task<MailMxPreviewDto?> PreviewMailMxAsync(int serverId, string domain, CancellationToken ct = default)
         => GetJsonAsync<MailMxPreviewDto>($"api/servers/{serverId}/mail/mx-preview?domain={Uri.EscapeDataString(domain)}", ct);
+
+    /// <summary>Recette R2-080: A record and reverse DNS of the host name the setup assistant proposes.</summary>
+    public Task<MailDiagnosticsDto?> CheckMailPrerequisitesAsync(int serverId, string hostname, CancellationToken ct = default)
+        => GetJsonAsync<MailDiagnosticsDto>($"api/servers/{serverId}/mail/prerequisites?hostname={Uri.EscapeDataString(hostname)}", ct);
+
+    /// <summary>Recette R2-080: queues the outbound port 25 check on the server agent.</summary>
+    public Task<MailTaskQueuedDto?> ProbeMailOutboundSmtpAsync(int serverId, CancellationToken ct = default)
+        => PostNoBodyAsync<MailTaskQueuedDto>($"api/servers/{serverId}/mail/prerequisites/outbound-smtp", ct);
 }

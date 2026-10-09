@@ -138,7 +138,9 @@ public class DockerController(IDockerService dockerService, IResourceAuthorizati
     [HttpPut("compose/file")]
     public async Task<IActionResult> SaveComposeFile(int serverId, [FromBody] DockerComposeFileSaveRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Write, ct))
+        // BACK-012: an arbitrary Compose file runs arbitrary containers (privileged, host mounts) on
+        // the server, the same reach as exec, so it takes the same Admin permission.
+        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Admin, ct))
             return Forbid();
         await dockerService.SaveComposeFileAsync(serverId, request, ct);
         return Ok();
@@ -177,7 +179,9 @@ public class DockerController(IDockerService dockerService, IResourceAuthorizati
     [HttpPost("build")]
     public async Task<IActionResult> BuildImage(int serverId, [FromBody] DockerBuildRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Write, ct))
+        // BACK-012: a Dockerfile's RUN steps are arbitrary commands executed by the server's Docker
+        // daemon, so building one takes Admin like exec.
+        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Admin, ct))
             return Forbid();
         await dockerService.BuildImageAsync(serverId, request, ct);
         return Ok();

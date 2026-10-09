@@ -1,0 +1,21 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* "Réinstaller la messagerie" (recette R2-083 / R2-088): says what is erased and asks for the domain
+   (or the mail host name) typed back before the red button enables. *@
+<OmniTemplateForm TModel="MailReinstallDialogModel" Model="@_model" OnValidSubmit="@Submit">
+    <OmniStack Gap="OmniSpacing.Medium">
+        <OmniAlert Severity="OmniSeverity.Danger" Title="@L["MailReinstallErasesTitle"]">
+            <ul class="mail-reinstall-erased">
+                <li>@L["MailReinstallErasesConfiguration"]</li>
+                <li>@L["MailReinstallErasesMailboxes"]</li>
+                <li>@L["MailReinstallErasesDkim"]</li>
+            </ul>
+        </OmniAlert>
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailReinstallAfter"]</OmniText>
+        <OmniFormField Label="@string.Format(L["MailReinstallTypeToConfirm"], Word)" For="mail-reinstall-confirmation">
+            <OmniTextBox Id="mail-reinstall-confirmation" @bind-Value="_model.Confirmation" Placeholder="@Word" Autocomplete="off" />
+        </OmniFormField>
+    </OmniStack>
+    <DialogFooter OnCancel="@(() => Dialog.Close())">
+        <OmniButton Variant="OmniButtonVariant.Danger" ButtonType="OmniButtonType.Submit" Disabled="@(!Matches)"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["MailReinstallConfirm"]</span></OmniButton>
+    </DialogFooter>
+</OmniTemplateForm>

@@ -19,10 +19,29 @@ public class LogRepository(AppDbContext db) : ILogRepository
         var cap = maxLines is > 0 ? maxLines.Value : MaxUnboundedTaskLogLines;
         return await query
             .OrderByDescending(l => l.Timestamp)
+            .ThenByDescending(l => l.Id)
             .Take(cap)
             .OrderBy(l => l.Timestamp)
+            .ThenBy(l => l.Id)
             .ToListAsync(ct)
             .ConfigureAwait(false);
+    }
+
+    public async Task<(List<TaskLog> Items, int Total)> GetTaskLogPageAsync(
+        int taskId, int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = db.TaskLogs.AsNoTracking().Where(l => l.TaskId == taskId);
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        // Timestamp, then Id: lines written in one batch share a timestamp, and the id keeps their order
+        // stable from one page to the next.
+        var items = await query
+            .OrderBy(l => l.Timestamp)
+            .ThenBy(l => l.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return (items, total);
     }
 
     public async Task<List<string>> GetTaskOutputVariableLinesAsync(int taskId, CancellationToken ct = default)

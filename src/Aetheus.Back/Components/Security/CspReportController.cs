@@ -72,11 +72,29 @@ public sealed class CspReportController(ILogger<CspReportController> logger) : C
         return NoContent();
     }
 
-    private void Log(CspReportBody report) => logger.LogWarning(
-        "CSP violation: {ViolatedDirective} blocked {BlockedUri} on {DocumentUri} "
-        + "(source {SourceFile}:{LineNumber}, sample {ScriptSample})",
-        Trim(report.ViolatedDirective), Trim(report.BlockedUri), Trim(report.DocumentUri),
-        Trim(report.SourceFile), report.LineNumber, Trim(report.ScriptSample));
+    /// <summary>
+    /// The schemes a browser gives to what its extensions inject. A page cannot stop an extension from
+    /// trying, and the policy is right to block it: the report says nothing about Aetheus, so it goes to
+    /// Debug instead of drowning the real violations in warnings.
+    /// </summary>
+    private static readonly string[] ExtensionSchemes =
+        ["moz-extension", "chrome-extension", "safari-extension", "safari-web-extension", "ms-browser-extension"];
+
+    private void Log(CspReportBody report)
+    {
+        const string Message = "CSP violation: {ViolatedDirective} blocked {BlockedUri} on {DocumentUri} "
+            + "(source {SourceFile}:{LineNumber}, sample {ScriptSample})";
+        var level = FromBrowserExtension(report) ? LogLevel.Debug : LogLevel.Warning;
+        logger.Log(level, Message,
+            Trim(report.ViolatedDirective), Trim(report.BlockedUri), Trim(report.DocumentUri),
+            Trim(report.SourceFile), report.LineNumber, Trim(report.ScriptSample));
+    }
+
+    internal static bool FromBrowserExtension(CspReportBody report) =>
+        IsExtension(report.SourceFile) || IsExtension(report.BlockedUri);
+
+    private static bool IsExtension(string? value) =>
+        value is not null && ExtensionSchemes.Any(scheme => value.StartsWith(scheme, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Reads whichever of the two report shapes the browser sent. Malformed JSON yields nothing:

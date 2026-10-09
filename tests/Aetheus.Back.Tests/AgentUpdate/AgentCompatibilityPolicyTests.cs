@@ -38,6 +38,25 @@ public class AgentCompatibilityPolicyTests
         Assert.Equal(AgentCompatibilityReason.OlderSoftware, result.Reason);
     }
 
+    /// <summary>
+    /// Recette R2-110: the last number became the project release number (1.3.0, 1.3.1...) instead of
+    /// the global run id (1.2.2553). The fleet must still be offered the new versions: the comparison is
+    /// numeric per component, so 1.3.0 is newer than 1.2.2553, and a nightly build ranks below its release.
+    /// </summary>
+    [Theory]
+    [InlineData("1.2.2553", "1.3.0", AgentCompatibilityStatus.UpdateRecommended)]
+    [InlineData("1.3.0", "1.3.1", AgentCompatibilityStatus.UpdateRecommended)]
+    [InlineData("1.3.0-nightly", "1.3.0", AgentCompatibilityStatus.UpdateRecommended)]
+    [InlineData("1.3.1", "1.3.0", AgentCompatibilityStatus.UpToDate)]
+    public void Evaluate_ReleaseNumberVersions_CompareNumerically(string installed, string released, AgentCompatibilityStatus expected)
+    {
+        var policy = new AgentCompatibilityPolicy(new TestReleaseCatalog(released));
+
+        var result = policy.Evaluate(CurrentServer() with { AgentVersion = installed });
+
+        Assert.Equal(expected, result.Status);
+    }
+
     [Fact]
     public void Evaluate_UnsupportedProtocol_IsRequired()
     {
@@ -116,11 +135,11 @@ public class AgentCompatibilityPolicyTests
         Status = ServerStatus.Online
     };
 
-    private sealed class TestReleaseCatalog : IAgentReleaseCatalog
+    private sealed class TestReleaseCatalog(string softwareVersion = "1.0.0") : IAgentReleaseCatalog
     {
         public AgentReleaseManifestDto Current { get; } = new()
         {
-            SoftwareVersion = "1.0.0",
+            SoftwareVersion = softwareVersion,
             ProtocolVersion = AgentProtocol.CurrentVersion,
             MinimumSupportedProtocol = AgentProtocol.MinimumSupportedVersion,
             MaximumSupportedProtocol = AgentProtocol.MaximumSupportedVersion,

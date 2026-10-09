@@ -5,7 +5,7 @@ parameters:
   - name: candidateVersion
     display_name: Candidate release version
     type: string
-    default: "c-$(BUILD_SOURCEVERSION)"
+    required: true
 variables:
   APPLICATION_DEPLOY_PIPELINE: application-deploy
   APPLICATION_VERIFY_PIPELINE: application-verify

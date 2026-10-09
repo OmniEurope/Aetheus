@@ -37,7 +37,7 @@ public sealed partial class HostLiteralAuditTests
     [Theory]
     [InlineData("  STATE_DIR: \"/var/lib/aetheus-demo\"")]
     [InlineData("sudo -n /etc/apache2/x")]
-    [InlineData("ServerName demo.aetheus.sonytumen.com")]
+    [InlineData("ServerName demo.app.aetheus.sonytumen.com")]
     [InlineData("  PORT_FRONT_BLUE: \"10025\"")]
     [InlineData("docker volume inspect aetheus-demo-db-data")]
     public void TheLiteralPattern_CatchesEveryShapeItWasWrittenFor(string line) =>

@@ -5,10 +5,17 @@
 set -eu
 CRON_DIR="/etc/cron.d"
 die() { echo "$1" >&2; exit 1; }
-valid_id()    { printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9_-]{1,64}$'; }
-valid_user()  { printf '%s' "$1" | grep -Eiq '^[a-z_][a-z0-9_-]{0,31}$'; }
-valid_sched() { printf '%s' "$1" | grep -Eq '^[0-9* /,-]+$'; }
-valid_cmd()   { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9 _/.:@=,-]+$'; }
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
+valid_id()    { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9_-]{1,64}$'; }
+valid_user()  { one_line "$1" && printf '%s' "$1" | grep -Eiq '^[a-z_][a-z0-9_-]{0,31}$'; }
+valid_sched() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[0-9* /,-]+$'; }
+valid_cmd()   { one_line "$1" && printf '%s' "$1" | grep -Eq '^[A-Za-z0-9 _/.:@=,-]+$'; }
 
 action="${1:-}"
 id="${2:-}"

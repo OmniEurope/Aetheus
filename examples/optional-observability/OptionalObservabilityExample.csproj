@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <EnableAetheusTelemetry Condition="'$(EnableAetheusTelemetry)' == ''">false</EnableAetheusTelemetry>
     <EnableAetheusWebAnalytics Condition="'$(EnableAetheusWebAnalytics)' == ''">false</EnableAetheusWebAnalytics>
-    <AetheusTelemetryVersion Condition="'$(AetheusTelemetryVersion)' == ''">1.0.0</AetheusTelemetryVersion>
+    <AetheusTelemetryVersion Condition="'$(AetheusTelemetryVersion)' == ''">1.1.0</AetheusTelemetryVersion>
     <AetheusWebAnalyticsVersion Condition="'$(AetheusWebAnalyticsVersion)' == ''">1.0.0</AetheusWebAnalyticsVersion>
     <DefineConstants Condition="'$(EnableAetheusTelemetry)' == 'true'">$(DefineConstants);AETHEUS_TELEMETRY</DefineConstants>
     <DefineConstants Condition="'$(EnableAetheusWebAnalytics)' == 'true'">$(DefineConstants);AETHEUS_WEB_ANALYTICS</DefineConstants>

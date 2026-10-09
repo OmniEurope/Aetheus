@@ -9,7 +9,8 @@ namespace Aetheus.Agent.Core.Tests.Services;
 /// it will send, because the server refuses a part that does not match and a whole that does not
 /// match. A plan that is right about one and wrong about the other would refuse every large upload.
 /// </summary>
-public sealed class ArtifactChunkPlanTests
+public sealed class ArtifactChunkPlanTests(ArtifactChunkPlanTests.MultiChunkPlan multiChunk)
+    : IClassFixture<ArtifactChunkPlanTests.MultiChunkPlan>
 {
     private static string Sha(ReadOnlySpan<byte> content) =>
         Convert.ToHexStringLower(SHA256.HashData(content));
@@ -37,29 +38,28 @@ public sealed class ArtifactChunkPlanTests
     }
 
     [Fact]
-    public async Task EachPartDigestIsTheDigestOfExactlyItsOwnBytes()
+    public void EachPartDigestIsTheDigestOfExactlyItsOwnBytes()
     {
-        // The property the server checks part by part. Verified against a hash taken independently
-        // of the plan, so a plan that hashed the wrong window would be caught.
-        var content = Pattern(700);
-        var stream = new MemoryStream(content);
+        // The property the server checks part by part, on the real production loop over an artifact
+        // one tail past the 256 MiB part size. Verified against hashes taken independently of the
+        // plan, so a plan that hashed the wrong window would be caught.
+        var plan = multiChunk.Plan;
 
-        var plan = await BuildWithChunkSizeAsync(stream, 256);
-
-        Assert.Equal(3, plan.Chunks.Count);
-        foreach (var chunk in plan.Chunks)
-            Assert.Equal(Sha(content.AsSpan((int)chunk.Offset, (int)chunk.Length)), chunk.Sha256);
+        Assert.Equal(2, plan.Chunks.Count);
+        Assert.Equal(multiChunk.IndependentPartDigests, plan.Chunks.Select(chunk => chunk.Sha256));
+        Assert.Equal(multiChunk.IndependentWholeDigest, plan.Sha256);
     }
 
     [Fact]
-    public async Task ThePartsCoverTheArtifactExactlyOnce()
+    public void ThePartsCoverTheArtifactExactlyOnce()
     {
-        var content = Pattern(700);
+        var plan = multiChunk.Plan;
 
-        var plan = await BuildWithChunkSizeAsync(new MemoryStream(content), 256);
-
+        Assert.Equal([0, 1], plan.Chunks.Select(chunk => chunk.Index));
         Assert.Equal(0, plan.Chunks[0].Offset);
-        Assert.Equal(content.Length, plan.Chunks.Sum(chunk => chunk.Length));
+        Assert.Equal(ArtifactChunkPlan.ChunkSizeBytes, plan.Chunks[0].Length);
+        Assert.Equal(MultiChunkPlan.Tail, plan.Chunks[1].Length);
+        Assert.Equal(MultiChunkPlan.Length, plan.Chunks.Sum(chunk => chunk.Length));
         for (var index = 1; index < plan.Chunks.Count; index++)
             Assert.Equal(
                 plan.Chunks[index - 1].Offset + plan.Chunks[index - 1].Length,
@@ -79,14 +79,12 @@ public sealed class ArtifactChunkPlanTests
     }
 
     [Fact]
-    public async Task AWindowReadsOnlyItsOwnPartAndCanBeReadAgainAfterAFailedAttempt()
+    public void AWindowReadsOnlyItsOwnPartAndCanBeReadAgainAfterAFailedAttempt()
     {
         // What makes a retry safe: a fresh window over the same file re-reads the same bytes, unlike
         // the single-request upload whose stream was already partially consumed.
-        var content = Pattern(700);
-        var stream = new MemoryStream(content);
-        var plan = await BuildWithChunkSizeAsync(stream, 256);
-        var second = plan.Chunks[1];
+        var stream = new PatternStream(MultiChunkPlan.Length);
+        var second = multiChunk.Plan.Chunks[1];
 
         static byte[] Drain(Stream window)
         {
@@ -98,7 +96,7 @@ public sealed class ArtifactChunkPlanTests
         var first = Drain(new ArtifactChunkStream(stream, second));
         var again = Drain(new ArtifactChunkStream(stream, second));
 
-        Assert.Equal(content.AsSpan(256, 256).ToArray(), first);
+        Assert.Equal(PatternStream.ExpectedBytes(ArtifactChunkPlan.ChunkSizeBytes, MultiChunkPlan.Tail), first);
         Assert.Equal(first, again);
     }
 
@@ -109,19 +107,90 @@ public sealed class ArtifactChunkPlanTests
             () => ArtifactChunkPlan.BuildAsync(new NonSeekableStream(), TestContext.Current.CancellationToken));
     }
 
-    /// <summary>The production chunk size is 256 MiB, which no test should allocate. This rebuilds the
-    /// same plan over a small size by slicing the content the way the production path does.</summary>
-    private static async Task<ArtifactChunkPlan.Plan> BuildWithChunkSizeAsync(MemoryStream stream, int chunkSize)
+    /// <summary>
+    /// The real plan over an artifact of one 256 MiB part plus a tail, built once for the class. The
+    /// bytes are generated from their position rather than allocated, and the expected digests are
+    /// computed by a separate pass with a different read size, independent of the production loop.
+    /// </summary>
+    public sealed class MultiChunkPlan : IAsyncLifetime
     {
-        var content = stream.ToArray();
-        var chunks = new List<ArtifactChunk>();
-        for (int offset = 0, index = 0; offset < content.Length; offset += chunkSize, index++)
+        internal const long Tail = 700;
+        internal const long Length = ArtifactChunkPlan.ChunkSizeBytes + Tail;
+
+        internal ArtifactChunkPlan.Plan Plan { get; private set; } = null!;
+        internal List<string> IndependentPartDigests { get; } = [];
+        internal string IndependentWholeDigest { get; private set; } = string.Empty;
+
+        public async ValueTask InitializeAsync()
         {
-            var length = Math.Min(chunkSize, content.Length - offset);
-            chunks.Add(new ArtifactChunk(index, offset, length, Sha(content.AsSpan(offset, length))));
+            Plan = await ArtifactChunkPlan.BuildAsync(new PatternStream(Length));
+
+            using var whole = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var stream = new PatternStream(Length);
+            var buffer = new byte[1 << 20];
+            foreach (var partLength in new[] { ArtifactChunkPlan.ChunkSizeBytes, Tail })
+            {
+                using var part = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                for (var remaining = partLength; remaining > 0;)
+                {
+                    var read = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                    part.AppendData(buffer, 0, read);
+                    whole.AppendData(buffer, 0, read);
+                    remaining -= read;
+                }
+                IndependentPartDigests.Add(Convert.ToHexStringLower(part.GetHashAndReset()));
+            }
+            IndependentWholeDigest = Convert.ToHexStringLower(whole.GetHashAndReset());
         }
-        var whole = await ArtifactChunkPlan.BuildAsync(stream, TestContext.Current.CancellationToken);
-        return new ArtifactChunkPlan.Plan(whole.Sha256, chunks);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>A seekable, read-only stream whose byte at position p is p % 251: any window read at
+    /// the wrong offset hashes differently, and nothing is allocated for its length.</summary>
+    private sealed class PatternStream(long length) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => true;
+        public override bool CanWrite => false;
+        public override long Length => length;
+        public override long Position { get; set; }
+
+        internal static byte[] ExpectedBytes(long offset, long count)
+        {
+            var bytes = new byte[count];
+            for (var index = 0L; index < count; index++) bytes[index] = (byte)((offset + index) % 251);
+            return bytes;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+        public override int Read(Span<byte> buffer)
+        {
+            var count = (int)Math.Min(buffer.Length, Math.Max(0, length - Position));
+            var value = (int)(Position % 251);
+            for (var index = 0; index < count; index++)
+            {
+                buffer[index] = (byte)value;
+                value = value == 250 ? 0 : value + 1;
+            }
+            Position += count;
+            return count;
+        }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(Read(buffer.Span));
+
+        public override long Seek(long offset, SeekOrigin origin) => Position = origin switch
+        {
+            SeekOrigin.Begin => offset,
+            SeekOrigin.Current => Position + offset,
+            _ => length + offset
+        };
+
+        public override void Flush() { }
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private sealed class NonSeekableStream : MemoryStream

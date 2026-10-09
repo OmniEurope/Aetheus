@@ -101,7 +101,7 @@ else
 }
 
 <AetheusDataGrid @ref="_policyGrid" Data="@_policies" TItem="BackupPolicyDto"
-    Count="@_policiesTotalCount" IsLoading="@_loading" LoadData="@OnLoadPoliciesAsync"
+    Count="@_policiesTotalCount" IsLoading="@_loading" LoadData="@OnLoadPoliciesAsync" ExportRead="@ReadPoliciesExportAsync"
     PageSize="25" Density="OmniDensity.Compact" FullHeight="true"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<BackupPolicyDto>(_policies, _policiesTotalCount))">
@@ -112,11 +112,11 @@ else
         <OmniDataGridColumn Frozen="true" TItem="BackupPolicyDto" Property="Name" Title="@L["BackupName"]" MinWidth="10rem" Filterable="true" />
         @if (!ProjectId.HasValue)
         {
-            <OmniDataGridColumn TItem="BackupPolicyDto" Key="ProjectName" Title="@L["Project"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_projectNames" FilterSearchable="true" >
+            <OmniDataGridColumn TItem="BackupPolicyDto" Key="ProjectName" ExportValue="@ProjectExport" Title="@L["Project"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_projectNames" FilterSearchable="true" >
                 <Template Context="p">@ProjectName(p.ProjectId)</Template>
             </OmniDataGridColumn>
         }
-        <OmniDataGridColumn TItem="BackupPolicyDto" Key="ServerName" Title="@L["Server"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_serverNames" FilterSearchable="true" >
+        <OmniDataGridColumn TItem="BackupPolicyDto" Key="ServerName" ExportValue="@ServerExport" Title="@L["Server"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_serverNames" FilterSearchable="true" >
             <Template Context="p">@ServerName(p.ServerId)</Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="BackupPolicyDto" Property="DbEngine" Title="@L["BackupEngine"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@EngineText" >
@@ -153,7 +153,7 @@ else
             Placeholder="@L["Search"]" Class="pipeline-list-search" />
     </OmniStack>
     <AetheusDataGrid @ref="_runsGrid" Data="@_runs" TItem="BackupRunDto"
-        Count="@_runsTotalCount" IsLoading="@_runsLoading" LoadData="@OnLoadRunsAsync"
+        Count="@_runsTotalCount" IsLoading="@_runsLoading" LoadData="@OnLoadRunsAsync" ExportRead="@ReadRunsExportAsync" ExportName="@L["BackupRuns"]"
         Density="OmniDensity.Compact" PageSize="10"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<BackupRunDto>(_runs, _runsTotalCount))">

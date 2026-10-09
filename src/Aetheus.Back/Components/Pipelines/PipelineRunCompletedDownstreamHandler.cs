@@ -100,6 +100,7 @@ public sealed class PipelineRunCompletedDownstreamHandler(
         {
             ["UPSTREAM_RUN_ID"] = run.Id.ToString(),
             ["UPSTREAM_PIPELINE"] = run.Pipeline!.Name,
+            [PipelineScannerTaskFactory.UpstreamTemplateVariable] = run.Pipeline.TemplateReferenceName ?? string.Empty,
             ["UPSTREAM_CHAIN"] = string.Join(",", chain),
             // The system value is the definition's static `trigger:` (usually "manual"), so deploy
             // #2334, started by candidate #2328's on_success, read "manual" (PLAN-007 lot 7). Additional

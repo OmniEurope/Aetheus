@@ -194,6 +194,37 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
     }
 
     [Test]
+    public async Task R2125_PipelineListsWithTheirStatusChips_DoNotScrollSidewaysOnADesktop()
+    {
+        // The status chip strip (OmniStackScroll) ended 3px past its row, so under the grid's own
+        // scrollbar the content area showed a second one. Measured, like R-503.
+        await Page.SetViewportSizeAsync(1014, 900);
+        var failures = new List<string>();
+        var pagesWithChips = 0;
+        foreach (var path in new[] { "/pipelines", "/projects/3/pipelines" })
+        {
+            await NavigateToAsync(path);
+            await WaitForNoSpinnerAsync();
+            var measure = await Page.EvaluateAsync<string>("""
+                () => {
+                    // A project's pages scroll inside its blade, the top-level list inside the main area.
+                    const content = document.querySelector('.blade-content') ?? document.getElementById('main-content');
+                    if (!content) return 'missing';
+                    const chips = content.querySelector('.omni-stack-scroll > .omni-stack--overflow-scroll') ? 'chips' : 'plain';
+                    return content.scrollWidth > content.clientWidth
+                        ? 'overflow:' + content.scrollWidth + '>' + content.clientWidth
+                        : chips;
+                }
+                """);
+            if (measure == "chips") pagesWithChips++;
+            else if (measure != "plain") failures.Add($"{path}: {measure}");
+        }
+
+        Assert.That(failures, Is.Empty, "Pages whose content area is wider than what it shows:\n" + string.Join("\n", failures));
+        Assert.That(pagesWithChips, Is.GreaterThan(0), "None of the pages measured had a chip strip: the test proved nothing.");
+    }
+
+    [Test]
     public async Task RepresentativePages_RemainReadableAcrossCommonWidths()
     {
         var representativePaths = new[] { "/", "/servers", "/projects", "/pipelines", "/settings" };
@@ -618,7 +649,9 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
             });
             await route.FulfillAsync(new() { Response = response, Body = run.ToJsonString() });
         });
-        await Page.RouteAsync($"**/api/logs/task/{taskId}", route => route.FulfillAsync(new()
+        // Recette R2-104: the run page reads a step's tail (?maxLines=...), so the route matches the path
+        // whatever the query; a glob on the bare path no longer caught the request.
+        await Page.RouteAsync(url => new Uri(url).AbsolutePath.EndsWith($"/api/logs/task/{taskId}", StringComparison.Ordinal), route => route.FulfillAsync(new()
         {
             Status = 200,
             ContentType = "application/json",
@@ -652,6 +685,78 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         await Page.WaitForFunctionAsync(
             "([selector, start]) => Math.abs(document.querySelector(selector).scrollTop - start) > 50",
             new object[] { ".run-split-logs .run-logs-terminal", before });
+    }
+
+    [Test]
+    [Category("Pipelines")]
+    public async Task R2095_MobileApprovalBanner_KeepsEverythingInside_AndReducesApproveAndRejectToIcons()
+    {
+        // Recette R2-095 (release-fast #2536 on a phone): the title, the text and the three buttons ran
+        // past the approval banner. Run 1 of the demo dataset is served waiting on a pipeline approval
+        // whose stage has a long name; everything else stays real.
+        await Page.RouteAsync("**/api/pipelines/runs/1", async route =>
+        {
+            var response = await route.FetchAsync();
+            var run = System.Text.Json.Nodes.JsonNode.Parse(await response.TextAsync())!.AsObject();
+            run["status"] = "WaitingForApproval";
+            run["completedAt"] = null;
+            await route.FulfillAsync(new() { Response = response, Body = run.ToJsonString() });
+        });
+        await Page.RouteAsync("**/api/pipelines/runs/1/approvals", route => route.FulfillAsync(new()
+        {
+            Status = 200,
+            ContentType = "application/json",
+            Body = System.Text.Json.JsonSerializer.Serialize(new[]
+            {
+                new
+                {
+                    id = 424242,
+                    pipelineRunId = 1,
+                    stageName = "Confirm-the-production-switch-before-the-blue-green-swap",
+                    scope = "Pipeline",
+                    status = "Pending",
+                    requestedAt = DateTime.UtcNow
+                }
+            })
+        }));
+
+        await Page.SetViewportSizeAsync(375, 812);
+        await NavigateToAsync("/pipelines/runs/1");
+
+        var banner = Page.Locator(".run-approval-banner");
+        await Expect(banner.Locator(".approval-decision").First).ToBeVisibleAsync(new() { Timeout = 15000 });
+
+        var overflowing = await banner.EvaluateAsync<string[]>("""
+            banner => {
+                const box = banner.getBoundingClientRect();
+                return [...banner.querySelectorAll('*')]
+                    .filter(element => {
+                        const rect = element.getBoundingClientRect();
+                        return rect.width > 0 && (rect.left < box.left - 1 || rect.right > box.right + 1);
+                    })
+                    .map(element => `${element.tagName}.${element.className}`);
+            }
+            """);
+        var widths = await Page.EvaluateAsync<int[]>("() => [document.documentElement.scrollWidth, window.innerWidth]");
+        var decisions = await banner.Locator(".approval-decision").EvaluateAllAsync<string[]>("""
+            buttons => buttons.map(button => {
+                const label = button.querySelector('.omni-button__content > span:not(.omni-icon)');
+                return `${button.getAttribute('aria-label')}|${button.getAttribute('title')}|${label ? getComputedStyle(label).display : 'none'}`;
+            })
+            """);
+        var commentLabelDisplay = await banner.Locator(".approval-add-comment .omni-button__content > span:not(.omni-icon)")
+            .EvaluateAsync<string>("label => getComputedStyle(label).display");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(overflowing, Is.Empty, "Nothing may run past the approval banner on a phone.");
+            Assert.That(widths[0], Is.LessThanOrEqualTo(widths[1]), "The run page must not scroll sideways on a phone.");
+            Assert.That(decisions, Has.Length.EqualTo(2));
+            Assert.That(decisions, Has.All.Matches<string>(decision =>
+                decision is not null && decision.EndsWith("|none", StringComparison.Ordinal) && !decision.StartsWith('|') && decision.Split('|')[0] == decision.Split('|')[1]),
+                "Approve and Reject show their icon alone, keeping their accessible name and tooltip: " + string.Join(", ", decisions));
+            Assert.That(commentLabelDisplay, Is.Not.EqualTo("none"), "Comment keeps its text.");
+        });
     }
 
     [Test]

@@ -18,7 +18,7 @@ public class ApiClientAdminVarEnvTests
     // --- Admin ---
     [Fact]
     public async Task GetUsersAsync_Returns()
-    { _handler.SetJsonResponse("api/users", new PaginatedResult<UserDto> { Items = [new UserDto { Id = 7, Username = "alice" }], TotalCount = 1 }); var r = await _api.Auth.GetUsersAsync(); Assert.Single(r.Items); Assert.Equal("alice", r.Items[0].Username); AssertRequest(HttpMethod.Get, "api/users?page=1&pageSize=25"); }
+    { _handler.SetJsonResponse("api/users", new PaginatedResult<UserDto> { Items = [new UserDto { Id = 7, Username = "alice" }], TotalCount = 1 }); var r = await _api.Auth.GetUsersAsync(cancellationToken: TestContext.Current.CancellationToken); Assert.Single(r.Items); Assert.Equal("alice", r.Items[0].Username); AssertRequest(HttpMethod.Get, "api/users?page=1&pageSize=25"); }
 
     [Fact]
     public async Task GetCurrentUserAsync_Returns()

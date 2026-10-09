@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_projects" Count="@_totalCount" TItem="ProjectDto"
-    IsLoading="@_loading" LoadData="@LoadProjectsAsync" PageSize="25" Density="OmniDensity.Compact"
+    IsLoading="@_loading" LoadData="@LoadProjectsAsync" ExportRead="@ReadExportAsync" PageSize="25" Density="OmniDensity.Compact"
     EmptyText="@L["NoRecords"]" AllowSorting="true" RowClick="@OnRowClick"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<ProjectDto>(_projects, _totalCount))">

@@ -53,7 +53,7 @@ public class ButtonRoleColourGuardTests
     [
         ("Components/Vaults/VaultEdit.razor", "GenerateNewSecretValue",
             "R-436 (2026-09-28): Generate, the value field's helper, is blue beside Add"),
-        ("Components/Servers/ServerDetailSections/ServerMailStatusCard.razor", "InstallCertificateAsync",
+        ("Components/Servers/ServerDetailSections/MailStatusFix.razor", "OnInstallCertificate",
             "User decision (2026-09-28): Obtain and Install the mail certificate are both blue"),
     ];
 
@@ -264,10 +264,25 @@ public class ButtonRoleColourGuardTests
     [Fact]
     public void DestructiveConfirmations_AreRedAndNameTheirVerb()
     {
-        var dangerHandlers = DangerButtonHandlers();
         var violations = new List<string>();
-        var destructiveFound = 0;
+        var destructiveFound = CheckDestructiveConfirmCalls(violations) + CheckActionSectionConfirmations(violations);
 
+        Assert.True(destructiveFound >= 40,
+            $"Expected the app's destructive confirmations to be found, found only {destructiveFound}: the scan is broken.");
+        Assert.True(violations.Count == 0,
+            "STD-BTN: a destructive action stays red on the button that confirms it, which names the verb, never \"Valider\":\n  "
+            + string.Join("\n  ", violations));
+    }
+
+    /// <summary>
+    /// The confirmation dialogs opened from code: the destructive ones found, their violations added.
+    /// Recette R2-107: the two scans of the test above are their own methods, under the grade-A
+    /// cyclomatic threshold.
+    /// </summary>
+    private static int CheckDestructiveConfirmCalls(List<string> violations)
+    {
+        var dangerHandlers = DangerButtonHandlers();
+        var found = 0;
         foreach (var file in FrontFiles("*.cs"))
         {
             // The server sections' shared confirmation takes its verb and its colour from each caller:
@@ -276,43 +291,51 @@ public class ButtonRoleColourGuardTests
             var source = File.ReadAllText(file);
             foreach (Match call in ConfirmCall.Matches(source))
             {
-                var method = EnclosingMethod(source, call.Index);
-                var okKey = Regex.Match(call.Value, @"OkButtonText\s*=\s*\w+\[""(?<key>\w+)""\]").Groups["key"].Value;
-                var conditionalLabel = Regex.IsMatch(call.Value, @"OkButtonText\s*=\s*\w+\s*\?");
-                var flagged = Regex.IsMatch(call.Value, @"Destructive\s*=\s*(?!false\b)\w+");
-                var triggeredByRed = method.Length > 0 && dangerHandlers.Contains(method);
-                var destructiveVerb = okKey.Length > 0 && DestructiveLabelKey.IsMatch(okKey);
-                if (!flagged && !triggeredByRed && !destructiveVerb) continue;
-                destructiveFound++;
-
-                var where = $"{Rel(file)} ({method})";
-                if (!flagged)
-                    violations.Add($"{where}: destructive confirmation without Destructive = true (its confirm button must be red)");
-                if (!conditionalLabel && (okKey.Length == 0 || okKey == "Validate"))
-                    violations.Add($"{where}: destructive confirmation labelled {(okKey.Length == 0 ? "by default" : okKey)}, it must name its verb (Supprimer, Arrêter...)");
+                if (CheckConfirmCall(file, source, call, dangerHandlers, violations)) found++;
             }
         }
+        return found;
+    }
 
+    /// <summary>One confirmation call: false when it is not destructive, its violations added otherwise.</summary>
+    private static bool CheckConfirmCall(
+        string file, string source, Match call, HashSet<string> dangerHandlers, List<string> violations)
+    {
+        var method = EnclosingMethod(source, call.Index);
+        var okKey = Regex.Match(call.Value, @"OkButtonText\s*=\s*\w+\[""(?<key>\w+)""\]").Groups["key"].Value;
+        var conditionalLabel = Regex.IsMatch(call.Value, @"OkButtonText\s*=\s*\w+\s*\?");
+        var flagged = Regex.IsMatch(call.Value, @"Destructive\s*=\s*(?!false\b)\w+");
+        var triggeredByRed = method.Length > 0 && dangerHandlers.Contains(method);
+        var destructiveVerb = okKey.Length > 0 && DestructiveLabelKey.IsMatch(okKey);
+        if (!flagged && !triggeredByRed && !destructiveVerb) return false;
+
+        var where = $"{Rel(file)} ({method})";
+        if (!flagged)
+            violations.Add($"{where}: destructive confirmation without Destructive = true (its confirm button must be red)");
+        if (!conditionalLabel && (okKey.Length == 0 || okKey == "Validate"))
+            violations.Add($"{where}: destructive confirmation labelled {(okKey.Length == 0 ? "by default" : okKey)}, it must name its verb (Supprimer, Arrêter...)");
+        return true;
+    }
+
+    /// <summary>The red buttons of the server sections, which confirm through ServerActionSectionBase.</summary>
+    private static int CheckActionSectionConfirmations(List<string> violations)
+    {
         var actionSections = FrontFiles("*.razor")
             .Where(f => File.ReadAllText(f).Contains("@inherits ServerActionSectionBase", StringComparison.Ordinal))
             .Select(Rel)
             .ToHashSet(StringComparer.Ordinal);
+        var found = 0;
         foreach (var (file, tag) in ButtonTags())
         {
             // The confirmation of the server sections (ServerActionSectionBase): a red button asks it
             // through ShowDestructiveConfirm, which passes the verb and turns the confirm button red.
             if (!actionSections.Contains(file) || Attribute(tag, "Variant") != Danger
                 || !Regex.IsMatch(tag, @"Show(Destructive)?Confirm\(")) continue;
-            destructiveFound++;
+            found++;
             if (!tag.Contains("ShowDestructiveConfirm(", StringComparison.Ordinal))
                 violations.Add($"{file}: a red button opens ShowConfirm, a green \"Valider\" confirmation (use ShowDestructiveConfirm with its verb)");
         }
-
-        Assert.True(destructiveFound >= 40,
-            $"Expected the app's destructive confirmations to be found, found only {destructiveFound}: the scan is broken.");
-        Assert.True(violations.Count == 0,
-            "STD-BTN: a destructive action stays red on the button that confirms it, which names the verb, never \"Valider\":\n  "
-            + string.Join("\n  ", violations));
+        return found;
     }
 
     [Fact]

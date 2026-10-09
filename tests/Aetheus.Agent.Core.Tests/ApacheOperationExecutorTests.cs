@@ -224,6 +224,44 @@ public class ApacheOperationExecutorTests
     }
 
     [Fact]
+    public async Task ApplyConfigSet_CancelledDuringConfigTest_RestoresPreviousSetWithItsOwnBudget()
+    {
+        using var layout = new ApacheTestLayout();
+        var available = Path.Combine(layout.Available, "app.conf");
+        var enabled = Path.Combine(layout.Enabled, "app.conf");
+        await File.WriteAllTextAsync(available, "old-config\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(enabled, available, TestContext.Current.CancellationToken);
+        using var taskCts = new CancellationTokenSource();
+        var operations = new List<(OperationKind Kind, bool TokenCancelled)>();
+        var executor = layout.Build((kind, _, _, token) =>
+        {
+            operations.Add((kind, token.IsCancellationRequested));
+            if (operations.Count == 1)
+            {
+                taskCts.Cancel();
+                token.ThrowIfCancellationRequested();
+            }
+            return Task.FromResult(new ExecutorResult(0, false));
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => executor.ExecuteAsync(
+            OperationKind.ApacheApplyConfigSet, "config-set",
+            BuildConfigSet(("app.conf", "new-config\n"), ("new.conf", "partial\n")), 10, NoOutput,
+            taskCts.Token));
+
+        Assert.Equal(
+            [(OperationKind.ApacheTestConfig, false), (OperationKind.ApacheTestConfig, false),
+                (OperationKind.ApacheReload, false)],
+            operations);
+        Assert.Equal("old-config\n", await File.ReadAllTextAsync(
+            available, TestContext.Current.CancellationToken));
+        Assert.Equal(available, await File.ReadAllTextAsync(
+            enabled, TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(Path.Combine(layout.Available, "new.conf")));
+        Assert.False(File.Exists(Path.Combine(layout.Enabled, "new.conf")));
+    }
+
+    [Fact]
     public async Task ApplyConfigSet_InvalidDestination_IsRejectedBeforeFilesystemChanges()
     {
         using var layout = new ApacheTestLayout();

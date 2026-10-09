@@ -52,6 +52,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
     private AetheusDataGrid<AnalysisFindingDto>? _findingsGrid;
     private HubConnection? _realtime;
     private CancellationTokenSource? _reloadDebounce;
+    private bool _disposed;
     private int? _loadedProjectId;
     private int _qualitySectionIndex;
     private FindingQuery? _lastFindingQueryKey;
@@ -107,7 +108,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
 
         _loadedProjectId = ProjectId;
         _loading = false;
-        if (_realtime is null) await StartRealtimeAsync();
+        if (_realtime is null && !_disposed) await StartRealtimeAsync();
     }
 
     private async Task OnQualitySectionChangedAsync(int index)
@@ -171,6 +172,9 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
 
     private Task QueueRealtimeReloadAsync()
     {
+        // Recette R2-100: an EntityChanged delivered after the section was left (while its hub was being
+        // disposed) cancelled the disposed debounce source and threw ObjectDisposedException.
+        if (_disposed) return Task.CompletedTask;
         _reloadDebounce?.Cancel();
         _reloadDebounce?.Dispose();
         _reloadDebounce = new CancellationTokenSource();
@@ -215,6 +219,18 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         _findingSortBy = Sort(args);
         _findingSortDescending = Descending(args);
         _lastFindingQueryKey = queryKey;
+    }
+
+    /// <summary>
+    /// Recette R2-124: one page of the findings export, every page read from the API with the sort and
+    /// the column filters of the grid. Those are the filters the grid's last load applied, so applying
+    /// them again leaves the page's filters as they were; the rows on screen are not touched.
+    /// </summary>
+    private Task<PaginatedResult<AnalysisFindingDto>> ReadFindingsAsync(GridLoadArgs args)
+    {
+        ApplyHeaderFilters(args);
+        var (page, size) = Page(args);
+        return FetchFindingsAsync(page, size, Sort(args), Descending(args));
     }
 
     private void ApplyHeaderFilters(GridLoadArgs args)
@@ -381,9 +397,12 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
+        _disposed = true;
         SectionMenu?.Clear();
         _reloadDebounce?.Cancel();
         _reloadDebounce?.Dispose();
+        _reloadDebounce = null;
         if (_realtime is not null) await _realtime.DisposeAsync();
     }
 }

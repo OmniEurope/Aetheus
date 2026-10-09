@@ -12,15 +12,22 @@ public sealed class AuthControllerExternalLoginSecurityTests
     private readonly IAuthService _auth = Substitute.For<IAuthService>();
     private readonly IServerEnrollmentService _enrollment = Substitute.For<IServerEnrollmentService>();
 
-    [Fact]
-    public async Task ExternalLogin_MissingGatewaySecret_FailsClosed()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task ExternalLogin_MissingGatewaySecret_IsNotFoundAndFailsClosed(string? configuredSecret)
     {
-        var controller = Build([]);
+        var controller = Build(new Dictionary<string, string?>
+        {
+            ["Auth:ExternalLogin:GatewaySecret"] = configuredSecret,
+        });
 
         var result = await controller.ExternalLogin(Request(), TestContext.Current.CancellationToken);
 
-        var response = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(StatusCodes.Status503ServiceUnavailable, response.StatusCode);
+        // R2-120: a feature that is not configured answers 404 with the ApiError body, never 503.
+        var response = Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status404NotFound, response.StatusCode);
+        Assert.IsType<Aetheus.Shared.Components.Shared.ApiError>(response.Value);
         await _auth.DidNotReceiveWithAnyArgs().HandleExternalLoginAsync(
             default!, default!, default, default, TestContext.Current.CancellationToken);
     }

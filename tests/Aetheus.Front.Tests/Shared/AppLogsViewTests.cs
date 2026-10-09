@@ -184,7 +184,7 @@ public sealed class AppLogsViewTests : BunitContext
         Assert.Empty(cut.FindAll("#app-logs-level"));
         Assert.Empty(cut.FindAll("#app-logs-search"));
         Assert.Empty(cut.FindComponents<OmniMarkdownExportButton<AppLogEntryDto>>());
-        Assert.Equal(2, cut.FindAll(".omni-data-grid__export-button").Count);
+        Assert.Single(cut.FindAll(".omni-data-grid__export-button"));
         // Under the table: the bar follows the grid's table in the markup.
         var markup = cut.Markup;
         Assert.True(markup.IndexOf("omni-data-grid__export", StringComparison.Ordinal)
@@ -283,7 +283,7 @@ public sealed class AppLogsViewTests : BunitContext
     }
 
     [Fact]
-    public void R2009_TheExportBar_HasItsMarkdownButtonBlueWithTheMdIcon_AndCsvSecondary()
+    public void R2009_TheExportBar_IsOneBlueMarkdownButtonWithTheMdIcon()
     {
         BunitTestHelper.RegisterServices(this).SetJsonResponse(LogsUrl, new PaginatedResult<AppLogEntryDto> { Items = Lines(1, 1), TotalCount = 1 });
 
@@ -293,12 +293,11 @@ public sealed class AppLogsViewTests : BunitContext
         var buttons = cut.FindComponents<OmniButton>()
             .Where(button => button.Instance.Class?.Contains("omni-data-grid__export-button", StringComparison.Ordinal) == true)
             .ToArray();
-        Assert.Equal(2, buttons.Length);
-        // One blue button in the bar, the user's exception (R2-009): Markdown, with the file icon of its format.
-        // The other export buttons take OE's default, Secondary since OE 1.5.0 (Ghost before).
-        Assert.Equal([OmniButtonVariant.Primary, OmniButtonVariant.Secondary], buttons.Select(button => button.Instance.Variant));
-        Assert.Equal(OmniIconName.FileMd, buttons[0].FindComponent<OmniIcon>().Instance.Name);
-        Assert.Equal(OmniIconName.FileCsv, buttons[1].FindComponent<OmniIcon>().Instance.Name);
+        // One blue button in the bar, the user's exception (R2-009): Markdown, with the file icon of its format;
+        // no CSV (R2-124, second decision of 2026-10-05).
+        var button = Assert.Single(buttons);
+        Assert.Equal(OmniButtonVariant.Primary, button.Instance.Variant);
+        Assert.Equal(OmniIconName.FileMd, button.FindComponent<OmniIcon>().Instance.Name);
         Assert.Single(cut.FindAll(".omni-data-grid__export .omni-button--primary"));
     }
 }

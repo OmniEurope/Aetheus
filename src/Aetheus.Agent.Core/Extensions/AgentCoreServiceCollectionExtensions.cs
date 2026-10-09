@@ -173,6 +173,7 @@ public static class AgentCoreServiceCollectionExtensions
         // F-32: typed operation executors. These run platform commands via fixed argument lists
         // - no shell, no allow-list regex, target string validated per kind.
         services.AddSingleton<IOperationExecutor, DockerOperationExecutor>();
+        services.AddSingleton<IOperationExecutor, DockerPayloadOperationExecutor>();
         services.AddSingleton<IOperationExecutor, ServiceOperationExecutor>();
         services.AddSingleton<IOperationExecutor, PackageOperationExecutor>();
         services.AddSingleton<IOperationExecutor, SystemPackageUpgradeExecutor>();
@@ -184,6 +185,9 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IOperationExecutor, RkhunterOperationExecutor>();
         services.AddSingleton<IOperationExecutor, AgentSelfUpdateOperationExecutor>();
         services.AddSingleton<IOperationExecutor, MailOperationExecutor>();
+        // Recette R2-080: the outbound port 25 prerequisite, run by the agent itself (no helper).
+        services.AddSingleton<IOutboundTcpConnector, OutboundTcpConnector>();
+        services.AddSingleton<IOperationExecutor, MailOutboundProbeOperationExecutor>();
         services.AddSingleton<IOperationExecutor, PortsentryOperationExecutor>();
         services.AddSingleton<IOperationExecutor, CronOperationExecutor>();
         services.AddSingleton<IOperationExecutor, PipelineArtifactOperationExecutor>();

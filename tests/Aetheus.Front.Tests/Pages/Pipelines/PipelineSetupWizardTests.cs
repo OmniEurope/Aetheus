@@ -180,6 +180,76 @@ public sealed class PipelineSetupWizardTests : BunitContext
         });
     }
 
+    /// <summary>Recette R2-121: the extended QA and the Git-history secret scan the nightly runs are
+    /// wizard options, named after the project and enabled for its nightly and candidate.</summary>
+    [Theory]
+    [InlineData("application-qa-extended", "atlas-qa-extended", "APPLICATION_QA_EXTENDED_ENABLED")]
+    [InlineData("application-security-history", "atlas-security-history", "APPLICATION_SECURITY_HISTORY_ENABLED")]
+    public async Task Wizard_CreatesTheNightlyExtensionsWithTheirToggleWritten(
+        string template, string pipeline, string toggle)
+    {
+        var requests = await FinishWizardAsync(
+            new ProjectDto { Id = 7, Name = "Atlas", DefaultBranch = "develop" },
+            TemplateCatalog(),
+            templateId: Template(template).Id);
+
+        Assert.Equal(["atlas-ci", pipeline], requests.Select(request => request.Name));
+        Assert.Contains($"extends: {template}@1", requests[1].YamlDefinition, StringComparison.Ordinal);
+        Assert.All(requests, request =>
+        {
+            Assert.Contains($"{toggle}: \"true\"", request.YamlDefinition, StringComparison.Ordinal);
+            Assert.Contains("APPLICATION_QA_EXTENDED_PIPELINE: \"atlas-qa-extended\"", request.YamlDefinition, StringComparison.Ordinal);
+            Assert.Contains("APPLICATION_SECURITY_HISTORY_PIPELINE: \"atlas-security-history\"", request.YamlDefinition, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>Recette R2-121: the version pinned is that of the template the backend resolves for the
+    /// project, its organization's own before the one the platform shares.</summary>
+    [Fact]
+    public async Task Wizard_PinsTheVersionOfTheProjectsOrganizationTemplate()
+    {
+        List<PipelineTemplateSummaryDto> catalog =
+        [
+            new() { Id = 1, Name = "application-ci", Version = 2, OrganizationId = 1 },
+            new() { Id = 2, Name = "application-ci", Version = 7, OrganizationId = 5 }
+        ];
+
+        var requests = await FinishWizardAsync(
+            new ProjectDto { Id = 7, Name = "Atlas", DefaultBranch = "develop", OrganizationId = 5 },
+            catalog,
+            templateId: 1);
+
+        Assert.Contains("extends: application-ci@7", Assert.Single(requests).YamlDefinition, StringComparison.Ordinal);
+    }
+
+    private async Task<CreatePipelineRequest[]> FinishWizardAsync(
+        ProjectDto project, List<PipelineTemplateSummaryDto> catalog, int templateId)
+    {
+        _handler.SetPaginatedJsonResponse("api/projects", [project]);
+        _handler.SetJsonResponse("api/pipelines/templates", catalog);
+        _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines", new PipelineDto { Id = 91 });
+        NothingMissing();
+        Services.GetRequiredService<NavigationManager>()
+            .NavigateTo($"http://localhost/pipelines/setup?projectId={project.Id}&templateId={templateId}");
+        var cut = Render<PipelineSetupWizard>();
+        cut.WaitForAssertion(() => Assert.Contains(project.Name, cut.Markup, StringComparison.Ordinal));
+        var wizard = cut.FindComponent<WizardDialog>();
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+        await cut.Find(".omni-wizard__actions button.omni-wizard__finish")
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, request =>
+            request.Method == HttpMethod.Post.Method
+            && request.Url.EndsWith("api/pipelines", StringComparison.OrdinalIgnoreCase)));
+        return _handler.RequestDetails
+            .Where(request => request.Method == HttpMethod.Post.Method
+                && request.Url.EndsWith("api/pipelines", StringComparison.OrdinalIgnoreCase))
+            .Select(request => JsonSerializer.Deserialize<CreatePipelineRequest>(request.Body!,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))!)
+            .ToArray();
+    }
+
     /// <summary>Reaching the summary now asks the backend for readiness; a clean verdict keeps the
     /// cases that are about the summary itself about the summary.</summary>
     private void NothingMissing() => _handler.SetJsonResponse(
@@ -193,6 +263,8 @@ public sealed class PipelineSetupWizardTests : BunitContext
         Template("application-quality"),
         Template("application-security"),
         Template("application-qa"),
+        Template("application-qa-extended"),
+        Template("application-security-history"),
         Template("application-candidate"),
         Template("application-nightly"),
         Template("application-deploy-prod"),

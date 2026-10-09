@@ -404,6 +404,102 @@ public sealed class ScannerOperationExecutorTests
         finally { context.Dispose(); }
     }
 
+    /// <summary>
+    /// Recette R2-099: the eight OpenAPI partitions are one step. The agent scans each definition in
+    /// order, each with its share of the step's timeout, and publishes ONE report holding every
+    /// partition's sites, with one raw artifact.
+    /// </summary>
+    [Fact]
+    public async Task R2099_ZapApiWithSeveralDefinitions_ScansThemInOrder_AndPublishesOneMergedReport()
+    {
+        var context = CreateContext();
+        var scanned = new List<(string Specification, int TimeoutSeconds)>();
+        context.Runner.RunAsync(Arg.Any<ProcessStartInfo>(), Arg.Any<int>(),
+                Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var process = call.Arg<ProcessStartInfo>();
+                if (process.ArgumentList.Contains("inspect"))
+                    await call.Arg<Func<string, TaskLogLevel, Task>>()("127.0.0.1", TaskLogLevel.Info);
+                if (!process.ArgumentList.Contains("run")) return new ExecutorResult(0, false);
+                var arguments = process.ArgumentList.ToList();
+                var specification = arguments[arguments.IndexOf("-t") + 1];
+                scanned.Add((specification, call.ArgAt<int>(1)));
+                var outputMount = arguments.First(argument => argument.Contains("dst=/zap/wrk", StringComparison.Ordinal));
+                var output = outputMount.Split(',').Single(part => part.StartsWith("src=", StringComparison.Ordinal))[4..];
+                var partition = specification[^6];
+                File.WriteAllText(Path.Combine(output, "report.json"),
+                    "{\"@programName\":\"ZAP\",\"site\":[{\"@name\":\"p" + partition + "\",\"alerts\":[{\"pluginid\":\"1\"},{\"pluginid\":\"2\"}]}]}");
+                return new ExecutorResult(partition == '1' ? 2 : 0, false);
+            });
+        context.Api.UploadArtifactAsync(42, Arg.Is<string>(name => name.StartsWith("analysis-zap-api-", StringComparison.Ordinal)),
+                Arg.Any<string?>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineArtifactDto { Id = 93 });
+        context.Api.PublishAnalysisReportAsync(42, Arg.Any<PublishAnalysisReportRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AnalysisReportDto { GateStatus = AnalysisGateStatus.Passed });
+        var env = ValidEnvironment(context.SourceDirectory);
+        env["AETHEUS_SCANNER_TARGET_URL"] = "http://127.0.0.1:10081";
+        env["AETHEUS_SCANNER_TARGET_CLASSIFICATION"] = "ephemeral";
+        env["AETHEUS_SCANNER_TARGET_TRUSTED"] = "true";
+        env["AETHEUS_SCANNER_TARGET_ALLOWED_HOST"] = "127.0.0.1";
+        env["AETHEUS_SCANNER_ACTIVE"] = "false";
+        env["AETHEUS_SCANNER_API_SPECIFICATION_URL"] = "";
+        env["AETHEUS_SCANNER_API_SPECIFICATION_URLS"] =
+            "http://127.0.0.1:10081/openapi/dast-0.json\nhttp://127.0.0.1:10081/openapi/dast-1.json\nhttp://127.0.0.1:10081/openapi/dast-2.json";
+        env["AETHEUS_SCANNER_API_SPECIFICATION_FORMAT"] = "openapi";
+        env["AETHEUS_SCANNER_DAST_LEASE_TOKEN"] = new string('a', 64);
+        env["AETHEUS_SCANNER_DAST_LEASE_EXPIRES_AT"] = DateTime.UtcNow.AddHours(1).ToString("O");
+        var log = new List<string>();
+        try
+        {
+            var result = await context.Executor.ExecuteAsync(
+                OperationKind.PipelineRunScanner, "zap-api", env, 60,
+                (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Equal(
+                ["http://127.0.0.1:10081/openapi/dast-0.json", "http://127.0.0.1:10081/openapi/dast-1.json", "http://127.0.0.1:10081/openapi/dast-2.json"],
+                scanned.Select(scan => scan.Specification));
+            // Each partition keeps its own bound: the step's 60 s shared by three.
+            Assert.All(scanned, scan => Assert.InRange(scan.TimeoutSeconds, 1, 20));
+            await context.Api.Received(1).UploadArtifactAsync(42, Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+            await context.Api.Received(1).PublishAnalysisReportAsync(42,
+                Arg.Is<PublishAnalysisReportRequest>(request => request.ScannerKey == "zap-api"
+                    && request.Status == AnalysisReportStatus.Failed
+                    && request.ReportContent!.Contains("\"p0\"", StringComparison.Ordinal)
+                    && request.ReportContent.Contains("\"p1\"", StringComparison.Ordinal)
+                    && request.ReportContent.Contains("\"p2\"", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>());
+            Assert.Contains(log, line => line.StartsWith("OpenAPI partition 3/3: scanning http://127.0.0.1:10081/openapi/dast-2.json", StringComparison.Ordinal));
+            Assert.Contains("One report for the 3 partitions, alerts per partition: 1=2, 2=2, 3=2.", log);
+        }
+        finally { context.Dispose(); }
+    }
+
+    /// <summary>R2-099: every definition of the list passes the host check, not only the first.</summary>
+    [Fact]
+    public void R2099_ADefinitionOnAnotherHost_RefusesTheWholeList()
+    {
+        var now = new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero);
+        var env = new Dictionary<string, string>
+        {
+            ["AETHEUS_SCANNER_TARGET_URL"] = "http://127.0.0.1:10081",
+            ["AETHEUS_SCANNER_TARGET_CLASSIFICATION"] = "ephemeral",
+            ["AETHEUS_SCANNER_TARGET_TRUSTED"] = "true",
+            ["AETHEUS_SCANNER_TARGET_ALLOWED_HOST"] = "127.0.0.1",
+            ["AETHEUS_SCANNER_ACTIVE"] = "false",
+            ["AETHEUS_SCANNER_API_SPECIFICATION_URLS"] = "http://127.0.0.1:10081/openapi/dast-0.json\nhttps://elsewhere.example/openapi.json",
+            ["AETHEUS_SCANNER_API_SPECIFICATION_FORMAT"] = "openapi",
+            ["AETHEUS_SCANNER_DAST_LEASE_TOKEN"] = new string('a', 64),
+            ["AETHEUS_SCANNER_DAST_LEASE_EXPIRES_AT"] = now.AddMinutes(5).ToString("O")
+        };
+
+        Assert.False(ScannerOperationValidator.ValidateDastTarget(
+            ScannerManifestCatalog.Find("zap-api")!, env, new FakeTimeProvider(now), out var error));
+        Assert.StartsWith("DAST API refused", error, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void BuildRawArtifactName_DastStepsReceiveDistinctStableNames()
     {

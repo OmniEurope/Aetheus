@@ -48,31 +48,31 @@ else
                             @bind-Value="_bulkPermission" Placeholder="@L["PermissionLevel"]" Class="bulk-perm-select" Disabled="@_savingPermissions" />
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnApplyBulk" Disabled="@(_bulkPermission is null || _savingPermissions)" title="@L["ApplyBulkPermissions"]"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["Apply"]</span></OmniButton>
                     </OmniStack>
-                    <AetheusDataGrid TItem="PermissionRowModel" Data="@_permissionRows" PageSize="20" Virtualize="@(_permissionRows.Count > 20)"
+                    <AetheusDataGrid TItem="PermissionRowModel" ExportName="@L["PermissionMatrix"]" Data="@_permissionRows" PageSize="20" Virtualize="@(_permissionRows.Count > 20)"
                 class="omni-u-mt-sm">
                         <Columns>
-                            <OmniDataGridColumn Frozen="true" TItem="PermissionRowModel" Title="@L["ResourceType"]" Width="180px" Filterable="true" >
+                            <OmniDataGridColumn Frozen="true" TItem="PermissionRowModel" ExportValue="@ResourceTypeExport" Title="@L["ResourceType"]" Width="180px" Filterable="true" >
                                 <Template Context="row">
                                     <OmniText Element="OmniTextElement.Paragraph">@L[row.ResourceType.ToString()]</OmniText>
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="PermissionRowModel" Title="@L["Scope"]" Width="160px" Filterable="true" >
+                            <OmniDataGridColumn TItem="PermissionRowModel" ExportValue="@ScopeExport" Title="@L["Scope"]" Width="160px" Filterable="true" >
                                 <Template Context="row">
                                     <OmniDropDown aria-label="@L["Scope"]" TValue="string" Options="@_scopeOptions" @bind-Value="row.Scope"
                                         Class="role-perm-select" @bind-Value:after="@(() => OnScopeChangedAndSaveAsync(row))" Disabled="@_savingPermissions" />
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="PermissionRowModel" Title="@L["Read"]" Width="80px" TextAlign="OmniDataGridTextAlign.Center" Filterable="true" >
+                            <OmniDataGridColumn TItem="PermissionRowModel" ExportValue="@ReadExport" Title="@L["Read"]" Width="80px" TextAlign="OmniDataGridTextAlign.Center" Filterable="true" >
                                 <Template Context="row">
                                     <OmniCheckBox aria-label="@L["Read"]" @bind-Value="row.CanRead" @bind-Value:after="@(() => OnPermissionToggledAndSaveAsync(row))" Disabled="@_savingPermissions" />
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="PermissionRowModel" Title="@L["Write"]" Width="80px" TextAlign="OmniDataGridTextAlign.Center" Filterable="true" >
+                            <OmniDataGridColumn TItem="PermissionRowModel" ExportValue="@WriteExport" Title="@L["Write"]" Width="80px" TextAlign="OmniDataGridTextAlign.Center" Filterable="true" >
                                 <Template Context="row">
                                     <OmniCheckBox aria-label="@L["Write"]" @bind-Value="row.CanWrite" @bind-Value:after="@(() => OnPermissionToggledAndSaveAsync(row))" Disabled="@_savingPermissions" />
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="PermissionRowModel" Title="@L["Admin"]" Width="80px" TextAlign="OmniDataGridTextAlign.Center" Filterable="true" >
+                            <OmniDataGridColumn TItem="PermissionRowModel" ExportValue="@AdminExport" Title="@L["Admin"]" Width="80px" TextAlign="OmniDataGridTextAlign.Center" Filterable="true" >
                                 <Template Context="row">
                                     <OmniCheckBox aria-label="@L["Admin"]" @bind-Value="row.CanAdmin" @bind-Value:after="@(() => OnPermissionToggledAndSaveAsync(row))" Disabled="@_savingPermissions" />
                                 </Template>
@@ -101,8 +101,8 @@ else
                             </OmniFormField>
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddUser" Disabled="@(_selectedUserId is null)" Class="@(_addingUser ? "btn-busy" : null)" Busy="@(_addingUser)" title="@L["AddUserToRole"]"><OmniIcon Name="OmniIconName.UserPlus" /> <span>@L["Add"]</span></OmniButton>
                         </OmniStack>
-                            <AetheusDataGrid FullHeight="true" @ref="_usersGrid" TItem="RoleUserDto" KeyProperty="UserId" Data="@_roleUsers" Count="@_roleUsersCount"
-                                LoadData="@LoadRoleUsersAsync" IsLoading="@_loadingRoleUsers" PageSize="25"
+                            <AetheusDataGrid FullHeight="true" @ref="_usersGrid" ExportName="@L["Users"]" TItem="RoleUserDto" KeyProperty="UserId" Data="@_roleUsers" Count="@_roleUsersCount"
+                                LoadData="@LoadRoleUsersAsync" ExportRead="@ReadRoleUsersExportAsync" IsLoading="@_loadingRoleUsers" PageSize="25"
                                 Virtualize="@AetheusGrid.RemoteVirtualization"
                                 VirtualData="@(() => new OmniDataGridResult<RoleUserDto>(_roleUsers, _roleUsersCount))"
                                 class="omni-u-mt-sm aetheus-clickable-rows"
@@ -117,7 +117,7 @@ else
                                         </Template>
                                     </OmniDataGridColumn>
                                     <OmniDataGridColumn TItem="RoleUserDto" Property="Email" Title="@L["Email"]" Filterable="true" />
-                                    <OmniDataGridColumn TItem="RoleUserDto" Key="IsActive" Title="@L["Status"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@ActiveText" >
+                                    <OmniDataGridColumn TItem="RoleUserDto" Key="IsActive" ExportValue="@UserStatusExport" Title="@L["Status"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@ActiveText" >
                                         <Template Context="u">
                                             <OmniBadge Fill="OmniFill.Solid" Tone="@(u.IsActive ? OmniTone.Success : OmniTone.Danger)">@(u.IsActive ? L["Active"] : L["Inactive"])</OmniBadge>
                                         </Template>

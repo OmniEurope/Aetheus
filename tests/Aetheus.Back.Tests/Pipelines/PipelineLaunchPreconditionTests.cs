@@ -45,7 +45,7 @@ public sealed class PipelineLaunchPreconditionTests
     private PipelineRunPreflightService BuildSut(ILogger<PipelineRunPreflightService>? logger = null)
     {
         var checks = Substitute.For<IPipelineEnvironmentCheckGuard>();
-        checks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>())
+        checks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(true);
         var ports = Substitute.For<IPipelinePortRegistryGuard>();
         ports.FindPortConflictsAsync(

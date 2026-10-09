@@ -1,0 +1,75 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-xl omni-u-mb-sm">@L["DataRetention"]</OmniHeading>
+@if (_loadFailed)
+{
+    <OmniAlert Severity="OmniSeverity.Warning">@L["DataRetentionLoadFailed"]</OmniAlert>
+}
+else if (_model is null)
+{
+    <AetheusLoader />
+}
+else
+{
+    <OmniText Class="omni-u-mb-md">@L["DataRetentionHelp"]</OmniText>
+    <OmniTemplateForm TModel="DataRetentionFormModel" Model="@_model" OnValidSubmit="@OnSubmit" Class="project-data-retention">
+        <OmniDataAnnotationsValidator Localizer="@L" />
+        <OmniRow Gap="OmniSpacing.Large">
+            <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField Label="@L["DataRetentionProfileLabel"]" For="project-data-retention-profile">
+                    <OmniDropDown Id="project-data-retention-profile" @bind-Value="_model.Profile" Options="@_profileOptions" />
+                </OmniFormField>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField For="project-data-retention-export" Id="project-data-retention-export-field" Description="@SavedIntervalText" Help="@L["TelemetrySendIntervalPackageHelp"]"><LabelContent>@L["DataRetentionExportInterval"]</LabelContent><ChildContent>
+                    <OmniNumeric @bind-Value="_model.TelemetryExportIntervalMinutes" Id="project-data-retention-export"
+                        Minimum="DataRetentionProfiles.MinimumExportIntervalMinutes" Maximum="DataRetentionProfiles.MaximumExportIntervalMinutes"
+                        Placeholder="@ProfileValue(Defaults.TelemetryExportIntervalMinutes)" />
+                    <ValidationMessage For="@(() => _model.TelemetryExportIntervalMinutes)" />
+                </ChildContent></OmniFormField>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField For="project-data-retention-telemetry"><LabelContent>@L["DataRetentionTelemetryDetail"]</LabelContent><ChildContent>
+                    <OmniNumeric @bind-Value="_model.TelemetryDetailRetentionDays" Id="project-data-retention-telemetry"
+                        Minimum="DataRetentionProfiles.MinimumTelemetryDetailDays" Maximum="DataRetentionProfiles.MaximumTelemetryDetailDays"
+                        Placeholder="@ProfileValue(Defaults.TelemetryDetailRetentionDays)" />
+                    <ValidationMessage For="@(() => _model.TelemetryDetailRetentionDays)" />
+                </ChildContent></OmniFormField>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField For="project-data-retention-aggregates"><LabelContent>@L["DataRetentionAggregates"]</LabelContent><ChildContent>
+                    <OmniNumeric @bind-Value="_model.TelemetryAggregateRetentionMonths" Id="project-data-retention-aggregates"
+                        Minimum="DataRetentionProfiles.MinimumAggregateMonths" Maximum="DataRetentionProfiles.MaximumAggregateMonths"
+                        Placeholder="@ProfileValue(Defaults.TelemetryAggregateRetentionMonths)" />
+                    <ValidationMessage For="@(() => _model.TelemetryAggregateRetentionMonths)" />
+                </ChildContent></OmniFormField>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField For="project-data-retention-analysis"><LabelContent>@L["DataRetentionAnalysisDetail"]</LabelContent><ChildContent>
+                    <OmniNumeric @bind-Value="_model.AnalysisDetailRetentionDays" Id="project-data-retention-analysis"
+                        Minimum="DataRetentionProfiles.MinimumAnalysisDetailDays" Maximum="DataRetentionProfiles.MaximumAnalysisDetailDays"
+                        Placeholder="@ProfileValue(Defaults.AnalysisDetailRetentionDays)" />
+                    <ValidationMessage For="@(() => _model.AnalysisDetailRetentionDays)" />
+                </ChildContent></OmniFormField>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField For="project-data-retention-logs"><LabelContent>@L["DataRetentionAppLogs"]</LabelContent><ChildContent>
+                    <OmniNumeric @bind-Value="_model.AppLogRetentionDays" Id="project-data-retention-logs"
+                        Minimum="DataRetentionProfiles.MinimumAppLogDays" Maximum="DataRetentionProfiles.MaximumAppLogDays"
+                        Placeholder="@ProfileValue(Defaults.AppLogRetentionDays)" />
+                    <ValidationMessage For="@(() => _model.AppLogRetentionDays)" />
+                </ChildContent></OmniFormField>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField For="project-data-retention-budget"><LabelContent>@L["DataRetentionStorageBudget"]</LabelContent><ChildContent>
+                    <OmniNumeric @bind-Value="_model.StorageBudgetMegabytes" Id="project-data-retention-budget"
+                        Minimum="ProjectStorageDefaults.MinimumBudgetMegabytes" Maximum="ProjectStorageDefaults.MaximumBudgetMegabytes"
+                        Placeholder="@DefaultValue(ProjectStorageDefaults.DefaultBudgetMegabytes)" />
+                    <ValidationMessage For="@(() => _model.StorageBudgetMegabytes)" />
+                </ChildContent></OmniFormField>
+            </OmniColumn>
+        </OmniRow>
+        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Id="project-data-retention-save" Busy="@_saving"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+        </OmniStack>
+    </OmniTemplateForm>
+}

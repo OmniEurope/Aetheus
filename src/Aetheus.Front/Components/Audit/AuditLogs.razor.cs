@@ -77,6 +77,15 @@ public partial class AuditLogs : IAsyncDisposable
         _count = result.TotalCount;
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<AuditLogDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(20);
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(AuditLogDto.Timestamp), fallbackDescending: true);
+        return Api.Monitoring.GetAuditLogsAsync(page, pageSize, sortBy: sortBy, sortDescending: sortDescending,
+            filters: args.ToApiFilters());
+    }
+
     private async Task LoadData(GridLoadArgs args)
     {
         // Recette R-238: the header filters drive the query, each one a real column filter of the endpoint.

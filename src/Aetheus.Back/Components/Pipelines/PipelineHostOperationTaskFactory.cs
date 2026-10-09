@@ -458,7 +458,11 @@ public sealed class PipelineHostOperationTaskFactory(
             return;
         }
         await BlueGreenRunOwnership.StampAsync(binding!.Variables, runId, resourceLocks, ct).ConfigureAwait(false);
-        if (binding!.SkippedComposeEnv.Count > 0)
+        // Recette R2-092: bluegreen-up refuses a compose_env name the run does not define, so a rollback
+        // that finds one undefined belongs to a run that never started a colour, let alone switched
+        // one. The agent's rollback says there is nothing to undo; a run warning about variables it
+        // does not need would only repeat the failure that stopped the run in other words.
+        if (binding!.SkippedComposeEnv.Count > 0 && operation != OperationKind.BlueGreenRollback)
             await repo.AppendRunWarningsAsync(runId, [$"Blue-green step '{stepRun.StepName}': compose_env did not forward {string.Join(", ", binding.SkippedComposeEnv)}, which this run does not define at this point."], ct).ConfigureAwait(false);
 
         stepRun.ServerId = legServer.Id;

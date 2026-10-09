@@ -18,18 +18,18 @@ namespace Aetheus.Back.Tests.Pipelines;
 /// </summary>
 public sealed class NightlyAndDemoPipelineTests
 {
-    private const string TemplateResource = "host-bluegreen-deploy-v6.yaml";
+    private const string TemplateResource = "host-bluegreen-deploy-v1.yaml";
 
     private static async Task<PipelineYamlDefinition> ComposeAsync(string file)
     {
         var yaml = await File.ReadAllTextAsync(
             Path.Combine(RepositoryScan.Root, ".pipeline", file), TestContext.Current.CancellationToken);
         var repo = Substitute.For<IPipelineRepository>();
-        var template = new PipelineTemplate { Id = 1, Name = "host-bluegreen-deploy", LatestVersion = 6 };
+        var template = new PipelineTemplate { Id = 1, Name = "host-bluegreen-deploy", LatestVersion = 1 };
         template.Versions.Add(new PipelineTemplateVersion
         {
             TemplateId = 1,
-            Version = 6,
+            Version = 1,
             YamlContent = DeliveryPipelineTemplateSeeder.ReadResource(TemplateResource)
         });
         repo.FindTemplateByNameAsync("host-bluegreen-deploy", Arg.Any<int>(), Arg.Any<CancellationToken>())

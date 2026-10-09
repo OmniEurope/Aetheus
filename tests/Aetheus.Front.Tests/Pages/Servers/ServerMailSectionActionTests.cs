@@ -69,10 +69,13 @@ public sealed class ServerMailSectionActionTests : BunitContext
     [Fact]
     public void AnInstalledServerOffersTheMailWriteActions()
     {
-        var cut = RenderSection();
+        StubReads();
+        var server = ServerTestData.MakeMailServer(true, true, true) with { MailSetupAvailable = true };
+        var cut = Render<ServerMailSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
 
         Assert.NotNull(TryButton(cut, "AddDomain"));
-        Assert.NotNull(TryButton(cut, "Postfix"));
+        // Recette R2-090: the service controls moved into the status list, shown once the counts are read.
+        cut.WaitForAssertion(() => Assert.NotNull(TryButton(cut, "Postfix")));
     }
 
     [Fact]

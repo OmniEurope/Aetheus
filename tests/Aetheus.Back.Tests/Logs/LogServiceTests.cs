@@ -91,6 +91,31 @@ public class LogServiceTests
     }
 
     [Fact]
+    public async Task AppendLogsAsync_BroadcastLinesCarryTheirPersistedIds()
+    {
+        // FRONT-010: without the id a streamed line could not be told apart from the same line read
+        // again in a snapshot or in a page of the full log, so the run page duplicated or lost lines.
+        _repoMock.AddLogsAsync(Arg.Any<List<TaskLog>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var id = 100;
+                foreach (var log in call.Arg<List<TaskLog>>()) log.Id = ++id;
+                return Task.CompletedTask;
+            });
+        List<TaskLogDto>? sent = null;
+        _clientProxyMock.When(proxy => proxy.SendCoreAsync("LogsReceived", Arg.Any<object?[]>(), Arg.Any<CancellationToken>()))
+            .Do(call => sent = (List<TaskLogDto>)call.ArgAt<object?[]>(1)[0]!);
+
+        await _sut.AppendLogsAsync(
+        [
+            new() { TaskId = 1, Level = TaskLogLevel.Info, Message = "L1" },
+            new() { TaskId = 1, Level = TaskLogLevel.Info, Message = "L2" }
+        ], ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal([101, 102], sent!.Select(line => line.Id));
+    }
+
+    [Fact]
     public async Task AppendLogsAsync_EmptyList_DoesNotCallRepo()
     {
         var requests = new List<AppendLogRequest>();

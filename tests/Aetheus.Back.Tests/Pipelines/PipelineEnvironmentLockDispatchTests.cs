@@ -34,8 +34,8 @@ public sealed class PipelineEnvironmentLockDispatchTests
         repo.GetActiveStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         repo.GetSuccessfulStepOutputsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         repo.GetRunAffinityServerIdAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns((int?)null);
-        repo.FindEnvironmentByNameAsync("qa", Arg.Any<CancellationToken>()).Returns(new Environment { Id = 3, Name = "qa" });
-        environmentChecks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>()).Returns(true);
+        repo.FindEnvironmentByNameAsync("qa", Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns(new Environment { Id = 3, Name = "qa" });
+        environmentChecks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns(true);
         finalizer.IsRunActiveAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
         locks.TryAcquireAsync(RunId, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>()).Returns(holder);
 

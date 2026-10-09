@@ -146,7 +146,10 @@ public class NotificationService(
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
             logger.LogWarning(ex, "Notification channel test failed for {Channel}", channel.Name);
-            return new NotificationTestResultDto { Status = NotificationTestStatus.Failed, Message = "The provider could not be reached." };
+            var message = ex is HttpRequestException { StatusCode: { } status }
+                ? $"The provider rejected the message (HTTP {(int)status})."
+                : "The provider could not be reached.";
+            return new NotificationTestResultDto { Status = NotificationTestStatus.Failed, Message = message };
         }
     }
 
@@ -284,7 +287,9 @@ public class NotificationService(
         var slackPayload = JsonSerializer.Serialize(new { text = $"*[Aetheus]* {eventType}\n```{jsonPayload}```" });
         using var client = httpClientFactory.CreateClient("webhooks");
         using var content = new StringContent(slackPayload, Encoding.UTF8, "application/json");
-        await client.PostAsync(urlElement.GetString(), content, ct).ConfigureAwait(false);
+        // A provider that answers 401, 429 or 500 did not take the message: the status is the verdict.
+        using var response = await client.PostAsync(urlElement.GetString(), content, ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
     }
 
     private async Task SendTeamsNotificationAsync(NotificationChannel channel, string eventType, string jsonPayload, CancellationToken ct)
@@ -317,7 +322,9 @@ public class NotificationService(
 
         using var client = httpClientFactory.CreateClient("webhooks");
         using var content = new StringContent(teamsPayload, Encoding.UTF8, "application/json");
-        await client.PostAsync(urlElement.GetString(), content, ct).ConfigureAwait(false);
+        // A provider that answers 401, 429 or 500 did not take the message: the status is the verdict.
+        using var response = await client.PostAsync(urlElement.GetString(), content, ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
     }
 
     private async Task SendWebhookNotificationAsync(NotificationChannel channel, string eventType, string jsonPayload, CancellationToken ct)
@@ -337,7 +344,8 @@ public class NotificationService(
             request.Headers.Add("X-Aetheus-Signature", $"sha256={signature}");
         }
 
-        await client.SendAsync(request, ct).ConfigureAwait(false);
+        using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
     }
 
     private static async Task<bool> IsUrlSafeAsync(string? targetUrl, CancellationToken ct)

@@ -37,22 +37,13 @@ public sealed class AnalyticsVaultPerProjectMigrationTests(PostgresFixture fixtu
             Assert.True(index > 0, $"Could not locate {Migration} after a predecessor.");
             await db.GetService<IMigrator>().MigrateAsync(migrations[index - 1], ct);
 
-            var project = new Project
-            {
-                Name = "Mon Aetheus",
-                OrganizationId = await db.Organizations.OrderBy(o => o.Id).Select(o => o.Id).FirstAsync(ct)
-            };
-            db.Projects.Add(project);
-            await db.SaveChangesAsync(ct);
-            projectId = project.Id;
+            var organizationId = await db.Organizations.OrderBy(o => o.Id).Select(o => o.Id).FirstAsync(ct);
+            projectId = await LegacyProjectRows.InsertAsync(db, "Mon Aetheus", organizationId, ct);
 
             firstAppId = await InsertLegacyAppAsync(db, projectId, "front", ct);
             secondAppId = await InsertLegacyAppAsync(db, projectId, "docs", ct);
 
-            var soloProject = new Project { Name = "Portfolio", OrganizationId = project.OrganizationId };
-            db.Projects.Add(soloProject);
-            await db.SaveChangesAsync(ct);
-            soloProjectId = soloProject.Id;
+            soloProjectId = await LegacyProjectRows.InsertAsync(db, "Portfolio", organizationId, ct);
             soloAppId = await InsertLegacyAppAsync(db, soloProjectId, "portfolio", ct);
 
             db.Vaults.AddRange(

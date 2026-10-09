@@ -23,6 +23,23 @@ public sealed record AnalysisGradeMeasureDto
     public double? EThreshold { get; init; }
     public AnalysisGrade? NextGrade { get; init; }
     public double? DistanceToNextGrade { get; init; }
+
+    /// <summary>True for a <c>finding_score: weighted</c> rule: <see cref="ObservedValue"/> is the
+    /// weighted score of the open findings (<see cref="AnalysisFindingScore"/>).</summary>
+    public bool WeightedFindingScore { get; init; }
+
+    /// <summary>The open findings behind a weighted score, by severity; null for any other rule.</summary>
+    public AnalysisGradeFindingCountsDto? FindingCounts { get; init; }
+}
+
+/// <summary>Distinct open findings by severity (an info count includes findings without a severity).</summary>
+public sealed record AnalysisGradeFindingCountsDto
+{
+    public int Critical { get; init; }
+    public int High { get; init; }
+    public int Medium { get; init; }
+    public int Low { get; init; }
+    public int Info { get; init; }
 }
 
 public sealed record AnalysisGradeDomainDto

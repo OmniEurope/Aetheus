@@ -31,7 +31,7 @@
   <data name="Settings" xml:space="preserve"><value>Paramètres</value></data>
   <data name="Login" xml:space="preserve"><value>Connexion</value></data>
   <data name="PublicDemo" xml:space="preserve"><value>Démo publique</value></data>
-  <data name="PublicDemoCredentials" xml:space="preserve"><value>Identifiant : admin · Mot de passe : aetheus-demo</value></data>
+  <data name="PublicDemoFillForm" xml:space="preserve"><value>Remplir le formulaire</value></data>
   <data name="Logout" xml:space="preserve"><value>Déconnexion</value></data>
   <data name="Username" xml:space="preserve"><value>Nom d'utilisateur</value></data>
   <data name="About" xml:space="preserve"><value>À propos</value></data>
@@ -144,7 +144,6 @@
   <data name="Enum_GitMirrorStatus_Error" xml:space="preserve"><value>Erreur</value></data>
   <data name="Active" xml:space="preserve"><value>Actif</value></data>
   <data name="Archived" xml:space="preserve"><value>Archivé</value></data>
-  <data name="DeleteProjectConfirm" xml:space="preserve"><value>Êtes-vous sûr de vouloir supprimer ce projet ?</value></data>
   <data name="Docker" xml:space="preserve"><value>Docker</value><comment>same in both languages</comment></data>
   <data name="Containers" xml:space="preserve"><value>Conteneurs</value></data>
   <data name="DockerActionSent" xml:space="preserve"><value>Commande {0} envoyée pour {1}</value></data>
@@ -349,8 +348,6 @@
   <data name="RepositoryUrl" xml:space="preserve"><value>URL du dépôt</value></data>
   <data name="TagsCommaSeparated" xml:space="preserve"><value>Tags (séparés par des virgules)</value></data>
   <data name="ProjectCreated" xml:space="preserve"><value>Projet créé.</value></data>
-  <data name="OpenNewProjectConfirm" xml:space="preserve"><value>Ouvrir le nouveau projet « {0} » maintenant ?</value></data>
-  <data name="OpenProject" xml:space="preserve"><value>Ouvrir</value></data>
   <data name="StayHere" xml:space="preserve"><value>Rester ici</value></data>
   <data name="ProjectUpdated" xml:space="preserve"><value>Projet mis à jour.</value></data>
   <data name="PipelineCreated" xml:space="preserve"><value>Pipeline créé.</value></data>
@@ -451,16 +448,18 @@
   <data name="ApprovalTimeoutMinutes" xml:space="preserve"><value>Délai d'approbation (minutes)</value></data>
   <data name="ApprovalInstructions" xml:space="preserve"><value>Instructions d'approbation</value></data>
   <data name="Approval" xml:space="preserve"><value>Approbation</value></data>
-  <data name="ApprovalRequiredTitle" xml:space="preserve"><value>Approbation de déploiement requise</value></data>
+  <data name="EnvironmentApprovalTitle" xml:space="preserve"><value>Autoriser le déploiement en {0}</value></data>
+  <data name="PipelineApprovalTitle" xml:space="preserve"><value>Confirmer que la nouvelle version fonctionne</value></data>
   <data name="ApprovalMissingTitle" xml:space="preserve"><value>Aucune approbation à donner</value></data>
   <data name="ApprovalMissingDetail" xml:space="preserve"><value>Cette exécution attend une approbation qui n'existe plus. Le backend réapplique la décision enregistrée à sa prochaine passe de réconciliation, en général en moins d'une minute ; si l'exécution reste bloquée ensuite, annulez-la.</value></data>
   <data name="ApprovalLoadFailedDetail" xml:space="preserve"><value>L'approbation en attente n'a pas pu être chargée. Rechargez la page ; si l'erreur persiste, le backend ne répond pas.</value></data>
-  <data name="ApprovalRequiredDetail" xml:space="preserve"><value>Ce run attend qu'un humain approuve l'étape « {0} » pour l'environnement « {1} » avant de continuer.</value></data>
-  <data name="PipelineApprovalRequiredDetail" xml:space="preserve"><value>Ce run attend qu'un humain approuve l'étape « {0} », approbation demandée par la pipeline elle-même, avant de continuer.</value></data>
+  <data name="ApprovalRequiredDetail" xml:space="preserve"><value>Ce run attend qu'un humain autorise l'environnement « {1} » avant de continuer. L'autorisation vaut pour toute l'exécution (première étape concernée : « {0} »).</value></data>
+  <data name="PipelineApprovalRequiredDetail" xml:space="preserve"><value>Ce run attend qu'un humain confirme, à l'étape « {0} », que la nouvelle version fonctionne avant de continuer.</value></data>
   <data name="ApprovalCommentsOptional" xml:space="preserve"><value>Commentaires (facultatif)</value></data>
   <data name="Approve" xml:space="preserve"><value>Approuver</value></data>
   <data name="Reject" xml:space="preserve"><value>Rejeter</value></data>
-  <data name="ApprovalDecisionFailed" xml:space="preserve"><value>La décision d'approbation n'a pas pu être enregistrée.</value></data>
+  <data name="ApprovalDecisionFailed" xml:space="preserve"><value>La décision d'approbation n'a pas été appliquée.</value></data>
+  <data name="ApprovalDecisionFailedStatus" xml:space="preserve"><value>Le serveur a répondu {0} sans donner de raison.</value></data>
   <data name="SecretUpdated" xml:space="preserve"><value>Secret mis à jour.</value></data>
   <data name="SecretRotated" xml:space="preserve"><value>Secret renouvelé.</value></data>
   <data name="RotateSecretConfirm" xml:space="preserve"><value>Renouveler la valeur du secret « {0} » ? Une nouvelle version sera enregistrée.</value></data>
@@ -783,6 +782,8 @@
   <data name="PipelineRunnerDisabledToast" xml:space="preserve"><value>Runner de pipeline désactivé.</value></data>
   <data name="AgentUpdateInProgress" xml:space="preserve"><value>Mise à jour de l'agent en cours</value></data>
   <data name="AgentUpdateFailed" xml:space="preserve"><value>Échec de la mise à jour</value></data>
+  <data name="AgentUpdateInProgressTo" xml:space="preserve"><value>Mise à jour en cours vers {0}</value></data>
+  <data name="AgentUpdateFailedWithReason" xml:space="preserve"><value>Échec de la mise à jour : {0}</value></data>
   <data name="AgentUpdateTimeoutHint" xml:space="preserve"><value>Aucun progrès reçu - l'agent est peut-être hors ligne ou injoignable.</value></data>
   <data name="AgentUpdateRestartingHint" xml:space="preserve"><value>Attente du redémarrage de l'agent…</value></data>
   <data name="AgentUpdateDoneHint" xml:space="preserve"><value>Agent redémarré en v{0}.</value></data>
@@ -844,6 +845,9 @@
   <data name="DockerfilePlaceholder" xml:space="preserve"><value># Collez votre Dockerfile ici...</value></data>
   <data name="CopyToClipboard" xml:space="preserve"><value>Copier dans le presse-papiers</value></data>
   <data name="CopyLogs" xml:space="preserve"><value>Copier les logs</value></data>
+  <data name="EarlierLogLinesHidden" xml:space="preserve"><value>Seules les dernières lignes de cette étape sont affichées. Les précédentes sont conservées sur le serveur.</value></data>
+  <data name="ShowCompleteLog" xml:space="preserve"><value>Journal complet</value></data>
+  <data name="CompleteLogLoadFailed" xml:space="preserve"><value>Le journal complet n'a pas pu être chargé.</value></data>
   <data name="ExecutedCommand" xml:space="preserve"><value>Commande exécutée</value></data>
   <data name="Output" xml:space="preserve"><value>Résultat</value></data>
   <data name="OutputHidden" xml:space="preserve"><value>Résultat masqué</value></data>
@@ -1158,20 +1162,29 @@
   <data name="RunCancelledDetail" xml:space="preserve"><value>La demande est enregistrée. Les nettoyages obligatoires se termineront avant le passage à l'état Annulé.</value></data>
   <data name="CancellationAcceptedTitle" xml:space="preserve"><value>Annulation prise en compte</value></data>
   <data name="CancellationAcceptedDetail" xml:space="preserve"><value>Aucun nouveau travail ne sera lancé. Le travail en cours s'arrête et les nettoyages obligatoires se termineront avant le passage à l'état Annulé.</value></data>
+  <data name="RunCancelledBy" xml:space="preserve"><value>Annulée par {0}.</value></data>
+  <data name="RunCancelledBySystem" xml:space="preserve"><value>Annulée par Aetheus (annulation automatique).</value></data>
   <data name="ChildCurrentStage" xml:space="preserve"><value>Ce que fait le run déclenché en ce moment</value></data>
   <data name="Digest" xml:space="preserve"><value>Empreinte</value></data>
   <data name="DigestUnavailable" xml:space="preserve"><value>non enregistrée</value></data>
   <data name="CandidateNotDeployableTitle" xml:space="preserve"><value>Cette candidate ne peut pas être déployée</value></data>
   <data name="CandidateNotDeployableDetail" xml:space="preserve"><value>Le sceau d&apos;assurance a refusé le paquet. Le run peut être vert : ce qu&apos;il a construit n&apos;est pas autorisé en production.</value></data>
   <data name="CandidateBlockingTests" xml:space="preserve"><value>Tests bloquants</value></data>
+  <data name="GateSealedGradeTitle" xml:space="preserve"><value>Note scellée de la candidate</value></data>
+  <data name="GateSealedGradeDetail" xml:space="preserve"><value>La liste des exécutions et cet onglet montrent la note scellée par le contrat d&apos;assurance de la candidate. L&apos;analyse ci-dessous, prise seule, vaut {0}.</value></data>
+  <data name="LatestGradeOpenFindings" xml:space="preserve"><value>Ouvrir les constats de cette exécution notée</value></data>
+  <data name="LastSuccessOpenRun" xml:space="preserve"><value>Ouvrir cette exécution réussie</value></data>
   <data name="CandidateDeployableShort" xml:space="preserve"><value>Candidate autorisée</value></data>
   <data name="CandidateNotDeployableShort" xml:space="preserve"><value>Candidate refusée</value></data>
   <data name="CandidateDeployableTitle" xml:space="preserve"><value>Candidate autorisée au déploiement</value></data>
   <data name="AssuranceGrade" xml:space="preserve"><value>Note d&apos;assurance</value></data>
   <data name="PendingApprovalsTooltip" xml:space="preserve"><value>{0} approbation(s) en attente de décision</value></data>
   <data name="PendingApprovalsTitle" xml:space="preserve"><value>Approbations en attente</value></data>
-  <data name="PendingApprovalLine" xml:space="preserve"><value> - stage {0}, environnement {1}, demandée le {2}</value></data>
-  <data name="PendingPipelineApprovalLine" xml:space="preserve"><value> - stage {0}, approbation de la pipeline, demandée le {1}</value></data>
+  <data name="PendingApprovalsTabTitle" xml:space="preserve"><value>● {0} approbation(s) en attente</value></data>
+  <data name="RunLiveInterrupted" xml:space="preserve"><value>Direct interrompu depuis {0}</value></data>
+  <data name="RunLiveInterruptedTitle" xml:space="preserve"><value>La mise à jour en direct est coupée : la page se recharge seule toutes les 15 secondes et se reconnecte dès que possible.</value></data>
+  <data name="PendingApprovalLine" xml:space="preserve"><value> - autoriser le déploiement en {1} (stage {0}), demandée le {2}</value></data>
+  <data name="PendingPipelineApprovalLine" xml:space="preserve"><value> - confirmer que la nouvelle version fonctionne (stage {0}), demandée le {1}</value></data>
   <data name="ReleaseNotQualified" xml:space="preserve"><value>Non qualifiée</value></data>
   <data name="ReleaseNotQualifiedHint" xml:space="preserve"><value>Aucun contrat d&apos;assurance scellé : cette release ne vient pas d&apos;une candidate qualifiante (par exemple release-fast).</value></data>
   <data name="Redeploy" xml:space="preserve"><value>Redéployer</value></data>
@@ -1411,8 +1424,6 @@
   <data name="UnexpectedServerError" xml:space="preserve"><value>Une erreur serveur inattendue s'est produite.</value></data>
   <data name="RequestFailed" xml:space="preserve"><value>Échec de la requête ({0}).</value></data>
   <data name="Mail" xml:space="preserve"><value>Messagerie</value></data>
-  <data name="MailQueueCount" xml:space="preserve"><value>{0} en file d'attente</value></data>
-  <data name="MailSetup" xml:space="preserve"><value>Messagerie</value></data>
   <data name="MailSetupCapabilityRequired" xml:space="preserve"><value>L'installation de la messagerie n'est pas activée sur ce serveur. Relancez l'installeur de l'agent avec la capacité mail-setup (--enable-mail-setup).</value></data>
   <data name="MailInstalledNotConfigured" xml:space="preserve"><value>Postfix/Dovecot sont installés mais la pile mail n'est pas configurée (aucun domaine). Lancez la configuration pour provisionner les boîtes virtuelles, l'authentification Dovecot et DKIM.</value></data>
   <data name="MailDomains" xml:space="preserve"><value>Domaines</value></data>
@@ -1433,7 +1444,6 @@
   <data name="AdminPassword" xml:space="preserve"><value>Mot de passe admin</value></data>
   <data name="Install" xml:space="preserve"><value>Installer</value></data>
   <data name="NoMailDomains" xml:space="preserve"><value>Aucun domaine mail configuré</value></data>
-  <data name="MailSetupSummary" xml:space="preserve"><value>Résumé</value></data>
   <data name="Previous" xml:space="preserve"><value>Précédent</value></data>
   <data name="Next" xml:space="preserve"><value>Suivant</value></data>
   <data name="Sender" xml:space="preserve"><value>Expéditeur</value></data>
@@ -1574,7 +1584,6 @@
   <data name="LogLevel" xml:space="preserve"><value>Niveau</value></data>
   <data name="AllLevels" xml:space="preserve"><value>Tous les niveaux</value></data>
   <data name="SearchLogs" xml:space="preserve"><value>Rechercher dans les logs…</value></data>
-  <data name="ExportCsv" xml:space="preserve"><value>Exporter CSV</value></data>
   <data name="LogsExportTitle" xml:space="preserve"><value>Logs de {0}</value></data>
   <data name="LogsExportFailed" xml:space="preserve"><value>Échec de l'export : une page du journal n'a pas pu être lue, aucun fichier n'a été produit.</value></data>
   <data name="LogsExportPeriodValue" xml:space="preserve"><value>dernières {0} heures</value></data>
@@ -1591,7 +1600,6 @@
   <data name="Download" xml:space="preserve"><value>Télécharger</value></data>
   <data name="DownloadFailed" xml:space="preserve"><value>Échec du téléchargement.</value></data>
   <data name="DownloadZip" xml:space="preserve"><value>Télécharger le zip</value></data>
-  <data name="ExportFailed" xml:space="preserve"><value>Échec de l'export.</value></data>
   <data name="ServiceLogs" xml:space="preserve"><value>Logs du service</value></data>
   <data name="LogLines" xml:space="preserve"><value>Lignes</value></data>
   <data name="FollowingLogs" xml:space="preserve"><value>Actualisé toutes les 30 s</value></data>
@@ -2283,6 +2291,8 @@
   <data name="AnalysisCriticalVulnerabilities" xml:space="preserve"><value>Failles critiques</value></data>
   <data name="AnalysisHighVulnerabilities" xml:space="preserve"><value>Failles de sévérité élevée</value></data>
   <data name="AnalysisMediumVulnerabilities" xml:space="preserve"><value>Failles de sévérité moyenne</value></data>
+  <data name="AnalysisOpenFindingsScore" xml:space="preserve"><value>Constats ouverts (score pondéré)</value></data>
+  <data name="AnalysisCriticalFindingNotDeliverable" xml:space="preserve"><value>Un constat critique ouvert donne F : non livrable.</value></data>
   <data name="AnalysisTestedLines" xml:space="preserve"><value>Lignes couvertes par les tests</value></data>
   <data name="AnalysisTestedBranches" xml:space="preserve"><value>Branches de code couvertes par les tests</value></data>
   <data name="AnalysisMaximumComplexity" xml:space="preserve"><value>Chemin de code le plus complexe</value></data>
@@ -2441,6 +2451,7 @@
   <data name="AuditAction_Organization.ProjectsAssigned" xml:space="preserve"><value>Projets affectés</value></data>
   <data name="AuditAction_AccessedUnmasked" xml:space="preserve"><value>Journaux démasqués consultés</value></data>
   <data name="AuditAction_AdvancedBranchAfterDeploy" xml:space="preserve"><value>Branche avancée après déploiement</value></data>
+  <data name="AuditAction_TaggedReleaseAfterDeploy" xml:space="preserve"><value>Version étiquetée après déploiement</value></data>
   <data name="AuditAction_AgentSelfUpdateAll" xml:space="preserve"><value>Mise à jour des agents demandée sur tous les serveurs</value></data>
   <data name="AuditAction_AgentUpdateConfirmationFailed" xml:space="preserve"><value>Mise à jour de l'agent non confirmée</value></data>
   <data name="AuditAction_AgentUpdateConfirmed" xml:space="preserve"><value>Mise à jour de l'agent confirmée</value></data>
@@ -2539,6 +2550,7 @@
   <data name="AuditAction_MailSetup" xml:space="preserve"><value>Serveur mail installé</value></data>
   <data name="AuditAction_MailSpamConfigure" xml:space="preserve"><value>Filtre anti-spam configuré</value></data>
   <data name="AuditAction_MailSpamInstall" xml:space="preserve"><value>Filtre anti-spam installé</value></data>
+  <data name="AuditAction_MailPurge" xml:space="preserve"><value>Messagerie effacée (réinstallation)</value></data>
   <data name="AuditAction_MailSpamLearn" xml:space="preserve"><value>Filtre anti-spam entraîné</value></data>
   <data name="AuditAction_MailStartDovecot" xml:space="preserve"><value>Dovecot démarré</value></data>
   <data name="AuditAction_MailStartPostfix" xml:space="preserve"><value>Postfix démarré</value></data>
@@ -2631,10 +2643,14 @@
   <data name="AuditAction_TeamspeakUnban" xml:space="preserve"><value>Bannissement TeamSpeak levé</value></data>
   <data name="AuditAction_TemplatePublicationCompensated" xml:space="preserve"><value>Publication du modèle compensée</value></data>
   <data name="AuditAction_TemplateVersionAdopted" xml:space="preserve"><value>Version du modèle adoptée</value></data>
+  <data name="AuditAction_TemplateVersionsReset" xml:space="preserve"><value>Versions du modèle repartues en v1</value></data>
+  <data name="AuditAction_TemplateVersionRepinned" xml:space="preserve"><value>Version du modèle réépinglée en v1</value></data>
   <data name="AuditAction_Tested" xml:space="preserve"><value>Testé</value></data>
   <data name="AuditAction_TotpDisabled" xml:space="preserve"><value>Double authentification désactivée</value></data>
   <data name="AuditAction_TotpEnabled" xml:space="preserve"><value>Double authentification activée</value></data>
   <data name="AuditAction_Triggered" xml:space="preserve"><value>Déclenché</value></data>
+  <data name="AuditAction_Cancelled" xml:space="preserve"><value>Annulé</value></data>
+  <data name="AuditAction_ApprovalDecision" xml:space="preserve"><value>Décision d'approbation</value></data>
   <data name="AuditAction_UnlinkedProjectServer" xml:space="preserve"><value>Serveur de projet délié</value></data>
   <data name="AuditAction_Unlisted" xml:space="preserve"><value>Paquet retiré de la liste</value></data>
   <data name="AuditAction_UnlockedUser" xml:space="preserve"><value>Utilisateur déverrouillé</value></data>
@@ -2659,13 +2675,13 @@
   <data name="DatabasePipelineHint" xml:space="preserve"><value>Inclure les migrations de schéma et les contrôles de compatibilité.</value></data>
   <data name="SelectPipelineCapabilities" xml:space="preserve"><value>Sélectionnez les capacités d’assurance et de livraison à générer.</value></data>
   <data name="CiPipelineHint" xml:space="preserve"><value>Compiler, tester et produire des artefacts immuables.</value></data>
-  <data name="QualityPipelineHint" xml:space="preserve"><value>Couverture, tests, formatage et preuves de qualité du code.</value></data>
-  <data name="SecurityPipelineHint" xml:space="preserve"><value>Secrets, dépendances, SAST, conteneurs et SBOM.</value></data>
+  <data name="QualityPipelineHint" xml:space="preserve"><value>Couverture et lint laissés par l'adaptateur du projet, analyse C#, Python et Java, note de A à F.</value></data>
+  <data name="SecurityPipelineHint" xml:space="preserve"><value>Secrets, code (SAST), dépendances et fichiers d'infrastructure, note de A à F.</value></data>
   <data name="QaPipelineHint" xml:space="preserve"><value>Environnement jetable et validation dynamique.</value></data>
   <data name="Candidate" xml:space="preserve"><value>Candidate</value><comment>same in both languages</comment></data>
   <data name="CandidatePipelineHint" xml:space="preserve"><value>Coordonner le parcours complet d’une candidate qualifiée.</value></data>
   <data name="Nightly" xml:space="preserve"><value>Nightly</value><comment>same in both languages</comment></data>
-  <data name="NightlyPipelineHint" xml:space="preserve"><value>Planifier l’assurance complète et les contrôles de dérive.</value></data>
+  <data name="NightlyPipelineHint" xml:space="preserve"><value>Chaque nuit : CI, qualité, sécurité, historique des secrets, QA et QA étendue pour les pipelines choisis ici.</value></data>
   <data name="ProductionDeployment" xml:space="preserve"><value>Déploiement en production</value></data>
   <data name="ProductionPipelineHint" xml:space="preserve"><value>Déployer une candidate qualifiée et vérifier sa disponibilité.</value></data>
   <data name="FastDeploy" xml:space="preserve"><value>Déploiement rapide</value></data>
@@ -2936,7 +2952,7 @@
   <data name="CoverageTierGood" xml:space="preserve"><value>bonne (80 % ou plus)</value></data>
   <data name="CoverageTierFair" xml:space="preserve"><value>moyenne (de 50 à 80 %)</value></data>
   <data name="CoverageTierLow" xml:space="preserve"><value>faible (moins de 50 %)</value></data>
-  <data name="StepUsualDuration" xml:space="preserve"><value>(moyenne {0})</value></data>
+  <data name="StepUsualDuration" xml:space="preserve"><value>(~{0})</value><comment>same in both languages</comment></data>
   <data name="StepUsualDurationHint" xml:space="preserve"><value>Durée moyenne de cette étape sur les dernières exécutions réussies</value></data>
   <data name="Supervision" xml:space="preserve"><value>Supervision</value><comment>same in both languages</comment></data>
   <data name="SupervisionDescription" xml:space="preserve"><value>Toutes les applications supervisées, tous projets confondus : leur statut, les personnes en ligne et le dernier événement reçu.</value></data>
@@ -2955,12 +2971,10 @@
   <data name="PerformanceThisBrowser" xml:space="preserve"><value>Ce navigateur</value></data>
   <data name="PerformanceThisBrowserHint" xml:space="preserve"><value>Les appels API les plus lents de cette session, tels que ce navigateur les a attendus : réseau et serveur ensemble.</value></data>
   <data name="PerformanceNoSamples" xml:space="preserve"><value>Aucune mesure pour l'instant.</value></data>
-  <data name="PerformanceWindow" xml:space="preserve"><value>{0} requêtes mesurées par le serveur depuis le {1} (24 heures au plus ; la fenêtre repart au redémarrage de l'instance).</value></data>
+  <data name="PerformanceWindow" xml:space="preserve"><value>Depuis le {0} ; 24 heures au plus, la fenêtre repart au redémarrage de l'instance.</value></data>
+  <data name="PerformanceTileRequests" xml:space="preserve"><value>Requêtes mesurées</value></data>
+  <data name="PerformanceTileSlowestCall" xml:space="preserve"><value>Appel le plus lent</value></data>
   <data name="PerformanceTruncated" xml:space="preserve"><value>Le plafond a été atteint : les requêtes les plus anciennes de la fenêtre ont été écartées.</value></data>
-  <data name="PerformanceExportMarkdown" xml:space="preserve"><value>Tout exporter en Markdown</value></data>
-  <data name="PerformanceExportMarkdownHint" xml:space="preserve"><value>Toutes les lignes des trois tableaux, brutes, dans un seul fichier Markdown à faire lire par une IA. Le tableau du navigateur contient tous les appels de cette session, pas seulement les plus lents.</value></data>
-  <data name="PerformanceExportTitle" xml:space="preserve"><value>Performance de l'API Aetheus</value></data>
-  <data name="PerformanceExportTable" xml:space="preserve"><value>Tableau</value></data>
   <data name="PerformanceExportSince" xml:space="preserve"><value>Fenêtre du serveur depuis (UTC)</value></data>
   <data name="PerformanceExportSamples" xml:space="preserve"><value>Requêtes mesurées par le serveur</value></data>
   <data name="PerformanceExportTruncated" xml:space="preserve"><value>Plafond atteint (requêtes les plus anciennes écartées)</value></data>
@@ -3015,12 +3029,8 @@
   <data name="SessionEnd_no_refresh_token_at_startup" xml:space="preserve"><value>Raison : la session a expiré et ne pouvait pas être renouvelée.</value></data>
   <data name="MailManagedByAetheus" xml:space="preserve"><value>Provisionné par Aetheus</value></data>
   <data name="MailAdoptedStack" xml:space="preserve"><value>Configuration existante (adoptée)</value></data>
-  <data name="MailHelperOutdated" xml:space="preserve"><value>Les helpers mail de ce serveur sont obsolètes (version {0}). Relancez l'installeur de l'agent avec --enable-mail-setup pour déployer la version 2.</value></data>
-  <data name="MailTlsCertificate" xml:space="preserve"><value>Certificat TLS</value></data>
-  <data name="MailTlsSelfSigned" xml:space="preserve"><value>Auto-signé</value></data>
+  <data name="MailHelperOutdated" xml:space="preserve"><value>Les helpers mail de ce serveur sont obsolètes (version {0}). Relancez l'installeur de l'agent avec --enable-mail-setup pour déployer la version 3.</value></data>
   <data name="MailTlsValidUntil" xml:space="preserve"><value>Valide jusqu'au {0}</value></data>
-  <data name="MailTlsUnreadable" xml:space="preserve"><value>Certificat illisible par l'agent</value></data>
-  <data name="MailTlsNone" xml:space="preserve"><value>Aucun certificat configuré</value></data>
   <data name="MailObtainCertificate" xml:space="preserve"><value>Obtenir TLS</value></data>
   <data name="MailInstallCertificate" xml:space="preserve"><value>Installer TLS</value></data>
   <data name="MailAcmeEmail" xml:space="preserve"><value>E-mail du compte Let's Encrypt</value></data>
@@ -3037,8 +3047,6 @@
   <data name="MailLearnTitle" xml:space="preserve"><value>Entraîner l'antispam</value></data>
   <data name="MailRawMessage" xml:space="preserve"><value>Message brut (en-têtes et corps)</value></data>
   <data name="MailIsSpam" xml:space="preserve"><value>Ce message est un spam</value></data>
-  <data name="MailOpenDkim" xml:space="preserve"><value>Service OpenDKIM</value></data>
-  <data name="MailDiagnostics" xml:space="preserve"><value>Diagnostic</value></data>
   <data name="MailRunServerCheck" xml:space="preserve"><value>Tester le serveur</value></data>
   <data name="MailSendTest" xml:space="preserve"><value>Envoyer un test</value></data>
   <data name="MailDeliverySent" xml:space="preserve"><value>Livré (identifiant de file {0})</value></data>
@@ -3069,6 +3077,21 @@
   <data name="MailServerChecks" xml:space="preserve"><value>Contrôles serveur</value></data>
   <data name="MailCollectorFindings" xml:space="preserve"><value>Constats de l'inventaire</value></data>
   <data name="MailWaitingForTask" xml:space="preserve"><value>En attente de la tâche serveur</value></data>
+  <data name="MailReinstall" xml:space="preserve"><value>Réinstaller la messagerie</value></data>
+  <data name="MailReinstallAction" xml:space="preserve"><value>Réinstaller</value></data>
+  <data name="MailReinstallConfirm" xml:space="preserve"><value>Réinstaller</value></data>
+  <data name="MailReinstallErasesTitle" xml:space="preserve"><value>Tout est effacé sur ce serveur</value></data>
+  <data name="MailReinstallErasesConfiguration" xml:space="preserve"><value>La configuration de Postfix, Dovecot et OpenDKIM, et l&apos;antispam installé par Aetheus.</value></data>
+  <data name="MailReinstallErasesMailboxes" xml:space="preserve"><value>Toutes les boîtes mail et tous leurs messages, sans retour possible.</value></data>
+  <data name="MailReinstallErasesDkim" xml:space="preserve"><value>La clé DKIM : après la nouvelle configuration, un nouvel enregistrement DKIM devra être publié dans le DNS.</value></data>
+  <data name="MailReinstallAfter" xml:space="preserve"><value>La page revient ensuite à « Messagerie non configurée » : relancez « Configurer » pour la configurer de nouveau.</value></data>
+  <data name="MailReinstallTypeToConfirm" xml:space="preserve"><value>Tapez {0} pour confirmer</value></data>
+  <data name="MailReinstallRunning" xml:space="preserve"><value>Effacement de la messagerie en cours</value></data>
+  <data name="MailReinstallSucceeded" xml:space="preserve"><value>La messagerie a été effacée. Lancez « Configurer » pour la configurer de nouveau.</value></data>
+  <data name="MailReinstallFailed" xml:space="preserve"><value>L&apos;effacement de la messagerie a échoué ({0}) : {1}</value></data>
+  <data name="MailReinstallHelperRequired" xml:space="preserve"><value>Le helper mail de ce serveur ne sait pas encore effacer la messagerie (version {0}, {1} requise) : mettez à jour l&apos;agent de ce serveur.</value></data>
+  <data name="MailReinstallNoName" xml:space="preserve"><value>Ni domaine mail ni nom d&apos;hôte mail connu pour ce serveur : attendez le prochain signal de l&apos;agent.</value></data>
+  <data name="MailReinstallNoLog" xml:space="preserve"><value>aucune ligne de journal</value></data>
   <data name="MailDiagInstalled" xml:space="preserve"><value>Pile mail détectée</value></data>
   <data name="MailDiagCapability" xml:space="preserve"><value>Capacité de gestion mail (helper sudo)</value></data>
   <data name="MailDiagHelperVersion" xml:space="preserve"><value>Version du helper mail</value></data>
@@ -3371,11 +3394,8 @@
   <data name="RequiredField" xml:space="preserve"><value>Ce champ est obligatoire.</value></data>
   <data name="All" xml:space="preserve"><value>Tous</value></data>
   <data name="MailSetupSteps" xml:space="preserve"><value>Étapes de la configuration</value></data>
-  <data name="MailSetupStepServer" xml:space="preserve"><value>Serveur et domaine</value></data>
-  <data name="MailSetupStepAdmin" xml:space="preserve"><value>Compte d&apos;administration</value></data>
-  <data name="MailSetupStepOptions" xml:space="preserve"><value>Options</value><comment>same in both languages</comment></data>
   <data name="MailHostnameHelp" xml:space="preserve"><value>Le nom complet de ce serveur de messagerie, par exemple mx.votredomaine.fr. Il sert de nom au serveur, de cible à l&apos;enregistrement MX et de nom au certificat. Créez un enregistrement A de ce nom vers l&apos;adresse IP du serveur, et le DNS inverse (PTR) de cette adresse vers ce nom.</value></data>
-  <data name="MailDomainHelp" xml:space="preserve"><value>Le domaine des adresses servies : ce qui suit le @, par exemple votredomaine.fr. L&apos;installation ne modifie pas le DNS ; les enregistrements à publier s&apos;affichent ensuite.</value></data>
+  <data name="MailDomainHelp" xml:space="preserve"><value>Le domaine des adresses servies : ce qui suit le @, par exemple votredomaine.fr.</value></data>
   <data name="MailDkimSelectorHelp" xml:space="preserve"><value>Une étiquette libre (lettres, chiffres, - et _) qui nomme la clé de signature DKIM dans le DNS : l&apos;enregistrement sera sélecteur._domainkey.domaine. Prenez-en une différente de celles d&apos;un autre fournisseur du même domaine.</value></data>
   <data name="MailAdminEmailHelp" xml:space="preserve"><value>La première boîte créée, dans le domaine ci-dessus, par exemple postmaster@votredomaine.fr. Elle reçoit aussi les rapports DMARC.</value></data>
   <data name="MailAdminPasswordHelp" xml:space="preserve"><value>Le mot de passe de cette boîte, au moins 12 caractères.</value></data>
@@ -3393,11 +3413,178 @@
   <data name="ServiceActionNounStart" xml:space="preserve"><value>Démarrage</value></data>
   <data name="ServiceActionNounStop" xml:space="preserve"><value>Arrêt</value></data>
   <data name="ServiceActionNounRestart" xml:space="preserve"><value>Redémarrage</value></data>
-  <data name="MailNotConfigured" xml:space="preserve"><value>Messagerie non configurée</value></data>
-  <data name="MailNotConfiguredTitle" xml:space="preserve"><value>La messagerie n&apos;est pas encore configurée sur ce serveur</value></data>
-  <data name="MailSetupAction" xml:space="preserve"><value>Configurer</value></data>
-  <data name="MailGuideServicesNotEnough" xml:space="preserve"><value>Postfix ou Dovecot installés seuls depuis l&apos;onglet Services ne suffisent pas : les boîtes, la signature DKIM et le chiffrement se posent par « Configurer ».</value></data>
-  <data name="MailGuidePrerequisites" xml:space="preserve"><value>Avant : choisissez un nom complet pour ce serveur (par exemple mx.votredomaine.fr), créez son enregistrement A vers l&apos;adresse IP du serveur et le DNS inverse (PTR) de cette adresse vers ce nom, et vérifiez auprès de l&apos;hébergeur que le port 25 sortant est ouvert.</value></data>
-  <data name="MailGuideRunSetup" xml:space="preserve"><value>Puis « Configurer » : nom du serveur, domaine, sélecteur DKIM, puis la boîte d&apos;administration ; chaque champ explique ce qu&apos;il attend.</value></data>
-  <data name="MailGuideAfterSetup" xml:space="preserve"><value>Après : obtenez le certificat, testez l&apos;envoi et la réception, publiez SPF, DKIM et DMARC (onglet Diagnostics), et faites pointer l&apos;enregistrement MX vers ce serveur en dernier.</value></data>
+  <data name="EnvironmentNotFound" xml:space="preserve"><value>Environnement introuvable (il a peut-être été supprimé).</value></data>
+  <data name="PipelineFormInvalid" xml:space="preserve"><value>Certains champs du formulaire sont invalides (nom, description) : corrigez-les avant d&apos;enregistrer.</value></data>
+  <data name="AppDatabaseTab" xml:space="preserve"><value>Base de données</value></data>
+  <data name="AppDatabaseNoData" xml:space="preserve"><value>Aucune mesure de la base reçue de cette application pour l&apos;instant.</value></data>
+  <data name="AppDatabaseNoDataHint" xml:space="preserve"><value>Elle vient du paquet Aetheus.Telemetry, avec la télémétrie activée et la mesure de la taille de la base allumée (DatabaseSize.UsePostgreSql).</value></data>
+  <data name="AppDatabaseTotal" xml:space="preserve"><value>Taille de la base</value></data>
+  <data name="AppDatabaseLargestTable" xml:space="preserve"><value>Plus grosse table</value></data>
+  <data name="AppDatabaseMeasuredAt" xml:space="preserve"><value>Dernière mesure</value></data>
+  <data name="AppDatabaseNoTables" xml:space="preserve"><value>Aucune table mesurée.</value></data>
+  <data name="AppDatabaseTable" xml:space="preserve"><value>Table</value><comment>same in both languages</comment></data>
+  <data name="AppDatabaseRows" xml:space="preserve"><value>Lignes (estimation)</value></data>
+  <data name="AppDatabaseTrend" xml:space="preserve"><value>Sur 24 h</value></data>
+  <data name="AppDatabaseTrendDay" xml:space="preserve"><value>{0} sur 24 heures</value></data>
+  <data name="AppDatabaseTrendUnknown" xml:space="preserve"><value>Pas encore de mesure d&apos;il y a 24 heures</value></data>
+  <data name="AppDatabaseNote" xml:space="preserve"><value>Les tailles comptent les index et le TOAST, comme pg_total_relation_size ; les lignes sont l&apos;estimation du planificateur (pg_class.reltuples). La place des lignes supprimées ne revient qu&apos;après un VACUUM FULL.</value></data>
+  <data name="SizeMegabytes" xml:space="preserve"><value>{0} Mo</value></data>
+  <data name="SizeKilobytes" xml:space="preserve"><value>{0} ko</value></data>
+  <data name="ProjectDeletionTitle" xml:space="preserve"><value>Supprimer le projet</value></data>
+  <data name="ProjectDeletionPreviewFailed" xml:space="preserve"><value>Ce que la suppression retirerait n&apos;a pas pu être lu : le projet ne peut pas être supprimé d&apos;ici.</value></data>
+  <data name="ProjectDeletionIrreversible" xml:space="preserve"><value>Cette action est définitive</value></data>
+  <data name="ProjectDeletionIntro" xml:space="preserve"><value>Supprimer le projet supprime aussi tout ce qui lui appartient :</value></data>
+  <data name="ProjectDeletionNothingElse" xml:space="preserve"><value>Le projet ne contient rien d&apos;autre : seul le projet sera supprimé.</value></data>
+  <data name="ProjectDeletionKeptOutside" xml:space="preserve"><value>Les serveurs restent enregistrés (seul leur lien avec le projet disparaît) et les archives de sauvegarde restent sur leurs hôtes.</value></data>
+  <data name="ProjectDeletionActiveRuns" xml:space="preserve"><value>{0} exécution(s) de pipeline de ce projet sont en cours. Annulez-les ou attendez leur fin avant de supprimer le projet.</value></data>
+  <data name="ProjectDeletionTypeName" xml:space="preserve"><value>Saisissez le nom du projet ({0}) pour confirmer</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Pipelines" xml:space="preserve"><value>Pipelines</value><comment>same in both languages</comment></data>
+  <data name="Enum_ProjectDeletionItemKind_PipelineRuns" xml:space="preserve"><value>Exécutions de pipeline</value></data>
+  <data name="Enum_ProjectDeletionItemKind_PipelineStepRuns" xml:space="preserve"><value>Étapes exécutées</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Tasks" xml:space="preserve"><value>Tâches d&apos;agent</value></data>
+  <data name="Enum_ProjectDeletionItemKind_TaskLogLines" xml:space="preserve"><value>Lignes de journal des tâches</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Approvals" xml:space="preserve"><value>Approbations</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Artifacts" xml:space="preserve"><value>Artefacts (fichiers compris)</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Environments" xml:space="preserve"><value>Environnements</value></data>
+  <data name="Enum_ProjectDeletionItemKind_MonitoredApps" xml:space="preserve"><value>Applications supervisées</value></data>
+  <data name="Enum_ProjectDeletionItemKind_TelemetryRecords" xml:space="preserve"><value>Enregistrements de télémétrie et d&apos;audience</value></data>
+  <data name="Enum_ProjectDeletionItemKind_BackupPolicies" xml:space="preserve"><value>Politiques de sauvegarde</value></data>
+  <data name="Enum_ProjectDeletionItemKind_ProjectServers" xml:space="preserve"><value>Serveurs du projet (liens)</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Vaults" xml:space="preserve"><value>Coffres</value></data>
+  <data name="Enum_ProjectDeletionItemKind_VaultSecrets" xml:space="preserve"><value>Secrets des coffres</value></data>
+  <data name="Enum_ProjectDeletionItemKind_VariableLibraries" xml:space="preserve"><value>Bibliothèques de variables</value></data>
+  <data name="Enum_ProjectDeletionItemKind_ServiceConnections" xml:space="preserve"><value>Connexions de service</value></data>
+  <data name="Enum_ProjectDeletionItemKind_PackageFeeds" xml:space="preserve"><value>Flux de paquets</value></data>
+  <data name="Enum_ProjectDeletionItemKind_PortReservations" xml:space="preserve"><value>Réservations de ports</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Subscriptions" xml:space="preserve"><value>Abonnements</value></data>
+  <data name="Enum_ProjectDeletionItemKind_Releases" xml:space="preserve"><value>Releases</value><comment>same in both languages</comment></data>
+  <data name="Enum_ProjectDeletionItemKind_GitRepositories" xml:space="preserve"><value>Dépôts Git</value></data>
+  <data name="Enum_ProjectDeletionItemKind_GitConnections" xml:space="preserve"><value>Connexions Git</value></data>
+  <data name="Enum_ProjectDeletionItemKind_AnalysisReports" xml:space="preserve"><value>Rapports d&apos;analyse</value></data>
+  <data name="Enum_ProjectDeletionItemKind_AnalysisFindings" xml:space="preserve"><value>Constats d&apos;analyse</value></data>
+  <data name="Enum_ProjectDeletionItemKind_WorkItems" xml:space="preserve"><value>Éléments de travail</value></data>
+  <data name="Enum_ProjectDeletionItemKind_TestSuites" xml:space="preserve"><value>Suites de tests</value></data>
+  <data name="Enum_ProjectDeletionItemKind_AiTasks" xml:space="preserve"><value>Tâches IA</value></data>
+  <data name="SetUpNewProjectPipelinesConfirm" xml:space="preserve"><value>Projet « {0} » créé. Configurer ses pipelines maintenant ? L'assistant vérifie le dépôt, le runner, les environnements, les bibliothèques et les scripts adaptateurs, et donne le lien vers la page qui corrige chaque manque.</value></data>
+  <data name="SetUpPipelines" xml:space="preserve"><value>Configurer les pipelines</value></data>
+  <data name="QaExtended" xml:space="preserve"><value>QA étendue</value></data>
+  <data name="QaExtendedPipelineHint" xml:space="preserve"><value>Validation lourde lancée par la nuit (performance, scénarios longs), via l'adaptateur qa-extended.sh du projet.</value></data>
+  <data name="SecurityHistory" xml:space="preserve"><value>Historique des secrets</value></data>
+  <data name="SecurityHistoryPipelineHint" xml:space="preserve"><value>Recherche de secrets dans tout l'historique Git, lancée par la nuit.</value></data>
+  <data name="ReadinessMissingScannerConfiguration" xml:space="preserve"><value>Configuration de scanner absente</value></data>
+  <data name="ReadinessMissingScannerConfigurationHint" xml:space="preserve"><value>Les scanners de sécurité lisent ces fichiers dans le dépôt et s'arrêtent sans eux. Commitez-les avant la première exécution.</value></data>
+  <data name="ReadinessScannerFileGitleaks" xml:space="preserve"><value>règles Gitleaks ; les deux lignes [extend] et useDefault = true appliquent les règles par défaut</value></data>
+  <data name="ReadinessAdapterCi" xml:space="preserve"><value>construit et teste le projet, puis dépose la charge à livrer dans .pipeline-artifacts/</value></data>
+  <data name="ReadinessAdapterQuality" xml:space="preserve"><value>lance les tests avec couverture et le linter du projet ; peut déposer .pipeline-quality/coverage.cobertura.xml et .pipeline-quality/lint.sarif</value></data>
+  <data name="ReadinessAdapterQa" xml:space="preserve"><value>déploie la charge restaurée dans .pipeline-artifacts/ sur un environnement jetable et la valide</value></data>
+  <data name="ReadinessAdapterQaExtended" xml:space="preserve"><value>lance la validation lourde de la nuit (performance, scénarios longs) sur la charge restaurée</value></data>
+  <data name="ReadinessAdapterDeployProd" xml:space="preserve"><value>déploie en production la charge de la candidate restaurée</value></data>
+  <data name="ReadinessAdapterReleaseFast" xml:space="preserve"><value>construit et déploie directement, sans candidate</value></data>
+  <data name="ReadinessAdapterPublishPackages" xml:space="preserve"><value>publie les paquets restaurés dans leur registre</value></data>
+  <data name="ReadinessAdapterPackage" xml:space="preserve"><value>construit et teste un paquet et le dépose dans .pipeline-artifacts/packages/</value></data>
+  <data name="MailAssistantTitle" xml:space="preserve"><value>Configurer la messagerie</value></data>
+  <data name="MailAssistantIntro" xml:space="preserve"><value>Chaque étape dit quoi faire et le vérifie. Configurer reste indisponible tant que l'enregistrement A, le DNS inverse et le port 25 sortant ne sont pas vérifiés.</value></data>
+  <data name="MailStepDomain" xml:space="preserve"><value>Domaine</value></data>
+  <data name="MailStepDomainText" xml:space="preserve"><value>Saisissez le domaine de messagerie, ce qui suit le @. Le nom d'hôte et l'adresse d'administration se remplissent à partir de lui ; modifiez-les au besoin.</value></data>
+  <data name="MailStepARecord" xml:space="preserve"><value>Enregistrement A</value></data>
+  <data name="MailStepARecordText" xml:space="preserve"><value>Chez le gestionnaire DNS du domaine, créez un enregistrement A pour que {0} pointe vers ce serveur ({1}). Les autres serveurs de messagerie et le certificat trouvent le serveur grâce à lui.</value></data>
+  <data name="MailStepReverseDns" xml:space="preserve"><value>DNS inverse</value></data>
+  <data name="MailStepReverseDnsText" xml:space="preserve"><value>Chez l'hébergeur du serveur (pas chez le registraire du domaine), réglez le DNS inverse (PTR) de {0} sur {1}. Les serveurs destinataires refusent ou classent en indésirable le courrier d'une adresse dont le DNS inverse ne nomme pas l'expéditeur.</value></data>
+  <data name="MailStepOutbound" xml:space="preserve"><value>Port 25 sortant</value></data>
+  <data name="MailStepOutboundText" xml:space="preserve"><value>Beaucoup d'hébergeurs bloquent le port 25 sortant, et un serveur qui ne l'atteint pas ne livre jamais. L'agent de ce serveur se connecte à un serveur de messagerie public ({0}) sur le port 25, lit son accueil et repart sans rien envoyer.</value></data>
+  <data name="MailOutboundNeedsAgentUpdate" xml:space="preserve"><value>L'agent de ce serveur est trop ancien pour faire cette vérification : mettez d'abord l'agent à jour.</value></data>
+  <data name="MailStepConfigure" xml:space="preserve"><value>Boîte et options</value></data>
+  <data name="MailStepConfigureText" xml:space="preserve"><value>Créez la boîte d'administration et choisissez les options. Configurer installe et règle ensuite Postfix, Dovecot et OpenDKIM.</value></data>
+  <data name="MailAfterSetupTitle" xml:space="preserve"><value>Ensuite, sur cette page</value></data>
+  <data name="MailAfterSetupCertificate" xml:space="preserve"><value>Certificat : obtenez le certificat Let's Encrypt du nom d'hôte.</value></data>
+  <data name="MailAfterSetupDnsRecords" xml:space="preserve"><value>SPF, DKIM et DMARC : publiez les enregistrements TXT que l'état donne à copier.</value></data>
+  <data name="MailAfterSetupMx" xml:space="preserve"><value>MX : faites pointer le MX du domaine vers le nom d'hôte.</value></data>
+  <data name="MailCheckPrerequisite" xml:space="preserve"><value>Vérifier</value></data>
+  <data name="MailPrerequisiteCheckFailed" xml:space="preserve"><value>La vérification n'a pas pu se faire. Réessayez.</value></data>
+  <data name="MailDiagOutbound" xml:space="preserve"><value>Port 25 sortant joignable</value></data>
+  <data name="MailNotChecked" xml:space="preserve"><value>Non vérifié</value></data>
+  <data name="MailStatusToFix" xml:space="preserve"><value>À corriger</value></data>
+  <data name="MailConfigure" xml:space="preserve"><value>Configurer</value></data>
+  <data name="MailConfigureNeedsPrerequisites" xml:space="preserve"><value>Configurer demande les trois vérifications ci-dessus en vert : revenez à l'étape en rouge.</value></data>
+  <data name="MailSetupRunning" xml:space="preserve"><value>Configuration en cours...</value></data>
+  <data name="MailSetupFailed" xml:space="preserve"><value>La configuration n'a pas abouti ({0}). Voir le journal de la tâche.</value></data>
+  <data name="MailSpamFilterHelp" xml:space="preserve"><value>rspamd filtre le courrier indésirable entrant. Il peut aussi s'installer plus tard depuis l'onglet Antispam.</value></data>
+  <data name="MailAcmeEmailHelp" xml:space="preserve"><value>L'adresse à laquelle Let's Encrypt écrit avant l'expiration du certificat.</value></data>
+  <data name="MailStatusTitle" xml:space="preserve"><value>État de la messagerie</value></data>
+  <data name="MailStatusAllGreen" xml:space="preserve"><value>Tout est vert. Envoyez un message de test pour vérifier la livraison de bout en bout.</value></data>
+  <data name="MailStartServices" xml:space="preserve"><value>Démarrer</value></data>
+  <data name="MailFixServices" xml:space="preserve"><value>Arrêtés : {0}. Démarrez-les ; la ligne passe au vert au battement suivant.</value></data>
+  <data name="MailFixCertificate" xml:space="preserve"><value>Postfix n'a pas de certificat valide pour {0}. Obtenez un certificat Let's Encrypt (l'enregistrement A du nom d'hôte doit pointer vers le serveur), ou installez celui déjà délivré.</value></data>
+  <data name="MailFixCertificateNoHost" xml:space="preserve"><value>Le nom d'hôte de la messagerie n'est pas encore connu : attendez le prochain battement.</value></data>
+  <data name="MailFixARecord" xml:space="preserve"><value>Chez le gestionnaire DNS du domaine, créez cet enregistrement :</value></data>
+  <data name="MailFixReverseDns" xml:space="preserve"><value>Chez l'hébergeur du serveur, réglez le DNS inverse de son adresse sur le nom d'hôte :</value></data>
+  <data name="MailFixMx" xml:space="preserve"><value>Faites pointer le MX du domaine vers ce serveur avec cet enregistrement :</value></data>
+  <data name="MailFixTxt" xml:space="preserve"><value>Publiez cet enregistrement TXT chez le gestionnaire DNS du domaine :</value></data>
+  <data name="MailFixDkimUnknown" xml:space="preserve"><value>La clé DKIM de ce domaine n'est pas encore lue ; elle apparaît après le prochain battement.</value></data>
+  <data name="MailFixUnknown" xml:space="preserve"><value>Cette vérification n'a pas pu se faire (résolveur DNS, ou données pas encore collectées). Elle repasse au prochain battement.</value></data>
+  <data name="MailFixRecheck" xml:space="preserve"><value>La ligne passe au vert dès que le DNS répond ; elle est revérifiée à chaque battement.</value></data>
+  <data name="MailDiagSpf" xml:space="preserve"><value>SPF de {0}</value></data>
+  <data name="MailDiagDkim" xml:space="preserve"><value>DKIM de {0}</value></data>
+  <data name="MailDiagDmarc" xml:space="preserve"><value>DMARC de {0}</value></data>
+  <data name="DataRetention" xml:space="preserve"><value>Conservation des données</value></data>
+  <data name="DataRetentionHelp" xml:space="preserve"><value>Quantité de données que garde ce projet. Un profil fixe chaque valeur ; un champ vide garde la valeur du profil.</value></data>
+  <data name="DataRetentionProfileLabel" xml:space="preserve"><value>Profil</value></data>
+  <data name="Enum_DataRetentionProfile_Light" xml:space="preserve"><value>Léger</value></data>
+  <data name="Enum_DataRetentionProfile_Standard" xml:space="preserve"><value>Standard</value><comment>same in both languages</comment></data>
+  <data name="Enum_DataRetentionProfile_Complete" xml:space="preserve"><value>Complet</value></data>
+  <data name="DataRetentionExportInterval" xml:space="preserve"><value>Envoi de la télémétrie (minutes)</value></data>
+  <data name="DataRetentionTelemetryDetail" xml:space="preserve"><value>Détail de la télémétrie (jours)</value></data>
+  <data name="DataRetentionAggregates" xml:space="preserve"><value>Agrégats horaires (mois)</value></data>
+  <data name="DataRetentionAnalysisDetail" xml:space="preserve"><value>Détail des analyses (jours)</value></data>
+  <data name="DataRetentionAppLogs" xml:space="preserve"><value>Journaux de l&apos;application (jours)</value></data>
+  <data name="DataRetentionProfileValue" xml:space="preserve"><value>Profil : {0}</value></data>
+  <data name="DataRetentionSaved" xml:space="preserve"><value>Conservation des données enregistrée</value></data>
+  <data name="DataRetentionLoadFailed" xml:space="preserve"><value>Le réglage de conservation des données n&apos;a pas pu être chargé.</value></data>
+  <data name="AuditAction_DataRetentionUpdated" xml:space="preserve"><value>Conservation des données modifiée</value></data>
+  <data name="DataRetentionStorageBudget" xml:space="preserve"><value>Budget de stockage (Mo)</value></data>
+  <data name="DataRetentionDefaultValue" xml:space="preserve"><value>Par défaut : {0}</value></data>
+  <data name="NotificationEvent_project_storage_quota" xml:space="preserve"><value>Budget de stockage du projet atteint</value></data>
+  <data name="ProjectStorage" xml:space="preserve"><value>Stockage par projet</value></data>
+  <data name="ProjectStorageEmpty" xml:space="preserve"><value>Aucun projet pour l&apos;instant.</value></data>
+  <data name="ProjectStorageUsed" xml:space="preserve"><value>Utilisé</value></data>
+  <data name="ProjectStorageBudget" xml:space="preserve"><value>Budget</value><comment>same in both languages</comment></data>
+  <data name="ProjectStorageShare" xml:space="preserve"><value>Part</value></data>
+  <data name="ProjectStorageLargestTable" xml:space="preserve"><value>Plus grosse table</value></data>
+  <data name="ProjectStorageMeasuredNote" xml:space="preserve"><value>Lignes de chaque projet multipliées par les octets par ligne de la mesure de la base du {0}. Au-delà de son budget, un projet perd d&apos;abord son détail le plus ancien ; notes et totaux restent.</value></data>
+  <data name="ProjectStorageEstimatedNote" xml:space="preserve"><value>Lignes de chaque projet multipliées par des octets par ligne fixes : Aetheus n&apos;a pas de mesure récente de sa propre base. Au-delà de son budget, un projet perd d&apos;abord son détail le plus ancien ; notes et totaux restent.</value></data>
+  <data name="ReclaimSpace" xml:space="preserve"><value>Récupérer la place</value></data>
+  <data name="ReclaimSpaceAction" xml:space="preserve"><value>Récupérer</value></data>
+  <data name="ReclaimSpaceHelp" xml:space="preserve"><value>Une purge supprime des lignes mais la table garde sa taille sur le disque. Récupérer la place réécrit une table (VACUUM FULL) : la table est verrouillée pendant l&apos;opération, qui peut durer plusieurs minutes pour une grande table. Refusé pendant qu&apos;un pipeline s&apos;exécute.</value></data>
+  <data name="ReclaimSpaceConfirm" xml:space="preserve"><value>Réécrire la table {0} pour rendre sa place libre ? Elle reste verrouillée jusqu&apos;à la fin.</value></data>
+  <data name="ReclaimSpacePipelinesRunning" xml:space="preserve"><value>{0} exécutions de pipeline sont en cours : la récupération attend qu&apos;elles soient terminées.</value></data>
+  <data name="ReclaimSpaceRunning" xml:space="preserve"><value>Récupération de la place de {0} en cours...</value></data>
+  <data name="ReclaimSpaceStarted" xml:space="preserve"><value>Récupération de la place de {0} lancée.</value></data>
+  <data name="ReclaimSpaceRefused" xml:space="preserve"><value>Refusé : un pipeline s&apos;exécute ou une autre table est en cours.</value></data>
+  <data name="ReclaimSpaceBefore" xml:space="preserve"><value>Avant</value></data>
+  <data name="ReclaimSpaceAfter" xml:space="preserve"><value>Après</value></data>
+  <data name="ReclaimSpaceRequestedBy" xml:space="preserve"><value>Demandé par</value></data>
+  <data name="ReclaimSpaceInProgress" xml:space="preserve"><value>En cours</value></data>
+  <data name="ReclaimSpaceDone" xml:space="preserve"><value>Terminé</value></data>
+  <data name="ReclaimSpaceFailedShort" xml:space="preserve"><value>Échec</value></data>
+  <data name="AuditAction_ReclaimSpaceStarted" xml:space="preserve"><value>Récupération de place lancée</value></data>
+  <data name="AuditAction_ReclaimSpaceCompleted" xml:space="preserve"><value>Place récupérée</value></data>
+  <data name="AuditAction_ReclaimSpaceFailed" xml:space="preserve"><value>Récupération de place en échec</value></data>
+  <data name="ReclaimSpaceStartedAt" xml:space="preserve"><value>Lancé le</value></data>
+  <data name="TelemetrySendIntervalSetting" xml:space="preserve"><value>Envoi {0} ({1}) : un point {2}</value></data>
+  <data name="TelemetrySendIntervalProfile" xml:space="preserve"><value>profil {0}</value></data>
+  <data name="TelemetrySendIntervalOverride" xml:space="preserve"><value>réglage du projet</value></data>
+  <data name="TelemetrySendIntervalHourly" xml:space="preserve"><value>Au-delà de 24 heures, le graphique montre un point par heure (moyenne horaire).</value></data>
+  <data name="TelemetrySendIntervalObservedDiffers" xml:space="preserve"><value>Intervalle observé : un point {0}. L&apos;application ne suit pas l&apos;intervalle du serveur : il ne s&apos;applique qu&apos;à partir d&apos;Aetheus.Telemetry 1.1.0, qui le relit toutes les 15 minutes.</value></data>
+  <data name="TelemetrySendIntervalUnobserved" xml:space="preserve"><value>L&apos;intervalle du serveur ne s&apos;applique qu&apos;à partir d&apos;Aetheus.Telemetry 1.1.0 ; une version antérieure garde son propre intervalle.</value></data>
+  <data name="TelemetrySendIntervalPackageHelp" xml:space="preserve"><value>Appliqué par Aetheus.Telemetry 1.1.0 ou plus, qui relit ce réglage toutes les 15 minutes ; une version antérieure garde son propre intervalle.</value></data>
+  <data name="TelemetryEveryMinutesShort" xml:space="preserve"><value>toutes les {0} min</value></data>
+  <data name="TelemetryEveryMinuteShort" xml:space="preserve"><value>chaque minute</value></data>
+  <data name="TelemetryEverySecondsShort" xml:space="preserve"><value>toutes les {0} s</value></data>
+  <data name="TelemetryEveryMinutesLong" xml:space="preserve"><value>toutes les {0} minutes</value></data>
+  <data name="TelemetryEveryMinuteLong" xml:space="preserve"><value>par minute</value></data>
+  <data name="TelemetryEverySecondsLong" xml:space="preserve"><value>toutes les {0} secondes</value></data>
+  <data name="GridExportFailed" xml:space="preserve"><value>Échec de l'export : une page du tableau n'a pas pu être lue, aucun fichier n'a été produit.</value></data>
+  <data name="GridExportUntitled" xml:space="preserve"><value>Tableau Aetheus</value></data>
+  <data name="GridExportSource" xml:space="preserve"><value>Source</value><comment>same in both languages</comment></data>
+  <data name="GridExportAddress" xml:space="preserve"><value>Adresse de la page</value></data>
 </root>

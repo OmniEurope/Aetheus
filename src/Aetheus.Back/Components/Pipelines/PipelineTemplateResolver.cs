@@ -50,7 +50,11 @@ public sealed class PipelineTemplateResolver(IPipelineRepository repo) : IPipeli
         var reference = parsedReference ?? ParseReference(child.Extends);
         if (reference is null) return child;
 
+        // Recette R2-121: an organization's own template wins; otherwise the shipped delivery template
+        // the platform shares with every organization, so a new organization's projects can use the
+        // setup wizard without a copy of the catalog.
         var template = await repo.FindTemplateByNameAsync(reference.Name, organizationId, ct).ConfigureAwait(false)
+            ?? await repo.FindSharedTemplateByNameAsync(reference.Name, ct).ConfigureAwait(false)
             ?? throw new BadRequestException(
                 $"Pipeline template '{reference.Name}' was not found in organization {organizationId}.");
         var versionNumber = reference.Version ?? template.LatestVersion;
@@ -86,6 +90,7 @@ public sealed class PipelineTemplateResolver(IPipelineRepository repo) : IPipeli
             ProjectType = child.ProjectType ?? parent.ProjectType,
             Schedule = child.Schedule ?? parent.Schedule,
             SupersedeRunning = child.SupersedeRunning ?? parent.SupersedeRunning,
+            ReleaseNumber = child.ReleaseNumber ?? parent.ReleaseNumber,
             Branches = child.Branches.Count > 0 ? child.Branches : parent.Branches,
             Extends = null,
             Variables = variables,

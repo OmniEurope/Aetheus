@@ -1,0 +1,26 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* How often the application sends its metrics, where its telemetry is read: the server's interval (the
+   project's « Conservation des données »), what a chart point stands for, and the interval its samples
+   actually show when that is not the server's (an Aetheus.Telemetry package older than 1.1.0). *@
+@if (_interval is not null)
+{
+    <OmniStack Gap="OmniSpacing.XSmall" Class="@Class" data-testid="telemetry-send-interval">
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="telemetry-send-interval-setting">@SettingText</OmniText>
+        @if (HourlyPoints)
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["TelemetrySendIntervalHourly"]</OmniText>
+        }
+        @if (ObservationText is { } observation)
+        {
+            @if (_interval.ObservedIntervalSeconds is null)
+            {
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="telemetry-send-interval-observation">@observation</OmniText>
+            }
+            else
+            {
+                <OmniAlert Severity="OmniSeverity.Warning" data-testid="telemetry-send-interval-observation">@observation</OmniAlert>
+            }
+        }
+    </OmniStack>
+}

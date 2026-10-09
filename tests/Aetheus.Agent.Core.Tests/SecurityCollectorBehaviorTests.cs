@@ -170,6 +170,38 @@ public sealed class SecurityCollectorBehaviorTests
     }
 
     [Fact]
+    public void RkhunterCollector_ParseLastScan_CountsEveryWarningOfALongLastScan()
+    {
+        // 25 warnings: a 20-line tail drops the [Started] line and undercounts.
+        var lines = new List<string> { "[Started] 2026-09-01 03:00:00", "[ Warning ] old scan", "System checks summary" };
+        lines.Add("[Started] 2026-10-01 03:00:00");
+        lines.AddRange(Enumerable.Range(0, 25).Select(i => $"[ Warning ] finding {i}"));
+        lines.Add("System checks summary");
+
+        var (time, status, warnings) = RkhunterCollector.ParseLastScan(lines);
+
+        Assert.Equal(new DateTime(2026, 10, 1, 3, 0, 0), time);
+        Assert.Equal("warning", status);
+        Assert.Equal(25, warnings);
+    }
+
+    [Fact]
+    public void RkhunterCollector_ParseLastScan_CleanLastScanDoesNotInheritEarlierWarnings()
+    {
+        string[] lines =
+        [
+            "[Started] 2026-09-30 03:00:00", "[ Warning ] old finding", "System checks summary",
+            "[Started] 2026-10-01 03:00:00", "System checks summary",
+        ];
+
+        var (time, status, warnings) = RkhunterCollector.ParseLastScan(lines);
+
+        Assert.Equal(new DateTime(2026, 10, 1, 3, 0, 0), time);
+        Assert.Equal("clean", status);
+        Assert.Equal(0, warnings);
+    }
+
+    [Fact]
     public async Task CertbotCollector_PathDetectionAndStderrVersion_ReportInstalledVersion()
     {
         var shell = Substitute.For<IShellRunner>();

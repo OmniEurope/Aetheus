@@ -135,7 +135,9 @@ public interface IPipelineRunService
     /// completion callback. Used by the scheduler self-heal after a lost advancement signal.</summary>
     Task ReconcileRunAsync(int pipelineRunId, CancellationToken ct = default);
 
-    Task<bool> CancelRunAsync(int runId, CancellationToken ct = default);
+    /// <summary>Cancels a run and every run it triggered; <paramref name="cancellation"/> names who and why
+    /// (audited and kept on each run, recette R2-103).</summary>
+    Task<bool> CancelRunAsync(int runId, PipelineRunCancellation cancellation, CancellationToken ct = default);
 
     /// <summary>Force-completes a run wedged in Running as Failed (reconcile backstop). Used by the
     /// trigger-reconcile sweep for runs that can no longer make progress - e.g. a step failed but the run
@@ -157,6 +159,17 @@ public interface IPipelineRunService
     /// fresh run from the live definition; the snapshot modes replay the source run's captured YAML,
     /// pinned to the same commit or floated to the branch head. Null when the source run is unknown.</summary>
     Task<PipelineRunDto?> RerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default);
+
+    /// <summary>BACK-020: resolves what a rerun in <paramref name="mode"/> will execute (snapshot, commit
+    /// and replayed parameters) without launching it, so the caller authorizes its exact targets and then
+    /// starts it with <see cref="TriggerPreparedRunAsync"/>. Null when the source run is unknown or the
+    /// mode needs a snapshot it does not have.</summary>
+    Task<PipelineRerunPlan?> PrepareRerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default);
+
+    /// <summary>BACK-020: the servers a retry of <paramref name="runId"/> can reach, read from the
+    /// definition the run captured (the one a retry executes). Null when the run or its definition is
+    /// unavailable.</summary>
+    Task<IReadOnlyCollection<int>?> GetRetryTargetServerIdsAsync(int runId, CancellationToken ct = default);
     Task<PipelineCheckpointResumePreviewDto?> GetCheckpointResumePreviewAsync(int sourceRunId, CancellationToken ct = default);
 
 

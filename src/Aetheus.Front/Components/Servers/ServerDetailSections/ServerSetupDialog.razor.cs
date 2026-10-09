@@ -14,6 +14,7 @@ public partial class ServerSetupDialog
     // same parameters again. Copying the model there wiped what had just been typed: it is copied once.
     protected override void OnInitialized() => _model = new ServerSetupDialogModel
     {
+        Kind = Kind,
         Mode = Model.Mode,
         TcpPorts = Model.TcpPorts,
         UdpPorts = Model.UdpPorts,
@@ -27,7 +28,11 @@ public enum ServerSetupKind { Portsentry, Rkhunter }
 public sealed class ServerSetupDialogModel
 {
     [Required, StringLength(32)] public string Mode { get; set; } = "atcp";
-    [Required, StringLength(1024)] public string TcpPorts { get; set; } = string.Empty;
-    [Required, StringLength(1024)] public string UdpPorts { get; set; } = string.Empty;
-    [EmailAddress, StringLength(320)] public string MailOnWarning { get; set; } = string.Empty;
+    /// <summary>Which setup the dialog collects; the port lists are only asked (and required) for Portsentry.</summary>
+    public ServerSetupKind Kind { get; set; }
+    // FRONT-019: the RKHunter dialog hides the port fields, so a plain [Required] on them made its form
+    // impossible to submit. They are required for Portsentry only.
+    [RequiredForPortsentry(ErrorMessage = "Required"), StringLength(1024)] public string TcpPorts { get; set; } = string.Empty;
+    [RequiredForPortsentry(ErrorMessage = "Required"), StringLength(1024)] public string UdpPorts { get; set; } = string.Empty;
+    [OptionalEmailAddress(ErrorMessage = "MailEmailInvalid"), StringLength(320)] public string MailOnWarning { get; set; } = string.Empty;
 }

@@ -63,6 +63,11 @@ public interface IArtifactRepository
     // Own-reads over entities Artifacts shares with Pipelines and Releases. Obtaining them by
     // injecting those modules' services is what put Artifacts inside a module cycle, for reads that
     // change no ownership: the writes stay where they were.
+    /// <summary>
+    /// The run's pipeline and the project that owns it, resolved through the pipeline's
+    /// exactly-one-owner triple (Project / Environment / ProjectServer) like
+    /// <see cref="GetArtifactOwningProjectIdAsync"/>; ProjectId is null only when no owner can be named.
+    /// </summary>
     Task<(int PipelineId, int? ProjectId)?> GetRunPipelineContextAsync(int runId, CancellationToken ct = default);
 
     /// <summary>

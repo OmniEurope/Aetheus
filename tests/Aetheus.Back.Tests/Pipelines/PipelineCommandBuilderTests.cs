@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Pipelines;
+using Aetheus.Tests.Shared;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
@@ -339,11 +340,9 @@ public class PipelineCommandBuilderTests
         Assert.DoesNotContain("cd \"/\"", result, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [PlatformFact("linux")]
     public void BuildStepCommand_Linux_ExecutesAfterWorkspaceWasCompletelyRemoved()
     {
-        if (!OperatingSystem.IsLinux()) return;
-
         var root = Path.Combine(Path.GetTempPath(), $"aetheus-command-builder-{Guid.NewGuid():N}");
         var workspace = Path.Combine(root, "s");
         var proof = Path.Combine(workspace, "teardown-reached");

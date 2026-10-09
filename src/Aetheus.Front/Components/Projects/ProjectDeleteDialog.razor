@@ -1,0 +1,41 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R2-122: deleting a project removes everything it owns, so the confirmation counts it first
+   and asks for the project's name before the Delete button wakes up. *@
+<OmniStack Gap="OmniSpacing.Large">
+    @if (_loading)
+    {
+        <AetheusLoader />
+    }
+    else if (_preview is null)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger">@L["ProjectDeletionPreviewFailed"]</OmniAlert>
+    }
+    else
+    {
+        <OmniAlert Severity="OmniSeverity.Danger" Title="@L["ProjectDeletionIrreversible"]">@L["ProjectDeletionIntro"]</OmniAlert>
+        @if (_preview.Items.Count > 0)
+        {
+            <OmniDescriptionList Columns="2" Class="project-deletion-counts">
+                @foreach (var item in _preview.Items)
+                {
+                    <OmniDescriptionItem Label="@L.Localize(item.Kind)">@item.Count</OmniDescriptionItem>
+                }
+            </OmniDescriptionList>
+        }
+        else
+        {
+            <p>@L["ProjectDeletionNothingElse"]</p>
+        }
+        <p>@L["ProjectDeletionKeptOutside"]</p>
+        @if (_preview.ActiveRunCount > 0)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning" Class="project-deletion-active-runs">@string.Format(L["ProjectDeletionActiveRuns"], _preview.ActiveRunCount)</OmniAlert>
+        }
+        <OmniFormField Label="@string.Format(L["ProjectDeletionTypeName"], _preview.ProjectName)" For="project-delete-confirm">
+            <OmniTextBox @bind-Value="_confirmation" Id="project-delete-confirm" Autocomplete="off" />
+        </OmniFormField>
+    }
+    <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@(() => Dialog.Close())">
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync" Disabled="@(!CanDelete)" Busy="@_deleting" Id="project-delete-submit"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+    </Aetheus.Front.Components.Shared.DialogFooter>
+</OmniStack>

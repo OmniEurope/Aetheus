@@ -56,6 +56,16 @@ public partial class PersonalAccessTokens
         await LoadPageAsync();
     }
 
+    /// <summary>Recette R2-124: one page of the export (the token's prefix, never the token), with the
+    /// grid's sort and column filters.</summary>
+    private Task<PaginatedResult<PersonalAccessTokenDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = ResolveSort(args);
+        return Api.Auth.GetPersonalAccessTokensAsync(
+            page, pageSize, sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
+    }
+
     private async Task LoadPageAsync()
     {
         _loading = true;
@@ -161,4 +171,8 @@ public partial class PersonalAccessTokens
         : L["PatStatusActive"];
 
     private static bool IsRevocable(PersonalAccessTokenDto t) => t.RevokedAt is null;
+
+    /// <summary>Recette R2-124: the export writes the state the badge shows.</summary>
+    private Func<PersonalAccessTokenDto, object?> StatusExport => _statusExport ??= token => StatusLabel(token);
+    private Func<PersonalAccessTokenDto, object?>? _statusExport;
 }

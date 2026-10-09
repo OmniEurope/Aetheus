@@ -65,7 +65,7 @@ public sealed class TelemetryRetentionAndPerformanceIntegrationTests(PostgresFix
             Assert.Equal(0, await repo.AggregateHourAsync(rolled, ct));
             Assert.Equal(1, await repo.AggregateHourAsync(missing, ct));
             Assert.Equal(0, await repo.AggregateHourAsync(missing, ct));
-            Assert.Equal(AppMetricRepository.PurgeBatchSize + 3, await repo.PurgeRawOlderThanAsync(CurrentHour.AddDays(-30), ct));
+            Assert.Equal(AppMetricRepository.PurgeBatchSize + 3, await repo.PurgeRawOlderThanAsync(CurrentHour.AddDays(-30), [appId], ct));
         }
 
         await using var read = NewContext();
@@ -92,7 +92,7 @@ public sealed class TelemetryRetentionAndPerformanceIntegrationTests(PostgresFix
 
         await using var read = NewContext();
         var samples = await new AppMetricRepository(read).GetLatestExportAsync(
-            appId, AppRoutePerformance.MetricNames, AppRoutePerformance.ExportSpan, ct);
+            appId, AppRoutePerformance.MetricNames, AppRoutePerformance.LatestPointLookback, ct);
         var report = AppRoutePerformance.Build(samples);
 
         var orders = Assert.Single(report.Routes);

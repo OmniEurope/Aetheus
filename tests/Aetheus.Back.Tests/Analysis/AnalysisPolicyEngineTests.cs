@@ -277,6 +277,77 @@ public sealed class AnalysisPolicyEngineTests
         Assert.Equal(64, root.GetProperty("AggregateEvidenceHash").GetString()!.Length);
     }
 
+    [Fact]
+    public async Task EvaluateAsync_FindingExceptionScopedToOnePolicyLeavesTheOtherPolicyApplied()
+    {
+        var repository = Repository();
+        repository.GetApplicablePoliciesAsync(1, 2, Arg.Any<CancellationToken>()).Returns(
+            [FindingPolicy(7, AnalysisGateBehavior.Block), FindingPolicy(8, AnalysisGateBehavior.Warn)]);
+        repository.GetActiveExceptionsAsync(2, Now, Arg.Any<CancellationToken>()).Returns(
+            [new AnalysisPolicyException { Id = 40, ProjectId = 2, AnalysisPolicyId = 7, RuleId = "rule", ExpiresAt = Now.AddDays(1) }]);
+        var report = Report(AnalysisCategory.Sast, Finding(AnalysisSeverity.High, isNew: false));
+
+        var evaluation = await new AnalysisPolicyEngine(repository).EvaluateAsync(report, Context(), Now,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisGateStatus.Warning, evaluation.Status);
+        Assert.Equal(0, evaluation.BlockerCount);
+        Assert.Equal(1, evaluation.WarningCount);
+        Assert.Contains("exception:40", evaluation.PolicySnapshotJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_FindingExceptionWithoutPolicyStillCoversEveryPolicy()
+    {
+        var repository = Repository();
+        repository.GetApplicablePoliciesAsync(1, 2, Arg.Any<CancellationToken>()).Returns(
+            [FindingPolicy(7, AnalysisGateBehavior.Block), FindingPolicy(8, AnalysisGateBehavior.Warn)]);
+        repository.GetActiveExceptionsAsync(2, Now, Arg.Any<CancellationToken>()).Returns(
+            [new AnalysisPolicyException { Id = 41, ProjectId = 2, RuleId = "rule", ExpiresAt = Now.AddDays(1) }]);
+        var report = Report(AnalysisCategory.Sast, Finding(AnalysisSeverity.High, isNew: false));
+
+        var evaluation = await new AnalysisPolicyEngine(repository).EvaluateAsync(report, Context(), Now,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisGateStatus.Passed, evaluation.Status);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_MetricExceptionScopedToOnePolicyLeavesTheOtherPolicyBlocking()
+    {
+        var repository = Repository();
+        var excepted = BlockingMetricPolicy("coverage.line.percent", AnalysisPolicyOperator.LessThan, 80);
+        var other = BlockingMetricPolicy("coverage.line.percent", AnalysisPolicyOperator.LessThan, 90);
+        other.Id = 8;
+        repository.GetApplicablePoliciesAsync(1, 2, Arg.Any<CancellationToken>()).Returns([excepted, other]);
+        repository.GetActiveExceptionsAsync(2, Now, Arg.Any<CancellationToken>()).Returns(
+            [new AnalysisPolicyException { Id = 42, ProjectId = 2, AnalysisPolicyId = 7, Category = AnalysisCategory.Coverage, ExpiresAt = Now.AddDays(1) }]);
+        var report = Report(AnalysisCategory.Coverage, Metric("coverage.line.percent", 79, AnalysisMetricDirection.HigherIsBetter));
+
+        var evaluation = await new AnalysisPolicyEngine(repository).EvaluateAsync(report, Context(), Now,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisGateStatus.Blocked, evaluation.Status);
+        Assert.Equal(1, evaluation.BlockerCount);
+        var violations = AnalysisGateViolationParser.Parse(
+            [new AnalysisEvaluationSnapshot(report.Id, evaluation.PolicySnapshotJson)]);
+        var blocking = Assert.Single(violations, item => item.Outcome.Equals("Block", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("legacy.8", blocking.PolicyKey);
+    }
+
+    private static AnalysisPolicy FindingPolicy(int id, AnalysisGateBehavior behavior) => new()
+    {
+        Id = id,
+        OrganizationId = 1,
+        ProjectId = 2,
+        Name = $"Finding gate {id}",
+        Category = AnalysisCategory.Sast,
+        SeverityThreshold = AnalysisSeverity.High,
+        Behavior = behavior,
+        Enabled = true,
+        Version = 1
+    };
+
     private static Task<AnalysisEvaluation> EvaluateAsync(AnalysisCategory category, object item)
     {
         var report = Report(category, item);

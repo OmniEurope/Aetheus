@@ -12,13 +12,23 @@ trap 'rm -rf "$OUTPUT"' EXIT HUP INT TERM
   --configuration Release --output "$OUTPUT/feed" --nologo
 "$DOTNET" pack "$ROOT/src/Aetheus.WebAnalytics/Aetheus.WebAnalytics.csproj" \
   --configuration Release --output "$OUTPUT/feed" --nologo
+# The normalizer takes the packed files by name, so read each version from its project instead of
+# repeating it here: a version bump must not break this gate (run 2633).
+package_version()
+{
+  sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$1" | head -n 1
+}
+TELEMETRY_PACKAGE_VERSION="$(package_version "$ROOT/src/Aetheus.Telemetry/Aetheus.Telemetry.csproj")"
+WEB_ANALYTICS_PACKAGE_VERSION="$(package_version "$ROOT/src/Aetheus.WebAnalytics/Aetheus.WebAnalytics.csproj")"
+test -n "$TELEMETRY_PACKAGE_VERSION"
+test -n "$WEB_ANALYTICS_PACKAGE_VERSION"
 "$DOTNET" restore \
   "$ROOT/deploy/tools/Aetheus.PackageNormalizer/Aetheus.PackageNormalizer.csproj"
 "$DOTNET" run \
   --project "$ROOT/deploy/tools/Aetheus.PackageNormalizer/Aetheus.PackageNormalizer.csproj" \
   --configuration Release --no-restore -- \
-  "$OUTPUT/feed/Aetheus.Telemetry.1.0.0.nupkg" \
-  "$OUTPUT/feed/Aetheus.WebAnalytics.1.0.0.nupkg"
+  "$OUTPUT/feed/Aetheus.Telemetry.$TELEMETRY_PACKAGE_VERSION.nupkg" \
+  "$OUTPUT/feed/Aetheus.WebAnalytics.$WEB_ANALYTICS_PACKAGE_VERSION.nupkg"
 
 PROJECT="$ROOT/examples/optional-observability/OptionalObservabilityExample.csproj"
 MANIFEST="$ROOT/examples/optional-observability/aetheus.integrations.json"

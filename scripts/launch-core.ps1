@@ -15,6 +15,8 @@ if ($TestAll)  { $TestUnit = $true; $TestIntegration = $true; $TestE2e = $true }
 if ($TestUnit) { $TestBack = $true; $TestFront = $true; $TestAgent = $true; $TestAnalyzers = $true }
 if ($Coverage) { $TestBack = $true; $TestFront = $true }
 $buildConfiguration = if ($Coverage) { "Release" } else { "Debug" }
+# Every build output read after the build (runtime snapshots, the front publish, playwright.ps1)
+# follows this value: `-c -te` builds Release, and E2E used to copy and run stale Debug outputs.
 $anyTest = $TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegration -or $TestE2e
 $e2eOnly = $TestE2e -and -not ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegration -or $Coverage)
 $tunnelOnly = $RemoteAgent -and -not $ModeFront -and -not $ModeAgent -and -not $anyTest -and -not $Reset
@@ -44,7 +46,7 @@ function Show-Options {
     Write-Host "    -tec Auth            Category by name"
     Write-Host "    -tec Auth,Acts,3     Mix of names and numbers"
     Write-Host "  -ta, -TestAll          Run EVERYTHING: unit + integration + E2E (dev DB never reset)"
-    Write-Host "  -c,  -Coverage         Collect coverage + open HTML report (Back+Front+Agent.Core, implies -tb -tf)"
+    Write-Host "  -c,  -Coverage         Collect coverage + open HTML report (Back+Front+Agent.Core; integration coverage kept beside it, implies -tb -tf)"
     Write-Host "  -mf, -ModeFront        Start Backend + Frontend (default)"
     Write-Host "  -ma, -ModeAgent        Start Agent Worker Service"
     Write-Host "  -hr, -HotReload        Start servers with dotnet watch (hot reload)"
@@ -382,15 +384,27 @@ if ($VpsSim) {
     # behind with nothing attached, and no other code path in this repo ever reclaims
     # them: measured 2026-08-19, two abandoned project sets held 33 GB of orphaned
     # volumes (the nested daemon's /var/lib/docker and /var/lib/containerd stores),
-    # one of them from a worktree that no longer exists. So every -vps run sweeps the
-    # volumes of EVERY vpssim compose project except the one it is about to start.
+    # one of them from a worktree that no longer exists. The volumes of EVERY Aetheus vpssim
+    # compose project except the one about to start are those of another flavor: their state
+    # is not this run's to drop, so they are only counted, and removed with -vpsclean alone
+    # (SCRIPTS-001, decision of 2026-10-08).
     # Matched by name on purpose: `docker volume prune` is forbidden by
     # docs/runbooks/storage-maintenance.md because it would reach other projects.
-    $keepPrefix = "${proj}_"
-    $staleVolumes = @(& docker volume ls -q --filter name=vpssim 2>$null |
-        Where-Object { $_ -and $_ -like "*vpssim*" -and -not $_.StartsWith($keepPrefix, [StringComparison]::Ordinal) })
-    if ($staleVolumes.Count -gt 0) {
-        Write-Host "  Reclaiming $($staleVolumes.Count) abandoned VPS-sim volume(s)..." -ForegroundColor DarkGray
+    # Only this repository's own compose projects (aetheus-vpssim-<flavor>, volumes named
+    # "<project>_<volume>"): a name that merely contains "vpssim" can belong to another project,
+    # and its volumes and containers are not ours to destroy (SCRIPTS-001).
+    function Select-AetheusVpsSimStaleVolumes([string[]]$Names, [string]$KeepProject) {
+        @($Names | Where-Object {
+            $_ -and $_ -cmatch '^aetheus-vpssim-[a-z0-9-]+_' -and
+            -not $_.StartsWith("${KeepProject}_", [StringComparison]::Ordinal)
+        })
+    }
+    $staleVolumes = @(Select-AetheusVpsSimStaleVolumes @(& docker volume ls -q --filter name=vpssim 2>$null) $proj)
+    if ($staleVolumes.Count -gt 0 -and -not $VpsClean) {
+        Write-Host "  $($staleVolumes.Count) VPS-sim volume(s) of another flavor kept; -vpsclean removes them." -ForegroundColor DarkGray
+    }
+    elseif ($staleVolumes.Count -gt 0) {
+        Write-Host "  Reclaiming $($staleVolumes.Count) VPS-sim volume(s) of other flavors (-vpsclean)..." -ForegroundColor DarkGray
         foreach ($vol in $staleVolumes) {
             # A stopped container from a vanished worktree's project can still hold the
             # volume; drop those holders first, otherwise `volume rm` refuses.
@@ -658,7 +672,10 @@ function Invoke-TestRun {
         [string[]]$ExtraArgs = @(),
         [string]$Label = "Running tests...",
         [string]$Target = "",
-        [switch]$StreamOutput
+        [switch]$StreamOutput,
+        # Where TRX and Cobertura land instead of the default (PLAN-015: the integration coverage goes
+        # beside the product report, which merges exactly the three unit suites).
+        [string]$ResultDirectory = ""
     )
     if (-not $Target) { $Target = $solution }
     Write-Step $Label
@@ -669,7 +686,7 @@ function Invoke-TestRun {
     # named by --project or --solution, TRX comes from the TrxReport extension and the per-test lines
     # only appear with --output Detailed. Put both TRX and Cobertura outputs in the coverage directory
     # for -c, and pass --results-directory exactly once.
-    $resultDirectory = if ($Coverage) { $coverageDir } else { Join-Path $root "TestResults\Launcher" }
+    $resultDirectory = if ($ResultDirectory) { $ResultDirectory } elseif ($Coverage) { $coverageDir } else { Join-Path $root "TestResults\Launcher" }
     New-Item -ItemType Directory -Path $resultDirectory -Force | Out-Null
     $safeLabel = ($Label -replace '[^A-Za-z0-9]+', '-').Trim('-').ToLowerInvariant()
     $trxName = "{0}-{1:yyyyMMdd-HHmmssfff}.trx" -f $safeLabel, (Get-Date)
@@ -903,9 +920,7 @@ $E2eCategories = @(
     'Logs',
     'Accessibility',
     'ResponsiveAdmin',
-    'ProductionSmoke',
-    # PLAN-008 lot 0: explicit capture fixture, never part of an unfiltered -te run.
-    'Parity'
+    'ProductionSmoke'
 )
 
 function Resolve-E2eCategories([string]$filter) {
@@ -1503,6 +1518,29 @@ $frontSnapshotHostDir = $null
 $backSnapshotDir = $null
 $agentSnapshotDir = $null
 $frontApiBaseUrl = "https://localhost:$backHttpsPort"
+# What the frontend snapshot is made of, as one hash: path and content of every front source (bin/obj
+# excluded, on either separator) and of every assembly the front build copied, the static server's
+# sources, and the per-launch appsettings.Development.json. Content, not write time: the snapshot's own
+# publish (-p:RunAnalyzers=false) and the next launch's build each recompile the front, rewriting
+# byte-identical assemblies with a new timestamp, so a write-time key never matched twice.
+function Get-FrontSnapshotFingerprint([string]$Configuration) {
+    $devSettings = Join-Path $frontDir "wwwroot\appsettings.Development.json"
+    $files = @(Get-ChildItem -LiteralPath $frontDir -Recurse -File |
+            Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.FullName -ne $devSettings })
+    $files += @(Get-ChildItem -LiteralPath (Join-Path $frontDir "bin\$Configuration") -Recurse -File -Filter "*.dll" -ErrorAction SilentlyContinue)
+    $files += @(Get-ChildItem -LiteralPath (Join-Path $root "deploy\docker") -File | Where-Object { $_.Extension -in ".cs", ".csproj", ".json" })
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("configuration=$Configuration")
+    foreach ($file in $files | Sort-Object FullName) {
+        $lines.Add("$($file.FullName.Substring($root.Length))|$((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash)")
+    }
+    if (Test-Path -LiteralPath $devSettings) {
+        $lines.Add("dev-settings=$((Get-FileHash -LiteralPath $devSettings -Algorithm SHA256).Hash)")
+    }
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes(($lines -join [char]10))
+    return [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($bytes))
+}
+
 function Copy-RuntimeSnapshot([string]$name, [string]$sourceDir, [string]$entryDll) {
     $testResultsRoot = [IO.Path]::GetFullPath((Join-Path $root "TestResults") + [IO.Path]::DirectorySeparatorChar)
     $snapshotDir = [IO.Path]::GetFullPath((Join-Path $testResultsRoot $name))
@@ -1524,11 +1562,11 @@ function Copy-RuntimeSnapshot([string]$name, [string]$sourceDir, [string]$entryD
 }
 if ($ModeFront -and -not $HotReload -and (-not $anyTest -or $TestE2e)) {
     Write-Step "Copying Backend runtime snapshot..."
-    $backSnapshotDir = Copy-RuntimeSnapshot "YLaunchBack" (Join-Path $backDir "bin\Debug\net10.0") "Aetheus.Back.dll"
+    $backSnapshotDir = Copy-RuntimeSnapshot "YLaunchBack" (Join-Path $backDir "bin\$buildConfiguration\net10.0") "Aetheus.Back.dll"
 }
 if ($ModeAgent -and -not $HotReload -and -not $anyTest) {
     Write-Step "Copying Agent runtime snapshot..."
-    $agentSnapshotDir = Copy-RuntimeSnapshot "YLaunchAgent" (Join-Path $agentDir "bin\Debug\net10.0-windows") "Aetheus.Agent.Windows.dll"
+    $agentSnapshotDir = Copy-RuntimeSnapshot "YLaunchAgent" (Join-Path $agentDir "bin\$buildConfiguration\net10.0-windows") "Aetheus.Agent.Windows.dll"
 }
 if ($ModeFront -and -not $HotReload -and (-not $anyTest -or $TestE2e)) {
     Write-Step "Publishing a stable frontend snapshot..."
@@ -1538,16 +1576,32 @@ if ($ModeFront -and -not $HotReload -and (-not $anyTest -or $TestE2e)) {
     if (-not $snapshotPath.StartsWith($testResultsRoot, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Frontend snapshot path must stay under TestResults."
     }
-    if (Test-Path -LiteralPath $frontSnapshotDir) {
-        Remove-Item -LiteralPath $frontSnapshotDir -Recurse -Force
-    }
     $frontSnapshotSiteDir = Join-Path $frontSnapshotDir "site"
     $frontSnapshotHostDir = Join-Path $frontSnapshotDir "host"
-    dotnet publish (Join-Path $frontDir "Aetheus.Front.csproj") -c Debug -o $frontSnapshotSiteDir --no-restore -p:RunAnalyzers=false -p:PublishTrimmed=false -p:UseSharedCompilation=false -m:1 -nodeReuse:false --nologo
-    if ($LASTEXITCODE -ne 0) { Write-Host "FRONTEND SNAPSHOT FAILED." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
-    dotnet publish (Join-Path $root "deploy\docker\StaticServer.csproj") -c Debug -o $frontSnapshotHostDir -p:UseSharedCompilation=false -m:1 -nodeReuse:false --nologo
-    if ($LASTEXITCODE -ne 0) { Write-Host "STATIC SERVER SNAPSHOT FAILED." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
-    Copy-Item -Path (Join-Path $frontSnapshotSiteDir "wwwroot\*") -Destination (Join-Path $frontSnapshotHostDir "wwwroot") -Recurse -Force -ErrorAction Stop
+    # Publishing the WebAssembly site takes ~40 s (759 files, each compressed twice) and ran on every
+    # launch, changed or not. The snapshot is reused when nothing it is made of changed: the front
+    # sources (wwwroot included), the assemblies its build copied (referenced projects, OmniEurope.Blazor
+    # and the other packages), the static server and the launch's own appsettings.Development.json
+    # (by content: this script rewrites it on every launch). Any doubt republishes.
+    $frontSnapshotStamp = Join-Path $frontSnapshotDir "inputs.sha256"
+    $frontSnapshotFingerprint = Get-FrontSnapshotFingerprint -Configuration $buildConfiguration
+    $frontSnapshotReusable = (Test-Path -LiteralPath $frontSnapshotStamp) -and
+        ((Get-Content -LiteralPath $frontSnapshotStamp -Raw).Trim() -eq $frontSnapshotFingerprint) -and
+        (Test-Path (Join-Path $frontSnapshotHostDir "wwwroot\index.html")) -and
+        (Test-Path (Join-Path $frontSnapshotHostDir "StaticServer.dll"))
+    if ($frontSnapshotReusable) {
+        Write-Host "  Frontend unchanged since the last snapshot: reused." -ForegroundColor DarkGray
+    } else {
+        if (Test-Path -LiteralPath $frontSnapshotDir) {
+            Remove-Item -LiteralPath $frontSnapshotDir -Recurse -Force
+        }
+        dotnet publish (Join-Path $frontDir "Aetheus.Front.csproj") -c $buildConfiguration -o $frontSnapshotSiteDir --no-restore -p:RunAnalyzers=false -p:PublishTrimmed=false -p:UseSharedCompilation=false -m:1 -nodeReuse:false --nologo
+        if ($LASTEXITCODE -ne 0) { Write-Host "FRONTEND SNAPSHOT FAILED." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
+        dotnet publish (Join-Path $root "deploy\docker\StaticServer.csproj") -c Debug -o $frontSnapshotHostDir -p:UseSharedCompilation=false -m:1 -nodeReuse:false --nologo
+        if ($LASTEXITCODE -ne 0) { Write-Host "STATIC SERVER SNAPSHOT FAILED." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
+        Copy-Item -Path (Join-Path $frontSnapshotSiteDir "wwwroot\*") -Destination (Join-Path $frontSnapshotHostDir "wwwroot") -Recurse -Force -ErrorAction Stop
+        Set-Content -LiteralPath $frontSnapshotStamp -Value $frontSnapshotFingerprint -NoNewline
+    }
     if (-not (Test-Path (Join-Path $frontSnapshotHostDir "wwwroot\index.html")) -or
         -not (Test-Path (Join-Path $frontSnapshotHostDir "StaticServer.dll"))) {
         throw "Frontend snapshot is incomplete."
@@ -1634,9 +1688,20 @@ if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegrat
         }
     }
 
+    # PLAN-015 lot 0: the integration tests exercise the controllers and repositories the unit suites do
+    # not reach; under -c their coverage is collected too, in its own subdirectory: the product report
+    # still merges exactly the three unit suites, the CRAP measure reads every report under the coverage
+    # directory. Without -c they run only when asked (-ti), as before.
+    if ($Coverage) {
+        $integrationTestDir = Join-Path $root "tests\Aetheus.Back.IntegrationTests"
+        $rci = Invoke-TestRun -Target $integrationTestDir -ExtraArgs @("--coverlet") -ResultDirectory (Join-Path $coverageDir "Integration") -Label "Running integration tests (Testcontainers) with coverage..."
+        $testResults += $rci; $testLabels += "Integration"
+        if ($rci.ExitCode -ne 0) { Write-Host "INTEGRATION TESTS FAILED - aborting." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
+    }
+
     if ($Coverage) { Invoke-CoverageReport }
 
-    if ($TestIntegration) {
+    if ($TestIntegration -and -not $Coverage) {
         $integrationTestDir = Join-Path $root "tests\Aetheus.Back.IntegrationTests"
         $ri = Invoke-TestRun -Target $integrationTestDir -Label "Running integration tests (Testcontainers)..."
         $testResults += $ri; $testLabels += "Integration"
@@ -1674,7 +1739,7 @@ if ($TestE2e) {
     # already-present builds) and pinned to the Microsoft.Playwright NuGet
     # version, so it stays correct across package upgrades. Fail fast here
     # rather than letting every test fail with "Executable doesn't exist".
-    $playwrightScript = Join-Path $root "Tests\Aetheus.E2E\bin\Debug\net10.0\playwright.ps1"
+    $playwrightScript = Join-Path $root "Tests\Aetheus.E2E\bin\$buildConfiguration\net10.0\playwright.ps1"
     if (-not (Test-Path $playwrightScript)) {
         Write-Host "playwright.ps1 not found at $playwrightScript - solution not built? Aborting E2E." -ForegroundColor Red
         $script:ylaunchExitCode = 1

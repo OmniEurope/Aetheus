@@ -1,24 +1,85 @@
 # SPDX-License-Identifier: EUPL-1.2
+# Static security evidence for a repository in any language, graded on one versioned scale.
+#
+# Every scanner is the platform's own, pinned in the scanner manifest: no project adapter is needed.
+# One file is: Gitleaks reads its rules from .gitleaks.toml at the root of the repository (the setup
+# wizard's readiness check names it when it is missing; the default rules are one line,
+# `[extend]` then `useDefault = true`). The four scans are independent, so they share a stage; the
+# grade reads all four and sits in the stage after them (ADR-012: the steps of a stage run together).
+# Image scanning needs images this template cannot know how to build: a project that ships containers
+# adds its own stage in its pipeline.
 name: application-security-template
 trigger: manual
-variables:
-  APPLICATION_CI_PIPELINE: application-ci
 
 stages:
-  - name: Security
+  - name: Scan source
     group: Security
     execution_role: build
     os: linux
     steps:
-      - name: Restore immutable CI payload
-        type: restore-artifacts
-        artifact: ApplicationPayload-artifacts
-        artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
-        timeout_seconds: 1800
-      - name: Run project security adapter
-        working_directory: "$(WORKSPACE)"
-        shell: |
-          set -eu
-          test -f .pipeline/scripts/security.sh
-          sh .pipeline/scripts/security.sh
-        timeout_seconds: 7200
+      - name: Scan secrets
+        type: scanner
+        scanner: gitleaks
+        timeout_seconds: 600
+      - name: Scan code (SAST)
+        type: scanner
+        scanner: opengrep
+        retry_count: 1
+        timeout_seconds: 1200
+      - name: Scan dependencies
+        type: scanner
+        scanner: trivy-dependencies
+        retry_count: 1
+        timeout_seconds: 1200
+      - name: Scan IaC
+        type: scanner
+        scanner: trivy-iac
+        timeout_seconds: 900
+
+  # The severity rules every security pipeline uses. Recette R2-119 will switch them to the weighted
+  # finding score once the deployed backend parses `finding_score`; until then a template carrying it
+  # would be refused.
+  - name: Grade security
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Scan source]
+    steps:
+      - name: Publish summaries and calculate the versioned security grade
+        type: analysis-gate
+        analysis_scope: security
+        analysis_grading:
+          version: 1
+          minimum_grade: F
+          required_domains:
+            - security
+          rules:
+            - key: grade.security.critical
+              domain: security
+              severity: critical
+              direction: lower-is-better
+              a: 0
+              b: 0
+              c: 0
+              d: 0
+              e: 0
+            - key: grade.security.high
+              domain: security
+              severity: high
+              direction: lower-is-better
+              a: 0
+              b: 1
+              c: 3
+              d: 5
+              e: 10
+            - key: grade.security.medium
+              domain: security
+              severity: medium
+              required: false
+              direction: lower-is-better
+              a: 0
+              b: 5
+              c: 15
+              d: 30
+              e: 60
+        timeout_seconds: 300

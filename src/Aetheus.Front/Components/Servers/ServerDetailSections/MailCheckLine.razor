@@ -1,0 +1,12 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R2-080 / R2-090: one checked line of the mail page, green when it passes, red when it does not,
+   grey while it has not been checked yet. The detail wraps on a narrow screen. *@
+<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small"
+           Class="@($"mail-check-line {Class}".TrimEnd())" data-state="@State">
+    <OmniBadge Fill="OmniFill.Solid" Tone="@Tone">@BadgeText</OmniBadge>
+    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Label</OmniText>
+    @if (!string.IsNullOrEmpty(Detail))
+    {
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 mail-check-detail">@Detail</OmniText>
+    }
+</OmniStack>

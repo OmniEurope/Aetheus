@@ -116,7 +116,7 @@ else
         }
 
         <AetheusDataGrid FullHeight="true" @ref="_entriesGrid" Data="@_entries" Count="@_entryCount" TItem="VariableEntryDto"
-            IsLoading="@_entriesLoading" LoadData="@LoadEntriesAsync" PageSize="25"
+            IsLoading="@_entriesLoading" LoadData="@LoadEntriesAsync" ExportRead="@ReadEntriesExportAsync" PageSize="25"
             AllowAltering="true" EditMode="OmniDataGridRowMode.Single" RowUpdate="@OnEntryUpdate" AllowSorting="true"
             AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" AllowColumnResize="true" Virtualize="@AetheusGrid.RemoteVirtualization" VirtualizationOverscanCount="3"
             VirtualData="@(() => new OmniDataGridResult<VariableEntryDto>(_entries, _entryCount))">
@@ -158,7 +158,7 @@ else
                         </div>
                     </EditTemplate>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="VariableEntryDto" Title="@L["Versions"]" Width="90px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
+                <OmniDataGridColumn TItem="VariableEntryDto" Title="@L["Versions"]" ExportValue="@VersionsExport" Width="90px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
                     <Template Context="entry">
                         <CountBadge Value="@entry.VersionCount" Variant="OmniTone.Neutral" />
                     </Template>

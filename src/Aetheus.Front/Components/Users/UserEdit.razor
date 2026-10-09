@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @page "/admin/users/new"
 @page "/admin/users/{Id:int}"
 @page "/users/new"
@@ -109,7 +110,7 @@ else
                         }
                         else
                         {
-                            <OmniDataGrid @ref="_permissionsGrid" FillAvailableHeight="true" TItem="EffectivePermissionDto" Items="@_effectivePermissions" KeyOf="@PermissionKey" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                            <OmniDataGrid @ref="_permissionsGrid" ExportTitle="@ExportContext.Title(L["EffectivePermissions"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" TItem="EffectivePermissionDto" Items="@_effectivePermissions" KeyOf="@PermissionKey" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                                 <Columns>
                                     <OmniDataGridColumn Frozen="true" TItem="EffectivePermissionDto" Property="ResourceType" Title="@L["ResourceType"]" Width="10rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" FormatFilterValue="@PlainText">
                                         <Template Context="perm">
@@ -154,7 +155,7 @@ else
                     }
                     else
                     {
-                        <OmniDataGrid FillAvailableHeight="true" TItem="UserOrganizationDto" Items="@_userOrgs"
+                        <OmniDataGrid FillAvailableHeight="true" TItem="UserOrganizationDto" ExportTitle="@ExportContext.Title(L["Organizations"])" ExportFields="@ExportContext.Fields()" Items="@_userOrgs"
                             OnRowClick="@(args => Nav.NavigateTo($"/admin/organizations/{args.Item.OrganizationId}"))" Class="aetheus-clickable-rows" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                             <Columns>
                                 <OmniDataGridColumn Frozen="true" TItem="UserOrganizationDto" Property="Name" Title="@L["Organization"]" Filterable="true">

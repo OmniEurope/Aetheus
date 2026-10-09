@@ -9,13 +9,16 @@ namespace Aetheus.Front.Components.Pipelines;
 /// <remarks>
 /// Carries no display text: every "nothing to show" case surfaces as null and the view renders its
 /// own localized placeholder, which keeps this type free of the localizer and directly testable.
+/// Recette R2-128: the latest grade and the last success also name their run, so both tiles open it.
 /// </remarks>
 public sealed record PipelineRunsSummary(
     AnalysisGrade? LatestGrade,
     int SucceededCount,
     int FinishedCount,
     TimeSpan? AverageSuccessDuration,
-    DateTime? LastSuccessAt)
+    DateTime? LastSuccessAt,
+    int? LatestGradeRunId = null,
+    int? LastSuccessRunId = null)
 {
     public static PipelineRunsSummary Create(IReadOnlyList<PipelineRunDto> runs)
     {
@@ -28,22 +31,24 @@ public sealed record PipelineRunsSummary(
             .Select(run => run.CompletedAt!.Value - run.StartedAt)
             .Where(duration => duration > TimeSpan.Zero)
             .ToList();
+        var latestGraded = runs
+            .OrderByDescending(run => run.StartedAt)
+            .FirstOrDefault(run => run.GateGrade is not null);
+        var lastSuccess = finished
+            .Where(run => run.Status == PipelineStatus.Success)
+            .OrderByDescending(run => run.CompletedAt)
+            .FirstOrDefault();
 
         return new PipelineRunsSummary(
-            LatestGrade: runs
-                .OrderByDescending(run => run.StartedAt)
-                .Select(run => run.GateGrade)
-                .FirstOrDefault(grade => grade is not null),
+            LatestGrade: latestGraded?.GateGrade,
             SucceededCount: finished.Count(run => run.Status == PipelineStatus.Success),
             FinishedCount: finished.Count,
             AverageSuccessDuration: successDurations.Count == 0
                 ? null
                 : TimeSpan.FromSeconds(successDurations.Average(duration => duration.TotalSeconds)),
-            LastSuccessAt: finished
-                .Where(run => run.Status == PipelineStatus.Success)
-                .OrderByDescending(run => run.CompletedAt)
-                .Select(run => run.CompletedAt)
-                .FirstOrDefault());
+            LastSuccessAt: lastSuccess?.CompletedAt,
+            LatestGradeRunId: latestGraded?.Id,
+            LastSuccessRunId: lastSuccess?.Id);
     }
 
     public int? SuccessPercent => FinishedCount == 0 ? null : SucceededCount * 100 / FinishedCount;

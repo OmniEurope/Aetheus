@@ -83,19 +83,34 @@ public class OrganizationDetailDeepTests : BunitContext
         Assert.Equal("Org-1", org.Name);
     }
 
-    // ── Test 2: LoadAsync sets _users list ───────────────────────────────────
+    // ── Test 2: FRONT-007, the member picker searches the server ─────────────
 
     [Fact]
-    public async Task LoadAsync_SetsUsersList()
+    public async Task MemberPicker_SearchesTheServer_AndOffersAUserBeyondTheFirstHundred()
     {
         SetupForId(2);
+        _handler.SetJsonResponse(HttpMethod.Get, "api/users?page=1&pageSize=25&search=user101", new PaginatedResult<UserDto>
+        {
+            Items = [new UserDto { Id = 101, Username = "user101" }],
+            TotalCount = 1
+        });
+        _handler.SetJsonResponse(HttpMethod.Post, "api/organizations/2/members", new OrganizationMemberDto(
+            Id: 9, UserId: 101, Username: "user101", Email: null, Role: OrganizationRole.Member, CreatedAt: DateTime.UtcNow));
+        Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo("/admin/organizations/2?tab=members");
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 2));
+        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<OmniAutocomplete<int?>>()));
+        // The page no longer preloads a capped user list.
+        Assert.DoesNotContain(_handler.Requests, request => request.Url.Contains("pageSize=100", StringComparison.Ordinal));
 
-        var loadMethod = PageType.GetMethod("LoadAsync", Priv)!;
-        await cut.InvokeAsync(async () => await (Task)loadMethod.Invoke(cut.Instance, [])!);
+        var picker = cut.FindComponent<OmniAutocomplete<int?>>();
+        var options = await cut.InvokeAsync(() => picker.Instance.Search!("user101", CancellationToken.None));
+        Assert.Equal("user101", Assert.Single(options).Text);
+        await cut.InvokeAsync(() => picker.Instance.ValueChanged.InvokeAsync(101));
+        Assert.Equal("user101", picker.Instance.FormatValue!(101));
+        await cut.InvokeAsync(async () => await (Task)PageType.GetMethod("OnAddMember", Priv)!.Invoke(cut.Instance, [])!);
 
-        var users = (List<UserDto>)PageType.GetField("_users", Priv)!.GetValue(cut.Instance)!;
-        Assert.Equal(3, users.Count);
+        var post = Assert.Single(_handler.RequestDetails, request => request.Method == "POST");
+        Assert.Contains("\"userId\":101", post.Body, StringComparison.Ordinal);
     }
 
     // ── Test 3: LoadAsync sets _allProjects list ──────────────────────────────
@@ -234,6 +249,24 @@ public class OrganizationDetailDeepTests : BunitContext
         // OnSaveProjects sends the assign PUT and completes without throwing on any response.
         Assert.Null(ex);
         Assert.Contains(_handler.Requests, r => r.Method == "PUT" && r.Url.Contains("api/organizations/8/projects"));
+    }
+
+    [Fact]
+    public async Task Front006_ARefusedAssignment_RestoresTheConfirmedProjects_NotTheUnsavedSelection()
+    {
+        SetupForId(8);
+        _handler.SetResponse(HttpMethod.Put, "api/organizations/8/projects", System.Net.HttpStatusCode.BadRequest);
+        var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 8));
+        cut.WaitForAssertion(() => Assert.NotNull(PageType.GetField("_org", Priv)!.GetValue(cut.Instance)));
+
+        // What @bind-Value does before its :after handler runs: the field already holds the new selection.
+        IReadOnlyList<int> unsaved = [1];
+        PageType.GetField("_selectedProjectIds", Priv)!.SetValue(cut.Instance, unsaved);
+        await cut.InvokeAsync(async () =>
+            await (Task)PageType.GetMethod("OnProjectsChangedAsync", Priv)!.Invoke(cut.Instance, [unsaved])!);
+
+        var selected = (IReadOnlyList<int>)PageType.GetField("_selectedProjectIds", Priv)!.GetValue(cut.Instance)!;
+        Assert.Equal([1, 2], selected.Order());
     }
 
     // ── Test 9: OnAddMember with valid userId calls API ───────────────────────

@@ -304,6 +304,33 @@ public sealed class RecetteR2RunPageTests : BunitContext
         Assert.Contains(_handler.Requests, request => request.Url.Contains("appsettings.json", StringComparison.Ordinal));
     }
 
+    // ---------- R2-116: the two requests of a delivery carry their own title ----------
+
+    [Theory]
+    [InlineData(ApprovalScope.Environment, "EnvironmentApprovalTitle", "PipelineApprovalTitle")]
+    [InlineData(ApprovalScope.Pipeline, "PipelineApprovalTitle", "EnvironmentApprovalTitle")]
+    public void R2_116_TheEnvironmentApproval_AndTheConfirmation_HaveDistinctTitles(
+        ApprovalScope scope, string expected, string other)
+    {
+        var controller = PendingApproval();
+        typeof(PipelineRunApprovalController).GetProperty(nameof(PipelineRunApprovalController.Pending))!
+            .SetValue(controller, new PipelineApprovalDto
+            {
+                Id = 32,
+                PipelineRunId = 40,
+                StageName = "Confirm",
+                Scope = scope,
+                EnvironmentName = "prod"
+            });
+
+        var cut = Render<PipelineRunApprovalPanel>(parameters => parameters.Add(component => component.Approval, controller));
+
+        var banner = cut.Find(".run-approval-banner");
+        Assert.Contains(expected, banner.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain(other, banner.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApprovalRequiredTitle", cut.Markup, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void R2_046_TheCommentField_AppearsOnRequest_BesideApproveAndReject()
     {
@@ -320,6 +347,31 @@ public sealed class RecetteR2RunPageTests : BunitContext
         Assert.Single(cut.FindAll("textarea"));
         Assert.Empty(cut.FindAll("button.approval-add-comment"));
         Assert.Single(cut.FindAll("button.omni-button--primary"));
+    }
+
+    [Fact]
+    public void R2_095_OnAPhone_ApproveAndRejectCanShrinkToIcons_WithTheirNameAndTooltip_AndTheButtonsWrap()
+    {
+        // Recette R2-095: the banner's text and buttons ran past it on a phone. The CSS that reduces
+        // the two decisions to their icon below phone width targets these classes; the layout itself
+        // is measured at 375 px by the E2E R2095_MobileApprovalBanner_* test.
+        var cut = Render<PipelineRunApprovalPanel>(parameters => parameters.Add(component => component.Approval, PendingApproval()));
+        cut.WaitForAssertion(() => Assert.Contains("Approve", cut.Markup, StringComparison.Ordinal));
+
+        Assert.Single(cut.FindAll(".omni-alert.run-approval-banner"));
+        var decisions = cut.FindAll(".run-approval-banner button.approval-decision");
+        Assert.Equal(2, decisions.Count);
+        Assert.All(decisions, button =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(button.GetAttribute("aria-label")));
+            Assert.Equal(button.GetAttribute("aria-label"), button.GetAttribute("title"));
+            Assert.NotNull(button.QuerySelector(".omni-icon"));
+        });
+        Assert.Equal(["Approve", "Reject"], decisions.Select(button => button.GetAttribute("aria-label")));
+        // Comment keeps its text: it does not carry the class that hides the label.
+        Assert.DoesNotContain("approval-decision", cut.Find("button.approval-add-comment").ClassName, StringComparison.Ordinal);
+        // The row of buttons wraps instead of widening the banner.
+        Assert.Contains("omni-stack--wrap", decisions[0].ParentElement!.ClassName, StringComparison.Ordinal);
     }
 
     [Fact]

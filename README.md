@@ -129,8 +129,14 @@ dotnet run --project src/Aetheus.Front   # https://localhost:5401
 
 **Linux**
 
+The installer needs the agent binaries next to it, so it runs from the extracted agent archive,
+not from a checkout. Download the archive from the Aetheus UI, or from
+`{SERVER_URL}/downloads/aetheus-agent-linux-x64.tar.gz`, extract it, then run from inside it:
+
 ```bash
-sudo sh deploy/scripts/install-agent-linux.sh
+mkdir aetheus-agent && tar -xzf aetheus-agent-linux-x64*.tar.gz -C aetheus-agent
+cd aetheus-agent
+sudo sh ./install-agent-linux.sh
 # prompts for the server URL and a registration token, then creates a systemd service
 ```
 
@@ -150,7 +156,12 @@ powershell -ExecutionPolicy Bypass -File .\install-agent-windows.ps1
 .\deploy\scripts\local.ps1 -Down      # stop it
 ```
 
+`deploy.sh` assumes no host: `SERVERNAME` (the public domain) and `GITREMOTE` (the repository to
+deploy) are required, and the script stops when either is missing.
+
 ```bash
+export SERVERNAME=aetheus.example.com
+export GITREMOTE=https://git.example.com/you/aetheus.git
 sh deploy/scripts/deploy.sh           # remote Linux deployment, production, branch main
 sh deploy/scripts/deploy.sh -b develop
 sh deploy/scripts/deploy.sh -r        # rebuild without cache

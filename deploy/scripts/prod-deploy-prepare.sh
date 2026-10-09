@@ -250,6 +250,31 @@ if ! grep -q "^DEPLOYMENT_BOOTSTRAP_IDENTITY_KEY=.\+" "$ENV_FILE"; then
   mv "$ENV_BACKFILL_TMP" "$ENV_FILE"
   umask "$PREPARE_UMASK"
 fi
+# --- GIT_RUN_TOKEN_KEY back-fill (R-464) ---
+# The dedicated key pipeline clone tokens are signed with (GitLight:RunTokenKey). Drawn once per
+# environment, on the first prepare that finds it absent, then reused verbatim: a value already present
+# is never replaced. Drawing it rotates nothing that matters: the backend checks a clone token under
+# both this key and the Auth:EncryptionKey fallback, so tokens the previous colour minted stay valid
+# across the switch. An empty line counts as absent and is replaced, not duplicated.
+if ! grep -q "^GIT_RUN_TOKEN_KEY=.\+" "$ENV_FILE"; then
+  echo ">>> Back-filling GIT_RUN_TOKEN_KEY in $ENV_FILE"
+  GIT_RUN_TOKEN_KEY_VALUE="$(openssl rand -hex 32)"
+  case "$GIT_RUN_TOKEN_KEY_VALUE" in
+    *[!0-9a-f]*) fail "openssl did not draw a hexadecimal GIT_RUN_TOKEN_KEY." ;;
+  esac
+  [ "${#GIT_RUN_TOKEN_KEY_VALUE}" -eq 64 ] || fail "openssl did not draw a 32-byte GIT_RUN_TOKEN_KEY."
+  RUN_TOKEN_BACKUP="$STATE_DIR/$ENV_BACKUP_PREFIX-$(date -u +"%Y%m%dT%H%M%SZ")"
+  [ -f "$RUN_TOKEN_BACKUP" ] || cp -p "$ENV_FILE" "$RUN_TOKEN_BACKUP"
+  chmod 600 "$RUN_TOKEN_BACKUP"
+  PREPARE_UMASK="$(umask)"
+  umask 177
+  RUN_TOKEN_TMP="$ENV_FILE.run-token.$$"
+  { sed '/^GIT_RUN_TOKEN_KEY=$/d' "$ENV_FILE"; echo "GIT_RUN_TOKEN_KEY=$GIT_RUN_TOKEN_KEY_VALUE"; } > "$RUN_TOKEN_TMP"
+  chmod 600 "$RUN_TOKEN_TMP"
+  mv "$RUN_TOKEN_TMP" "$ENV_FILE"
+  umask "$PREPARE_UMASK"
+fi
+# --- end of GIT_RUN_TOKEN_KEY back-fill ---
 # The public URLs follow the libraries, the secrets do not move. API_BASE_URL is what the front calls
 # and FRONT_URL what the API accepts as an origin; both were written once at the first deploy, so a
 # host renamed in the library (api.aetheus, PLAN-003 2.1) would otherwise never reach them. Only these

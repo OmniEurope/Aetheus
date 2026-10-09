@@ -93,6 +93,8 @@ public class AetheusDataGridLoaderIdentityTests : BunitContext
             .Add(p => p.Count, rows.Count)
             .Add(p => p.Virtualize, true)
             .Add(p => p.LoadData, _ => { onLoad?.Invoke(); return Task.CompletedTask; })
+            // The export bar (R2-124) is AetheusDataGridExportTests' subject; these grids test the loader.
+            .Add(p => p.ExportMarkdown, false)
             .Add(p => p.VirtualData, () => new OmniDataGridResult<Row>(rows, rows.Count))
             .Add(p => p.Columns, BuildColumns(rows)));
 

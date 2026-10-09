@@ -169,21 +169,6 @@ public class SystemLogsExtendedTests : BunitContext
         Assert.Contains(JSInterop.Invocations, i => i.Identifier == "downloadFileFromBytes");
     }
 
-    // ── OnExportCsvAsync ──────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task OnExportCsvAsync_FetchesAndInvokesJsDownload()
-    {
-        _handler.SetJsonResponse("api/system-logs/export", new byte[] { 0x01 });
-        var cut = RenderPage();
-        var method = typeof(SystemLogs).GetMethod("OnExportCsvAsync", Priv)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
-
-        // Export issues the CSV GET and streams the returned bytes to the JS download helper.
-        Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/system-logs/export"));
-        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "downloadFileFromBytes");
-    }
-
     // ── OnCopyCorrelationIdAsync ──────────────────────────────────────────────
 
     [Fact]

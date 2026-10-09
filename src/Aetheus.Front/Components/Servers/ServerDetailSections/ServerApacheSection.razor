@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @inherits ServerActionSectionBase
 
 @* --- Status bar --- *@
@@ -50,7 +51,7 @@
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-md omni-u-mb-sm">
                 @L["SitesEnabled"] (@EnabledVirtualHostGroups.Count)
             </OmniHeading>
-            <OmniDataGrid @ref="_enabledGrid" Items="@EnabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+            <OmniDataGrid @ref="_enabledGrid" ExportTitle="@ExportContext.Title(L["SitesEnabled"])" ExportFields="@ExportContext.Fields()" Items="@EnabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="ApacheVirtualHostGroup" Property="ServerName" Title="@L["ServerName"]" Width="16.25rem" Filterable="true">
                         <Template Context="g">
@@ -63,7 +64,7 @@
                             </OmniStack>
                         </Template>
                     </OmniDataGridColumn>
-                    <OmniDataGridColumn TItem="ApacheVirtualHostGroup" Title="@L["Ports"]" Width="12.5rem" Sortable="false" Filterable="false">
+                    <OmniDataGridColumn TItem="ApacheVirtualHostGroup" ExportValue="@PortsExport" Title="@L["Ports"]" Width="12.5rem" Sortable="false" Filterable="false">
                         <Template Context="g">
                             <OmniRow Gap="OmniSpacing.XSmall">
                                 @foreach (var m in g.Members)
@@ -91,7 +92,7 @@
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-lg omni-u-mb-sm">
                 @L["SitesDisabled"] (@DisabledVirtualHostGroups.Count)
             </OmniHeading>
-            <OmniDataGrid @ref="_disabledGrid" FillAvailableHeight="true" Items="@DisabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+            <OmniDataGrid @ref="_disabledGrid" ExportTitle="@ExportContext.Title(L["SitesDisabled"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@DisabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="ApacheVirtualHostGroup" Property="ServerName" Title="@L["ServerName"]" Width="16.25rem" Filterable="true">
                         <Template Context="g">
@@ -104,7 +105,7 @@
                             </OmniStack>
                         </Template>
                     </OmniDataGridColumn>
-                    <OmniDataGridColumn TItem="ApacheVirtualHostGroup" Title="@L["Ports"]" Width="12.5rem" Sortable="false" Filterable="false">
+                    <OmniDataGridColumn TItem="ApacheVirtualHostGroup" ExportValue="@PortsExport" Title="@L["Ports"]" Width="12.5rem" Sortable="false" Filterable="false">
                         <Template Context="g">
                             <OmniRow Gap="OmniSpacing.XSmall">
                                 @foreach (var m in g.Members)
@@ -135,7 +136,7 @@
                 <CountBadge Value="@FilteredModules.Count" Variant="OmniTone.Accent" />
                 <OmniTextBox aria-label="@L["FilterModules"]" @bind-Value="_moduleSearch" Placeholder="@L["FilterModules"]" />
             </OmniStack>
-            <OmniDataGrid @ref="_modulesGrid" FillAvailableHeight="true" Items="@FilteredModules" TItem="ApacheModuleDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+            <OmniDataGrid @ref="_modulesGrid" ExportTitle="@ExportContext.Title(L["Modules"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@FilteredModules" TItem="ApacheModuleDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="ApacheModuleDto" Property="Name" Title="@L["Module"]" Filterable="true" />
                     <OmniDataGridColumn TItem="ApacheModuleDto" Property="Type" Title="@L["Type"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect">

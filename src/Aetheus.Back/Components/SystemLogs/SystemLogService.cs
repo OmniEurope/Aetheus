@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 
 namespace Aetheus.Back.Components.SystemLogs;
@@ -12,8 +11,7 @@ public class SystemLogService : ISystemLogService
     private readonly TimeProvider _timeProvider;
     private const long MaxFileSizeBytes = 50 * 1024 * 1024;
     // Hard cap on entries materialized in memory across all target files before paging (audit Faible:
-    // bound the working set of a query over a large log directory). Above the CSV export page size
-    // (100k) so export is unaffected; truncation is logged, never silent.
+    // bound the working set of a query over a large log directory). Truncation is logged, never silent.
     private const int MaxAggregatedEntries = 200_000;
 
     public SystemLogService(IConfiguration configuration, ILogger<SystemLogService> logger, TimeProvider timeProvider)
@@ -127,29 +125,6 @@ public class SystemLogService : ISystemLogService
         return Task.FromResult(stream);
     }
 
-    public async Task<byte[]> ExportCsvAsync(
-        string? fileName, string? level, string? search, DateTime? dateFrom, DateTime? dateTo, CancellationToken ct = default)
-    {
-        var result = await GetLogEntriesAsync(fileName, level, search, dateFrom, dateTo, 1, 100_000, ct).ConfigureAwait(false);
-        var sb = new StringBuilder();
-        sb.AppendLine("Timestamp,Level,Category,Message,Exception,CorrelationId");
-        foreach (var e in result.Items)
-        {
-            sb.Append(e.Timestamp.ToString("O"));
-            sb.Append(',');
-            sb.Append(CsvEscape(e.Level));
-            sb.Append(',');
-            sb.Append(CsvEscape(e.Category));
-            sb.Append(',');
-            sb.Append(CsvEscape(e.Message));
-            sb.Append(',');
-            sb.Append(CsvEscape(e.Exception ?? ""));
-            sb.Append(',');
-            sb.AppendLine(CsvEscape(e.CorrelationId ?? ""));
-        }
-        return [.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes(sb.ToString())];
-    }
-
     public Task<int> PurgeOldLogsAsync(int retentionDays, CancellationToken ct = default)
     {
         if (!Directory.Exists(_logDirectory)) return Task.FromResult(0);
@@ -192,18 +167,6 @@ public class SystemLogService : ISystemLogService
             !(entry.CorrelationId?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
             return false;
         return true;
-    }
-
-    private static string CsvEscape(string value)
-    {
-        // CSV formula injection: a cell starting with = + @ - (or a leading tab/CR)
-        // is interpreted as a formula by Excel/LibreOffice. Prefix with an apostrophe
-        // to neutralize it (the spreadsheet then renders the cell as plain text).
-        if (value.Length > 0 && value[0] is '=' or '+' or '@' or '-' or '\t' or '\r')
-            value = "'" + value;
-        if (value.Contains('"') || value.Contains(',') || value.Contains('\n') || value.Contains('\r'))
-            return '"' + value.Replace("\"", "\"\"") + '"';
-        return value;
     }
 
     private List<string> GetTargetFiles(string? fileName)

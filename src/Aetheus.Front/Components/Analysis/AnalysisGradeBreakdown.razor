@@ -32,6 +32,16 @@
                         {
                             <small class="analysis-grade-measure-hint">@L["AnalysisDistanceToGrade", measure.DistanceToNextGrade.Value.ToString("0.##"), measure.NextGrade]</small>
                         }
+                        @* Recette R2-119: a weighted score says what it is made of, the open findings by
+                           severity and the weight of each. *@
+                        @if (measure.FindingCounts is { } counts)
+                        {
+                            <small class="analysis-grade-measure-hint">@FindingCountsText(counts)</small>
+                            @if (counts.Critical > 0)
+                            {
+                                <small class="analysis-grade-measure-hint">@L["AnalysisCriticalFindingNotDeliverable"]</small>
+                            }
+                        }
                     </div>
                 }
                 @if (domain.CrapScore.HasValue)

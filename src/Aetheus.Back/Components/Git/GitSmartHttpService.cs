@@ -83,6 +83,14 @@ public class GitSmartHttpService(
 
         var isUploadPack = string.Equals(service, "git-upload-pack", StringComparison.Ordinal);
 
+        // BACK-013: the commands of a push are read and checked against the pull-request rules before
+        // git starts, so a refused push never reaches the repository.
+        var receivePrelude = isUploadPack
+            ? []
+            : await GitReceivePackRefParser.ReadCommandPreludeAsync(requestBody, ct).ConfigureAwait(false);
+        if (!isUploadPack)
+            await EnsureNoDirectPushToPullRequestBranchAsync(projectId, slug, receivePrelude, ct).ConfigureAwait(false);
+
         var process = Process.Start(psi);
         if (process is null) return null;
 
@@ -96,12 +104,14 @@ public class GitSmartHttpService(
 
         try
         {
-            IReadOnlyList<GitRefUpdate> requestedUpdates = isUploadPack
-                ? []
-                : await GitReceivePackRefParser.CopyAndExtractUpdatedRefsAsync(
-                    requestBody, process.StandardInput.BaseStream, token).ConfigureAwait(false);
-            if (isUploadPack)
-                await requestBody.CopyToAsync(process.StandardInput.BaseStream, token).ConfigureAwait(false);
+            IReadOnlyList<GitRefUpdate> requestedUpdates = [];
+            if (!isUploadPack)
+            {
+                await using var prelude = new MemoryStream(receivePrelude, writable: false);
+                requestedUpdates = await GitReceivePackRefParser.CopyAndExtractUpdatedRefsAsync(
+                    prelude, process.StandardInput.BaseStream, token).ConfigureAwait(false);
+            }
+            await requestBody.CopyToAsync(process.StandardInput.BaseStream, token).ConfigureAwait(false);
             await process.StandardInput.BaseStream.FlushAsync(token).ConfigureAwait(false);
             process.StandardInput.Close();
 
@@ -166,6 +176,33 @@ public class GitSmartHttpService(
     /// the configured <see cref="GitLightOptions.RepositoriesPath"/> root. Returns <c>null</c>
     /// when the resolved path escapes the root (defense against path-traversal slugs).
     /// </summary>
+    // RequirePullRequest: a branch it protects only moves through the platform's own paths, the merge
+    // of a pull request and the advance-branch pipeline step, which write the ref in the repository
+    // directly and never come through this transport. A push that would create or move such a branch
+    // is refused; a deletion stays governed by PreventDeletion, enforced by the pre-receive hook.
+    private async Task EnsureNoDirectPushToPullRequestBranchAsync(
+        int projectId, string slug, byte[] prelude, CancellationToken ct)
+    {
+        var repository = await lightRepo.FindBySlugAsync(projectId, slug, ct).ConfigureAwait(false);
+        if (repository is null) return;
+        var rules = (await lightRepo.GetBranchProtectionRulesAsync(repository.Id, ct).ConfigureAwait(false))
+            .Where(rule => rule.RequirePullRequest)
+            .ToList();
+        if (rules.Count == 0) return;
+
+        foreach (var command in GitReceivePackRefParser.ParseCommands(prelude))
+        {
+            if (GitReceivePackRefParser.IsDeletion(command)
+                || !command.Reference.StartsWith("refs/heads/", StringComparison.Ordinal))
+                continue;
+            var branch = command.Reference["refs/heads/".Length..];
+            if (rules.Any(rule => GitBranchPatternMatcher.Matches(branch, rule.Pattern)))
+                throw new BadHttpRequestException(
+                    $"Branch '{branch}' requires a pull request: direct pushes are refused.",
+                    StatusCodes.Status403Forbidden);
+        }
+    }
+
     private async Task<string?> ResolveServiceDiskPathAsync(
         int projectId,
         string slug,

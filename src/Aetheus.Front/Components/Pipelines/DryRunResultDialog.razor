@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 
 <div class="dry-run-dialog">
     @if (Result is not null)
@@ -19,7 +20,7 @@
 
         @if (Result.ResolvedVariables.Count > 0)
         {
-            <OmniDataGrid Items="@Result.ResolvedVariables.ToList()" TItem="KeyValuePair<string, string>"
+            <OmniDataGrid Items="@Result.ResolvedVariables.ToList()" ExportTitle="@ExportContext.Title(L["ResolvedVariables"])" ExportFields="@ExportContext.Fields()" TItem="KeyValuePair<string, string>"
  Class="omni-u-mb-lg" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="12rem">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="KeyValuePair<string, string>" Property="Key" Title="@L["Key"]" Width="12.5rem" Filterable="true" />
@@ -31,7 +32,7 @@
         @foreach (var stage in Result.Stages)
         {
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-sm omni-u-mb-xs">@stage.StageName (@stage.Agent)</OmniHeading>
-            <OmniDataGrid Items="@stage.Steps" TItem="DryRunStepDto" Class="omni-u-mb-sm" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+            <OmniDataGrid Items="@stage.Steps" ExportTitle="@ExportContext.Title(stage.StageName)" ExportFields="@ExportContext.Fields()" TItem="DryRunStepDto" Class="omni-u-mb-sm" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="DryRunStepDto" Property="StepName" Title="@L["Step"]" Width="9.375rem" Filterable="true" />
                     <OmniDataGridColumn TItem="DryRunStepDto" Property="OriginalCommand" Title="@L["OriginalCommand"]" Filterable="true" />

@@ -9,6 +9,11 @@ public partial class NotificationChannelEditDialog : EntityEditDialogBase
     private bool IsEdit => ChannelId is not null;
     private EditModel _model = new();
     private bool _loading;
+    // FRONT-004: an edit whose channel could not be read never submits; the form would otherwise
+    // save the blank model ("{}", enabled) over the stored configuration.
+    private bool _notFound;
+    private bool _loadFailed;
+    private bool CanSubmit => !IsEdit || (!_loading && !_notFound && !_loadFailed);
 
     private List<OmniOption<NotificationChannelType>> _types = [];
 
@@ -22,6 +27,7 @@ public partial class NotificationChannelEditDialog : EntityEditDialogBase
         try
         {
             var channel = await Api.Monitoring.GetNotificationChannelAsync(id);
+            _notFound = channel is null;
             if (channel is not null)
             {
                 _model = new EditModel
@@ -33,12 +39,14 @@ public partial class NotificationChannelEditDialog : EntityEditDialogBase
                 };
             }
         }
-        catch (HttpRequestException) { } // 401 on expired JWT - redirect handled by AuthProvider
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound) { _notFound = true; }
+        catch (HttpRequestException) { _loadFailed = true; } // 401 on expired JWT - redirect handled by AuthProvider
         finally { _loading = false; }
     }
 
     private async Task SubmitAsync()
     {
+        if (!CanSubmit) return;
         await RunBusyAsync(async () =>
         {
             var config = string.IsNullOrWhiteSpace(_model.ConfigurationJson) ? "{}" : _model.ConfigurationJson;

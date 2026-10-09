@@ -237,27 +237,35 @@ public sealed class IconLabelAlignmentAuditTests
             if (end < 0) break;
             var name = nameMatch.Value;
             if (closing)
-            {
-                while (open.Count > 0)
-                {
-                    var top = open.Pop();
-                    if (string.Equals(top.Name, name, StringComparison.Ordinal)) break;
-                }
-            }
+                CloseUpTo(open, name);
             else
-            {
-                var tag = text[index..(end + 1)];
-                var element = new Element(name, tag, text.AsSpan(0, index).Count('\n') + 1, open.Count > 0 ? open.Peek().Tag : null, []);
-                all.Add(element);
-                if (open.Count > 0) open.Peek().Children.Add(name);
-                var selfClosing = text[end - 1] == '/' || VoidElements.Contains(name);
-                if (!selfClosing) open.Push(element);
-            }
+                OpenElement(all, open, text, index, end, name);
 
             index = end + 1;
         }
 
         return all;
+    }
+
+    /// <summary>A closing tag closes every element opened since its own (recette R2-107: out of <see cref="Parse"/>).</summary>
+    private static void CloseUpTo(Stack<Element> open, string name)
+    {
+        while (open.Count > 0)
+        {
+            var top = open.Pop();
+            if (string.Equals(top.Name, name, StringComparison.Ordinal)) break;
+        }
+    }
+
+    /// <summary>An opening tag: recorded as a child of the open element, and opened unless it closes itself.</summary>
+    private static void OpenElement(List<Element> all, Stack<Element> open, string text, int index, int end, string name)
+    {
+        var tag = text[index..(end + 1)];
+        var element = new Element(name, tag, text.AsSpan(0, index).Count('\n') + 1, open.Count > 0 ? open.Peek().Tag : null, []);
+        all.Add(element);
+        if (open.Count > 0) open.Peek().Children.Add(name);
+        var selfClosing = text[end - 1] == '/' || VoidElements.Contains(name);
+        if (!selfClosing) open.Push(element);
     }
 
     private static int TagEnd(string text, int start)

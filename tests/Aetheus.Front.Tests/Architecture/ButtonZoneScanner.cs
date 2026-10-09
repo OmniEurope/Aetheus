@@ -8,9 +8,10 @@
 // Aetheus copy: the model reads the button of the kit's example app, from a component library Aetheus
 // no longer uses. Aetheus renders OE buttons, so the three button-library points are adapted: the
 // button tags (OmniButton and OmniSplitButton), the colour attribute (Variant) and the default colour
-// in IsMain (an OmniButton defaults to Primary, an OmniSplitButton to Secondary). The branch test of
-// Buttons is moved into StartsBranch, unchanged, to keep Buttons under the cyclomatic budget of
-// ComplexityAnalyzerTests (25; the model's Buttons is at 26).
+// in IsMain (an OmniButton defaults to Primary, an OmniSplitButton to Secondary). The walk of Buttons
+// is a ZoneWalker class split by what starts at the current character (tag, branch, brace), and the
+// branch test is StartsBranch, both unchanged in behaviour, to keep every method under the grade-A
+// cyclomatic threshold (15) of the nightly quality grade (recette R2-107; the model's Buttons is at 26).
 
 using System.Text.RegularExpressions;
 
@@ -51,101 +52,136 @@ internal static class ButtonZoneScanner
     {
         // Comments become spaces, their line breaks kept, so indices and line numbers stay true.
         source = Comment.Replace(source, m => Regex.Replace(m.Value, @"[^\n]", " "));
-        var result = new List<ZoneButton>();
-        var elements = new Stack<(string Name, int Id)>();
-        var frames = new Stack<(int If, int Branch)>();
-        var lastClosed = new Dictionary<int, (int If, int Branch)>();
-        var nextElement = 1;
-        var nextIf = 0;
-        var i = 0;
-        while (i < source.Length)
+        return new ZoneWalker(source).Walk();
+    }
+
+    /// <summary>
+    /// One pass over a markup source: the open elements (a button's zone is the innermost one) and the
+    /// <c>if</c>/<c>else</c> frames around the current position. Recette R2-107: the walk is split
+    /// by what starts at the current character (a tag, a branch, a brace) so no method of it goes over
+    /// the grade-A cyclomatic threshold (15) the nightly quality grade applies to every source.
+    /// </summary>
+    private sealed class ZoneWalker(string source)
+    {
+        private readonly List<ZoneButton> _result = [];
+        private readonly Stack<(string Name, int Id)> _elements = new();
+        private readonly Stack<(int If, int Branch)> _frames = new();
+        private readonly Dictionary<int, (int If, int Branch)> _lastClosed = [];
+        private int _nextElement = 1;
+        private int _nextIf;
+
+        internal List<ZoneButton> Walk()
         {
-            var c = source[i];
-            if (c == '<')
+            var i = 0;
+            while (i < source.Length)
             {
-                var tag = Tag.Match(source, i);
-                if (!tag.Success)
+                if (source[i] == '<')
                 {
-                    i++;
+                    i = ReadTag(i);
                     continue;
                 }
 
-                var name = tag.Groups["name"].Value;
-                var selfClosing = tag.Groups["attrs"].Value.TrimEnd().EndsWith('/');
-                if (tag.Groups["close"].Success)
+                if (StartsBranch(source, i, out var branch))
                 {
-                    if (elements.Any(e => e.Name == name))
+                    var open = source.IndexOf('{', i);
+                    if (open < 0)
                     {
-                        while (elements.Pop().Name != name)
-                        {
-                        }
+                        break;
                     }
 
-                    i += tag.Length;
+                    OpenBranch(branch);
+                    i = open + 1;
                     continue;
                 }
 
-                if (ButtonTags.Contains(name))
-                {
-                    var end = i + tag.Length;
-                    if (!selfClosing)
-                    {
-                        var close = source.IndexOf($"</{name}>", end, StringComparison.Ordinal);
-                        end = close < 0 ? end : close + name.Length + 3;
-                    }
-
-                    var line = source.AsSpan(0, i).Count('\n') + 1;
-                    result.Add(new ZoneButton(source[i..end], line,
-                        elements.Count > 0 ? elements.Peek().Id : 0,
-                        frames.Where(f => f.If >= 0).ToList()));
-                    i = end;
-                    continue;
-                }
-
-                if (!selfClosing && !VoidElements.Contains(name))
-                {
-                    elements.Push((name, nextElement++));
-                }
-
-                i += tag.Length;
-                continue;
+                ReadBrace(source[i]);
+                i++;
             }
 
-            if (StartsBranch(source, i, out var branch))
-            {
-                var open = source.IndexOf('{', i);
-                if (open < 0)
-                {
-                    break;
-                }
-
-                var isElse = branch.Value.Contains("else", StringComparison.Ordinal);
-                var depth = frames.Count;
-                var frame = isElse && lastClosed.TryGetValue(depth, out var previous)
-                    ? (previous.If, previous.Branch + 1)
-                    : (nextIf++, 0);
-                frames.Push(frame);
-                i = open + 1;
-                continue;
-            }
-
-            if (c == '{')
-            {
-                frames.Push((-1, 0));
-            }
-            else if (c == '}' && frames.Count > 0)
-            {
-                var closed = frames.Pop();
-                if (closed.If >= 0)
-                {
-                    lastClosed[frames.Count] = closed;
-                }
-            }
-
-            i++;
+            return _result;
         }
 
-        return result;
+        /// <summary>Reads the tag at <paramref name="i"/>; returns where the walk goes on.</summary>
+        private int ReadTag(int i)
+        {
+            var tag = Tag.Match(source, i);
+            if (!tag.Success)
+            {
+                return i + 1;
+            }
+
+            var name = tag.Groups["name"].Value;
+            if (tag.Groups["close"].Success)
+            {
+                CloseElement(name);
+                return i + tag.Length;
+            }
+
+            var selfClosing = tag.Groups["attrs"].Value.TrimEnd().EndsWith('/');
+            if (ButtonTags.Contains(name))
+            {
+                return AddButton(i, tag.Length, name, selfClosing);
+            }
+
+            if (!selfClosing && !VoidElements.Contains(name))
+            {
+                _elements.Push((name, _nextElement++));
+            }
+
+            return i + tag.Length;
+        }
+
+        private void CloseElement(string name)
+        {
+            if (_elements.Any(e => e.Name == name))
+            {
+                while (_elements.Pop().Name != name)
+                {
+                }
+            }
+        }
+
+        private int AddButton(int i, int tagLength, string name, bool selfClosing)
+        {
+            var end = i + tagLength;
+            if (!selfClosing)
+            {
+                var close = source.IndexOf($"</{name}>", end, StringComparison.Ordinal);
+                end = close < 0 ? end : close + name.Length + 3;
+            }
+
+            var line = source.AsSpan(0, i).Count('\n') + 1;
+            _result.Add(new ZoneButton(source[i..end], line,
+                _elements.Count > 0 ? _elements.Peek().Id : 0,
+                _frames.Where(f => f.If >= 0).ToList()));
+            return end;
+        }
+
+        private void OpenBranch(Match branch)
+        {
+            var isElse = branch.Value.Contains("else", StringComparison.Ordinal);
+            var depth = _frames.Count;
+            var frame = isElse && _lastClosed.TryGetValue(depth, out var previous)
+                ? (previous.If, previous.Branch + 1)
+                : (_nextIf++, 0);
+            _frames.Push(frame);
+        }
+
+        private void ReadBrace(char c)
+        {
+            if (c == '{')
+            {
+                _frames.Push((-1, 0));
+            }
+            else if (c == '}' && _frames.Count > 0)
+            {
+                var closed = _frames.Pop();
+                if (closed.If >= 0)
+                {
+                    _lastClosed[_frames.Count] = closed;
+                }
+            }
+        }
     }
 
     /// <summary>True when an <c>if</c>, <c>else if</c> or <c>else</c> block starts at <paramref name="i"/>.</summary>

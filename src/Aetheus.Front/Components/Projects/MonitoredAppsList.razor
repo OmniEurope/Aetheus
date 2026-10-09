@@ -64,7 +64,7 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="MonitoredAppDto" Title="@L["Uptime24h"]" Width="150px" Sortable="false" Filterable="false" >
+        <OmniDataGridColumn TItem="MonitoredAppDto" Title="@L["Uptime24h"]" ExportValue="@Uptime24hExport" Width="150px" Sortable="false" Filterable="false" >
             <Template Context="app">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <AvailabilitySparkline Samples="@SamplesFor(app.Id)" />
@@ -72,7 +72,7 @@
                 </OmniStack>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="MonitoredAppDto" Title="@L["Uptime7d"]" Width="110px" Sortable="false" Filterable="false" >
+        <OmniDataGridColumn TItem="MonitoredAppDto" Title="@L["Uptime7d"]" ExportValue="@Uptime7dExport" Width="110px" Sortable="false" Filterable="false" >
             <Template Context="app">@FormatUptime(app.Uptime7d)</Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppDto" Property="LastResponseTimeMs" Title="@L["ResponseTime"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >

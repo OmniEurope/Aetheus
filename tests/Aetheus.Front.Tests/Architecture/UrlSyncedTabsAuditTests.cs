@@ -29,8 +29,8 @@ public class UrlSyncedTabsAuditTests
         new(
             Path.Combine("Components", "Projects", "AppTelemetryPanel.razor"),
             0,
-            6,
-            "telemetry sub-tabs scoped to the application picked in the panel, not deep-linked"),
+            7,
+            "telemetry sub-tabs scoped to the application picked in the panel, not deep-linked (PLAN-013 lot 1 added the Database tab)"),
     ];
 
     private static readonly Regex TabsTokenRegex = new(

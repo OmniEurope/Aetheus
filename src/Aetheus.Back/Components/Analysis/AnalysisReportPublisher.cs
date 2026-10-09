@@ -136,6 +136,7 @@ internal sealed class AnalysisReportPublisher(
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var report = CreateReport(context, runId, request, payloadHash, bytes.LongLength);
         AnalysisEvaluation? evaluation = null;
+        var storedMetricCount = 0;
         async Task PersistAsync()
         {
             if (request.Status is AnalysisReportStatus.Passed or AnalysisReportStatus.Failed)
@@ -144,7 +145,12 @@ internal sealed class AnalysisReportPublisher(
                     repository, report, context, request.ReportContent, now, ct).ConfigureAwait(false);
             }
             await repository.AddReportAsync(report, ct).ConfigureAwait(false);
-            evaluation = await policyEngine.EvaluateAsync(report, context, now, ct).ConfigureAwait(false);
+            // Graded and gated on every metric, then only the ones an analysis keeps are written.
+            var flagged = new HashSet<AnalysisMetric>(ReferenceEqualityComparer.Instance);
+            evaluation = await policyEngine.EvaluateAsync(report, context, now, flagged, ct).ConfigureAwait(false);
+            var stored = AnalysisMetricRetention.Select([.. report.Metrics], flagged);
+            await repository.AddMetricsAsync(report.Id, stored, ct).ConfigureAwait(false);
+            storedMetricCount = stored.Count;
             await repository.AddEvaluationAsync(evaluation, ct).ConfigureAwait(false);
             if (request.Category == AnalysisCategory.Sbom
                 && request.Status is AnalysisReportStatus.Passed or AnalysisReportStatus.Failed)
@@ -174,7 +180,7 @@ internal sealed class AnalysisReportPublisher(
             report.Occurrences.Select(occurrence => occurrence.AnalysisFinding).Distinct().Count(),
             report.Occurrences.Count(occurrence => occurrence.IsNew),
             report.Components.Count,
-            report.Metrics.Count,
+            storedMetricCount,
             persistedEvaluation.Status,
             persistedEvaluation.Grade,
             persistedEvaluation.GradeCompleteness,

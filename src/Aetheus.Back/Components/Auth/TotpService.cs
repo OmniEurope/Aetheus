@@ -14,7 +14,7 @@ public class TotpService(
 {
     public async Task<TotpSetupResponse> SetupTotpAsync(int userId, CancellationToken ct = default)
     {
-        var user = await repo.FindUserByIdForUpdateAsync(userId, ct).ConfigureAwait(false)
+        var user = await repo.FindUserByIdTrackedAsync(userId, ct).ConfigureAwait(false)
                    ?? throw new NotFoundException("User not found.");
         if (user.TotpEnabled)
             throw new ConflictException("TOTP is already enabled. Disable it first.");
@@ -48,7 +48,7 @@ public class TotpService(
 
     public async Task<bool> VerifyAndEnableTotpAsync(int userId, string code, CancellationToken ct = default)
     {
-        var user = await repo.FindUserByIdForUpdateAsync(userId, ct).ConfigureAwait(false);
+        var user = await repo.FindUserByIdTrackedAsync(userId, ct).ConfigureAwait(false);
         if (user is null || string.IsNullOrEmpty(user.TotpSecret)) return false;
         if (user.TotpEnabled) return true;
 
@@ -63,7 +63,7 @@ public class TotpService(
 
     public async Task<bool> DisableTotpAsync(int userId, string password, CancellationToken ct = default)
     {
-        var user = await repo.FindUserByIdForUpdateAsync(userId, ct).ConfigureAwait(false);
+        var user = await repo.FindUserByIdTrackedAsync(userId, ct).ConfigureAwait(false);
         if (user is null || !user.TotpEnabled) return false;
 
         if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash)) return false;
@@ -91,26 +91,32 @@ public class TotpService(
 
     public async Task<bool> ConsumeRecoveryCodeAsync(int userId, string code, CancellationToken ct)
     {
-        var user = await repo.FindUserByIdForUpdateAsync(userId, ct).ConfigureAwait(false);
+        var user = await repo.FindUserByIdTrackedAsync(userId, ct).ConfigureAwait(false);
         if (user is null || string.IsNullOrEmpty(user.TotpRecoveryCodes)) return false;
 
-        var hashes = JsonSerializer.Deserialize<List<string>>(user.TotpRecoveryCodes) ?? [];
         var normalized = code.Replace("-", "", StringComparison.Ordinal);
-
-        for (int i = 0; i < hashes.Count; i++)
+        var current = user.TotpRecoveryCodes;
+        // BACK-011: the list is rewritten only if nobody changed it since it was read. A lost race
+        // re-reads the stored list: the same code is then gone (false, no second login), while a
+        // different code consumed concurrently is still there and is retried on the fresh list.
+        for (var attempt = 0; attempt < MaxRecoveryConsumeAttempts && !string.IsNullOrEmpty(current); attempt++)
         {
-            if (BCrypt.Net.BCrypt.Verify(normalized, hashes[i]))
+            var hashes = JsonSerializer.Deserialize<List<string>>(current) ?? [];
+            var index = hashes.FindIndex(hash => BCrypt.Net.BCrypt.Verify(normalized, hash));
+            if (index < 0) return false;
+
+            hashes.RemoveAt(index);
+            if (await repo.ReplaceTotpRecoveryCodesAsync(userId, current, JsonSerializer.Serialize(hashes), ct).ConfigureAwait(false))
             {
-                hashes.RemoveAt(i);
-                user.TotpRecoveryCodes = JsonSerializer.Serialize(hashes);
-                user.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
-                await repo.SaveChangesAsync(ct).ConfigureAwait(false);
                 await audit.LogAsync("RecoveryCodeUsed", "User", userId, user.Username, ct).ConfigureAwait(false);
                 return true;
             }
+            current = await repo.GetTotpRecoveryCodesAsync(userId, ct).ConfigureAwait(false);
         }
         return false;
     }
+
+    private const int MaxRecoveryConsumeAttempts = 3;
 
     private static string GenerateRecoveryCode()
     {

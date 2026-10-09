@@ -15,7 +15,8 @@ public sealed class AppTelemetryController(
     IAppWebAnalyticsService webAnalytics,
     IAppWebAnalyticsConfigurationService webAnalyticsConfiguration,
     IAppMonitoringService monitoring,
-    IResourceAuthorizationService authz) : ControllerBase
+    IResourceAuthorizationService authz,
+    IAppTelemetrySendIntervalService sendInterval) : ControllerBase
 {
     // --- ingestion key (Write) ---
 
@@ -73,6 +74,24 @@ public sealed class AppTelemetryController(
     {
         if (await GateAsync(id, Permission.Read, ct) is { } fail) return fail;
         return Ok(await telemetry.GetPerformanceAsync(id, ct));
+    }
+
+    /// <summary>PLAN-013 lot 1: the application's database size, as its Aetheus.Telemetry package last measured it.</summary>
+    [HttpGet("apps/{id:int}/database")]
+    public async Task<ActionResult<AppDatabaseSizeReportDto>> GetDatabaseSize(int id, CancellationToken ct = default)
+    {
+        if (await GateAsync(id, Permission.Read, ct) is { } fail) return fail;
+        return Ok(await telemetry.GetDatabaseSizeAsync(id, ct));
+    }
+
+    /// <summary>The interval the server hands to the application's Aetheus.Telemetry package, and the one its
+    /// recent samples show (a package older than 1.1.0 keeps its own).</summary>
+    [HttpGet("apps/{id:int}/send-interval")]
+    public async Task<ActionResult<AppTelemetrySendIntervalDto>> GetSendInterval(int id, CancellationToken ct = default)
+    {
+        if (await GateAsync(id, Permission.Read, ct) is { } fail) return fail;
+        var interval = await sendInterval.GetAsync(id, ct);
+        return interval is null ? NotFound() : Ok(interval);
     }
 
     // --- visitors ---

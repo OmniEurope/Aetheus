@@ -2,6 +2,7 @@
 using System.Reflection;
 using Aetheus.Front.Components.Auth;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages;
 
@@ -37,13 +38,39 @@ public class LoginOnSubmitTests : BunitContext
         _handler.SetJsonResponse("api/auth/login", new LoginResponse { Token = MakeJwt(), RefreshToken = "r" });
         _handler.SetJsonResponse("api/users/me/permissions", new UserPermissionSummaryDto { EffectivePermissions = [] });
 
+        // FRONTTEST-005: the outcome is read from what a login does, not from an error field that was
+        // already null: the credentials are posted, the session holds the issued token, and the page
+        // leaves /login for home.
+        var token = MakeJwt();
+        _handler.SetJsonResponse(HttpMethod.Post, "api/auth/login", new LoginResponse { Token = token, RefreshToken = "r" });
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("/login");
         var cut = Render<Login>();
         SetCredentials(cut.Instance, "admin", "password123");
         await InvokeSubmit(cut);
 
-        // _error stays null on success
-        var error = (string?)typeof(Login).GetField("_error", Priv)!.GetValue(cut.Instance);
-        Assert.Null(error);
+        var request = System.Text.Json.JsonSerializer.Deserialize<LoginRequest>(
+            _handler.RequestDetails.Single(r => r.Method == "POST" && r.Url.EndsWith("api/auth/login", StringComparison.Ordinal)).Body!,
+            JsonOptions.Web)!;
+        Assert.Equal("admin", request.Username);
+        Assert.Equal("password123", request.Password);
+        var auth = Services.GetRequiredService<AuthStateProvider>();
+        Assert.True(auth.IsAuthenticated);
+        Assert.Equal(token, auth.Token);
+        Assert.Equal("/", new Uri(nav.Uri).AbsolutePath);
+    }
+
+    [Fact]
+    public async Task OnSubmit_ValidCredentials_WithAReturnUrl_NavigatesThere()
+    {
+        _handler.SetJsonResponse(HttpMethod.Post, "api/auth/login", new LoginResponse { Token = MakeJwt(), RefreshToken = "r" });
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("/login?returnUrl=%2Fservers%2F7");
+        var cut = Render<Login>();
+        SetCredentials(cut.Instance, "admin", "password123");
+        await InvokeSubmit(cut);
+
+        Assert.Equal("/servers/7", new Uri(nav.Uri).AbsolutePath);
     }
 
     [Fact]

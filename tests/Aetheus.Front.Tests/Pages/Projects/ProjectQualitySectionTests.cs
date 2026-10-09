@@ -545,6 +545,60 @@ public class ProjectQualitySectionTests : BunitContext
             && request.Url.Contains("idTo=1094", StringComparison.Ordinal));
     }
 
+    private static List<AnalysisFindingDto> Findings(int firstId, int count) =>
+    [
+        .. Enumerable.Range(firstId, count).Select(id => new AnalysisFindingDto
+        {
+            Id = id, ProjectId = 2, RuleId = "CA2000", Title = $"Finding {id}",
+            Status = AnalysisFindingStatus.Open, Severity = AnalysisSeverity.High, Category = AnalysisCategory.Secrets,
+            LatestOccurrence = new AnalysisFindingOccurrenceDto { FilePath = "src/App.cs", StartLine = id, IsNew = id == 1 }
+        })
+    ];
+
+    /// <summary>
+    /// Recette R2-124: the findings table has the export bar under it (Markdown, then CSV). The Markdown
+    /// file holds every open finding, read from the API page after page with the Status filter of the
+    /// grid, not the 25 rows on screen; its cells read as the screen does (translated names, path:line).
+    /// </summary>
+    [Fact]
+    public async Task R2124_TheFindingsTable_ExportsEveryFindingAsMarkdown_ReadPageByPage()
+    {
+        _handler.SetJsonResponse("api/pipelines/projects/2/quality-trend", new ProjectQualityTrendDto());
+        MockAnalysisEndpoints(2);
+        _handler.SetJsonResponse("api/analysis/projects/2/findings?page=1&pageSize=25&status=Open",
+            new PaginatedResult<AnalysisFindingDto> { Items = Findings(1, 25), TotalCount = 201, Page = 1, PageSize = 25 });
+        _handler.SetJsonResponse("api/analysis/projects/2/findings?page=1&pageSize=200&status=Open",
+            new PaginatedResult<AnalysisFindingDto> { Items = Findings(1, 200), TotalCount = 201, Page = 1, PageSize = 200 });
+        _handler.SetJsonResponse("api/analysis/projects/2/findings?page=2&pageSize=200&status=Open",
+            new PaginatedResult<AnalysisFindingDto> { Items = Findings(201, 1), TotalCount = 201, Page = 2, PageSize = 200 });
+        var module = JSInterop.SetupModule("./_content/OmniEurope.Blazor/omni-document-editor.js");
+        module.SetupVoid("download", _ => true).SetVoidResult();
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        navigation.NavigateTo(navigation.GetUriWithQueryParameter("tab", "findings"));
+        var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
+        cut.WaitForState(() => cut.Markup.Contains("Finding 25", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+
+        // Markdown alone (R2-124, second decision of 2026-10-05).
+        await Assert.Single(cut.FindAll(".omni-data-grid__export-button")).ClickAsync(new());
+
+        cut.WaitForAssertion(() => Assert.Single(module.Invocations["download"]));
+        var download = module.Invocations["download"].Single();
+        var markdown = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
+        Assert.Contains(_handler.Requests, request => request.Url.EndsWith("findings?page=2&pageSize=200&status=Open", StringComparison.Ordinal));
+        var rows = markdown.Split('\n').Where(line => line.Contains("| Finding ", StringComparison.Ordinal)).ToList();
+        Assert.Equal(201, rows.Count);
+        Assert.Contains("AnalysisFindings", markdown, StringComparison.Ordinal);
+        Assert.Contains("GridExportAddress", markdown, StringComparison.Ordinal);
+        // The Status filter of the grid is said in the header, next to where the rows come from.
+        Assert.Contains("Enum_AnalysisFindingStatus_Open", markdown.Split("| ID", 2)[0], StringComparison.Ordinal);
+        // One row as the screen shows it: id, translated severity and category, rule, title, path:line, status, new.
+        Assert.Contains(
+            "| 1 | Enum_AnalysisSeverity_High | Enum_AnalysisCategory_Secrets | CA2000 | Finding 1 | src/App.cs:1 | Enum_AnalysisFindingStatus_Open | Yes |",
+            markdown, StringComparison.Ordinal);
+        Assert.Contains("| Finding 201 | src/App.cs:201 |", markdown, StringComparison.Ordinal);
+        Assert.Matches(@"\.md$", Assert.IsType<string>(download.Arguments[0]));
+    }
+
     private void MockAnalysisEndpoints(int projectId, AnalysisProjectSummaryDto? summary = null)
     {
         var prefix = $"api/analysis/projects/{projectId}";

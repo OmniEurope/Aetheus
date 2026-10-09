@@ -279,5 +279,25 @@ public class ProjectsTests : BunitContext
 
         Assert.True(opened);
     }
-}
 
+    /// <summary>Recette R2-121: a project is only its record until its pipelines exist, so creating
+    /// one leads straight to the setup wizard for it, whose readiness check names what is missing.</summary>
+    [Fact]
+    public async Task NewProject_Created_LeadsToThePipelineSetupWizardForIt()
+    {
+        BunitTestHelper.UseImmediateDialogs(this);
+        _handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto> { Items = [], TotalCount = 0 });
+        var dialog = (Aetheus.Front.Tests.TestDoubles.ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        dialog.OpenResult = new ProjectDto { Id = 42, Name = "Portfolio" };
+        dialog.ConfirmResult = true;
+        var cut = Render<ProjectsPage>();
+
+        cut.WaitForAssertion(() => Assert.False(cut.Find(".project-list-create").HasAttribute("disabled")));
+        await cut.Find(".project-list-create").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        Assert.Equal("SetUpPipelines", dialog.LastConfirmOptions?.OkButtonText);
+        Assert.Equal("SetUpNewProjectPipelinesConfirm", dialog.LastConfirmMessage);
+        Assert.EndsWith("/pipelines/setup?projectId=42",
+            Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().Uri, StringComparison.Ordinal);
+    }
+}

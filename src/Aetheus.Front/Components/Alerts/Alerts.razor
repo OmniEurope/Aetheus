@@ -25,7 +25,7 @@
     </OmniStack>
     @* Recette R-198: never a pager; the list keeps at most AlertNotificationService.MaxRecent (50) alerts. *@
     @* Recette R-227: a fired alert has no id; its trigger instant tells the rows apart for the bold new-row mark. *@
-    <AetheusDataGrid @ref="_recentGrid" Data="@_recent" TItem="AlertTriggeredDto" PageSize="50" Virtualize="@(_recent.Count > 50)" KeyProperty="TriggeredAt" class="omni-u-mb-2xl">
+    <AetheusDataGrid @ref="_recentGrid" ExportName="@L["RecentAlerts"]" Data="@_recent" TItem="AlertTriggeredDto" PageSize="50" Virtualize="@(_recent.Count > 50)" KeyProperty="TriggeredAt" class="omni-u-mb-2xl">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="AlertTriggeredDto" Property="TriggeredAt" Title="@L["TriggeredAt"]" Width="170px" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             <OmniDataGridColumn TItem="AlertTriggeredDto" Property="Severity" Title="@L["Severity"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" >
@@ -39,7 +39,7 @@
 
 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["AlertRules"]</OmniHeading>
 @* Recette R-198 (rule R-049): the rules scroll in a virtualized full-height grid, no pager. *@
-<AetheusDataGrid @ref="_rulesGrid" FullHeight="true" Virtualize="true" Data="@_alerts" TItem="AlertRuleDto" IsLoading="@_loading" class="aetheus-grid-fullheight">
+<AetheusDataGrid @ref="_rulesGrid" ExportName="@L["AlertRules"]" FullHeight="true" Virtualize="true" Data="@_alerts" TItem="AlertRuleDto" IsLoading="@_loading" class="aetheus-grid-fullheight">
         <EmptyTemplate>
             <EmptyState Icon="notifications_off" Title="@L["NoAlerts"]" Description="@L["NoAlertsDescription"]" />
         </EmptyTemplate>
@@ -55,7 +55,7 @@
                     <OmniBadge Fill="OmniFill.Solid" Tone="@GetMetricBadgeStyle(alert.Metric)">@L.Localize(alert.Metric)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AlertRuleDto" Title="@L["Threshold"]" Width="140px" Filterable="false" >
+            <OmniDataGridColumn TItem="AlertRuleDto" Title="@L["Threshold"]" ExportValue="@ThresholdExport" Width="140px" Filterable="false" >
                 <Template Context="alert">
                     @alert.Operator @alert.Threshold%
                 </Template>

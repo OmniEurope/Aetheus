@@ -63,23 +63,29 @@ internal static class GitAiCloneToken
         {
             return null;
         }
-        var expected = Compute(configuration, definitionId, projectId, expiry);
-        return CryptographicOperations.FixedTimeEquals(presented, expected)
-            ? definitionId
-            : null;
+        // Recette R-464: accepted under either configured secret, as the run clone tokens are, so a
+        // blue-green switch to a dedicated RunTokenKey does not refuse what the other colour minted.
+        foreach (var secret in GitCloneTokenSecrets.Validation(configuration))
+        {
+            if (CryptographicOperations.FixedTimeEquals(presented, Compute(secret, definitionId, projectId, expiry)))
+                return definitionId;
+        }
+        return null;
     }
 
     private static byte[] Compute(
         IConfiguration configuration,
         int definitionId,
         int projectId,
+        long expiry) =>
+        Compute(GitCloneTokenSecrets.Signing(configuration, "autonomous AI Git clone tokens"), definitionId, projectId, expiry);
+
+    private static byte[] Compute(
+        string secret,
+        int definitionId,
+        int projectId,
         long expiry)
     {
-        var secret = configuration["GitLight:RunTokenKey"]
-            ?? configuration["Auth:EncryptionKey"];
-        if (string.IsNullOrEmpty(secret))
-            throw new InvalidOperationException(
-                "No signing key configured for autonomous AI Git clone tokens.");
         var key = HKDF.DeriveKey(
             HashAlgorithmName.SHA256,
             Encoding.UTF8.GetBytes(secret),

@@ -140,6 +140,18 @@ public partial class ReleasesList : IAsyncDisposable
     // Every scope pages server-side. A360-18: the server scope used to hold the whole list in memory
     // and page it in the browser, so opening a server's Releases tab transferred every release of every
     // project that server had ever touched before showing the first twenty-five.
+    /// <summary>Recette R2-124: one page of the export, in the scope of the list, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<ReleaseDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(ReleaseDto.PublishedAt), fallbackDescending: true);
+        var filters = args.ToApiFilters();
+        return IsServerScope
+            ? Api.Servers.GetServerReleasesAsync(ServerId!.Value, page, pageSize, sortBy, sortDescending, filters)
+            : Api.Projects.GetReleasesAsync(page: page, pageSize: pageSize, projectId: ProjectId ?? _projectFilter,
+                sortBy: sortBy, sortDescending: sortDescending, filters: filters);
+    }
+
     private async Task OnLoadData(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -406,4 +418,7 @@ public partial class ReleasesList : IAsyncDisposable
         if (_hubConnection is not null)
             await _hubConnection.DisposeAsync();
     }
+
+    /// <summary>Recette R2-124: the export writes the name of every artifact of the release.</summary>
+    private static readonly Func<ReleaseDto, object?> ArtifactExport = release => string.Join(", ", release.Artifacts.Select(artifact => artifact.Name));
 }

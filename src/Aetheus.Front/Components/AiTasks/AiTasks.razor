@@ -48,7 +48,7 @@
 }
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_tasks" Count="@_totalCount"
                 TItem="AiTaskDefinitionDto" PageSize="25"
-                LoadData="@LoadDataAsync" IsLoading="@_loading"
+                LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" IsLoading="@_loading"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<AiTaskDefinitionDto>(_tasks, _totalCount))"
                 class="omni-u-w-100">
@@ -67,7 +67,7 @@
                     }
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AiTaskDefinitionDto" Title="@L["Source"]" Width="210px" Filterable="false" >
+            <OmniDataGridColumn TItem="AiTaskDefinitionDto" Title="@L["Source"]" ExportValue="@SourceExport" Width="210px" Filterable="false" >
                 <Template Context="task">
                     @if (task.ProjectId is { } projectId)
                     {

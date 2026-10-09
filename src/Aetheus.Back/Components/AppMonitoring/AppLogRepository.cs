@@ -37,17 +37,17 @@ public sealed class AppLogRepository(AppDbContext db) : IAppLogRepository
         return (items, totalCount);
     }
 
-    public async Task<int> PurgeOlderThanAsync(DateTime cutoff, CancellationToken ct = default)
+    public async Task<int> PurgeOlderThanAsync(DateTime cutoff, IReadOnlyCollection<int> appIds, CancellationToken ct = default)
     {
         return db.Database.IsRelational()
-            ? await db.AppLogEntries.Where(log => log.Timestamp < cutoff)
+            ? await db.AppLogEntries.Where(log => log.Timestamp < cutoff && appIds.Contains(log.MonitoredAppId))
                 .ExecuteDeleteAsync(ct).ConfigureAwait(false)
-            : await PurgeTrackedAsync(cutoff, ct).ConfigureAwait(false);
+            : await PurgeTrackedAsync(cutoff, appIds, ct).ConfigureAwait(false);
     }
 
-    private async Task<int> PurgeTrackedAsync(DateTime cutoff, CancellationToken ct)
+    private async Task<int> PurgeTrackedAsync(DateTime cutoff, IReadOnlyCollection<int> appIds, CancellationToken ct)
     {
-        var expired = await db.AppLogEntries.Where(log => log.Timestamp < cutoff)
+        var expired = await db.AppLogEntries.Where(log => log.Timestamp < cutoff && appIds.Contains(log.MonitoredAppId))
             .ToListAsync(ct).ConfigureAwait(false);
         db.RemoveRange(expired);
         _ = await db.SaveChangesAsync(ct).ConfigureAwait(false);

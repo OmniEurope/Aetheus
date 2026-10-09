@@ -81,10 +81,28 @@ public static class RouteAccessPolicy
         if (Matches(path, "service-connections", out var connectionTail))
             return CanAccessResourcePath(connectionTail, ResourceType.ServiceConnection, permissions, "new");
 
+        return CanAccessReadOnlyPath(path, permissions);
+    }
+
+    /// <summary>Routes that only read: operations (tasks, logs, alerts, Supervision) and project
+    /// views. Split from <see cref="CanAccessOtherPath"/> to keep each under the grade A complexity.</summary>
+    private static bool CanAccessReadOnlyPath(string path, PermissionService permissions)
+    {
         if (path.Equals("tasks", StringComparison.OrdinalIgnoreCase)
             || path.Equals("logs", StringComparison.OrdinalIgnoreCase)
             || path.Equals("alerts", StringComparison.OrdinalIgnoreCase))
             return permissions.CanReadAny(ResourceType.Server);
+
+        // FRONT-022: a task's detail and live log (offered by every task list). The API checks Server
+        // Read on the task's own server (GET api/tasks/{id}, api/logs/task/{id}); which server that is
+        // is unknown before the load, so the route asks for Server Read somewhere and the API decides.
+        if (Matches(path, "tasks", out var taskTail) && int.TryParse(taskTail, out _))
+            return permissions.CanReadAny(ResourceType.Server);
+
+        // FRONT-022: Supervision, offered by the menu to Project readers. Its summary
+        // (GET api/appmonitoring/summary) is filtered to the projects the caller can read.
+        if (path.Equals("monitoring", StringComparison.OrdinalIgnoreCase))
+            return permissions.CanReadAny(ResourceType.Project);
 
         if (path.Equals("analysis", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("analysis/", StringComparison.OrdinalIgnoreCase)

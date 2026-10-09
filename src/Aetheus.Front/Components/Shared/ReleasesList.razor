@@ -12,7 +12,7 @@
     </SectionContent>
 }
 <AetheusDataGrid @ref="_grid" TItem="ReleaseDto" Data="@_releases"
-    Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadData" PageSize="20"
+    Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadData" ExportRead="@ReadExportAsync" PageSize="20"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<ReleaseDto>(_releases, _totalCount))"
     RowClick="@(r => Nav.NavigateTo($"/releases/{r.Id}"))"
@@ -77,7 +77,7 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ReleaseDto" Title="@L["Artifact"]" Width="140px" Sortable="false" Filterable="false" >
+        <OmniDataGridColumn TItem="ReleaseDto" Title="@L["Artifact"]" ExportValue="@ArtifactExport" Width="140px" Sortable="false" Filterable="false" >
             <Template Context="r">
                 @* Recette R-225: one line per release. A single artifact keeps its name; several read as a
                    count that opens the release, which lists them. *@

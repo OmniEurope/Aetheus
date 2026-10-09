@@ -127,8 +127,8 @@ internal sealed class AnalysisProjectSummaryRepository(AppDbContext db)
 
     /// <summary>
     /// Recette R2-024 (decided 2026-10-01): the grade of the project is the one of its latest candidate,
-    /// read as the run page reads it: the root run with the runs its trigger steps started, graded by
-    /// the worst of them. It replaces the domain-by-domain mix of every recent run (R-482), where a
+    /// read as the run page reads it: the root run with the runs its trigger steps started, merged domain
+    /// by domain (R2-118, <see cref="AnalysisGradeEngine.MergeRuns"/>). It replaces the domain-by-domain mix of every recent run (R-482), where a
     /// nightly or a quality-only run could replace a domain of the delivered candidate. Among the
     /// project's 20 latest graded runs, the newest run tree that carries the candidate seal wins; a
     /// project without any candidate in that window falls back to its newest graded run tree. The
@@ -180,9 +180,10 @@ internal sealed class AnalysisProjectSummaryRepository(AppDbContext db)
             .ThenByDescending(group => rootStarts.GetValueOrDefault(group.Key))
             .ThenByDescending(group => group.Key)
             .First();
-        // The run page keeps the worst grade of the tree (PipelineRunGateState); so does the project.
-        var worst = tree.Select(run => run.Summary).OrderByDescending(summary => summary.OverallGrade).First();
-        return worst with { PipelineRunId = tree.Key };
+        // Recette R2-118: the tree's runs are merged domain by domain (the worst grade each domain was
+        // measured with). Keeping the one run with the worst overall grade left a domain empty whenever
+        // that run did not grade it: on a tie, the quality run won and the security tile read "-".
+        return AnalysisGradeEngine.MergeRuns([.. tree.Select(run => run.Summary)], tree.Key);
     }
 
     private sealed record GradedRun(int ProjectId, int RunId, AnalysisGradeSummaryDto Summary);

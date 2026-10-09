@@ -221,6 +221,11 @@ public static class DbInitializer
                               $reports = @(Get-ChildItem -Path $(WORKSPACE)/coverage -Recurse -Filter coverage.cobertura.xml)
                               if ($reports.Count -ne 3) { Write-Error "Expected exactly 3 coverage reports, found $($reports.Count)."; exit 1 }
                             timeout_seconds: 300
+                      # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
+                      - name: CoverageReport
+                        group: Build
+                        depends_on: [Coverage]
+                        steps:
                           - name: Publish Coverage
                             type: coverage
                       - name: Lint
@@ -233,7 +238,7 @@ public static class DbInitializer
                             continue_on_error: true
                       - name: Publish
                         group: Build
-                        depends_on: [Coverage, Lint]
+                        depends_on: [CoverageReport, Lint]
                         artifacts:
                           - $(WORKSPACE)/publish/back
                         steps:
@@ -256,7 +261,7 @@ public static class DbInitializer
                             type: substitute
                             target_files:
                               - $(WORKSPACE)/publish/back/appsettings.json
-                      - name: Deploy
+                      - name: Upload
                         group: Deploy
                         depends_on: [Substitute]
                         steps:
@@ -268,6 +273,11 @@ public static class DbInitializer
                           - name: Upload via SCP
                             shell: sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -P $(TARGET_SSH_PORT) -r $(WORKSPACE)/publish/back/* $(TARGET_USER)@$(TARGET_HOST):$(TARGET_DIR)/
                             timeout_seconds: 180
+                      # Steps of one stage run concurrently (ADR-012): each deploy step waits for the previous stage (DEP-008).
+                      - name: Restart
+                        group: Deploy
+                        depends_on: [Upload]
+                        steps:
                           - name: Restart Service
                             shell: sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -p $(TARGET_SSH_PORT) $(TARGET_USER)@$(TARGET_HOST) "sudo systemctl restart aetheus-back"
                             timeout_seconds: 60
@@ -323,6 +333,11 @@ public static class DbInitializer
                               $reports = @(Get-ChildItem -Path $(WORKSPACE)/coverage -Recurse -Filter coverage.cobertura.xml)
                               if ($reports.Count -ne 3) { Write-Error "Expected exactly 3 coverage reports, found $($reports.Count)."; exit 1 }
                             timeout_seconds: 300
+                      # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
+                      - name: CoverageReport
+                        group: Build
+                        depends_on: [Coverage]
+                        steps:
                           - name: Publish Coverage
                             type: coverage
                       - name: Lint
@@ -335,7 +350,7 @@ public static class DbInitializer
                             continue_on_error: true
                       - name: Publish
                         group: Build
-                        depends_on: [Coverage, Lint]
+                        depends_on: [CoverageReport, Lint]
                         artifacts:
                           - $(WORKSPACE)/publish/back
                         steps:
@@ -358,7 +373,7 @@ public static class DbInitializer
                             type: substitute
                             target_files:
                               - $(WORKSPACE)/publish/back/appsettings.json
-                      - name: Deploy
+                      - name: Stop
                         group: Deploy
                         depends_on: [Substitute]
                         steps:
@@ -366,9 +381,18 @@ public static class DbInitializer
                             shell: Stop-Service -Name "AetheusBack" -Force -ErrorAction SilentlyContinue
                             timeout_seconds: 30
                             continue_on_error: true
+                      # Steps of one stage run concurrently (ADR-012): each deploy step waits for the previous stage (DEP-008).
+                      - name: Copy
+                        group: Deploy
+                        depends_on: [Stop]
+                        steps:
                           - name: Copy Files
                             shell: "robocopy $(WORKSPACE)/publish/back $(DEPLOY_DIR) /MIR /NFL /NDL /NJH /NJS /NP ; if ($LASTEXITCODE -le 7) { $LASTEXITCODE = 0 }"
                             timeout_seconds: 120
+                      - name: Start
+                        group: Deploy
+                        depends_on: [Copy]
+                        steps:
                           - name: Start Service
                             shell: Start-Service -Name "AetheusBack"
                             timeout_seconds: 30
@@ -418,6 +442,11 @@ public static class DbInitializer
                               dotnet test --project $(WORKSPACE)/tests/Aetheus.Agent.Core.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
                               sh $(WORKSPACE)/deploy/scripts/normalize-coverage-report.sh $(WORKSPACE)/coverage
                             timeout_seconds: 300
+                      # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
+                      - name: CoverageReport
+                        group: Build
+                        depends_on: [Coverage]
+                        steps:
                           - name: Publish Coverage
                             type: coverage
                       - name: Lint
@@ -430,7 +459,7 @@ public static class DbInitializer
                             continue_on_error: true
                       - name: Publish
                         group: Build
-                        depends_on: [Coverage, Lint]
+                        depends_on: [CoverageReport, Lint]
                         artifacts:
                           - $(WORKSPACE)/publish/back
                         steps:
@@ -453,16 +482,25 @@ public static class DbInitializer
                             type: substitute
                             target_files:
                               - $(WORKSPACE)/publish/back/appsettings.json
-                      - name: Deploy
+                      - name: Stop
                         group: Deploy
                         depends_on: [Substitute]
                         steps:
                           - name: Stop Service
                             shell: sudo systemctl stop aetheus-back || true
                             timeout_seconds: 30
+                      # Steps of one stage run concurrently (ADR-012): each deploy step waits for the previous stage (DEP-008).
+                      - name: Copy
+                        group: Deploy
+                        depends_on: [Stop]
+                        steps:
                           - name: Copy Files
                             shell: cp -r $(WORKSPACE)/publish/back/* $(TARGET_DIR)/
                             timeout_seconds: 120
+                      - name: Start
+                        group: Deploy
+                        depends_on: [Copy]
+                        steps:
                           - name: Start Service
                             shell: sudo systemctl start aetheus-back
                             timeout_seconds: 30
@@ -512,6 +550,11 @@ public static class DbInitializer
                               dotnet test --project $(WORKSPACE)/tests/Aetheus.Agent.Core.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
                               sh $(WORKSPACE)/deploy/scripts/normalize-coverage-report.sh $(WORKSPACE)/coverage
                             timeout_seconds: 300
+                      # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
+                      - name: CoverageReport
+                        group: Build
+                        depends_on: [Coverage]
+                        steps:
                           - name: Publish Coverage
                             type: coverage
                       - name: Lint
@@ -524,7 +567,7 @@ public static class DbInitializer
                             continue_on_error: true
                       - name: Publish
                         group: Build
-                        depends_on: [Coverage, Lint]
+                        depends_on: [CoverageReport, Lint]
                         artifacts:
                           - $(WORKSPACE)/publish/back
                         steps:
@@ -547,7 +590,7 @@ public static class DbInitializer
                             type: substitute
                             target_files:
                               - $(WORKSPACE)/publish/back/appsettings.json
-                      - name: Deploy
+                      - name: Upload
                         group: Deploy
                         depends_on: [Substitute]
                         steps:
@@ -559,6 +602,11 @@ public static class DbInitializer
                           - name: Upload via SCP
                             shell: sshpass -e scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -P $(TARGET_SSH_PORT) -r $(WORKSPACE)/publish/back/* $(TARGET_USER)@$(TARGET_HOST):$(TARGET_DIR)/
                             timeout_seconds: 180
+                      # Steps of one stage run concurrently (ADR-012): each deploy step waits for the previous stage (DEP-008).
+                      - name: Restart
+                        group: Deploy
+                        depends_on: [Upload]
+                        steps:
                           - name: Restart Service
                             shell: sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -p $(TARGET_SSH_PORT) $(TARGET_USER)@$(TARGET_HOST) "net stop AetheusBack & net start AetheusBack"
                             timeout_seconds: 60

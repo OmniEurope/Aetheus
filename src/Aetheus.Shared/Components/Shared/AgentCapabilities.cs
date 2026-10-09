@@ -35,6 +35,13 @@ public static class AgentCapabilities
     /// </summary>
     public const string PortObservation = "ports.observe";
 
+    /// <summary>
+    /// Recette R2-080: the agent can test an outbound SMTP connection (TCP port 25) itself. Like
+    /// <see cref="PortObservation"/> it is a software capability, not a grant: it gates the agent version,
+    /// so the backend refuses the check by name on an older agent instead of queueing a task nobody runs.
+    /// </summary>
+    public const string MailOutboundProbe = "mail.outbound-probe";
+
     public static IReadOnlyList<string> SoftwareCapabilities { get; } =
     [
         ShellExecution,
@@ -43,6 +50,7 @@ public static class AgentCapabilities
         ArtifactRestore,
         SelfUpdate,
         PortObservation,
+        MailOutboundProbe,
         Analysis,
         AiExecution
     ];
@@ -78,7 +86,7 @@ public static class AgentCapabilities
 
     private static string? RequiredInfrastructureCapability(OperationKind operation) => operation switch
     {
-        >= OperationKind.DockerRestartContainer and <= OperationKind.DockerPullImage => DockerExecution,
+        >= OperationKind.DockerRestartContainer and <= OperationKind.DockerBuildImage => DockerExecution,
         OperationKind.SystemPackageUpgrade => PatchManagement,
         >= OperationKind.ApacheReload and <= OperationKind.ApacheApplyConfigSet => ApacheManagement,
         >= OperationKind.CertbotObtain and <= OperationKind.CertbotRenewalCheck => CertbotManagement,
@@ -91,7 +99,8 @@ public static class AgentCapabilities
     {
         >= OperationKind.ServiceStart and <= OperationKind.ServiceGetLogs => ServiceManagement,
         OperationKind.ServiceInstall or OperationKind.ServiceUninstall => PackageManagement,
-        >= OperationKind.MailStartPostfix and <= OperationKind.MailQuotaReport => MailManagement,
+        >= OperationKind.MailStartPostfix and <= OperationKind.MailPurge => MailManagement,
+        OperationKind.MailOutboundProbe => MailOutboundProbe,
         >= OperationKind.PortsentryStart and <= OperationKind.PortsentrySetup => PortsentryManagement,
         >= OperationKind.CronSave and <= OperationKind.CronDelete => CronManagement,
         >= OperationKind.TeamspeakServerQuery and <= OperationKind.TeamspeakGetLogs => TeamspeakManagement,

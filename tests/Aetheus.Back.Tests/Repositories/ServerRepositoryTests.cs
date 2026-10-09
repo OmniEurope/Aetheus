@@ -228,60 +228,80 @@ public class ServerRepositoryTests : IDisposable
     public async Task ReplaceDockerImagesAsync_ReplacesAll()
     {
         var s = CreateServer("di");
+        var foreign = CreateServer("di-foreign");
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
         _db.DockerImages.Add(new DockerImage { ServerId = s.Id, ImageId = "old", Repository = "r", Tag = "1", Size = "1" });
+        _db.DockerImages.Add(new DockerImage { ServerId = foreign.Id, ImageId = "kept", Repository = "r", Tag = "1", Size = "1" });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
         s = (await _db.Servers.Include(x => x.DockerImages).FirstAsync(x => x.Id == s.Id, cancellationToken: TestContext.Current.CancellationToken))!;
 
         await _heartbeatRepo.ReplaceDockerImagesAsync(s.Id, [new() { ServerId = s.Id, ImageId = "new", Repository = "r", Tag = "2", Size = "2" }], ct: TestContext.Current.CancellationToken);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, await _db.DockerImages.CountAsync(i => i.ServerId == s.Id, cancellationToken: TestContext.Current.CancellationToken));
+        // A no-op keeps "old", an append keeps both: only a real replacement leaves exactly "new",
+        // and another server's inventory is left untouched.
+        Assert.Equal(["new"], await _db.DockerImages.Where(i => i.ServerId == s.Id).Select(i => i.ImageId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(["kept"], await _db.DockerImages.Where(i => i.ServerId == foreign.Id).Select(i => i.ImageId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task ReplaceDockerComposeStacksAsync_ReplacesAll()
     {
         var s = CreateServer("dcs");
+        var foreign = CreateServer("dcs-foreign");
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
         _db.DockerComposeStacks.Add(new DockerComposeStack { ServerId = s.Id, Name = "old", Status = "up", ConfigFile = "/" });
+        _db.DockerComposeStacks.Add(new DockerComposeStack { ServerId = foreign.Id, Name = "kept", Status = "up", ConfigFile = "/" });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
         s = (await _db.Servers.Include(x => x.DockerComposeStacks).FirstAsync(x => x.Id == s.Id, cancellationToken: TestContext.Current.CancellationToken))!;
 
         await _heartbeatRepo.ReplaceDockerComposeStacksAsync(s.Id, [new() { ServerId = s.Id, Name = "new", Status = "up", ConfigFile = "/" }], ct: TestContext.Current.CancellationToken);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, await _db.DockerComposeStacks.CountAsync(c => c.ServerId == s.Id, cancellationToken: TestContext.Current.CancellationToken));
+        // A no-op keeps "old", an append keeps both: only a real replacement leaves exactly "new",
+        // and another server's inventory is left untouched.
+        Assert.Equal(["new"], await _db.DockerComposeStacks.Where(c => c.ServerId == s.Id).Select(c => c.Name).ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(["kept"], await _db.DockerComposeStacks.Where(c => c.ServerId == foreign.Id).Select(c => c.Name).ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task ReplaceDockerNetworksAsync_ReplacesAll()
     {
         var s = CreateServer("dn");
+        var foreign = CreateServer("dn-foreign");
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
         _db.DockerNetworks.Add(new DockerNetwork { ServerId = s.Id, NetworkId = "old", Name = "old", Driver = "bridge" });
+        _db.DockerNetworks.Add(new DockerNetwork { ServerId = foreign.Id, NetworkId = "kept", Name = "kept", Driver = "bridge" });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
         s = (await _db.Servers.Include(x => x.DockerNetworks).FirstAsync(x => x.Id == s.Id, cancellationToken: TestContext.Current.CancellationToken))!;
 
         await _heartbeatRepo.ReplaceDockerNetworksAsync(s.Id, [new() { ServerId = s.Id, NetworkId = "new", Name = "new", Driver = "bridge" }], ct: TestContext.Current.CancellationToken);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, await _db.DockerNetworks.CountAsync(n => n.ServerId == s.Id, cancellationToken: TestContext.Current.CancellationToken));
+        // A no-op keeps "old", an append keeps both: only a real replacement leaves exactly "new",
+        // and another server's inventory is left untouched.
+        Assert.Equal(["new"], await _db.DockerNetworks.Where(n => n.ServerId == s.Id).Select(n => n.NetworkId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(["kept"], await _db.DockerNetworks.Where(n => n.ServerId == foreign.Id).Select(n => n.NetworkId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task ReplaceDockerVolumesAsync_ReplacesAll()
     {
         var s = CreateServer("dv");
+        var foreign = CreateServer("dv-foreign");
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
         _db.DockerVolumes.Add(new DockerVolume { ServerId = s.Id, Name = "old", Driver = "local" });
+        _db.DockerVolumes.Add(new DockerVolume { ServerId = foreign.Id, Name = "kept", Driver = "local" });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
         s = (await _db.Servers.Include(x => x.DockerVolumes).FirstAsync(x => x.Id == s.Id, cancellationToken: TestContext.Current.CancellationToken))!;
 
         await _heartbeatRepo.ReplaceDockerVolumesAsync(s.Id, [new() { ServerId = s.Id, Name = "new", Driver = "local" }], ct: TestContext.Current.CancellationToken);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, await _db.DockerVolumes.CountAsync(v => v.ServerId == s.Id, cancellationToken: TestContext.Current.CancellationToken));
+        // A no-op keeps "old", an append keeps both: only a real replacement leaves exactly "new",
+        // and another server's inventory is left untouched.
+        Assert.Equal(["new"], await _db.DockerVolumes.Where(v => v.ServerId == s.Id).Select(v => v.Name).ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(["kept"], await _db.DockerVolumes.Where(v => v.ServerId == foreign.Id).Select(v => v.Name).ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]

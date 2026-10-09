@@ -202,6 +202,36 @@ public class IngestServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task IngestMetrics_ThresholdBreach_StartsTheAiTasksOfTheAppProjectOnly()
+    {
+        // BACK-003 follow-up: an AI task starts only for an event naming its owner, so the breach
+        // carries the project of the monitored app (project 1 here).
+        _db.AppMetricThresholds.Add(new AppMetricThreshold
+        {
+            MonitoredAppId = 1,
+            MetricName = "cpu",
+            Operator = ComparisonOperator.GreaterThan,
+            Threshold = 80,
+            Enabled = true
+        });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        object? payload = null;
+        await _notifications.SendEventAsync(
+            "app.metric.threshold",
+            Arg.Do<object>(value => payload = value),
+            Arg.Any<CancellationToken>());
+
+        await _service.IngestMetricsAsync(1, [new ParsedMetricPoint("cpu", 90, "%", default, null)], ct: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(payload);
+        Assert.Equal(
+            ["own"],
+            await Aetheus.Back.Tests.AiTasks.AiEventDispatchProbe.StartedDefinitionsAsync(
+                "app.metric.threshold", payload, ownProjectId: 1, foreignProjectId: 2,
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task IngestMetrics_ThresholdBreach_FiresOnce_ThenRecovers()
     {
         _db.AppMetricThresholds.Add(new AppMetricThreshold
@@ -225,6 +255,52 @@ public class IngestServiceTests : IDisposable
         // Back under threshold -> clears the breach.
         await _service.IngestMetricsAsync(1, [new ParsedMetricPoint("cpu", 40, "%", default, null)], ct: TestContext.Current.CancellationToken);
         Assert.False(await _db.AppMetricThresholds.AsNoTracking().Select(t => t.IsBreached).SingleAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Recette R-478: a breach alert still being dispatched does not hold the app's ingest lock, so the
+    /// app's next batch is ingested meanwhile; and that batch, which breaches too, does not alert again
+    /// because the breach was recorded before the lock was released.
+    /// </summary>
+    [Fact]
+    public async Task R478_ASlowAlertDispatch_DoesNotHoldTheAppsNextBatch_NorAlertTwice()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _db.AppMetricThresholds.Add(new AppMetricThreshold
+        {
+            MonitoredAppId = 1,
+            MetricName = "cpu",
+            Operator = ComparisonOperator.GreaterThan,
+            Threshold = 80,
+            Enabled = true
+        });
+        await _db.SaveChangesAsync(ct);
+        var dispatching = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _notifications.SendEventAsync("app.metric.threshold", Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                dispatching.TrySetResult();
+                return release.Task;
+            });
+
+        var first = _service.IngestMetricsAsync(1, [new ParsedMetricPoint("cpu", 90, "%", default, null)], ct);
+        await dispatching.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        try
+        {
+            var second = _service.IngestMetricsAsync(1, [new ParsedMetricPoint("cpu", 95, "%", default, null)], ct);
+            Assert.Same(second, await Task.WhenAny(second, Task.Delay(TimeSpan.FromSeconds(5), ct)));
+            Assert.Equal(1, (await second).Accepted);
+            Assert.False(first.IsCompleted);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        Assert.Equal(1, (await first).Accepted);
+        await _notifications.Received(1).SendEventAsync("app.metric.threshold", Arg.Any<object>(), Arg.Any<CancellationToken>());
+        Assert.Equal(2, await _db.AppMetricSamples.CountAsync(ct));
     }
 
     [Fact]

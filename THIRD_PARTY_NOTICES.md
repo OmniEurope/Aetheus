@@ -11,6 +11,15 @@ This repository uses third-party packages under their respective licenses. Packa
 
 The OmniEurope.Blazor source and redistributed assets remain under EUPL-1.2.
 
+## OmniEurope.Performance
+
+- Component: `OmniEurope.Performance`
+- Purpose: in-process request duration measurement: the administration Performance page of Aetheus, and the per-route figures the `Aetheus.Telemetry` package exports
+- License: EUPL-1.2
+- Source: nuget.org package `OmniEurope.Performance` (version pinned in `Directory.Packages.props`)
+
+The OmniEurope.Performance source and redistributed assets remain under EUPL-1.2.
+
 ## NetArchTest.Rules
 
 - Package: `NetArchTest.Rules` 1.3.2

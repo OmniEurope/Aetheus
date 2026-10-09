@@ -14,6 +14,13 @@ public partial class PipelineRunApprovalPanel : IDisposable
 
     private int? _versionCheckedFor;
 
+    /// <summary>Recette R2-116: the two requests a delivery makes no longer share one title. The
+    /// environment's approval authorises the deployment, the stage's own confirmation (R-370) asks
+    /// whether the new version works.</summary>
+    private string BannerTitle => Approval?.Pending is { Scope: ApprovalScope.Pipeline }
+        ? L["PipelineApprovalTitle"]
+        : string.Format(L["EnvironmentApprovalTitle"], Approval?.Pending?.EnvironmentName);
+
     protected override void OnInitialized() => VersionState.Changed += VersionChanged;
 
     /// <summary>
@@ -41,6 +48,10 @@ public partial class PipelineRunApprovalPanel : IDisposable
     private bool CommentOpen => _commentRequested || !string.IsNullOrEmpty(Approval?.Comments);
 
     private void OpenComment() => _commentRequested = true;
+
+    /// <summary>Recette R2-095: <c>approval-decision</c> marks Approve and Reject, the two buttons that
+    /// show their icon alone below phone width (app.css); Comment does not carry it.</summary>
+    private string DecisionClass => Approval?.Deciding == true ? "approval-decision btn-busy" : "approval-decision";
 
     public void Dispose() => VersionState.Changed -= VersionChanged;
 }

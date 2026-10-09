@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: EUPL-1.2
+# Validates the immutable CI payload through the project's QA adapter. The restore and the adapter sit in
+# two stages: the steps of one stage run concurrently (ADR-012), and the adapter reads what the restore
+# writes.
 name: application-qa-template
 trigger: manual
 parameters:
@@ -12,7 +15,7 @@ variables:
   APPLICATION_PERFORMANCE_ENABLED: "${{ parameters.performance }}"
 
 stages:
-  - name: QA
+  - name: Restore CI payload
     group: QA
     execution_role: build
     os: linux
@@ -22,6 +25,13 @@ stages:
         artifact: ApplicationPayload-artifacts
         artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
         timeout_seconds: 1800
+
+  - name: QA
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [Restore CI payload]
+    steps:
       - name: Run project QA adapter
         working_directory: "$(WORKSPACE)"
         shell: |

@@ -210,6 +210,35 @@ public class ServerPortsSectionTests : BunitContext
         Assert.Contains("portfolio-prod-front", cut.Markup);
     }
 
+    // FRONT-018: a TCP claim on a number must not hide the UDP listener observed on the same number.
+    [Fact]
+    public void TcpClaim_DoesNotHideTheUdpListenerOnTheSameNumber()
+    {
+        var scan = new DateTime(2026, 9, 5, 8, 0, 0, DateTimeKind.Utc);
+        var reservations = ThreeReservations();
+        reservations[0] = reservations[0] with { ObservedAt = scan };
+        reservations.Add(new PortReservationDto
+        {
+            Id = 9,
+            ServerId = 1,
+            Port = 10031,
+            Protocol = PortRegistryLimits.UdpProtocol,
+            OwnerLabel = "udp-listener",
+            Source = PortReservationSource.Observed,
+            DeclaredAt = scan,
+            UpdatedAt = scan,
+            ObservedAt = scan
+        });
+
+        var cut = RenderWith(reservations, lastScan: scan);
+
+        var rowsOnPort = cut.FindAll("tbody tr").Where(row => row.TextContent.Contains("10031")).ToList();
+        Assert.Equal(2, rowsOnPort.Count);
+        Assert.Contains(rowsOnPort, row => row.TextContent.Contains("portfolio-prod-front"));
+        Assert.Contains(rowsOnPort, row => row.TextContent.Contains("udp-listener")
+            && row.TextContent.Contains(PortRegistryLimits.UdpProtocol));
+    }
+
     [Fact]
     public void UdpSighting_ShowsItsProtocolAlongsideTheTcpRows()
     {

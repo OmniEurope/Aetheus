@@ -35,15 +35,6 @@ public static class AppMonitoringDefaults
     public const int DefaultHourlyRetentionDays = 90;
     public const int MinimumHourlyRetentionDays = 1;
     public const int MaximumHourlyRetentionDays = 3650;
-    public const int DefaultMetricDetailedRetentionDays = 30;
-    public const int MinimumMetricDetailedRetentionDays = 7;
-    public const int MaximumMetricDetailedRetentionDays = 90;
-    public const int DefaultMetricAggregateRetentionMonths = 13;
-    public const int MinimumMetricAggregateRetentionMonths = 1;
-    public const int MaximumMetricAggregateRetentionMonths = 36;
-    public const int DefaultLogRetentionDays = 14;
-    public const int MinimumLogRetentionDays = 1;
-    public const int MaximumLogRetentionDays = 90;
     public const int DefaultTraceRetentionDays = 14;
     public const int MinimumTraceRetentionDays = 1;
     public const int MaximumTraceRetentionDays = 90;

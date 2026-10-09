@@ -55,7 +55,7 @@ else
 @* Keep the grid mounted while loading. Replacing an empty grid with a spinner causes the grid to
    fire LoadData again every time the grid is recreated, producing an infinite reload loop. *@
 <AetheusDataGrid @ref="_grid" TItem="GitLightRepoDto" Data="@_repos"
-    Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" PageSize="20"
+    Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync" PageSize="20"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<GitLightRepoDto>(_repos, _totalCount))"
     EmptyText="@L["NoRepositoriesFound"]" class="@GitGridClass" FullHeight="true"
@@ -79,7 +79,7 @@ else
                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@r.DefaultBranch</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="GitLightRepoDto" Key="IsEmpty" Title="@L["Status"]" Width="100px" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EmptyText" >
+            <OmniDataGridColumn TItem="GitLightRepoDto" Key="IsEmpty" ExportValue="@StatusExport" Title="@L["Status"]" Width="100px" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EmptyText" >
                 <Template Context="r">
                     @if (r.IsEmpty)
                     {

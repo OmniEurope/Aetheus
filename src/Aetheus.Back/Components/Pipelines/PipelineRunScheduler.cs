@@ -55,6 +55,15 @@ public interface IPipelineRunScheduler
     Task DispatchNextStageWithScopedSecretsAsync(
         PipelineRun run, PipelineYamlDefinition definition,
         IPipelineChildRunLauncher launcher, CancellationToken ct);
+
+    /// <summary>
+    /// <see cref="DispatchNextStageWithScopedSecretsAsync"/> for a caller that holds no run lock (resume
+    /// after an approval, retry of failed steps): it takes the same per-run serialization as every other
+    /// dispatch pass first.
+    /// </summary>
+    Task DispatchNextStageSerializedAsync(
+        PipelineRun run, PipelineYamlDefinition definition,
+        IPipelineChildRunLauncher launcher, CancellationToken ct);
 }
 
 
@@ -164,6 +173,20 @@ public sealed class PipelineRunScheduler(
         return resolved;
     }
 
+    public async Task DispatchNextStageSerializedAsync(
+        PipelineRun run, PipelineYamlDefinition definition, IPipelineChildRunLauncher launcher, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        await operationLock.RunSerializedAsync(
+            $"pipeline-run-advance:{run.Id}",
+            async lockToken =>
+            {
+                using var runLock = await RunAdvanceLock.Shared.AcquireAsync(run.Id, lockToken).ConfigureAwait(false);
+                await DispatchNextStageWithScopedSecretsAsync(run, definition, launcher, lockToken).ConfigureAwait(false);
+            },
+            ct).ConfigureAwait(false);
+    }
+
     public async Task ReconcileRunAsync(int pipelineRunId, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         await operationLock.RunSerializedAsync(
@@ -233,16 +256,38 @@ public sealed class PipelineRunScheduler(
 
         if (collectionStatus != TaskExecutionStatus.Success)
         {
-            await repo.AppendRunWarningsAsync(pipelineRunId,
-                [$"Artifact collection ended with status {collectionStatus}; the run cannot publish its declared artifact."],
-                ct).ConfigureAwait(false);
-            if (await systemTasks.DispatchCleanupIfPendingAsync(pipelineRunId, ct).ConfigureAwait(false))
-                return;
-            await finalizer.CompleteRunAsync(pipelineRunId, PipelineStatus.Failed, ct).ConfigureAwait(false);
+            await FailForMissingArtifactAsync(pipelineRunId,
+                $"Artifact collection ended with status {collectionStatus}; the run cannot publish its declared artifact.",
+                launcher, ct).ConfigureAwait(false);
             return;
         }
 
         await AdvanceToNextStageOrCompleteAsync(pipelineRunId, launcher, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// BACK-019: a declared artifact that will never exist fails the run like a failed step does:
+    /// failure handlers first, then the workspace cleanup, then the terminal status. Nothing still
+    /// pending may consume it, and the failed collection keeps the run from ever ending Success
+    /// (<see cref="IPipelineRepository.HasFailedArtifactCollectionAsync"/>).
+    /// </summary>
+    private async Task FailForMissingArtifactAsync(
+        int pipelineRunId, string warning, IPipelineChildRunLauncher launcher, CancellationToken ct)
+    {
+        await repo.AppendRunWarningsAsync(pipelineRunId, [warning], ct).ConfigureAwait(false);
+        if (await TryContinueWithFailureHandlersAsync(pipelineRunId, launcher, ct).ConfigureAwait(false))
+            return;
+        var blockedSteps = (await repo.GetPendingStepRunsAsync(pipelineRunId, ct).ConfigureAwait(false))
+            .Where(step => step.StageName != PipelineRunService.SystemCleanupStage)
+            .ToList();
+        if (blockedSteps.Count > 0)
+        {
+            finalizer.MarkStepsAs(blockedSteps, TaskExecutionStatus.Cancelled);
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        if (await systemTasks.DispatchCleanupIfPendingAsync(pipelineRunId, ct).ConfigureAwait(false))
+            return;
+        await finalizer.CompleteRunAsync(pipelineRunId, PipelineStatus.Failed, ct).ConfigureAwait(false);
     }
 
     private async Task<bool> TryRetryFailedStepAsync(int pipelineRunId, List<PipelineStepRun> failedSteps, IPipelineChildRunLauncher launcher, CancellationToken ct)
@@ -408,7 +453,8 @@ public sealed class PipelineRunScheduler(
             var pendingSteps = await repo.GetPendingStepRunsAsync(pipelineRunId, ct).ConfigureAwait(false);
             if (pendingSteps.Count == 0)
             {
-                var blockingFailure = await repo.HasAnyFailedStepInRunAsync(pipelineRunId, ct).ConfigureAwait(false);
+                var blockingFailure = await repo.HasAnyFailedStepInRunAsync(pipelineRunId, ct).ConfigureAwait(false)
+                    || await repo.HasFailedArtifactCollectionAsync(pipelineRunId, ct).ConfigureAwait(false);
                 var finalStatus = DecideFinalStatus(
                     cancelled: HasCancellationRequest(run.AdditionalVariablesJson),
                     blockingFailure: blockingFailure,
@@ -434,7 +480,8 @@ public sealed class PipelineRunScheduler(
 
     // --- ServerTask creation & dispatch (per-stage steps, system tasks, artifact collection) ---
     /// <returns><c>true</c> if an artifact-collection task was dispatched (the caller must then wait for it
-    /// before advancing, S-TECH-ARCR); <c>false</c> if the stage has no artifacts / no resolvable server.</returns>
+    /// before advancing, S-TECH-ARCR) or the run was failed because its producer is unavailable (BACK-019);
+    /// <c>false</c> if the stage has no artifacts or no step that produced them.</returns>
     private async Task<bool> DispatchPostStageArtifactCollectionAsync(int runId, string stageName, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
@@ -450,8 +497,13 @@ public sealed class PipelineRunScheduler(
         var producerServerId = await repo.GetStageProducerServerIdAsync(runId, stageName, ct).ConfigureAwait(false);
         if (producerServerId is null) return false;
         var server = await repo.FindOnlineServerByIdAsync(producerServerId.Value, ct: ct).ConfigureAwait(false);
-        if (server is null || organizationId is not null && server.OrganizationId != organizationId.Value) return false;
-        if (server is null) return false;
+        if (server is null || organizationId is not null && server.OrganizationId != organizationId.Value)
+        {
+            // BACK-019: the stage promised artifacts and only its producer holds them. Advancing here
+            // let the run end Success with a publication that never happened.
+            await FailUncollectableArtifactsAsync(runId, stageDef, producerServerId.Value, launcher, ct).ConfigureAwait(false);
+            return true;
+        }
 
         var resolvedVars = await ResolveFullVariablesForRunAsync(run, definition, ct).ConfigureAwait(false);
         InjectStageSystemVariables(resolvedVars, stageName, server);
@@ -492,6 +544,32 @@ public sealed class PipelineRunScheduler(
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         logger.LogInformation("Dispatched artifact collection task for run {RunId} stage {Stage}", runId, stageName);
         return true;
+    }
+
+    // The collection is recorded as failed on the producer, never silently dropped: the run page shows
+    // why, and the failed collection is what keeps the run from being finalized as Success.
+    private async Task FailUncollectableArtifactsAsync(
+        int runId, PipelineStageDefinition stageDef, int producerServerId,
+        IPipelineChildRunLauncher launcher, CancellationToken ct)
+    {
+        var reason = $"Stage '{stageDef.Name}' declares artifacts, but its producer runner (server {producerServerId}) " +
+                     "is offline or no longer eligible, so they cannot be collected.";
+        repo.TrackTask(new ServerTask
+        {
+            ServerId = producerServerId,
+            Name = $"Collect Artifacts ({stageDef.Name})",
+            Command = JsonSerializer.Serialize(stageDef.Artifacts),
+            PipelineRunId = runId,
+            Operation = OperationKind.PipelineCollectArtifacts,
+            Status = TaskExecutionStatus.Failed,
+            FailureCode = TaskFailureCodes.InfrastructureMismatch,
+            FailureReason = reason,
+            CompletedAt = timeProvider.GetUtcNow().UtcDateTime
+        });
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        logger.LogWarning("Run {RunId}: artifacts of stage {Stage} cannot be collected, producer {ServerId} unavailable",
+            runId, stageDef.Name, producerServerId);
+        await FailForMissingArtifactAsync(runId, reason, launcher, ct).ConfigureAwait(false);
     }
 
     // --- Variable resolution (delegated to the injected IPipelineVariableResolver) ---

@@ -8,7 +8,6 @@ public partial class ProjectFormDialog
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
-    [Inject] private ConfirmHelper Confirm { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private IJSRuntime Js { get; set; } = default!;
 
@@ -70,20 +69,10 @@ public partial class ProjectFormDialog
     {
         if (Project is null) return;
 
-        var confirmed = await Confirm.ConfirmDeleteAsync("DeleteProjectConfirm", "Delete");
-        if (confirmed != true) return;
-
-        var success = await Api.Projects.DeleteProjectAsync(Project.Id);
-        if (success)
-        {
-            Toast.Success("Deleted", "Deleted");
-            Dialog.Close();
-            Nav.NavigateTo("/projects");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+        // Recette R2-122: the dialog counts what goes with the project, asks for its name and deletes it.
+        if (!await ProjectDeleteDialog.OpenAsync(Dialog, L, Project.Id)) return;
+        Dialog.Close();
+        Nav.NavigateTo("/projects");
     }
 
 }

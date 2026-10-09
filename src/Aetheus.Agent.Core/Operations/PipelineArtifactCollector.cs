@@ -70,14 +70,19 @@ internal static class PipelineArtifactCollector
                     .Where(File.Exists)
                     .Distinct(StringComparer.Ordinal)
                     .ToList();
-                if (matchingFiles.Count == 0)
-                {
-                    await onOutput("Artifact collection failed: no files matched the configured patterns", TaskLogLevel.Error).ConfigureAwait(false);
-                    return new ExecutorResult(-1, false);
-                }
-
             }
             discovery.Stop();
+            // An empty archive is not an artifact: with or without patterns, nothing collected is a
+            // failure, never a green step that uploaded an empty zip.
+            if (matchingFiles.Count == 0)
+            {
+                await onOutput(
+                    patterns is null or { Count: 0 }
+                        ? $"Artifact collection failed: the workspace {baseDirectory} holds no file to collect"
+                        : "Artifact collection failed: no files matched the configured patterns",
+                    TaskLogLevel.Error).ConfigureAwait(false);
+                return new ExecutorResult(-1, false);
+            }
 
             var sourceBytes = SumFileLengths(matchingFiles);
             await using var transferLease = await ArtifactTransferBudget.Shared.AcquireAsync(sourceBytes, ct)

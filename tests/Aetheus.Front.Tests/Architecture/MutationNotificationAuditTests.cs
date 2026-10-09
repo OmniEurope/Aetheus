@@ -115,13 +115,26 @@ public sealed class MutationNotificationAuditTests
             if (ConsumeComment(
                     current, next, ref i, ref inLineComment, ref inBlockComment, inString, inChar))
                 continue;
-            if (!inChar && current == '"' && (i == 0 || source[i - 1] != '\\')) { inString = !inString; continue; }
-            if (!inString && current == '\'' && (i == 0 || source[i - 1] != '\\')) { inChar = !inChar; continue; }
+            if (ToggleQuote(source, i, ref inString, ref inChar)) continue;
             if (inString || inChar) continue;
             if (current == '{') depth++;
             else if (current == '}' && --depth == 0) return i;
         }
         return -1;
+    }
+
+    /// <summary>
+    /// An unescaped quote opens or closes a string or char literal (one kind cannot open inside the
+    /// other); true when the character at <paramref name="i"/> was such a quote. Recette R2-107: moved out
+    /// of <see cref="FindMatchingBrace"/>, under the grade-A cyclomatic threshold.
+    /// </summary>
+    private static bool ToggleQuote(string source, int i, ref bool inString, ref bool inChar)
+    {
+        var current = source[i];
+        var escaped = i > 0 && source[i - 1] == '\\';
+        if (!inChar && current == '"' && !escaped) { inString = !inString; return true; }
+        if (!inString && current == '\'' && !escaped) { inChar = !inChar; return true; }
+        return false;
     }
 
     private static bool ConsumeComment(

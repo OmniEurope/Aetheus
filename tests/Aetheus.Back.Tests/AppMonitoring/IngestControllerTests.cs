@@ -23,6 +23,7 @@ public class IngestControllerTests
     private readonly IIngestService _ingest = Substitute.For<IIngestService>();
     private readonly IVisitorIngestService _visitorIngest = Substitute.For<IVisitorIngestService>();
     private readonly IAppWebAnalyticsService _webAnalytics = Substitute.For<IAppWebAnalyticsService>();
+    private readonly IIngestConfigurationService _configuration = Substitute.For<IIngestConfigurationService>();
 
     private IngestController Build(string? key, string? contentType, string body) =>
         Build(key, contentType, Encoding.UTF8.GetBytes(body));
@@ -33,7 +34,7 @@ public class IngestControllerTests
         if (key is not null) ctx.Request.Headers["x-aetheus-ingest-key"] = key;
         if (contentType is not null) ctx.Request.ContentType = contentType;
         ctx.Request.Body = new MemoryStream(body);
-        return new IngestController(_ingest, _visitorIngest, _webAnalytics)
+        return new IngestController(_ingest, _visitorIngest, _webAnalytics, _configuration)
         {
             ControllerContext = new ControllerContext { HttpContext = ctx }
         };
@@ -166,5 +167,27 @@ public class IngestControllerTests
         Assert.Single(attrs.OfType<RequestSizeLimitAttribute>()); // 413 for bodies over the 1 MiB cap
         var rateLimit = Assert.Single(attrs.OfType<EnableRateLimitingAttribute>());
         Assert.Equal("otlp-ingest", rateLimit.PolicyName); // 429 when the per-key limiter trips
+    }
+
+    [Fact]
+    public async Task Configuration_UnknownKey_Returns401()
+    {
+        _ingest.ResolveAppIdAsync("bad", Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        var result = await Build("bad", null, string.Empty).Configuration(TestContext.Current.CancellationToken);
+
+        Assert.IsType<UnauthorizedResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Configuration_ReturnsTheSendIntervalOfTheKeysApplication()
+    {
+        _ingest.ResolveAppIdAsync("ok", Arg.Any<CancellationToken>()).Returns(7);
+        _configuration.GetAsync(7, Arg.Any<CancellationToken>()).Returns(new IngestConfigurationDto(900));
+
+        var result = await Build("ok", null, string.Empty).Configuration(TestContext.Current.CancellationToken);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(900, Assert.IsType<IngestConfigurationDto>(ok.Value).MetricExportIntervalSeconds);
     }
 }

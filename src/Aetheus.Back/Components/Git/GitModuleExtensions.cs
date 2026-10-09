@@ -15,6 +15,7 @@ public static class GitModuleExtensions
         services.AddScoped<IGitLightRepository, GitLightRepository>();
         // Mirrors of external repositories: the credentialed fetch and its on-demand refresh.
         services.AddSingleton<CreditedGitRunner>();
+        services.AddSingleton(sp => new ExternalGitEndpointGuard(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GitLightOptions>>().Value));
         services.AddScoped<IExternalRepoMirrorService, ExternalRepoMirrorService>();
         services.AddScoped<IExternalMirrorRefresher, ExternalMirrorRefresher>();
         services.AddScoped<GitProcessRunner>();

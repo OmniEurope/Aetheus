@@ -52,9 +52,13 @@ git clone --quiet --depth 1 "$PUBLIC_SOURCE_URL" "$PUBLIC_DIR"
 PUBLIC_COMMIT="$(git -C "$PUBLIC_DIR" rev-parse HEAD)"
 echo ">>> Public commit: $PUBLIC_COMMIT"
 
-# The verification needs the commits it may match: a shallow pipeline checkout is deepened first.
+# The verification needs the commits it may match. They come with the checkout (AETHEUS_GIT_HISTORY_DEPTH
+# in aetheus-demo.yaml): this step holds no Git credential to fetch more, and a deepen asked the
+# internal repository for a username (run #2534, 2026-10-03).
 if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
-  git fetch --quiet --deepen="$PUBLIC_MATCH_DEPTH" origin
+  HELD="$(git rev-list --count HEAD)"
+  [ "$HELD" -ge "$PUBLIC_MATCH_DEPTH" ] \
+    || fail "The checkout holds $HELD commit(s) of main and the verification needs $PUBLIC_MATCH_DEPTH: raise AETHEUS_GIT_HISTORY_DEPTH."
 fi
 NODE="$(sh deploy/scripts/ensure-node-runtime.sh)"
 VERIFY_LOG="$(mktemp)"
@@ -97,7 +101,11 @@ fi
 
 # --- Build, from the public tree only ------------------------------------------------------------
 cd "$PUBLIC_DIR"
-BUILD_SOURCEVERSION="$PUBLIC_COMMIT" APP_VERSION="$APP_VERSION" sh deploy/scripts/build-fast-release-images.sh
+# WORKSPACE is the public tree for the whole build: publish-application.sh writes .pipeline-publish/
+# under $WORKSPACE, and the inherited internal checkout sent the backend there while Docker read the
+# public tree (run #2551: "/.pipeline-publish/backend": not found).
+WORKSPACE="$PUBLIC_DIR" BUILD_SOURCEVERSION="$PUBLIC_COMMIT" APP_VERSION="$APP_VERSION" \
+  sh deploy/scripts/build-fast-release-images.sh
 
 DOTNET="$(sh deploy/scripts/ensure-dotnet-sdk.sh)"
 "$DOTNET" build tests/Aetheus.E2E/Aetheus.E2E.csproj --configuration Release --verbosity minimal

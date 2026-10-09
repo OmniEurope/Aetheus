@@ -135,11 +135,36 @@ public sealed class AppMetricRollupAndPerformanceTests : IDisposable
             Sample(CurrentHour, "process.cpu.time", 5, route));
         await _db.SaveChangesAsync(ct);
 
-        var latest = await _repo.GetLatestExportAsync(1, AppRoutePerformance.MetricNames, AppRoutePerformance.ExportSpan, ct);
+        var latest = await _repo.GetLatestExportAsync(1, AppRoutePerformance.MetricNames, AppRoutePerformance.LatestPointLookback, ct);
 
         Assert.Equal(2, latest.Count);
         Assert.Equal(110, latest.Single(sample => sample.MetricName == RequestPerformanceMetrics.P95Metric).Value);
-        Assert.Empty(await _repo.GetLatestExportAsync(2, AppRoutePerformance.MetricNames, AppRoutePerformance.ExportSpan, ct));
+        Assert.Empty(await _repo.GetLatestExportAsync(2, AppRoutePerformance.MetricNames, AppRoutePerformance.LatestPointLookback, ct));
+    }
+
+    [Fact]
+    public async Task R2082_ARouteIdleSinceItsLastExport_KeepsItsNewestPoint_WithinTheWindow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orders = """{"http.request.method":"GET","http.route":"api/orders"}""";
+        var login = """{"http.request.method":"POST","http.route":"api/login"}""";
+        var gone = """{"http.request.method":"GET","http.route":"api/old"}""";
+        _db.AppMetricSamples.AddRange(
+            // login was last called three hours ago: no sample of it since (R2-082, idle routes are not exported).
+            Sample(CurrentHour.AddHours(-3).AddMinutes(-1), RequestPerformanceMetrics.P95Metric, 700, login),
+            Sample(CurrentHour.AddHours(-3), RequestPerformanceMetrics.P95Metric, 650, login),
+            Sample(CurrentHour.AddHours(-3), RequestPerformanceMetrics.CountMetric, 9, login),
+            Sample(CurrentHour.AddHours(-25), RequestPerformanceMetrics.P95Metric, 5, gone),
+            Sample(CurrentHour, RequestPerformanceMetrics.P95Metric, 110, orders),
+            Sample(CurrentHour, RequestPerformanceMetrics.CountMetric, 42, orders));
+        await _db.SaveChangesAsync(ct);
+
+        var report = AppRoutePerformance.Build(
+            await _repo.GetLatestExportAsync(1, AppRoutePerformance.MetricNames, AppRoutePerformance.LatestPointLookback, ct));
+
+        Assert.Equal(["api/login", "api/orders"], report.Routes.Select(route => route.Route).Order(StringComparer.Ordinal));
+        var loginLine = report.Routes.Single(route => route.Route == "api/login");
+        Assert.Equal((650d, 9L), (loginLine.P95Ms!.Value, loginLine.Count!.Value));
     }
 
     [Fact]

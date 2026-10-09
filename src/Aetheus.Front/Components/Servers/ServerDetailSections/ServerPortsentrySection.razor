@@ -44,7 +44,7 @@
                     <CountBadge Value="@_blockedCount" Variant="@GetBlockedCountBadgeStyle(_blockedCount)" />
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_blockedGrid" Data="@_blockedIps" Count="@_blockedCount"
-                    TItem="PortsentryBlockedIpDto" IsLoading="@_blockedLoading" LoadData="@LoadBlockedAsync"
+                    TItem="PortsentryBlockedIpDto" IsLoading="@_blockedLoading" LoadData="@LoadBlockedAsync" ExportRead="@ReadBlockedExportAsync" ExportName="@L["BlockedIps"]"
                     PageSize="25" Density="OmniDensity.Compact" AllowSorting="true" EmptyText="@L["NoBlockedIps"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<PortsentryBlockedIpDto>(_blockedIps, _blockedCount))">
@@ -80,7 +80,7 @@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddWhitelistIpAsync"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
                 </OmniRow>
                 <AetheusDataGrid FullHeight="true" @ref="_whitelistGrid" Data="@_whitelist" Count="@_whitelistCount"
-                    TItem="PortsentryWhitelistIpDto" IsLoading="@_whitelistLoading" LoadData="@LoadWhitelistAsync"
+                    TItem="PortsentryWhitelistIpDto" IsLoading="@_whitelistLoading" LoadData="@LoadWhitelistAsync" ExportRead="@ReadWhitelistExportAsync" ExportName="@L["Whitelist"]"
                     PageSize="25" Density="OmniDensity.Compact" AllowSorting="true" EmptyText="@L["NoWhitelistEntries"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<PortsentryWhitelistIpDto>(_whitelist, _whitelistCount))">

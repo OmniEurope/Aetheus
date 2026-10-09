@@ -17,6 +17,7 @@ public sealed class AppWebAnalyticsServiceTests : IDisposable
     private readonly AppDbContext _db;
     private readonly AppWebAnalyticsService _service;
     private readonly IAppTelemetryChangePublisher _telemetryChanges = Substitute.For<IAppTelemetryChangePublisher>();
+    private readonly INotificationService _notifications = Substitute.For<INotificationService>();
     private readonly FakeTimeProvider _time =
         new(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero));
 
@@ -40,7 +41,7 @@ public sealed class AppWebAnalyticsServiceTests : IDisposable
         _service = new AppWebAnalyticsService(
             new AppWebAnalyticsRepository(_db),
             new AppMonitoringRepository(_db),
-            Substitute.For<INotificationService>(),
+            _notifications,
             new AppIngestGate(),
             _telemetryChanges,
             new MemoryCache(new MemoryCacheOptions()),
@@ -268,6 +269,35 @@ public sealed class AppWebAnalyticsServiceTests : IDisposable
         Assert.Empty(_db.AppAnalyticsRejections);
         Assert.Equal(95, app.AnalyticsQuotaAlertLevel);
         await _telemetryChanges.Received(1).PublishAsync(1, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task QuotaAlert_StartsTheAiTasksOfTheAppProjectOnly()
+    {
+        // BACK-003 follow-up: an AI task starts only for an event naming its owner, so the quota alert
+        // carries the project of the monitored app (project 1 here). Same budget as the roll case
+        // above: the batch reaches it, which raises the 95 % alert.
+        var start = _time.GetUtcNow().UtcDateTime;
+        for (var minute = 0; minute < 10; minute++)
+            _db.AppAnalyticsEvents.Add(StoredEvent(start.AddMinutes(-60 + minute)));
+        var app = await _db.MonitoredApps.SingleAsync(TestContext.Current.CancellationToken);
+        app.AnalyticsStorageBudgetBytes = 10 * 480;
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        object? payload = null;
+        await _notifications.SendEventAsync(
+            "app.analytics.quota", Arg.Do<object>(value => payload = value), Arg.Any<CancellationToken>());
+
+        await _service.IngestAsync(
+            1,
+            [Event(Guid.NewGuid(), "a", "week-a", "month-a", "session-a")],
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(payload);
+        Assert.Equal(
+            ["own"],
+            await Aetheus.Back.Tests.AiTasks.AiEventDispatchProbe.StartedDefinitionsAsync(
+                "app.analytics.quota", payload, ownProjectId: 1, foreignProjectId: 2,
+                TestContext.Current.CancellationToken));
     }
 
     [Fact]

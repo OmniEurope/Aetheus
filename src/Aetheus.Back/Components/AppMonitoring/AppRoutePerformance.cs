@@ -23,9 +23,10 @@ public static class AppRoutePerformance
         RequestPerformanceMetrics.WindowMetric
     ];
 
-    /// <summary>One export writes the five gauges of every route at once; the samples read are those of
-    /// the last export, found within this span of the newest one.</summary>
-    public static readonly TimeSpan ExportSpan = TimeSpan.FromSeconds(90);
+    /// <summary>Recette R2-082: a route's gauges are exported only for a minute in which it was called, so
+    /// each route's newest point is searched within the package's default window (24 hours) of the newest
+    /// sample: a route idle for longer has left the window and the table, as before.</summary>
+    public static readonly TimeSpan LatestPointLookback = RequestPerformanceMetrics.DefaultWindow;
 
     public static AppPerformanceReportDto Build(IReadOnlyList<AppMetricSample> latestSamples)
     {

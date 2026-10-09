@@ -12,6 +12,7 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
 {
     private const string BranchVariable = "AETHEUS_RUN_BRANCH";
     private const string IdempotencyVariable = "AETHEUS_RUN_IDEMPOTENCY_KEY";
+    private static readonly string[] CurrentShapeNames = ["parameters", "sourceBranch", "idempotencyKey"];
 
     public override PipelineRunRequest? Read(
         ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -22,11 +23,9 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
             throw new JsonException("Pipeline run input must be a JSON object.");
 
         var root = document.RootElement;
-        var hasCurrentShape = TryGetProperty(root, "parameters", out var parametersElement)
-            || TryGetProperty(root, "sourceBranch", out _)
-            || TryGetProperty(root, "idempotencyKey", out _);
-        if (hasCurrentShape)
+        if (IsCurrentShape(root))
         {
+            TryGetProperty(root, "parameters", out var parametersElement);
             TryGetProperty(root, "sourceBranch", out var branchElement);
             TryGetProperty(root, "idempotencyKey", out var idempotencyElement);
             return new PipelineRunRequest
@@ -92,6 +91,25 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
             result[property.Name] = value;
         }
         return result;
+    }
+
+    /// <summary>
+    /// SHARED-002: the legacy shape is a flat dictionary of strings, and its keys are parameter names a
+    /// pipeline may legally choose, <c>parameters</c> and <c>sourceBranch</c> included. Seeing one of
+    /// the current names is therefore not enough. The current shape has only those three names, and its
+    /// <c>parameters</c> is an object or null, never a string; anything else is a legacy dictionary.
+    /// A body made only of <c>sourceBranch</c> and/or <c>idempotencyKey</c> strings is intrinsically
+    /// ambiguous and is read as the current shape, the one today's clients send.
+    /// </summary>
+    private static bool IsCurrentShape(JsonElement root)
+    {
+        foreach (var property in root.EnumerateObject())
+        {
+            if (!CurrentShapeNames.Contains(property.Name, StringComparer.OrdinalIgnoreCase)) return false;
+            if (property.Name.Equals("parameters", StringComparison.OrdinalIgnoreCase)
+                && property.Value.ValueKind == JsonValueKind.String) return false;
+        }
+        return true;
     }
 
     private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)

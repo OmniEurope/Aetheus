@@ -50,6 +50,15 @@ public class PipelineRun
     public int BuildNumber { get; set; }
 
     /// <summary>
+    /// Recette R2-110: the project release number this run builds with, exposed to steps as
+    /// <c>BUILD_RELEASENUMBER</c>. Taken at launch from <see cref="Project.ReleaseCounter"/>: the next
+    /// one when the pipeline declares <c>release_number: allocate</c>, the run it was started by when
+    /// it has one in the same project (a candidate's CI inherits the candidate's number), the latest
+    /// otherwise. Null for a pipeline without a project and for runs created before it existed.
+    /// </summary>
+    public int? ReleaseNumber { get; set; }
+
+    /// <summary>
     /// Why the last scheduling pass dispatched nothing, in one human sentence per blocked stage
     /// (group throttle, runner or deployment target offline, artifact collection in flight). Null
     /// while the run is progressing. Without it a run sits in <c>Running</c> with no task moving and

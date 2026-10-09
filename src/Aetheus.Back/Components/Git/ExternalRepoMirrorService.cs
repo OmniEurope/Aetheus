@@ -8,6 +8,7 @@ namespace Aetheus.Back.Components.Git;
 
 public sealed class ExternalRepoMirrorService(
     CreditedGitRunner git,
+    ExternalGitEndpointGuard endpointGuard,
     IServiceConnectionRepository serviceConnectionRepo,
     IEncryptionService encryption,
     IGitLightCliService cli,
@@ -23,8 +24,11 @@ public sealed class ExternalRepoMirrorService(
         GitAuthType authType, GitCredentialPayload? credential, CancellationToken ct = default)
     {
         var remoteUrl = ExternalRepoUrlBuilder.Build(provider, baseUrl, ownerOrGroup, repositoryName, authType);
+        var (pin, refusal) = await endpointGuard.CheckAsync(remoteUrl, ct).ConfigureAwait(false);
+        if (refusal is not null)
+            return (false, refusal);
         var result = await git.RunAsync(
-            Path.GetTempPath(), ["ls-remote", "--heads", remoteUrl], remoteUrl, credential, ct,
+            Path.GetTempPath(), [.. pin, "ls-remote", "--heads", remoteUrl], remoteUrl, credential, ct,
             TimeSpan.FromSeconds(45)).ConfigureAwait(false);
 
         return result.Success
@@ -88,6 +92,10 @@ public sealed class ExternalRepoMirrorService(
     private async Task<CreditedGitResult> CloneAsync(
         string mirrorPath, string remoteUrl, GitCredentialPayload? credential, CancellationToken ct)
     {
+        var (pin, refusal) = await endpointGuard.CheckAsync(remoteUrl, ct).ConfigureAwait(false);
+        if (refusal is not null)
+            return new CreditedGitResult(-1, string.Empty, refusal);
+
         var parent = Path.GetDirectoryName(mirrorPath);
         if (!string.IsNullOrEmpty(parent))
         {
@@ -95,7 +103,7 @@ public sealed class ExternalRepoMirrorService(
         }
 
         return await git.RunAsync(
-            Path.GetTempPath(), ["clone", "--mirror", remoteUrl, mirrorPath], remoteUrl, credential, ct)
+            Path.GetTempPath(), [.. pin, "clone", "--mirror", remoteUrl, mirrorPath], remoteUrl, credential, ct)
             .ConfigureAwait(false);
     }
 
@@ -108,9 +116,13 @@ public sealed class ExternalRepoMirrorService(
         await git.RunAsync(mirrorPath, ["remote", "set-url", "origin", remoteUrl], remoteUrl: null, credential: null, ct)
             .ConfigureAwait(false);
 
+        var (pin, refusal) = await endpointGuard.CheckAsync(remoteUrl, ct).ConfigureAwait(false);
+        if (refusal is not null)
+            return new CreditedGitResult(-1, string.Empty, refusal);
+
         // A --mirror clone configures remote.origin to fetch +refs/*:refs/* with mirror=true, so a
         // plain `fetch --prune origin` refreshes every ref.
-        return await git.RunAsync(mirrorPath, ["fetch", "--prune", "origin"], remoteUrl: null, credential, ct)
+        return await git.RunAsync(mirrorPath, [.. pin, "fetch", "--prune", "origin"], remoteUrl: null, credential, ct)
             .ConfigureAwait(false);
     }
 

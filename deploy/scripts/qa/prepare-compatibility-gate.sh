@@ -72,9 +72,22 @@ if [ "$PREVIOUS_PAYLOAD" = 1 ]; then
   case "${#PREVIOUS}" in 40|64) ;; *) echo "Invalid V-1 artifact commit length." >&2; exit 1 ;; esac
   case "$PREVIOUS" in *[!0-9a-fA-F]*) echo "Invalid V-1 artifact commit." >&2; exit 1 ;; esac
   test "$CURRENT" != "$PREVIOUS" || { echo "V and V-1 resolve to the same commit." >&2; exit 1; }
-  git cat-file -e "${PREVIOUS}^{commit}" 2>/dev/null || {
+fi
+# The 2026-10-06 history rewrite (secret scrub) left the deployed release 76a48b8a on a commit the
+# new history does not contain, so no N/N-1 pass can be built against it. That exact commit, and
+# only it, falls back to bootstrap; the seal still refuses Bootstrap unless the candidate was
+# launched with allowBootstrap=true. Once a release from the new history is deployed it becomes
+# V-1 and this exemption can no longer match.
+REWRITTEN_HISTORY_BASELINE=76a48b8ac1978c24dd3dc2bb03eb813f99ed124b
+if [ "$PREVIOUS_PAYLOAD" = 1 ] && ! git cat-file -e "${PREVIOUS}^{commit}" 2>/dev/null; then
+  test "$PREVIOUS" = "$REWRITTEN_HISTORY_BASELINE" || {
     echo "Retained V-1 commit is outside the configured Git history window." >&2; exit 1;
   }
+  echo ">>> Retained V-1 $PREVIOUS predates the history rewrite and is absent from the new history."
+  PREVIOUS_PAYLOAD=0
+  PREVIOUS=""
+fi
+if [ "$PREVIOUS_PAYLOAD" = 1 ]; then
   git merge-base --is-ancestor "$PREVIOUS" "$CURRENT" || {
     echo "Retained V-1 is not an ancestor of V." >&2; exit 1;
   }

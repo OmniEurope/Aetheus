@@ -76,6 +76,14 @@ public partial class Users : IAsyncDisposable
         _totalCount = result.TotalCount;
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    private Task<PaginatedResult<UserDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(UserDto.Username));
+        return Api.Auth.GetUsersAsync(page, pageSize, Search.Search, sortBy, sortDescending, args.ToApiFilters());
+    }
+
     private async Task OnLoadData(GridLoadArgs args)
     {
         _loadFailed = false;
@@ -171,4 +179,7 @@ public partial class Users : IAsyncDisposable
         Search.Changed -= OnSharedSearchChangedAsync;
         if (_adminRt is not null) await _adminRt.DisposeAsync();
     }
+
+    /// <summary>Recette R2-124: the export writes every role of the user, the cell shows three.</summary>
+    private static readonly Func<UserDto, object?> RolesExport = user => string.Join(", ", user.Roles);
 }

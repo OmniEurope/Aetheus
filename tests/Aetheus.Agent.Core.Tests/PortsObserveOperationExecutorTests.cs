@@ -47,6 +47,8 @@ public class PortsObserveOperationExecutorTests
             OperationKind.PortsObserve, string.Empty, 30, NoOutput, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.ExitCode);
+        // A completed report is a success; TimedOut=true made the task read as a timeout.
+        Assert.False(result.TimedOut);
         await _apiClient.Received(1).ReportObservedPortsAsync(
             7,
             Arg.Is<ObservedPortsReportDto>(report =>

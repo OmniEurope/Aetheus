@@ -129,4 +129,43 @@ public class PipelineVariableExpansionTests
         Assert.Equal("$(SOURCE_COMMIT:-fallback)", variables["LATER"]);
         Assert.Equal("$(NEVER_PROVIDED:-kept-as-typed)", variables["SECRET"]);
     }
+
+    /// <summary>
+    /// BACK-022: an alias receives the secret's clear value at resolution. It used to stay public, so it
+    /// was persisted with the run's variables, exported to every step and substituted into commands as
+    /// text. It is now a secret like the one it copies, transitively, and still carries the value.
+    /// </summary>
+    [Fact]
+    public void Resolution_ClassifiesEveryAliasOfASecretAsSecret()
+    {
+        var variables = Resolved(
+            ("VAULT_SECRET", "s3cr3t"),
+            ("ALIAS", "$(VAULT_SECRET)"),
+            ("CHAIN", "user:$(ALIAS)"),
+            ("FALLBACK", "$(VAULT_SECRET:-none)"),
+            ("PUBLIC", "$(OTHER)"),
+            ("OTHER", "visible"));
+        var secrets = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "VAULT_SECRET" };
+
+        PipelineVariableExpansion.ExpandResolved(variables, secrets, new HashSet<string>());
+
+        Assert.Equal(["ALIAS", "CHAIN", "FALLBACK", "VAULT_SECRET"], secrets.Order(StringComparer.Ordinal));
+        Assert.Equal("s3cr3t", variables["ALIAS"]);
+        Assert.Equal("user:s3cr3t", variables["CHAIN"]);
+        Assert.Equal("s3cr3t", variables["FALLBACK"]);
+        Assert.Equal("visible", variables["PUBLIC"]);
+
+        var persisted = PipelineRunHelpers.FilterSecretKeys(variables, secrets);
+        Assert.DoesNotContain(persisted.Values, value => value.Contains("s3cr3t", StringComparison.Ordinal));
+
+        var unrelated = new PipelineStepDefinition { Name = "build", Shell = "dotnet build" };
+        var unrelatedEnv = PipelineRunHelpers.ScopeStepEnvironment(variables, secrets, unrelated);
+        Assert.DoesNotContain(unrelatedEnv.Values, value => value.Contains("s3cr3t", StringComparison.Ordinal));
+
+        var consumer = new PipelineStepDefinition { Name = "login", Shell = "login --password $(ALIAS)" };
+        var consumerEnv = PipelineRunHelpers.ScopeStepEnvironment(variables, secrets, consumer);
+        Assert.Equal("s3cr3t", consumerEnv["ALIAS"]);
+        var command = PipelineCommandBuilder.BuildStepCommand(consumer, consumerEnv, isWindows: false, secrets);
+        Assert.DoesNotContain("s3cr3t", command, StringComparison.Ordinal);
+    }
 }

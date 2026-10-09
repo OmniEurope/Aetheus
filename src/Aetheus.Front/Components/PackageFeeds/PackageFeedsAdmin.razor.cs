@@ -18,6 +18,14 @@ public partial class PackageFeedsAdmin : Aetheus.Front.Components.Shared.Realtim
             return;
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    private Task<PaginatedResult<PackageFeedDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest("Name");
+        return Api.Packages.GetPackageFeedsAsync(page, pageSize, _search, sortBy, sortDescending, filters: args.ToApiFilters());
+    }
+
     private async Task LoadDataAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();

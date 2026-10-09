@@ -32,7 +32,7 @@
     }
 
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_items" TItem="PipelineFleetItemDto" Count="@_totalCount"
-                LoadData="@LoadDataAsync" IsLoading="@_loading" PageSize="25"
+                LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" IsLoading="@_loading" PageSize="25"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<PipelineFleetItemDto>(_items, _totalCount))"
                 EmptyText="@L["NoRecords"]">

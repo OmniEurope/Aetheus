@@ -129,6 +129,12 @@
         "resolved": "7.9.0",
         "contentHash": "r4sZuVpVqwSBLe4qYDrnpScqdyctlRXg0HSF5OoCGkeBc8b+o8BBYHuI/u1RoWYX78PbieijU13TBt71/Xf3lw=="
       },
+      "OmniEurope.Performance": {
+        "type": "Direct",
+        "requested": "[1.1.0, )",
+        "resolved": "1.1.0",
+        "contentHash": "XKJ35T/2LmyOQMlq0XC+Q9uwOpNEnouUxXKEaljN9RwSve1fVUvlxTEo7DCmPyyxg00+Q/0kFS5EOi96sNpy/Q=="
+      },
       "Otp.NET": {
         "type": "Direct",
         "requested": "[1.4.1, )",
@@ -393,6 +399,7 @@
       "aetheus.telemetry": {
         "type": "Project",
         "dependencies": {
+          "OmniEurope.Performance": "[1.1.0, )",
           "OpenTelemetry": "[1.19.1, )",
           "OpenTelemetry.Exporter.OpenTelemetryProtocol": "[1.19.1, )",
           "OpenTelemetry.Extensions.Hosting": "[1.19.1, )",

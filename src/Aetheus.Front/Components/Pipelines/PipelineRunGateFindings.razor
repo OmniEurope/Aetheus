@@ -11,11 +11,21 @@
         {
             <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineRunGatePresentation.GateStyle(Gate.Status)">@L[PipelineRunGatePresentation.StatusKey(Gate.Status)]</OmniBadge>
         }
-        @if (Gate.Grade?.OverallGrade is { } grade)
+        @if (PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is { } grade)
         {
             <GradeBadge Value="@grade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge analysis-run-gate-grade" />
         }
     </div>
+    @if (PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade))
+    {
+        <OmniAlert Severity="OmniSeverity.Warning" Title="@L["GateSealedGradeTitle"]" Class="omni-u-mb-md">
+            <div>@string.Format(L["GateSealedGradeDetail"], Gate.Grade?.OverallGrade?.ToString() ?? "-")</div>
+            @if (BlockingTests.Count > 0)
+            {
+                <div class="omni-u-mt-xs">@L["CandidateBlockingTests"]: <strong>@string.Join(", ", BlockingTests)</strong></div>
+            }
+        </OmniAlert>
+    }
     @* Recette R2-052: what the letter is made of. A B over "0 findings" came from a measure (coverage,
        duplication, complexity, a cycle) the tab did not show. *@
     <AnalysisGradeBreakdown Grade="@Gate.Grade" ShowLimitingDomain="true" />
@@ -52,7 +62,7 @@
         @* R-500: FullHeight lets OE size the grid to what is left under it, inside the card. *@
         @* Recette R-485: the findings of the run and the runs it triggered, read from the server page
            by page, filtered and sorted there, like the project's Quality list. *@
-        <AetheusDataGrid @ref="_grid" Data="@_rows" Count="@_total" TItem="AnalysisFindingDto" KeyProperty="Id" LoadData="LoadAsync" RowClick="OpenFinding"
+        <AetheusDataGrid ShowFooterBar="true" @ref="_grid" Data="@_rows" Count="@_total" TItem="AnalysisFindingDto" KeyProperty="Id" LoadData="LoadAsync" ExportRead="@ReadExportAsync" RowClick="OpenFinding"
                          AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" PageSize="25"
                          Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<AnalysisFindingDto>(_rows, _total))"
                          FullHeight="true" class="analysis-run-findings-grid" VirtualizationOverscanCount="3">

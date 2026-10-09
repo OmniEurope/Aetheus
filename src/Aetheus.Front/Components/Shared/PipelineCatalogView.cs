@@ -101,13 +101,24 @@ internal static class PipelineCatalogView
         IReadOnlyDictionary<int, PipelineFleetItemDto> fleetItems) =>
         pipelines.Count(pipeline => Matches(pipeline, status, fleetItems));
 
-    /// <summary>Starred pipelines first, then project, then name: the favourites panel is gone, the
-    /// favourites lead the one table instead.</summary>
-    public static List<PipelineDependencyDto> OrderFavoritesFirst(
+    /// <summary>The catalogue's order before any column sort: pipelines with a run in progress or
+    /// awaiting an approval first, the most recently started first (recette R2-093), then the starred
+    /// ones (the favourites panel is gone, the favourites lead the one table instead, R-119), then
+    /// project, then name. A column sort chosen in the grid reorders the rows over this.</summary>
+    public static List<PipelineDependencyDto> DefaultOrder(
         IEnumerable<PipelineDependencyDto> pipelines,
         IReadOnlySet<int> favoritePipelineIds) => pipelines
-        .OrderByDescending(pipeline => favoritePipelineIds.Contains(pipeline.Id))
+        .OrderByDescending(pipeline => ActiveRunStartedAt(pipeline).HasValue)
+        .ThenByDescending(ActiveRunStartedAt)
+        .ThenByDescending(pipeline => favoritePipelineIds.Contains(pipeline.Id))
         .ThenBy(pipeline => pipeline.ProjectName)
         .ThenBy(pipeline => pipeline.Name)
         .ToList();
+
+    /// <summary>When the latest of the pipeline's runs in progress started; null when none is in
+    /// progress. RecentRuns holds its five newest runs.</summary>
+    private static DateTime? ActiveRunStartedAt(PipelineDependencyDto pipeline) => pipeline.RecentRuns
+        .Where(run => !run.Status.IsTerminal())
+        .Select(run => (DateTime?)run.StartedAt)
+        .Max();
 }

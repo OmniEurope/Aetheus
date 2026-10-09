@@ -1,11 +1,12 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @* Volumes tab of the Docker section. Same shape as DockerNetworksTab: read-only over the parent's
    inventory, with only its own filter state. *@
 <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
     <CountBadge Value="@FilteredVolumes.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterVolumes"]" @bind-Value="_volumeSearch" Placeholder="@L["FilterVolumes"]" Class="docker-search" />
 </OmniStack>
-<OmniDataGrid @ref="_grid" FillAvailableHeight="true" Items="@FilteredVolumes" TItem="DockerVolumeDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
+<OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["DockerVolumes"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@FilteredVolumes" TItem="DockerVolumeDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_volumeGroups"
     AllGroupsExpanded="@_allVolumeGroupsExpanded" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
     <Columns>

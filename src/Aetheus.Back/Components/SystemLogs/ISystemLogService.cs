@@ -21,13 +21,5 @@ public interface ISystemLogService
 
     Task<Stream> DownloadLogFileAsync(string fileName, CancellationToken ct = default);
 
-    Task<byte[]> ExportCsvAsync(
-        string? fileName,
-        string? level,
-        string? search,
-        DateTime? dateFrom,
-        DateTime? dateTo,
-        CancellationToken ct = default);
-
     Task<int> PurgeOldLogsAsync(int retentionDays, CancellationToken ct = default);
 }

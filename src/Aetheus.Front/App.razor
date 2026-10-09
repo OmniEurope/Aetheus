@@ -1,16 +1,20 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @using Aetheus.Front.Layout
-@using OmniEurope.Blazor.Components
-@inject OmniOverlayService Overlays
-@* The OmniEurope.Blazor host (ADR-046) wraps the UI: its dialogs and notifications, raised by the
-   shared services, show over whichever layout is on screen.
-   PLAN-008 lot 11: each toast counts its time down, and a burst piles up behind a count while an
-   error stays apart, readable in full (verification OE-16, section D). *@
-<OmniComponentsHost OverlayService="@Overlays" Notifications="@(new OmniNotificationOptions(ShowCountdown: true, Group: true))">
-    <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Aetheus.Front.Components.Shared.NotFound)">
-        <Found Context="routeData">
-            <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)"/>
-            <FocusOnNavigate RouteData="@routeData" Selector="h1, h2, h3, [data-focus-target]" />
-        </Found>
-    </Router>
-</OmniComponentsHost>
+@* STD-SHELL (user decision 2026-10-04: everything goes through the package): OE's theme scope wraps the
+   whole application and paints the look stored by SiteAppearanceState (mode, theme, palette, font,
+   density); it wraps the overlay host too, so dialogs and notifications take the same look as the pages.
+   The OmniEurope.Blazor host (ADR-046) draws the dialogs and notifications raised by the shared services
+   over whichever layout is on screen. PLAN-008 lot 11: each toast counts its time down, and a burst piles
+   up behind a count while an error stays apart, readable in full (verification OE-16, section D). *@
+<OmniThemeScope Id="@ThemeScopeId" Appearance="@Appearance.Appearance" Preset="@Appearance.Preset"
+                Palette="@Appearance.Palette" Font="@Appearance.Font" Density="@Appearance.Density"
+                BackdropMotion="@Appearance.BackdropMotion">
+    <OmniComponentsHost OverlayService="@Overlays" Notifications="@NotificationOptions">
+        <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Aetheus.Front.Components.Shared.NotFound)">
+            <Found Context="routeData">
+                <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)"/>
+                <FocusOnNavigate RouteData="@routeData" Selector="h1, h2, h3, [data-focus-target]" />
+            </Found>
+        </Router>
+    </OmniComponentsHost>
+</OmniThemeScope>

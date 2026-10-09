@@ -26,7 +26,9 @@ public interface IAiTaskRepository
     Task AddDefinitionAsync(AiTaskDefinition definition, CancellationToken ct);
     Task RemoveDefinitionAsync(AiTaskDefinition definition, CancellationToken ct);
     Task<List<AiTaskDefinition>> GetScheduledDefinitionsAsync(CancellationToken ct);
-    Task<List<AiTaskDefinition>> GetDefinitionsForEventAsync(string eventType, CancellationToken ct);
+    /// <summary>Enabled definitions triggered by <paramref name="eventType"/> and owned by the event's project or server.</summary>
+    Task<List<AiTaskDefinition>> GetDefinitionsForEventAsync(
+        string eventType, int? projectId, int? serverId, CancellationToken ct);
     Task<Server?> ResolveExecutionServerAsync(AiTaskDefinition definition, CancellationToken ct);
     Task<int?> GetProjectOrganizationIdAsync(int projectId, CancellationToken ct);
     Task<int?> GetServerOrganizationIdAsync(int serverId, CancellationToken ct);

@@ -2,13 +2,14 @@
 using Aetheus.Front.Components.Settings;
 using Aetheus.Front.Components.Shared;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Settings;
 
 /// <summary>
 /// Recette R-390: the user menu's "Theme" opens OE's appearance window with the site's theme, palette,
 /// text size, density and control size, read from and written to the same storage keys as the settings
-/// page (SiteAppearanceState), each applied on the document root at once.
+/// page (SiteAppearanceState), which the application's OmniThemeScope paints at once.
 /// </summary>
 public sealed class SiteAppearanceWindowTests : BunitContext
 {
@@ -39,15 +40,41 @@ public sealed class SiteAppearanceWindowTests : BunitContext
         await cut.InvokeAsync(cut.Instance.OpenAsync);
 
         var window = cut.Find(".omni-appearance-window");
-        // OE 1.5.0: one block of rows in reading order, theme, palette, density, text size, control size
-        // (the font row only when the site binds FontChanged, which Aetheus does not).
+        // Decision of 2026-10-06: the whole window as OE draws it, every row bound: theme, palette with the
+        // mode beside it, font, density, text size, control size (the moving field only under Givre and
+        // Trou noir, below).
         var rows = window.QuerySelectorAll(".omni-appearance-settings--window .omni-appearance-settings__row");
-        Assert.Equal(5, rows.Length);
-        Assert.Contains("7/10", rows[3].TextContent, StringComparison.Ordinal);
-        Assert.Contains("3/10", rows[4].TextContent, StringComparison.Ordinal);
-        var densities = rows[2].QuerySelectorAll(".omni-select-bar__item");
+        Assert.Equal(6, rows.Length);
+        Assert.Contains(rows, row => row.TextContent.Contains("7/10", StringComparison.Ordinal));
+        Assert.Contains(rows, row => row.TextContent.Contains("3/10", StringComparison.Ordinal));
+        var densities = rows[3].QuerySelectorAll(".omni-select-bar__item");
         Assert.Equal(3, densities.Length);
+        // No moving field under this theme, so no switch to hold it still.
+        Assert.Empty(window.QuerySelectorAll(".omni-switch__track"));
         Assert.Contains("omni-select-bar__item--selected", densities[0].ClassList);
+    }
+
+    /// <summary>Decision of 2026-10-06: under a theme that moves its field the window offers to hold it
+    /// still, and the choice is stored and handed to the scope.</summary>
+    [Fact]
+    public async Task UnderTrouNoir_TheMovingFieldCanBeHeldStill_AndTheChoiceIsStored()
+    {
+        var trouNoir = OmniThemePresets.All.Single(preset => preset.Name == "Trou noir");
+        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.ThemePreset).SetResult(trouNoir.Name);
+        var cut = Render<SiteAppearanceWindow>();
+        await cut.InvokeAsync(cut.Instance.OpenAsync);
+
+        var window = cut.Find(".omni-appearance-window");
+        var rows = window.QuerySelectorAll(".omni-appearance-settings--window .omni-appearance-settings__row");
+        Assert.Equal(6, rows.Length);
+        // The switch sits on the theme row's title line, so it adds no row.
+        Assert.NotNull(rows[0].QuerySelector(".omni-switch__track"));
+
+        var state = Services.GetRequiredService<SiteAppearanceState>();
+        await cut.InvokeAsync(() => state.SetBackdropMotionAsync(false));
+        Assert.False(state.BackdropMotion);
+        Assert.Contains(JSInterop.Invocations["localStorage.setItem"],
+            call => (string?)call.Arguments[0] == StorageKeys.BackdropMotion && (string?)call.Arguments[1] == "off");
     }
 
     /// <summary>User decision 2026-09-29: no "Aetheus" theme of its own; the list is OE's, where the
@@ -75,8 +102,8 @@ public sealed class SiteAppearanceWindowTests : BunitContext
 
         Assert.Contains(JSInterop.Invocations, call => call.Identifier == "localStorage.setItem"
             && Equals(call.Arguments[0], StorageKeys.Density) && Equals(call.Arguments[1], "spacious"));
-        Assert.Contains(JSInterop.Invocations, call => call.Identifier == "Aetheus.setDensity"
-            && Equals(call.Arguments[0], "spacious"));
+        // STD-SHELL: the application's OmniThemeScope paints it from the shared state (AppThemeScopeTests).
+        Assert.Equal(OmniDensity.Spacious, Services.GetRequiredService<SiteAppearanceState>().Density);
     }
 
     [Fact]

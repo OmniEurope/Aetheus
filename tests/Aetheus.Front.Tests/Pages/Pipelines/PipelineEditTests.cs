@@ -116,6 +116,31 @@ public class PipelineEditTests : BunitContext
     }
 
     [Fact]
+    public void RunsTab_LatestGradeAndLastSuccessTiles_OpenTheirRun()
+    {
+        // Recette R2-128: "latest grade" opens the graded run on its Gate tab (its findings), "last
+        // success" opens the successful run; the two other tiles stay plain.
+        SetupEditPipelineMocks();
+        var start = new DateTime(2026, 10, 5, 8, 0, 0, DateTimeKind.Utc);
+        _handler.SetJsonResponse("api/pipelines/5/runs", new PaginatedResult<PipelineRunDto>
+        {
+            Items =
+            [
+                new PipelineRunDto { Id = 31, PipelineId = 5, Status = PipelineStatus.Failed, StartedAt = start.AddMinutes(30), CompletedAt = start.AddMinutes(32), GateGrade = AnalysisGrade.F },
+                new PipelineRunDto { Id = 21, PipelineId = 5, Status = PipelineStatus.Success, StartedAt = start.AddMinutes(20), CompletedAt = start.AddMinutes(22), GateGrade = AnalysisGrade.A }
+            ],
+            TotalCount = 2
+        });
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.FindAll("a.tile-link").Count == 2, TimeSpan.FromSeconds(2));
+
+        var links = cut.FindAll("a.tile-link").Select(link => link.GetAttribute("href")).ToList();
+        Assert.Equal(["/pipelines/runs/31?tab=gate", "/pipelines/runs/21"], links);
+        Assert.Equal(2, cut.FindAll(".pipeline-runs-summary-card.tile-clickable").Count);
+        Assert.Equal(4, cut.FindAll(".pipeline-runs-summary-card").Count);
+    }
+
+    [Fact]
     public void ProjectPipeline_Breadcrumb_Includes_Project_And_ProjectSection()
     {
         SetupEditPipelineMocks();
@@ -229,7 +254,7 @@ public class PipelineEditTests : BunitContext
             """;
         const string pipeline = """
             name: aetheus-deploy-prod
-            extends: host-bluegreen-deploy@6
+            extends: host-bluegreen-deploy@1
             parameters:
               - name: revision
                 default: candidate
@@ -252,19 +277,19 @@ public class PipelineEditTests : BunitContext
         {
             Id = 7,
             Name = "host-bluegreen-deploy",
-            Version = 6,
+            Version = 1,
             YamlContent = "name: host-bluegreen-deploy\nparameters:\n  - name: revision\n    required: true\nstages: []"
         });
-        _handler.SetJsonResponse("api/pipelines/templates/7/resolve?version=6", "name: host-bluegreen-deploy\nstages: []");
+        _handler.SetJsonResponse("api/pipelines/templates/7/resolve?version=1", "name: host-bluegreen-deploy\nstages: []");
         var coordinator = new PipelineTemplateEditorCoordinator(Services.GetRequiredService<ApiClient>());
 
         var baseYaml = await coordinator.LoadBaseYamlAsync(
-            "name: aetheus-deploy-prod\nextends: host-bluegreen-deploy@6\nparameters:\n  - name: revision\n    default: candidate\nstages: []",
-            [new PipelineTemplateSummaryDto { Id = 7, Name = "host-bluegreen-deploy", Version = 6 }]);
+            "name: aetheus-deploy-prod\nextends: host-bluegreen-deploy@1\nparameters:\n  - name: revision\n    default: candidate\nstages: []",
+            [new PipelineTemplateSummaryDto { Id = 7, Name = "host-bluegreen-deploy", Version = 1 }]);
 
         Assert.NotNull(baseYaml);
         Assert.Contains(_handler.Requests, request =>
-            request.Url.Contains("api/pipelines/templates/7/resolve?version=6", StringComparison.Ordinal));
+            request.Url.Contains("api/pipelines/templates/7/resolve?version=1", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -636,6 +661,56 @@ public class PipelineEditTests : BunitContext
         var saving = (bool)typeof(PipelineEdit).GetField("_saving", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
         Assert.False(saving);
         Assert.Contains(_handler.Requests, request => request.Method == "PUT" && request.Url.Contains("api/pipelines/5"));
+    }
+
+    [Fact]
+    public void Front009_ALoadedPipeline_IsCleanUntilOnlyItsSourceBranchIsEdited()
+    {
+        SetupEditPipelineMocks();
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        const BindingFlags priv = BindingFlags.NonPublic | BindingFlags.Instance;
+        var model = (PipelineModel)typeof(PipelineEdit).GetField("_model", priv)!.GetValue(cut.Instance)!;
+        bool Dirty() => PipelineDefinitionLiveSync.HasUnsavedChanges(
+            model,
+            (PipelineDto?)typeof(PipelineEdit).GetField("_pipeline", priv)!.GetValue(cut.Instance),
+            (string?)typeof(PipelineEdit).GetField("_savedSourceBranch", priv)!.GetValue(cut.Instance));
+
+        Assert.False(Dirty());
+        model.SourceBranch = "release/2026.10";
+        Assert.True(Dirty());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("a-name-longer-than-one-hundred-characters-a-name-longer-than-one-hundred-characters-a-name-longer-than")]
+    public async Task Front008_MonacoCtrlS_WithAnInvalidName_SendsNoMutation(string invalidName)
+    {
+        // FRONT-008: Monaco's OnSave called OnSubmit outside the form's validity-gated submit.
+        SetupEditPipelineMocks();
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("/pipelines/5?tab=edit");
+        _handler.SetJsonResponse("api/variable-libraries/names", new List<string>());
+        _handler.SetJsonResponse("api/vaults/names", new List<string>());
+        _handler.SetJsonResponse("api/servers/names", new List<string>());
+        _handler.SetJsonResponse("api/variable-libraries", new PaginatedResult<VariableLibraryDto> { Items = [], TotalCount = 0 });
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
+        model.GetType().GetProperty("Name")!.SetValue(model, invalidName);
+        var requestsBefore = _handler.Requests.Count;
+
+        var save = cut.InvokeAsync(() => cut.FindComponent<MonacoEditor>().Instance.OnSave.InvokeAsync());
+        var stoppedBeforeTheReviewDialog = save.IsCompleted;
+        if (!stoppedBeforeTheReviewDialog)
+        {
+            // Without the guard the save review dialog opens; confirm it so the test ends on the PUT it sends.
+            var dialog = Services.GetRequiredService<OmniDialogService>();
+            await cut.InvokeAsync(() => dialog.Close(new PipelineSaveDecision("main")));
+        }
+        await save;
+
+        Assert.True(stoppedBeforeTheReviewDialog);
+        Assert.DoesNotContain(_handler.Requests.Skip(requestsBefore), request => request.Method is "PUT" or "POST" && request.Url.Contains("api/pipelines", StringComparison.Ordinal));
     }
 
     [Fact]

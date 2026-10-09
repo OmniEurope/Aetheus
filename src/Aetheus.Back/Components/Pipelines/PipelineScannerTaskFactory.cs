@@ -71,6 +71,7 @@ public sealed class PipelineScannerTaskFactory(
         {
             TargetUrl = SubstituteVariables(stepDef.TargetUrl ?? string.Empty, legVars),
             ApiSpecificationUrl = SubstituteVariables(stepDef.ApiSpecificationUrl ?? string.Empty, legVars),
+            ApiSpecificationUrls = [.. stepDef.ApiSpecificationUrls.Select(url => SubstituteVariables(url, legVars).Trim())],
             ApiSpecificationFormat = SubstituteVariables(stepDef.ApiSpecificationFormat ?? string.Empty, legVars)
         };
         if (scanner.Key.StartsWith("zap-", StringComparison.OrdinalIgnoreCase))
@@ -111,17 +112,28 @@ public sealed class PipelineScannerTaskFactory(
         Server server,
         IReadOnlyDictionary<string, string> variables)
     {
-        if (!RequiresCandidateScannerManifest(variables.GetValueOrDefault("UPSTREAM_PIPELINE")))
+        if (!RequiresCandidateScannerManifest(
+                variables.GetValueOrDefault("UPSTREAM_PIPELINE"),
+                variables.GetValueOrDefault(UpstreamTemplateVariable)))
             return true;
         return ServerDataMapper.DeserializeDiagnostics(server.ScannerCapabilitiesJson).Contains(
             $"scanner-manifest:sha256:{ScannerManifestCatalog.Sha256}",
             StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// The shipped template the parent of a triggered run extends, written by the engine beside
+    /// <c>UPSTREAM_PIPELINE</c> (never by a definition: the engine overwrites it).
+    /// </summary>
+    internal const string UpstreamTemplateVariable = "UPSTREAM_PIPELINE_TEMPLATE";
+
     /// <summary>Scanner steps of a pipeline triggered by the candidate need the exact manifest this
-    /// backend embeds. Shared with the launch preflight so both answer the same question.</summary>
-    internal static bool RequiresCandidateScannerManifest(string? upstreamPipeline) =>
-        string.Equals(upstreamPipeline, "aetheus-candidate", StringComparison.OrdinalIgnoreCase);
+    /// backend embeds. Shared with the launch preflight so both answer the same question.
+    /// Recette R2-121: a candidate is aetheus-candidate, or any project's pipeline extending the
+    /// shipped application-candidate template (portfolio-candidate).</summary>
+    internal static bool RequiresCandidateScannerManifest(string? upstreamPipeline, string? upstreamTemplate) =>
+        string.Equals(upstreamPipeline, "aetheus-candidate", StringComparison.OrdinalIgnoreCase)
+        || DeliveryTemplateNames.Is(upstreamTemplate, DeliveryTemplateNames.Candidate);
 
     private async Task FailScannerStepAsync(
         int runId, PipelineStepRun stepRun, string reason, CancellationToken ct)
@@ -155,6 +167,9 @@ public sealed class PipelineScannerTaskFactory(
             ["AETHEUS_SCANNER_ENVIRONMENT_NAME"] = stageDef.Environment ?? string.Empty,
             ["AETHEUS_SCANNER_ACTIVE"] = stepDef.Active ? "true" : "false",
             ["AETHEUS_SCANNER_API_SPECIFICATION_URL"] = resolvedStep.ApiSpecificationUrl ?? string.Empty,
+            // R2-099: the list a single step scans in sequence. The single URL above stays empty with a
+            // list, so an agent that predates the list refuses the scan instead of scanning one part.
+            ["AETHEUS_SCANNER_API_SPECIFICATION_URLS"] = string.Join('\n', resolvedStep.ApiSpecificationUrls),
             ["AETHEUS_SCANNER_API_SPECIFICATION_FORMAT"] = resolvedStep.ApiSpecificationFormat ?? string.Empty
         };
 
@@ -264,8 +279,11 @@ public sealed class PipelineScannerTaskFactory(
         if (!active && step.Active)
             return "the active flag requires the zap-active scanner.";
         if (!string.Equals(scanner.Key, "zap-api", StringComparison.OrdinalIgnoreCase)) return null;
-        if (!Uri.TryCreate(step.ApiSpecificationUrl, UriKind.Absolute, out var specification)
-            || !IsDastApiSpecificationEligible(target, specification)
+        List<string> specifications = step.ApiSpecificationUrls.Count > 0
+            ? step.ApiSpecificationUrls
+            : [step.ApiSpecificationUrl ?? string.Empty];
+        if (specifications.Any(url => !Uri.TryCreate(url, UriKind.Absolute, out var specification)
+                || !IsDastApiSpecificationEligible(target, specification))
             || step.ApiSpecificationFormat?.ToLowerInvariant() is not ("openapi" or "graphql"))
             return "the API specification must use HTTPS, except on loopback QA, use the target host and declare openapi or graphql.";
         return null;

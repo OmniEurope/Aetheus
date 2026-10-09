@@ -95,6 +95,22 @@ internal sealed class PipelineTemplateRepository(AppDbContext db)
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Recette R2-121: the shipped delivery templates are seeded once, in the platform organization,
+    /// and shared with every organization rather than copied into each (a copy per organization would
+    /// drift and multiply the R2-094 version history). Only the shipped names are shared: a template
+    /// someone wrote in the platform organization stays private to it.
+    /// </summary>
+    public async Task<PipelineTemplate?> FindSharedTemplateByNameAsync(string name, CancellationToken ct = default)
+    {
+        var normalizedName = name.Trim().ToLowerInvariant();
+        if (!DeliveryPipelineTemplateSeeder.Definitions.ContainsKey(normalizedName)) return null;
+        return await db.PipelineTemplates.AsNoTracking()
+            .Where(template => template.Organization.Slug == DeliveryPipelineTemplateSeeder.PlatformOrganizationSlug)
+            .FirstOrDefaultAsync(template => template.Name.ToLower() == normalizedName, ct)
+            .ConfigureAwait(false);
+    }
+
     public async Task<PipelineTemplateVersion?> GetTemplateVersionAsync(
         int templateId, int version, CancellationToken ct = default) =>
         await db.PipelineTemplateVersions.AsNoTracking()

@@ -35,6 +35,8 @@ public partial class UserEdit : IAsyncDisposable
     private const int PasswordMinLength = PasswordPolicy.MinimumLength;
     private bool PasswordMeetsRules => _passwordChange.NewPassword.Length >= PasswordMinLength;
     private int? _previousId = int.MinValue;
+    // FRONT-024: bumped on every change of account so an answer requested for a previous one is dropped.
+    private int _loadGeneration;
 
     private List<EffectivePermissionDto>? _effectivePermissions;
 
@@ -81,13 +83,17 @@ public partial class UserEdit : IAsyncDisposable
 
         if (Id == _previousId) return;
         _previousId = Id;
+        var generation = ResetForAccountChange();
 
         try
         {
             if (!_isNew)
             {
                 _loading = true;
-                _user = await Api.Auth.GetUserDetailAsync(Id!.Value);
+                var user = await Api.Auth.GetUserDetailAsync(Id!.Value);
+                // FRONT-024: the route moved to another account while this one was loading.
+                if (generation != _loadGeneration) return;
+                _user = user;
                 if (_user is not null)
                 {
                     _model = new UserModel
@@ -102,7 +108,13 @@ public partial class UserEdit : IAsyncDisposable
                 _loading = false;
             }
         }
-        catch (HttpRequestException) { _loading = false; } // 401 on expired JWT - redirect handled by AuthProvider
+        catch (HttpRequestException)
+        {
+            // 401 on expired JWT - redirect handled by AuthProvider. Nothing of the previous account
+            // is left on screen: ResetForAccountChange cleared it, so no mutation can target it.
+            if (generation != _loadGeneration) return;
+            _loading = false;
+        }
 
         if (!_isNew)
         {
@@ -134,6 +146,30 @@ public partial class UserEdit : IAsyncDisposable
             await LoadUserOrgsAsync();
     }
 
+    /// <summary>
+    /// FRONT-024: forgets everything shown for the previous account before the next one loads, so a
+    /// failed or slow load never leaves account A's name above actions that target account B.
+    /// </summary>
+    private int ResetForAccountChange()
+    {
+        _user = null;
+        _model = new UserModel();
+        _passwordChange = new PasswordChangeModel();
+        _effectivePermissions = null;
+        _userOrgs = [];
+        _availableOrgs = [];
+        _orgsLoaded = false;
+        _selectedOrgId = null;
+        _rolesSaved = false;
+        return ++_loadGeneration;
+    }
+
+    /// <summary>
+    /// The account a destructive action may target: the one displayed, and only while the route still
+    /// names it. Captured before a confirmation so the action cannot drift to another account.
+    /// </summary>
+    private UserDto? DisplayedTarget() => _user is { } user && user.Id == Id ? user : null;
+
     private string? CurrentTab()
     {
         var query = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
@@ -150,11 +186,14 @@ public partial class UserEdit : IAsyncDisposable
     private async Task LoadUserOrgsAsync()
     {
         if (_isNew || Id is null or 0) return;
+        var generation = _loadGeneration;
         _loadingOrgs = true;
         await InvokeAsync(StateHasChanged);
         try
         {
-            _userOrgs = await Api.Servers.GetUserOrganizationsAsync(Id.Value);
+            var userOrgs = await Api.Servers.GetUserOrganizationsAsync(Id.Value);
+            if (generation != _loadGeneration) return;
+            _userOrgs = userOrgs;
             var memberOf = _userOrgs.Select(o => o.OrganizationId).ToHashSet();
             var available = new List<OrganizationDto>();
             const int pageSize = 200;
@@ -165,6 +204,7 @@ public partial class UserEdit : IAsyncDisposable
                 available.AddRange(result.Items.Where(o => !memberOf.Contains(o.Id)));
                 if (page * pageSize >= result.TotalCount || result.Items.Count == 0) break;
             }
+            if (generation != _loadGeneration) return;
             _availableOrgs = available;
             _orgsLoaded = true;
         }
@@ -381,11 +421,13 @@ public partial class UserEdit : IAsyncDisposable
 
     private async Task OnDelete()
     {
+        if (DisplayedTarget() is not { } target) return;
         var confirmed = await Dialog.Confirm(L["DeleteUserConfirm"].Value, L["DeleteUser"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
-        if (confirmed == true)
+        // FRONT-024: the confirmed account, still the one on screen, and nobody else.
+        if (confirmed == true && DisplayedTarget()?.Id == target.Id)
         {
-            var status = await Api.Auth.DeleteUserAsync(Id!.Value);
+            var status = await Api.Auth.DeleteUserAsync(target.Id);
             if (status.Success)
             {
                 Toast.Success("Deleted", "Deleted");
@@ -406,10 +448,11 @@ public partial class UserEdit : IAsyncDisposable
             return;
         }
 
+        if (DisplayedTarget() is not { } target) return;
         _changingPassword = true;
         try
         {
-            var status = await Api.Auth.ChangeUserPasswordAsync(Id!.Value, new ChangeUserPasswordRequest { NewPassword = model.NewPassword });
+            var status = await Api.Auth.ChangeUserPasswordAsync(target.Id, new ChangeUserPasswordRequest { NewPassword = model.NewPassword });
             if (status.Success)
             {
                 Toast.Success("Saved", "PasswordChanged");
@@ -497,7 +540,9 @@ public partial class UserEdit : IAsyncDisposable
     {
         if (_isNew || Id is null or 0) return;
 
+        var generation = _loadGeneration;
         var summary = await Api.Auth.GetUserEffectivePermissionsAsync(Id!.Value);
+        if (generation != _loadGeneration) return;
         _effectivePermissions = summary?.EffectivePermissions ?? [];
     }
 

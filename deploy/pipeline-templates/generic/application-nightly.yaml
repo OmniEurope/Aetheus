@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: EUPL-1.2
+# Scheduled complete assurance, structured like the platform's own nightly: build cold, then quality,
+# security, the Git-history secret scan, QA and the extended QA, one after the other. Each stage after
+# the build runs only for a pipeline the project has (the setup wizard writes the *_ENABLED values); a
+# stage skipped that way counts as done for the next one.
 name: application-nightly-template
 trigger: schedule
 schedule: "0 0 2 * * *"
@@ -6,6 +10,14 @@ variables:
   APPLICATION_CI_PIPELINE: application-ci
   APPLICATION_QUALITY_PIPELINE: application-quality
   APPLICATION_SECURITY_PIPELINE: application-security
+  APPLICATION_SECURITY_HISTORY_PIPELINE: application-security-history
+  APPLICATION_QA_PIPELINE: application-qa
+  APPLICATION_QA_EXTENDED_PIPELINE: application-qa-extended
+  APPLICATION_QUALITY_ENABLED: "true"
+  APPLICATION_SECURITY_ENABLED: "true"
+  APPLICATION_SECURITY_HISTORY_ENABLED: "false"
+  APPLICATION_QA_ENABLED: "true"
+  APPLICATION_QA_EXTENDED_ENABLED: "false"
 
 stages:
   - name: NightlyCI
@@ -25,6 +37,7 @@ stages:
     execution_role: build
     os: linux
     depends_on: [NightlyCI]
+    condition: "eq(variables['APPLICATION_QUALITY_ENABLED'], 'true')"
     steps:
       - name: Run complete quality analysis
         type: trigger
@@ -38,10 +51,45 @@ stages:
     execution_role: build
     os: linux
     depends_on: [NightlyQuality]
+    condition: "eq(variables['APPLICATION_SECURITY_ENABLED'], 'true')"
     steps:
-      - name: Run complete full-history security analysis
+      - name: Run complete current-tree security analysis
         type: trigger
         pipeline: "$(APPLICATION_SECURITY_PIPELINE)"
-        variables:
-          SECRET_HISTORY_MODE: full
         timeout_seconds: 9000
+
+  - name: NightlySecurityHistory
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [NightlySecurity]
+    condition: "eq(variables['APPLICATION_SECURITY_HISTORY_ENABLED'], 'true')"
+    steps:
+      - name: Scan the whole Git history for secrets
+        type: trigger
+        pipeline: "$(APPLICATION_SECURITY_HISTORY_PIPELINE)"
+        timeout_seconds: 9000
+
+  - name: NightlyQA
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [NightlySecurityHistory]
+    condition: "eq(variables['APPLICATION_QA_ENABLED'], 'true')"
+    steps:
+      - name: Validate the nightly payload
+        type: trigger
+        pipeline: "$(APPLICATION_QA_PIPELINE)"
+        timeout_seconds: 18000
+
+  - name: NightlyQAExtended
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [NightlyQA]
+    condition: "eq(variables['APPLICATION_QA_EXTENDED_ENABLED'], 'true')"
+    steps:
+      - name: Run the extended QA
+        type: trigger
+        pipeline: "$(APPLICATION_QA_EXTENDED_PIPELINE)"
+        timeout_seconds: 18000

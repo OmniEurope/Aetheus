@@ -20,7 +20,7 @@ else
 {
     <AetheusDataGrid @ref="_versionsGrid" Data="@_versions" Count="@_versionCount"
         TItem="PipelineTemplateVersionSummaryDto" IsLoading="@_versionsLoading"
-        LoadData="@LoadVersionsAsync" PageSize="10"
+        LoadData="@LoadVersionsAsync" ExportRead="@ReadVersionsExportAsync" PageSize="10"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<PipelineTemplateVersionSummaryDto>(_versions, _versionCount))">
         <EmptyTemplate>

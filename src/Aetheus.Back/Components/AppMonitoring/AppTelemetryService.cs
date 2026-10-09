@@ -135,8 +135,19 @@ public sealed class AppTelemetryService(
     public async Task<AppPerformanceReportDto> GetPerformanceAsync(int appId, CancellationToken ct = default)
     {
         var samples = await metricRepo.GetLatestExportAsync(
-            appId, AppRoutePerformance.MetricNames, AppRoutePerformance.ExportSpan, ct).ConfigureAwait(false);
+            appId, AppRoutePerformance.MetricNames, AppRoutePerformance.LatestPointLookback, ct).ConfigureAwait(false);
         return AppRoutePerformance.Build(samples);
+    }
+
+    public async Task<AppDatabaseSizeReportDto> GetDatabaseSizeAsync(int appId, CancellationToken ct = default)
+    {
+        var latest = await metricRepo.GetLatestExportAsync(
+            appId, AppDatabaseSize.MetricNames, AppDatabaseSize.MeasurementSpread, ct).ConfigureAwait(false);
+        if (latest.Count == 0) return AppDatabaseSize.Build(latest, []);
+        var dayBefore = latest.Max(sample => sample.Timestamp) - AppDatabaseSize.TrendDistance;
+        var earlier = await metricRepo.GetLatestBetweenAsync(
+            appId, AppDatabaseSize.MetricNames, dayBefore - AppDatabaseSize.TrendWindow, dayBefore, ct).ConfigureAwait(false);
+        return AppDatabaseSize.Build(latest, earlier);
     }
 
     public async Task<AppVisitorSeriesDto> GetVisitorSeriesAsync(

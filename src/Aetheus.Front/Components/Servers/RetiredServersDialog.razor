@@ -12,7 +12,7 @@
     </OmniAlert>
 }
 <AetheusDataGrid @ref="_grid" Data="@_servers" Count="@_totalCount" TItem="RetiredServerDto"
-                IsLoading="@_loading" LoadData="@LoadDataAsync" PageSize="25" EmptyText="@L["NoRetiredServers"]"
+                IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="25" EmptyText="@L["NoRetiredServers"]"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<RetiredServerDto>(_servers, _totalCount))">
     <Columns>

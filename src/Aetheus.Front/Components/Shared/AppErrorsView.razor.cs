@@ -26,10 +26,6 @@ public partial class AppErrorsView : IAsyncDisposable
     /// <summary>The sort the API applies when the reader sorts no column: most recently seen first.</summary>
     private const string DefaultSort = nameof(AppErrorEventDto.LastSeenAt);
 
-    /// <summary>Recette R2-011: the formats of the grid's export bar.</summary>
-    internal static readonly IReadOnlyList<OmniTableExportFormat> ExportFormats =
-        [OmniTableExportFormat.Markdown, OmniTableExportFormat.Csv];
-
     // The Message column writes the message and, when there is one, the top frame shown under it.
     private static readonly Func<AppErrorEventDto, object?> MessageExport = AppTelemetryMarkdownExport.ErrorMessageExport;
 

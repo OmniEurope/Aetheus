@@ -130,18 +130,30 @@ internal sealed class AnalysisReportRepository(AppDbContext db)
     /// tracker never holds more than this many of them.</summary>
     private const int MetricBatchSize = 2_000;
 
+    /// <summary>
+    /// Writes the report without its metrics, which stay on the report in memory for the policy engine and
+    /// the grade. <see cref="AddMetricsAsync"/> then writes the ones an analysis keeps (PLAN-013 lot 3).
+    /// </summary>
     public async Task AddReportAsync(AnalysisReport report, CancellationToken ct)
     {
-        // An architecture report carries ~39,000 metrics (candidate #2328). Inserted as one tracked
-        // graph they cost 6 to 7 s of EF fix-up on PostgreSQL, almost the whole ingestion (PLAN-007
-        // lot 6). The report goes first, then its metrics in detached batches: same rows, same
-        // transaction (the caller's), a bounded change tracker.
         var metrics = report.Metrics.ToList();
         report.Metrics.Clear();
         db.AnalysisReports.Add(report);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         if (metrics.Count == 0) return;
+        // The report is detached first, so handing its metrics back cannot make a later SaveChanges
+        // insert them.
+        db.Entry(report).State = EntityState.Detached;
+        foreach (var metric in metrics)
+            report.Metrics.Add(metric);
+    }
 
+    public async Task AddMetricsAsync(int reportId, IReadOnlyCollection<AnalysisMetric> metrics, CancellationToken ct)
+    {
+        // An architecture report carries ~39,000 metrics (candidate #2328). Inserted as one tracked
+        // graph they cost 6 to 7 s of EF fix-up on PostgreSQL, almost the whole ingestion (PLAN-007
+        // lot 6). They go in detached batches: same transaction (the caller's), a bounded change tracker.
+        if (metrics.Count == 0) return;
         var autoDetectChanges = db.ChangeTracker.AutoDetectChangesEnabled;
         db.ChangeTracker.AutoDetectChangesEnabled = false;
         try
@@ -149,7 +161,7 @@ internal sealed class AnalysisReportRepository(AppDbContext db)
             foreach (var batch in metrics.Chunk(MetricBatchSize))
             {
                 foreach (var metric in batch)
-                    metric.AnalysisReportId = report.Id;
+                    metric.AnalysisReportId = reportId;
                 db.AnalysisMetrics.AddRange(batch);
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
                 foreach (var metric in batch)
@@ -160,10 +172,5 @@ internal sealed class AnalysisReportRepository(AppDbContext db)
         {
             db.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
         }
-        // The policy engine and the response read the metrics from the report. The report is detached
-        // first, so handing them back cannot make a later SaveChanges insert them a second time.
-        db.Entry(report).State = EntityState.Detached;
-        foreach (var metric in metrics)
-            report.Metrics.Add(metric);
     }
 }

@@ -76,6 +76,78 @@ public sealed class UserNotificationsSurfaceTests : BunitContext
         Assert.Equal(3, Services.GetRequiredService<UserNotificationsFeed>().UnreadCount);
     }
 
+    /// <summary>
+    /// Recette R2-106: the header bell lost its number while the task count beside it still showed. The
+    /// count was kept only when the newest deliveries could be read too; a list answering with an error
+    /// (or a body that does not parse) left the bell at zero although the count had been read.
+    /// </summary>
+    [Theory]
+    [InlineData("error")]
+    [InlineData("unparsable")]
+    public void Bell_ShowsTheUnreadCount_WhenTheNewestDeliveriesCannotBeRead(string failure)
+    {
+        if (failure == "error")
+            _handler.SetResponse(HttpMethod.Get, "api/notifications/me?", System.Net.HttpStatusCode.InternalServerError);
+        else
+            _handler.SetRawResponse(HttpMethod.Get, "api/notifications/me?", "<!doctype html>", "application/json");
+
+        var bell = Render<NotificationBell>();
+
+        bell.WaitForAssertion(() => Assert.Equal("3", bell.Find(".notification-bell-count").TextContent.Trim()));
+        Assert.Equal(3, Services.GetRequiredService<UserNotificationsFeed>().UnreadCount);
+    }
+
+    [Fact]
+    public async Task Front005_AnAnswerRequestedForThePreviousAccount_IsDroppedAfterSignOutAndSignIn()
+    {
+        var countOfA = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var latestOfA = new TaskCompletionSource<PaginatedResult<NotificationDeliveryDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/notifications/me/unread-count", _ => countOfA.Task);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/notifications/me?", _ => latestOfA.Task);
+        var feed = Services.GetRequiredService<UserNotificationsFeed>();
+        var auth = Services.GetRequiredService<AuthStateProvider>();
+        var inFlight = feed.RefreshAsync();
+
+        await auth.LogoutAsync();
+        await auth.LoginAsync(TokenFor("second-account"));
+        countOfA.SetResult(9);
+        latestOfA.SetResult(new PaginatedResult<NotificationDeliveryDto> { Items = [Delivery(1, "subject of the first account")], TotalCount = 1 });
+        await inFlight;
+
+        Assert.Equal(0, feed.UnreadCount);
+        Assert.Empty(feed.Latest);
+
+        // The count keeps working for the account now signed in.
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/notifications/me/unread-count", _ => Task.FromResult(2));
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/notifications/me?", [Delivery(2, "subject of the second account")]);
+        await feed.RefreshAsync();
+        Assert.Equal(2, feed.UnreadCount);
+        Assert.Equal("subject of the second account", Assert.Single(feed.Latest).Subject);
+    }
+
+    private static string TokenFor(string username)
+    {
+        static string Encode(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var header = Encode(System.Text.Encoding.UTF8.GetBytes("{\"alg\":\"HS256\"}"));
+        var payload = Encode(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+            new { sub = username, unique_name = username, exp = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds() }));
+        return $"{header}.{payload}.signature";
+    }
+
+    [Fact]
+    public async Task Feed_KeepsTheLatestDeliveries_WhenOnlyTheCountCannotBeRead()
+    {
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/notifications/me?", [Delivery(5, "kept")]);
+        _handler.SetAsyncJsonResponse<int>(HttpMethod.Get, "api/notifications/me/unread-count",
+            _ => Task.FromException<int>(new HttpRequestException("unread count unavailable")));
+        var feed = Services.GetRequiredService<UserNotificationsFeed>();
+
+        await feed.RefreshAsync();
+
+        Assert.Equal("kept", Assert.Single(feed.Latest).Subject);
+        Assert.Equal(0, feed.UnreadCount);
+    }
+
     [Fact]
     public void MenuEntry_ShowsTheSameCountAsTheBell()
     {

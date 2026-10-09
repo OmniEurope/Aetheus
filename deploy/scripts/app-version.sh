@@ -5,13 +5,16 @@
 # The major and the minor are the code's, so they live where the code is: the <VersionPrefix> of
 # Directory.Build.props, the single place a version bump is made, reviewed and dated in the history.
 # They used to be written three times - that file (1.1.0), a VERSION_PREFIX library entry (1.1) and a
-# literal "1.1." in the CI packaging script - and nothing kept the three in step. The run number is the
-# global run id of the build (BUILD_BUILDID), one counter for every pipeline that builds the application
-# (recette R2-076, 2026-10-03); the suffix is the environment's (VERSION_SUFFIX: empty in production,
-# "-nightly" for the demo), which is why it alone stays in a library.
+# literal "1.1." in the CI packaging script - and nothing kept the three in step. The last number is the
+# project's release number (BUILD_RELEASENUMBER, recette R2-110, 2026-10-04): Aetheus advances it by one at
+# each candidate or release-fast run, the site and the agents of that release carry the same one, and the
+# runs that make no release (nightly, demo) build with the latest number and their suffix. It replaced the
+# global run id (R2-076), which advanced with every run of every pipeline. The suffix is the
+# environment's (VERSION_SUFFIX: empty in production, "-nightly" for the demo), which is why it alone
+# stays in a library.
 #
 # Inputs:
-#   $1 or BUILD_PIPELINE_RUNNUMBER  the run number (digits only); every build passes BUILD_BUILDID
+#   $1 or BUILD_RELEASENUMBER       the release number (digits only)
 #   VERSION_SUFFIX                  optional, letters, digits, '.', '_' or '-'
 #   WORKSPACE                       the checkout (defaults to the current directory)
 set -eu
@@ -21,7 +24,7 @@ fail() {
   exit 1
 }
 
-RUN_NUMBER="${1:-${BUILD_PIPELINE_RUNNUMBER:-}}"
+RUN_NUMBER="${1:-${BUILD_RELEASENUMBER:-}}"
 SUFFIX="${VERSION_SUFFIX:-}"
 PROPS="${WORKSPACE:-$(pwd)}/Directory.Build.props"
 

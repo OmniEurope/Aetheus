@@ -95,6 +95,10 @@
     from the backend API at boot and self-installs the agent, so it appears in
     the dashboard Servers list. Requires the backend to be running (e.g. -s).
     The blank box ships no agent, so enrollment there is a separate step.
+.PARAMETER VpsClean
+    Only meaningful with -vps: also remove the volumes of the other VPS-sim flavors
+    (their provisioned state is lost). Without it, -vps keeps them and only reports
+    how many there are.
 .PARAMETER Net10
     Only meaningful with -vps: pre-bake the .NET SDK 10.0 into the VPS-sim image
     so the box can `dotnet build/test/run` out of the box. Works with either
@@ -131,6 +135,7 @@
     .\launch-windows.ps1 -vps -full  Build + start the fully-provisioned VPS-sim + exit
     .\launch-windows.ps1 -vps -net10 Build + start the BLANK VPS-sim with .NET SDK 10.0 pre-installed
     .\launch-windows.ps1 -vps -r     Reset the current VPS-sim flavor (drops its volumes)
+    .\launch-windows.ps1 -vps -vpsclean  Also remove the other flavors' VPS-sim volumes
     .\launch-windows.ps1 -vps -full -aa  Full VPS-sim + self-install the agent at boot
     .\launch-windows.ps1 -h          Show available options
     .\launch-windows.ps1 -hl         Show detailed help with examples
@@ -157,6 +162,7 @@ param(
     [switch]$Full,
     [Alias("aa")] [switch]$AgentAutoInstall,
     [switch]$Net10,
+    [switch]$VpsClean,
     [Alias("h")]  [switch]$Help,
     [Alias("hl")] [switch]$HelpLong
 )

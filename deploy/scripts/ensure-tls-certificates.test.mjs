@@ -56,20 +56,36 @@ esac
   chmodSync(join(bin, "sudo"), 0o755);
   chmodSync(join(bin, "openssl"), 0o755);
 
-  const run = (...groups) => spawnSync("sh", [script, ...groups], {
+  // The stand-ins are put first on PATH from inside the shell. Prepending them to the PATH handed to
+  // sh is not enough on Windows: Git's bin/sh.exe launcher puts its own /mingw64/bin in front, where
+  // the real openssl lives, so the script read the synthetic certificates with the real tool and
+  // seven of these tests failed (DEP-026). `cd && pwd` turns the directory into the shell's own form.
+  const inShell = (...argv) => spawnSync("sh", [
+    "-c", 'PATH="$(cd "$1" && pwd):$PATH"; export PATH; shift; exec "$@"', "sh", bin.replace(/\\/g, "/"), ...argv
+  ], {
     encoding: "utf8",
     env: {
       ...process.env,
-      PATH: `${bin}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}`,
       TLS_LIVE_DIR: live.replace(/\\/g, "/"),
       AGENT_HELPERS_DIR: "/opt/helpers",
       FAKE_ISSUE: issue,
       FAKE_RENEW: renew
     }
   });
+  const run = (...groups) => inShell("sh", script, ...groups);
+  const resolved = name => inShell("sh", "-c", 'command -v "$1"', "sh", name).stdout.trim();
   const calls = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").filter(Boolean) : []);
-  return { root, run, calls, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, run, calls, resolved, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
+
+test("the script resolves openssl and sudo to the stand-ins, not to the host's tools", () => {
+  const env = setUp();
+  try {
+    const standIns = `/${env.root.split(/[\\/]/).pop()}/bin/`;
+    assert.ok(env.resolved("openssl").endsWith(`${standIns}openssl`), env.resolved("openssl"));
+    assert.ok(env.resolved("sudo").endsWith(`${standIns}sudo`), env.resolved("sudo"));
+  } finally { env.cleanup(); }
+});
 
 test("a missing certificate is issued, then checked", () => {
   const env = setUp();

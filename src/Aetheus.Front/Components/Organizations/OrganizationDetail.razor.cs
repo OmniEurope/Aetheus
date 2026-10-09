@@ -28,9 +28,14 @@ public partial class OrganizationDetail : IAsyncDisposable
     // broadcast anywhere would reload this page and blow away an unsaved edit. A direct hub
     // subscription lets the filter check the id before deciding to reload.
     private HubConnection? _hub;
-    private List<UserDto> _users = [];
+    // FRONT-007: the member picker searches the users on the server instead of offering the first 100;
+    // the names of the users it last offered let the field show the chosen one.
+    private const int UserSearchPageSize = 25;
+    private readonly Dictionary<int, string> _userNames = [];
     private List<ProjectDto> _allProjects = [];
     private IReadOnlyList<int> _selectedProjectIds = [];
+    // FRONT-006: the assignment the server last confirmed, what a failed save rolls back to.
+    private IReadOnlyList<int> _confirmedProjectIds = [];
     private bool _savingProjects;
     private int? _newUserId;
     private OrganizationRole _newUserRole = OrganizationRole.Member;
@@ -152,19 +157,16 @@ public partial class OrganizationDetail : IAsyncDisposable
             if (!showLoading && _membersGrid is not null) await _membersGrid.RefreshAsync();
             _org = organization;
             _selectedProjectIds = organization?.Projects.Select(p => p.Id).ToList() ?? [];
+            _confirmedProjectIds = _selectedProjectIds;
             if (organization is null)
             {
-                _users = [];
                 _allProjects = [];
                 return;
             }
 
-            var usersTask = LoadUsersOrEmptyAsync();
-            var projectsTask = LoadProjectsOrEmptyAsync();
-            await Task.WhenAll(usersTask, projectsTask);
+            var projects = await LoadProjectsOrEmptyAsync();
             if (Id != id) return;
-            _users = await usersTask;
-            _allProjects = await projectsTask;
+            _allProjects = projects;
 
             _general.Name = organization.Name;
             _general.Slug = organization.Slug;
@@ -180,11 +182,16 @@ public partial class OrganizationDetail : IAsyncDisposable
         }
     }
 
-    private async Task<List<UserDto>> LoadUsersOrEmptyAsync()
+    private async Task<IReadOnlyList<OmniOption<int?>>> SearchUsersAsync(string search, CancellationToken cancellationToken)
     {
-        try { return (await Api.Auth.GetUsersAsync(1, 100))?.Items ?? []; }
-        catch (HttpRequestException) { return []; }
+        var result = await Api.Auth.GetUsersAsync(1, UserSearchPageSize, string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+            nameof(UserDto.Username), cancellationToken: cancellationToken);
+        foreach (var user in result.Items) _userNames[user.Id] = user.Username;
+        return result.Items.Select(user => new OmniOption<int?>(user.Id, user.Username)).ToArray();
     }
+
+    private string FormatUser(int? userId) =>
+        userId is int id && _userNames.TryGetValue(id, out var username) ? username : string.Empty;
 
     private async Task<List<ProjectDto>> LoadProjectsOrEmptyAsync()
     {
@@ -297,7 +304,9 @@ public partial class OrganizationDetail : IAsyncDisposable
 
     private async Task OnProjectsChangedAsync(IEnumerable<int> projectIds)
     {
-        var previous = _selectedProjectIds.ToList();
+        // @bind-Value has already written the new selection into _selectedProjectIds: the rollback
+        // target is the confirmed assignment, never the field.
+        var previous = _confirmedProjectIds;
         _selectedProjectIds = projectIds.ToList();
         _savingProjects = true;
         await InvokeAsync(StateHasChanged);
@@ -307,6 +316,7 @@ public partial class OrganizationDetail : IAsyncDisposable
                 new AssignProjectsRequest { ProjectIds = _selectedProjectIds.ToList() });
             if (ok)
             {
+                _confirmedProjectIds = _selectedProjectIds;
                 Notify.Success(L["Saved"]);
                 await RefreshAsync();
             }

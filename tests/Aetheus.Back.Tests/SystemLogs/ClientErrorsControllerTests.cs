@@ -68,4 +68,60 @@ public sealed class ClientErrorsControllerTests
 
         Assert.Equal("(unknown)", logged);
     }
+
+    [Fact]
+    public void R2100_Report_LogsThePageAddressWithoutItsQuery_AndTheStackTraceOnOneLine()
+    {
+        var logged = CaptureLoggedValues();
+
+        Sut().Report(new ClientErrorLogRequest
+        {
+            CorrelationId = "abc",
+            Summary = "Unhandled client exception: ObjectDisposedException",
+            Message = "CancellationTokenSource_Disposed",
+            Path = "/pipelines/runs/7?tab=logs&token=s3cr3t#step-2",
+            StackTrace = "   at Aetheus.Front.Components.Dashboard.Home.RefreshAsync()\n   at System.Threading.Timer.Fire()"
+        });
+
+        Assert.Equal("/pipelines/runs/7", logged["ClientPath"]);
+        var stack = Assert.IsType<string>(logged["ClientStackTrace"]);
+        Assert.Contains("Home.RefreshAsync", stack, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', stack);
+        Assert.DoesNotContain(logged.Values.OfType<string>(), value => value.Contains("s3cr3t", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void R2100_Report_ABlankPath_IsUnknownRatherThanAnEmptyAddress()
+    {
+        var logged = CaptureLoggedValues();
+
+        Sut().Report(new ClientErrorLogRequest { CorrelationId = "abc", Summary = "boom", Message = "details", Path = "" });
+
+        Assert.Equal("(unknown)", logged["ClientPath"]);
+        Assert.Equal("(none)", logged["ClientStackTrace"]);
+    }
+
+    [Fact]
+    public void R2100_StackTrace_IsBoundedOnTheContract()
+    {
+        var property = typeof(ClientErrorLogRequest).GetProperty(nameof(ClientErrorLogRequest.StackTrace))!;
+        var length = (System.ComponentModel.DataAnnotations.StringLengthAttribute)Attribute.GetCustomAttribute(
+            property, typeof(System.ComponentModel.DataAnnotations.StringLengthAttribute))!;
+
+        Assert.Equal(4000, length.MaximumLength);
+    }
+
+    private Dictionary<string, object?> CaptureLoggedValues()
+    {
+        var logged = new Dictionary<string, object?>();
+        _logger.When(logger => logger.Log(
+                Arg.Any<LogLevel>(), Arg.Any<EventId>(), Arg.Any<object>(),
+                Arg.Any<Exception?>(), Arg.Any<Func<object, Exception?, string>>()))
+            .Do(call =>
+            {
+                foreach (var pair in (IReadOnlyList<KeyValuePair<string, object?>>)call[2]!)
+                    logged[pair.Key] = pair.Value;
+            });
+        return logged;
+    }
 }

@@ -90,6 +90,7 @@ internal static class PipelineStepAnalysisValidator
         if (string.Equals(scannerKey, "zap-api", StringComparison.OrdinalIgnoreCase))
             ValidateApiScanner(errors, step, context);
         else if (!string.IsNullOrWhiteSpace(step.ApiSpecificationUrl)
+                 || step.ApiSpecificationUrls.Count > 0
                  || !string.IsNullOrWhiteSpace(step.ApiSpecificationFormat))
         {
             errors.Add($"Step '{step.Name}' in {context} API specification fields are reserved for zap-api.");
@@ -100,19 +101,36 @@ internal static class PipelineStepAnalysisValidator
         !string.IsNullOrWhiteSpace(step.TargetUrl)
         || step.Active
         || !string.IsNullOrWhiteSpace(step.ApiSpecificationUrl)
+        || step.ApiSpecificationUrls.Count > 0
         || !string.IsNullOrWhiteSpace(step.ApiSpecificationFormat);
+
+    /// <summary>R2-099: the most definitions one zap-api step scans in sequence.</summary>
+    internal const int MaxApiSpecificationUrls = 16;
 
     private static void ValidateApiScanner(
         ICollection<string> errors,
         PipelineStepDefinition step,
         string context)
     {
-        if ((!Uri.TryCreate(step.ApiSpecificationUrl, UriKind.Absolute, out var specification)
-             || specification.Scheme != Uri.UriSchemeHttps) && !IsVariableReference(step.ApiSpecificationUrl))
+        // R2-099: one definition, or a list scanned in sequence by the same step; never both.
+        if (step.ApiSpecificationUrls.Count > 0)
+        {
+            if (!string.IsNullOrWhiteSpace(step.ApiSpecificationUrl))
+                errors.Add($"Step '{step.Name}' in {context} sets both api_specification_url and api_specification_urls; keep one.");
+            if (step.ApiSpecificationUrls.Count > MaxApiSpecificationUrls)
+                errors.Add($"Step '{step.Name}' in {context} lists more than {MaxApiSpecificationUrls} api_specification_urls.");
+            if (step.ApiSpecificationUrls.Any(url => !IsHttpsOrVariable(url)))
+                errors.Add($"Step '{step.Name}' in {context} requires every api_specification_urls entry to be an HTTPS URL.");
+        }
+        else if (!IsHttpsOrVariable(step.ApiSpecificationUrl))
             errors.Add($"Step '{step.Name}' in {context} requires an HTTPS api_specification_url.");
         if (step.ApiSpecificationFormat?.ToLowerInvariant() is not ("openapi" or "graphql"))
             errors.Add($"Step '{step.Name}' in {context} api_specification_format must be openapi or graphql.");
     }
+
+    private static bool IsHttpsOrVariable(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var specification) && specification.Scheme == Uri.UriSchemeHttps
+        || IsVariableReference(value);
 
     private static bool IsVariableReference(string? value) =>
         !string.IsNullOrWhiteSpace(value)

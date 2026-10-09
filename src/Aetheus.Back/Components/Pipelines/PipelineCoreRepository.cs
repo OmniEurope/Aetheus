@@ -29,12 +29,11 @@ internal sealed class PipelineCoreRepository(
         var query = FilterPipelines(search, triggerType, accessibleIds);
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
 
-        var items = await query
+        var items = await InProgressFirst(query
             .Include(p => p.Project)
             .Include(p => p.Environment)
             .Include(p => p.ProjectServer)
-            .Include(p => p.Runs.OrderByDescending(r => r.StartedAt).Take(5))
-            .OrderBy(p => p.Name)
+            .Include(p => p.Runs.OrderByDescending(r => r.StartedAt).Take(5)))
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .AsSplitQuery()
@@ -42,6 +41,17 @@ internal sealed class PipelineCoreRepository(
 
         return (items, totalCount);
     }
+
+    /// <summary>
+    /// Recette R2-093: a pipeline with a run in progress or awaiting an approval leads the list, the most
+    /// recently started first, then the others by name as before. Shared by the two paged lists.
+    /// </summary>
+    private static IOrderedQueryable<Pipeline> InProgressFirst(IQueryable<Pipeline> query) => query
+        .OrderByDescending(p => p.Runs.Any(r => !PipelineStatusFacts.Terminal.Contains(r.Status)))
+        .ThenByDescending(p => p.Runs
+            .Where(r => !PipelineStatusFacts.Terminal.Contains(r.Status))
+            .Max(r => (DateTime?)r.StartedAt))
+        .ThenBy(p => p.Name);
 
     // Shared filters of the two paged lists (entity vs. projected), so they cannot drift apart.
     private IQueryable<Pipeline> FilterPipelines(
@@ -79,8 +89,7 @@ internal sealed class PipelineCoreRepository(
 
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
 
-        var items = await query
-            .OrderBy(p => p.Name)
+        var items = await InProgressFirst(query)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(p => new PipelineDto
@@ -343,6 +352,9 @@ internal sealed class PipelineCoreRepository(
             .ConfigureAwait(false);
     }
 
+    public Task<bool> HasFailedArtifactCollectionAsync(int runId, CancellationToken ct = default)
+        => _runStatusRepository.HasFailedArtifactCollectionAsync(runId, ct);
+
     public async Task<bool> HasAnyFailedStepInRunAsync(int runId, CancellationToken ct = default)
     {
         return await db.PipelineStepRuns
@@ -478,8 +490,8 @@ internal sealed class PipelineCoreRepository(
     public Task CancelPendingStepRunsAsync(int runId, CancellationToken ct = default)
         => _cancellation.CancelPendingStepRunsAsync(runId, ct);
 
-    public Task RequestPipelineRunCancellationAsync(int runId, CancellationToken ct = default)
-        => _cancellation.RequestPipelineRunCancellationAsync(runId, ct);
+    public Task RequestPipelineRunCancellationAsync(int runId, PipelineRunCancellation cancellation, CancellationToken ct = default)
+        => _cancellation.RequestPipelineRunCancellationAsync(runId, cancellation, ct);
 
     public Task CancelPendingStepRunsExceptStagesAsync(
         int runId,
@@ -524,18 +536,32 @@ internal sealed class PipelineCoreRepository(
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<Data.Entities.Environment?> FindEnvironmentByNameAsync(string name, CancellationToken ct = default)
+    public async Task<Data.Entities.Environment?> FindEnvironmentByNameAsync(
+        string name, int? projectId, CancellationToken ct = default)
     {
         // AsSplitQuery: two collection Includes on one query is a cartesian product (servers x checks).
         // AsNoTracking: every caller reads this environment to decide something, none of them mutates
         // it, and tracking an environment with its whole server list is the expensive half of the call.
+        // BACK-018: a name is unique per project only, so the run's project's own environment comes
+        // first, then a shared one (no project), never another project's; the order makes it deterministic.
         return await db.Environments
             .AsNoTracking()
-            .AsSplitQuery()
+            .Where(e => e.Name == name && (e.ProjectId == null || e.ProjectId == projectId))
             .Include(e => e.Servers).ThenInclude(es => es.Server)
             .Include(e => e.Checks)
-            .FirstOrDefaultAsync(e => e.Name == name, ct).ConfigureAwait(false);
+            .AsSplitQuery()
+            .OrderBy(e => e.ProjectId == null)
+            .ThenBy(e => e.Id)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
+
+    public Task<int?> GetRunProjectIdAsync(int runId, CancellationToken ct = default) =>
+        db.PipelineRuns.AsNoTracking()
+            .Where(run => run.Id == runId)
+            .Select(run => run.Pipeline.ProjectId
+                ?? run.Pipeline.Environment!.ProjectId
+                ?? (run.Pipeline.ProjectServer == null ? null : (int?)run.Pipeline.ProjectServer.ProjectId))
+            .FirstOrDefaultAsync(ct);
 
     public Task<Data.Entities.Environment?> FindEnvironmentByNameForProjectAsync(
         string name,

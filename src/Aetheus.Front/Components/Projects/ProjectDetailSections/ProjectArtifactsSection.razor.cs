@@ -136,6 +136,15 @@ public partial class ProjectArtifactsSection : IAsyncDisposable
     }
 
     // R-260: the grid owns loading; its headers stay mounted while the rows arrive.
+    /// <summary>Recette R2-124: one page of the export, with the retention filter, sort and column filters of the grid.</summary>
+    private Task<PaginatedResult<PipelineArtifactDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest("CreatedAt", fallbackDescending: true);
+        return Api.ServerTools.GetProjectArtifactsAsync(ProjectId, page, pageSize, _selectedPolicy,
+            filters: args.ToApiFilters(), sortBy: sortBy, sortDescending: sortDescending);
+    }
+
     private Task OnLoadData(GridLoadArgs args)
     {
         var page = (args.Skip ?? 0) / _pageSize + 1;
@@ -184,4 +193,7 @@ public partial class ProjectArtifactsSection : IAsyncDisposable
     };
 
     private sealed record PolicyOption(string Label, ArtifactRetentionPolicy Value);
+
+    /// <summary>Recette R2-124: the export writes the version of every release the artifact is in.</summary>
+    private static readonly Func<PipelineArtifactDto, object?> ReleaseExport = artifact => string.Join(", ", artifact.Releases.Select(release => release.Version));
 }

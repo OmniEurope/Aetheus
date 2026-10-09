@@ -33,7 +33,13 @@
                             <ul class="pipeline-setup-readiness-items">
                                 @foreach (var item in check.Items)
                                 {
-                                    <li><code>@item</code></li>
+                                    <li>
+                                        <code>@item</code>
+                                        @if (ItemRole(check.Kind, item) is { } role)
+                                        {
+                                            <span data-testid="setup-readiness-item-role"> : @role</span>
+                                        }
+                                    </li>
                                 }
                             </ul>
                         }

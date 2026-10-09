@@ -28,6 +28,7 @@ public class AuditChainServiceTests
             Username = "admin",
             Action = "Created",
             EntityType = "Server",
+            EntityId = 42,
             Details = "test details"
         };
         var previousHash = "abc123";
@@ -36,16 +37,75 @@ public class AuditChainServiceTests
 
         // Manually compute the expected hash
         var payload = string.Join('|',
-            "v2",
+            "v3",
             entry.Timestamp.ToString("O"),
             "admin",
             "Created",
             "Server",
+            "42",
             "test details",
             "abc123");
         var expected = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(payload)));
 
         Assert.Equal(expected, result);
+    }
+
+    // SITE-SEC-004: re-pointing an entry at another entity must break its hash.
+    [Fact]
+    public void ComputeHash_DifferentEntityId_ProducesDifferentOutput()
+    {
+        var entry = new AuditLog
+        {
+            Timestamp = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            Username = "user",
+            Action = "Deleted",
+            EntityType = "Server",
+            EntityId = 1
+        };
+        var original = _sut.ComputeHash(entry, "prev");
+
+        entry.EntityId = 2;
+
+        Assert.NotEqual(original, _sut.ComputeHash(entry, "prev"));
+    }
+
+    [Fact]
+    public void ToStoredPrecision_DropsTheTicksBelowTheMicrosecond()
+    {
+        var precise = new DateTime(2026, 10, 8, 9, 0, 0, DateTimeKind.Utc).AddTicks(1_234_567);
+
+        var stored = AuditChainService.ToStoredPrecision(precise);
+
+        Assert.Equal(precise.Ticks - 7, stored.Ticks);
+        Assert.Equal(DateTimeKind.Utc, stored.Kind);
+    }
+
+    // SITE-SEC-003: a v2 row was hashed over the full .NET timestamp but read back from PostgreSQL in
+    // microseconds; it must still verify, and a real tampering must still fail.
+    [Fact]
+    public async Task VerifyChainAsync_V2RowReadBackInMicroseconds_IsValid_AndTamperingIsNot()
+    {
+        var written = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc).AddTicks(3_141_593);
+        var v2Payload = string.Join('|', "v2", written.ToString("O"), "admin", "Created", "Server", "d", string.Empty);
+        var row = new AuditLog
+        {
+            Id = 1,
+            Timestamp = AuditChainService.ToStoredPrecision(written),
+            Username = "admin",
+            Action = "Created",
+            EntityType = "Server",
+            Details = "d",
+            PreviousHash = string.Empty,
+            Hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(v2Payload)))
+        };
+        _repoMock.StreamOrderedAsync().Returns(ToAsyncEnumerable([row]));
+
+        Assert.True((await _sut.VerifyChainAsync(TestContext.Current.CancellationToken)).IsValid);
+
+        row.Details = "tampered";
+        _repoMock.StreamOrderedAsync().Returns(ToAsyncEnumerable([row]));
+
+        Assert.False((await _sut.VerifyChainAsync(TestContext.Current.CancellationToken)).IsValid);
     }
 
     [Fact]

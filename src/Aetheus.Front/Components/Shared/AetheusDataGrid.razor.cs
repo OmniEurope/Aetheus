@@ -7,6 +7,8 @@ namespace Aetheus.Front.Components.Shared;
 public partial class AetheusDataGrid<TItem> where TItem : notnull
 {
     [Inject] private ILogger<AetheusDataGrid<TItem>> Logger { get; set; } = default!;
+    [Inject] private GridExportContext ExportContext { get; set; } = default!;
+    [Inject] private NotifyHelper Toast { get; set; } = default!;
 
     [Parameter] public IEnumerable<TItem>? Data { get; set; }
     [Parameter] public int Count { get; set; }
@@ -58,11 +60,25 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     [Parameter] public bool AllowAlternatingRows { get; set; } = true;
 
     // Recette R2-011: the export bar of OE's grid, declared here so a page sets it by name and type instead
-    // of through the unmatched attributes. Empty formats, the default, show no bar. Its buttons are OE's
-    // own, each with the file icon of its format (OE 1.4.0).
+    // of through the unmatched attributes. Its buttons are OE's own, each with the file icon of its format
+    // (OE 1.4.0). Recette R2-124: a list that exports writes all its rows, titled by the page; only the
+    // tables listed in GridExportCoverageAuditTests show the bar (Markdown, second decision of 2026-10-05).
+    // OE 1.6.0: the bar sits under the rows, inside the table's frame; Aetheus puts its buttons at its end
+    // (user decision of 2026-10-06, OE's default stays the start).
 
-    /// <summary>The formats of the export bar; none by default.</summary>
-    [Parameter] public IReadOnlyList<OmniTableExportFormat> ExportFormats { get; set; } = [];
+    /// <summary>
+    /// Recette R2-124 (decision of 2026-10-05): true shows the bar under the rows with the Markdown button,
+    /// for a prompt; CSV, Excel and PDF are always off. Only the tables worth handing to an AI ask for it,
+    /// listed with their reason in <c>GridExportCoverageAuditTests</c>. Off by default: no bar.
+    /// </summary>
+    [Parameter] public bool ShowFooterBar { get; set; }
+
+    /// <summary>
+    /// False is the opt-out of a table that must never be exported (a secret value on screen, say): no
+    /// format, so no bar even when <see cref="ShowFooterBar"/> asks for one, and no export reader needed.
+    /// <c>GridExportCoverageAuditTests</c> holds it to its approved list.
+    /// </summary>
+    [Parameter] public bool ExportMarkdown { get; set; } = true;
 
     /// <summary>
     /// The variant of each format's button. By default <see cref="AetheusGrid.ExportVariants"/>: the
@@ -71,19 +87,37 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     /// </summary>
     [Parameter] public IReadOnlyDictionary<OmniTableExportFormat, OmniButtonVariant> ExportVariants { get; set; } = AetheusGrid.ExportVariants;
 
-    /// <summary>Where the export bar goes: under the table by default.</summary>
-    [Parameter] public OmniDataGridPosition ExportPosition { get; set; } = OmniDataGridPosition.Bottom;
-
-    /// <summary>The title of the exported document.</summary>
+    /// <summary>
+    /// The title of the exported document. Null, the default, writes the page's breadcrumb followed by
+    /// <see cref="ExportName"/> (<see cref="GridExportContext.Title"/>).
+    /// </summary>
     [Parameter] public string? ExportTitle { get; set; }
 
-    /// <summary>The header lines of the exported document (application, period); OE adds the active column filters.</summary>
+    /// <summary>
+    /// What the table holds, appended to the breadcrumb in the default title: required where a page
+    /// holds several tables, so their files do not share one title and one name.
+    /// </summary>
+    [Parameter] public string? ExportName { get; set; }
+
+    /// <summary>
+    /// The header lines of the exported document (application, period); OE adds the active column filters.
+    /// Empty, the default, writes the application and the address of the page (<see cref="GridExportContext.Fields"/>).
+    /// </summary>
     [Parameter] public IReadOnlyList<OmniTableExportField> ExportFields { get; set; } = [];
+
+    /// <summary>
+    /// Reads one page of the rows an export writes, from the API, with the sort and column filters of the
+    /// grid: the page's own reading, without the rows, the cache or the error state its
+    /// <see cref="LoadData"/> keeps. OE asks 200 rows at a time until every row is read. A failed read
+    /// throws, so the export fails and says so instead of writing a partial file. The simpler way to
+    /// give a <see cref="LoadData"/> grid its export; <see cref="ExportLoad"/> wins when both are set.
+    /// </summary>
+    [Parameter] public Func<GridLoadArgs, Task<PaginatedResult<TItem>>>? ExportRead { get; set; }
 
     /// <summary>
     /// The file name without extension and without date (see <see cref="ExportFileNames.Stem"/>); OE appends
     /// its generation time and the extension, <c>aetheus-logs-2026-10-01-0840.md</c> (recette R2-036). Null
-    /// lets OE derive it from <see cref="ExportTitle"/>.
+    /// writes the page's breadcrumb past its module, then <see cref="ExportName"/> (<see cref="GridExportContext.FileName"/>).
     /// </summary>
     [Parameter] public string? ExportFileName { get; set; }
 
@@ -93,7 +127,10 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     /// </summary>
     [Parameter] public Func<OmniDataGridLoadRequest, Task<OmniDataGridResult<TItem>>>? ExportLoad { get; set; }
 
-    /// <summary>Raised when an export fails; no file is produced.</summary>
+    /// <summary>
+    /// Raised when an export fails; no file is produced. Without a handler, a page that could not be read
+    /// raises the <c>GridExportFailed</c> toast and any other failure goes to the error boundary.
+    /// </summary>
     [Parameter] public EventCallback<Exception> OnExportError { get; set; }
     [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
 
@@ -178,10 +215,11 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
                 $"AetheusDataGrid<{typeof(TItem).Name}>: LoadData needs VirtualData, the rows and total the page holds after a load.");
         }
 
-        if (LoadData.HasDelegate && ExportFormats.Count > 0 && ExportLoad is null)
+        if (LoadData.HasDelegate && Exports && EffectiveExportLoad is null)
         {
             throw new InvalidOperationException(
-                $"AetheusDataGrid<{typeof(TItem).Name}>: an export bar on a LoadData grid needs ExportLoad; LoadData replaces the page's rows.");
+                $"AetheusDataGrid<{typeof(TItem).Name}>: an export bar on a LoadData grid needs ExportRead (or ExportLoad); "
+                + "LoadData replaces the page's rows. A table that must not be exported writes ExportMarkdown=\"false\".");
         }
 
         // A paged grid showed the page's own rows before OE 1.2.0 (the page fed Items and Count). It now shows
@@ -194,6 +232,41 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
             _pageLoadSettled = true;
         }
         _pageWasLoading = IsLoading;
+    }
+
+    // Recette R2-124: the shared export of a list. The title and the header lines say where the rows come
+    // from unless the page wrote its own; a LoadData grid reads its export through ExportRead. The opt-out
+    // (ExportMarkdown="false", a table that must never export) wins over ShowFooterBar.
+    private bool Exports => ShowFooterBar && ExportMarkdown;
+
+    private string EffectiveExportTitle => ExportTitle ?? ExportContext.Title(ExportName);
+
+    private string? EffectiveExportFileName => ExportFileName ?? ExportContext.FileName(ExportName);
+
+    private IReadOnlyList<OmniTableExportField> EffectiveExportFields =>
+        ExportFields.Count > 0 ? ExportFields : ExportContext.Fields();
+
+    private Func<OmniDataGridLoadRequest, Task<OmniDataGridResult<TItem>>>? EffectiveExportLoad =>
+        ExportLoad ?? (ExportRead is null ? null : ReadExportPageAsync);
+
+    private EventCallback<Exception> EffectiveExportError => OnExportError.HasDelegate
+        ? OnExportError
+        : EventCallback.Factory.Create<Exception>(this, ExportFailed);
+
+    /// <summary>One page of an export, through the page's reader; the rows on screen are left alone.</summary>
+    private async Task<OmniDataGridResult<TItem>> ReadExportPageAsync(OmniDataGridLoadRequest request)
+    {
+        var page = await ExportRead!(request.ToGridLoadArgs());
+        return new OmniDataGridResult<TItem>(page.Items, page.TotalCount);
+    }
+
+    /// <summary>A page that could not be read: no file was produced, the toast says so. Any other failure
+    /// is a defect and goes to the error boundary, as the page's own handlers do.</summary>
+    private void ExportFailed(Exception exception)
+    {
+        if (exception is not HttpRequestException)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
+        Toast.Error("GridExportFailed");
     }
 
     private bool PageRowsReplaced()

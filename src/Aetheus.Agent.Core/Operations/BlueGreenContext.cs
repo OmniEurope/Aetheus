@@ -42,7 +42,9 @@ internal sealed record BlueGreenContext
     private const string ComposeEnvPrefix = "AETHEUS_BG_COMPOSE_ENV_";
 
     internal string ColorFile => Path.Combine(StateDir, "live-color");
-    internal string JournalDir => Path.Combine(StateDir, "deployment-transaction");
+    internal string JournalDir => JournalDirectoryOf(StateDir);
+
+    internal static string JournalDirectoryOf(string stateDir) => Path.Combine(stateDir, "deployment-transaction");
     internal string SourceCommitFile => Path.Combine(StateDir, "source-commit");
 
     internal (int Front, int Back) PortsFor(string colour) => colour switch

@@ -167,13 +167,19 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
         if (existingCount != distinct.Count)
             throw new BadRequestException("One or more project IDs do not exist.");
 
+        // The organizations that lose the projects, read before the move: their members keep a
+        // cached "member of the owner" verdict for five minutes unless it is evicted too.
+        var sourceOrganizationIds = await repo.GetProjectOrganizationIdsAsync(distinct, ct).ConfigureAwait(false);
         await repo.AssignProjectsAsync(organizationId, distinct, ct).ConfigureAwait(false);
         await audit.LogAsync("Organization.ProjectsAssigned", "Organization", organizationId,
             $"Assigned project IDs: {string.Join(", ", distinct)}", ct).ConfigureAwait(false);
 
-        // Reassigning the org's projects changes what its members can reach through org-scoped
-        // access, so invalidate their authz cache and push a refresh.
-        var members = await repo.GetMembersForNotificationAsync(organizationId, ct).ConfigureAwait(false);
+        // Reassigning projects changes what the members of the source and target organizations can
+        // reach through org-scoped access, so invalidate their authz cache and push a refresh.
+        var members = new List<(int UserId, string Username)>();
+        foreach (var affectedOrganizationId in sourceOrganizationIds.Append(organizationId).Distinct())
+            members.AddRange(await repo.GetMembersForNotificationAsync(affectedOrganizationId, ct).ConfigureAwait(false));
+        members = members.DistinctBy(m => m.UserId).ToList();
         foreach (var m in members)
             authz.InvalidateRoleCache(m.Username);
         await notifier.BroadcastAsync(AdminEntities.Organization, organizationId, EntityChangeOps.Updated, ct).ConfigureAwait(false);

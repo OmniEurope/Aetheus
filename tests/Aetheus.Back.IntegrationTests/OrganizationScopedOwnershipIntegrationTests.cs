@@ -146,16 +146,39 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
         projResp.EnsureSuccessStatusCode();
         var project = await projResp.Content.ReadFromJsonAsync<ProjectDto>(IntegrationJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
 
-        // Create a user and add them to this org
+        // A project of another organization: the member must not reach it.
+        var otherOrgResp = await client.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest
+        {
+            Name = $"Other Org {Guid.NewGuid():N}",
+            Slug = $"other-org-{Guid.NewGuid():N}",
+            Description = "Not the member's org"
+        }, cancellationToken: TestContext.Current.CancellationToken);
+        otherOrgResp.EnsureSuccessStatusCode();
+        var otherOrg = await otherOrgResp.Content.ReadFromJsonAsync<OrganizationDto>(IntegrationJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
+        var otherProjResp = await client.PostAsJsonAsync("/api/projects", new CreateProjectRequest
+        {
+            Name = $"OtherOrg-Project-{Guid.NewGuid():N}",
+            Description = "Belongs to another org",
+            OrganizationId = otherOrg!.Id
+        }, cancellationToken: TestContext.Current.CancellationToken);
+        otherProjResp.EnsureSuccessStatusCode();
+        var otherProject = await otherProjResp.Content.ReadFromJsonAsync<ProjectDto>(IntegrationJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Create a user and add them to this org. INT-001: the role carries no resource permission at
+        // all; the built-in Contributor grants a global Write on every resource type, which would let
+        // the read below succeed even if organization membership granted nothing.
         string memberName;
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            var contribRole = await db.Roles
-                .Where(r => r.Name == "Contributor")
-                .Select(r => r.Id)
-                .FirstAsync(db);
+            var orgOnlyRole = new Role
+            {
+                Name = $"OrgOnlyMember-{Guid.NewGuid():N}",
+                Description = "No global permissions - access only via org membership"
+            };
+            db.Roles.Add(orgOnlyRole);
+            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             memberName = $"member-{Guid.NewGuid():N}";
             var member = new User
@@ -167,7 +190,7 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
             db.Users.Add(member);
             await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-            db.UserRoles.Add(new UserRole { UserId = member.Id, RoleId = contribRole });
+            db.UserRoles.Add(new UserRole { UserId = member.Id, RoleId = orgOnlyRole.Id });
             await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             db.OrganizationMembers.Add(new OrganizationMember
@@ -184,9 +207,13 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
         var memberToken = await LoginAsync(client, memberName, "Member-Test-Pwd-2026!");
         SetBearer(client, memberToken);
 
-        // Member CAN read the project owned by their org
+        // Member CAN read the project owned by their org, through membership alone
         var getProj = await client.GetAsync($"/api/projects/{project!.Id}", cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, getProj.StatusCode);
+
+        // and only that one
+        var getOther = await client.GetAsync($"/api/projects/{otherProject!.Id}", cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, getOther.StatusCode);
     }
 
     [Fact]

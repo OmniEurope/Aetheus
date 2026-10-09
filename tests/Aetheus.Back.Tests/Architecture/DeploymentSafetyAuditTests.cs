@@ -206,8 +206,10 @@ public sealed class DeploymentSafetyAuditTests
                  })
             Assert.Contains(witness, derivationBody, StringComparison.Ordinal);
 
-        // An explicit --enable-*/--disable-* still wins, otherwise a revocation could never be applied.
-        Assert.Contains("POSTURE_EXPLICIT", derivationBody, StringComparison.Ordinal);
+        // An explicit --enable-*/--disable-* still wins for the capability it names, otherwise a
+        // revocation could never be applied; the others keep the host's posture (audit DEP-021).
+        Assert.Contains("preserve ", derivationBody, StringComparison.Ordinal);
+        Assert.Contains("preserve() {\n    is_explicit \"$1\" && return 0", installer.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
 
         // The agent publishes its ServerUrl as the package base URL and NuGet refuses plain HTTP.
         Assert.Contains("NuGet requires HTTPS sources", installer, StringComparison.Ordinal);
@@ -246,7 +248,10 @@ public sealed class DeploymentSafetyAuditTests
             installer.IndexOf("# --- Clean any previous installation ---", StringComparison.Ordinal),
             StringComparison.Ordinal);
         Assert.True(installPreservation >= 0);
-        Assert.True(installPreservation < installer.IndexOf("rm -rf \"${WORK_DIR:?}\"/*", StringComparison.Ordinal));
+        // The reinstall purges the agent's own state (audit DEP-020: the deployment tree stays).
+        var purge = installer.IndexOf("\npurge_agent_work_dir\n", StringComparison.Ordinal);
+        Assert.True(purge > 0, "the reinstall purges the agent state");
+        Assert.True(installPreservation < purge);
 
         // Secret-zero moved into the preparation script when the cutover became typed, and every rule
         // about it is asserted against the script that now applies them.
@@ -874,6 +879,25 @@ public sealed class DeploymentSafetyAuditTests
     /// no route to ever satisfy it. The three halves are pinned together here: the backend reads the
     /// key, Compose passes it, and the preparation script both generates and back-fills it.
     /// </summary>
+    [Fact]
+    public void TheGitRunTokenKey_ReachesBothColours_AndAnAbsentValueStaysEmpty()
+    {
+        // R-464, key separation: clone tokens are signed with a key of their own instead of the data
+        // encryption key, but only if the containers receive it. Nothing passed it, so setting it in
+        // the environment file alone changed nothing. It belongs to the anchor both
+        // colours merge, and defaults to empty: an environment file without it (release-fast or
+        // revert-prod before the next prepare, the demo and the nightly) keeps the fallback key.
+        var compose = Read("deploy", "compose", "remote-bluegreen.compose.yml");
+        var backAnchor = compose.IndexOf("<<: &back-common", StringComparison.Ordinal);
+        var backBlue = compose.IndexOf("container_name: ${APPNAME}-${ENV}-blue-back", StringComparison.Ordinal);
+        Assert.True(backAnchor > 0 && backBlue > backAnchor);
+        Assert.Contains(
+            "- GitLight__RunTokenKey=${GIT_RUN_TOKEN_KEY:-}",
+            compose[backAnchor..backBlue],
+            StringComparison.Ordinal);
+        Assert.Contains("<<: *back-common", compose, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheDeploymentBootstrapIdentityKey_IsProvisioned_NotJustRequired()
     {

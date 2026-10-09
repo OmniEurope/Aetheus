@@ -106,6 +106,34 @@ internal sealed class BackupPolicyService(
     public async Task<int?> GetOwningProjectIdAsync(int id, CancellationToken ct = default)
         => (await repo.FindPolicyAsync(id, ct).ConfigureAwait(false))?.ProjectId;
 
+    public async Task<int?> GetServerForAgentParameterChangeAsync(
+        int id, UpdateBackupPolicyRequest request, CancellationToken ct = default)
+    {
+        var policy = await repo.FindPolicyAsync(id, ct).ConfigureAwait(false);
+        if (policy is null) return null;
+        var filePathsJson = request.FilePaths.Count > 0 ? JsonSerializer.Serialize(request.FilePaths) : null;
+        var changed = policy.DbEngine != request.DbEngine
+            || !SameText(policy.DbHost, request.DbHost)
+            || policy.DbPort != request.DbPort
+            || !SameText(policy.DbName, request.DbName)
+            || !SameText(policy.DbUser, request.DbUser)
+            || policy.FilePathsJson != filePathsJson
+            || PasswordChanges(policy.DbPasswordEncrypted, request.DbPassword);
+        return changed ? policy.ServerId : null;
+    }
+
+    // An untouched empty field may come back as null or as "": neither is a new target.
+    private static bool SameText(string? stored, string? requested) =>
+        string.Equals(stored ?? string.Empty, requested ?? string.Empty, StringComparison.Ordinal);
+
+    // null keeps the stored password; empty clears it; anything else replaces it.
+    private bool PasswordChanges(string? storedEncrypted, string? requested) => requested switch
+    {
+        null => false,
+        "" => storedEncrypted is not null,
+        _ => storedEncrypted is null || encryption.DecryptValue(storedEncrypted) != requested
+    };
+
     public async Task<PaginatedResult<BackupRunDto>> GetRunsAsync(
         int policyId, PaginationRequest request, CancellationToken ct = default)
     {

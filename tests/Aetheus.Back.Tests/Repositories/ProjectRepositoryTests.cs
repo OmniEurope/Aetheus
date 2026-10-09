@@ -226,17 +226,6 @@ public class ProjectRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task RemoveProjectAsync_Removes()
-    {
-        var project = new Project { Name = "Del", Description = "d" };
-        _db.Projects.Add(project);
-        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-        await _repo.RemoveProjectAsync(project, ct: TestContext.Current.CancellationToken);
-        Assert.Equal(0, await _db.Projects.CountAsync(cancellationToken: TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
     public async Task GetAllProjectsWithRepoUrlAsync_ReturnsOnlyWithRepoUrl()
     {
         _db.Projects.AddRange(

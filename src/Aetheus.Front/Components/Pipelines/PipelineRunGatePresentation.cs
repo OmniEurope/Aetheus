@@ -22,4 +22,16 @@ internal static class PipelineRunGatePresentation
         || gate.Status is AnalysisGateStatus.Blocked or AnalysisGateStatus.Error;
 
     public static string StatusKey(AnalysisGateStatus status) => $"AnalysisGateStatus{status}";
+
+    /// <summary>
+    /// Recette R2-129: the letter a run is listed with (its own evaluations, else the sealed contract a
+    /// candidate published, see <c>PipelineRunGradeHydration</c>) is the letter its gate shows. Candidate
+    /// #2571 was listed F (sealed: current E2E failed) while its gate showed the analysis A.
+    /// </summary>
+    public static AnalysisGrade? HeadlineGrade(AnalysisRunGateDto gate, AnalysisGrade? runGrade) =>
+        runGrade ?? gate.Grade?.OverallGrade;
+
+    /// <summary>True when the run's letter is not the analysis letter, so the gate says where it comes from.</summary>
+    public static bool GradeComesFromSeal(AnalysisRunGateDto gate, AnalysisGrade? runGrade) =>
+        runGrade is not null && runGrade != gate.Grade?.OverallGrade;
 }

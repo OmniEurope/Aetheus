@@ -170,7 +170,7 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (!DockerIdValidator.IsValidName(stackName))
             throw new BadRequestException("Invalid stack name.");
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker compose file - {stackName}", $"docker compose -p {stackName} config", 15), ct).ConfigureAwait(false);
+        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, DockerTaskNames.ComposeFile(stackName), $"docker compose -p {stackName} config", 15), ct).ConfigureAwait(false);
     }
 
     public async Task SaveComposeFileAsync(int serverId, DockerComposeFileSaveRequest request, CancellationToken ct = default)
@@ -180,10 +180,9 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (string.IsNullOrWhiteSpace(request.Content))
             throw new BadRequestException("Content is required.");
 
-        var decoded = DockerCommandHelper.EncodeBase64Shell(request.Content);
-        var command = $"{decoded} | tee /tmp/compose-{request.StackName}.yml && docker compose -f /tmp/compose-{request.StackName}.yml -p {request.StackName} up -d";
-
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker compose deploy - {request.StackName}", command, 120), ct).ConfigureAwait(false);
+        await QueueTaskAsync(PayloadOperation(
+            serverId, $"Docker compose deploy - {request.StackName}", OperationKind.DockerComposeUp,
+            request.StackName, "AETHEUS_DOCKER_COMPOSE_B64", request.Content, 120), ct).ConfigureAwait(false);
     }
 
     public async Task ExecuteShellCommandAsync(int serverId, DockerExecRequest request, CancellationToken ct = default)
@@ -193,10 +192,9 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (string.IsNullOrWhiteSpace(request.Command))
             throw new BadRequestException("Command is required.");
 
-        var decoded = DockerCommandHelper.EncodeBase64Shell(request.Command);
-        var command = $"{decoded} | docker exec -i {request.ContainerId} sh";
-
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker exec - {request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}", command, 30), ct).ConfigureAwait(false);
+        await QueueTaskAsync(PayloadOperation(
+            serverId, $"Docker exec - {request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}",
+            OperationKind.DockerExecScript, request.ContainerId, "AETHEUS_DOCKER_EXEC_B64", request.Command, 30), ct).ConfigureAwait(false);
         await audit.LogAsync("DockerExec", "Server", serverId, request.ContainerId[..Math.Min(12, request.ContainerId.Length)], ct).ConfigureAwait(false);
     }
 
@@ -229,9 +227,27 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (string.IsNullOrWhiteSpace(request.DockerfileContent))
             throw new BadRequestException("Dockerfile content is required.");
 
-        var decoded = DockerCommandHelper.EncodeBase64Shell(request.DockerfileContent);
-        var command = $"{decoded} | tee /tmp/Dockerfile.build && docker build -t {request.ImageTag} -f /tmp/Dockerfile.build .";
+        await QueueTaskAsync(PayloadOperation(
+            serverId, $"Docker build - {request.ImageTag}", OperationKind.DockerBuildImage,
+            request.ImageTag, "AETHEUS_DOCKER_DOCKERFILE_B64", request.DockerfileContent, 600), ct).ConfigureAwait(false);
+    }
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker build - {request.ImageTag}", command, 600), ct).ConfigureAwait(false);
+    // BACK-012: a user payload (Compose file, exec script, Dockerfile) travels base64-encoded in an
+    // environment variable of a typed operation. The former `printf | base64 -d | ...` shell strings
+    // were refused by the agent's command validator before running, so these features never worked;
+    // the validator itself is unchanged.
+    private static ServerTask PayloadOperation(
+        int serverId, string name, OperationKind operation, string target,
+        string payloadVariable, string payload, int timeoutSeconds)
+    {
+        if (!OperationTargetValidator.IsValid(operation, target))
+            throw new BadRequestException("Invalid docker target.");
+        return ServerTaskFactory.Operation(
+            serverId, name, operation, target,
+            new Dictionary<string, string>
+            {
+                [payloadVariable] = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(payload))
+            },
+            timeoutSeconds);
     }
 }

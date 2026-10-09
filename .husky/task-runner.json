@@ -33,7 +33,7 @@
          "args": [
             "-NoProfile",
             "-Command",
-            "& { $marker = 'SPDX-License-Identifier: EUPL-1.2'; $missing = 0; Get-ChildItem -Path src,tests -Include '*.cs','*.razor' -Recurse -File | Where-Object { $_.FullName -notmatch '[\\\\/](obj|bin|Migrations)[\\\\/]' } | ForEach-Object { $head = Get-Content $_.FullName -TotalCount 5 -ErrorAction SilentlyContinue; if (-not ($head -match [regex]::Escape($marker))) { Write-Host \"Missing SPDX: $($_.FullName)\"; $script:missing++ } }; if ($missing -gt 0) { Write-Error \"$missing file(s) missing SPDX header. Run: pwsh scripts/add-spdx-header.ps1\"; exit 1 } }"
+            "& { $marker = 'SPDX-License-Identifier: EUPL-1.2'; $missing = 0; Get-ChildItem -Path src,tests -Include '*.cs','*.razor' -Recurse -File | Where-Object { $_.FullName -notmatch '[\\\\/](obj|bin|Migrations)[\\\\/]' } | ForEach-Object { $head = Get-Content $_.FullName -TotalCount 5 -ErrorAction SilentlyContinue; if (-not ($head -match [regex]::Escape($marker))) { Write-Host \"Missing SPDX: $($_.FullName)\"; $missing++ } }; if ($missing -gt 0) { Write-Error \"$missing file(s) missing SPDX header. Run: pwsh scripts/add-spdx-header.ps1\"; exit 1 } }"
          ]
       },
       {

@@ -1,0 +1,34 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* PLAN-013 lot 5 (R2-115): what each project occupies in the Aetheus database, against its budget. *@
+<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-xl omni-u-mb-sm">@L["ProjectStorage"]</OmniHeading>
+@if (_loading)
+{
+    <AetheusLoader Size="OmniControlSize.Small" />
+}
+else if (_loadFailed || _report is null)
+{
+    <EmptyState Icon="error" Title="@L["LoadFailed"]" />
+}
+else
+{
+    <AetheusDataGrid Data="@_report.Projects" TItem="ProjectStorageUsageDto" KeyProperty="ProjectId" Virtualize="true" EmptyText="@L["ProjectStorageEmpty"]" class="omni-u-mb-sm project-storage-grid">
+        <Columns>
+            <OmniDataGridColumn Frozen="true" TItem="ProjectStorageUsageDto" Property="ProjectName" Title="@L["Project"]" MinWidth="12rem" Filterable="true" />
+            <OmniDataGridColumn TItem="ProjectStorageUsageDto" Property="UsedBytes" Title="@L["ProjectStorageUsed"]" Width="9rem" TextAlign="OmniDataGridTextAlign.End" Filterable="false">
+                <Template Context="usage"><span data-testid="project-storage-used">@Megabytes(usage.UsedBytes)</span></Template>
+            </OmniDataGridColumn>
+            <OmniDataGridColumn TItem="ProjectStorageUsageDto" Property="BudgetBytes" Title="@L["ProjectStorageBudget"]" Width="9rem" TextAlign="OmniDataGridTextAlign.End" Filterable="false">
+                <Template Context="usage">@Megabytes(usage.BudgetBytes)</Template>
+            </OmniDataGridColumn>
+            <OmniDataGridColumn TItem="ProjectStorageUsageDto" Property="UsedPercent" Title="@L["ProjectStorageShare"]" Width="8rem" TextAlign="OmniDataGridTextAlign.End" Filterable="false">
+                <Template Context="usage">
+                    <OmniBadge Tone="@ShareTone(usage.UsedPercent)" Fill="OmniFill.Tonal" data-testid="project-storage-share">@Percent(usage.UsedPercent)</OmniBadge>
+                </Template>
+            </OmniDataGridColumn>
+            <OmniDataGridColumn TItem="ProjectStorageUsageDto" Property="Tables" Title="@L["ProjectStorageLargestTable"]" MinWidth="12rem" Sortable="false" Filterable="false">
+                <Template Context="usage"><code>@LargestTable(usage)</code></Template>
+            </OmniDataGridColumn>
+        </Columns>
+    </AetheusDataGrid>
+    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="project-storage-note">@Note</OmniText>
+}

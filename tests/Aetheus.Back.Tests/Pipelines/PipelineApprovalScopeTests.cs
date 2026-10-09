@@ -38,7 +38,7 @@ public class PipelineApprovalScopeTests
         var (gate, repo) = Harness(approvals: []);
 
         var held = await gate.CheckAndCreateApprovalAsync(
-            RunId, GateWithoutEnvironment.Name, GateWithoutEnvironment, [GateWithoutEnvironment], CancellationToken.None);
+            RunId, null, GateWithoutEnvironment.Name, GateWithoutEnvironment, [GateWithoutEnvironment], CancellationToken.None);
 
         Assert.True(held);
         await repo.Received(1).AddApprovalAsync(
@@ -54,7 +54,7 @@ public class PipelineApprovalScopeTests
     {
         var (gate, repo) = Harness(approvals: []);
 
-        var held = await gate.CheckAndCreateApprovalAsync(RunId, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
+        var held = await gate.CheckAndCreateApprovalAsync(RunId, null, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
 
         Assert.True(held);
         await repo.Received(1).AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>());
@@ -68,7 +68,7 @@ public class PipelineApprovalScopeTests
     {
         var (gate, repo) = Harness(approvals: [Approval(ApprovalScope.Pipeline, "Confirm", ApprovalStatus.Approved, timeout: 10)]);
 
-        var held = await gate.CheckAndCreateApprovalAsync(RunId, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
+        var held = await gate.CheckAndCreateApprovalAsync(RunId, null, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
 
         Assert.True(held);
         await repo.Received(1).AddApprovalAsync(
@@ -87,7 +87,7 @@ public class PipelineApprovalScopeTests
             Approval(ApprovalScope.Pipeline, "Confirm", ApprovalStatus.Approved, timeout: 10)
         ]);
 
-        var held = await gate.CheckAndCreateApprovalAsync(RunId, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
+        var held = await gate.CheckAndCreateApprovalAsync(RunId, null, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
 
         Assert.False(held);
         await repo.DidNotReceive().AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>());
@@ -98,7 +98,7 @@ public class PipelineApprovalScopeTests
     {
         var (gate, repo) = Harness(approvals: [Approval(ApprovalScope.Environment, "Deploy", ApprovalStatus.Approved)]);
 
-        var held = await gate.CheckAndCreateApprovalAsync(RunId, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
+        var held = await gate.CheckAndCreateApprovalAsync(RunId, null, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
 
         Assert.True(held);
         await repo.Received(1).AddApprovalAsync(
@@ -114,7 +114,7 @@ public class PipelineApprovalScopeTests
         var (gate, repo) = Harness(approvals: [Approval(ApprovalScope.Pipeline, "Approve the run", status, timeout: 30, environmentId: null)]);
 
         var held = await gate.CheckAndCreateApprovalAsync(
-            RunId, GateWithoutEnvironment.Name, GateWithoutEnvironment, [GateWithoutEnvironment], CancellationToken.None);
+            RunId, null, GateWithoutEnvironment.Name, GateWithoutEnvironment, [GateWithoutEnvironment], CancellationToken.None);
 
         Assert.True(held);
         await repo.DidNotReceive().AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>());
@@ -129,7 +129,7 @@ public class PipelineApprovalScopeTests
             Approval(ApprovalScope.Environment, "Confirm", ApprovalStatus.Pending)
         ]);
 
-        var held = await gate.CheckAndCreateApprovalAsync(RunId, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
+        var held = await gate.CheckAndCreateApprovalAsync(RunId, null, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
 
         Assert.True(held);
         await repo.DidNotReceive().AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>());
@@ -177,7 +177,7 @@ public class PipelineApprovalScopeTests
     {
         var repo = Substitute.For<IPipelineRepository>();
         repo.GetApprovalsAsync(RunId, Arg.Any<CancellationToken>()).Returns(approvals);
-        repo.FindEnvironmentByNameAsync("prod", Arg.Any<CancellationToken>())
+        repo.FindEnvironmentByNameAsync("prod", Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(new Aetheus.Back.Data.Entities.Environment
             {
                 Id = ProdEnvironmentId,

@@ -22,7 +22,7 @@
         @* Recette R-181: no Refresh, new entries arrive over the admin hub. *@
     </Actions>
 </OmniPageHeader>
-<AetheusDataGrid @ref="_grid" TItem="AuditLogDto" Data="@_logs" Count="@_count" LoadData="@LoadData"
+<AetheusDataGrid @ref="_grid" TItem="AuditLogDto" Data="@_logs" Count="@_count" LoadData="@LoadData" ExportRead="@ReadExportAsync"
     PageSize="20" AllowSorting="true" IsLoading="@_loading" Density="OmniDensity.Compact" FullHeight="true"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<AuditLogDto>(_logs, _count))">

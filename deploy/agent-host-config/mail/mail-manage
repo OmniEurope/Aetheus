@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-# aetheus-mail-helper-version: 2
+# aetheus-mail-helper-version: 3
 # Aetheus Agent mail-manage helper - root-owned, invoked via /etc/sudoers.d/aetheus-mail (NOPASSWD).
 # Incremental management of an already-provisioned mail stack. First argv token is a fixed
 # sub-command; every following argument is re-validated here. Passwords and learned messages arrive on
@@ -8,14 +8,21 @@
 set -eu
 
 die() { echo "$1" >&2; exit 1; }
-valid_domain() { printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'; }
-valid_email()  { printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'; }
-valid_sel()    { printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9_-]+$'; }
-valid_quota()  { printf '%s' "$1" | grep -Eq '^[0-9]{1,7}$'; }
-valid_score()  { printf '%s' "$1" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,2})?$'; }
-valid_qid()    { printf '%s' "$1" | grep -Eq '^[0-9A-Za-z]{6,32}$'; }
-valid_token()  { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9._@<>=-]{1,64}$'; }
-valid_lines()  { printf '%s' "$1" | grep -Eq '^[0-9]{1,4}$' && [ "$1" -ge 1 ] && [ "$1" -le 2000 ]; }
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
+valid_domain() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'; }
+valid_email()  { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'; }
+valid_sel()    { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9_-]+$'; }
+valid_quota()  { one_line "$1" && printf '%s' "$1" | grep -Eq '^[0-9]{1,7}$'; }
+valid_score()  { one_line "$1" && printf '%s' "$1" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,2})?$'; }
+valid_qid()    { one_line "$1" && printf '%s' "$1" | grep -Eq '^[0-9A-Za-z]{6,32}$'; }
+valid_token()  { one_line "$1" && printf '%s' "$1" | grep -Eq '^[A-Za-z0-9._@<>=-]{1,64}$'; }
+valid_lines()  { one_line "$1" && printf '%s' "$1" | grep -Eq '^[0-9]{1,4}$' && [ "$1" -ge 1 ] && [ "$1" -le 2000 ]; }
 without_space_key() { awk -v key="$1" '$1 != key' "$2" > "$2.tmp" 2>/dev/null || true; }
 without_colon_key() { awk -F: -v key="$1" '$1 != key' "$2" > "$2.tmp" 2>/dev/null || true; }
 
@@ -120,7 +127,7 @@ cmd="${1:-}"
 
 case "$cmd" in
   version)
-    echo "aetheus-mail-helper-version: 2"
+    echo "aetheus-mail-helper-version: 3"
     ;;
   add-domain)
     domain="${2:-}"; selector="${3:-}"
@@ -351,8 +358,20 @@ case "$cmd" in
     ;;
   spam-install)
     export DEBIAN_FRONTEND=noninteractive
+    # Recorded for purge: only a package this command installed itself is removed with the stack, so a
+    # Redis the host already ran for something else survives "Réinstaller la messagerie".
+    installed_here=""
+    for p in rspamd redis-server; do
+      case "$(dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null || true)" in
+        ?i*) : ;;
+        *) installed_here="$installed_here $p" ;;
+      esac
+    done
     apt-get update -qq || true
     apt-get install -y -qq rspamd redis-server
+    mkdir -p /etc/aetheus
+    for p in $installed_here; do printf '%s\n' "$p"; done >> /etc/aetheus/mail-spam.packages
+    chmod 644 /etc/aetheus/mail-spam.packages
     mkdir -p /etc/rspamd/local.d
     printf '# Managed by Aetheus mail-manage.\nbind_socket = "localhost:11332";\nmilter = yes;\ntimeout = 120s;\nupstream "local" {\n  default = yes;\n  self_scan = yes;\n}\n' > /etc/rspamd/local.d/worker-proxy.inc
     printf '# Managed by Aetheus mail-manage.\nservers = "127.0.0.1";\n' > /etc/rspamd/local.d/redis.conf
@@ -450,6 +469,76 @@ case "$cmd" in
       if [ -d "$dir" ]; then kb="$(du -sk "$dir" | cut -f1)"; else kb=0; fi
       echo "QUOTA	$email	$kb"
     done
+    ;;
+  purge)
+    # "Réinstaller la messagerie" (recette R2-083 / R2-088, decision of 2026-10-03: erase everything).
+    # Removes what mail-setup and spam-install created, nothing else, so the stack can be configured
+    # again from scratch. Idempotent: on a host with nothing installed every step finds nothing to do.
+    export DEBIAN_FRONTEND=noninteractive
+    marker=/etc/aetheus/mail-stack.managed
+    units="postfix dovecot opendkim"
+    packages="postfix dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd opendkim opendkim-tools"
+    # rspamd and Redis go only when spam-install installed them (its record), or, for rspamd on a host
+    # set up before that record existed, when spam-install's own configuration is in place.
+    spam=no
+    if grep -qsx rspamd /etc/aetheus/mail-spam.packages \
+      || { [ ! -f /etc/aetheus/mail-spam.packages ] && grep -qs '^# Managed by Aetheus mail-manage' /etc/rspamd/local.d/worker-proxy.inc; }; then
+      spam=yes; units="$units rspamd"; packages="$packages rspamd"
+    fi
+    if grep -qsx redis-server /etc/aetheus/mail-spam.packages; then
+      units="$units redis-server"; packages="$packages redis-server"
+    fi
+    # The mail host name, read before Postfix goes: /etc/mailname is removed only when mail-setup wrote it.
+    mailhost=""
+    if [ -f "$marker" ]; then
+      mailhost="$(sed -n 's/^hostname=//p' "$marker" | head -n 1)"
+      if [ -z "$mailhost" ] && command -v postconf >/dev/null 2>&1; then
+        mailhost="$(postconf -h myhostname 2>/dev/null || true)"
+      fi
+    fi
+    # Unmask first: a masked unit (postfix was, tasks 23257 and 23258) stays masked through a purge and
+    # would refuse the next setup's enable.
+    for u in $units; do
+      case "$(systemctl is-enabled "$u.service" 2>/dev/null || true)" in
+        masked) systemctl unmask "$u.service" ;;
+        masked-runtime) systemctl unmask --runtime "$u.service" ;;
+      esac
+    done
+    for u in $units; do
+      if systemctl list-unit-files "$u.service" --no-legend 2>/dev/null | grep -q .; then
+        systemctl disable --now "$u.service"
+      fi
+    done
+    to_purge=""
+    for p in $packages; do
+      case "$(dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null || true)" in
+        ""|?n*) : ;;
+        *) to_purge="$to_purge $p" ;;
+      esac
+    done
+    if [ -n "$to_purge" ]; then
+      # Fixed package names only (no argument reaches this list): the unquoted expansion splits on purpose.
+      # shellcheck disable=SC2086
+      apt-get purge -y -qq $to_purge
+      # Only these packages: removing the orphans apt lists would, on a shared host, take packages that
+      # have nothing to do with mail.
+    fi
+    # The answers mail-setup preseeded (main_mailer_type, mailname); a purged postfix normally drops them.
+    if command -v debconf-communicate >/dev/null 2>&1; then
+      echo PURGE | debconf-communicate postfix >/dev/null
+    fi
+    rm -rf /etc/postfix /etc/dovecot /etc/opendkim /var/mail/vhosts /var/spool/postfix /var/lib/postfix
+    rm -f /etc/opendkim.conf /etc/letsencrypt/renewal-hooks/deploy/aetheus-mail
+    if [ "$spam" = yes ]; then rm -rf /etc/rspamd; fi
+    if [ -n "$mailhost" ] && [ -f /etc/mailname ] && [ "$(cat /etc/mailname)" = "$mailhost" ]; then
+      rm -f /etc/mailname
+    fi
+    if [ "$(id -u vmail 2>/dev/null || true)" = 5000 ]; then userdel vmail; fi
+    if [ "$(getent group vmail | cut -d: -f3)" = 5000 ]; then groupdel vmail; fi
+    rm -f /etc/aetheus/mail-spam.packages
+    # Last: until here the page still knows an Aetheus stack is (partly) on the host.
+    rm -f "$marker"
+    echo "Mail stack purged"
     ;;
   *)
     die "unknown sub-command: $cmd"

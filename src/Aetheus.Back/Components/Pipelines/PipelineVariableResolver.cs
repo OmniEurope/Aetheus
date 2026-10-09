@@ -68,6 +68,10 @@ internal sealed class PipelineVariableResolver(
             // what a release/version pattern should use: it increments by exactly one per run of
             // this pipeline, so 1.1.$(BUILD_PIPELINE_RUNNUMBER) yields 1.1.1, 1.1.2, 1.1.3…
             ["BUILD_PIPELINE_RUNNUMBER"] = (buildNumber ?? 0).ToString(),
+            // Recette R2-110: the project's release number, the last number of the application version.
+            // A run's own number replaces this 0 (PipelineReleaseNumbers.Inject, at launch and every stage);
+            // 0 remains for a resolution without a run (preflight, dry run) and a pipeline without a project.
+            [PipelineReleaseNumbers.VariableName] = "0",
             ["BUILD_PIPELINEID"] = (pipelineId ?? 0).ToString(),
             ["BUILD_PIPELINENAME"] = pipelineName ?? definition.Name,
             // Stable per-run host port for disposable QA environments. Run ids are globally
@@ -246,6 +250,7 @@ internal sealed class PipelineVariableResolver(
         // and CI can package an unpinned artifact despite the run itself having a valid commit.
         if (PipelineRunHelpers.IsGitCommitHash(run.CommitHash))
             additionalVars["BUILD_SOURCEVERSION"] = run.CommitHash!;
+        PipelineReleaseNumbers.Inject(additionalVars, run.ReleaseNumber);
 
         // S-TECH-RPVI: shared injection point (see PipelineProjectVariables), identical to the
         // trigger-time path so the rehomed mirror URL stays consistent across re-resolutions.

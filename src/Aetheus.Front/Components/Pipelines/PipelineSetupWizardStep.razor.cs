@@ -29,6 +29,10 @@ public partial class PipelineSetupWizardStep
     [Parameter] public EventCallback<bool> SecurityChanged { get; set; }
     [Parameter] public bool Qa { get; set; }
     [Parameter] public EventCallback<bool> QaChanged { get; set; }
+    [Parameter] public bool QaExtended { get; set; }
+    [Parameter] public EventCallback<bool> QaExtendedChanged { get; set; }
+    [Parameter] public bool SecurityHistory { get; set; }
+    [Parameter] public EventCallback<bool> SecurityHistoryChanged { get; set; }
     [Parameter] public bool Candidate { get; set; }
     [Parameter] public EventCallback<bool> CandidateChanged { get; set; }
     [Parameter] public bool Nightly { get; set; }

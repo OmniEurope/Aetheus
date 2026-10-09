@@ -91,14 +91,12 @@ public sealed class AppPerformanceViewTests : BunitContext
             .Add(component => component.AppName, "Éditeur Toto"));
         cut.WaitForAssertion(() => Assert.Contains("api/orders/{id}", cut.Markup, StringComparison.Ordinal));
 
-        // Recette R2-011: the bar of the grid (Markdown then CSV), under the table; no standalone button.
+        // Recette R2-011: the bar of the grid, under the table; no standalone button. R2-124 (second decision
+        // of 2026-10-05): Markdown alone, blue (R2-009), no CSV.
         Assert.Empty(cut.FindComponents<OmniMarkdownExportButton<AppRouteTimingDto>>());
-        var buttons = cut.FindAll(".omni-data-grid__export-button");
-        Assert.Equal(2, buttons.Count);
-        // Recette R2-009: Markdown is the bar's one blue button, CSV stays Ghost.
-        Assert.Contains("omni-button--primary", buttons[0].ClassList);
-        Assert.DoesNotContain("omni-button--primary", buttons[1].ClassList);
-        await buttons[0].ClickAsync(new());
+        var button = Assert.Single(cut.FindAll(".omni-data-grid__export-button"));
+        Assert.Contains("omni-button--primary", button.ClassList);
+        await button.ClickAsync(new());
 
         cut.WaitForAssertion(() => Assert.Single(module.Invocations["download"]));
         var download = module.Invocations["download"].Single();

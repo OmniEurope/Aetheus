@@ -46,7 +46,7 @@ services:
       # reads like a broken deployment. On the real host the name already resolves to itself; this
       # gives the simulation the same property. Browser smoke containers run with --network host,
       # so they inherit this file.
-      - "demo.aetheus.sonytumen.com:127.0.0.1"
+      - "demo.app.aetheus.sonytumen.com:127.0.0.1"
     # Optional agent auto-install. VPSSIM_AGENT=1 → the box mints a token from the
     # backend API at boot and self-installs the agent (appears in the dashboard).
     # Default 0 → blank VPS, no agent. Auto-install requires either AGENT_TOKEN

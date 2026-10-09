@@ -44,7 +44,7 @@
 </OmniCard>
 
 <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_tokens" Count="@_totalCount" TItem="PersonalAccessTokenDto"
-                IsLoading="@_loading" LoadData="@LoadDataAsync" PageSize="25"
+                IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="25"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<PersonalAccessTokenDto>(_tokens, _totalCount))"
                 class="aetheus-grid-fullheight">
@@ -73,7 +73,7 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="PersonalAccessTokenDto" Title="@L["PatStatus"]" Width="120px" Sortable="false" Filterable="false" >
+        <OmniDataGridColumn TItem="PersonalAccessTokenDto" Title="@L["PatStatus"]" ExportValue="@StatusExport" Width="120px" Sortable="false" Filterable="false" >
             <Template Context="t">
                 <OmniBadge Fill="OmniFill.Solid" Tone="@StatusStyle(t)">@StatusLabel(t)</OmniBadge>
             </Template>

@@ -15,12 +15,7 @@ public sealed class LinuxMetricsCollector(ILogger<LinuxMetricsCollector> logger)
         {
             var cpuLine = File.ReadAllLines("/proc/stat")
                 .First(l => l.StartsWith("cpu "));
-            var parts = cpuLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-            // parts[1..] = user, nice, system, idle, iowait, irq, softirq, steal
-            var values = parts.Skip(1).Select(long.Parse).ToArray();
-            var idle = values[3] + (values.Length > 4 ? values[4] : 0); // idle + iowait
-            var total = values.Sum();
+            var (idle, total) = ParseCpuTimes(cpuLine);
 
             if (!_cpuInitialized)
             {
@@ -46,6 +41,22 @@ public sealed class LinuxMetricsCollector(ILogger<LinuxMetricsCollector> logger)
             logger.LogWarning(ex, "Failed to read /proc/stat for CPU percent; reporting 0 (may look idle)");
             return 0;
         }
+    }
+
+    /// <summary>
+    /// Idle and total jiffies of a /proc/stat <c>cpu</c> line. Only user, nice, system, idle, iowait,
+    /// irq, softirq and steal are summed: the kernel already counts guest and guest_nice inside user
+    /// and nice, so adding them again overstates the busy share on a virtualization host.
+    /// </summary>
+    internal static (long Idle, long Total) ParseCpuTimes(string cpuLine)
+    {
+        var values = cpuLine.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Skip(1)
+            .Take(8)
+            .Select(long.Parse)
+            .ToArray();
+        var idle = values[3] + (values.Length > 4 ? values[4] : 0); // idle + iowait
+        return (idle, values.Sum());
     }
 
     protected override double GetMemoryUsedMb()

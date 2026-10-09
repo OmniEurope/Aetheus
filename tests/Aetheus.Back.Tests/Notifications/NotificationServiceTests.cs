@@ -97,6 +97,43 @@ public class NotificationServiceTests
             => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK));
     }
 
+    private sealed class StatusHandler(System.Net.HttpStatusCode status) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(new HttpResponseMessage(status));
+        }
+    }
+
+    [Theory]
+    [InlineData(NotificationChannelType.Slack, "webhookUrl", 401)]
+    [InlineData(NotificationChannelType.Slack, "webhookUrl", 429)]
+    [InlineData(NotificationChannelType.Slack, "webhookUrl", 500)]
+    [InlineData(NotificationChannelType.Teams, "webhookUrl", 401)]
+    [InlineData(NotificationChannelType.Teams, "webhookUrl", 429)]
+    [InlineData(NotificationChannelType.Teams, "webhookUrl", 500)]
+    [InlineData(NotificationChannelType.Webhook, "url", 401)]
+    [InlineData(NotificationChannelType.Webhook, "url", 429)]
+    [InlineData(NotificationChannelType.Webhook, "url", 500)]
+    public async Task TestChannelAsync_ProviderRejectsTheMessage_ReportsFailedNotSent(
+        NotificationChannelType type, string urlProperty, int status)
+    {
+        _repo.FindChannelAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new NotificationChannel { Id = 1, Name = "ch", Type = type, ConfigurationJson = $"{{\"{urlProperty}\":\"https://93.184.216.34/hook\"}}" });
+        var handler = new StatusHandler((System.Net.HttpStatusCode)status);
+        _httpFactory.CreateClient("webhooks").Returns(new HttpClient(handler));
+
+        var result = await _sut.TestChannelAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(NotificationTestStatus.Failed, result!.Status);
+        Assert.Contains($"HTTP {status}", result.Message, StringComparison.Ordinal);
+        await _audit.DidNotReceive().LogAsync("Tested", Arg.Any<string>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task GetChannelsAsync_ReturnsMappedList()
     {

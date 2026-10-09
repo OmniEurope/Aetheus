@@ -153,6 +153,8 @@ public sealed class TaskTimeoutService(
                     && stepRun.Status is not (TaskExecutionStatus.Success or TaskExecutionStatus.Failed or TaskExecutionStatus.Timeout))
                 {
                     stepRun.Status = TaskExecutionStatus.Timeout;
+                    stepRun.FailureCode ??= task.FailureCode;
+                    stepRun.FailureReason ??= task.FailureReason;
                     stepRun.CompletedAt = now;
                     advanceTasks.Add((task.PipelineRunId!.Value, stepRun.StageName));
 
@@ -274,7 +276,8 @@ public sealed class TaskTimeoutService(
 
         var parked = candidates
             .Where(task => task.PipelineRunId.HasValue)
-            .Where(task => PipelineOutageReplayPolicy.MayReplayAfterAnOutage(task.Operation))
+            // BACK-025: only never-started work replays; a started command may already have had its effect.
+            .Where(task => PipelineOutageReplayPolicy.MayReplayAfterAnOutage(task.Operation, task.StartedAt is not null))
             .Where(task => now - task.CreatedAt < _offlineAgentGrace)
             .ToList();
 
@@ -372,6 +375,12 @@ public sealed class TaskTimeoutService(
             task.Status = TaskExecutionStatus.Timeout;
             task.CompletedAt = now;
             task.EnvironmentVariables = TaskEnvProtection.EmptyEnv;
+            // BACK-025: a started task is not replayed (ParkPipelineWork); it fails and says why.
+            if (task.StartedAt is not null)
+            {
+                task.FailureCode = TaskFailureCodes.InfrastructureMismatch;
+                task.FailureReason = PipelineOutageReplayPolicy.NotReplayedReason;
+            }
             logger.LogWarning(
                 "Task #{TaskId} ({TaskName}) was orphaned by an agent restart; previous session {PreviousSession} was replaced",
                 task.Id,

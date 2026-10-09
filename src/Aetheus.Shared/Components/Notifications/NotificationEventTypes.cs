@@ -53,11 +53,13 @@ public static class NotificationEventTypes
         new("analysis.operational.scanner-unavailable", DefaultEnabled: false, CarriesProjectId: false),
         new("app.down", DefaultEnabled: false, CarriesProjectId: true),
         new("app.recovered", DefaultEnabled: false, CarriesProjectId: true),
-        new("app.analytics.quota", DefaultEnabled: false, CarriesProjectId: false),
-        new("app.metric.threshold", DefaultEnabled: false, CarriesProjectId: false),
+        new("app.analytics.quota", DefaultEnabled: false, CarriesProjectId: true),
+        new("project.storage.quota", DefaultEnabled: false, CarriesProjectId: true),
+        new("app.metric.threshold", DefaultEnabled: false, CarriesProjectId: true),
         new("alert.triggered", DefaultEnabled: false, CarriesProjectId: false),
         new("certbot.renewal-check.failed", DefaultEnabled: false, CarriesProjectId: false),
-        new("SecretExpiring", DefaultEnabled: false, CarriesProjectId: false)
+        // Carries the project owning the vault; a vault of a shared environment has none.
+        new("SecretExpiring", DefaultEnabled: false, CarriesProjectId: true)
     ];
 
     /// <summary>The catalogue entry for <paramref name="eventType"/>, or null for an unknown type.</summary>

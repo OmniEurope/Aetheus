@@ -135,7 +135,8 @@ internal sealed class GitPushPipelineTriggerHandler(
         if (preparation is null) return;
         var activeRunIds = await pipelineRepo.GetActiveRunIdsAsync(pipeline.Id, ct).ConfigureAwait(false);
         foreach (var activeRunId in activeRunIds)
-            await pipelineRunService.CancelRunAsync(activeRunId, ct).ConfigureAwait(false);
+            await pipelineRunService.CancelRunAsync(
+                activeRunId, PipelineRunCancellation.BySystem("Superseded by a newer push (latest wins)"), ct).ConfigureAwait(false);
         logger.LogInformation(
             "Git push latest-wins requested cancellation of {Count} superseded run(s) for pipeline {PipelineId}",
             activeRunIds.Count, pipeline.Id);

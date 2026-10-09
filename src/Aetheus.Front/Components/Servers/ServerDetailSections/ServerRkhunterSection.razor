@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 
 
 @* --- Status bar --- *@
@@ -89,7 +90,7 @@
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                         <CountBadge Value="@_warnings.Count" Variant="OmniTone.Warning" />
                     </OmniStack>
-                    <OmniDataGrid @ref="_warningsGrid" FillAvailableHeight="true" Items="@_warnings" TItem="RkhunterWarningDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                    <OmniDataGrid @ref="_warningsGrid" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@_warnings" TItem="RkhunterWarningDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                         <Columns>
                             <OmniDataGridColumn Frozen="true" TItem="RkhunterWarningDto" Property="Category" Title="@L["Category"]" Width="9.375rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
                             <OmniDataGridColumn TItem="RkhunterWarningDto" Property="Detail" Title="@L["Detail"]"  Filterable="true"/>
@@ -116,7 +117,7 @@
                 }
                 else
                 {
-                    <OmniDataGrid @ref="_historyGrid" FillAvailableHeight="true" Items="@_scanHistory" TItem="RkhunterScanResultDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                    <OmniDataGrid @ref="_historyGrid" ExportTitle="@ExportContext.Title(L["ScanHistory"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@_scanHistory" TItem="RkhunterScanResultDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                         <Columns>
                             <OmniDataGridColumn Frozen="true" TItem="RkhunterScanResultDto" Property="Status" Title="@L["Status"]" Width="7.5rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ScanStatusText">
                                 <Template Context="r">

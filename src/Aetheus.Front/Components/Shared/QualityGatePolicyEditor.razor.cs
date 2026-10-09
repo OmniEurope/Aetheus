@@ -409,27 +409,33 @@ public partial class QualityGatePolicyEditor
         return candidate;
     }
 
-    private static bool IsValidImport(QualityGateExport? import)
+    /// <summary>An imported gate: schema 1, 1 to 100 rules, each valid, with a unique key, a target and,
+    /// for a metric rule, its operator and threshold.</summary>
+    internal static bool IsValidImport(QualityGateExport? import)
     {
         if (import is not { SchemaVersion: 1, Rules.Count: > 0 and <= 100 }) return false;
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var rule in import.Rules)
-        {
-            var results = new List<ValidationResult>();
-            if (!Validator.TryValidateObject(rule, new ValidationContext(rule), results, true)
-                || string.IsNullOrWhiteSpace(rule.PolicyKey)
-                || !keys.Add(rule.PolicyKey)
-                || (!rule.SeverityThreshold.HasValue
-                    && string.IsNullOrWhiteSpace(rule.RuleId)
-                    && string.IsNullOrWhiteSpace(rule.MetricKey)
-                    && !rule.Category.HasValue
-                    && string.IsNullOrWhiteSpace(rule.ScannerKey))
-                || (!string.IsNullOrWhiteSpace(rule.MetricKey)
-                    && (!rule.Operator.HasValue || !rule.Threshold.HasValue)))
-                return false;
-        }
-        return true;
+        return import.Rules.All(rule => IsValidImportedRule(rule, keys));
     }
+
+    private static bool IsValidImportedRule(UpsertAnalysisPolicyRequest rule, HashSet<string> keys) =>
+        Validator.TryValidateObject(rule, new ValidationContext(rule), new List<ValidationResult>(), true)
+        && !string.IsNullOrWhiteSpace(rule.PolicyKey)
+        && keys.Add(rule.PolicyKey)
+        && HasImportTarget(rule)
+        && HasCompleteMetric(rule);
+
+    /// <summary>A rule targets something: a severity, a rule, a metric, a category or a scanner.</summary>
+    private static bool HasImportTarget(UpsertAnalysisPolicyRequest rule) =>
+        rule.SeverityThreshold.HasValue
+        || !string.IsNullOrWhiteSpace(rule.RuleId)
+        || !string.IsNullOrWhiteSpace(rule.MetricKey)
+        || rule.Category.HasValue
+        || !string.IsNullOrWhiteSpace(rule.ScannerKey);
+
+    /// <summary>A metric rule carries its operator and threshold.</summary>
+    private static bool HasCompleteMetric(UpsertAnalysisPolicyRequest rule) =>
+        string.IsNullOrWhiteSpace(rule.MetricKey) || (rule.Operator.HasValue && rule.Threshold.HasValue);
 
     private static List<UpsertAnalysisPolicyRequest> Preset(bool strict) =>
     [
@@ -504,7 +510,7 @@ public partial class QualityGatePolicyEditor
     private sealed record RuleKindOption(QualityGateRuleKind Value, string Text);
     private sealed record LocalizedOption<T>(T Value, string Text);
 
-    private sealed class QualityGateExport
+    internal sealed class QualityGateExport
     {
         public int SchemaVersion { get; init; } = 1;
         public List<UpsertAnalysisPolicyRequest> Rules { get; init; } = [];

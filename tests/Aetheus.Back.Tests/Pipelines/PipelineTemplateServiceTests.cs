@@ -609,6 +609,43 @@ public class PipelineTemplateServiceTests
         Assert.Contains("Cyclic", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Recette R2-121: a project of an organization that holds no copy of the catalog extends
+    /// the shipped template the platform shares; an organization's own template still wins.</summary>
+    [Fact]
+    public async Task Resolver_AnotherOrganization_ExtendsTheSharedShippedTemplate_UnlessItHasItsOwn()
+    {
+        var shared = new PipelineTemplate
+        {
+            Id = 7,
+            Name = "application-ci",
+            OrganizationId = 1,
+            LatestVersion = 2,
+            Versions = [new PipelineTemplateVersion { Version = 2, YamlContent = "name: shared\nvariables:\n  FROM: shared\nstages: []" }]
+        };
+        _repoMock.FindSharedTemplateByNameAsync("application-ci", Arg.Any<CancellationToken>()).Returns(shared);
+        var resolver = new PipelineTemplateResolver(_repoMock);
+
+        var fromShared = await resolver.ResolveAsync(
+            "name: atlas-ci\nextends: application-ci@2\nstages: []", 4, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("shared", fromShared.Definition.Variables["FROM"]);
+        Assert.Equal(2, fromShared.ResolvedVersion);
+
+        _repoMock.FindTemplateByNameAsync("application-ci", 4, Arg.Any<CancellationToken>()).Returns(new PipelineTemplate
+        {
+            Id = 9,
+            Name = "application-ci",
+            OrganizationId = 4,
+            LatestVersion = 2,
+            Versions = [new PipelineTemplateVersion { Version = 2, YamlContent = "name: own\nvariables:\n  FROM: own\nstages: []" }]
+        });
+
+        var fromOwn = await resolver.ResolveAsync(
+            "name: atlas-ci\nextends: application-ci@2\nstages: []", 4, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("own", fromOwn.Definition.Variables["FROM"]);
+    }
+
     [Fact]
     public async Task Resolver_LegacyReferenceReportsConcreteLatestVersion()
     {

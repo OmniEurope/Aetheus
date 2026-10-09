@@ -80,6 +80,13 @@ internal static partial class PipelineCommandBuilder
     internal static string Substitute(string command, IReadOnlyDictionary<string, string> variables)
         => Substitute(command, variables, EveryDefaultApplies);
 
+    /// <summary>The names <paramref name="text"/> references as <c>$(NAME)</c> or <c>$(NAME:-default)</c>,
+    /// read with the same pattern <see cref="Substitute(string, IReadOnlyDictionary{string, string})"/> uses.</summary>
+    internal static IEnumerable<string> ReferencedVariableNames(string text) =>
+        string.IsNullOrEmpty(text)
+            ? []
+            : VariablePattern().Matches(text).Select(match => match.Groups[1].Value);
+
     /// <summary>
     /// Substitutes <c>${{ parameters.X }}</c> and <c>$(X)</c>. An unknown <c>$(X)</c> stays literal.
     /// <c>$(X:-default)</c> takes the value of X when it is defined and not empty; otherwise
@@ -173,14 +180,18 @@ internal static partial class PipelineCommandBuilder
         "$ErrorActionPreference = 'Stop'\n" +
         "$env:GIT_TERMINAL_PROMPT = '0'\n" +
         WindowsGitAuthPreamble +
+        // BACK-017: PowerShell does not stop on a native exit code, even with ErrorActionPreference
+        // Stop. Every mandatory git call checks its own, so a failed checkout never reads as prepared;
+        // the fallback fetches stay optional, the final cat-file check decides.
+        "function Assert-GitSucceeded([string]$operation) { if ($LASTEXITCODE -ne 0) { throw \"git $operation failed with exit code $LASTEXITCODE.\" } }\n" +
         $"New-Item -ItemType Directory -Force -Path '{workdirExpr}' | Out-Null\n" +
         $"Set-Location '{workdirExpr}'\n" +
         "$branch = if ($env:DEFAULT_BRANCH) { $env:DEFAULT_BRANCH } else { 'main' }\n" +
         "$historyDepth = if ($env:AETHEUS_GIT_HISTORY_DEPTH) { $env:AETHEUS_GIT_HISTORY_DEPTH } else { '1' }\n" +
         "if ($historyDepth -notmatch '^[1-9][0-9]*$') { throw 'AETHEUS_GIT_HISTORY_DEPTH must be a positive integer.' }\n" +
         "if ($env:BUILD_SOURCEVERSION) {\n" +
-        "  if (-not (Test-Path '.git')) { git init; git remote add origin $env:REPOSITORY_URL }\n" +
-        "  git fetch --depth $historyDepth origin $branch\n" +
+        "  if (-not (Test-Path '.git')) { git init; Assert-GitSucceeded 'init'; git remote add origin $env:REPOSITORY_URL; Assert-GitSucceeded 'remote add' }\n" +
+        "  git fetch --depth $historyDepth origin $branch; Assert-GitSucceeded 'fetch'\n" +
         "  git cat-file -e \"$env:BUILD_SOURCEVERSION`^{commit}\" 2>$null\n" +
         "  if ($LASTEXITCODE -ne 0) { git fetch --depth 1 origin $env:BUILD_SOURCEVERSION }\n" +
         "  git cat-file -e \"$env:BUILD_SOURCEVERSION`^{commit}\" 2>$null\n" +
@@ -189,15 +200,15 @@ internal static partial class PipelineCommandBuilder
         "  if ($LASTEXITCODE -ne 0) { git fetch --deepen 1000 origin '+refs/heads/*:refs/remotes/origin/*' }\n" +
         "  git cat-file -e \"$env:BUILD_SOURCEVERSION`^{commit}\"\n" +
         "  if ($LASTEXITCODE -ne 0) { throw 'Pinned source commit is not reachable from the configured branch.' }\n" +
-        "  git checkout --detach $env:BUILD_SOURCEVERSION\n" +
-        "  git reset --hard $env:BUILD_SOURCEVERSION\n" +
+        "  git checkout --detach $env:BUILD_SOURCEVERSION; Assert-GitSucceeded 'checkout'\n" +
+        "  git reset --hard $env:BUILD_SOURCEVERSION; Assert-GitSucceeded 'reset'\n" +
         "  Write-Output \"Repository pinned to $env:BUILD_SOURCEVERSION\"\n" +
         "} elseif (Test-Path '.git') {\n" +
-        "  git fetch --depth 1 origin $branch\n" +
-        "  git reset --hard \"origin/$branch\"\n" +
+        "  git fetch --depth 1 origin $branch; Assert-GitSucceeded 'fetch'\n" +
+        "  git reset --hard \"origin/$branch\"; Assert-GitSucceeded 'reset'\n" +
         "  Write-Output 'Repository updated (fetch + reset)'\n" +
         "} else {\n" +
-        "  git clone --branch $branch --single-branch --depth 1 $env:REPOSITORY_URL .\n" +
+        "  git clone --branch $branch --single-branch --depth 1 $env:REPOSITORY_URL .; Assert-GitSucceeded 'clone'\n" +
         "  Write-Output 'Repository cloned'\n" +
         "}\n";
 
@@ -224,26 +235,39 @@ internal static partial class PipelineCommandBuilder
         $"Write-Output 'Workspace prepared: {workspace}'\n" +
         $"Get-ChildItem '{workspace}' | Format-Table Name, Length -AutoSize";
 
+    // BACK-017 (decision of 2026-10-08): a cleanup that cannot remove the workspace fails, after three
+    // attempts spaced out for a process that still holds a file; it never prints a success it did not
+    // achieve. Only the cleanup step fails, the business steps keep their own status.
     internal static string BuildLinuxCleanupCommand(string workspace) =>
-        "set +e\n" +
         $"echo \"Cleaning up workspace: {workspace}\"\n" +
-        $"if [ -d \"{workspace}\" ]; then\n" +
-        $"  rm -rf \"{workspace}\"\n" +
-        "  echo \"Workspace cleaned successfully\"\n" +
-        "else\n" +
+        $"if [ ! -e \"{workspace}\" ]; then\n" +
         "  echo \"Workspace already clean\"\n" +
+        "  exit 0\n" +
         "fi\n" +
-        "echo \"Cleanup complete\"";
+        "for delay in 0 2 5; do\n" +
+        "  sleep \"$delay\"\n" +
+        $"  rm -rf \"{workspace}\"\n" +
+        $"  if [ ! -e \"{workspace}\" ]; then\n" +
+        "    echo \"Workspace cleaned successfully\"\n" +
+        "    exit 0\n" +
+        "  fi\n" +
+        "  echo \"Workspace still present, retrying\"\n" +
+        "done\n" +
+        "echo \"Workspace cleanup failed after 3 attempts; left over:\" >&2\n" +
+        $"ls -la \"{workspace}\" >&2\n" +
+        "exit 1";
 
     internal static string BuildWindowsCleanupCommand(string workspace) =>
         $"Write-Output 'Cleaning up workspace: {workspace}'\n" +
-        $"if (Test-Path '{workspace}') {{\n" +
-        $"  Remove-Item -Recurse -Force '{workspace}'\n" +
-        "  Write-Output 'Workspace cleaned successfully'\n" +
-        "} else {\n" +
-        "  Write-Output 'Workspace already clean'\n" +
+        $"if (-not (Test-Path '{workspace}')) {{ Write-Output 'Workspace already clean'; exit 0 }}\n" +
+        "foreach ($delay in 0, 2, 5) {\n" +
+        "  Start-Sleep -Seconds $delay\n" +
+        $"  Remove-Item -Recurse -Force '{workspace}' -ErrorAction SilentlyContinue\n" +
+        $"  if (-not (Test-Path '{workspace}')) {{ Write-Output 'Workspace cleaned successfully'; exit 0 }}\n" +
+        "  Write-Output 'Workspace still present, retrying'\n" +
         "}\n" +
-        "Write-Output 'Cleanup complete'";
+        "Write-Output 'Workspace cleanup failed after 3 attempts.'\n" +
+        "exit 1";
 
     /// <summary>
     /// F-032 / S-TECH-52: rewrites bash-style <c>&amp;&amp;</c> chains into PowerShell exit-code

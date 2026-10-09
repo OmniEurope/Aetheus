@@ -9,6 +9,12 @@ public interface IAppMonitoringService
     Task<int?> GetAppProjectIdAsync(int id, CancellationToken ct = default);
     Task<MonitoredAppDto> CreateAppAsync(int projectId, CreateMonitoredAppRequest request, CancellationToken ct = default);
     Task<MonitoredAppDto?> UpdateAppAsync(int id, UpdateMonitoredAppRequest request, CancellationToken ct = default);
+    /// <summary>
+    /// The server whose agent would probe a new target (another server, or another URL on the same
+    /// server) if <paramref name="request"/> were applied; null when no agent target changes or the app
+    /// does not exist. Choosing what a server's agent probes needs Write on that server.
+    /// </summary>
+    Task<int?> GetProbeServerChangeAsync(int id, UpdateMonitoredAppRequest request, CancellationToken ct = default);
     Task<bool> DeleteAppAsync(int id, CancellationToken ct = default);
     Task<List<AppHealthSampleDto>> GetSamplesAsync(int id, int hours, CancellationToken ct = default);
 

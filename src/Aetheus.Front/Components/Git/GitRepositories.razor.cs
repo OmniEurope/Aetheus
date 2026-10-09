@@ -249,6 +249,15 @@ public partial class GitRepositories : IAsyncDisposable
         }
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the project filter, search, sort and column filters of the grid.</summary>
+    internal Task<PaginatedResult<GitLightRepoDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest("Name");
+        return Api.Git.GetGitReposPageAsync(page, pageSize, _projectFilter, _search, sortBy, sortDescending,
+            CancellationToken.None, args.ToApiFilters());
+    }
+
     internal async Task OnLoadDataAsync(GridLoadArgs args)
     {
         (_currentPage, _pageSize) = args.ToPageRequest();
@@ -407,4 +416,8 @@ public partial class GitRepositories : IAsyncDisposable
         }
         _joinedRepositoryIds.Clear();
     }
+
+    /// <summary>Recette R2-124: the export writes the state the badge shows.</summary>
+    private Func<GitLightRepoDto, object?> StatusExport => _statusExport ??= repository => L[repository.IsEmpty ? "Empty" : "Active"].Value;
+    private Func<GitLightRepoDto, object?>? _statusExport;
 }

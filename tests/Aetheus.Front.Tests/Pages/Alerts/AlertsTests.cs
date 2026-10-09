@@ -17,10 +17,16 @@ public class AlertsTests : BunitContext
     [Fact]
     public void Renders_EmptyGrid_WhenNoAlerts()
     {
-        _handler.SetJsonResponse("api/alerts", new List<AlertRuleDto>());
+        // FRONTTEST-004: the answer is held back, so the test sees the list still loading (no empty
+        // state yet), then the empty state once the empty list has arrived.
+        var answer = new TaskCompletionSource<List<AlertRuleDto>>();
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/alerts", _ => answer.Task);
         var cut = Render<Alerts>();
-        cut.WaitForState(() => cut.Markup.Contains("NoRecords") || !cut.Markup.Contains("rz-progressbar"));
-        Assert.DoesNotContain("rz-progressbar-circular", cut.Markup);
+        Assert.DoesNotContain("NoAlerts", cut.Markup);
+
+        answer.SetResult([]);
+
+        cut.WaitForAssertion(() => Assert.Contains("NoAlertsDescription", cut.Markup));
     }
 
     [Fact]
@@ -53,7 +59,11 @@ public class AlertsTests : BunitContext
         var cut = Render<Alerts>();
         cut.WaitForState(() => cut.Markup.Contains("Mem Alert"));
 
-        Assert.Contains("Mem Alert", cut.Markup);
+        // FRONTTEST-004: the trigger instant shows, in the browser's time, as a red badge on its row.
+        var expected = triggeredAt.ToLocalTime().ToString("g");
+        var row = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("Mem Alert"));
+        var badge = row.QuerySelectorAll(".omni-badge").Single(b => b.TextContent.Trim() == expected);
+        Assert.Contains("danger", badge.ClassName);
     }
 
     [Fact]
@@ -85,10 +95,14 @@ public class AlertsTests : BunitContext
     [Fact]
     public void Handles_HttpError_Gracefully()
     {
+        // FRONTTEST-004: a failed load ends the loading state (the empty state replaces it) and never
+        // reports success.
         _handler.SetResponse("api/alerts", System.Net.HttpStatusCode.InternalServerError);
         var cut = Render<Alerts>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
-        Assert.DoesNotContain("rz-progressbar-circular", cut.Markup);
+
+        cut.WaitForAssertion(() => Assert.Contains("NoAlertsDescription", cut.Markup));
+        Assert.Contains(_handler.Requests, request => request.Method == "GET" && request.Url.EndsWith("api/alerts", StringComparison.Ordinal));
+        Assert.DoesNotContain(Services.Toasts(), toast => toast.Severity == OmniSeverity.Success);
     }
 
     [Theory]

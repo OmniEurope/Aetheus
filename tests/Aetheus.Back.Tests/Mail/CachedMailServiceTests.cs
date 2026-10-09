@@ -190,7 +190,7 @@ public class CachedMailServiceTests
     public async Task SetupAsync_InvalidatesCache()
     {
         _inner.GetStateAsync(1, Arg.Any<CancellationToken>()).Returns(new MailDataDto());
-        _inner.SetupAsync(1, Arg.Any<MailSetupRequest>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _inner.SetupAsync(1, Arg.Any<MailSetupRequest>(), Arg.Any<CancellationToken>()).Returns(new MailTaskQueuedDto { TaskId = 5 });
 
         await _sut.GetStateAsync(1, ct: TestContext.Current.CancellationToken);
         await _sut.SetupAsync(1, new MailSetupRequest(), ct: TestContext.Current.CancellationToken);

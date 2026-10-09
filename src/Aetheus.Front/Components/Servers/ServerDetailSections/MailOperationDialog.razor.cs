@@ -5,7 +5,6 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 public partial class MailOperationDialog
 {
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
-    [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Parameter] public MailDialogMode Mode { get; set; }
     [Parameter] public MailDialogModel Model { get; set; } = new();
@@ -14,20 +13,8 @@ public partial class MailOperationDialog
     [Parameter] public MailDnsRecordsDto? DnsRecords { get; set; }
 
     private MailDialogModel _model = new();
-    private int _setupStep = 1;
-    private MailMxPreviewDto? _mxPreview;
-    private bool _checkingMx;
-    private bool _mxCheckFailed;
-    private string _mxCheckedDomain = string.Empty;
-    private bool CanCheckMx => ServerId > 0 && _model.Domain.Length <= 253
-        && MailValidation.IsValidDomainName(_model.Domain.Trim());
-    private bool PreviewMatchesDomain => _mxPreview is not null
-        && _mxPreview.Domain.Equals(_model.Domain.Trim(), StringComparison.OrdinalIgnoreCase);
-    private bool MxFailureMatchesDomain => _mxCheckFailed
-        && _mxCheckedDomain.Equals(_model.Domain.Trim(), StringComparison.OrdinalIgnoreCase);
     private string SubmitText => Mode switch
     {
-        MailDialogMode.Setup => L["Install"],
         MailDialogMode.RotateDkim => L["Rotate"],
         MailDialogMode.RequestCertificate => L["MailObtainCertificate"],
         MailDialogMode.SpamThresholds => L["Save"],
@@ -46,79 +33,15 @@ public partial class MailOperationDialog
     // same parameters again. Copying the model there wiped what had just been typed: it is copied once.
     protected override void OnInitialized() => _model = Model.Clone();
     protected override void OnParametersSet() => _model.Mode = Mode;
-    private void Submit(MailDialogModel model) => Dialog.Close(model);
-    private async Task CheckMxAsync()
+    // R2-085: a second submit (Enter, then a click) must not close a second time: Close pops whatever
+    // dialog is on top, the one underneath included.
+    private bool _closed;
+    private void Submit(MailDialogModel model)
     {
-        if (!CanCheckMx) return;
-        _checkingMx = true;
-        _mxCheckFailed = false;
-        _mxPreview = null;
-        _mxCheckedDomain = _model.Domain.Trim();
-        try
-        {
-            _mxPreview = await Api.Mail.PreviewMailMxAsync(ServerId, _mxCheckedDomain);
-            _mxCheckFailed = _mxPreview is null;
-        }
-        catch (HttpRequestException)
-        {
-            _mxCheckFailed = true;
-        }
-        finally
-        {
-            _checkingMx = false;
-        }
+        if (_closed) return;
+        _closed = true;
+        Dialog.Close(model);
     }
-    /// <summary>Recette R2-060: the fields each setup step owns. Next used to move on whatever was typed,
-    /// so a bare host name or an address outside the domain only failed at the very end.</summary>
-    internal static readonly IReadOnlyDictionary<int, string[]> SetupStepMembers = new Dictionary<int, string[]>
-    {
-        [1] = [nameof(MailDialogModel.Hostname), nameof(MailDialogModel.Domain), nameof(MailDialogModel.DkimSelector)],
-        [2] = [nameof(MailDialogModel.Email), nameof(MailDialogModel.Password)]
-    };
-
-    private IReadOnlyList<string> _stepErrors = [];
-
-    /// <summary>The model's own validation, kept to the members of one step and translated.</summary>
-    internal IReadOnlyList<string> StepErrors(int step)
-    {
-        if (!SetupStepMembers.TryGetValue(step, out var members)) return [];
-        var results = new List<ValidationResult>();
-        // Attribute checks first; the model's rules run only when they pass (as EditContext does), so
-        // both are read here.
-        Validator.TryValidateObject(_model, new ValidationContext(_model), results, validateAllProperties: true);
-        results.AddRange(_model.Validate(new ValidationContext(_model)));
-        return [.. results
-            .Where(result => result.MemberNames.Any(members.Contains))
-            .Select(result => L[result.ErrorMessage ?? "Required"].Value)
-            .Distinct(StringComparer.Ordinal)];
-    }
-
-    private void NextStep()
-    {
-        _stepErrors = StepErrors(_setupStep);
-        if (_stepErrors.Count == 0) _setupStep++;
-    }
-
-    private void PreviousStep()
-    {
-        _stepErrors = [];
-        _setupStep--;
-    }
-
-    /// <summary>The step list moves back freely; forward only past steps that validate.</summary>
-    private Task<bool> CanMoveToStepAsync(int index)
-    {
-        for (var step = _setupStep; step < index + 1; step++)
-        {
-            _stepErrors = StepErrors(step);
-            if (_stepErrors.Count > 0) return Task.FromResult(false);
-        }
-        _stepErrors = [];
-        return Task.FromResult(true);
-    }
-
-    private void OnStepSelected(int index) => _setupStep = index + 1;
-
     private sealed record DnsRecord(string Label, string Value, bool Multiline);
 }
 

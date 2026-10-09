@@ -29,6 +29,15 @@ public partial class VersionHistoryDialog
 
     protected override void OnParametersSet() => _currentVersion = CurrentVersion;
 
+    /// <summary>Recette R2-124: one page of the versions export, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<VariableEntryVersionDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(25);
+        var (sortBy, descending) = args.ToSortRequest("Version", true);
+        return Api.Variables.GetVariableEntryVersionsPageAsync(
+            LibraryId, EntryId, page, pageSize, sortBy: sortBy, sortDescending: descending, filters: args.ToApiFilters());
+    }
+
     private async Task LoadDataAsync(GridLoadArgs args)
     {
         var pageSize = args.Top ?? 25;

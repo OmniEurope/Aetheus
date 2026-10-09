@@ -21,6 +21,10 @@ RAW_TEST_EXIT=0
     --results-directory "$WORKSPACE/coverage/analyzers" \
     --report-trx --report-trx-filename analyzers.trx
 ) || RAW_TEST_EXIT=$?
+# From here on a failure is a technical fault, not a test result: the classifier refuses a missing or
+# invalid TRX, and that refusal must fail the step instead of being published as an empty status
+# followed by "Valid TRX evidence recorded" (DEP-015). Failed assertions stay status 1, advisory.
+set -e
 NODE="$(sh deploy/scripts/ensure-node-runtime.sh)"
 ANALYZER_STATUS="$("$NODE" deploy/scripts/classify-dotnet-test-result.mjs \
   "$RAW_TEST_EXIT" "$WORKSPACE/coverage/analyzers/analyzers.trx" -)"

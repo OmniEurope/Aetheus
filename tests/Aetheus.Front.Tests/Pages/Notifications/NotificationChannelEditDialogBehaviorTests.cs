@@ -60,14 +60,23 @@ public sealed class NotificationChannelEditDialogBehaviorTests : BunitContext
         Assert.True(Spy.Closed);
     }
 
-    [Fact]
-    public void Edit_LoadFailure_RendersFormAfterCaughtHttpError()
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway, "LoadFailed")]
+    [InlineData(HttpStatusCode.NotFound, "NotificationChannelNotFound")]
+    public async Task Edit_LoadFailure_ShowsTheFailure_AndNeverOverwritesTheChannel(HttpStatusCode status, string message)
     {
-        _handler.SetResponse(HttpMethod.Get, "api/notifications/channels/4", HttpStatusCode.BadGateway);
+        // FRONT-004: the blank model ("{}", enabled) used to be submittable after a failed GET.
+        _handler.SetResponse(HttpMethod.Get, "api/notifications/channels/4", status);
+        _handler.SetJsonResponse(HttpMethod.Put, "api/notifications/channels/4", new NotificationChannelDto { Id = 4 });
 
         var cut = Render<NotificationChannelEditDialog>(p => p.Add(x => x.ChannelId, 4));
 
-        Assert.Contains("ChannelConfiguration", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(message, cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("ChannelConfiguration", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("button[type='submit']"));
+        Set(Model(cut.Instance), "Name", "Retyped name");
+        await InvokeSubmitAsync(cut);
+        Assert.DoesNotContain(_handler.Requests, r => r.Method == "PUT");
     }
 
     [Fact]

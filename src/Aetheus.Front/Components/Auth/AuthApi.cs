@@ -78,12 +78,13 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
     public async Task<PaginatedResult<UserDto>> GetUsersAsync(
         int page = 1, int pageSize = 25, string? search = null,
         string? sortBy = null, bool sortDescending = false,
-        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
+        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null,
+        CancellationToken cancellationToken = default)
     {
         var query = PageQuery(page, pageSize, search, sortBy, sortDescending);
         // Recette R-210 / R-224: the list's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<UserDto>>(GridColumnFilters.AddTo(
-            QueryHelpers.AddQueryString("api/users", query), filters), JsonOptions.Web) ?? new();
+            QueryHelpers.AddQueryString("api/users", query), filters), JsonOptions.Web, cancellationToken) ?? new();
     }
 
 

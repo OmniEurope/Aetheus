@@ -172,6 +172,16 @@ public sealed record MailDiagnosticItemDto
     public string Key { get; init; } = string.Empty;
     public MailCheckVerdict Verdict { get; init; }
     public string Detail { get; init; } = string.Empty;
+
+    /// <summary>Recette R2-090: for a DNS line (A, PTR, MX, SPF, DKIM, DMARC), the record the line expects,
+    /// so the page shows exactly what to publish. Empty for the other lines.</summary>
+    public string RecordName { get; init; } = string.Empty;
+
+    /// <summary>DNS type of <see cref="RecordValue"/>: <c>A</c>, <c>AAAA</c>, <c>PTR</c>, <c>MX</c> or <c>TXT</c>.</summary>
+    public string RecordType { get; init; } = string.Empty;
+
+    /// <summary>Expected value; empty when it is not known yet (a DKIM key the agent has not read).</summary>
+    public string RecordValue { get; init; } = string.Empty;
 }
 
 /// <summary>Mail diagnostics computed from the last heartbeat and backend DNS lookups.</summary>
@@ -185,4 +195,16 @@ public sealed record MailDiagnosticsDto
 public sealed record MailTaskQueuedDto
 {
     public int TaskId { get; init; }
+}
+
+/// <summary>
+/// "Réinstaller la messagerie" (recette R2-083 / R2-088): erases the whole mail stack of the server. The
+/// caller types back the mail domain (or the mail host name when no domain is known) as proof of intent;
+/// the backend refuses any other word.
+/// </summary>
+public sealed record MailPurgeRequest
+{
+    [Required]
+    [StringLength(253, MinimumLength = 1)]
+    public string Confirmation { get; init; } = string.Empty;
 }

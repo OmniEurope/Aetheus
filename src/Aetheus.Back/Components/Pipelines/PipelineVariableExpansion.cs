@@ -41,15 +41,45 @@ internal static class PipelineVariableExpansion
     /// Resolution-time expansion. A vault secret is expanded exactly as before the default syntax
     /// existed (its own <c>$(NAME)</c> references resolve, a <c>$(NAME:-x)</c> shape stays as typed):
     /// it is opaque data, not a template.
+    /// <para>
+    /// BACK-022: a variable that references a secret, directly or through another variable
+    /// (<c>ALIAS: $(VAULT_SECRET)</c>), receives its clear value here. It joins
+    /// <paramref name="secretKeys"/>, so it is classified like the secret everywhere that set is read:
+    /// left out of the persisted run variables, kept out of the environment of a step that does not
+    /// reference it, and passed to the command as a placeholder rather than as text.
+    /// </para>
     /// </summary>
     internal static void ExpandResolved(
         Dictionary<string, string> resolved,
-        IReadOnlySet<string> secretKeys,
+        ISet<string> secretKeys,
         IReadOnlySet<string> namesStillToCome)
     {
         ArgumentNullException.ThrowIfNull(resolved);
+        ArgumentNullException.ThrowIfNull(secretKeys);
+        var vaultSecrets = new HashSet<string>(secretKeys, StringComparer.OrdinalIgnoreCase);
+        var declared = new Dictionary<string, string>(resolved, StringComparer.OrdinalIgnoreCase);
         Func<string, bool> applies = name => !namesStillToCome.Contains(name);
-        Expand(resolved, _ => true, key => secretKeys.Contains(key) ? null : applies, NoHiddenNames);
+        Expand(resolved, _ => true, key => vaultSecrets.Contains(key) ? null : applies, NoHiddenNames);
+        ClassifySecretAliases(declared, secretKeys);
+    }
+
+    // Read on the values as declared, before expansion replaced the references: the taint follows the
+    // reference graph to its fixed point, so a chain longer than the expansion depth is still covered.
+    private static void ClassifySecretAliases(IReadOnlyDictionary<string, string> declared, ISet<string> secretKeys)
+    {
+        bool added;
+        do
+        {
+            added = false;
+            foreach (var (key, value) in declared)
+            {
+                if (secretKeys.Contains(key)) continue;
+                if (!PipelineCommandBuilder.ReferencedVariableNames(value).Any(secretKeys.Contains)) continue;
+                secretKeys.Add(key);
+                added = true;
+            }
+        }
+        while (added);
     }
 
     /// <summary>

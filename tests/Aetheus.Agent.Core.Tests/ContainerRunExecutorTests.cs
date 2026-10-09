@@ -172,6 +172,25 @@ public class ContainerRunExecutorTests
     }
 
     [Fact]
+    public void ResolveSecretFilePaths_StayUnderDaemonVisibleStateRoot_NeverTheServicePrivateTmp()
+    {
+        var stateRoot = Path.Combine(Path.GetTempPath(), "agent-work", "container-state", "7");
+
+        var (envFile, secretsFile) = ContainerRunExecutor.ResolveSecretFilePaths(
+            stateRoot, "prom-x", hasEnvironment: true, hasMounted: true);
+
+        var secretsDirectory = Path.Combine(stateRoot, "secrets");
+        Assert.Equal(Path.Combine(secretsDirectory, "prom-x.env"), envFile);
+        Assert.Equal(Path.Combine(secretsDirectory, "prom-x.secrets.sh"), secretsFile);
+        Assert.NotEqual(
+            Path.TrimEndingDirectorySeparator(Path.GetTempPath()),
+            Path.GetDirectoryName(secretsFile));
+        Assert.Equal(
+            (null, null),
+            ContainerRunExecutor.ResolveSecretFilePaths(stateRoot, "prom-x", hasEnvironment: false, hasMounted: false));
+    }
+
+    [Fact]
     public void BuildDockerRun_MultiLineSecrets_UseMountAndSource_NeverArgv()
     {
         var exec = NewExecutor();

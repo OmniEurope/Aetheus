@@ -63,6 +63,17 @@ public sealed class BlueGreenOperationExecutor(
         }
         if (!BlueGreenContext.TryCreate(target, envVars, out var context, out var contextError))
         {
+            // Recette R2-092: a run that failed before it prepared the host has no env file, and
+            // nothing to undo either. The journal decides, not the missing file: an open transaction
+            // still fails below, because a switch the rollback cannot restore must not read as success.
+            if (kind == OperationKind.BlueGreenRollback
+                && BlueGreenJournal.HoldsNoOpenTransaction(envVars.GetValueOrDefault("AETHEUS_BG_STATE_DIR", string.Empty).Trim()))
+            {
+                await onOutput(
+                    "No deployment transaction is open: this run never switched colour, nothing to roll back.",
+                    TaskLogLevel.Info).ConfigureAwait(false);
+                return new ExecutorResult(0, false);
+            }
             await onOutput(contextError, TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
         }
@@ -475,8 +486,15 @@ public sealed class BlueGreenOperationExecutor(
             return new ExecutorResult(1, false);
 
         var retired = journal.Idle;
-        if (retired is "blue" or "green")
-            await _compose.StopColourAsync(context, retired, timeoutSeconds, ct).ConfigureAwait(false);
+        if (retired is "blue" or "green"
+            && await _compose.StopColourAsync(context, retired, timeoutSeconds, ct).ConfigureAwait(false) != 0)
+        {
+            // Keep the transaction: it is the only record that this colour still has to be stopped.
+            await onOutput(
+                $"The {retired} colour could not be stopped; the deployment transaction stays open so the retirement can be retried.",
+                TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(1, false);
+        }
 
         journal.ClearLiveColour();
         journal.Clear();

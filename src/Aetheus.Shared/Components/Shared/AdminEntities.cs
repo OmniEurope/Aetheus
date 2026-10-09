@@ -22,4 +22,7 @@ public static class AdminEntities
 
     /// <summary>New API timing samples reached the Performance page's recorder (the id is always 0).</summary>
     public const string ApiPerformance = "ApiPerformance";
+
+    /// <summary>New API timing samples reached the OmniEurope.Performance recorder of the side-by-side
+    /// trial (the id is always 0).</summary>
 }

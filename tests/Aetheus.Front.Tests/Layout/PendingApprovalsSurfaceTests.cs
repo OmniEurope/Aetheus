@@ -55,6 +55,24 @@ public sealed class PendingApprovalsSurfaceTests : BunitContext
         Assert.Contains(indicator.FindAll(".pending-approvals-row"), row => row.GetAttribute("href") == "/pipelines/runs/2335");
     }
 
+    /// <summary>Decision of 2026-10-06: the browser tab's title carries the waiting approvals too, with the
+    /// attention message it alternates with in the background (layout.js does the blinking).</summary>
+    [Fact]
+    public void Pending_TheTabTitleIsToldTheCountAndTheAttentionMessage()
+    {
+        _handler.SetJsonResponse("api/pipelines/approvals/pending", new List<PendingApprovalDto> { Approval(2334), Approval(2335) });
+
+        var indicator = Render<PendingApprovalsIndicator>();
+        indicator.WaitForElement(".pending-approvals-btn");
+
+        indicator.WaitForAssertion(() =>
+        {
+            var call = JSInterop.Invocations["Aetheus.titleAttention.set"].Last();
+            Assert.Equal(2, Assert.IsType<int>(call.Arguments[0]));
+            Assert.False(string.IsNullOrWhiteSpace(Assert.IsType<string>(call.Arguments[1])));
+        });
+    }
+
     [Fact]
     public void SeveralPending_TheHomePageListsEachWithItsLink()
     {

@@ -189,7 +189,7 @@ public class PipelineDeploymentStageApprovalTests
         repo.TryTransitionPipelineRunStatusAsync(
             RunId, PipelineStatus.WaitingForApproval, PipelineStatus.Failed, Arg.Any<CancellationToken>()).Returns(true);
         var control = new PipelineRunControlService(
-            repo, Substitute.For<IHubContext<PipelineHub>>(), Substitute.For<IPipelineRunDefinitionParser>());
+            repo, Substitute.For<IHubContext<PipelineHub>>(), Substitute.For<IPipelineRunDefinitionParser>(), Substitute.For<Aetheus.Back.Components.Audit.IAuditService>());
 
         var outcome = await control.ApplyRefusalAsync(
             RunId, scheduler, Substitute.For<IPipelineChildRunLauncher>(), CancellationToken.None);
@@ -198,6 +198,8 @@ public class PipelineDeploymentStageApprovalTests
         await scheduler.DidNotReceive().FailUnconfirmedStageAsync(
             Arg.Any<int>(), Arg.Any<string>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>());
         await scheduler.DidNotReceive().DispatchNextStageWithScopedSecretsAsync(
+            Arg.Any<PipelineRun>(), Arg.Any<PipelineYamlDefinition>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>());
+        await scheduler.DidNotReceive().DispatchNextStageSerializedAsync(
             Arg.Any<PipelineRun>(), Arg.Any<PipelineYamlDefinition>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>());
     }
 
@@ -228,7 +230,7 @@ public class PipelineDeploymentStageApprovalTests
             Repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
                 Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns([]);
-            Repo.FindEnvironmentByNameAsync("prod", Arg.Any<CancellationToken>())
+            Repo.FindEnvironmentByNameAsync("prod", Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(new Aetheus.Back.Data.Entities.Environment
                 {
                     Id = ProdEnvironmentId,
@@ -236,7 +238,7 @@ public class PipelineDeploymentStageApprovalTests
                     RequireApproval = prodRequiresApproval,
                     ApprovalTimeoutMinutes = 1440
                 });
-            Repo.FindEnvironmentByNameAsync("staging", Arg.Any<CancellationToken>())
+            Repo.FindEnvironmentByNameAsync("staging", Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(new Aetheus.Back.Data.Entities.Environment
                 {
                     Id = StagingEnvironmentId,
@@ -247,7 +249,7 @@ public class PipelineDeploymentStageApprovalTests
             Repo.TryTransitionPipelineRunStatusAsync(
                 Arg.Any<int>(), PipelineStatus.Running, PipelineStatus.WaitingForApproval, Arg.Any<CancellationToken>())
                 .Returns(true);
-            environmentChecks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>())
+            environmentChecks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(true);
             finalizer.IsRunActiveAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
             servers.ResolveEffectiveStageTarget(Arg.Any<PipelineStageDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>())

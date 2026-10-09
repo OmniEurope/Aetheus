@@ -77,7 +77,14 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     // binding, so the placeholder id yields 401 regardless of whether the app exists).
     [InlineData("/api/appmonitoring/summary")]
     [InlineData("/api/appmonitoring/apps/1/metrics/names")]
+    [InlineData("/api/appmonitoring/apps/1/send-interval")]
     [InlineData("/metrics")]
+    // PLAN-013 lots 4 to 6: the data retention setting, the storage per project and the reclaim status;
+    // the ingest configuration answers 401 without an ingest key, like the exports.
+    [InlineData("/api/projects/1/data-retention")]
+    [InlineData("/api/data-storage/projects")]
+    [InlineData("/api/data-storage/reclaim")]
+    [InlineData("/api/ingest/otlp/v1/configuration")]
     // --- project-scoped endpoints ---
     [InlineData("/api/artifacts/project/1")]
     [InlineData("/api/external-repos/project/1")]
@@ -132,6 +139,8 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("DELETE", "/api/projects/1")]
     [InlineData("DELETE", "/api/agent-pools/1")]
     [InlineData("DELETE", "/api/vaults/1")]
+    [InlineData("PUT", "/api/projects/1/data-retention")]
+    [InlineData("POST", "/api/data-storage/reclaim")]
     public async Task ProtectedMutationEndpoint_Anonymous_Returns401(string method, string route)
     {
         using var client = fixture.CreateAnonymousClient();

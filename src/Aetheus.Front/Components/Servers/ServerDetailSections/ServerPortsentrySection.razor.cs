@@ -66,6 +66,21 @@ public partial class ServerPortsentrySection
         }
     }
 
+    // Recette R2-124: one page of each list's export, with the grid's sort and column filters.
+    private Task<PaginatedResult<PortsentryBlockedIpDto>> ReadBlockedExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, descending) = GetSort(args, "BlockedAt", fallbackDescending: true);
+        return Api.Security.GetPortsentryBlockedIpsAsync(ServerId, page, pageSize, sortBy: sortBy, sortDescending: descending, filters: args.ToApiFilters());
+    }
+
+    private Task<PaginatedResult<PortsentryWhitelistIpDto>> ReadWhitelistExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, descending) = GetSort(args, "IpAddress", fallbackDescending: false);
+        return Api.Security.GetPortsentryWhitelistPageAsync(ServerId, page, pageSize, sortBy: sortBy, sortDescending: descending, filters: args.ToApiFilters());
+    }
+
     private async Task LoadBlockedAsync(GridLoadArgs args)
     {
         var serverId = ServerId;

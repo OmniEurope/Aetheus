@@ -36,6 +36,7 @@ public sealed class PipelineTriggerStepCoordinator(
     IPipelineRepository repo,
     IPipelineGitService pipelineGit,
     IPipelineRunPreparationService preparations,
+    IPipelineRunParameterResolver parameterResolver,
     IPipelineCheckpointReuseService checkpoints,
     IResourceAuthorizationService authz,
     IAuditService audit,
@@ -103,7 +104,7 @@ public sealed class PipelineTriggerStepCoordinator(
         var vars = BuildSubstitutedValues(stepDef.Variables, legVars);
         var parameters = BuildSubstitutedValues(stepDef.Parameters, legVars);
         PropagateLocalDeploymentContext(legVars, vars);
-        ApplyUpstreamContext(vars, run.Pipeline!.Name, runId, chain);
+        ApplyUpstreamContext(vars, run.Pipeline!.Name, runId, chain, run.Pipeline.TemplateReferenceName);
         var sourceError = ApplyTriggerSourceContext(stepDef, run, legVars, vars);
         if (sourceError is not null)
         {
@@ -111,15 +112,11 @@ public sealed class PipelineTriggerStepCoordinator(
             return;
         }
 
-        PipelineRunPreparation? preparation;
-        try
+        var (preparation, prepareError) = await PrepareTriggeredRunAsync(target.Id, targetName, vars, parameters, ct)
+            .ConfigureAwait(false);
+        if (prepareError is not null)
         {
-            preparation = await preparations.PrepareRunAsync(target.Id, PipelineRunService.ResolveRunBranch(vars),
-                yamlOverride: null, PipelineRunService.ResolveSourceCommit(vars), ct).ConfigureAwait(false);
-        }
-        catch (BadRequestException ex)
-        {
-            await FailAsync($"pipeline '{targetName}' configuration refused: {ex.Message}").ConfigureAwait(false);
+            await FailAsync(prepareError).ConfigureAwait(false);
             return;
         }
         if (preparation is null
@@ -149,6 +146,40 @@ public sealed class PipelineTriggerStepCoordinator(
         stepRun.StartedAt ??= now;
         stepRun.TriggeredRunId = child!.Id;
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Prepares the child run with the parameters the parent passes, or returns why the step fails.
+    /// BACK-021: those parameters can choose the child's targets (agent: ${{ parameters.runner }}).
+    /// Authorization reads the definition they produce, and the child starts from that same
+    /// preparation, never from the one prepared without them. A null preparation with no error means
+    /// the target could not be prepared, which the caller refuses like an unauthorized one.
+    /// </summary>
+    private async Task<(PipelineRunPreparation? Preparation, string? Error)> PrepareTriggeredRunAsync(
+        int targetId, string targetName, Dictionary<string, string> vars,
+        Dictionary<string, string> parameters, CancellationToken ct)
+    {
+        PipelineRunPreparation? preparation;
+        try
+        {
+            preparation = await preparations.PrepareRunAsync(targetId, PipelineRunService.ResolveRunBranch(vars),
+                yamlOverride: null, PipelineRunService.ResolveSourceCommit(vars), ct).ConfigureAwait(false);
+        }
+        catch (BadRequestException ex)
+        {
+            return (null, $"pipeline '{targetName}' configuration refused: {ex.Message}");
+        }
+        if (preparation is null)
+            return (null, null);
+
+        try
+        {
+            return (await parameterResolver.ResolveRunParametersAsync(preparation, parameters, ct).ConfigureAwait(false), null);
+        }
+        catch (BadRequestException ex)
+        {
+            return (null, $"pipeline '{targetName}' refused the trigger: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -284,10 +315,12 @@ public sealed class PipelineTriggerStepCoordinator(
     /// otherwise reads the child definition's static `trigger:`, "manual" for every chained child
     /// (PLAN-007 lot 7).</summary>
     internal static void ApplyUpstreamContext(
-        Dictionary<string, string> vars, string parentPipelineName, int parentRunId, IReadOnlyCollection<int> chain)
+        Dictionary<string, string> vars, string parentPipelineName, int parentRunId, IReadOnlyCollection<int> chain,
+        string? parentTemplateName = null)
     {
         vars["UPSTREAM_RUN_ID"] = parentRunId.ToString();
         vars["UPSTREAM_PIPELINE"] = parentPipelineName;
+        vars[PipelineScannerTaskFactory.UpstreamTemplateVariable] = parentTemplateName ?? string.Empty;
         vars["UPSTREAM_CHAIN"] = string.Join(",", chain);
         vars["BUILD_TRIGGEREDBY"] = $"trigger:{parentPipelineName}#{parentRunId}";
     }
@@ -360,9 +393,7 @@ public sealed class PipelineTriggerStepCoordinator(
         if (child is null) return null;
         var preparation = await preparations.PrepareRunAsync(child.Id, PipelineRunService.ResolveRunBranch(upstreamVariables),
             yamlOverride: null, PipelineRunService.ResolveSourceCommit(upstreamVariables), ct).ConfigureAwait(false);
-        if (preparation is null
-            || !await ChainedRunAuthorizedAsync(preparation, child.Name, child.CreatedByUsername, ct).ConfigureAwait(false))
-            return null;
+        if (preparation is null) return null;
         // F3: a chained target that declares a `candidateVersion` parameter (aetheus-deploy-prod, when
         // triggered by aetheus-candidate's on_success) receives it automatically from the upstream
         // release the trigger carried, so the queue-time manual entry stays optional rather than
@@ -375,6 +406,11 @@ public sealed class PipelineTriggerStepCoordinator(
             && !string.IsNullOrWhiteSpace(upstreamRelease)
             && preparation.Definition.Parameters.Any(p => string.Equals(p.Name, "candidateVersion", StringComparison.OrdinalIgnoreCase)))
             parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["candidateVersion"] = upstreamRelease };
-        return await launcher.TriggerPreparedRunAsync(preparation, upstreamVariables, parameters, ct).ConfigureAwait(false);
+        // BACK-021: authorize the targets of the definition the parameters produce, then launch exactly it.
+        var runtimePreparation = await parameterResolver.ResolveRunParametersAsync(preparation, parameters, ct)
+            .ConfigureAwait(false);
+        if (!await ChainedRunAuthorizedAsync(runtimePreparation, child.Name, child.CreatedByUsername, ct).ConfigureAwait(false))
+            return null;
+        return await launcher.TriggerPreparedRunAsync(runtimePreparation, upstreamVariables, parameters, ct).ConfigureAwait(false);
     }
 }

@@ -43,7 +43,8 @@ fi
 
   // What the clone lays down: the public tree's own build scripts, as stand-ins that record.
   const record = name => `echo "${name} BUILD_SOURCEVERSION=\${BUILD_SOURCEVERSION:-} $*" >> "${log}"\n`;
-  write(join(template, "deploy/scripts/build-fast-release-images.sh"), record("build-fast-release-images"));
+  write(join(template, "deploy/scripts/build-fast-release-images.sh"),
+    record("build-fast-release-images") + `echo "build-workspace \${WORKSPACE:-}" >> "${log}"\n`);
   write(join(template, "deploy/scripts/buildx-build-load.sh"), record("buildx-build-load"));
   write(join(template, "deploy/scripts/ensure-dotnet-sdk.sh"), `echo "${join(bin, "fake-dotnet").replace(/\\/g, "/")}"\n`);
   write(join(template, "deploy/scripts/deploy-identity.sh"), "deploy_image_repos() { BACK_IMAGE_REPO=aetheus-back; FRONT_IMAGE_REPO=aetheus-front; }\n");
@@ -62,6 +63,7 @@ case "$*" in
   *"checkout --quiet --detach"*) for sha; do :; done; echo "$sha" > "${head}" ;;
   *"rev-parse HEAD"*) if [ -f "${head}" ]; then cat "${head}"; else echo "${PUBLIC}"; fi ;;
   *is-shallow-repository*) echo "$FAKE_SHALLOW" ;;
+  *"rev-list --count HEAD"*) echo "\${FAKE_HELD:-1000}" ;;
 esac
 exit 0
 `, true);
@@ -159,14 +161,36 @@ test("a verified public commit is built from the public tree and published with 
   } finally { env.cleanup(); }
 });
 
-test("a shallow pipeline checkout is deepened before the verification", () => {
-  const env = setUp({ shallow: "true" });
+// Run #2551 (2026-10-04): the inherited WORKSPACE (the internal checkout) sent the published backend
+// outside the public tree Docker builds from.
+test("the public images are built with the public tree as their workspace", () => {
+  const env = setUp();
   try {
     assert.equal(env.run().status, 0);
+    const workspace = env.calls().find(call => call.startsWith("build-workspace "));
+    assert.ok(workspace?.endsWith("/.public-source"), env.calls().join("\n"));
+  } finally { env.cleanup(); }
+});
+
+// Run #2534 (2026-10-03): the step holds no Git credential, and a deepen asked the internal repository
+// for a username. The checkout brings the history (AETHEUS_GIT_HISTORY_DEPTH); the step only counts it.
+test("a shallow checkout holding enough commits is verified without fetching", () => {
+  const env = setUp({ shallow: "true" });
+  try {
+    assert.equal(env.run({ FAKE_HELD: "20" }).status, 0);
     const calls = env.calls();
-    const deepen = calls.findIndex(call => call.startsWith("git fetch --quiet --deepen=20 origin"));
-    const verify = calls.findIndex(call => call.startsWith("node ") && call.includes("--verify"));
-    assert.ok(deepen >= 0 && deepen < verify, calls.join("\n"));
+    assert.ok(!calls.some(call => call.startsWith("git fetch") && !call.startsWith("git -C")), calls.join("\n"));
+    assert.ok(calls.some(call => call.startsWith("node ") && call.includes("--verify")), calls.join("\n"));
+  } finally { env.cleanup(); }
+});
+
+test("a shallow checkout holding too few commits is refused before the verification", () => {
+  const env = setUp({ shallow: "true" });
+  try {
+    const result = env.run({ FAKE_HELD: "3" });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /holds 3 commit\(s\) of main and the verification needs 20: raise AETHEUS_GIT_HISTORY_DEPTH/);
+    assert.ok(!env.calls().some(call => call.startsWith("node ") && call.includes("--verify")));
   } finally { env.cleanup(); }
 });
 

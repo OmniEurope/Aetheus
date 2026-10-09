@@ -152,6 +152,15 @@ public partial class Backups : IAsyncDisposable
         StateHasChanged();
     }
 
+    /// <summary>Recette R2-124: one page of the policies export, with the search, sort and column filters of the grid.</summary>
+    internal Task<PaginatedResult<BackupPolicyDto>> ReadPoliciesExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = GetSort(args, "Name");
+        return Api.Security.GetBackupPoliciesAsync(
+            page, pageSize, _policySearch, sortBy, sortDescending, ProjectId, filters: args.ToApiFilters());
+    }
+
     internal async Task OnLoadPoliciesAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -311,6 +320,16 @@ public partial class Backups : IAsyncDisposable
         if (runsGrid is not null) await runsGrid.Reload();
     }
 
+    /// <summary>Recette R2-124: one page of the runs export of the policy shown, with the grid's search, sort and column filters.</summary>
+    internal Task<PaginatedResult<BackupRunDto>> ReadRunsExportAsync(GridLoadArgs args)
+    {
+        if (_runsFor is null) return Task.FromResult(new PaginatedResult<BackupRunDto>());
+        var (page, pageSize) = args.ToPageRequest(10);
+        var (sortBy, sortDescending) = GetSort(args, "StartedAt", true);
+        return Api.Security.GetBackupRunsAsync(
+            _runsFor.Id, page, pageSize, _runsSearch, sortBy, sortDescending, filters: args.ToApiFilters());
+    }
+
     internal async Task OnLoadRunsAsync(GridLoadArgs args)
     {
         if (_runsFor is null) return;
@@ -381,4 +400,10 @@ public partial class Backups : IAsyncDisposable
         await _hubConnection.LeaveEntityUpdatesAndDisposeAsync(ResourceType.Project);
         _hubConnection = null;
     }
+
+    /// <summary>Recette R2-124: the export writes the names the cells show.</summary>
+    private Func<BackupPolicyDto, object?> ProjectExport => _projectExport ??= policy => ProjectName(policy.ProjectId);
+    private Func<BackupPolicyDto, object?> ServerExport => _serverExport ??= policy => ServerName(policy.ServerId);
+    private Func<BackupPolicyDto, object?>? _projectExport;
+    private Func<BackupPolicyDto, object?>? _serverExport;
 }

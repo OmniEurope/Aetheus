@@ -9,18 +9,10 @@
         <HelpLink PageKey="servers" />
         @* A healthy fleet shows nothing here: the up-to-date count is the normal case and reads as
            noise, and a zero counter is not information. Only what needs attention is displayed. *@
-        @if (_compatibilitySummary.UpdateRecommended > 0)
-        {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@($"{L["AgentCompatibility_UpdateRecommended"]}: {_compatibilitySummary.UpdateRecommended}")</OmniBadge>
-        }
-        @if (_compatibilitySummary.UpdateRequired > 0)
-        {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@($"{L["AgentCompatibility_UpdateRequired"]}: {_compatibilitySummary.UpdateRequired}")</OmniBadge>
-        }
-        @if (_compatibilitySummary.Unknown > 0)
-        {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"{L["AgentCompatibility_Unknown"]}: {_compatibilitySummary.Unknown}")</OmniBadge>
-        }
+        @* Recette R2-109: a status count, its icon in place of its name on a phone. *@
+        <StatusCountBadge Count="@_compatibilitySummary.UpdateRecommended" Label="@L["AgentCompatibility_UpdateRecommended"]" Icon="OmniIconName.Upgrade" Tone="OmniTone.Warning" />
+        <StatusCountBadge Count="@_compatibilitySummary.UpdateRequired" Label="@L["AgentCompatibility_UpdateRequired"]" Icon="OmniIconName.Warning" Tone="OmniTone.Danger" />
+        <StatusCountBadge Count="@_compatibilitySummary.Unknown" Label="@L["AgentCompatibility_Unknown"]" Icon="OmniIconName.Question" Tone="OmniTone.Neutral" />
     </Badges>
     <Actions>
         @* Recette R-197: no column button in the header any more; the choice stays, opened from Tools. *@
@@ -63,7 +55,7 @@
 }
 
 <AetheusDataGrid @ref="_grid" TItem="ServerDto" Data="@_servers"
-    Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadData" PageSize="20"
+    Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadData" ExportRead="@ReadExportAsync" PageSize="20"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<ServerDto>(_servers, _totalCount))"
     RowClick="@(s => Navigation.NavigateTo($"/servers/{s.Id}/overview"))" FullHeight="true" class="server-list-grid">
@@ -140,7 +132,7 @@
                 </OmniStack>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServerDto" Key="@ServerTagsColumn" Title="@L["Tags"]" Width="220px" Sortable="false" Visible="@IsColumnVisible("Tags")" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Tags" FilterSearchable="true" >
+        <OmniDataGridColumn TItem="ServerDto" Key="@ServerTagsColumn" ExportValue="@TagsExport" Title="@L["Tags"]" Width="220px" Sortable="false" Visible="@IsColumnVisible("Tags")" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Tags" FilterSearchable="true" >
             <Template Context="server">
                 <OmniRow Gap="OmniSpacing.XSmall">
                     @{ var visibleTags = server.Tags.Take(3).ToList(); }

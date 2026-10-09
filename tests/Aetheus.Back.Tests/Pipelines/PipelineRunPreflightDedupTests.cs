@@ -32,7 +32,7 @@ public sealed class PipelineRunPreflightDedupTests
     private static IPipelineEnvironmentCheckGuard Admits(bool verdict)
     {
         var guard = Substitute.For<IPipelineEnvironmentCheckGuard>();
-        guard.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>())
+        guard.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(verdict);
         return guard;
     }
@@ -117,7 +117,7 @@ public sealed class PipelineRunPreflightDedupTests
             guard);
 
         await guard.Received(1).CheckEnvironmentChecksAsync(
-            Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>());
+            Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public sealed class PipelineRunPreflightDedupTests
             guard);
 
         await guard.Received(2).CheckEnvironmentChecksAsync(
-            Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>());
+            Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

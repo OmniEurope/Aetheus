@@ -16,7 +16,7 @@
 }
 
 <AetheusDataGrid @ref="_grid" TItem="VaultDto" Data="@_vaults"
-    Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData"
+    Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData" ExportRead="@ReadExportAsync"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<VaultDto>(_vaults, _totalCount))"
     RowClick="@(v => Nav.NavigateTo($"/vaults/{v.Id}"))"

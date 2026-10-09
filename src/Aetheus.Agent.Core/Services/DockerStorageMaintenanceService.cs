@@ -359,22 +359,30 @@ public sealed class DockerStorageMaintenanceService(
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
         if (!match.Success) return 0;
         var number = double.Parse(match.Groups["n"].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
-        var multiplier = match.Groups["u"].Value.ToUpperInvariant() switch
-        {
-            "K" or "KB" => 1_000d,
-            "KIB" => 1_024d,
-            "M" or "MB" => 1_000_000d,
-            "MIB" => 1_048_576d,
-            "G" or "GB" => 1_000_000_000d,
-            "GIB" => 1_073_741_824d,
-            "T" or "TB" => 1_000_000_000_000d,
-            "TIB" => 1_099_511_627_776d,
-            "P" or "PB" => 1_000_000_000_000_000d,
-            "PIB" => 1_125_899_906_842_624d,
-            _ => 1d
-        };
+        var multiplier = SizeUnitMultipliers.TryGetValue(match.Groups["u"].Value.ToUpperInvariant(), out var unit) ? unit : 1d;
         return checked((long)(number * multiplier));
     }
+
+    /// <summary>Decimal (K, KB...) and binary (KIB...) size units; anything else, bytes included, is 1.</summary>
+    private static readonly System.Collections.Frozen.FrozenDictionary<string, double> SizeUnitMultipliers =
+        System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new Dictionary<string, double>
+        {
+            ["K"] = 1_000d,
+            ["KB"] = 1_000d,
+            ["KIB"] = 1_024d,
+            ["M"] = 1_000_000d,
+            ["MB"] = 1_000_000d,
+            ["MIB"] = 1_048_576d,
+            ["G"] = 1_000_000_000d,
+            ["GB"] = 1_000_000_000d,
+            ["GIB"] = 1_073_741_824d,
+            ["T"] = 1_000_000_000_000d,
+            ["TB"] = 1_000_000_000_000d,
+            ["TIB"] = 1_099_511_627_776d,
+            ["P"] = 1_000_000_000_000_000d,
+            ["PB"] = 1_000_000_000_000_000d,
+            ["PIB"] = 1_125_899_906_842_624d
+        }, StringComparer.Ordinal);
 
     private async Task EnsureBuilderAsync(CancellationToken ct)
     {

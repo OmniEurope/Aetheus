@@ -13,7 +13,14 @@ ACME_CONF=/etc/apache2/conf-available/aetheus-acme-webroot.conf
 LIVE_DIR=/etc/letsencrypt/live
 SITES_AVAIL=/etc/apache2/sites-available
 SITES_ENABLED=/etc/apache2/sites-enabled
-valid_domain() { printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9._-]{1,253}$'; }
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
+valid_domain() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9._-]{1,253}$'; }
 
 primary="${1:-}"
 valid_domain "$primary" || { echo "invalid primary domain" >&2; exit 2; }
@@ -24,7 +31,7 @@ case "$mode" in production|local) ;; *) echo "invalid certificate mode" >&2; exi
 # The email is agent-influenced env input to a root-run certbot: validate it
 # with the same discipline as domains (basic shape, no leading '-', no spaces).
 if [ -n "$email" ]; then
-    printf '%s' "$email" | grep -Eq '^[^@[:space:]-][^@[:space:]]*@[^@[:space:]]+$' \
+    one_line "$email" && printf '%s' "$email" | grep -Eq '^[^@[:space:]-][^@[:space:]]*@[^@[:space:]]+$' \
         || { echo "invalid email" >&2; exit 2; }
 fi
 

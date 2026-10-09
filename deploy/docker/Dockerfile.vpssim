@@ -123,23 +123,23 @@ RUN mkdir -p /etc/letsencrypt/live/vpssim.local \
     && chmod 600 /etc/letsencrypt/live/vpssim.local/privkey.pem
 
 # --- Nightly demo: the same Let's Encrypt layout for the demo hostname, plus the trust that makes
-#     it usable. vpssim.compose.yml already resolves demo.aetheus.sonytumen.com to this box, and
+#     it usable. vpssim.compose.yml already resolves demo.app.aetheus.sonytumen.com to this box, and
 #     nightly-demo-prepare.sh only calls the certbot helper when the live directory is missing - so
 #     shipping the certificate here keeps ACME out of the simulation without forking the script.
 #     Registering it as a local CA is what the real host gets for free from Let's Encrypt: without
 #     it the deployment's own smoke probe reached a correctly deployed demo and refused it with
 #     "The SSL connection could not be established", two blocking findings on a healthy cutover.
 #     The gate is untouched - it still demands a valid chain; the simulated host now provides one.
-RUN mkdir -p /etc/letsencrypt/live/demo.aetheus.sonytumen.com \
+RUN mkdir -p /etc/letsencrypt/live/demo.app.aetheus.sonytumen.com \
     && openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-        -keyout /etc/letsencrypt/live/demo.aetheus.sonytumen.com/privkey.pem \
-        -out /etc/letsencrypt/live/demo.aetheus.sonytumen.com/fullchain.pem \
-        -subj "/CN=demo.aetheus.sonytumen.com/O=Aetheus local simulation (self-signed, NOT a public CA)" \
-        -addext "subjectAltName=DNS:demo.aetheus.sonytumen.com" \
+        -keyout /etc/letsencrypt/live/demo.app.aetheus.sonytumen.com/privkey.pem \
+        -out /etc/letsencrypt/live/demo.app.aetheus.sonytumen.com/fullchain.pem \
+        -subj "/CN=demo.app.aetheus.sonytumen.com/O=Aetheus local simulation (self-signed, NOT a public CA)" \
+        -addext "subjectAltName=DNS:demo.app.aetheus.sonytumen.com" \
         -addext "basicConstraints=critical,CA:TRUE" >/dev/null 2>&1 \
-    && chmod 644 /etc/letsencrypt/live/demo.aetheus.sonytumen.com/fullchain.pem \
-    && chmod 600 /etc/letsencrypt/live/demo.aetheus.sonytumen.com/privkey.pem \
-    && install -m 644 /etc/letsencrypt/live/demo.aetheus.sonytumen.com/fullchain.pem \
+    && chmod 644 /etc/letsencrypt/live/demo.app.aetheus.sonytumen.com/fullchain.pem \
+    && chmod 600 /etc/letsencrypt/live/demo.app.aetheus.sonytumen.com/privkey.pem \
+    && install -m 644 /etc/letsencrypt/live/demo.app.aetheus.sonytumen.com/fullchain.pem \
         /usr/local/share/ca-certificates/aetheus-local-simulation-demo.crt \
     && update-ca-certificates >/dev/null 2>&1
 

@@ -89,7 +89,10 @@ public sealed class PipelineStageDispatchPlanner(
 
         // A cancelled run counts as failed for the deployment rollback its cancellation kept
         // (PipelineRunControlService): the only failed() stages still pending after a cancel are those.
+        // BACK-019: an artifact the run could not collect fails it as surely as a failed step, so the
+        // failed() handlers see it.
         var previousStageFailed = await repo.HasAnyFailedStepInRunAsync(runId, ct).ConfigureAwait(false)
+            || await repo.HasFailedArtifactCollectionAsync(runId, ct).ConfigureAwait(false)
             || await finalizer.IsCancellationRequestedAsync(runId, ct).ConfigureAwait(false);
         var dependencyTerminalStages = previousStageFailed
             ? terminalStages
@@ -109,18 +112,24 @@ public sealed class PipelineStageDispatchPlanner(
         PipelineVariableExpansion.ApplyStepOutputs(
             resolvedVars, secretKeys, await repo.GetSuccessfulStepOutputsAsync(runId, ct).ConfigureAwait(false));
         var activeStageNames = await repo.GetActiveStageNamesAsync(runId, ct).ConfigureAwait(false) ?? [];
+        var notStarted = completedStages.Count == 0 && terminalStages.Count == 0 && activeStageNames.Count == 0;
         // R-368: before the run touches anything, approvals included. Only a run that has not started:
         // failing a started one outright would skip its failed() rollback.
-        if (completedStages.Count == 0 && terminalStages.Count == 0 && activeStageNames.Count == 0
-            && await _gradeGate.EvaluateAsync(runId, resolvedVars, ct).ConfigureAwait(false) is { } refusal)
+        if (notStarted && await _gradeGate.EvaluateAsync(runId, resolvedVars, ct).ConfigureAwait(false) is { } refusal)
         {
             finalizer.MarkStepsAs(pendingSteps, TaskExecutionStatus.Cancelled);
             await finalizer.FailRunWithUnmatchedStagesAsync(runId, [refusal], [], ct).ConfigureAwait(false);
             return false;
         }
+        // BACK-018: environments are read in the run's project, for approvals, checks and locks alike.
+        var projectId = await repo.GetRunProjectIdAsync(runId, ct).ConfigureAwait(false);
+        // Recette R2-117: the environments the run declares are approved at its launch, before any stage.
+        if (notStarted
+            && await _approvals.RequireLaunchApprovalsAsync(runId, projectId, flattenedStages, ct).ConfigureAwait(false))
+            return false;
         var state = new NextStageDispatchState(
             await repo.GetRunAffinityServerIdAsync(runId, ct).ConfigureAwait(false),
-            activeStageNames);
+            activeStageNames, projectId);
         foreach (var stageName in readyStageNames)
             if (await DispatchReadyStageAsync(
                     runId, stageName, definition, resolvedVars, pendingSteps, organizationId,
@@ -218,9 +227,10 @@ public sealed class PipelineStageDispatchPlanner(
             state.AddWaiting($"Stage '{stageName}' waits: group '{stageDef.Group}' has reached its concurrency limit.");
             return ReadyStagePreparation.Skip;
         }
-        if (await _approvals.CheckAndCreateApprovalAsync(runId, stageName, stageDef, flattenedStages, ct).ConfigureAwait(false))
+        if (await _approvals.CheckAndCreateApprovalAsync(
+                runId, state.ProjectId, stageName, stageDef, flattenedStages, ct).ConfigureAwait(false))
             return ReadyStagePreparation.Stop;
-        if (await environmentChecks.CheckEnvironmentChecksAsync(stageDef, ct).ConfigureAwait(false) == false)
+        if (await environmentChecks.CheckEnvironmentChecksAsync(stageDef, state.ProjectId, ct).ConfigureAwait(false) == false)
         {
             finalizer.MarkStepsAs(stageSteps, TaskExecutionStatus.Failed);
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -228,7 +238,7 @@ public sealed class PipelineStageDispatchPlanner(
             return ReadyStagePreparation.Skip;
         }
         if (_environmentLocks is not null
-            && await _environmentLocks.TryHoldAsync(runId, stageDef, flattenedStages, ct).ConfigureAwait(false) is { } lockWait)
+            && await _environmentLocks.TryHoldAsync(runId, state.ProjectId, stageDef, flattenedStages, ct).ConfigureAwait(false) is { } lockWait)
         {
             // Another run acts on the environment: this one waits, it does not fail (2026-10-02).
             state.AnyResourceLocked = true;
@@ -296,8 +306,9 @@ public sealed class PipelineStageDispatchPlanner(
         state.AnyStageCancelled = true;
     }
 
-    private sealed class NextStageDispatchState(int? affinityServerId, List<string> activeStageNames)
+    private sealed class NextStageDispatchState(int? affinityServerId, List<string> activeStageNames, int? projectId)
     {
+        public int? ProjectId { get; } = projectId;
         public bool AnyTaskCreated { get; set; }
         public bool AnyStageCancelled { get; set; }
         public bool AnyStageSyncFailed { get; set; }

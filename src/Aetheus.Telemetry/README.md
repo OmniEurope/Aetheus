@@ -21,16 +21,18 @@ three-second timeout, sampling, and never blocks a request on network I/O.
 
 | Runtime | OpenTelemetry | Support |
 | --- | --- | --- |
-| .NET 8 LTS | 1.17.x | tested minimum |
-| .NET 10 | 1.17.x | tested current |
+| .NET 10 | 1.17.x | required (OmniEurope.Performance targets .NET 10) |
 
-## Request performance (0.2.0, window and lower-case routes in 1.0.0)
+## Request performance (measured by OmniEurope.Performance)
 
-When telemetry is enabled, the package also measures, in process, how long each route takes to answer.
-It listens to the ASP.NET Core `http.server.request.duration` instrument, keeps the last 24 hours of
-requests in memory (50,000 at most, grouped by route template: no concrete path, identifier or query
-value, in lower case so one route is one line whatever the case of its source), and exports five gauges
-on the meter `Aetheus.Telemetry.Performance`, one series per `http.route` and `http.request.method`:
+When telemetry is enabled, the package also exports how long each route takes to answer. The
+measurement is the collector of the `OmniEurope.Performance` package (nuget.org, EUPL-1.2), which
+listens to the ASP.NET Core `http.server.request.duration` instrument and keeps the requests of its
+window in memory (2 MiB at most, grouped by route template in lower case: no concrete path, identifier
+or query value). The window is 24 hours unless the host chose another, through
+`OmniPerformance:Window` or by registering the collector itself before `AddAetheusTelemetry`. This
+package exports five gauges on the meter `Aetheus.Telemetry.Performance`, one series per `http.route`
+(without its leading slash) and `http.request.method`:
 
 | Metric | Unit | Value |
 | --- | --- | --- |
@@ -41,12 +43,51 @@ on the meter `Aetheus.Telemetry.Performance`, one series per `http.route` and `h
 | `aetheus.http.server.request.duration.max` | `ms` | slowest request |
 
 A sixth gauge, `aetheus.http.server.request.window` (`s`, no attribute), says how many seconds the kept
-requests span: 24 hours at most, less after a restart. A percentile is a request that happened (nearest
+requests span: the window at most, less after a restart. A percentile is a request that happened (nearest
 rank, no interpolation), so below 20 requests the 95th percentile is the maximum, and below 100 the 99th.
+
+A route's five gauges are exported only for a collection in which its figures changed: an idle route
+writes nothing, and a reader keeps each route's newest point.
 
 Aetheus shows them in the Performance tab of the application's Supervision. The window restarts with
 the process. Health probes and static assets are not measured. A host that wants the figures without
-the export calls `AddAetheusRequestPerformance()` and reads `RequestPerformanceRecorder` itself.
+the export uses `OmniEurope.Performance` directly (`AddOmniPerformance` for its page, or
+`AddOmniPerformanceCollector` and `RequestPerformanceRecorder.Summarize()` for a page of its own); with the
+export enabled too, both read the same collector.
+
+## Database size (PostgreSQL)
+
+Off by default. A host turns it on by handing over a connection it already has:
+
+```csharp
+builder.Services.AddAetheusTelemetry(builder.Configuration, options =>
+    options.DatabaseSize.UsePostgreSql(() => new NpgsqlConnection(connectionString)));
+```
+
+Every `IntervalMinutes` (15 by default, 5 to 1440) the package reads, from the PostgreSQL catalog only,
+the size of the database and of its `TopTables` largest tables (20 by default, 1 to 100), and exports
+three gauges on the meter `Aetheus.Telemetry.Database`:
+
+| Metric | Unit | Attributes | Value |
+| --- | --- | --- | --- |
+| `aetheus.db.size` | `By` | `db.namespace` | `pg_database_size(current_database())` |
+| `aetheus.db.table.size` | `By` | `db.schema.name`, `db.collection.name` | `pg_total_relation_size` (heap, indexes, TOAST) |
+| `aetheus.db.table.rows` | `{row}` | `db.schema.name`, `db.collection.name` | `pg_class.reltuples`, absent before the first `ANALYZE` |
+
+No row of a table is ever read. Each measurement is exported once, at the first collection after it was
+taken. Both `IntervalMinutes` and `TopTables` live under `Aetheus:Telemetry:DatabaseSize`; the
+`AETHEUS_TELEMETRY_DATABASE_SIZE_ENABLED` environment variable has the final say, and turning it on
+without a connection fails at startup. Aetheus shows the figures in the Database tab of the
+application's Supervision.
+
+## Metric send interval
+
+The metrics are sent at the interval Aetheus keeps for the application's project (its « Conservation des
+données » setting: 15, 5 or 1 minute by profile). At startup, then every 15 minutes, the package reads
+`GET {metrics endpoint}/../configuration` with its ingest key and applies `metricExportIntervalSeconds`
+(kept between 10 s and 1 h). Until it has an answer, and when the server gives none (an older Aetheus
+answers 404, a network failure), it keeps the OpenTelemetry default: 60 s, or `OTEL_METRIC_EXPORT_INTERVAL`
+in milliseconds. A version of the package that predates this keeps its own interval; Aetheus accepts both.
 
 The package composes with additional official instrumentations configured by the host. Both registration
 paths use the same `OpenTelemetryBuilder`, so an application may call `AddOpenTelemetry()` before or after

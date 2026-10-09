@@ -51,6 +51,66 @@ public class AlertEvaluatorServiceTests
     }
 
     [Fact]
+    public async Task EvaluateAlertRulesAsync_ReservesTheCooldownBeforeEmitting()
+    {
+        var (repository, notifications, service) = BreachedRuleEvaluator(reservationWon: true);
+
+        await service.EvaluateAlertRulesAsync(TestContext.Current.CancellationToken);
+
+        Received.InOrder(() =>
+        {
+            repository.TryReserveTriggerAsync(5, null, Now, Arg.Any<CancellationToken>());
+            notifications.SendEventAsync("alert.triggered", Arg.Any<object>(), Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task EvaluateAlertRulesAsync_ReservationLostToAnotherEvaluator_EmitsNothing()
+    {
+        var (_, notifications, service) = BreachedRuleEvaluator(reservationWon: false);
+
+        await service.EvaluateAlertRulesAsync(TestContext.Current.CancellationToken);
+
+        await notifications.DidNotReceive().SendEventAsync(
+            Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
+    }
+
+    private static (IAlertRepository Repository, INotificationService Notifications, AlertEvaluatorService Service)
+        BreachedRuleEvaluator(bool reservationWon)
+    {
+        var repository = Substitute.For<IAlertRepository>();
+        repository.GetEnabledAsync(Arg.Any<CancellationToken>()).Returns(
+        [
+            new AlertRule
+            {
+                Id = 5, ServerId = 11, SustainedSeconds = 60, Metric = MetricType.Cpu,
+                Operator = ComparisonOperator.GreaterThan, Threshold = 80
+            }
+        ]);
+        repository.GetRecentMetricsForServersAsync(
+                Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, List<ServerMetric>>
+            {
+                [11] = [.. Enumerable.Range(0, 4).Select(step => new ServerMetric
+                {
+                    ServerId = 11, Timestamp = Now.AddSeconds(-30 * (3 - step)), CpuPercent = 95
+                })]
+            });
+        repository.TryReserveTriggerAsync(5, null, Now, Arg.Any<CancellationToken>()).Returns(reservationWon);
+        var notifications = Substitute.For<INotificationService>();
+        var services = new ServiceCollection()
+            .AddSingleton(repository)
+            .AddSingleton(notifications)
+            .BuildServiceProvider();
+        var service = new AlertEvaluatorService(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            Substitute.For<IHubContext<AlertHub>>(),
+            NullLogger<AlertEvaluatorService>.Instance,
+            new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(Now)));
+        return (repository, notifications, service);
+    }
+
+    [Fact]
     public void HasContinuousCoverage_RequiresBoundaryAndRecentMetric()
     {
         var metrics = new List<ServerMetric>

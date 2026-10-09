@@ -91,11 +91,26 @@ public class AuthServiceLockoutTests
         // User already has 4 failed attempts - the next failure is the 5th (MaxFailedAttempts)
         var user = MakeUser(failedCount: 4);
         _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.IncrementFailedLoginAsync(user.Id, Arg.Any<CancellationToken>()).Returns(5);
 
         var result = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
         await _repo.Received(1).IncrementFailedLoginAsync(user.Id, Arg.Any<CancellationToken>());
+        await _repo.Received(1).LockoutUserAsync(user.Id, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LoginAsync_ConcurrentFailuresReachTheThreshold_LocksOutFromTheStoredCount()
+    {
+        // Every concurrent request read the same snapshot (0 failures); the store holds all five.
+        var user = MakeUser(failedCount: 0);
+        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.IncrementFailedLoginAsync(user.Id, Arg.Any<CancellationToken>()).Returns(5);
+
+        var result = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Null(result);
         await _repo.Received(1).LockoutUserAsync(user.Id, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
     }
 
@@ -135,6 +150,7 @@ public class AuthServiceLockoutTests
     {
         var user = MakeUser(failedCount: 9);
         _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.IncrementFailedLoginAsync(user.Id, Arg.Any<CancellationToken>()).Returns(10);
 
         await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
 

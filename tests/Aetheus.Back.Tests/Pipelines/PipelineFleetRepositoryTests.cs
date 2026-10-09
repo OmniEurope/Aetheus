@@ -325,8 +325,8 @@ public sealed class PipelineFleetRepositoryTests : IDisposable
     [Theory]
     [InlineData("PipelineName", false, new[] { "alpha", "beta", "gamma" })]
     [InlineData("PipelineName", true, new[] { "gamma", "beta", "alpha" })]
-    [InlineData("OwnerName", false, new[] { "alpha", "beta", "gamma" })]
-    [InlineData("OwnerName", true, new[] { "gamma", "beta", "alpha" })]
+    [InlineData("OwnerName", false, new[] { "beta", "gamma", "alpha" })]
+    [InlineData("OwnerName", true, new[] { "alpha", "gamma", "beta" })]
     public async Task GetPageAsync_SortsOnTheRequestedTextKey(
         string sortBy, bool descending, string[] expected)
     {
@@ -334,10 +334,13 @@ public sealed class PipelineFleetRepositoryTests : IDisposable
             new Project { Id = 1, Name = "alpha", OrganizationId = 7 },
             new Project { Id = 2, Name = "beta", OrganizationId = 7 },
             new Project { Id = 3, Name = "gamma", OrganizationId = 7 });
+        // Pipeline names, owner names and ids are deliberately uncorrelated: sorting on the
+        // owner yields beta/gamma/alpha, on the id gamma/alpha/beta, on the name alpha/beta/gamma,
+        // so each expected order is produced by exactly one sort key.
         _db.Pipelines.AddRange(
-            Pipeline(2, "beta", projectId: 2),
-            Pipeline(3, "gamma", projectId: 3),
-            Pipeline(1, "alpha", projectId: 1));
+            Pipeline(2, "alpha", projectId: 3),
+            Pipeline(3, "beta", projectId: 1),
+            Pipeline(1, "gamma", projectId: 2));
         await SaveAsync();
         _db.ChangeTracker.Clear();
 

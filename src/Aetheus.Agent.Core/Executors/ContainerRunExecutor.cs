@@ -128,8 +128,7 @@ public sealed class ContainerRunExecutor(
             return new ExecutorResult(-1, false);
         }
 
-        var envFilePath = secrets.Environment.Count > 0 ? Path.Combine(Path.GetTempPath(), $"{containerName}.env") : null;
-        var secretsFilePath = secrets.Mounted.Count > 0 ? Path.Combine(Path.GetTempPath(), $"{containerName}.secrets.sh") : null;
+        var (envFilePath, secretsFilePath) = PrepareSecretFilePaths(stateRoot, containerName, secrets);
         var psi = BuildDockerRun(
             spec,
             resolution,
@@ -180,6 +179,35 @@ public sealed class ContainerRunExecutor(
             PurgeWorkspace(hostWorkspace, stateRoot);
 
         return executionResult;
+    }
+
+    /// <summary>
+    /// Secret files live under the agent's owner-only container state, never under the temp
+    /// directory: the systemd unit runs with PrivateTmp=true, so a file in the service's /tmp is
+    /// invisible to the host Docker daemon that bind-mounts the multi-line secrets file. Both files
+    /// are created 0600 and deleted when the step ends, whatever its outcome.
+    /// </summary>
+    private (string? EnvFilePath, string? SecretsFilePath) PrepareSecretFilePaths(
+        string stateRoot, string containerName, ContainerSecrets secrets)
+    {
+        var paths = ResolveSecretFilePaths(
+            stateRoot, containerName, secrets.Environment.Count > 0, secrets.Mounted.Count > 0);
+        if ((paths.EnvFilePath ?? paths.SecretsFilePath) is { } anyPath)
+        {
+            var directory = Path.GetDirectoryName(anyPath)!;
+            Directory.CreateDirectory(directory);
+            TrySetOwnerOnly(directory, "container secrets");
+        }
+        return paths;
+    }
+
+    internal static (string? EnvFilePath, string? SecretsFilePath) ResolveSecretFilePaths(
+        string stateRoot, string containerName, bool hasEnvironment, bool hasMounted)
+    {
+        var directory = Path.Combine(stateRoot, "secrets");
+        return (
+            hasEnvironment ? Path.Combine(directory, $"{containerName}.env") : null,
+            hasMounted ? Path.Combine(directory, $"{containerName}.secrets.sh") : null);
     }
 
     private static async Task<ExecutorResult?> ValidateRuntimeAsync(

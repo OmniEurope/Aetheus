@@ -91,9 +91,15 @@ public class ProjectsTests : E2ETestBase
             {
                 NameRegex = new System.Text.RegularExpressions.Regex("Delete$")
             }).ClickAsync();
-            var deleteDialog = Page.GetByRole(AriaRole.Dialog, new() { Name = "Delete", Exact = true });
+            // Recette R2-122: the deletion counts what it removes and asks for the project's name before
+            // its Delete button wakes up.
+            var deleteDialog = Page.GetByRole(AriaRole.Dialog, new() { Name = "Delete the project", Exact = true });
             await Expect(deleteDialog).ToBeVisibleAsync(new() { Timeout = 5000 });
-            await deleteDialog.GetByRole(AriaRole.Button, new() { Name = "Delete", Exact = true }).ClickAsync();
+            var submit = deleteDialog.Locator("#project-delete-submit");
+            await Expect(submit).ToBeDisabledAsync(new() { Timeout = 10000 });
+            await deleteDialog.Locator("#project-delete-confirm").FillAsync(projectName);
+            await Expect(submit).ToBeEnabledAsync(new() { Timeout = 5000 });
+            await submit.ClickAsync();
 
             await Expect(Page).ToHaveURLAsync(
                 new System.Text.RegularExpressions.Regex(@"/projects/?$"),

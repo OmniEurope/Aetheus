@@ -29,11 +29,15 @@ public class PipelineRunService(
     IPipelineRunScheduler scheduler,
     IPipelineRunPreflightService preflight,
     IPipelineAdvisoryPreflightBuilder advisoryPreflight,
-    IPipelineRunReader runReader) : IPipelineRunService, IPipelineLauncher
+    IPipelineRunReader runReader,
+    IPipelineRunDefinitionParser definitions) : IPipelineRunService, IPipelineLauncher
 {
     internal const string SystemPrepareStage = "System:Prepare";
     internal const string SystemCleanupStage = PipelineSystemStages.Cleanup;
     internal const string CancellationRequestedVariable = "__AETHEUS_CANCEL_REQUESTED";
+    // Recette R2-103: who cancelled the run and why, kept beside the request marker for the run page.
+    internal const string CancelledByVariable = "__AETHEUS_CANCELLED_BY";
+    internal const string CancellationReasonVariable = "__AETHEUS_CANCEL_REASON";
     internal const string SourceCommitVariable = "AETHEUS_SOURCE_COMMIT";
     internal const string SourceBranchVariable = "AETHEUS_RUN_BRANCH";
     // Recette R-534: set only on a run whose workspace comes from another repository (source: block).
@@ -93,6 +97,21 @@ public class PipelineRunService(
 
     public Task<PipelineRunDto?> RerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default)
         => launcher.RerunAsync(sourceRunId, mode, ct);
+
+    public Task<PipelineRerunPlan?> PrepareRerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default)
+        => launcher.PrepareRerunAsync(sourceRunId, mode, ct);
+
+    public async Task<IReadOnlyCollection<int>?> GetRetryTargetServerIdsAsync(int runId, CancellationToken ct = default)
+    {
+        // BACK-020: a retry replays the run's captured definition, so that definition is what is authorized.
+        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
+        if (run?.Pipeline is null) return null;
+        var definition = definitions.Parse(run);
+        if (definition is null) return null;
+        var organizationId = await repo.GetPipelineOrganizationIdAsync(run.Pipeline.Id, ct).ConfigureAwait(false);
+        return await parameterResolver.ResolveCandidateTargetServerIdsAsync(definition, organizationId, ct)
+            .ConfigureAwait(false);
+    }
 
     public Task<PipelineCheckpointResumePreviewDto?> GetCheckpointResumePreviewAsync(
         int sourceRunId,
@@ -288,8 +307,8 @@ public class PipelineRunService(
         int childPipelineId, Dictionary<string, string>? upstreamVariables, CancellationToken ct = default) =>
         triggerSteps.TriggerChainedRunAsync(childPipelineId, upstreamVariables, launcher, ct);
 
-    public Task<bool> CancelRunAsync(int runId, CancellationToken ct = default) =>
-        control.CancelRunAsync(runId, scheduler, launcher, ct);
+    public Task<bool> CancelRunAsync(int runId, PipelineRunCancellation cancellation, CancellationToken ct = default) =>
+        control.CancelRunAsync(runId, cancellation, scheduler, launcher, ct);
 
     public Task FailStuckRunAsync(int runId, CancellationToken ct = default) =>
         finalizer.FailStuckRunAsync(runId, ct);

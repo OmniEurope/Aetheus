@@ -2,9 +2,15 @@
 using Aetheus.Agent.Core.Operations;
 using Aetheus.Back.Components.AppMonitoring;
 using Aetheus.Back.Components.Artifacts;
+using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Git;
+using Aetheus.Back.Components.Organizations;
+using Aetheus.Back.Components.Pipelines;
+using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -185,35 +191,48 @@ public sealed class TotoConformanceSeederTests
         Assert.Contains("pipeline: toto-promote-accept", yaml, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void WindowsSmokePipeline_UsesDiscoverableWindowsRunnerAndRealTotoBuild()
+    // BTEST-001 (STD-TESTSCOPE): the Windows smoke and image pipelines were held by assertions on the
+    // literal text of their YAML (commands, names, selectors), which proved no behaviour. They are
+    // replaced by what the product does with every pipeline the seeder publishes: the editor's
+    // validation, template inheritance included, must accept it, or the seeded pipeline cannot be
+    // saved or run. Whether the Windows scenario really builds, tests and deploys is proved by running
+    // it on a Windows runner.
+    public static TheoryData<string> SeededPipelineNames() => new(TotoConformanceSeeder.PipelineNames);
+
+    [Theory]
+    [MemberData(nameof(SeededPipelineNames))]
+    public async Task SeededPipeline_PassesTheEditorValidationWithItsTemplates(string name)
     {
-        var yaml = TotoConformanceSeeder.LoadPipelineFiles()[".pipeline/toto-windows-smoke.yaml"];
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateDb();
+        var organization = new Organization
+        {
+            Name = "Aetheus",
+            Slug = "aetheus",
+            CreatedAt = DateTime.UnixEpoch,
+            UpdatedAt = DateTime.UnixEpoch
+        };
+        db.Organizations.Add(organization);
+        await db.SaveChangesAsync(ct);
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System).SeedAsync(ct);
+        var repository = new PipelineRepository(
+            db,
+            TimeProvider.System,
+            NullLogger<PipelineRepository>.Instance,
+            new PipelineTaskLifecycleRepository(db, TimeProvider.System),
+            new PipelineRunLineageRepository(db));
+        var editor = new PipelineService(
+            repository, Substitute.For<IPipelineGitService>(),
+            Substitute.For<IAuditService>(), NullLogger<PipelineService>.Instance,
+            Substitute.For<IEntityChangeNotifier>(), Substitute.For<IHttpContextAccessor>(),
+            TimeProvider.System, new PipelineTemplateResolver(repository),
+            Substitute.For<IOrganizationRepository>());
+        var yaml = TotoConformanceSeeder.LoadPipelineFiles()[$".pipeline/{name}.yaml"];
 
-        Assert.Contains("os: windows", yaml, StringComparison.Ordinal);
-        Assert.Contains("checkout: true", yaml, StringComparison.Ordinal);
-        Assert.Contains("dotnet build Toto.slnx", yaml, StringComparison.Ordinal);
-        Assert.Contains("dotnet test Toto.slnx", yaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("agent:", yaml, StringComparison.Ordinal);
-    }
+        var result = await editor.ValidateYamlStrictAsync(
+            yaml, projectId: null, environmentId: null, projectServerId: null, organization.Id, ct);
 
-    [Fact]
-    public void WindowsImagePipeline_DeploysImmutableTotoImageWithoutLinuxAgent()
-    {
-        var yaml = TotoConformanceSeeder.LoadPipelineFiles()[".pipeline/toto-windows-image.yaml"];
-
-        Assert.Contains("name: toto-windows-image", yaml, StringComparison.Ordinal);
-        Assert.Contains("docker info --format '{{.OSType}}'", yaml, StringComparison.Ordinal);
-        Assert.Contains("docker build", yaml, StringComparison.Ordinal);
-        Assert.Contains("docker save --output", yaml, StringComparison.Ordinal);
-        Assert.Contains("docker load --input", yaml, StringComparison.Ordinal);
-        Assert.Contains("up -d --wait --no-build", yaml, StringComparison.Ordinal);
-        Assert.Contains("/health/ready", yaml, StringComparison.Ordinal);
-        Assert.Contains("/api/todos", yaml, StringComparison.Ordinal);
-        Assert.Contains("TOTO_WINDOWS_PORT: \"10092\"", yaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("os: linux", yaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("agent:", yaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("down -v", yaml, StringComparison.Ordinal);
+        Assert.True(result.IsValid, string.Join(System.Environment.NewLine, result.Errors));
     }
 
     [Fact]

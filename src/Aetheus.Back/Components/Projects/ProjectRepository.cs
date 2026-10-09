@@ -388,12 +388,6 @@ public class ProjectRepository(
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task RemoveProjectAsync(Project project, CancellationToken ct = default)
-    {
-        db.Projects.Remove(project);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-    }
-
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

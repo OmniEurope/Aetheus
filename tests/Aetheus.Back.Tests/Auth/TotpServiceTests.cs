@@ -38,7 +38,7 @@ public class TotpServiceTests
     [Fact]
     public async Task SetupTotpAsync_UserNotFound_ThrowsNotFoundException()
     {
-        _repoMock.FindUserByIdForUpdateAsync(99, Arg.Any<CancellationToken>())
+        _repoMock.FindUserByIdTrackedAsync(99, Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         await Assert.ThrowsAsync<NotFoundException>(() => _sut.SetupTotpAsync(99, ct: TestContext.Current.CancellationToken));
@@ -47,7 +47,7 @@ public class TotpServiceTests
     [Fact]
     public async Task SetupTotpAsync_TotpAlreadyEnabled_ThrowsConflictException()
     {
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>())
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>())
             .Returns(new User { Id = 1, Username = "admin", TotpEnabled = true });
 
         await Assert.ThrowsAsync<ConflictException>(() => _sut.SetupTotpAsync(1, ct: TestContext.Current.CancellationToken));
@@ -57,7 +57,7 @@ public class TotpServiceTests
     public async Task SetupTotpAsync_ValidUser_ReturnsSetupResponse()
     {
         var user = new User { Id = 1, Username = "admin", TotpEnabled = false };
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.SetupTotpAsync(1, ct: TestContext.Current.CancellationToken);
 
@@ -74,7 +74,7 @@ public class TotpServiceTests
     public async Task SetupTotpAsync_SetsEncryptedSecretOnUser()
     {
         var user = new User { Id = 1, Username = "admin", TotpEnabled = false };
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
 
         await _sut.SetupTotpAsync(1, ct: TestContext.Current.CancellationToken);
 
@@ -88,7 +88,7 @@ public class TotpServiceTests
     [Fact]
     public async Task VerifyAndEnableTotpAsync_UserNotFound_ReturnsFalse()
     {
-        _repoMock.FindUserByIdForUpdateAsync(99, Arg.Any<CancellationToken>())
+        _repoMock.FindUserByIdTrackedAsync(99, Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         var result = await _sut.VerifyAndEnableTotpAsync(99, "123456", ct: TestContext.Current.CancellationToken);
@@ -99,7 +99,7 @@ public class TotpServiceTests
     [Fact]
     public async Task VerifyAndEnableTotpAsync_NoSecret_ReturnsFalse()
     {
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>())
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>())
             .Returns(new User { Id = 1, TotpSecret = null });
 
         var result = await _sut.VerifyAndEnableTotpAsync(1, "123456", ct: TestContext.Current.CancellationToken);
@@ -110,7 +110,7 @@ public class TotpServiceTests
     [Fact]
     public async Task VerifyAndEnableTotpAsync_AlreadyEnabled_ReturnsTrue()
     {
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>())
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>())
             .Returns(new User { Id = 1, TotpSecret = "enc:JBSWY3DPEHPK3PXP", TotpEnabled = true });
 
         var result = await _sut.VerifyAndEnableTotpAsync(1, "123456", ct: TestContext.Current.CancellationToken);
@@ -128,7 +128,7 @@ public class TotpServiceTests
         var code = totp.ComputeTotp(FixedNow.UtcDateTime);
 
         var user = new User { Id = 1, Username = "admin", TotpSecret = $"enc:{base32Secret}", TotpEnabled = false };
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.VerifyAndEnableTotpAsync(1, code, ct: TestContext.Current.CancellationToken);
 
@@ -144,7 +144,7 @@ public class TotpServiceTests
         var base32Secret = Base32Encoding.ToString(secret);
 
         var user = new User { Id = 1, Username = "admin", TotpSecret = $"enc:{base32Secret}", TotpEnabled = false };
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.VerifyAndEnableTotpAsync(1, "000000", ct: TestContext.Current.CancellationToken);
 
@@ -157,7 +157,7 @@ public class TotpServiceTests
     [Fact]
     public async Task DisableTotpAsync_UserNotFound_ReturnsFalse()
     {
-        _repoMock.FindUserByIdForUpdateAsync(99, Arg.Any<CancellationToken>())
+        _repoMock.FindUserByIdTrackedAsync(99, Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         var result = await _sut.DisableTotpAsync(99, "password", ct: TestContext.Current.CancellationToken);
@@ -168,7 +168,7 @@ public class TotpServiceTests
     [Fact]
     public async Task DisableTotpAsync_TotpNotEnabled_ReturnsFalse()
     {
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>())
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>())
             .Returns(new User { Id = 1, TotpEnabled = false });
 
         var result = await _sut.DisableTotpAsync(1, "password", ct: TestContext.Current.CancellationToken);
@@ -180,7 +180,7 @@ public class TotpServiceTests
     public async Task DisableTotpAsync_WrongPassword_ReturnsFalse()
     {
         var hash = BCrypt.Net.BCrypt.HashPassword("correctpassword");
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>())
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>())
             .Returns(new User { Id = 1, Username = "admin", TotpEnabled = true, PasswordHash = hash });
 
         var result = await _sut.DisableTotpAsync(1, "wrongpassword", ct: TestContext.Current.CancellationToken);
@@ -201,7 +201,7 @@ public class TotpServiceTests
             TotpRecoveryCodes = "[\"hash1\"]",
             PasswordHash = hash
         };
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.DisableTotpAsync(1, "mypassword", ct: TestContext.Current.CancellationToken);
 
@@ -217,7 +217,7 @@ public class TotpServiceTests
     [Fact]
     public async Task ConsumeRecoveryCodeAsync_UserNotFound_ReturnsFalse()
     {
-        _repoMock.FindUserByIdForUpdateAsync(99, Arg.Any<CancellationToken>())
+        _repoMock.FindUserByIdTrackedAsync(99, Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         var result = await _sut.ConsumeRecoveryCodeAsync(99, "ABCDE-12345", TestContext.Current.CancellationToken);
@@ -239,15 +239,57 @@ public class TotpServiceTests
             Username = "admin",
             TotpRecoveryCodes = hashes
         };
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        string? written = null;
+        _repoMock.ReplaceTotpRecoveryCodesAsync(1, hashes, Arg.Do<string>(value => written = value), Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var result = await _sut.ConsumeRecoveryCodeAsync(1, "ABCDE-12345", TestContext.Current.CancellationToken);
 
         Assert.True(result);
-        // One code should have been removed
-        var remaining = JsonSerializer.Deserialize<List<string>>(user.TotpRecoveryCodes!);
-        Assert.Single(remaining!);
+        // One code was removed, conditionally on the list that was read.
+        Assert.Equal([otherHash], JsonSerializer.Deserialize<List<string>>(written!)!);
         await _auditMock.Received(1).LogAsync("RecoveryCodeUsed", "User", 1, "admin", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ConsumeRecoveryCodeAsync_ConcurrentConsumeOfTheSameCodeWon_ReturnsFalse()
+    {
+        var hashedCode = BCrypt.Net.BCrypt.HashPassword("ABCDE12345");
+        var otherHash = BCrypt.Net.BCrypt.HashPassword("OTHER67890");
+        var read = JsonSerializer.Serialize(new List<string> { hashedCode, otherHash });
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new User { Id = 1, Username = "admin", TotpRecoveryCodes = read });
+        // The other request rewrote the list first: the conditional replace matches nothing, and the
+        // stored list no longer holds the code.
+        _repoMock.ReplaceTotpRecoveryCodesAsync(1, read, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+        _repoMock.GetTotpRecoveryCodesAsync(1, Arg.Any<CancellationToken>())
+            .Returns(JsonSerializer.Serialize(new List<string> { otherHash }));
+
+        var result = await _sut.ConsumeRecoveryCodeAsync(1, "ABCDE-12345", TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        await _auditMock.DidNotReceive().LogAsync("RecoveryCodeUsed", Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ConsumeRecoveryCodeAsync_ConcurrentConsumeOfAnotherCode_RetriesOnTheFreshList()
+    {
+        var hashedCode = BCrypt.Net.BCrypt.HashPassword("ABCDE12345");
+        var otherHash = BCrypt.Net.BCrypt.HashPassword("OTHER67890");
+        var read = JsonSerializer.Serialize(new List<string> { hashedCode, otherHash });
+        var fresh = JsonSerializer.Serialize(new List<string> { hashedCode });
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new User { Id = 1, Username = "admin", TotpRecoveryCodes = read });
+        _repoMock.ReplaceTotpRecoveryCodesAsync(1, read, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+        _repoMock.GetTotpRecoveryCodesAsync(1, Arg.Any<CancellationToken>()).Returns(fresh);
+        _repoMock.ReplaceTotpRecoveryCodesAsync(1, fresh, "[]", Arg.Any<CancellationToken>()).Returns(true);
+
+        var result = await _sut.ConsumeRecoveryCodeAsync(1, "ABCDE-12345", TestContext.Current.CancellationToken);
+
+        // The concurrent removal of the other code is kept: the write starts from the fresh list.
+        Assert.True(result);
+        await _repoMock.Received(1).ReplaceTotpRecoveryCodesAsync(1, fresh, "[]", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -262,7 +304,7 @@ public class TotpServiceTests
             Username = "admin",
             TotpRecoveryCodes = hashes
         };
-        _repoMock.FindUserByIdForUpdateAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+        _repoMock.FindUserByIdTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.ConsumeRecoveryCodeAsync(1, "WRONG-CODE0", TestContext.Current.CancellationToken);
 

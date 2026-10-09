@@ -32,6 +32,15 @@ public abstract class PipelineTemplateVersionHistoryBase : ComponentBase
             await LoadSelectedYamlAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Recette R2-124: one page of the versions export, with the grid's sort and column filters.</summary>
+    protected Task<PaginatedResult<PipelineTemplateVersionSummaryDto>> ReadVersionsExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(10);
+        var (sortBy, descending) = ResolveSort(args);
+        return Api.PipelineTemplates.GetPipelineTemplateVersionsAsync(
+            TemplateId, page, pageSize, sortBy, descending, filters: args.ToApiFilters());
+    }
+
     protected async Task LoadVersionsAsync(GridLoadArgs args)
     {
         var pageSize = args.Top ?? 10;

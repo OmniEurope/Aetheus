@@ -297,7 +297,7 @@ public class MainLayoutMethodCoverageTests : BunitContext
         permissions.SetPermissions(
             [new EffectivePermissionDto { ResourceType = ResourceType.Project, Permission = Permission.Read }],
             isAdmin: false);
-        cache.Set("dashboard:overview", new DashboardOverviewDto { TotalServers = 1 });
+        cache.TryStore(cache.Begin(), "dashboard:overview", new DashboardOverviewDto { TotalServers = 1 });
         // PLAN-005 lot 8 / D47: a session that expires in the middle of a page keeps that page.
         nav.NavigateTo("http://localhost/servers/3?tab=docker");
         // PLAN-005 lot 9 / D48: the session ended for a reason, which the layout reports.

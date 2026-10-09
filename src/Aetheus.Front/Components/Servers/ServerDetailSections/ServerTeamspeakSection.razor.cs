@@ -577,4 +577,8 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
             ? $"{ts.Days}d {ts.Hours}h {ts.Minutes}m"
             : $"{ts.Hours}h {ts.Minutes}m";
     }
+
+    /// <summary>Recette R2-124: the export writes the channel as the cell does.</summary>
+    private static readonly Func<TeamspeakClientDto, object?> ChannelExport = client =>
+        string.IsNullOrEmpty(client.ChannelName) ? client.ChannelId.ToString(System.Globalization.CultureInfo.InvariantCulture) : client.ChannelName;
 }

@@ -19,6 +19,9 @@ else
 
     @if (_selectedApp is not null)
     {
+        @* How often this application sends its metrics, stated once above its tabs: what one point of its
+           figures and charts stands for. *@
+        <TelemetrySendIntervalNote AppId="_selectedApp.Id" Class="omni-u-mb-md" />
         @* Plain OmniTabs (local state, listed as an exact exception in UrlSyncedTabsAuditTests): the
            sub-tabs are scoped to the application picked above, which the URL does not carry, so a
            ?tab= slug alone would not name what is shown. *@
@@ -35,6 +38,10 @@ else
                    on demand under it. *@
                 <OmniTabsItem Key="performance" Title="@L["Performance"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("speed"))" /></Icon><ChildContent>
                     <AppPerformanceView AppId="_selectedApp.Id" AppName="@_selectedApp.Name" />
+                </ChildContent></OmniTabsItem>
+                @* PLAN-013 lot 1 (R2-113): the size of the application's database and of its largest tables. *@
+                <OmniTabsItem Key="database" Title="@L["AppDatabaseTab"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("storage"))" /></Icon><ChildContent>
+                    <AppDatabaseSizeView AppId="_selectedApp.Id" />
                 </ChildContent></OmniTabsItem>
                 <OmniTabsItem Title="@L["Logs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("terminal"))" /></Icon><ChildContent>
                     <AppLogsView AppId="_selectedApp.Id" ProjectId="_selectedApp.ProjectId" AppName="@_selectedApp.Name" />

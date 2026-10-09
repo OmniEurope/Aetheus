@@ -35,7 +35,12 @@ public enum PipelineSetupReadinessKind
 
     /// <summary>A selected template declares `requires.capabilities` this installation cannot satisfy
     /// (or that this control plane cannot verify). Items are capability names.</summary>
-    MissingRequiredCapabilities
+    MissingRequiredCapabilities,
+
+    /// <summary>A platform scanner of a selected template reads its configuration from the repository
+    /// and the branch does not carry it (Gitleaks and <c>.gitleaks.toml</c>). Items are paths from the
+    /// repository root.</summary>
+    MissingScannerConfiguration
 }
 
 /// <summary>

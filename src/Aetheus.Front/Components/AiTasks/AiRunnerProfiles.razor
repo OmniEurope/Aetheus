@@ -26,7 +26,7 @@
 }
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_profiles" Count="@_totalCount"
                 TItem="AiRunnerProfileDto" PageSize="25"
-                LoadData="@LoadDataAsync" IsLoading="@_loading"
+                LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" IsLoading="@_loading"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<AiRunnerProfileDto>(_profiles, _totalCount))"
                 class="omni-u-w-100">

@@ -357,7 +357,7 @@ public class ServerDockerSectionTemplateTests : BunitContext
         {
             TaskId = 3,
             ServerId = 13,
-            TaskName = "docker compose file read",
+            TaskName = DockerTaskNames.ComposeFile("webapp-stack"),
             Status = TaskExecutionStatus.Success,
             Output = "version: '3'\nservices:\n  web:\n    image: nginx"
         }));

@@ -68,7 +68,9 @@ public sealed class PortRegistryApiRoundTripTests(ApiSmokeFixture fixture)
     {
         using var client = fixture.CreateAdminClient();
         var taken = FreePort();
-        var free = FreePort() + 1;
+        // INT-003: derived from the taken port, never drawn again, so the two can never be the same
+        // port; still inside the QA band.
+        var free = taken + 1 < 39000 ? taken + 1 : taken - 1;
         var holder = $"check-{Guid.NewGuid():N}";
 
         var created = await client.PostAsJsonAsync(

@@ -145,8 +145,20 @@ public class DashboardEditTests : BunitContext
         var method = typeof(DashboardEdit).GetMethod("OnDrop", BindingFlags.NonPublic | BindingFlags.Instance)!;
         method.Invoke(cut.Instance, [1]);
 
+        // FRONTTEST-006: the dragged widget (Servers) now follows Pipelines, and the rows follow the
+        // new order; resetting the drag alone would leave both untouched.
+        Assert.Equal([("Pipelines", 0), ("Servers", 1)], TitlesAndRows(cut));
         var dragIndex = typeof(DashboardEdit).GetField("_dragIndex", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
         Assert.Null(dragIndex);
+    }
+
+    private static List<(string Title, int Row)> TitlesAndRows(IRenderedComponent<DashboardEdit> cut)
+    {
+        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
+        return widgets.Cast<object>()
+            .Select(widget => ((string)widget.GetType().GetProperty("Title")!.GetValue(widget)!,
+                (int)widget.GetType().GetProperty("Row")!.GetValue(widget)!))
+            .ToList();
     }
 
     [Fact]
@@ -293,17 +305,20 @@ public class DashboardEditTests : BunitContext
     [Fact]
     public void RecalculateRows_SetsSequentialRows()
     {
-        var cut = RenderDashboard();
+        // FRONTTEST-006: the fixture already holds rows 0 and 1, so start from rows that are NOT
+        // sequential (7 and 3); only a real reindexing turns them into 0 and 1.
+        _handler.SetJsonResponse("api/dashboards/1", MakeDashboard(1) with
+        {
+            Widgets = [.. MakeDashboard(1).Widgets.Select(widget => widget with { Row = widget.Id == 1 ? 7 : 3 })]
+        });
+        var cut = Render<DashboardEdit>(p => p.Add(x => x.Id, 1));
+        cut.WaitForAssertion(() => Assert.Equal(2, TitlesAndRows(cut).Count), TimeSpan.FromSeconds(2));
+        Assert.DoesNotContain(TitlesAndRows(cut), widget => widget.Row is 0 or 1);
         var method = typeof(DashboardEdit).GetMethod("RecalculateRows", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
         method.Invoke(cut.Instance, []);
 
-        // RecalculateRows reindexes every widget's Row to its position (0, 1, …).
-        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        for (var i = 0; i < widgets.Count; i++)
-        {
-            var row = (int)widgets[i]!.GetType().GetProperty("Row")!.GetValue(widgets[i])!;
-            Assert.Equal(i, row);
-        }
+        Assert.Equal([0, 1], TitlesAndRows(cut).Select(widget => widget.Row));
     }
 
     [Fact]

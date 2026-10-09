@@ -6,7 +6,10 @@
 *@
 @if (Approval?.Pending is not null)
 {
-    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ApprovalRequiredTitle"]" Class="omni-u-mt-sm">
+    @* Recette R2-095: on a phone the title, the text and the buttons ran past the banner. The banner
+       text wraps, the buttons wrap, and below phone width Approve and Reject show their icon alone
+       (named by Label, explained by their tooltip); Comment keeps its text. *@
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@BannerTitle" Class="omni-u-mt-sm run-approval-banner">
         @* R-370: the pipeline's own approval and the environment's are told apart. *@
         <div>@(Approval.Pending.Scope == ApprovalScope.Pipeline
                   ? string.Format(L["PipelineApprovalRequiredDetail"], Approval.Pending.StageName)
@@ -33,9 +36,9 @@
             {
                 <OmniTextArea aria-label="@L["ApprovalCommentsOptional"]" @bind-Value="Approval.Comments" Placeholder="@L["ApprovalCommentsOptional"]" Rows="2" Class="omni-u-w-100 approval-comment" />
             }
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Approval.DecideAsync(ApprovalStatus.Approved))" Class="@(Approval.Deciding ? "btn-busy" : null)" Busy="@(Approval.Deciding)"><OmniIcon Name="OmniIconName.CheckCircle" /> <span>@L["Approve"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => Approval.DecideAsync(ApprovalStatus.Rejected))" Class="@(Approval.Deciding ? "btn-busy" : null)" Busy="@(Approval.Deciding)"><OmniIcon Name="OmniIconName.Prohibit" /> <span>@L["Reject"]</span></OmniButton>
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Wrap="true" Class="approval-decisions">
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Approval.DecideAsync(ApprovalStatus.Approved))" Class="@DecisionClass" Busy="@(Approval.Deciding)" Label="@L["Approve"]" title="@L["Approve"]"><OmniIcon Name="OmniIconName.CheckCircle" /> <span>@L["Approve"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => Approval.DecideAsync(ApprovalStatus.Rejected))" Class="@DecisionClass" Busy="@(Approval.Deciding)" Label="@L["Reject"]" title="@L["Reject"]"><OmniIcon Name="OmniIconName.Prohibit" /> <span>@L["Reject"]</span></OmniButton>
                 @if (!CommentOpen)
                 {
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OpenComment" Disabled="@(Approval.Deciding)" Class="approval-add-comment"><OmniIcon Name="OmniIconName.Chat" /> <span>@L["ApprovalAddComment"]</span></OmniButton>

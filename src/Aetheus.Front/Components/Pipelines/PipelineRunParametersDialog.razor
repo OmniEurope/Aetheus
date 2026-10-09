@@ -1,6 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 
-<OmniDataGrid Items="@ParameterList" TItem="KeyValuePair<string, string>"
+<OmniDataGrid Items="@ParameterList" ExportTitle="@ExportContext.Title(L["RunParameters"])" ExportFields="@ExportContext.Fields()" TItem="KeyValuePair<string, string>"
  Class="run-params-grid" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="KeyValuePair<string, string>" Property="Key" Title="@L["Parameter"]" Width="40%" Filterable="true" />

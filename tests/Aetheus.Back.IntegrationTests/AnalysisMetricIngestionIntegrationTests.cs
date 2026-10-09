@@ -16,16 +16,21 @@ namespace Aetheus.Back.IntegrationTests;
 /// <summary>
 /// The architecture metrics report of candidate #2328 carried 39,240 records and took 130 s to publish
 /// (PLAN-007 lot 6). This ingests a report of that size on PostgreSQL, twice on the default branch so
-/// the second one also resolves a baseline, and proves every record lands; the durations are written
-/// to the test output as the measurement.
+/// the second one also resolves a baseline; the durations are written to the test output as the
+/// measurement. Since PLAN-013 lot 3 an analysis writes only its totals, the 50 worst rows of each key
+/// and the rows over a policy threshold: at least ten times fewer rows, with the grade and the Gate
+/// those of the whole report.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 public sealed class AnalysisMetricIngestionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
     private const int MetricCount = 39_240;
 
+    /// <summary>Values cycle from 1 to 97; the project policy warns above 95.</summary>
+    private const double WarnAbove = 95;
+
     [Fact]
-    public async Task ArchitectureSizedMetricsReport_PersistsEveryRecordWithItsBaseline()
+    public async Task ArchitectureSizedMetricsReport_WritesTenTimesFewerRowsWithTheSameGradeAndGate()
     {
         await ResetAndMigrateAsync();
         var ct = TestContext.Current.CancellationToken;
@@ -42,11 +47,33 @@ public sealed class AnalysisMetricIngestionIntegrationTests(PostgresFixture fixt
         var second = await PublishTimedAsync(secondRun, "second (with baseline)", ct);
 
         await using var verification = NewContext();
-        Assert.Equal(MetricCount, await verification.AnalysisMetrics.CountAsync(m => m.AnalysisReportId == first.Id, ct));
-        Assert.Equal(MetricCount, await verification.AnalysisMetrics.CountAsync(m => m.AnalysisReportId == second.Id, ct));
-        Assert.Equal(MetricCount, await verification.AnalysisMetrics
+        var stored = await verification.AnalysisMetrics.CountAsync(m => m.AnalysisReportId == first.Id, ct);
+        TestContext.Current.TestOutputHelper?.WriteLine($"Rows written: {stored} of {MetricCount}");
+        Assert.True(stored * 10 <= MetricCount, $"{stored} rows written out of {MetricCount}");
+        var overThreshold = Values().Count(value => value > WarnAbove);
+        Assert.Equal(overThreshold, await verification.AnalysisMetrics
+            .CountAsync(m => m.AnalysisReportId == first.Id && m.Value > WarnAbove, ct));
+        Assert.Equal(stored, await verification.AnalysisMetrics.CountAsync(m => m.AnalysisReportId == second.Id, ct));
+        Assert.Equal(stored, await verification.AnalysisMetrics
             .CountAsync(m => m.AnalysisReportId == second.Id && m.BaselineValue != null, ct));
+
+        // The Gate counted every row of the report, not only the written ones.
+        var evaluation = await verification.AnalysisEvaluations.AsNoTracking().SingleAsync(e => e.AnalysisReportId == first.Id, ct);
+        Assert.Equal(AnalysisGateStatus.Warning, evaluation.Status);
+        Assert.Equal(overThreshold, evaluation.WarningCount);
+        // The grade read back from the written rows is the one computed on the whole report.
+        Assert.NotNull(evaluation.Grade);
+        var report = await verification.AnalysisReports.AsNoTracking().Include(r => r.Metrics).SingleAsync(r => r.Id == first.Id, ct);
+        var context = await new AnalysisRepository(verification).GetRunContextAsync(firstRun.RunId, ct);
+        // Recomputed at the instant the snapshot carries: PostgreSQL keeps EvaluatedAt to the microsecond.
+        var instant = Summary(evaluation.GradeSnapshotJson).EvaluatedAt!.Value;
+        Assert.Equal(evaluation.GradeSnapshotHash, AnalysisGradeEngine.Evaluate(report, context!, instant).SnapshotHash);
     }
+
+    private static AnalysisGradeSummaryDto Summary(string json) =>
+        JsonSerializer.Deserialize<AnalysisGradeSummaryDto>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+
+    private static IEnumerable<double> Values() => Enumerable.Range(0, MetricCount).Select(index => (double)(index % 97 + 1));
 
     private async Task<AnalysisReportDto> PublishTimedAsync((int RunId, int ArtifactId) run, string label, CancellationToken ct)
     {
@@ -78,14 +105,25 @@ public sealed class AnalysisMetricIngestionIntegrationTests(PostgresFixture fixt
             metrics = Enumerable.Range(0, MetricCount).Select(index => new
             {
                 key = "architecture.dependencies.namespace",
-                value = 1.0,
+                value = (double)(index % 97 + 1),
                 unit = "edge",
                 scope = "namespace-edge",
                 language = "csharp",
                 filePath = $"src/Aetheus.Back/Components/Module{index % 400}/File{index}.cs",
                 symbol = $"Aetheus.Back.Components.Module{index % 400}->Aetheus.Shared.Target{index}",
                 toolName = "Microsoft.CodeAnalysis Architecture",
-                direction = "Informational"
+                direction = "LowerIsBetter"
+            }).Append(new
+            {
+                key = "architecture.cycles",
+                value = 0.0,
+                unit = "cycles",
+                scope = "project",
+                language = "csharp",
+                filePath = (string)null!,
+                symbol = (string)null!,
+                toolName = "Microsoft.CodeAnalysis Architecture",
+                direction = "LowerIsBetter"
             })
         })
     };
@@ -99,11 +137,50 @@ public sealed class AnalysisMetricIngestionIntegrationTests(PostgresFixture fixt
         var project = new Project { Name = "Project", OrganizationId = organization.Id, DefaultBranch = "main" };
         db.Projects.Add(project);
         await db.SaveChangesAsync(ct);
-        var pipeline = new Pipeline { Name = "Quality", ProjectId = project.Id, YamlDefinition = "name: quality\ntrigger: manual\nstages: []" };
+        var pipeline = new Pipeline { Name = "Quality", ProjectId = project.Id, YamlDefinition = GradedYaml };
         db.Pipelines.Add(pipeline);
+        db.AnalysisPolicies.Add(new AnalysisPolicy
+        {
+            OrganizationId = organization.Id,
+            ProjectId = project.Id,
+            PolicyKey = "test.dependencies",
+            Name = "Too many references",
+            MetricKey = "architecture.dependencies.namespace",
+            Operator = AnalysisPolicyOperator.GreaterThan,
+            Threshold = WarnAbove,
+            Behavior = AnalysisGateBehavior.Warn,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
         await db.SaveChangesAsync(ct);
         return pipeline.Id;
     }
+
+    private const string GradedYaml = """
+        name: quality
+        trigger: manual
+        stages:
+          - name: Quality
+            steps:
+              - name: Grade
+                type: analysis-gate
+                analysis_scope: quality
+                analysis_grading:
+                  version: 1
+                  minimum_grade: F
+                  required_domains: [architecture]
+                  rules:
+                    - key: grade.dependencies
+                      domain: architecture
+                      metric: architecture.dependencies.namespace
+                      category: architecture
+                      direction: lower-is-better
+                      a: 10
+                      b: 20
+                      c: 40
+                      d: 60
+                      e: 90
+        """;
 
     private async Task<(int RunId, int ArtifactId)> SeedRunAsync(int pipelineId, CancellationToken ct)
     {

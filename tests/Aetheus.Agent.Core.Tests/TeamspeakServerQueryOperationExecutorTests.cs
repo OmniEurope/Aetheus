@@ -37,6 +37,23 @@ public class TeamspeakServerQueryOperationExecutorTests
         Assert.False(TeamspeakServerQueryOperationExecutor.ServerQueryReportsSuccess(reply));
     }
 
+    [Theory]
+    // login rejected, then use/command refused, then quit answers ok
+    [InlineData("error id=520 msg=invalid\\sloginname\\sor\\spassword\nerror id=1281 msg=database\\sempty\\sresult\\sset\nerror id=0 msg=ok")]
+    // login and use ok, the command itself rejected, quit ok
+    [InlineData("error id=0 msg=ok\nerror id=0 msg=ok\nerror id=2568 msg=insufficient\\sclient\\spermissions\nerror id=0 msg=ok")]
+    public void ServerQueryReportsSuccess_AFailureBeforeASuccessfulQuitIsStillAFailure(string reply)
+    {
+        Assert.False(TeamspeakServerQueryOperationExecutor.ServerQueryReportsSuccess(reply));
+    }
+
+    [Fact]
+    public void ServerQueryReportsSuccess_EveryAnswerOkIsASuccess()
+    {
+        const string reply = "error id=0 msg=ok\nerror id=0 msg=ok\nclid=42 client_nickname=Bob\nerror id=0 msg=ok\nerror id=0 msg=ok";
+        Assert.True(TeamspeakServerQueryOperationExecutor.ServerQueryReportsSuccess(reply));
+    }
+
     private sealed class StubQueryClient(string? reply) : Aetheus.Agent.Core.Collectors.ITeamspeakQueryClient
     {
         public Task<string?> ExecuteAsync(int port, string commands, CancellationToken ct = default) => Task.FromResult(reply);

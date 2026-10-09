@@ -64,6 +64,15 @@ public partial class EnvironmentsList : IAsyncDisposable
 
     private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.Environment);
 
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<EnvironmentDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(EnvironmentDto.Name));
+        return Api.Servers.GetEnvironmentsAsync(page: page, pageSize: pageSize, projectId: ProjectId,
+            sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
+    }
+
     private async Task OnLoadData(GridLoadArgs args)
     {
         _columnFilters = args.ToApiFilters();
@@ -133,4 +142,7 @@ public partial class EnvironmentsList : IAsyncDisposable
         await _hubConnection.LeaveEntityUpdatesAndDisposeAsync(ResourceType.Environment);
         _hubConnection = null;
     }
+
+    /// <summary>Recette R2-124: the export writes the count the badge shows.</summary>
+    private static readonly Func<EnvironmentDto, object?> ServersExport = environment => environment.Servers.Count;
 }

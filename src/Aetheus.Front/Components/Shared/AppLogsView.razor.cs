@@ -29,10 +29,6 @@ public partial class AppLogsView : IAsyncDisposable
     /// </summary>
     internal static readonly string[] SeverityClasses = ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"];
 
-    /// <summary>Recette R2-011: the formats of the grid's export bar.</summary>
-    internal static readonly IReadOnlyList<OmniTableExportFormat> ExportFormats =
-        [OmniTableExportFormat.Markdown, OmniTableExportFormat.Csv];
-
     // What the Message column writes in an export: the message with its values, as the cell shows it.
     // Static, so every render hands the same delegate.
     private static readonly Func<AppLogEntryDto, object?> MessageExport =

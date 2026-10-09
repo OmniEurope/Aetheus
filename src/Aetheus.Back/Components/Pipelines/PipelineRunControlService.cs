@@ -14,9 +14,10 @@ namespace Aetheus.Back.Components.Pipelines;
 /// </summary>
 public interface IPipelineRunControlService
 {
-    /// <summary>Cancels a run and every run it triggered, depth-first through the trigger tree.</summary>
+    /// <summary>Cancels a run and every run it triggered, depth-first through the trigger tree. Each
+    /// cancelled run is audited with the cancellation's author and reason (recette R2-103).</summary>
     Task<bool> CancelRunAsync(
-        int runId, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct);
+        int runId, PipelineRunCancellation cancellation, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct);
 
     /// <summary>Moves a run out of WaitingForApproval and re-dispatches it.</summary>
     Task<bool> ResumeAfterApprovalAsync(
@@ -40,14 +41,16 @@ public interface IPipelineRunControlService
 public sealed class PipelineRunControlService(
     IPipelineRepository repo,
     IHubContext<PipelineHub> pipelineHub,
-    IPipelineRunDefinitionParser definitions) : IPipelineRunControlService
+    IPipelineRunDefinitionParser definitions,
+    IAuditService audit) : IPipelineRunControlService
 {
     public async Task<bool> CancelRunAsync(
-        int runId, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct)
+        int runId, PipelineRunCancellation cancellation, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(cancellation);
         var root = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
         if (root is null || IsTerminal(root.Status)) return false;
-        if (!await CancelSingleRunAsync(root, scheduler, launcher, ct).ConfigureAwait(false)) return false;
+        if (!await CancelSingleRunAsync(root, cancellation, scheduler, launcher, ct).ConfigureAwait(false)) return false;
 
         var visited = new HashSet<int> { runId };
         var pendingParents = new Queue<int>();
@@ -60,7 +63,7 @@ public sealed class PipelineRunControlService(
                 if (!visited.Add(childId)) continue;
                 var child = await repo.GetPipelineRunWithPipelineAsync(childId, ct).ConfigureAwait(false);
                 if (child is not null && !IsTerminal(child.Status))
-                    await CancelSingleRunAsync(child, scheduler, launcher, ct).ConfigureAwait(false);
+                    await CancelSingleRunAsync(child, cancellation.ForChildOf(parentRunId), scheduler, launcher, ct).ConfigureAwait(false);
                 pendingParents.Enqueue(childId);
             }
         }
@@ -69,7 +72,7 @@ public sealed class PipelineRunControlService(
     }
 
     private async Task<bool> CancelSingleRunAsync(
-        PipelineRun run, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct)
+        PipelineRun run, PipelineRunCancellation cancellation, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         using var runLock = await RunAdvanceLock.Shared.AcquireAsync(run.Id, ct).ConfigureAwait(false);
         var current = await repo.GetPipelineRunWithPipelineAsync(run.Id, ct).ConfigureAwait(false);
@@ -93,7 +96,11 @@ public sealed class PipelineRunControlService(
         preservedStages.Add(PipelineSystemStages.Cleanup);
 
         var cancellationAlreadyRequested = HasCancellationRequest(current.AdditionalVariablesJson);
-        await repo.RequestPipelineRunCancellationAsync(current.Id, ct).ConfigureAwait(false);
+        await repo.RequestPipelineRunCancellationAsync(current.Id, cancellation, ct).ConfigureAwait(false);
+        // Recette R2-103: the launch was audited, its cancellation was not. Every request is recorded,
+        // a repeated one too: the audit says who pressed it again, the run keeps the first author.
+        await audit.LogAsync("Cancelled", "PipelineRun", current.Id,
+            $"{current.Pipeline?.Name} | by {cancellation.By} | {cancellation.Reason}", ct).ConfigureAwait(false);
         await repo.CancelPendingStepRunsExceptStagesAsync(
             current.Id, preservedStages, ct).ConfigureAwait(false);
         if (cancellationAlreadyRequested)
@@ -127,7 +134,9 @@ public sealed class PipelineRunControlService(
         var definition = definitions.Parse(run);
         if (definition is not null)
         {
-            await scheduler.DispatchNextStageWithScopedSecretsAsync(run, definition, launcher, ct).ConfigureAwait(false);
+            // Under the per-run lock every other dispatch pass takes: a completion or a reconcile pass
+            // dispatching the same stage at the same moment would otherwise create its tasks twice.
+            await scheduler.DispatchNextStageSerializedAsync(run, definition, launcher, ct).ConfigureAwait(false);
         }
         return true;
     }
@@ -182,7 +191,8 @@ public sealed class PipelineRunControlService(
         var definition = definitions.Parse(run);
         if (definition is not null)
         {
-            await scheduler.DispatchNextStageWithScopedSecretsAsync(run, definition, launcher, ct).ConfigureAwait(false);
+            // Same serialization as the resume above: the re-opened run is visible to every other pass.
+            await scheduler.DispatchNextStageSerializedAsync(run, definition, launcher, ct).ConfigureAwait(false);
         }
 
         await pipelineHub.Clients

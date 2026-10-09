@@ -242,6 +242,41 @@ public class BackupOperationExecutorTests
     }
 
     [Fact]
+    public async Task RestoreCheck_CancelledDuringRestore_StillDropsScratchDatabaseAndExtraction()
+    {
+        using var fixture = new BackupExecutorFixture();
+        var databaseDump = Path.Combine(fixture.Root, "database.dump");
+        await File.WriteAllTextAsync(databaseDump, "desired-database", TestContext.Current.CancellationToken);
+        var archive = Path.Combine(fixture.Root, "restore-check.aetheus-backup");
+        await BackupArchiveBundle.CreateAsync(archive, databaseDump, [], TestContext.Current.CancellationToken);
+        using var taskCts = new CancellationTokenSource();
+        var commands = new List<(string FileName, bool TokenCancelled)>();
+        string? extractedDump = null;
+        fixture.Executor.ProcessInvoker = (fileName, argv, _, _, _, token, _) =>
+        {
+            commands.Add((fileName, token.IsCancellationRequested));
+            if (fileName == "pg_restore")
+            {
+                extractedDump = argv[^1];
+                taskCts.Cancel();
+                token.ThrowIfCancellationRequested();
+            }
+            return Task.FromResult(new ExecutorResult(0, false));
+        };
+        var environment = fixture.DatabaseRestoreEnvironment(archive);
+        environment[BackupConstants.RunIdEnvVar] = "707";
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Executor.ExecuteSupportedPlatformAsync(
+            OperationKind.BackupRestoreCheck, environment, 30, fixture.CaptureOutput, taskCts.Token));
+
+        Assert.Equal(
+            [("dropdb", false), ("createdb", false), ("pg_restore", false), ("dropdb", false)],
+            commands);
+        Assert.NotNull(extractedDump);
+        Assert.False(File.Exists(extractedDump));
+    }
+
+    [Fact]
     public async Task RestoreCheck_CorruptArchiveReportsTerminalFailure()
     {
         using var fixture = new BackupExecutorFixture();

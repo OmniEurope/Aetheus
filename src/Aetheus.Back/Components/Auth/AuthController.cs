@@ -102,10 +102,11 @@ public class AuthController(
         // user. Enabling this endpoint without authenticating that gateway would let anyone
         // mint an identity by posting an arbitrary SubjectId. Fail closed unless both sides
         // share a dedicated secret; compare hashes in constant time and never log the value.
+        // R2-120: an external login that is not configured does not exist on this instance, so it
+        // answers 404 (never 503, which reads as an outage) and processes nothing.
         var expectedGatewaySecret = configuration["Auth:ExternalLogin:GatewaySecret"];
         if (string.IsNullOrWhiteSpace(expectedGatewaySecret))
-            return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                new ApiError { Message = "External identity gateway is not configured." });
+            return NotFound(new ApiError { Message = "External login is not enabled on this instance." });
 
         var suppliedGatewaySecret = Request.Headers[ExternalGatewayHeader].FirstOrDefault();
         if (!GatewaySecretsMatch(expectedGatewaySecret, suppliedGatewaySecret))

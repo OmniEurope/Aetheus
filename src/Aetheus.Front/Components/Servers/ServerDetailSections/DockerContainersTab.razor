@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @* Containers tab of the Docker section: the grid, the per-project bulk actions, and the five
    detail panels (logs, inspect, shell, env, file browser). Markup moved verbatim from the parent. *@
 <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
@@ -30,7 +31,7 @@ else
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenProjectZoom(SelectedBulkProject!))" title="@L["ZoomProject"]" Disabled="@(SelectedBulkProject is null)"><OmniIcon Name="OmniIconName.MagnifyingGlassPlus" /> <span>@L["ZoomProject"]</span></OmniButton>
         </OmniStack>
     }
-<OmniDataGrid @ref="_grid" Items="@FilteredContainers" TItem="DockerContainerDto" KeyOf="@(row => row.ContainerId)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
+<OmniDataGrid @ref="_grid" Items="@FilteredContainers" ExportTitle="@ExportContext.Title(L["Containers"])" ExportFields="@ExportContext.Fields()" TItem="DockerContainerDto" KeyOf="@(row => row.ContainerId)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_containerGroups" GroupLabel="@ContainerGroupLabel"
     AllGroupsExpanded="@_allContainerGroupsExpanded"
     RowRender="@OnContainerRowRender" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
@@ -88,7 +89,10 @@ else
                         @* Eight actions crowd a row; the three "open a panel" actions of a running container
                            go behind "…". *@
                         <OmniOverflowMenu Label="@L["MoreActions"]">
-                            <OmniMenuItem OnClick="@(() => OpenShell(c.ContainerId, c.Name))"><Icon><OmniIcon Name="OmniIconName.TerminalWindow" /></Icon><ChildContent>@L["DockerShell"]</ChildContent></OmniMenuItem>
+                            @if (CanAdmin)
+                            {
+                                <OmniMenuItem OnClick="@(() => OpenShell(c.ContainerId, c.Name))"><Icon><OmniIcon Name="OmniIconName.TerminalWindow" /></Icon><ChildContent>@L["DockerShell"]</ChildContent></OmniMenuItem>
+                            }
                             <OmniMenuItem OnClick="@(() => RequestEnvVarsAsync(c.ContainerId, c.Name))"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>@L["DockerEnvVars"]</ChildContent></OmniMenuItem>
                             <OmniMenuItem OnClick="@(() => OpenFileBrowserAsync(c.ContainerId, c.Name))"><Icon><OmniIcon Name="OmniIconName.FolderOpen" /></Icon><ChildContent>@L["DockerFileBrowser"]</ChildContent></OmniMenuItem>
                         </OmniOverflowMenu>
@@ -174,7 +178,7 @@ else
         }
         else
         {
-            <OmniDataGrid Items="@ParseEnvVars(_envContent)" TItem="DockerEnvVarDto" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+            <OmniDataGrid Items="@ParseEnvVars(_envContent)" ExportMarkdown="false" TItem="DockerEnvVarDto" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="DockerEnvVarDto" Property="Key" Title="@L["Key"]" Filterable="true" />
                     <OmniDataGridColumn TItem="DockerEnvVarDto" Property="Value" Title="@L["Value"]" Filterable="true" />

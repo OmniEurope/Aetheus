@@ -64,6 +64,15 @@ public partial class PipelineFleet
         await LoadAsync();
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the project filter, sort and column filters of the grid.</summary>
+    internal Task<PaginatedResult<PipelineFleetItemDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = ResolveSort(args);
+        return Api.Pipelines.GetPipelineFleetAsync(page, pageSize, projectId: _projectId,
+            sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
+    }
+
     private async Task LoadAsync()
     {
         _loading = true;

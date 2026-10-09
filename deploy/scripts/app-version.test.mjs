@@ -16,7 +16,7 @@ function run(props, args = [], env = {}) {
   if (props !== null) writeFileSync(join(root, "Directory.Build.props"), props);
   const result = spawnSync("sh", [script, ...args], {
     encoding: "utf8",
-    env: { ...process.env, BUILD_PIPELINE_RUNNUMBER: "", VERSION_SUFFIX: "", WORKSPACE: root.replace(/\\/g, "/"), ...env }
+    env: { ...process.env, BUILD_RELEASENUMBER: "", BUILD_PIPELINE_RUNNUMBER: "", VERSION_SUFFIX: "", WORKSPACE: root.replace(/\\/g, "/"), ...env }
   });
   rmSync(root, { recursive: true, force: true });
   return result;
@@ -33,9 +33,16 @@ test("the repository's own props give its major and minor", () => {
   assert.equal(result.stdout.trim(), `${declared[1]}.${declared[2]}.82`);
 });
 
-test("the run number replaces the patch, the suffix follows it", () => {
-  assert.equal(run(props("1.1.0"), [], { BUILD_PIPELINE_RUNNUMBER: "79" }).stdout.trim(), "1.1.79");
+test("the release number replaces the patch, the suffix follows it", () => {
+  assert.equal(run(props("1.1.0"), [], { BUILD_RELEASENUMBER: "79" }).stdout.trim(), "1.1.79");
   assert.equal(run(props("2.3"), ["5"], { VERSION_SUFFIX: "-nightly" }).stdout.trim(), "2.3.5-nightly");
+});
+
+// Recette R2-110: the release number counts from 0, and the per-pipeline counter is no longer read.
+test("the first release of a minor is .0, and the pipeline counter is not a release number", () => {
+  assert.equal(run(props("1.3.0"), [], { BUILD_RELEASENUMBER: "0" }).stdout.trim(), "1.3.0");
+  assert.equal(run(props("1.3.0"), [], { BUILD_RELEASENUMBER: "0", VERSION_SUFFIX: "-nightly" }).stdout.trim(), "1.3.0-nightly");
+  assert.notEqual(run(props("1.3.0"), [], { BUILD_PIPELINE_RUNNUMBER: "79" }).status, 0);
 });
 
 test("a malformed input is refused, never turned into a version", () => {

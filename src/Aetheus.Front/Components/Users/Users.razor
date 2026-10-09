@@ -28,7 +28,7 @@
 
     <div class="iam-grid-surface">
         <AetheusDataGrid @ref="_grid" Data="@_users" TItem="UserDto"
-            Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData" Density="OmniDensity.Compact"
+            Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData" ExportRead="@ReadExportAsync" Density="OmniDensity.Compact"
             Virtualize="@AetheusGrid.RemoteVirtualization"
             VirtualData="@(() => new OmniDataGridResult<UserDto>(_users, _totalCount))"
             FullHeight="true" RowClick="@(user => Nav.NavigateTo($"/users/{user.Id}"))">
@@ -41,7 +41,7 @@
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="UserDto" Property="Email" Title="@L["Email"]" MinWidth="180px" Filterable="true" />
-                <OmniDataGridColumn TItem="UserDto" Key="Roles" Title="@L["Roles"]" Width="220px" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_roleNames" FilterSearchable="true" >
+                <OmniDataGridColumn TItem="UserDto" Key="Roles" ExportValue="@RolesExport" Title="@L["Roles"]" Width="220px" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_roleNames" FilterSearchable="true" >
                     <Template Context="user">
                         <OmniRow Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                             @foreach (var role in user.Roles.Take(3))

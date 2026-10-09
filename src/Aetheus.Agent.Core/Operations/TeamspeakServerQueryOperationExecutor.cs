@@ -66,9 +66,10 @@ public sealed class TeamspeakServerQueryOperationExecutor(ITeamspeakQueryClient 
 
         await onOutput(reply, TaskLogLevel.Info).ConfigureAwait(false);
 
-        // TS3 ServerQuery reports the outcome with a trailing `error id=N msg=…` line. id=0 is success;
-        // a failed login or a rejected command returns a non-zero id. Map that to a non-zero exit so a
-        // failed action is marked failed, never a fake green (anti-fake rule).
+        // TS3 ServerQuery answers every line of the script (login, use, the command, quit) with an
+        // `error id=N msg=…` line; id=0 is success. A failed login or a rejected command returns a
+        // non-zero id, and the quit that follows still answers id=0, so every answer is checked, not
+        // just the last one: a failed action is marked failed, never a fake green (anti-fake rule).
         return ServerQueryReportsSuccess(reply)
             ? new ExecutorResult(0, false)
             : new ExecutorResult(1, false);
@@ -76,9 +77,13 @@ public sealed class TeamspeakServerQueryOperationExecutor(ITeamspeakQueryClient 
 
     internal static bool ServerQueryReportsSuccess(string reply)
     {
-        var lastError = reply
+        var answers = reply
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .LastOrDefault(l => l.StartsWith("error id=", StringComparison.Ordinal));
-        return lastError is not null && lastError.StartsWith("error id=0", StringComparison.Ordinal);
+            .Where(l => l.StartsWith("error id=", StringComparison.Ordinal))
+            .ToList();
+        return answers.Count > 0 && answers.All(IsSuccessAnswer);
     }
+
+    private static bool IsSuccessAnswer(string answer) =>
+        answer is "error id=0" || answer.StartsWith("error id=0 ", StringComparison.Ordinal);
 }

@@ -1,0 +1,50 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* PLAN-013 lot 1 (R2-113): the Database tab of a supervised application. The size of its database and of
+   its largest tables, as its Aetheus.Telemetry package measured them, with the change over 24 hours. *@
+@if (_loading)
+{
+    <AetheusLoader Size="OmniControlSize.Small" />
+}
+else if (_loadFailed)
+{
+    <EmptyState Icon="error" Title="@L["LoadFailed"]" />
+}
+else if (_report is null || _report.MeasuredAt is null)
+{
+    <EmptyState Icon="storage" Title="@L["AppDatabaseNoData"]" Description="@L["AppDatabaseNoDataHint"]" />
+}
+else
+{
+    @* The same OE key-figure tiles as the Performance tab: half the row from the small breakpoint, a third
+       from the large one, one per line on a phone. *@
+    <OmniRow Gap="OmniSpacing.Medium" Class="omni-u-mb-md">
+        <OmniColumn Span="12" SmallSpan="6" LargeSpan="4">
+            <OmniStatTile Class="app-performance-tile" Value="@TotalText" Label="@L["AppDatabaseTotal"]" Detail="@TotalTrendText" data-testid="app-database-total" />
+        </OmniColumn>
+        <OmniColumn Span="12" SmallSpan="6" LargeSpan="4">
+            <OmniStatTile Class="app-performance-tile" Value="@LargestSizeText" Label="@L["AppDatabaseLargestTable"]" Detail="@LargestNameText" data-testid="app-database-largest" />
+        </OmniColumn>
+        <OmniColumn Span="12" SmallSpan="6" LargeSpan="4">
+            <OmniStatTile Class="app-performance-tile" Value="@MeasuredAtText" Label="@L["AppDatabaseMeasuredAt"]" Detail="@DatabaseNameText" data-testid="app-database-measured" />
+        </OmniColumn>
+    </OmniRow>
+
+    <AetheusDataGrid Data="@_report.Tables" TItem="AppDatabaseTableSizeDto" KeyProperty="" Virtualize="true" EmptyText="@L["AppDatabaseNoTables"]" class="omni-u-mb-lg">
+        <Columns>
+            <OmniDataGridColumn Frozen="true" TItem="AppDatabaseTableSizeDto" Property="Name" Title="@L["AppDatabaseTable"]" MinWidth="14rem" Filterable="true">
+                <Template Context="table"><code>@TableName(table)</code></Template>
+            </OmniDataGridColumn>
+            <OmniDataGridColumn TItem="AppDatabaseTableSizeDto" Property="TotalBytes" Title="@L["Size"]" Width="8rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
+                <Template Context="table">@Bytes(table.TotalBytes)</Template>
+            </OmniDataGridColumn>
+            <OmniDataGridColumn TItem="AppDatabaseTableSizeDto" Property="EstimatedRows" Title="@L["AppDatabaseRows"]" Width="9rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
+                <Template Context="table">@Rows(table.EstimatedRows)</Template>
+            </OmniDataGridColumn>
+            <OmniDataGridColumn TItem="AppDatabaseTableSizeDto" Property="TotalBytesDayBefore" Title="@L["AppDatabaseTrend"]" Width="8rem" TextAlign="OmniDataGridTextAlign.End" Sortable="false" Filterable="false">
+                <Template Context="table"><span data-testid="app-database-trend">@Trend(table.TotalBytes, table.TotalBytesDayBefore)</span></Template>
+            </OmniDataGridColumn>
+        </Columns>
+    </AetheusDataGrid>
+    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["AppDatabaseNote"]</OmniText>
+}

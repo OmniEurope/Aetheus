@@ -40,6 +40,10 @@ public interface IAppMonitoringRepository
         int maxCount,
         CancellationToken ct = default);
     Task<int?> GetAppProjectIdAsync(int id, CancellationToken ct = default);
+    /// <summary>The organization of a server; null when the server does not exist.</summary>
+    Task<int?> GetServerOrganizationIdAsync(int serverId, CancellationToken ct = default);
+    /// <summary>True when the environment exists and is the project's own or a shared one (no project).</summary>
+    Task<bool> EnvironmentIsUsableByProjectAsync(int environmentId, int projectId, CancellationToken ct = default);
 
     /// <summary>Maps each project id to its OrganizationId (for per-org SignalR broadcast).</summary>
     Task<Dictionary<int, int>> GetProjectOrgIdsAsync(IReadOnlyCollection<int> projectIds, CancellationToken ct = default);

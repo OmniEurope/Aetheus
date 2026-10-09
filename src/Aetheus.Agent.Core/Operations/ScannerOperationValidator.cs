@@ -126,11 +126,13 @@ internal static class ScannerOperationValidator
         string allowedHost,
         out string error)
     {
-        var specification = Value(envVars, "AETHEUS_SCANNER_API_SPECIFICATION_URL");
+        // R2-099: every definition of a partitioned step passes the same check as a single one.
+        var specifications = ScannerApiSpecifications.Read(envVars);
         var format = Value(envVars, "AETHEUS_SCANNER_API_SPECIFICATION_FORMAT")?.ToLowerInvariant();
-        if (!Uri.TryCreate(specification, UriKind.Absolute, out var specificationUri)
-            || !UsesAllowedApiScheme(specificationUri, targetUri)
-            || !string.Equals(specificationUri.Host.TrimEnd('.'), allowedHost, StringComparison.OrdinalIgnoreCase)
+        if (specifications.Count == 0
+            || specifications.Any(specification => !Uri.TryCreate(specification, UriKind.Absolute, out var specificationUri)
+                || !UsesAllowedApiScheme(specificationUri, targetUri)
+                || !string.Equals(specificationUri.Host.TrimEnd('.'), allowedHost, StringComparison.OrdinalIgnoreCase))
             || format is not ("openapi" or "graphql"))
             return Fail("DAST API refused: specification must use HTTPS except on loopback QA, use the allowlisted host and declare openapi or graphql.", out error);
         error = string.Empty;

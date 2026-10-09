@@ -2,7 +2,10 @@
 using System.Reflection;
 using Aetheus.Front.Components.Servers;
 using Aetheus.Front.Components.Servers.AgentWizard;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -244,5 +247,69 @@ public class AddAgentRealtimeTests : BunitContext
         // capabilities step (1) advances the cursor without POSTing a registration token.
         Assert.Equal(1, (int)typeof(AddAgent).GetField("_currentStep", Priv)!.GetValue(cut.Instance)!);
         Assert.DoesNotContain(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("registration-tokens"));
+    }
+
+    // FRONT-015: a heartbeat or registration of ANOTHER server must never conclude that the wizard's
+    // new agent is installed; it only triggers a re-read of the wizard's own token.
+    [Fact]
+    public async Task ForeignServerHubEvents_WhileOwnTokenIsUnused_DoNotReportTheAgentFound()
+    {
+        SetupDefaultStubs();
+        _handler.SetJsonResponse("api/auth/registration-tokens/42", new RegistrationTokenDto { Id = 42, IsUsed = false });
+        var factory = new CapturingHubConnectionFactory(Services);
+        var monitor = new AgentDetectionMonitor(Services.GetRequiredService<ApiClient>(), factory,
+            NullLogger.Instance, () => Task.CompletedTask, new FakeTimeProvider());
+        await monitor.StartAsync(new RegistrationTokenDto { Id = 42, Token = "token-abc-xyz-123456" });
+        var tokenReadsBefore = _handler.Requests.Count(r => r.Url.Contains("registration-tokens/42"));
+
+        await HubHandlerInvoker.InvokeAsync(factory.Created!, "ServerHeartbeat", 3, new ServerHeartbeatDto());
+        await HubHandlerInvoker.InvokeAsync(factory.Created!, "ServerRegistered", new ServerDto { Id = 99, Name = "old-vps" });
+
+        Assert.False(monitor.AgentFound);
+        Assert.Null(monitor.DetectedServerId);
+        Assert.Equal(tokenReadsBefore + 2, _handler.Requests.Count(r => r.Url.Contains("registration-tokens/42")));
+        await monitor.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ServerHubEvent_WhenOwnTokenHasBeenUsed_ReportsTheServerOfTheToken()
+    {
+        SetupDefaultStubs();
+        _handler.SetJsonResponse("api/auth/registration-tokens/42", new RegistrationTokenDto { Id = 42, IsUsed = false });
+        var factory = new CapturingHubConnectionFactory(Services);
+        var monitor = new AgentDetectionMonitor(Services.GetRequiredService<ApiClient>(), factory,
+            NullLogger.Instance, () => Task.CompletedTask, new FakeTimeProvider());
+        await monitor.StartAsync(new RegistrationTokenDto { Id = 42, Token = "token-abc-xyz-123456" });
+
+        _handler.SetJsonResponse("api/auth/registration-tokens/42",
+            new RegistrationTokenDto { Id = 42, IsUsed = true, UsedByServerId = 7 });
+        _handler.SetJsonResponse("api/servers/7", new ServerDetailDto { Id = 7, Name = "edge-vps-01" });
+        await HubHandlerInvoker.InvokeAsync(factory.Created!, "ServerRegistered", new ServerDto { Id = 99, Name = "old-vps" });
+
+        Assert.True(monitor.AgentFound);
+        Assert.Equal(7, monitor.DetectedServerId);
+        Assert.Equal("edge-vps-01", monitor.AgentName);
+        await monitor.DisposeAsync();
+    }
+
+    /// <summary>Unreachable hub, but keeps the connection so a test can deliver its messages.</summary>
+    private sealed class CapturingHubConnectionFactory(IServiceProvider services) : HubConnectionFactory(
+        services.GetRequiredService<IConfiguration>(),
+        services.GetRequiredService<AuthStateProvider>(),
+        NullLogger<AuthDelegatingHandler>.Instance)
+    {
+        public HubConnection? Created { get; private set; }
+
+        public override HubConnection Create(string hubPath, IRetryPolicy? retryPolicy = null) =>
+            Created = new HubConnectionBuilder()
+                .WithUrl($"http://127.0.0.1:1/hubs/{hubPath}", options =>
+                    options.HttpMessageHandlerFactory = _ => new FailingHandler())
+                .Build();
+
+        private sealed class FailingHandler : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+                => Task.FromException<HttpResponseMessage>(new HttpRequestException("Test: hub not available"));
+        }
     }
 }

@@ -23,12 +23,13 @@ public sealed class PipelineDefinitionLiveSyncTests
         Name = "build",
         Description = "d",
         YamlDefinition = "stages: []",
-        ProjectId = 2
+        ProjectId = 2,
+        SourceBranch = "main"
     };
 
     [Fact]
     public void FormEqualToTheSavedPipeline_HasNoUnsavedChanges() =>
-        Assert.False(PipelineDefinitionLiveSync.HasUnsavedChanges(Form(), Saved));
+        Assert.False(PipelineDefinitionLiveSync.HasUnsavedChanges(Form(), Saved, "main"));
 
     [Fact]
     public void EditedYaml_OrName_IsAnUnsavedChange()
@@ -38,11 +39,22 @@ public sealed class PipelineDefinitionLiveSyncTests
         var name = Form();
         name.Name = "deploy";
 
-        Assert.True(PipelineDefinitionLiveSync.HasUnsavedChanges(yaml, Saved));
-        Assert.True(PipelineDefinitionLiveSync.HasUnsavedChanges(name, Saved));
+        Assert.True(PipelineDefinitionLiveSync.HasUnsavedChanges(yaml, Saved, "main"));
+        Assert.True(PipelineDefinitionLiveSync.HasUnsavedChanges(name, Saved, "main"));
+    }
+
+    [Fact]
+    public void Front009_AnEditedSourceBranch_IsAnUnsavedChange()
+    {
+        // Changing only the branch in Settings used to read as clean, so a push from elsewhere reloaded the
+        // page and overwrote the draft branch without the banner.
+        var branch = Form();
+        branch.SourceBranch = "release/2026.10";
+
+        Assert.True(PipelineDefinitionLiveSync.HasUnsavedChanges(branch, Saved, "main"));
     }
 
     [Fact]
     public void NothingLoadedYet_IsNotAnEdit() =>
-        Assert.False(PipelineDefinitionLiveSync.HasUnsavedChanges(Form(), null));
+        Assert.False(PipelineDefinitionLiveSync.HasUnsavedChanges(Form(), null, "main"));
 }

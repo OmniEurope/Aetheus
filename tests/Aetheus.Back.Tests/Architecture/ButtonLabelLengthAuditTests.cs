@@ -33,7 +33,10 @@ public sealed class ButtonLabelLengthAuditTests
         // Questions and qualified variants: the extra words ARE the meaning, not the page context.
         "WhyOffline", "ApplyOnProposedBranch", "PipelineRun",
         // Recette R-234: the wording the user asked for on the security settings.
-        "ChangePassword"
+        "ChangePassword",
+        // Recette R2-123 (decided 2026-10-05): the wording the user asked for on the public demo sign-in;
+        // the button sits outside the form it fills, so "le formulaire" says what it acts on.
+        "PublicDemoFillForm"
     };
 
     [Fact]

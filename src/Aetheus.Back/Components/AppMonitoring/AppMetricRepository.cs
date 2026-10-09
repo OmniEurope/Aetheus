@@ -127,21 +127,59 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
     }
 
     public async Task<List<AppMetricSample>> GetLatestExportAsync(
-        int appId, IReadOnlyCollection<string> metricNames, TimeSpan exportSpan, CancellationToken ct = default)
+        int appId, IReadOnlyCollection<string> metricNames, TimeSpan lookback, CancellationToken ct = default)
     {
         var newest = await db.AppMetricSamples.AsNoTracking()
             .Where(m => m.MonitoredAppId == appId && metricNames.Contains(m.MetricName))
             .MaxAsync(m => (DateTime?)m.Timestamp, ct).ConfigureAwait(false);
         if (newest is null) return [];
 
-        var floor = newest.Value - exportSpan;
-        var recent = await db.AppMetricSamples.AsNoTracking()
-            .Where(m => m.MonitoredAppId == appId && metricNames.Contains(m.MetricName) && m.Timestamp >= floor)
+        // Recette R2-082: a route is exported only for a minute in which it was called, so its newest
+        // point can be hours older than the newest export.
+        return await GetLatestPerSeriesAsync(appId, metricNames, newest.Value - lookback, newest.Value, ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<List<DateTime>> GetRecentSampleInstantsAsync(
+        int appId, DateTime since, int take, CancellationToken ct = default)
+    {
+        return await db.AppMetricSamples.AsNoTracking()
+            .Where(m => m.MonitoredAppId == appId && m.Timestamp >= since)
+            .Select(m => m.Timestamp)
+            .Distinct()
+            .OrderByDescending(timestamp => timestamp)
+            .Take(take)
             .ToListAsync(ct).ConfigureAwait(false);
-        // The newest point of each series: a series the last export no longer carries keeps its last value.
-        return [.. recent
+    }
+
+    public Task<List<AppMetricSample>> GetLatestBetweenAsync(
+        int appId, IReadOnlyCollection<string> metricNames, DateTime floor, DateTime ceiling,
+        CancellationToken ct = default) =>
+        GetLatestPerSeriesAsync(appId, metricNames, floor, ceiling, ct);
+
+    /// <summary>The newest point of each series within [<paramref name="floor"/>, <paramref name="ceiling"/>].
+    /// The newest instant of each series is found in the database (one row per series), then only the
+    /// samples written at those instants are read: memory follows the number of series, not the number
+    /// of minutes in the window.</summary>
+    private async Task<List<AppMetricSample>> GetLatestPerSeriesAsync(
+        int appId, IReadOnlyCollection<string> metricNames, DateTime floor, DateTime ceiling, CancellationToken ct)
+    {
+        var inLookback = db.AppMetricSamples.AsNoTracking()
+            .Where(m => m.MonitoredAppId == appId && metricNames.Contains(m.MetricName)
+                        && m.Timestamp >= floor && m.Timestamp <= ceiling);
+        var lastPoints = await inLookback
+            .GroupBy(m => new { m.MetricName, m.AttributesJson })
+            .Select(series => new { series.Key.MetricName, series.Key.AttributesJson, Last = series.Max(m => m.Timestamp) })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var instants = lastPoints.Select(point => point.Last).Distinct().ToList();
+        var wanted = lastPoints.Select(point => (point.MetricName, point.AttributesJson, point.Last)).ToHashSet();
+        var atInstants = await inLookback
+            .Where(m => instants.Contains(m.Timestamp))
+            .ToListAsync(ct).ConfigureAwait(false);
+        return [.. atInstants
+            .Where(m => wanted.Contains((m.MetricName, m.AttributesJson, m.Timestamp)))
             .GroupBy(m => (m.MetricName, m.AttributesJson))
-            .Select(series => series.MaxBy(m => m.Timestamp)!)];
+            .Select(series => series.MaxBy(m => m.Id)!)];
     }
 
     public async Task<List<AppMetricThreshold>> GetThresholdsForAppAsync(int appId, CancellationToken ct = default)
@@ -254,13 +292,7 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
             .Where(m => m.MonitoredAppId == appId && m.Timestamp >= readFrom && m.Timestamp < next)
             .Select(m => new { m.MetricName, m.AttributesJson, m.Unit, m.Kind, m.Timestamp, m.Value })
             .ToListAsync(ct).ConfigureAwait(false);
-        var existingKeys = (await db.AppMetricHourly
-                .AsNoTracking()
-                .Where(h => h.MonitoredAppId == appId && h.HourUtc == hourUtc)
-                .Select(h => new { h.MetricName, h.AttributesJson })
-                .ToListAsync(ct).ConfigureAwait(false))
-            .Select(e => (e.MetricName, e.AttributesJson))
-            .ToHashSet();
+        var existingKeys = await RolledUpKeysAsync(appId, hourUtc, ct).ConfigureAwait(false);
 
         var toInsert = new List<AppMetricHourly>();
         // Sum (cumulative counter) series become deltas BEFORE aggregation, across the ordered run that
@@ -293,12 +325,27 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
         }
 
         if (toInsert.Count == 0) return 0;
-        db.AppMetricHourly.AddRange(toInsert);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return toInsert.Count;
+        // R-462: a concurrent sweep that wrote some of these series first is not an error.
+        return await HourlyRollupInsert.AddMissingAsync(db, toInsert, async token =>
+        {
+            var present = await RolledUpKeysAsync(appId, hourUtc, token).ConfigureAwait(false);
+            return row => !present.Contains((row.MetricName, row.AttributesJson));
+        }, ct).ConfigureAwait(false);
     }
 
-    public async Task<int> PurgeRawOlderThanAsync(DateTime cutoff, CancellationToken ct = default)
+    private async Task<HashSet<(string MetricName, string? AttributesJson)>> RolledUpKeysAsync(
+        int appId, DateTime hourUtc, CancellationToken ct)
+    {
+        return (await db.AppMetricHourly
+                .AsNoTracking()
+                .Where(h => h.MonitoredAppId == appId && h.HourUtc == hourUtc)
+                .Select(h => new { h.MetricName, h.AttributesJson })
+                .ToListAsync(ct).ConfigureAwait(false))
+            .Select(e => (e.MetricName, e.AttributesJson))
+            .ToHashSet();
+    }
+
+    public async Task<int> PurgeRawOlderThanAsync(DateTime cutoff, IReadOnlyCollection<int> appIds, CancellationToken ct = default)
     {
         if (db.Database.IsRelational())
         {
@@ -307,7 +354,7 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
             int deleted;
             do
             {
-                var batch = db.AppMetricSamples.Where(m => m.Timestamp < cutoff)
+                var batch = db.AppMetricSamples.Where(m => m.Timestamp < cutoff && appIds.Contains(m.MonitoredAppId))
                     .OrderBy(m => m.Id).Select(m => m.Id).Take(PurgeBatchSize);
                 deleted = await db.AppMetricSamples.Where(m => batch.Contains(m.Id))
                     .ExecuteDeleteAsync(ct).ConfigureAwait(false);
@@ -316,13 +363,13 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
             return purged;
         }
 
-        var expired = await db.AppMetricSamples.Where(m => m.Timestamp < cutoff).ToListAsync(ct).ConfigureAwait(false);
+        var expired = await db.AppMetricSamples.Where(m => m.Timestamp < cutoff && appIds.Contains(m.MonitoredAppId)).ToListAsync(ct).ConfigureAwait(false);
         db.AppMetricSamples.RemoveRange(expired);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return expired.Count;
     }
 
-    public async Task<int> PurgeHourlyOlderThanAsync(DateTime cutoff, CancellationToken ct = default)
+    public async Task<int> PurgeHourlyOlderThanAsync(DateTime cutoff, IReadOnlyCollection<int> appIds, CancellationToken ct = default)
     {
         if (db.Database.IsRelational())
         {
@@ -330,7 +377,7 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
             int deleted;
             do
             {
-                var batch = db.AppMetricHourly.Where(h => h.HourUtc < cutoff)
+                var batch = db.AppMetricHourly.Where(h => h.HourUtc < cutoff && appIds.Contains(h.MonitoredAppId))
                     .OrderBy(h => h.Id).Select(h => h.Id).Take(PurgeBatchSize);
                 deleted = await db.AppMetricHourly.Where(h => batch.Contains(h.Id))
                     .ExecuteDeleteAsync(ct).ConfigureAwait(false);
@@ -339,7 +386,7 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
             return purged;
         }
 
-        var expired = await db.AppMetricHourly.Where(h => h.HourUtc < cutoff).ToListAsync(ct).ConfigureAwait(false);
+        var expired = await db.AppMetricHourly.Where(h => h.HourUtc < cutoff && appIds.Contains(h.MonitoredAppId)).ToListAsync(ct).ConfigureAwait(false);
         db.AppMetricHourly.RemoveRange(expired);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return expired.Count;

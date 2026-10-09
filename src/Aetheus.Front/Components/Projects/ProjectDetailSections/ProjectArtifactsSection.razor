@@ -9,7 +9,7 @@
 
     <AetheusDataGrid @ref="_grid" IsLoading="@_loading" FullHeight="true" Data="@_artifacts" TItem="PipelineArtifactDto"
         Count="@_totalCount" PageSize="@_pageSize"
-        LoadData="@OnLoadData" EmptyText="@L["NoArtifactsFound"]" class="aetheus-clickable-rows"
+        LoadData="@OnLoadData" ExportRead="@ReadExportAsync" EmptyText="@L["NoArtifactsFound"]" class="aetheus-clickable-rows"
         RowClick="@OnRowClick" AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" AllowColumnResize="true" Virtualize="@AetheusGrid.RemoteVirtualization" VirtualizationOverscanCount="3"
         VirtualData="@(() => new OmniDataGridResult<PipelineArtifactDto>(_artifacts, _totalCount))">
         <Columns>
@@ -45,7 +45,7 @@
                     }
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineArtifactDto" Title="@L["Release"]" Width="100px" Sortable="false" Filterable="false" >
+            <OmniDataGridColumn TItem="PipelineArtifactDto" Title="@L["Release"]" ExportValue="@ReleaseExport" Width="100px" Sortable="false" Filterable="false" >
                 <Template Context="a">
                     <OmniRow Gap="OmniSpacing.XSmall">
                         @foreach (var rel in a.Releases)

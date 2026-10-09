@@ -8,6 +8,17 @@ public partial class Login
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private NotifyHelper Toast { get; set; } = default!;
+
+    /// <summary>Recette R2-123: the account the public demo seeds and advertises (PUBLIC_ADMIN_PASSWORD of aetheus-demo).</summary>
+    internal const string PublicDemoUsername = "admin";
+
+    /// <summary>The demo password: public by design, shown only when the backend reports the public demo.</summary>
+    internal const string PublicDemoPassword = "aetheus-demo";
+
+    // The read-only fields bind to members, not constants: an OE input's ValueExpression must name a member.
+    private string DemoUsername { get; } = PublicDemoUsername;
+    private string DemoPassword { get; } = PublicDemoPassword;
 
     /// <summary>PLAN-005 lot 8 / D47: the page the user was bounced from, validated by <see cref="LoginRedirect"/>.</summary>
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
@@ -32,6 +43,20 @@ public partial class Login
             _model.TotpCode = null;
         else
             _model.RecoveryCode = null;
+    }
+
+    /// <summary>Recette R2-123: writes the demo account into the sign-in fields; the user still presses Login.</summary>
+    private void FillWithPublicDemoAccount()
+    {
+        _model.Username = PublicDemoUsername;
+        _model.Password = PublicDemoPassword;
+    }
+
+    /// <summary>A copy the browser refused shows nothing on OE's button, so it gets the app's warning (as R2-002).</summary>
+    private void OnDemoValueCopied(bool copied)
+    {
+        if (!copied)
+            Toast.Warning("CopyFailed", "ClipboardUnavailable");
     }
 
     protected override async Task OnInitializedAsync()

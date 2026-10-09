@@ -16,13 +16,13 @@ Docker management per server: containers, images, networks, volumes, compose sta
 | `/api/servers/{serverId}/docker/images` | GET | User | List images |
 | `/api/servers/{serverId}/docker/images/pull` | POST | User | Pull image |
 | `/api/servers/{serverId}/docker/images/{id}` | DELETE | Admin | Remove image |
-| `/api/servers/{serverId}/docker/build` | POST | User | Build image |
+| `/api/servers/{serverId}/docker/build` | POST | Admin | Build image (typed `DockerBuildImage` operation) |
 | `/api/servers/{serverId}/docker/networks` | GET | User | List networks |
 | `/api/servers/{serverId}/docker/volumes` | GET | User | List volumes |
 | `/api/servers/{serverId}/docker/compose` | GET | User | List compose stacks |
 | `/api/servers/{serverId}/docker/compose/action` | POST | User | Compose action (up/down/restart) |
 | `/api/servers/{serverId}/docker/compose/{stack}/file` | GET | User | Read compose file |
-| `/api/servers/{serverId}/docker/compose/file` | PUT | User | Save compose file |
+| `/api/servers/{serverId}/docker/compose/file` | PUT | Admin | Save compose file and deploy the stack (typed `DockerComposeUp` operation) |
 | `/api/servers/{serverId}/docker/prune` | POST | Admin | Prune unused resources |
 | `/api/servers/{serverId}/docker/resource-limits` | POST | User | Update resource limits |
 | `/api/servers/{serverId}/docker/exec` | POST | Admin | Shell exec in container |
@@ -33,7 +33,7 @@ Docker management per server: containers, images, networks, volumes, compose sta
 - `IDockerService` / `DockerService` -- business logic, delegates to agent tasks
 - `CachedDockerService` -- in-memory cache decorator
 - `IDockerRepository` / `DockerRepository` -- EF data access
-- `DockerCommandHelper` -- builds agent task payloads
+- Compose deploy, exec and build send their payload base64-encoded in an env var of a typed operation (`DockerComposeUp`, `DockerExecScript`, `DockerBuildImage`), executed by the agent's `DockerPayloadOperationExecutor`
 - `DockerIdValidator` -- validates container/image ID format
 
 ## Cross-Module Dependencies

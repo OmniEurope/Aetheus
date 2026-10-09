@@ -29,6 +29,12 @@ public sealed record PipelineStepDefinition
     /// <c>AETHEUS_CANDIDATE_VERSION</c>, as its candidate recorded it). The backend hosts the
     /// repository and writes the ref itself, so the agent needs no git credential.</summary>
     public string? Branch { get; init; }
+
+    /// <summary>Decision of 2026-10-07: for a <c>type: advance-branch</c> step, an optional tag the
+    /// backend creates on the same deployed commit, named after the deployed version
+    /// (<c>v$(APP_VERSION)</c>). A tag already on that commit is accepted; one on another commit fails
+    /// the step, because a version names exactly one commit.</summary>
+    public string? Tag { get; init; }
     public List<string> TargetFiles { get; init; } = [];
     /// <summary>PLAN-003 2.2 (4.5): for a <c>type: artifacts</c> step, the name the files matched by
     /// <see cref="TargetFiles"/> are stored and restored under. Several such steps in one stage publish
@@ -77,6 +83,11 @@ public sealed record PipelineStepDefinition
     /// <summary>Validated OpenAPI or GraphQL definition URL for <c>zap-api</c>. Its hostname must be
     /// the exact allowlisted hostname of the trusted non-production environment.</summary>
     public string? ApiSpecificationUrl { get; init; }
+
+    /// <summary>Recette R2-099: several definition URLs for one <c>zap-api</c> step, in place of
+    /// <see cref="ApiSpecificationUrl"/>. The agent scans them one after the other, each bounded to
+    /// <see cref="TimeoutSeconds"/> divided by their number, and publishes one merged report.</summary>
+    public List<string> ApiSpecificationUrls { get; init; } = [];
 
     /// <summary>ZAP API definition format: <c>openapi</c> or <c>graphql</c>.</summary>
     public string? ApiSpecificationFormat { get; init; }

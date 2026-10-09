@@ -17,6 +17,10 @@ public partial class DockerComposeTab
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
+
+    /// <summary>BACK-012: the backend takes Server.Admin for this tab's agent-reaching writes (compose
+    /// deploy, image build and delete, container shell); without it they are not offered.</summary>
+    [Parameter] public bool CanAdmin { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<DockerComposeStackDto> Stacks { get; set; } = [];
 
     private string _composeSearch = string.Empty;
@@ -42,10 +46,16 @@ public partial class DockerComposeTab
     /// <summary>
     /// Consumes one completed agent task forwarded by the parent. Returns without touching anything
     /// when the output is not the compose file this tab is waiting for.
+    /// FRONT-017: only the task of the stack open in the editor, and only while its file is still being
+    /// requested. A late answer for another stack (open A, then B, A answers last) would otherwise show
+    /// A's file under B's title and Deploy would apply it to B; an answer arriving once the file is
+    /// shown would overwrite the user's edits.
     /// </summary>
     public void HandleTaskOutput(string taskName, string output)
     {
-        if (!_composeEditorVisible || !taskName.Contains("compose file")) return;
+        if (!_composeEditorVisible || !_composeFileLoading
+            || !string.Equals(taskName, DockerTaskNames.ComposeFile(_composeEditorStack), StringComparison.Ordinal))
+            return;
         _composeEditorContent = output;
         _composeFileLoading = false;
 
@@ -110,4 +120,7 @@ public partial class DockerComposeTab
         }
         _composeDeploying = false;
     }
+
+    /// <summary>Recette R2-124: the export writes the running and total services as the cell does.</summary>
+    private static readonly Func<DockerComposeStackDto, object?> ServicesExport = stack => $"{stack.RunningCount} / {stack.TotalCount}";
 }

@@ -92,6 +92,46 @@ public class OwnerTypeSelectorTests : BunitContext
         Assert.Equal(OwnerTypeSelector.OwnerKind.Environment, kind);
     }
 
+    // FRONT-021: a project without environments answers an empty list; that is a loaded list, and the
+    // selector must not ask again after every render.
+    [Fact]
+    public async Task EnvironmentKind_WithAnEmptyEnvironmentList_LoadsItOnce()
+    {
+        _handler.SetJsonResponse("api/environments/10", new EnvironmentDto { Id = 10, Name = "Staging", ProjectId = 1 });
+        _handler.SetPaginatedJsonResponse("api/environments", new List<EnvironmentDto>());
+        var cut = Render<OwnerTypeSelector>(p => p
+            .Add(x => x.Projects, MakeProjects())
+            .Add(x => x.EnvironmentId, 10));
+
+        await Task.Delay(300, Xunit.TestContext.Current.CancellationToken);
+        cut.Render();
+        cut.Render();
+
+        Assert.Equal(1, _handler.Requests.Count(r => r.Url.Contains("api/environments?")));
+    }
+
+    [Fact]
+    public async Task ProjectServerKind_WithAnEmptyServerList_LoadsItOnce()
+    {
+        var projects = new List<ProjectDto> { new() { Id = 1, Name = "Alpha", Tags = [] } };
+        SetupProjectServersStub(1);
+        var cut = Render<OwnerTypeSelector>(p => p
+            .Add(x => x.Projects, projects)
+            .Add(x => x.ProjectServerId, 20));
+        // The owner lookup, then the dropdown's own load once the kind is inferred.
+        cut.WaitForAssertion(() => Assert.Equal(2, _handler.Requests.Count(r => r.Url.Contains("api/projects/1/servers"))));
+        _handler.SetPaginatedJsonResponse("api/projects/1/servers", new List<ProjectServerDto>());
+        var requestsBefore = _handler.Requests.Count(r => r.Url.Contains("api/projects/1/servers"));
+
+        // The user picks the same project again: one reload, then nothing more however often it renders (the
+        // old loop re-rendered itself; a parameter re-render would re-run the owner lookup on this URL).
+        var method = typeof(OwnerTypeSelector).GetMethod("OnProjectChanged", Priv)!;
+        await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [1])!);
+        await Task.Delay(300, Xunit.TestContext.Current.CancellationToken);
+
+        Assert.Equal(requestsBefore + 1, _handler.Requests.Count(r => r.Url.Contains("api/projects/1/servers")));
+    }
+
     [Fact]
     public void OnParametersSet_WithProjectServerId_SetsProjectServerKind()
     {

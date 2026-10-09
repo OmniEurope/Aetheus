@@ -1,4 +1,9 @@
 # SPDX-License-Identifier: EUPL-1.2
+# Builds, tests and packages the project through its CI adapter, then seals the payload's provenance.
+# One step on purpose: the steps of a stage run concurrently (ADR-012), and the provenance must describe
+# the payload the adapter has finished writing. Every consumer (quality, QA, candidate) restores this
+# artifact, and the restore refuses a payload without source-commit, delivery-contract.json and
+# artifact-provenance.json, or built from another commit than its own run.
 name: application-ci-template
 trigger: manual
 variables:
@@ -26,4 +31,43 @@ stages:
             sh .pipeline/scripts/ci.sh
           test -d .pipeline-artifacts
           find .pipeline-artifacts -type f -print -quit | grep -q .
+
+          SOURCE_SHA="$(printf '%s' "$(BUILD_SOURCEVERSION)" | tr 'A-F' 'a-f')"
+          case "$SOURCE_SHA" in
+            *[!0-9a-f]*|'') echo "The run has no full source commit to seal the payload with." >&2; exit 1 ;;
+          esac
+          test "${#SOURCE_SHA}" -eq 40
+          # An adapter may seal its own payload; it is kept as written and only its commit is checked.
+          if test -s .pipeline-artifacts/source-commit; then
+            test "$(tr -d ' \r\n' < .pipeline-artifacts/source-commit)" = "$SOURCE_SHA"
+          else
+            printf '%s\n' "$SOURCE_SHA" > .pipeline-artifacts/source-commit
+          fi
+          if ! test -s .pipeline-artifacts/artifact-provenance.json; then
+            find .pipeline-artifacts -type f \
+              ! -path .pipeline-artifacts/source-commit \
+              ! -path .pipeline-artifacts/delivery-contract.json \
+              ! -path .pipeline-artifacts/artifact-provenance.json \
+              | LC_ALL=C sort > .pipeline-payload-files
+            if grep -q '["\\]' .pipeline-payload-files; then
+              echo "A payload file name holds a quote or a backslash; rename it." >&2
+              exit 1
+            fi
+            {
+              printf '{"schemaVersion":1,"sourceCommit":"%s","files":[' "$SOURCE_SHA"
+              SEPARATOR=""
+              while IFS= read -r FILE; do
+                SUM="$(sha256sum "$FILE" | cut -d ' ' -f 1)"
+                printf '%s{"path":"%s","sha256":"%s"}' "$SEPARATOR" "${FILE#.pipeline-artifacts/}" "$SUM"
+                SEPARATOR=","
+              done < .pipeline-payload-files
+              printf ']}\n'
+            } > .pipeline-artifacts/artifact-provenance.json
+            rm -f .pipeline-payload-files
+          fi
+          if ! test -s .pipeline-artifacts/delivery-contract.json; then
+            PROVENANCE_SUM="$(sha256sum .pipeline-artifacts/artifact-provenance.json | cut -d ' ' -f 1)"
+            printf '{"schemaVersion":1,"adapter":"generic","candidateVersion":"c-%s","sourceSha":"%s","artifactProvenanceSha256":"%s"}\n' \
+              "$SOURCE_SHA" "$SOURCE_SHA" "$PROVENANCE_SUM" > .pipeline-artifacts/delivery-contract.json
+          fi
         timeout_seconds: 7200

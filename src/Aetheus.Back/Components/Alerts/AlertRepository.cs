@@ -16,6 +16,30 @@ public class AlertRepository(AppDbContext db, TimeProvider timeProvider) : IAler
             .ToListAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task<bool> TryReserveTriggerAsync(
+        int ruleId, DateTime? readLastTriggeredAt, DateTime triggeredAt, CancellationToken ct = default)
+    {
+        if (db.Database.IsRelational())
+        {
+            // Compare-and-set on the value read: of two evaluators (blue and green during a swap)
+            // that saw the same cooldown, exactly one moves it; the row lock makes the later UPDATE
+            // re-check the predicate and match nothing.
+            var reserved = await db.AlertRules
+                .Where(rule => rule.Id == ruleId && rule.LastTriggeredAt == readLastTriggeredAt)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(rule => rule.LastTriggeredAt, (DateTime?)triggeredAt),
+                    ct)
+                .ConfigureAwait(false);
+            return reserved == 1;
+        }
+
+        var stored = await db.AlertRules.FirstOrDefaultAsync(rule => rule.Id == ruleId, ct).ConfigureAwait(false);
+        if (stored is null || stored.LastTriggeredAt != readLastTriggeredAt) return false;
+        stored.LastTriggeredAt = triggeredAt;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return true;
+    }
+
     public async Task<List<AlertRule>> GetEnabledAsync(CancellationToken ct = default)
     {
         return await db.AlertRules

@@ -15,7 +15,7 @@
 }
 
 <AetheusDataGrid @ref="_grid" TItem="VariableLibraryDto" Data="@_libraries"
-    Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData"
+    Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData" ExportRead="@ReadExportAsync"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<VariableLibraryDto>(_libraries, _totalCount))"
     RowClick="@(lib => Nav.NavigateTo($"/variable-libraries/{lib.Id}"))"

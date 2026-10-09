@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 
 <OmniStack Gap="OmniSpacing.Large">
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
@@ -46,7 +47,7 @@
 
         @if (_status.Updates.Count > 0)
         {
-            <OmniDataGrid @ref="_grid" FillAvailableHeight="true" Items="@_status.Updates" TItem="PendingUpdateDto" KeyOf="@(row => row.Package)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+            <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["PatchTitle"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@_status.Updates" TItem="PendingUpdateDto" KeyOf="@(row => row.Package)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="PendingUpdateDto" Property="Package" Title="@L["PatchPackage"]"  Filterable="true"/>
                     <OmniDataGridColumn TItem="PendingUpdateDto" Property="CurrentVersion" Title="@L["PatchCurrentVersion"]" Width="200px"  Filterable="true"/>

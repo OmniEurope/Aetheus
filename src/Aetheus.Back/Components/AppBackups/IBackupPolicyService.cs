@@ -14,6 +14,12 @@ public interface IBackupPolicyService
 
     /// <summary>Project id owning the policy, for authorization; null if the policy does not exist.</summary>
     Task<int?> GetOwningProjectIdAsync(int id, CancellationToken ct = default);
+    /// <summary>
+    /// The server whose agent would run different parameters (engine, host, port, database, user,
+    /// password, file paths) if <paramref name="request"/> were applied; null when the update leaves
+    /// them as approved, or the policy does not exist. Changing them needs the server's own Write.
+    /// </summary>
+    Task<int?> GetServerForAgentParameterChangeAsync(int id, UpdateBackupPolicyRequest request, CancellationToken ct = default);
 
     Task<PaginatedResult<BackupRunDto>> GetRunsAsync(
         int policyId, PaginationRequest request, CancellationToken ct = default);

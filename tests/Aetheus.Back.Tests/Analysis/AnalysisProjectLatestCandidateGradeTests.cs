@@ -9,7 +9,7 @@ namespace Aetheus.Back.Tests.Analysis;
 
 /// <summary>
 /// Recette R2-024: the project grade is the grade of its latest candidate run (the root run and the
-/// runs its trigger steps started, the worst of them, as on the run page), no longer the latest grade
+/// runs its trigger steps started, merged domain by domain since R2-118), no longer the latest grade
 /// of each domain across every recent run.
 /// </summary>
 public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
@@ -78,6 +78,63 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
         Assert.Empty(await new AnalysisProjectSummaryRepository(_db).GetGradesAsync([ProjectId], Ct));
     }
 
+    [Fact]
+    public async Task TheCandidateTree_ShowsTheSecurityDomainOfItsSecurityRun_WhenItsQualityRunTiesOnTheOverallGrade()
+    {
+        // Recette R2-118: candidate 600 triggered quality 601 and security 602, both graded B overall. The
+        // quality run has no security rule (its security domain is advisory and incomplete); keeping the
+        // one worst run took the quality run on the tie and the security tile read "Indicatif · Incomplet · -".
+        Run(600, _now.AddHours(-2), sealedCandidate: true);
+        Run(601, _now.AddHours(-2).AddMinutes(1), parentRunId: 600);
+        Run(602, _now.AddHours(-2).AddMinutes(2), parentRunId: 600);
+        EvaluateDomains(601, _now.AddHours(-1),
+            Measured(AnalysisGradeDomain.CodeQuality, AnalysisGrade.B), Unmeasured(AnalysisGradeDomain.Security));
+        EvaluateDomains(602, _now.AddHours(-1).AddMinutes(1),
+            Measured(AnalysisGradeDomain.Security, AnalysisGrade.B), Unmeasured(AnalysisGradeDomain.CodeQuality));
+        await _db.SaveChangesAsync(Ct);
+
+        var grade = (await new AnalysisProjectSummaryRepository(_db).GetGradesAsync([ProjectId], Ct))[ProjectId];
+
+        var security = grade.Domains.Single(domain => domain.Domain == AnalysisGradeDomain.Security);
+        Assert.Equal(AnalysisGrade.B, security.Grade);
+        Assert.True(security.Required);
+        Assert.Equal(AnalysisGradeCompleteness.Complete, security.Completeness);
+        Assert.NotEmpty(security.Measures);
+        var codeQuality = grade.Domains.Single(domain => domain.Domain == AnalysisGradeDomain.CodeQuality);
+        Assert.Equal(AnalysisGrade.B, codeQuality.Grade);
+        Assert.Equal(AnalysisGradeCompleteness.Complete, grade.Completeness);
+        Assert.Equal(600, grade.PipelineRunId);
+    }
+
+    [Fact]
+    public async Task TheNightlyTree_MergesItsRunsDomainByDomain_KeepingTheWorstMeasuredSecurityGrade()
+    {
+        // A nightly (no candidate seal, so the newest tree) triggers quality, security, security history,
+        // QA and extended QA. Security is the worst of the four runs that measured it; quality comes from
+        // the quality run, and the extended QA run that could not measure security does not blank it.
+        Run(700, _now.AddHours(-4));
+        Run(701, _now.AddHours(-4).AddMinutes(1), parentRunId: 700);
+        Run(702, _now.AddHours(-4).AddMinutes(2), parentRunId: 700);
+        Run(703, _now.AddHours(-4).AddMinutes(3), parentRunId: 700);
+        Run(704, _now.AddHours(-4).AddMinutes(4), parentRunId: 700);
+        Run(705, _now.AddHours(-4).AddMinutes(5), parentRunId: 700);
+        EvaluateDomains(701, _now.AddHours(-3),
+            Measured(AnalysisGradeDomain.CodeQuality, AnalysisGrade.A), Unmeasured(AnalysisGradeDomain.Security));
+        EvaluateDomains(702, _now.AddHours(-3), Measured(AnalysisGradeDomain.Security, AnalysisGrade.C));
+        EvaluateDomains(703, _now.AddHours(-3), Measured(AnalysisGradeDomain.Security, AnalysisGrade.D));
+        EvaluateDomains(704, _now.AddHours(-3), Measured(AnalysisGradeDomain.Security, AnalysisGrade.B));
+        EvaluateDomains(705, _now.AddHours(-3), Unmeasured(AnalysisGradeDomain.Security, required: true));
+        await _db.SaveChangesAsync(Ct);
+
+        var grade = (await new AnalysisProjectSummaryRepository(_db).GetGradesAsync([ProjectId], Ct))[ProjectId];
+
+        Assert.Equal(700, grade.PipelineRunId);
+        Assert.Equal(AnalysisGrade.D, grade.Domains.Single(domain => domain.Domain == AnalysisGradeDomain.Security).Grade);
+        Assert.Equal(AnalysisGrade.A, grade.Domains.Single(domain => domain.Domain == AnalysisGradeDomain.CodeQuality).Grade);
+        Assert.Equal(AnalysisGrade.D, grade.OverallGrade);
+        Assert.Equal(AnalysisGradeDomain.Security, grade.LimitingDomain);
+    }
+
     private void Run(int runId, DateTime startedAt, bool sealedCandidate = false, int? parentRunId = null)
     {
         _db.PipelineRuns.Add(new PipelineRun { Id = runId, PipelineId = 1, Status = PipelineStatus.Success, StartedAt = startedAt });
@@ -103,49 +160,21 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
             });
     }
 
-    private void Evaluate(int runId, AnalysisGrade grade, AnalysisGradeDomain domain, DateTime evaluatedAt)
+    private void Evaluate(int runId, AnalysisGrade grade, AnalysisGradeDomain domain, DateTime evaluatedAt) =>
+        EvaluateDomains(runId, evaluatedAt, Measured(domain, grade));
+
+    /// <summary>One evaluation of the run, its snapshot holding the given domains as the engine writes them.</summary>
+    private void EvaluateDomains(int runId, DateTime evaluatedAt, params AnalysisGradeDomainDto[] domains)
     {
-        var observed = grade switch
-        {
-            AnalysisGrade.A => 100,
-            AnalysisGrade.B => 85,
-            AnalysisGrade.C => 75,
-            _ => 65
-        };
+        var required = domains.Where(domain => domain.Required).ToList();
+        var complete = required.Count > 0 && required.All(domain => domain.Grade.HasValue);
+        var grade = complete ? required.Max(domain => domain.Grade) : null;
         var snapshot = new AnalysisGradeSummaryDto
         {
             EvaluatedAt = evaluatedAt,
             OverallGrade = grade,
-            Completeness = AnalysisGradeCompleteness.Complete,
-            Domains =
-            [
-                new AnalysisGradeDomainDto
-                {
-                    Domain = domain,
-                    Grade = grade,
-                    Required = true,
-                    Completeness = AnalysisGradeCompleteness.Complete,
-                    EvaluatedAt = evaluatedAt,
-                    Measures =
-                    [
-                        new AnalysisGradeMeasureDto
-                        {
-                            Key = domain.ToString(),
-                            Domain = domain,
-                            Grade = grade,
-                            Required = true,
-                            Observed = true,
-                            ObservedValue = observed,
-                            Direction = AnalysisMetricDirection.HigherIsBetter,
-                            AThreshold = 90,
-                            BThreshold = 80,
-                            CThreshold = 70,
-                            DThreshold = 60,
-                            EThreshold = 50
-                        }
-                    ]
-                }
-            ]
+            Completeness = complete ? AnalysisGradeCompleteness.Complete : AnalysisGradeCompleteness.Incomplete,
+            Domains = [.. domains.Select(domain => domain with { EvaluatedAt = evaluatedAt })]
         };
         var id = _nextId++;
         _db.AnalysisEvaluations.Add(new AnalysisEvaluation
@@ -156,10 +185,56 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
             PipelineRunId = runId,
             Status = AnalysisGateStatus.Passed,
             Grade = grade,
-            GradeCompleteness = AnalysisGradeCompleteness.Complete,
+            GradeCompleteness = snapshot.Completeness,
             GradeSnapshotJson = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
             EvaluatedAt = evaluatedAt,
             CreatedAt = evaluatedAt
         });
     }
+
+    private static AnalysisGradeDomainDto Measured(AnalysisGradeDomain domain, AnalysisGrade grade)
+    {
+        var observed = grade switch
+        {
+            AnalysisGrade.A => 100,
+            AnalysisGrade.B => 85,
+            AnalysisGrade.C => 75,
+            AnalysisGrade.D => 65,
+            AnalysisGrade.E => 55,
+            _ => 45
+        };
+        return new AnalysisGradeDomainDto
+        {
+            Domain = domain,
+            Grade = grade,
+            Required = true,
+            Completeness = AnalysisGradeCompleteness.Complete,
+            Measures =
+            [
+                new AnalysisGradeMeasureDto
+                {
+                    Key = domain.ToString(),
+                    Domain = domain,
+                    Grade = grade,
+                    Required = true,
+                    Observed = true,
+                    ObservedValue = observed,
+                    Direction = AnalysisMetricDirection.HigherIsBetter,
+                    AThreshold = 90,
+                    BThreshold = 80,
+                    CThreshold = 70,
+                    DThreshold = 60,
+                    EThreshold = 50
+                }
+            ]
+        };
+    }
+
+    // A domain the run's grading does not measure: advisory (or required but without evidence), no grade.
+    private static AnalysisGradeDomainDto Unmeasured(AnalysisGradeDomain domain, bool required = false) => new()
+    {
+        Domain = domain,
+        Required = required,
+        Completeness = AnalysisGradeCompleteness.Incomplete
+    };
 }

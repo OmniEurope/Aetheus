@@ -42,6 +42,15 @@ public partial class Organizations : IAsyncDisposable
         }));
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    private async Task<PaginatedResult<OrganizationDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest("Name");
+        return await Api.Servers.GetOrganizationsAsync(Search.Search, page, pageSize, sortBy, sortDescending, filters: args.ToApiFilters())
+            ?? new PaginatedResult<OrganizationDto>();
+    }
+
     private async Task LoadDataAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();

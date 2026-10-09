@@ -81,6 +81,9 @@ public sealed class AppWebAnalyticsService(
                 await notifications.SendEventAsync("app.analytics.quota", new
                 {
                     MonitoredAppId = appId,
+                    // The owning project: the AI tasks and the per-user notifications of an event are
+                    // those of the project it is about (AiEventOwner, RecordProjectEventAsync).
+                    app.ProjectId,
                     UsagePercent = usagePercent,
                     Threshold = alertLevel
                 }, ct).ConfigureAwait(false);

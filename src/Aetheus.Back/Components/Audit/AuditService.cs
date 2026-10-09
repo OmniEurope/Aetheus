@@ -34,7 +34,8 @@ public class AuditService(IAuditRepository repo, IHttpContextAccessor httpContex
                     EntityType = entityType,
                     EntityId = entityId,
                     Details = details,
-                    Timestamp = timeProvider.GetUtcNow().UtcDateTime,
+                    // Hashed as stored: PostgreSQL keeps microseconds (SITE-SEC-003).
+                    Timestamp = AuditChainService.ToStoredPrecision(timeProvider.GetUtcNow().UtcDateTime),
                     PreviousHash = previousHash
                 };
                 log.Hash = chainService.ComputeHash(log, previousHash);

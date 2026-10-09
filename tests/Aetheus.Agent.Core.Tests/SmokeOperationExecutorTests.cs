@@ -17,7 +17,7 @@ namespace Aetheus.Agent.Core.Tests;
 public sealed class SmokeOperationExecutorTests
 {
     [Theory]
-    [InlineData("https://demo.aetheus.sonytumen.com")]
+    [InlineData("https://demo.app.aetheus.sonytumen.com")]
     [InlineData("http://127.0.0.1:10030")]
     [InlineData("https://app.example.org:8443")]
     public void SmokeOrigin_AcceptsBareOrigins(string origin) =>
@@ -168,6 +168,40 @@ public sealed class SmokeOperationExecutorTests
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("##aetheus[setvariable name=SMOKE_GATE_STATUS]1", log);
         Assert.Contains("##aetheus[setvariable name=SMOKE_BLOCKING_FINDINGS]0", log);
+    }
+
+    /// <summary>
+    /// Docker answering 125/126/127, or a filter that selects nothing, ran no test at all: that is a
+    /// step without evidence, never a suite graded as failing (which the advisory gate turns green).
+    /// </summary>
+    [Theory]
+    [InlineData(125, "")]
+    [InlineData(126, "")]
+    [InlineData(127, "")]
+    [InlineData(0, "No test matches the given testcase filter `TestCategory=ProductionSmoke`")]
+    public async Task ABrowserSuiteThatRanNoTest_FailsTheStepInsteadOfBeingGraded(int dockerExitCode, string stdOut)
+    {
+        var shell = Substitute.For<IShellRunner>();
+        shell.RunExecAsync("docker", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>())
+            .Returns(new ShellExecResult(0, "27.0.0", string.Empty));
+        shell.RunExecAsync(
+                "docker", Arg.Any<IReadOnlyList<string>>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<string>(),
+                Arg.Any<bool>(), Arg.Any<int>(), Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>())
+            .Returns(new ShellExecResult(dockerExitCode, stdOut, "docker: Error response from daemon"));
+        var log = new List<string>();
+
+        var result = await CreateExecutor(shell, HttpStatusCode.OK).ExecuteAsync(
+            OperationKind.PipelineSmoke, "http://127.0.0.1:19999",
+            new Dictionary<string, string>
+            {
+                ["AETHEUS_SMOKE_FRONTEND"] = "false",
+                ["AETHEUS_SMOKE_BROWSER_IMAGE"] = "registry.local/browser-smoke@sha256:" + new string('a', 64)
+            },
+            60, (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(log, line => line.StartsWith("Browser suite did not run", StringComparison.Ordinal));
+        Assert.DoesNotContain(log, line => line.Contains("SMOKE_GATE_STATUS", StringComparison.Ordinal));
     }
 
     private static SmokeOperationExecutor CreateExecutor(

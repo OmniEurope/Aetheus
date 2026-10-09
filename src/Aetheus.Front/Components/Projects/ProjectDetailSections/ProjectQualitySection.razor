@@ -137,7 +137,7 @@ else
                 @* Recette R-221: no search row; the column header filters are the only filters. Recette
                    R2-054 (2026-10-02): "Export all" is back under the table, the blue Markdown button of
                    every grid's export bar, and leaves the "..." menu R-431 had put it in. *@
-                 <AetheusDataGrid @ref="_findingsGrid" Data="@_findings" Count="@_findingCount" TItem="AnalysisFindingDto" LoadData="LoadFindingsAsync" RowClick="OpenFinding" AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" PageSize="25" class="analysis-table aetheus-clickable-rows aetheus-grid-fullheight" AllowColumnResize="true" Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<AnalysisFindingDto>(_findings, _findingCount))" FullHeight="true" VirtualizationOverscanCount="3">
+                 <AetheusDataGrid ShowFooterBar="true" @ref="_findingsGrid" Data="@_findings" Count="@_findingCount" TItem="AnalysisFindingDto" LoadData="LoadFindingsAsync" ExportRead="@ReadFindingsAsync" ExportName="@L["AnalysisFindings"]" RowClick="OpenFinding" AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" PageSize="25" class="analysis-table aetheus-clickable-rows aetheus-grid-fullheight" AllowColumnResize="true" Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<AnalysisFindingDto>(_findings, _findingCount))" FullHeight="true" VirtualizationOverscanCount="3">
                     <Columns>
                         @* Recette R-502: the one definition of a findings list, shared with the Gate tab of a run. *@
                         <AnalysisFindingColumns Defaults="@_findingDefaults" />

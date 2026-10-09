@@ -288,7 +288,7 @@ public class PipelinesController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
             return Forbid();
 
-        var cancelled = await runService.CancelRunAsync(runId, ct);
+        var cancelled = await runService.CancelRunAsync(runId, PipelineRunCancellation.ByUser(User.Identity?.Name), ct);
         if (!cancelled) return NotFound();
         return NoContent();
     }
@@ -301,7 +301,10 @@ public class PipelinesController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
             return Forbid();
 
-        if (!await CallerAdministersAllTargetsAsync(pipelineId.Value, ct))
+        // BACK-020: a retry replays the run's captured definition, not the current one: authorize that.
+        var retryTargets = await runService.GetRetryTargetServerIdsAsync(runId, ct);
+        if (retryTargets is null) return NotFound();
+        if (!await CallerAdministersAllTargetsAsync(retryTargets, ct))
             return Forbid();
 
         var run = await runService.RetryFailedStepsAsync(runId, ct);
@@ -318,11 +321,15 @@ public class PipelinesController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
             return Forbid();
 
-        // Same Server.Admin gate as TriggerRun - a rerun launches free-form shell (= RCE).
-        if (!await CallerAdministersAllTargetsAsync(pipelineId.Value, ct))
+        // Same Server.Admin gate as TriggerRun - a rerun launches free-form shell (= RCE). BACK-020: on the
+        // snapshot, commit and parameters the rerun will execute, and the launch starts from that plan.
+        var plan = await runService.PrepareRerunAsync(runId, mode, ct);
+        if (plan is null) return NotFound();
+        if (!await CallerAdministersAllTargetsAsync(plan.Preparation.TargetServerIds, ct))
             return Forbid();
 
-        var run = await runService.RerunAsync(runId, mode, ct);
+        var run = await runService.TriggerPreparedRunAsync(
+            plan.Preparation, plan.AdditionalVariables, plan.Parameters, ct);
         if (run is null) return NotFound();
         return CreatedAtAction(nameof(GetRun), new { runId = run.Id }, run);
     }
@@ -373,9 +380,8 @@ public class PipelinesController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
             return Forbid();
 
-        var approval = await approvalService.DecideApprovalAsync(approvalId, request, ct);
-        if (approval is null) return NotFound();
-        return Ok(approval);
+        // Recette R2-116: a refused decision answers with its reason (ErrorHandlingMiddleware), never a bare 404.
+        return Ok(await approvalService.DecideApprovalAsync(approvalId, request, ct));
     }
 
     [AllowAnonymous]

@@ -9,9 +9,33 @@ ADMIN_PORT="$(/usr/sbin/sshd -T 2>/dev/null | awk '/^port[[:space:]]/ {print $2;
 [ -n "$ADMIN_PORT" ] || ADMIN_PORT="$(awk '/^[Pp]ort[[:space:]]+[0-9]+/ {print $2; exit}' /etc/ssh/sshd_config 2>/dev/null)"
 [ -n "$ADMIN_PORT" ] || ADMIN_PORT=22
 
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
+# Deletes one variant (allow or deny) of a rule. A rule that does not exist is not an error, the
+# other variant may be the one present; any other ufw failure is (audit DEP-004). LC_ALL=C keeps the
+# "non-existent rule" message in English whatever locale sudo passed on.
+fw_delete_variant() {
+    out="$(LC_ALL=C "$UFW" --force delete "$@" 2>&1)"
+    rc=$?
+    case "$out" in
+        *"non-existent rule"*) echo "no $1 rule to delete"; return 0 ;;
+    esac
+    [ -z "$out" ] || printf '%s\n' "$out"
+    if [ "$rc" -ne 0 ]; then
+        echo "ufw delete $1 failed (exit $rc)" >&2
+        return 1
+    fi
+    return 0
+}
+
 fw_valid_source() {
     [ "$1" = "any" ] && return 0
-    echo "$1" | grep -Eq '^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$'
+    one_line "$1" && printf '%s' "$1" | grep -Eq '^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$'
 }
 
 action="${1:-}"
@@ -20,8 +44,13 @@ case "$action" in
         exec "$UFW" status numbered
         ;;
     enable)
-        # Never lock out: allow the admin port before the default-deny policy takes effect.
-        "$UFW" allow "${ADMIN_PORT}/tcp" >/dev/null 2>&1
+        # Never lock out: allow the admin port before the default-deny policy takes effect. When that
+        # rule cannot be set, the firewall is not enabled (audit DEP-003): default-deny without it
+        # would cut the administration channel the anti-lockout promise protects.
+        if ! out="$("$UFW" allow "${ADMIN_PORT}/tcp" 2>&1)"; then
+            echo "refused: the administration port ${ADMIN_PORT}/tcp could not be allowed, the firewall is left as it was: $out" >&2
+            exit 4
+        fi
         exec "$UFW" --force enable
         ;;
     disable)
@@ -29,9 +58,9 @@ case "$action" in
         ;;
     allow|deny|delete)
         port="${2:-}"; proto="${3:-}"; source="${4:-any}"
-        echo "$port" | grep -Eq '^[0-9]{1,5}$' || { echo "invalid port" >&2; exit 2; }
+        one_line "$port" && printf '%s' "$port" | grep -Eq '^[0-9]{1,5}$' || { echo "invalid port" >&2; exit 2; }
         [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || { echo "port out of range" >&2; exit 2; }
-        echo "$proto" | grep -Eq '^(tcp|udp)$' || { echo "invalid protocol" >&2; exit 2; }
+        one_line "$proto" && printf '%s' "$proto" | grep -Eq '^(tcp|udp)$' || { echo "invalid protocol" >&2; exit 2; }
         fw_valid_source "$source" || { echo "invalid source" >&2; exit 2; }
         # Anti-lockout: refuse to close (deny/delete) the administration port.
         if [ "$action" != "allow" ] && [ "$port" = "$ADMIN_PORT" ]; then
@@ -43,8 +72,10 @@ case "$action" in
                 allow) exec "$UFW" allow "${port}/${proto}" ;;
                 deny)  exec "$UFW" deny  "${port}/${proto}" ;;
                 delete)
-                    "$UFW" --force delete allow "${port}/${proto}" 2>/dev/null
-                    exec "$UFW" --force delete deny "${port}/${proto}"
+                    failed=0
+                    fw_delete_variant allow "${port}/${proto}" || failed=1
+                    fw_delete_variant deny "${port}/${proto}" || failed=1
+                    exit "$failed"
                     ;;
             esac
         else
@@ -52,8 +83,10 @@ case "$action" in
                 allow) exec "$UFW" allow from "$source" to any port "$port" proto "$proto" ;;
                 deny)  exec "$UFW" deny  from "$source" to any port "$port" proto "$proto" ;;
                 delete)
-                    "$UFW" --force delete allow from "$source" to any port "$port" proto "$proto" 2>/dev/null
-                    exec "$UFW" --force delete deny from "$source" to any port "$port" proto "$proto"
+                    failed=0
+                    fw_delete_variant allow from "$source" to any port "$port" proto "$proto" || failed=1
+                    fw_delete_variant deny from "$source" to any port "$port" proto "$proto" || failed=1
+                    exit "$failed"
                     ;;
             esac
         fi

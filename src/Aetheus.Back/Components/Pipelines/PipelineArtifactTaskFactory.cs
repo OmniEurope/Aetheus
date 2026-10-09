@@ -91,10 +91,14 @@ public sealed class PipelineArtifactTaskFactory(
     {
         if (stepDefinition.AllowMissing && IsOptionalProducerArtifactUnavailable(stepDefinition, error))
         {
+            // Recette R2-097: an optional artifact that does not exist yet (a first successful nightly
+            // has no earlier evidence) is the expected case the step was declared for, not a run-level
+            // warning. The step says it, in its own status; the steps that grade the comparison record
+            // it as unavailable.
             await CompleteMissingRestoreArtifactAsync(
                 runId, server, stepRun,
-                $"optional producer artifact is unavailable; downstream assurance will record Unavailable/F. {error}",
-                now, ct).ConfigureAwait(false);
+                $"Nothing to restore: the optional artifact '{stepDefinition.Artifact}' of {stepDefinition.ArtifactSourcePipeline} does not exist yet, so there is nothing to compare with ({error?.TrimEnd('.')}). The checks that read it record it as unavailable.",
+                runWarning: false, now, ct).ConfigureAwait(false);
             return;
         }
         var canBootstrap = stepDefinition.AllowMissing
@@ -122,7 +126,8 @@ public sealed class PipelineArtifactTaskFactory(
         }
         await CompleteMissingRestoreArtifactAsync(
             runId, server, stepRun,
-            "the selected release contract does not require this retained artifact; explicit fallback selected.", now, ct)
+            "the selected release contract does not require this retained artifact; explicit fallback selected.",
+            runWarning: true, now, ct)
             .ConfigureAwait(false);
     }
 
@@ -153,7 +158,8 @@ public sealed class PipelineArtifactTaskFactory(
         int runId,
         Server server,
         PipelineStepRun stepRun,
-        string warning,
+        string reason,
+        bool runWarning,
         DateTime now,
         CancellationToken ct)
     {
@@ -161,9 +167,12 @@ public sealed class PipelineArtifactTaskFactory(
         stepRun.Status = TaskExecutionStatus.Success;
         stepRun.StartedAt ??= now;
         stepRun.CompletedAt = now;
-        stepRun.SkippedReason = warning.Length <= 1000 ? warning : warning[..1000];
-        await repo.AppendRunWarningsAsync(
-            runId, [$"Restore-artifacts step '{stepRun.StepName}': {warning}"], ct).ConfigureAwait(false);
+        stepRun.SkippedReason = reason.Length <= 1000 ? reason : reason[..1000];
+        if (runWarning)
+        {
+            await repo.AppendRunWarningsAsync(
+                runId, [$"Restore-artifacts step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+        }
     }
 
     private void CreateRestoreArtifactsTask(

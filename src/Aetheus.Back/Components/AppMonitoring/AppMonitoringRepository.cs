@@ -80,6 +80,19 @@ public sealed class AppMonitoringRepository(AppDbContext db) : IAppMonitoringRep
         return projectId;
     }
 
+    public Task<int?> GetServerOrganizationIdAsync(int serverId, CancellationToken ct = default) =>
+        db.Servers
+            .AsNoTracking()
+            .Where(server => server.Id == serverId)
+            .Select(server => (int?)server.OrganizationId)
+            .FirstOrDefaultAsync(ct);
+
+    public Task<bool> EnvironmentIsUsableByProjectAsync(int environmentId, int projectId, CancellationToken ct = default) =>
+        db.Environments
+            .AsNoTracking()
+            .AnyAsync(environment => environment.Id == environmentId
+                && (environment.ProjectId == null || environment.ProjectId == projectId), ct);
+
     public async Task<Dictionary<int, int>> GetProjectOrgIdsAsync(IReadOnlyCollection<int> projectIds, CancellationToken ct = default)
     {
         return await db.Projects
@@ -422,11 +435,7 @@ public sealed class AppMonitoringRepository(AppDbContext db) : IAppMonitoringRep
         if (sampledApps.Count == 0)
             return 0;
 
-        var rolledUpApps = await db.AppHealthHourly
-            .AsNoTracking()
-            .Where(h => h.HourUtc == hourUtc)
-            .Select(h => h.MonitoredAppId)
-            .ToListAsync(ct).ConfigureAwait(false);
+        var rolledUpApps = await RolledUpAppsAsync(hourUtc, ct).ConfigureAwait(false);
 
         var toInsert = new List<AppHealthHourly>();
         foreach (var appId in sampledApps.Except(rolledUpApps))
@@ -451,9 +460,22 @@ public sealed class AppMonitoringRepository(AppDbContext db) : IAppMonitoringRep
         if (toInsert.Count == 0)
             return 0;
 
-        db.AppHealthHourly.AddRange(toInsert);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return toInsert.Count;
+        // R-462: the production 23505 was on this insert; an application another sweep rolled up first
+        // keeps its row and the others still go in.
+        return await HourlyRollupInsert.AddMissingAsync(db, toInsert, async token =>
+        {
+            var present = (await RolledUpAppsAsync(hourUtc, token).ConfigureAwait(false)).ToHashSet();
+            return row => !present.Contains(row.MonitoredAppId);
+        }, ct).ConfigureAwait(false);
+    }
+
+    private async Task<List<int>> RolledUpAppsAsync(DateTime hourUtc, CancellationToken ct)
+    {
+        return await db.AppHealthHourly
+            .AsNoTracking()
+            .Where(h => h.HourUtc == hourUtc)
+            .Select(h => h.MonitoredAppId)
+            .ToListAsync(ct).ConfigureAwait(false);
     }
 
     public async Task<int> PurgeRawOlderThanAsync(DateTime cutoff, CancellationToken ct = default)

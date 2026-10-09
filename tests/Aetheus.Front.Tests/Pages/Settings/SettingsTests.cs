@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 using SettingsPage = Aetheus.Front.Components.Settings.Settings;
 
 namespace Aetheus.Front.Tests.Pages;
@@ -67,8 +68,8 @@ public class SettingsTests : BunitContext
     }
 
     /// <summary>Recette R-448: the settings page reuses OE's appearance settings, every row bound to
-    /// what the site stores and applies: theme, palette and font paint their tokens (an empty theme,
-    /// Essentiel as shipped, clears them), the density its band, the text and control sizes their level.</summary>
+    /// what the site stores and applies: theme, palette, font and density go to the application's theme
+    /// scope, the text and control sizes to their level on the document root.</summary>
     [Fact]
     public async Task OesAppearanceSettings_ApplyEveryChoiceToTheWholeSite()
     {
@@ -95,17 +96,24 @@ public class SettingsTests : BunitContext
         Assert.True(Stored("aetheus_density", "compact"));
         Assert.True(Stored("aetheus_text_size", "7"));
         Assert.True(Stored("aetheus_control_size", "4"));
-        var painted = (string?)JSInterop.Invocations.Last(i => i.Identifier == "Aetheus.setThemeTokens").Arguments[0];
-        Assert.Contains("\"light\"", painted, StringComparison.Ordinal);
-        Assert.Contains("\"dark\"", painted, StringComparison.Ordinal);
-        Assert.Contains("--omni-font-family", painted, StringComparison.Ordinal);
-        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "Aetheus.setDensity" && Equals(i.Arguments[0], "compact"));
+        // STD-SHELL: the theme, palette, font and density reach the application's OmniThemeScope through the
+        // shared state (AppThemeScopeTests); no token is written by hand. OE leaves the two scales to the host.
+        var state = Services.GetRequiredService<Aetheus.Front.Components.Settings.SiteAppearanceState>();
+        Assert.Same(theme, state.Preset);
+        Assert.Same(palette, state.Palette);
+        Assert.Same(font, state.Font);
+        Assert.Equal(OmniDensity.Compact, state.Density);
+        Assert.DoesNotContain(JSInterop.Invocations, i => i.Identifier is "Aetheus.setThemeTokens" or "Aetheus.setDensity");
         Assert.Contains(JSInterop.Invocations, i => i.Identifier == "Aetheus.setTextSize" && Equals(i.Arguments[0], 7));
         Assert.Contains(JSInterop.Invocations, i => i.Identifier == "Aetheus.setControlSize" && Equals(i.Arguments[0], 4));
 
-        // A new theme drops the palette and the font picked for the previous one; no theme, no tokens.
+        // A new theme drops the palette and the font picked for the previous one, in memory and in storage.
         await cut.InvokeAsync(() => settings.PresetChanged.InvokeAsync(null));
-        Assert.Null(JSInterop.Invocations.Last(i => i.Identifier == "Aetheus.setThemeTokens").Arguments[0]);
+        Assert.Null(state.Preset);
+        Assert.Null(state.Palette);
+        Assert.Null(state.Font);
+        Assert.Equal(string.Empty, JSInterop.Invocations.Last(i => i.Identifier == "localStorage.setItem"
+            && Equals(i.Arguments[0], "aetheus_theme_palette")).Arguments[1]);
     }
 
     /// <summary>Recette R-390 / R-448: the settings page and the Theme window read one source, so a

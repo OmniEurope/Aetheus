@@ -27,22 +27,31 @@ else if (_report is null)
 }
 else
 {
-    @* Recette R-454: the window, then one export of every row of the three tables, raw, for an AI. *@
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center"
-               Justify="OmniJustification.Between" Class="omni-u-mt-lg omni-u-mb-md">
-        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-m-0" data-testid="performance-window">
-            @WindowText
-        </OmniText>
-        <OmniMarkdownExportButton TItem="PerformanceExportRow" Export="@CreateExport" FileName="performance"
-                                  Text="@L["PerformanceExportMarkdown"]" title="@L["PerformanceExportMarkdownHint"]" />
-    </OmniStack>
+    @* Recette R-454: since when the figures count. Decision of 2026-10-07: the OE key-figure tiles of the
+       application Performance tab (half the row from the small breakpoint, a quarter from the large one),
+       instead of a sentence above the tabs; the window is the first tile's detail. Recette R2-124: each
+       table exports through the bar under it, and the file's header carries this window. *@
+    <OmniRow Gap="OmniSpacing.Medium" Class="omni-u-mt-lg omni-u-mb-md">
+        <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
+            <OmniStatTile Class="app-performance-tile" Value="@SampleCountText" Label="@L["PerformanceTileRequests"]" Detail="@WindowText" data-testid="performance-window" />
+        </OmniColumn>
+        <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
+            <OmniStatTile Class="app-performance-tile" Value="@RoutesCountText" Label="@L["AppPerformanceRoutes"]" />
+        </OmniColumn>
+        <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
+            <OmniStatTile Class="app-performance-tile" Value="@SlowestP95Text" Label="@L["AppPerformanceSlowestRoute"]" Detail="@SlowestRouteText" />
+        </OmniColumn>
+        <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
+            <OmniStatTile Class="app-performance-tile" Value="@SlowestCallText" Label="@L["PerformanceTileSlowestCall"]" Detail="@SlowestCallRouteText" />
+        </OmniColumn>
+    </OmniRow>
 
     @* Recette R-454: the three tables in tabs, all rendered so a push refreshes every grid. *@
     <UrlSyncedTabs Slugs="@TabSlugs" RenderAllPanels="true">
         <Tabs>
             <OmniTabsItem Key="slowest" Title="@L["PerformanceSlowestCalls"]"><Icon><OmniIcon Name="OmniIconName.Hourglass" /></Icon><ChildContent>
                 @* Recette R-240: no pager, the slowest calls scroll in a virtualized, bounded grid. *@
-                <AetheusDataGrid @ref="_slowestGrid" Data="@_report.Slowest" TItem="ApiCallTimingDto" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
+                <AetheusDataGrid ShowFooterBar="true" @ref="_slowestGrid" ExportName="@L["PerformanceSlowestCalls"]" ExportFields="@ExportFields" Data="@_report.Slowest" TItem="ApiCallTimingDto" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="ApiCallTimingDto" Property="DurationMs" Title="@L["Duration"]" Width="7rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                             <Template Context="call">@Milliseconds(call.DurationMs)</Template>
@@ -59,7 +68,7 @@ else
                 </AetheusDataGrid>
             </ChildContent></OmniTabsItem>
             <OmniTabsItem Key="routes" Title="@L["PerformanceByRoute"]"><Icon><OmniIcon Name="OmniIconName.Rows" /></Icon><ChildContent>
-                <AetheusDataGrid @ref="_endpointsGrid" Data="@_report.Endpoints" TItem="ApiEndpointTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
+                <AetheusDataGrid ShowFooterBar="true" @ref="_endpointsGrid" ExportName="@L["PerformanceByRoute"]" ExportFields="@ExportFields" Data="@_report.Endpoints" TItem="ApiEndpointTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="ApiEndpointTimingDto" Property="Method" Title="@L["Method"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                         <OmniDataGridColumn TItem="ApiEndpointTimingDto" Property="Route" Title="@L["Route"]" MinWidth="16rem" Filterable="true" >
@@ -83,7 +92,7 @@ else
             </ChildContent></OmniTabsItem>
             <OmniTabsItem Key="browser" Title="@L["PerformanceThisBrowser"]"><Icon><OmniIcon Name="OmniIconName.Globe" /></Icon><ChildContent>
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["PerformanceThisBrowserHint"]</OmniText>
-                <AetheusDataGrid @ref="_browserGrid" Data="@_browserCalls" TItem="ClientApiCall" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]">
+                <AetheusDataGrid ShowFooterBar="true" @ref="_browserGrid" ExportName="@L["PerformanceThisBrowser"]" ExportFields="@ExportFields" Data="@_browserCalls" TItem="ClientApiCall" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="ClientApiCall" Property="DurationMs" Title="@L["Duration"]" Width="7rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" >
                             <Template Context="call">@Milliseconds(call.DurationMs)</Template>

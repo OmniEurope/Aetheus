@@ -134,17 +134,29 @@ public sealed class IngestService(
         // cached snapshot, so two concurrent ingests for the same app would otherwise race past the cap.
         var gate = ingestGate.For(appId);
         await gate.WaitAsync(ct).ConfigureAwait(false);
+        (IngestOutcome Outcome, List<object> Alerts) result;
         try
         {
-            return await IngestMetricsCoreAsync(appId, points, ct).ConfigureAwait(false);
+            result = await IngestMetricsCoreAsync(appId, points, ct).ConfigureAwait(false);
         }
         finally
         {
             gate.Release();
         }
+
+        // Recette R-478: the alerts go out once the app's lock is released. Dispatching them (channels,
+        // per-user notifications, AI tasks) under the lock made every later batch of the app wait behind
+        // it. The breach itself is recorded under the lock, so a concurrent batch still sees it and does
+        // not alert a second time.
+        foreach (var alert in result.Alerts)
+            await notificationService.SendEventAsync(MetricThresholdEvent, alert, ct).ConfigureAwait(false);
+        return result.Outcome;
     }
 
-    private async Task<IngestOutcome> IngestMetricsCoreAsync(int appId, IReadOnlyList<ParsedMetricPoint> points, CancellationToken ct)
+    private const string MetricThresholdEvent = "app.metric.threshold";
+
+    private async Task<(IngestOutcome Outcome, List<object> Alerts)> IngestMetricsCoreAsync(
+        int appId, IReadOnlyList<ParsedMetricPoint> points, CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var (accepted, dropped, capped) = CapByCount(points, MaxPointsPerRequest);
@@ -206,11 +218,11 @@ public sealed class IngestService(
         }
 
         await appRepo.TouchIngestAsync(appId, dropped, now, ct).ConfigureAwait(false);
-        await EvaluateThresholdsAsync(appId, extremesByMetric, now, ct).ConfigureAwait(false);
+        var alerts = await EvaluateThresholdsAsync(appId, extremesByMetric, now, ct).ConfigureAwait(false);
 
         if (dropped > 0 || capped)
             logger.LogInformation("Ingest metrics app {AppId}: {Accepted} accepted, {Dropped} dropped (caps)", appId, samples.Count, dropped);
-        return new IngestOutcome(samples.Count, dropped);
+        return (new IngestOutcome(samples.Count, dropped), alerts);
     }
 
     /// <summary>
@@ -336,17 +348,23 @@ public sealed class IngestService(
         return new IngestOutcome(groups, dropped);
     }
 
-    private async Task EvaluateThresholdsAsync(int appId, Dictionary<string, (double Min, double Max)> extremesByMetric, DateTime now, CancellationToken ct)
+    /// <summary>
+    /// Records the breaches and recoveries of the batch under the app's lock and returns the alerts to
+    /// send once it is released (recette R-478).
+    /// </summary>
+    private async Task<List<object>> EvaluateThresholdsAsync(int appId, Dictionary<string, (double Min, double Max)> extremesByMetric, DateTime now, CancellationToken ct)
     {
+        var alerts = new List<object>();
         if (extremesByMetric.Count == 0)
-            return;
+            return alerts;
 
         // One query for all the app's enabled thresholds (was an N+1 per metric name on the hot path).
         var thresholds = await metricRepo.GetEnabledThresholdsForAppAsync(appId, ct).ConfigureAwait(false);
         if (thresholds.Count == 0)
-            return;
+            return alerts;
 
         var changed = false;
+        int? projectId = null;
         foreach (var t in thresholds)
         {
             if (!extremesByMetric.TryGetValue(t.MetricName, out var extreme))
@@ -363,15 +381,19 @@ public sealed class IngestService(
                 t.IsBreached = true;
                 t.LastTriggeredAt = now;
                 changed = true;
-                await notificationService.SendEventAsync("app.metric.threshold", new
+                // The owning project, read once and only when a breach fires: the AI tasks and the
+                // per-user notifications of an event are those of the project it is about.
+                projectId ??= await appRepo.GetAppProjectIdAsync(appId, ct).ConfigureAwait(false);
+                alerts.Add(new
                 {
                     AppId = appId,
+                    ProjectId = projectId,
                     t.MetricName,
                     Operator = t.Operator.ToString(),
                     t.Threshold,
                     Value = value,
                     At = now
-                }, ct).ConfigureAwait(false);
+                });
             }
             else if (!breached && t.IsBreached)
             {
@@ -382,6 +404,7 @@ public sealed class IngestService(
 
         if (changed)
             await metricRepo.SaveChangesAsync(ct).ConfigureAwait(false);
+        return alerts;
     }
 
     private static bool Breaches(double value, ComparisonOperator op, double threshold) => op switch

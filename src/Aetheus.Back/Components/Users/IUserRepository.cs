@@ -37,5 +37,12 @@ public interface IUserRepository
 
     Task<List<string>> GetAllRoleNamesAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Marks every active personal access token of the user revoked, saved by the next
+    /// <see cref="SaveChangesAsync"/>: a password reset by someone else must end the access the previous
+    /// holder of the account may still have through a token (audit SITE-SEC-001). Returns how many.
+    /// </summary>
+    Task<int> RevokePersonalAccessTokensAsync(int userId, DateTime revokedAt, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }

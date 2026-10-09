@@ -11,4 +11,10 @@ Cmnd_Alias AETHEUS_SYSTEMCTL = \
     /bin/systemctl start rkhunter, /bin/systemctl stop rkhunter, /bin/systemctl restart rkhunter, /bin/systemctl status rkhunter, \
     /bin/systemctl start cron, /bin/systemctl stop cron, /bin/systemctl restart cron, /bin/systemctl status cron, \
     /bin/systemctl start crond, /bin/systemctl stop crond, /bin/systemctl restart crond, /bin/systemctl status crond
+# docs/contracts/security.md "Controlled Sudo Escalation": noexec stops a child process (the status
+# pager is the GTFOBins escape), timestamp_timeout=0 keeps no sudo cache between calls (audit DEP-001).
+Defaults!AETHEUS_SYSTEMCTL noexec
+Defaults!AETHEUS_SYSTEMCTL timestamp_timeout=0
+Defaults!AETHEUS_SYSTEMCTL env_reset
+Defaults!AETHEUS_SYSTEMCTL secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
 #{AGENT_USER}# ALL=(root) NOPASSWD: AETHEUS_SYSTEMCTL

@@ -32,5 +32,18 @@ public static class AetheusGridPresets
                 // STD-GRIDTITLE (recette R-538): a column title stays on one line and is cut with an
                 // ellipsis when it does not fit; OE wraps titles by default.
                 [nameof(OmniDataGrid<object>.HeaderWrap)] = OmniDataGridHeaderWrap.Truncate,
+                // Recette R2-124 (second decision of 2026-10-05): no export bar by default (OE's
+                // ShowFooterBar is off) and Markdown alone; a table worth handing to an AI writes
+                // ShowFooterBar="true" and gets the Markdown button at the end (right) of a bar under its rows,
+                // blue (R2-009). A raw grid holds its rows in Items, so the export writes all of them, not
+                // the window on screen. A table that must not be exported writes ExportMarkdown="false"
+                // (GridExportCoverageAuditTests).
+                // User decision of 2026-10-06: the export buttons at the end (right) of the bar; OE's
+                // default stays the start.
+                [nameof(OmniDataGrid<object>.FooterBarExport)] = OmniDataGridBarExport.End,
+                [nameof(OmniDataGrid<object>.ExportCsv)] = false,
+                [nameof(OmniDataGrid<object>.ExportExcel)] = false,
+                [nameof(OmniDataGrid<object>.ExportPdf)] = false,
+                [nameof(OmniDataGrid<object>.ExportVariants)] = AetheusGrid.ExportVariants,
             }, isDefault: true);
 }

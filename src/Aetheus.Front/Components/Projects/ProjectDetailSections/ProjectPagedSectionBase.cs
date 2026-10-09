@@ -47,6 +47,23 @@ public abstract class ProjectPagedSectionBase<TItem> : ComponentBase
         await LoadAsync();
     }
 
+    /// <summary>
+    /// Recette R2-124: one page of the section's export, the grid's sort and column filters read from the
+    /// request OE sends, through the same endpoint as <see cref="LoadAsync"/> and without touching the
+    /// rows the section shows. A page that cannot be read throws, so the export fails and says so.
+    /// </summary>
+    protected Task<PaginatedResult<TItem>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest(DefaultSortBy, DefaultSortDescending);
+        return ReadPageAsync(ProjectId, page, pageSize, sortBy, sortDescending, args.ToApiFilters());
+    }
+
+    /// <summary>One page of the project's rows from the section's endpoint.</summary>
+    protected abstract Task<PaginatedResult<TItem>> ReadPageAsync(
+        int projectId, int page, int pageSize, string sortBy, bool sortDescending,
+        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter> filters);
+
     protected virtual void ResetForProject()
     {
     }

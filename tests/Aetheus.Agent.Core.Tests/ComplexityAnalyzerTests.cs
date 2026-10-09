@@ -102,8 +102,13 @@ public class ComplexityAnalyzerTests
         Assert.Contains(report.Hotspots, item => item.Member == "Outer" && item.Cyclomatic == 1);
     }
 
+    /// <summary>
+    /// Recette R2-107: the nightly's "Measure complexity" stage runs this analyzer over every C# file of
+    /// the checkout, tests and migrations included, and grades its maximum (A at 15 or less). This holds
+    /// the same file set to the same threshold, so a method that would cost the grade fails here first.
+    /// </summary>
     [Fact]
-    public void Repository_RemainsWithinCandidateComplexityBudget()
+    public void Repository_RemainsWithinGradeAComplexityThreshold()
     {
         var root = FindRepoRoot();
         var separator = Path.DirectorySeparatorChar;
@@ -116,7 +121,9 @@ public class ComplexityAnalyzerTests
                 && !path.Contains($"{separator}.codex-runtime{separator}", StringComparison.OrdinalIgnoreCase)
                 // Other checkouts nested under .claude/worktrees (other sessions, other branches, their
                 // uncommitted work) are not this tree's code: one of them failed this budget on a push.
-                && !path.Contains($"{separator}.claude{separator}", StringComparison.OrdinalIgnoreCase))
+                // .worktrees holds the manual ones (git-ignored) for the same reason.
+                && !path.Contains($"{separator}.claude{separator}", StringComparison.OrdinalIgnoreCase)
+                && !path.Contains($"{separator}.worktrees{separator}", StringComparison.OrdinalIgnoreCase))
             .Select(path => (path, File.ReadAllText(path)));
 
         var report = ComplexityAnalyzer.Analyze(sources);
@@ -126,8 +133,8 @@ public class ComplexityAnalyzerTests
                 $"CC {item.Cyclomatic}: {Path.GetRelativePath(root, item.Path)}:{item.Line} ({item.Member})"));
 
         Assert.True(
-            report.MaxCyclomatic <= 25,
-            $"Repository max cyclomatic complexity is {report.MaxCyclomatic}; candidate budget is 25.{Environment.NewLine}{details}");
+            report.MaxCyclomatic <= 15,
+            $"Repository max cyclomatic complexity is {report.MaxCyclomatic}; grade A of the nightly quality grade (grade.complexity.maximum) requires <= 15.{Environment.NewLine}{details}");
     }
 
     private static string FindRepoRoot() => Aetheus.Agent.Core.Tests.RepositoryScan.Root;

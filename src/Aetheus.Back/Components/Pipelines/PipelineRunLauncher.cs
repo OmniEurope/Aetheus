@@ -42,6 +42,9 @@ public interface IPipelineRunLauncher : IPipelineChildRunLauncher
 
     /// <inheritdoc cref="IPipelineRunService.RerunAsync"/>
     Task<PipelineRunDto?> RerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default);
+
+    /// <inheritdoc cref="IPipelineRunService.PrepareRerunAsync"/>
+    Task<PipelineRerunPlan?> PrepareRerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -94,6 +97,7 @@ public sealed class PipelineRunLauncher(
             throw new BadRequestException(
                 $"Idempotency key cannot exceed {PipelineRunRequest.MaxIdempotencyKeyLength} characters.");
         var definition = preparation.Definition;
+        PipelineReleaseNumbers.EnsureValid(definition);
         var trigger = ResolveTriggerVariables(preparation, additionalVariables, parameters);
         var variables = trigger.Variables;
         var effectiveParams = trigger.EffectiveParameters;
@@ -163,6 +167,8 @@ public sealed class PipelineRunLauncher(
         var run = CreatePipelineRun(
             preparation, runtimePreparation, variables, effectiveParams, idempotencyKey,
             preflightOutcome.Checks);
+        run.ReleaseNumber = await PipelineReleaseNumbers.ResolveAsync(
+            repo, runtimePreparation.Definition, runtimePreparation.EffectiveProjectId, variables, ct).ConfigureAwait(false);
         var existing = await PersistPipelineRunAsync(run, ct).ConfigureAwait(false);
         if (existing is not null) return existing;
 
@@ -322,6 +328,7 @@ public sealed class PipelineRunLauncher(
         }
         if (!string.IsNullOrWhiteSpace(run.CommitHash))
             projectVars["BUILD_SOURCEVERSION"] = run.CommitHash;
+        PipelineReleaseNumbers.Inject(projectVars, run.ReleaseNumber);
 
         var (resolvedVars, warnings, secretKeys) = await variableResolver.ResolveVariablesWithWarningsAsync(
             definition, effectiveProjectId, projectVars, ct,
@@ -509,6 +516,15 @@ public sealed class PipelineRunLauncher(
 
     public async Task<PipelineRunDto?> RerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default)
     {
+        var plan = await PrepareRerunAsync(sourceRunId, mode, ct).ConfigureAwait(false);
+        return plan is null
+            ? null
+            : await TriggerPreparedRunAsync(plan.Preparation, plan.AdditionalVariables, plan.Parameters, ct)
+                .ConfigureAwait(false);
+    }
+
+    public async Task<PipelineRerunPlan?> PrepareRerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default)
+    {
         var source = await repo.GetRunDetailAsync(sourceRunId, ct).ConfigureAwait(false);
         if (source is null) return null;
 
@@ -539,15 +555,22 @@ public sealed class PipelineRunLauncher(
             ? null
             : source.CommitHash;
 
-        return mode switch
+        var (yamlOverride, commitOverride, workspaceOverride) = mode switch
         {
             RerunMode.SnapshotSameCommit when !string.IsNullOrWhiteSpace(source.YamlSnapshot) =>
-                await TriggerResolvedRunAsync(source.PipelineId, additional, rerunParams, source.YamlSnapshot, definitionCommit, ct, workspaceCommit).ConfigureAwait(false),
+                (source.YamlSnapshot, definitionCommit, workspaceCommit),
             RerunMode.SnapshotBranchHead when !string.IsNullOrWhiteSpace(source.YamlSnapshot) =>
-                await TriggerResolvedRunAsync(source.PipelineId, additional, rerunParams, source.YamlSnapshot, commitOverride: null, ct).ConfigureAwait(false),
-            RerunMode.ResumeCheckpoints =>
-                await TriggerResolvedRunAsync(source.PipelineId, additional, rerunParams, source.YamlSnapshot, definitionCommit, ct, workspaceCommit).ConfigureAwait(false),
-            _ => await TriggerResolvedRunAsync(source.PipelineId, additional, rerunParams, yamlOverride: null, commitOverride: null, ct).ConfigureAwait(false)
+                (source.YamlSnapshot, null, null),
+            RerunMode.ResumeCheckpoints => (source.YamlSnapshot, definitionCommit, workspaceCommit),
+            _ => ((string?)null, (string?)null, (string?)null)
         };
+        var preparation = await preparations.PrepareRunAsync(
+            source.PipelineId, PipelineRunService.ResolveRunBranch(additional), yamlOverride, commitOverride, ct,
+            workspaceOverride).ConfigureAwait(false);
+        if (preparation is null) return null;
+        // BACK-020: the replayed parameters can choose targets, so the plan is authorized with them applied.
+        var runtimePreparation = await parameterResolver.ResolveRunParametersAsync(preparation, rerunParams, ct)
+            .ConfigureAwait(false);
+        return new PipelineRerunPlan(runtimePreparation, additional, rerunParams);
     }
 }

@@ -118,10 +118,12 @@ public sealed class AiTaskRepository(AppDbContext db) : IAiTaskRepository
             .ToListAsync(ct);
 
     public Task<List<AiTaskDefinition>> GetDefinitionsForEventAsync(
-        string eventType, CancellationToken ct) =>
+        string eventType, int? projectId, int? serverId, CancellationToken ct) =>
         db.AiTaskDefinitions
             .Where(definition => definition.Enabled
-                && definition.Triggers.Any(trigger => trigger.EventType == eventType))
+                && definition.Triggers.Any(trigger => trigger.EventType == eventType)
+                && ((projectId != null && definition.ProjectId == projectId)
+                    || (serverId != null && definition.ServerId == serverId)))
             .Include(definition => definition.Profile)
             .Include(definition => definition.Triggers)
             .ToListAsync(ct);

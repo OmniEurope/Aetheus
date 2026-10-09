@@ -20,6 +20,10 @@ public partial class DockerImagesTab
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
+
+    /// <summary>BACK-012: the backend takes Server.Admin for this tab's agent-reaching writes (compose
+    /// deploy, image build and delete, container shell); without it they are not offered.</summary>
+    [Parameter] public bool CanAdmin { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<DockerImageDto> Images { get; set; } = [];
 
     private string _imageSearch = string.Empty;
@@ -117,4 +121,7 @@ public partial class DockerImagesTab
         }
         _buildingImage = false;
     }
+
+    /// <summary>Recette R2-124: the export writes the whole image id, the cell its first twelve characters.</summary>
+    private static readonly Func<DockerImageDto, object?> IdExport = image => image.ImageId;
 }

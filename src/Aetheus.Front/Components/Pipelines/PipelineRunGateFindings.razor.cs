@@ -29,6 +29,13 @@ public partial class PipelineRunGateFindings : IDisposable
     /// <summary>Recette R2-027: raised with the finding whose decision was reverted, open again.</summary>
     [Parameter] public EventCallback<int> FindingReopened { get; set; }
 
+    /// <summary>Recette R2-129: the letter the run is listed with; when the assurance seal set it, the tab
+    /// says so and gives the analysis letter beside it.</summary>
+    [Parameter] public AnalysisGrade? RunGrade { get; set; }
+
+    /// <summary>The tests the seal held the candidate back for, in its own words.</summary>
+    [Parameter] public IReadOnlyList<string> BlockingTests { get; set; } = [];
+
     private AetheusDataGrid<AnalysisFindingDto>? _grid;
     private IReadOnlyList<AnalysisFindingDto> _rows = [];
     private int _total;
@@ -62,10 +69,31 @@ public partial class PipelineRunGateFindings : IDisposable
     /// column headers ask.</summary>
     private async Task LoadAsync(GridLoadArgs args)
     {
+        var request = RequestOf(args);
+        var page = await Api.Analysis.GetAnalysisRunFindingsAsync(request);
+        _rows = [.. page.Items.Select(AnalysisFindingColumns.ToRow)];
+        _total = page.TotalCount;
+        _lastRequest = request;
+    }
+
+    /// <summary>Recette R2-124: one page of the export, the same query as the grid's load.</summary>
+    private async Task<PaginatedResult<AnalysisFindingDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var page = await Api.Analysis.GetAnalysisRunFindingsAsync(RequestOf(args));
+        return new PaginatedResult<AnalysisFindingDto>
+        {
+            Items = [.. page.Items.Select(AnalysisFindingColumns.ToRow)],
+            TotalCount = page.TotalCount
+        };
+    }
+
+    /// <summary>The findings of the run's analyses the grid asks for: its page, column filters and sort.</summary>
+    private AnalysisRunFindingsRequest RequestOf(GridLoadArgs args)
+    {
         var size = Math.Clamp(args.Top ?? 25, 1, PaginationRequest.MaxPageSize);
         var sort = args.Sorts?.FirstOrDefault();
         var (idFrom, idTo, idNot) = args.ColumnWholeNumberRange(nameof(AnalysisFindingDto.Id));
-        var request = new AnalysisRunFindingsRequest
+        return new AnalysisRunFindingsRequest
         {
             RunIds = [.. EffectiveRunIds],
             IncludeDecided = _showDecided,
@@ -82,10 +110,6 @@ public partial class PipelineRunGateFindings : IDisposable
             SortBy = sort?.Property,
             SortDescending = sort?.SortOrder == GridSortOrder.Descending
         };
-        var page = await Api.Analysis.GetAnalysisRunFindingsAsync(request);
-        _rows = [.. page.Items.Select(AnalysisFindingColumns.ToRow)];
-        _total = page.TotalCount;
-        _lastRequest = request;
     }
 
     private static List<T>? NullIfEmpty<T>(IReadOnlyList<T> values) => values.Count > 0 ? [.. values] : null;

@@ -6,7 +6,7 @@ variables:
   DOTNET_NOLOGO: "1"
 
 stages:
-  - name: WindowsQualification
+  - name: WindowsCheckout
     group: Build
     execution_role: build
     os: windows
@@ -28,11 +28,24 @@ stages:
           Write-Host "Windows runner checkout verified at $commit."
         timeout_seconds: 120
 
+  # Steps of one stage run concurrently (ADR-012): the build waits for the checkout, the tests for the build.
+  - name: WindowsBuild
+    group: Build
+    execution_role: build
+    os: windows
+    depends_on: [WindowsCheckout]
+    steps:
       - name: Build Toto
         working_directory: "$(WORKSPACE)"
         shell: dotnet build Toto.slnx --configuration Release --verbosity minimal
         timeout_seconds: 600
 
+  - name: WindowsTest
+    group: Build
+    execution_role: build
+    os: windows
+    depends_on: [WindowsBuild]
+    steps:
       - name: Test Toto
         working_directory: "$(WORKSPACE)"
         shell: dotnet test Toto.slnx --configuration Release --no-build --verbosity minimal

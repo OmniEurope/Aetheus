@@ -36,6 +36,16 @@ $env:DB_PASSWORD = $dbPass
 $env:JWT_KEY     = $jwtKey
 $env:APP_VERSION = "local"
 
+# $ErrorActionPreference does not stop on a native command's failure: every Docker call goes through
+# here, which stops the script on a non-zero exit code, so success is reported only once every call
+# succeeded (audit DEP-023).
+function Invoke-Compose {
+    docker compose -f $compose -p "${appName}-local" @args
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker compose $($args -join ' ') failed with exit code $LASTEXITCODE."
+    }
+}
+
 if ($Wipe) {
     Write-Host "This DELETES the '${appName}-local' named volumes (local DB data)." -ForegroundColor Red
     $answer = Read-Host "Type 'wipe' to confirm"
@@ -43,13 +53,15 @@ if ($Wipe) {
         Write-Host "Aborted - nothing was removed." -ForegroundColor Yellow
         exit 1
     }
-    docker compose -f $compose -p "${appName}-local" down -v
+    Invoke-Compose down -v
+    Write-Host "Containers and volumes removed." -ForegroundColor Green
     exit 0
 }
 
 if ($Down) {
     Write-Host "Stopping containers (volumes preserved)..." -ForegroundColor Yellow
-    docker compose -f $compose -p "${appName}-local" down
+    Invoke-Compose down
+    Write-Host "Containers stopped." -ForegroundColor Green
     exit 0
 }
 
@@ -82,9 +94,9 @@ finally {
 }
 
 if ($Rebuild) {
-    docker compose -f $compose -p "${appName}-local" build --no-cache
+    Invoke-Compose build --no-cache
 }
-docker compose -f $compose -p "${appName}-local" up -d --build
+Invoke-Compose up -d --build
 
 Write-Host ""
 Write-Host "Containers started." -ForegroundColor Green

@@ -179,28 +179,7 @@ public sealed partial class GitCliService(ILogger<GitCliService> logger, GitProc
             return [];
         }
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "git",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        // -c protocol.allow=user-configured constrains the allowed transports for this invocation.
-        psi.ArgumentList.Add("-c");
-        psi.ArgumentList.Add("protocol.file.allow=never");
-        // Keep TLS/SNI validation against the original host while pinning libcurl to the exact
-        // address validated above. DNS rebinding between validation and git's connect is impossible.
-        psi.ArgumentList.Add("-c");
-        psi.ArgumentList.Add($"http.curloptResolve={pinnedEndpoint.Value.Host}:{pinnedEndpoint.Value.Port}:{pinnedEndpoint.Value.Address}");
-        psi.ArgumentList.Add("ls-remote");
-        psi.ArgumentList.Add("--heads");
-        // `--` separator so the URL can never be parsed as an option.
-        psi.ArgumentList.Add("--");
-        psi.ArgumentList.Add(repositoryUrl);
-        psi.ArgumentList.Add("refs/heads/release/*");
-        GitProcessStartInfoFactory.NeutralizeInheritedGitEnvironment(psi);
+        var psi = BuildListReleaseBranchesStartInfo(repositoryUrl, pinnedEndpoint.Value);
 
         using var process = new Process { StartInfo = psi };
         process.Start();
@@ -296,6 +275,36 @@ public sealed partial class GitCliService(ILogger<GitCliService> logger, GitProc
         if (IPAddress.TryParse(host, out var ip) && WebhookSsrfGuard.IsForbiddenAddress(ip)) return false;
 
         return true;
+    }
+
+    internal static ProcessStartInfo BuildListReleaseBranchesStartInfo(string repositoryUrl, (string Host, int Port, string Address) endpoint)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        // -c protocol.allow=user-configured constrains the allowed transports for this invocation.
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("protocol.file.allow=never");
+        // Keep TLS/SNI validation against the original host while pinning libcurl to the exact
+        // address validated above. DNS rebinding between validation and git's connect is impossible.
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add($"http.curloptResolve={endpoint.Host}:{endpoint.Port}:{endpoint.Address}");
+        // A redirect would leave the pinned public address for a target never validated.
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("http.followRedirects=false");
+        psi.ArgumentList.Add("ls-remote");
+        psi.ArgumentList.Add("--heads");
+        // `--` separator so the URL can never be parsed as an option.
+        psi.ArgumentList.Add("--");
+        psi.ArgumentList.Add(repositoryUrl);
+        psi.ArgumentList.Add("refs/heads/release/*");
+        GitProcessStartInfoFactory.NeutralizeInheritedGitEnvironment(psi);
+        return psi;
     }
 
     internal static async Task<(string Host, int Port, string Address)?> ResolveSafeEndpointAsync(

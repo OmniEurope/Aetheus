@@ -217,11 +217,17 @@ public partial class VaultEdit
 
         if (newValue is string value && !string.IsNullOrEmpty(value))
         {
-            await Api.Variables.UpdateVaultSecretAsync(Id!.Value, secret.Id, new UpdateVaultSecretRequest
+            var updated = await Api.Variables.UpdateVaultSecretAsync(Id!.Value, secret.Id, new UpdateVaultSecretRequest
             {
                 Key = secret.Key,
                 Value = value
             });
+            // FRONT-025: a refused update (403, 400, 500) answers null; the old value is still in force.
+            if (updated is null)
+            {
+                Toast.Error("Error", "SaveFailed");
+                return;
+            }
             Toast.Success("Saved", "SecretUpdated");
             await ReloadDetail();
         }
@@ -244,11 +250,17 @@ public partial class VaultEdit
 
         if (newValue is string value && !string.IsNullOrEmpty(value))
         {
-            await Api.Variables.RotateVaultSecretAsync(Id!.Value, secret.Id, new RotateVaultSecretRequest
+            var rotated = await Api.Variables.RotateVaultSecretAsync(Id!.Value, secret.Id, new RotateVaultSecretRequest
             {
                 Value = value,
                 ExpiresAt = secret.ExpiresAt
             });
+            // FRONT-025: not rotated means the previous value is still the usable one; never say otherwise.
+            if (rotated is null)
+            {
+                Toast.Error("Error", "SaveFailed");
+                return;
+            }
             Toast.Success("Rotated", "SecretRotated");
             await ReloadDetail();
         }
@@ -260,7 +272,13 @@ public partial class VaultEdit
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        await Api.Variables.DeleteVaultSecretAsync(Id!.Value, secretId);
+        var status = await Api.Variables.DeleteVaultSecretAsync(Id!.Value, secretId);
+        // FRONT-025: a refused delete leaves the secret in place.
+        if (!status.Success)
+        {
+            Toast.Error("Error", status.Forbidden ? "AccessDenied" : "DeleteFailed");
+            return;
+        }
         Toast.Success("Deleted", "SecretDeleted");
         await ReloadDetail();
     }
@@ -391,4 +409,7 @@ public partial class VaultEdit
     private sealed class VaultModel : ScopedResourceFormModel
     {
     }
+
+    /// <summary>Recette R2-124: the export writes the count the badge shows (never the value).</summary>
+    private static readonly Func<VaultSecretDto, object?> VersionsExport = secret => secret.VersionCount;
 }

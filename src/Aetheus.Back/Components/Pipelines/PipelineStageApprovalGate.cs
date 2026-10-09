@@ -19,14 +19,15 @@ internal sealed class PipelineStageApprovalGate(
     TimeProvider timeProvider)
 {
     /// <summary><c>true</c> when the stage must not be dispatched on this pass: an approval was raised,
-    /// or one raised earlier is still waiting.</summary>
+    /// or one raised earlier is still waiting. <paramref name="projectId"/> is the run's project: every
+    /// environment is read in it (BACK-018), never a homonym of another project.</summary>
     public async Task<bool> CheckAndCreateApprovalAsync(
-        int runId, string stageName, PipelineStageDefinition stageDef,
+        int runId, int? projectId, string stageName, PipelineStageDefinition stageDef,
         IReadOnlyList<PipelineStageDefinition> runStages, CancellationToken ct)
     {
         var env = string.IsNullOrEmpty(stageDef.Environment)
             ? null
-            : await repo.FindEnvironmentByNameAsync(stageDef.Environment, ct).ConfigureAwait(false);
+            : await repo.FindEnvironmentByNameAsync(stageDef.Environment, projectId, ct).ConfigureAwait(false);
         List<PipelineApproval>? existingApprovals = null;
 
         // PLAN-003 2.7 / recette R-370: a stage with its own delay asks for the PIPELINE's approval,
@@ -49,7 +50,7 @@ internal sealed class PipelineStageApprovalGate(
 
         if (string.IsNullOrEmpty(stageDef.Environment))
             return IsDeploymentStage(stageDef)
-                && await RequireRunEnvironmentApprovalsAsync(runId, stageName, runStages, ct).ConfigureAwait(false);
+                && await RequireRunEnvironmentApprovalsAsync(runId, projectId, stageName, runStages, ct).ConfigureAwait(false);
         if (env is null || !env.RequireApproval) return false;
 
         existingApprovals ??= await repo.GetApprovalsAsync(runId, ct).ConfigureAwait(false);
@@ -77,28 +78,46 @@ internal sealed class PipelineStageApprovalGate(
     /// A refusal or an expiry of that approval fails the run before the stage is ever dispatched.
     /// </summary>
     private async Task<bool> RequireRunEnvironmentApprovalsAsync(
-        int runId, string stageName, IReadOnlyList<PipelineStageDefinition> runStages, CancellationToken ct)
+        int runId, int? projectId, string? stageName, IReadOnlyList<PipelineStageDefinition> runStages,
+        CancellationToken ct)
     {
-        var environmentNames = runStages
-            .Select(stage => stage.Environment)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        // First stage naming each environment, in the run's order: what a launch approval is shown for.
+        var environments = runStages
+            .Where(stage => !string.IsNullOrWhiteSpace(stage.Environment))
+            .GroupBy(stage => stage.Environment!, StringComparer.OrdinalIgnoreCase)
+            .Select(group => (Name: group.Key, FirstStage: group.First().Name))
             .ToList();
         List<PipelineApproval>? existingApprovals = null;
-        foreach (var name in environmentNames)
+        foreach (var (name, firstStage) in environments)
         {
-            var env = await repo.FindEnvironmentByNameAsync(name, ct).ConfigureAwait(false);
+            var env = await repo.FindEnvironmentByNameAsync(name, projectId, ct).ConfigureAwait(false);
             if (env is null || !env.RequireApproval) continue;
             existingApprovals ??= await repo.GetApprovalsAsync(runId, ct).ConfigureAwait(false);
             if (IsApprovedForRun(existingApprovals, env.Id)) continue;
             // Already asked and still pending: the run is waiting on it, the stage keeps waiting too.
             if (IsPendingForRun(existingApprovals, env.Id))
                 return true;
-            return await RaiseApprovalAsync(runId, stageName, ApprovalScope.Environment, env, timeoutMinutes: null, ct).ConfigureAwait(false);
+            // One at a time: the run waits on one decision, and the pass after it asks the next one.
+            return await RaiseApprovalAsync(
+                runId, stageName ?? firstStage, ApprovalScope.Environment, env, timeoutMinutes: null, ct).ConfigureAwait(false);
         }
         return false;
     }
+
+    /// <summary>
+    /// Recette R2-117: when a run starts, every approval-requiring environment it declares (any stage's
+    /// <c>environment:</c>) is asked at once, before its first stage, System:Prepare included, is
+    /// dispatched. aetheus-release-fast used to ask for prod only when its deployment stage became ready,
+    /// after the image build, long after the launch. The run waits (WaitingForApproval) until each one is
+    /// approved; an approval given here is the run's (<see cref="IsApprovedForRun"/>), so no later stage
+    /// asks for that environment again. A stage's own confirmation (<c>approval_timeout_minutes</c>) is
+    /// not asked here: it stays a separate decision, raised when its stage is ready (R-370). A refusal or
+    /// an expiry fails the run before anything is dispatched (PipelineRunControlService.ApplyRefusalAsync).
+    /// </summary>
+    /// <returns><c>true</c> when the run must not dispatch anything on this pass.</returns>
+    public Task<bool> RequireLaunchApprovalsAsync(
+        int runId, int? projectId, IReadOnlyList<PipelineStageDefinition> runStages, CancellationToken ct) =>
+        RequireRunEnvironmentApprovalsAsync(runId, projectId, stageName: null, runStages, ct);
 
     /// <summary>What a deployment is, for R-369: the <c>deploy</c> execution role, or a step that
     /// deploys (<c>type: deploy</c>, or one of the typed blue-green cutover steps).</summary>

@@ -30,6 +30,7 @@
     "src/Aetheus.Back/Data/Configurations/**",
     "docs-site/public/**"
   ],
+  "ignorePattern": ["\\[Inject\\][^\\n]*"],
   "reporters": ["json"],
   "output": ".analysis-duplication"
 }

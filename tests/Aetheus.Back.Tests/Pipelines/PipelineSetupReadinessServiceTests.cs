@@ -240,4 +240,53 @@ public sealed class PipelineSetupReadinessServiceTests
 
         Assert.Empty(readiness.Checks);
     }
+
+    private const string SecurityTemplate = """
+        name: application-security-template
+        stages:
+          - name: Scan source
+            steps:
+              - name: Scan secrets
+                type: scanner
+                scanner: gitleaks
+              - name: Scan code (SAST)
+                type: scanner
+                scanner: opengrep
+              - name: Scan IaC
+                type: scanner
+                scanner: trivy-iac
+        """;
+
+    /// <summary>Recette R2-121: Gitleaks reads .gitleaks.toml from the repository and fails without it;
+    /// the readiness check names it. Trivy's ignore file is optional and is not asked for.</summary>
+    [Fact]
+    public async Task ScannerConfigurationTheRepositoryMustCarry_IsReportedWhenAbsent()
+    {
+        Template(1, "application-security", SecurityTemplate);
+        Runners(11);
+        Repository();
+        _git.GetTreeAsync(4, Arg.Any<string?>(), Arg.Is<string?>(path => path == null), Arg.Any<CancellationToken>())
+            .Returns([new GitLightTreeEntryDto { Name = "README.md", Path = "README.md", Type = GitTreeEntryType.Blob }]);
+
+        var readiness = await RunAsync("application-security");
+
+        var check = Assert.Single(readiness.Checks);
+        Assert.Equal(PipelineSetupReadinessKind.MissingScannerConfiguration, check.Kind);
+        Assert.Equal([".gitleaks.toml"], check.Items);
+        Assert.True(readiness.HasBlocking);
+    }
+
+    [Fact]
+    public async Task ScannerConfigurationPresentAtTheRoot_ProducesNoFinding()
+    {
+        Template(1, "application-security", SecurityTemplate);
+        Runners(11);
+        Repository();
+        _git.GetTreeAsync(4, Arg.Any<string?>(), Arg.Is<string?>(path => path == null), Arg.Any<CancellationToken>())
+            .Returns([new GitLightTreeEntryDto { Name = ".gitleaks.toml", Path = ".gitleaks.toml", Type = GitTreeEntryType.Blob }]);
+
+        var readiness = await RunAsync("application-security");
+
+        Assert.Empty(readiness.Checks);
+    }
 }

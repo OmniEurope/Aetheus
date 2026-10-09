@@ -120,6 +120,8 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
             run.CompletedAt = null;
             var variables = PipelineRunHelpers.DeserializeResolvedVariables(run.AdditionalVariablesJson);
             variables.Remove(PipelineRunService.CancellationRequestedVariable);
+            variables.Remove(PipelineRunService.CancelledByVariable);
+            variables.Remove(PipelineRunService.CancellationReasonVariable);
             run.AdditionalVariablesJson = JsonSerializer.Serialize(variables);
         }
 

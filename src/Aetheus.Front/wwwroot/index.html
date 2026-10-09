@@ -16,9 +16,11 @@
     <script>
         (function() {
             var t = localStorage.getItem('aetheus_theme');
-            // PLAN-008 (D17, lot 11): the OmniEurope.Blazor tokens follow the same preference, dark by
-            // default, before the first paint (the separate Aetheus look was removed, recette R-054). 'system' reads
-            // the OS preference here too, so the first paint is already the right one.
+            // PLAN-008 (D17, lot 11), STD-SHELL: OmniThemeScope paints the application once Blazor runs, but
+            // the boot splash is painted before that and lives outside the scope. So the stored mode is laid
+            // on the document root here, dark by default, through the same data-omni-theme attribute the
+            // scope uses; SiteAppearanceState keeps it in step afterwards (Aetheus.setOmniTheme). 'system'
+            // reads the OS preference here too, so the first paint is already the right one.
             var light = t === 'light'
                 || (t === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
             document.documentElement.setAttribute('data-omni-theme', light ? 'light' : 'dark');
@@ -28,22 +30,26 @@
             // mislabelling the document for screen readers and SEO.
             var lang = localStorage.getItem('aetheus_lang') || navigator.language || 'en';
             if (lang) document.documentElement.lang = lang.substring(0, 2);
-            // Recette R-232: the chosen theme, palette and density, painted before the first frame too
-            // (layout.js repaints them on each change; same keys, same rule).
-            var density = localStorage.getItem('aetheus_density');
-            if (density === 'compact' || density === 'spacious') {
-                document.documentElement.setAttribute('data-aetheus-density', density);
-                document.documentElement.setAttribute('data-omni-density', density);
-            }
-            // Recette R-390: the text size and control size levels (1-10, 5 as drawn, no attribute).
+            // Recette R-390: the text size and control size levels (1-10, 5 as drawn, no attribute). OE leaves
+            // them to the host, on the document root, where its stylesheet reads them (layout.js on change).
             [['aetheus_text_size', 'data-oe-text-size'], ['aetheus_control_size', 'data-oe-control-size']].forEach(function (scale) {
                 var level = parseInt(localStorage.getItem(scale[0]), 10);
                 if (level >= 1 && level <= 10 && level !== 5) document.documentElement.setAttribute(scale[1], String(level));
             });
+            // STD-SHELL: the tokens OmniThemeScope painted last time (theme, palette, font), copied by
+            // layout.js (Aetheus.followThemeScope) under the half they were painted for. Laid on the root
+            // only for the boot splash, so it shows in the chosen colours instead of flashing the shipped
+            // ones; Aetheus.releaseBootTheme removes them once the splash is gone and the scope paints the
+            // application. A copy of the other half (the mode changed since) is ignored.
+            window.Aetheus = window.Aetheus || {};
+            window.Aetheus._bootTokenNames = [];
             try {
                 var tokens = JSON.parse(localStorage.getItem('aetheus_theme_tokens') || 'null');
                 var half = tokens && (light ? tokens.light : tokens.dark);
-                if (half) Object.keys(half).forEach(function (name) { document.documentElement.style.setProperty(name, half[name]); });
+                if (half) Object.keys(half).forEach(function (name) {
+                    document.documentElement.style.setProperty(name, half[name]);
+                    window.Aetheus._bootTokenNames.push(name);
+                });
             } catch (e) { /* a malformed entry leaves the shipped look */ }
         })();
     </script>
@@ -97,7 +103,7 @@
          changed layout.js would otherwise stay stale in the browser (a new function like
          Aetheus.scrollToBottom would be "undefined" and its buttons silently no-op). Bump ?v= on any
          edit to these files. -->
-    <script src="js/layout.js?v=13"></script>
+    <script src="js/layout.js?v=16"></script>
     <script src="js/offline-registration.js?v=1"></script>
     <script src="js/docker-interop.js?v=3"></script>
     <script src="js/monaco-frame-host.js?v=1"></script>

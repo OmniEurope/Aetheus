@@ -69,11 +69,14 @@ public sealed class PipelineRunPreflightService(
         var state = new ChainPreflightState();
         await CheckOnePipelineAsync(
             definition, resolvedVariables, resolvedVariables.GetValueOrDefault("UPSTREAM_PIPELINE"),
+            resolvedVariables.GetValueOrDefault(PipelineScannerTaskFactory.UpstreamTemplateVariable),
             sameSourceCommit: true, organizationId, projectId, problems, state, ct).ConfigureAwait(false);
 
         if (projectId is { } childProjectId)
             await CheckChildPipelinesAsync(
-                definition, definition.Name, true, resolvedVariables, organizationId, childProjectId,
+                definition, definition.Name,
+                await RootTemplateAsync(definition, childProjectId, ct).ConfigureAwait(false),
+                true, resolvedVariables, organizationId, childProjectId,
                 problems, state, depth: 1, path: string.Empty, ct).ConfigureAwait(false);
 
         if (problems.Count > 0)
@@ -91,6 +94,7 @@ public sealed class PipelineRunPreflightService(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         string? upstreamPipeline,
+        string? upstreamTemplate,
         bool sameSourceCommit,
         int? organizationId,
         int? projectId,
@@ -116,7 +120,7 @@ public sealed class PipelineRunPreflightService(
         // After the runner check: a stage nobody is configured for is refused there, and this one only
         // asks whether a configured runner can serve the candidate's scanner steps.
         var manifestProblem = await scannerManifest.FindProblemAsync(
-            definition, resolvedVariables, upstreamPipeline, organizationId, ct).ConfigureAwait(false);
+            definition, resolvedVariables, upstreamPipeline, upstreamTemplate, organizationId, ct).ConfigureAwait(false);
         if (manifestProblem is not null)
         {
             problems.Add(manifestProblem);
@@ -139,7 +143,7 @@ public sealed class PipelineRunPreflightService(
                      .GroupBy(stage => stage.Environment!, StringComparer.OrdinalIgnoreCase))
         {
             if (!state.CheckedEnvironments.Add(environmentGroup.Key)) continue;
-            await CheckEnvironmentAdmitsTheRunAsync(environmentGroup, problems, state, ct).ConfigureAwait(false);
+            await CheckEnvironmentAdmitsTheRunAsync(environmentGroup, projectId, problems, state, ct).ConfigureAwait(false);
         }
 
         if (projectId is { } id)
@@ -212,9 +216,18 @@ public sealed class PipelineRunPreflightService(
     /// failure it replaces. What remains refused is what nothing can ever provide: a library entry, a
     /// vault, an environment or a runner that does not exist.
     /// </summary>
+    /// <summary>Recette R2-121: the shipped template the launched pipeline extends, which is what makes
+    /// portfolio-candidate a candidate for its children's scanner manifest, as aetheus-candidate is by name.</summary>
+    private async Task<string?> RootTemplateAsync(PipelineYamlDefinition definition, int projectId, CancellationToken ct) =>
+        string.IsNullOrWhiteSpace(definition.Name)
+            ? null
+            : (await repo.FindPipelineByNameAndProjectAsync(definition.Name, projectId, ct).ConfigureAwait(false))
+                ?.TemplateReferenceName;
+
     private async Task CheckChildPipelinesAsync(
         PipelineYamlDefinition definition,
         string? parentPipelineName,
+        string? parentTemplateName,
         bool parentOnSameCommit,
         IReadOnlyDictionary<string, string> parentVariables,
         int? organizationId,
@@ -267,7 +280,7 @@ public sealed class PipelineRunPreflightService(
             var childProblems = new List<string>();
             var childOnSameCommit = parentOnSameCommit && !reference.FromOnSuccess && reference.SameSourceCommit;
             await CheckOnePipelineAsync(
-                childDefinition, childVariables, parentPipelineName, childOnSameCommit, organizationId,
+                childDefinition, childVariables, parentPipelineName, parentTemplateName, childOnSameCommit, organizationId,
                 projectId, childProblems, state, ct).ConfigureAwait(false);
             problems.AddRange(childProblems.Select(problem => $"{childPath}: {problem}"));
             // The chain itself is a requirement: reaching this line means the child's definition
@@ -278,7 +291,8 @@ public sealed class PipelineRunPreflightService(
                 childProblems.Count == 0 ? null : string.Join(" ", childProblems));
 
             await CheckChildPipelinesAsync(
-                childDefinition, target.Name, childOnSameCommit, childVariables, organizationId, projectId,
+                childDefinition, target.Name, target.TemplateReferenceName, childOnSameCommit, childVariables,
+                organizationId, projectId,
                 problems, state, depth + 1, childPath, ct).ConfigureAwait(false);
         }
     }
@@ -464,12 +478,13 @@ public sealed class PipelineRunPreflightService(
     /// </summary>
     private async Task CheckEnvironmentAdmitsTheRunAsync(
         IGrouping<string, PipelineStageDefinition> environmentStages,
+        int? projectId,
         List<string> problems,
         ChainPreflightState state,
         CancellationToken ct)
     {
         // Same guard the dispatcher uses, so the answer here and an hour later are the same answer.
-        if (await environmentChecks.CheckEnvironmentChecksAsync(environmentStages.First(), ct)
+        if (await environmentChecks.CheckEnvironmentChecksAsync(environmentStages.First(), projectId, ct)
                 .ConfigureAwait(false))
         {
             state.Record(PreflightCheckKinds.Environment, environmentStages.Key);

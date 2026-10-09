@@ -1,0 +1,30 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* "Réinstaller la messagerie" (recette R2-083 / R2-088): offered whenever a mail stack is on the host,
+   half-configured included; the outcome of the purge stays on the page once the stack is gone. *@
+@if (StackDetected || Running || _outcome is not null)
+{
+    <OmniStack Gap="OmniSpacing.Small" Class="omni-u-mb-lg mail-reinstall">
+        @if (StackDetected)
+        {
+            <OmniRow Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <div class="blade-content-spacer"></div>
+                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@PurgeAsync" Busy="@Running" Disabled="@(!CanPurge)" title="@(DisabledReason ?? L["MailReinstall"].Value)"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["MailReinstallAction"]</span></OmniButton>
+            </OmniRow>
+        }
+        @if (_taskId is not null)
+        {
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <AetheusLoader Size="OmniControlSize.Small" />
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailReinstallRunning"]</OmniText>
+            </OmniStack>
+        }
+        @if (_outcome is { } outcome)
+        {
+            <OmniAlert Severity="@(outcome.Succeeded ? OmniSeverity.Success : OmniSeverity.Danger)" Class="mail-reinstall-outcome">
+                @(outcome.Succeeded
+                    ? L["MailReinstallSucceeded"].Value
+                    : string.Format(L["MailReinstallFailed"], L.Localize(outcome.Status), outcome.LastLine))
+            </OmniAlert>
+        }
+    </OmniStack>
+}

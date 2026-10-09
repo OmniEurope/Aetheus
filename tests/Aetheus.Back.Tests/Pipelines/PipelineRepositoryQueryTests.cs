@@ -80,11 +80,15 @@ public class PipelineRepositoryQueryTests : IDisposable
     public async Task GetLintResultsAsync_FiltersByRun()
     {
         _db.LintResults.AddRange(
-            new LintResult { PipelineRunId = 1, CreatedAt = DateTime.UtcNow },
-            new LintResult { PipelineRunId = 1, CreatedAt = DateTime.UtcNow });
+            new LintResult { Id = 11, PipelineRunId = 1, CreatedAt = DateTime.UtcNow },
+            new LintResult { Id = 21, PipelineRunId = 2, CreatedAt = DateTime.UtcNow },
+            new LintResult { Id = 12, PipelineRunId = 1, CreatedAt = DateTime.UtcNow });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, (await _repo.GetLintResultsAsync(1, ct: TestContext.Current.CancellationToken)).Count);
+        var results = await _repo.GetLintResultsAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal([11, 12], results.Select(r => r.Id).Order());
+        Assert.All(results, r => Assert.Equal(1, r.PipelineRunId));
     }
 
     [Fact]
@@ -1213,7 +1217,7 @@ public class PipelineRepositoryQueryTests : IDisposable
         // approval carries no delay of its own, so the run fails without its scheduler being involved.
         var runService = Substitute.For<IPipelineRunService>();
         var control = new PipelineRunControlService(
-            _repo, Substitute.For<IHubContext<PipelineHub>>(), Substitute.For<IPipelineRunDefinitionParser>());
+            _repo, Substitute.For<IHubContext<PipelineHub>>(), Substitute.For<IPipelineRunDefinitionParser>(), Substitute.For<Aetheus.Back.Components.Audit.IAuditService>());
         runService.ApplyRefusalAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(call => control.ApplyRefusalAsync(
                 call.Arg<int>(), Substitute.For<IPipelineRunScheduler>(), Substitute.For<IPipelineChildRunLauncher>(),
@@ -1223,6 +1227,7 @@ public class PipelineRepositoryQueryTests : IDisposable
             runService,
             Substitute.For<IHttpContextAccessor>(),
             Substitute.For<IHubContext<PipelineHub>>(),
+            Substitute.For<Aetheus.Back.Components.Audit.IAuditService>(),
             NullLogger<PipelineApprovalService>.Instance,
             TimeProvider.System);
 
@@ -1252,5 +1257,25 @@ public class PipelineRepositoryQueryTests : IDisposable
         var untouchedRun = await _db.PipelineRuns.AsNoTracking()
             .FirstAsync(r => r.Id == 11, TestContext.Current.CancellationToken);
         Assert.Equal(PipelineStatus.WaitingForApproval, untouchedRun.Status);
+    }
+
+    /// <summary>Recette R2-121: the shipped catalog lives in the platform organization and is shared by
+    /// name; a template someone wrote there, or one of another organization, is not.</summary>
+    [Fact]
+    public async Task FindSharedTemplateByNameAsync_SharesOnlyThePlatformsShippedTemplates()
+    {
+        var platform = new Organization { Id = 1, Name = "Aetheus", Slug = "aetheus" };
+        var other = new Organization { Id = 2, Name = "Client", Slug = "client" };
+        _db.Organizations.AddRange(platform, other);
+        _db.PipelineTemplates.AddRange(
+            new PipelineTemplate { Id = 1, Name = "application-ci", OrganizationId = 1 },
+            new PipelineTemplate { Id = 2, Name = "my-private-template", OrganizationId = 1 },
+            new PipelineTemplate { Id = 3, Name = "application-qa", OrganizationId = 2 });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.Equal(1, (await _repo.FindSharedTemplateByNameAsync("Application-CI", ct))?.Id);
+        Assert.Null(await _repo.FindSharedTemplateByNameAsync("my-private-template", ct));
+        Assert.Null(await _repo.FindSharedTemplateByNameAsync("application-qa", ct));
     }
 }

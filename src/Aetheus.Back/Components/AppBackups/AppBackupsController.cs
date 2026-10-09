@@ -44,6 +44,12 @@ public sealed class AppBackupsController(IBackupPolicyService service, IResource
     public async Task<ActionResult<BackupPolicyDto>> Update(int id, [FromBody] UpdateBackupPolicyRequest request, CancellationToken ct)
     {
         if (!await EnsurePolicyWriteAsync(id, ct)) return Forbid();
+        // Project.Write may rename, reschedule or run the approved configuration; changing what the
+        // agent connects to or reads (host, credentials, paths) needs Server.Write, as at creation.
+        var server = await service.GetServerForAgentParameterChangeAsync(id, request, ct);
+        if (server is not null
+            && !await authz.HasPermissionAsync(User, ResourceType.Server, server.Value, Permission.Write, ct))
+            return Forbid();
         var dto = await service.UpdateAsync(id, request, ct);
         return dto is null ? NotFound() : Ok(dto);
     }

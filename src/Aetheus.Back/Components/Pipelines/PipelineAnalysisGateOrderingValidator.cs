@@ -27,7 +27,17 @@ internal static class PipelineAnalysisGateOrderingValidator
         {
             foreach (var producer in FindProducers(stages, gate.Scope))
             {
-                if (RunsBefore(producer, gate, stageMap)) continue;
+                // BACK-016: the steps of one stage are dispatched together and run concurrently on the
+                // agent, so a gate beside its producer can be evaluated before the report exists.
+                if (string.Equals(producer.Stage.Name, gate.Stage.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add(
+                        $"Analysis gate '{gate.Step.Name}' ({gate.Scope}) cannot share stage '{gate.Stage.Name}' " +
+                        $"with producer '{producer.Step.Name}': the steps of a stage run concurrently. " +
+                        $"Move the gate to a stage that depends on '{producer.Stage.Name}'.");
+                    continue;
+                }
+                if (IsAncestor(producer.Stage.Name, gate.Stage.Name, stageMap)) continue;
                 errors.Add(
                     $"Analysis gate '{gate.Step.Name}' ({gate.Scope}) must run after producer " +
                     $"'{producer.Step.Name}' in stage '{producer.Stage.Name}'.");
@@ -81,16 +91,6 @@ internal static class PipelineAnalysisGateOrderingValidator
     private static bool IsProtectedStage(PipelineStageDefinition stage) =>
         stage.Artifacts.Count > 0
         || stage.Steps.Any(step => step.Type is not null && ProtectedStepTypes.Contains(step.Type));
-
-    private static bool RunsBefore(
-        AnalysisStep producer,
-        AnalysisStep gate,
-        IReadOnlyDictionary<string, PipelineStageDefinition> stageMap)
-    {
-        if (string.Equals(producer.Stage.Name, gate.Stage.Name, StringComparison.OrdinalIgnoreCase))
-            return producer.StepIndex < gate.StepIndex;
-        return IsAncestor(producer.Stage.Name, gate.Stage.Name, stageMap);
-    }
 
     private static bool IsAncestor(
         string ancestorName,

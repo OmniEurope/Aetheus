@@ -5,6 +5,11 @@
 {
     <AetheusLoader Size="OmniControlSize.Small" />
 }
+else if (!CanSubmit)
+{
+    <OmniAlert Severity="@(_notFound ? OmniSeverity.Warning : OmniSeverity.Danger)">@(_notFound ? L["NotificationChannelNotFound"] : L["LoadFailed"])</OmniAlert>
+    <DialogFooter OnCancel="@Cancel" />
+}
 else
 {
     <OmniTemplateForm TModel="EditModel" Model="@_model" OnValidSubmit="@SubmitAsync">

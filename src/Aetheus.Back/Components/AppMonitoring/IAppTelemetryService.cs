@@ -13,6 +13,8 @@ public interface IAppTelemetryService
     Task<AppVisitorSeriesDto> GetVisitorSeriesAsync(int appId, int days, CancellationToken ct = default);
     /// <summary>R-455: the per-route timings the application last exported through Aetheus.Telemetry.</summary>
     Task<AppPerformanceReportDto> GetPerformanceAsync(int appId, CancellationToken ct = default);
+    /// <summary>PLAN-013 lot 1: the database size the application last measured through Aetheus.Telemetry.</summary>
+    Task<AppDatabaseSizeReportDto> GetDatabaseSizeAsync(int appId, CancellationToken ct = default);
 
     Task<List<AppMetricThresholdDto>> GetThresholdsAsync(int appId, CancellationToken ct = default);
     Task<AppMetricThresholdDto> CreateThresholdAsync(int appId, CreateMetricThresholdRequest request, CancellationToken ct = default);

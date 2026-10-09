@@ -44,6 +44,13 @@ stages:
           dotnet test --project $(WORKSPACE)/tests/Aetheus.Agent.Core.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
           sh $(WORKSPACE)/deploy/scripts/normalize-coverage-report.sh $(WORKSPACE)/coverage
         timeout_seconds: 300
+
+  # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
+  - name: CoverageReport
+    group: Build
+    os: linux
+    depends_on: [Coverage]
+    steps:
       - name: Publish Coverage
         type: coverage
         continue_on_error: true
@@ -63,7 +70,7 @@ stages:
     group: Quality
     os: linux
     depends_on:
-      - Coverage
+      - CoverageReport
       - Lint
     steps:
       - name: Publish the advisory coverage grade
@@ -123,7 +130,7 @@ stages:
         target_files:
           - $(WORKSPACE)/publish/back/appsettings.json
 
-  - name: Deploy
+  - name: Upload
     group: Deploy
     os: linux
     depends_on:
@@ -135,6 +142,13 @@ stages:
           KNOWN="$WORKSPACE/.ssh-known-hosts"; printf '%s\n' "$(TARGET_SSH_HOST_KEY)" > "$KNOWN"; chmod 600 "$KNOWN"
           sshpass -e scp -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN" -o LogLevel=ERROR -P $(TARGET_SSH_PORT) -r $(WORKSPACE)/publish/back/* $(TARGET_USER)@$(TARGET_HOST):$(TARGET_DIR)/
         timeout_seconds: 180
+
+  # Steps of one stage run concurrently (ADR-012): each deploy step waits for the previous stage (DEP-008).
+  - name: Restart
+    group: Deploy
+    os: linux
+    depends_on: [Upload]
+    steps:
       - name: Restart Service
         shell: |
           set -eu

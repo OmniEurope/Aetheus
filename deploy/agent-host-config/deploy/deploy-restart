@@ -3,12 +3,19 @@
 # Aetheus Agent deploy-restart helper - root-owned, invoked via /etc/sudoers.d/aetheus-deploy
 # (NOPASSWD). (Re)starts ONLY aetheus-app@<app>.service for a re-validated <app>. Never evals input.
 set -eu
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
 app="${1:-}"
 if [ "$app" = "--probe" ] && [ "$#" -eq 1 ]; then
     echo "aetheus-deploy-helper-v2"
     exit 0
 fi
-printf '%s' "$app" | grep -Eq '^[a-zA-Z0-9_-]{1,64}$' || { echo "invalid app" >&2; exit 1; }
+one_line "$app" && printf '%s' "$app" | grep -Eq '^[a-zA-Z0-9_-]{1,64}$' || { echo "invalid app" >&2; exit 1; }
 unit="aetheus-app@${app}.service"
 # `enable` makes the FIRST deploy of a template instance persist across reboot (idempotent on later
 # deploys); `restart` then starts it (fresh) or restarts it (already running). Together they cover the

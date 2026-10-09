@@ -480,6 +480,24 @@ public class PipelineRunsGridTests : BunitContext
     }
 
     [Fact]
+    public void R2102_GroupRuns_PutsRunsInProgressFirst_MostRecentlyStartedFirst_ThenTheRestByDate()
+    {
+        // Recette R2-102: aetheus-deploy-prod #2543, still running, sat third under #2551 and #2544,
+        // finished and started after it.
+        var at = new DateTime(2026, 10, 4, 1, 0, 0);
+        var runs = new List<PipelineRunDto>
+        {
+            new() { Id = 2551, PipelineId = 1, PipelineName = "aetheus-demo", Status = PipelineStatus.Failed, StartedAt = at.AddMinutes(30) },
+            new() { Id = 2544, PipelineId = 2, PipelineName = "aetheus-nightly", Status = PipelineStatus.Success, StartedAt = at.AddMinutes(20) },
+            new() { Id = 2543, PipelineId = 3, PipelineName = "aetheus-deploy-prod", Status = PipelineStatus.Running, StartedAt = at },
+            new() { Id = 2540, PipelineId = 4, PipelineName = "release-fast", Status = PipelineStatus.WaitingForApproval, StartedAt = at.AddMinutes(5) },
+            new() { Id = 2530, PipelineId = 5, PipelineName = "old", Status = PipelineStatus.Cancelled, StartedAt = at.AddMinutes(-60) }
+        };
+
+        Assert.Equal([2540, 2543, 2551, 2544, 2530], PipelineRunTableItem.GroupRuns(runs).Select(run => run.RunId));
+    }
+
+    [Fact]
     public void GroupRuns_PreservesTheDirectParentChildHierarchy()
     {
         var runs = new List<PipelineRunDto>

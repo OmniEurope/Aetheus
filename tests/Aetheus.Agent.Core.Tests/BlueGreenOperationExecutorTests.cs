@@ -430,6 +430,64 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
         Assert.Contains(log, line => line.Contains("No open deployment transaction", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Recette R2-092 (aetheus-demo #2534, #2551): the run failed before "Prepare demo host" wrote its
+    /// env file, and the rollback failed on "Environment file is missing" although this run had
+    /// switched nothing. Without a context the journal decides: no open transaction is a success that
+    /// says so, without Docker ever being contacted.
+    /// </summary>
+    [Fact]
+    public async Task R2092_RollbackOfARunThatNeverPreparedTheHost_SucceedsAndSaysNothingWasSwitched()
+    {
+        var shell = Substitute.For<IShellRunner>();
+        var env = MissingEnvFileEnvironment();
+        var log = new List<string>();
+
+        var result = await CreateExecutor(shell).ExecuteAsync(
+            OperationKind.BlueGreenRollback, "aetheus-demo", env, 60,
+            (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(["No deployment transaction is open: this run never switched colour, nothing to roll back."], log);
+        await shell.DidNotReceiveWithAnyArgs().RunExecAsync(default!, default!, CancellationToken.None);
+    }
+
+    /// <summary>R2-092, the other half: a switched transaction the rollback cannot reach still fails.</summary>
+    [Fact]
+    public async Task R2092_RollbackWithAnOpenTransaction_AndNoEnvFile_StillFails()
+    {
+        var env = MissingEnvFileEnvironment();
+        var journalDir = Path.Combine(_root, "deployment-transaction");
+        Directory.CreateDirectory(journalDir);
+        await File.WriteAllTextAsync(Path.Combine(journalDir, "state"), "SWITCHED\n", TestContext.Current.CancellationToken);
+        var log = new List<string>();
+
+        var result = await CreateExecutor(Substitute.For<IShellRunner>()).ExecuteAsync(
+            OperationKind.BlueGreenRollback, "aetheus-demo", env, 60,
+            (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(log, line => line.StartsWith("Environment file is missing", StringComparison.Ordinal));
+    }
+
+    /// <summary>Only the rollback may conclude anything from a missing env file; the other steps refuse.</summary>
+    [Fact]
+    public async Task R2092_ASwitchWithoutItsEnvFile_IsStillRefused()
+    {
+        var result = await CreateExecutor(Substitute.For<IShellRunner>()).ExecuteAsync(
+            OperationKind.BlueGreenSwitch, "aetheus-demo", MissingEnvFileEnvironment(), 60,
+            (_, _) => Task.CompletedTask, TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(0, result.ExitCode);
+    }
+
+    private Dictionary<string, string> MissingEnvFileEnvironment()
+    {
+        var env = BaseEnvironment();
+        env["AETHEUS_BG_ENV_FILE"] = Path.Combine(_root, ".demo-state", ".env");
+        return env;
+    }
+
     // A state nobody wrote means the journal is corrupt; guessing what to restore from it would be
     // worse than stopping.
     [Fact]

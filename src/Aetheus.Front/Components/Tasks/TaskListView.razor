@@ -14,7 +14,7 @@
 }
 
 <AetheusDataGrid @ref="_grid" Data="@_tasks" TItem="ServerTaskDto"
-    Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData" FullHeight="true"
+    Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData" ExportRead="@ReadExportAsync" FullHeight="true"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<ServerTaskDto>(_tasks, _totalCount))"
     RowClick="@OpenTask">
@@ -30,7 +30,7 @@
         {
             <OmniDataGridColumn TItem="ServerTaskDto" Property="ServerName" Title="@L["Server"]" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ServerNames" FilterSearchable="true" />
         }
-        <OmniDataGridColumn TItem="ServerTaskDto" Title="@L["Source"]" Width="210px" Sortable="false" Filterable="false" >
+        <OmniDataGridColumn TItem="ServerTaskDto" Title="@L["Source"]" ExportValue="@SourceExport" Width="210px" Sortable="false" Filterable="false" >
             <Template Context="task">
                 @if (task.PipelineRunId is { } pipelineRunId)
                 {

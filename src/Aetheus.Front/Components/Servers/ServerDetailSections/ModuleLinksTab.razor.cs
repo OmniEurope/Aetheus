@@ -53,6 +53,29 @@ public partial class ModuleLinksTab
         return _grid is not null ? _grid.GoToPage(0, forceReload: true) : LoadLinksAsync();
     }
 
+    /// <summary>Recette R2-124: one page of the export, the same query as the grid's load.</summary>
+    private Task<PaginatedResult<LinkedResourceDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var resourceIdentifiers = Resources
+            .Where(resource => !string.IsNullOrWhiteSpace(resource))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (resourceIdentifiers.Count == 0) return Task.FromResult(new PaginatedResult<LinkedResourceDto>());
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = GetSort(args);
+        return Api.Servers.GetModuleLinksPageAsync(ServerId, new ModuleLinkPageRequest
+        {
+            SourceType = SourceType,
+            ResourceIdentifiers = resourceIdentifiers,
+            Page = page,
+            PageSize = pageSize,
+            Search = _search,
+            SortBy = sortBy,
+            SortDescending = sortDescending,
+            Filters = args.ToApiFilters()
+        });
+    }
+
     private async Task LoadLinksAsync()
     {
         _loading = true;

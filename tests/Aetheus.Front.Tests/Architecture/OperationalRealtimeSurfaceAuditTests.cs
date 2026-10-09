@@ -92,7 +92,7 @@ public sealed class OperationalRealtimeSurfaceAuditTests
                 ["ServerHeartbeat", "TaskCompleted", "JoinServerGroup", "RejoinOnReconnect", "TrailingReloadCoalescer"],
             ["Components/Shared/EntityOperationalFeed.cs"] =
                 ["JoinEntityUpdates", "RejoinOnReconnect", "TrailingReloadCoalescer"],
-            ["Components/Servers/ServerDetailSections/ServerMailDiagnosticsTab.razor.cs"] =
+            ["Components/Servers/ServerDetailSections/ServerMailStatusList.razor.cs"] =
                 ["ServerLiveFeed", "ServerLiveFeedTriggers.HeartbeatAndTasks"],
             ["Components/Servers/ServerDetailSections/ServerRkhunterSection.razor.cs"] =
                 ["ServerLiveFeed", "ServerLiveFeedTriggers.Heartbeat"],

@@ -95,8 +95,13 @@ jobs:
         with:
           global-json-file: global.json
 
+      # The default shell is `bash -e` without pipefail: the step took tee's status, so a scanner that
+      # failed (restore error, no inventory) left a report without "Critical"/"High" and the gate
+      # below passed on nothing (GITHUB-001).
       - name: Check for vulnerable packages
-        run: dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+        run: |
+          set -o pipefail
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
 
       - name: Fail on critical vulnerabilities
         run: |

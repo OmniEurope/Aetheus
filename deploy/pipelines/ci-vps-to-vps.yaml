@@ -44,6 +44,13 @@ stages:
           dotnet test --project $(WORKSPACE)/tests/Aetheus.Agent.Core.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
           sh $(WORKSPACE)/deploy/scripts/normalize-coverage-report.sh $(WORKSPACE)/coverage
         timeout_seconds: 300
+
+  # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
+  - name: CoverageReport
+    group: Build
+    os: linux
+    depends_on: [Coverage]
+    steps:
       - name: Publish Coverage
         type: coverage
         continue_on_error: true
@@ -63,7 +70,7 @@ stages:
     group: Quality
     os: linux
     depends_on:
-      - Coverage
+      - CoverageReport
       - Lint
     steps:
       - name: Publish the advisory coverage grade
@@ -123,7 +130,9 @@ stages:
         target_files:
           - $(WORKSPACE)/publish/back/appsettings.json
 
-  - name: Deploy
+  # Steps of one stage run concurrently (ADR-012): stop, copy and start are three stages, each waiting
+  # for the previous one, so the service never starts on a partial copy (audit DEP-008).
+  - name: Stop
     group: Deploy
     os: linux
     depends_on:
@@ -132,9 +141,23 @@ stages:
       - name: Stop Service
         shell: sudo systemctl stop aetheus-back || true
         timeout_seconds: 30
+
+  - name: Copy
+    group: Deploy
+    os: linux
+    depends_on:
+      - Stop
+    steps:
       - name: Copy Files
         shell: cp -r $(WORKSPACE)/publish/back/* $(TARGET_DIR)/
         timeout_seconds: 120
+
+  - name: Start
+    group: Deploy
+    os: linux
+    depends_on:
+      - Copy
+    steps:
       - name: Start Service
         shell: sudo systemctl start aetheus-back
         timeout_seconds: 30

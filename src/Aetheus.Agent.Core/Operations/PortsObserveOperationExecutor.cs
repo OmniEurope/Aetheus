@@ -69,6 +69,6 @@ public sealed class PortsObserveOperationExecutor(
         }
 
         await onOutput($"Reported {ports.Count} listening TCP port(s).", TaskLogLevel.Info).ConfigureAwait(false);
-        return new ExecutorResult(0, true);
+        return new ExecutorResult(0, false);
     }
 }

@@ -10,7 +10,8 @@ namespace Aetheus.Back.Components.AppMonitoring;
 /// Hourly sweep (ADR-021 phase 1): aggregates raw <c>AppHealthSample</c> rows from completed hours into
 /// <c>AppHealthHourly</c>, then purges raw samples older than the raw-retention window (default 7 days) and
 /// hourly aggregates older than the aggregate-retention window (default 90 days). OpenTelemetry signal
-/// retention is independent: metric details 30 days, metric aggregates 13 months, logs/traces 14 days.
+/// retention is independent: metric details, metric aggregates and logs follow each project's « Conservation
+/// des données » setting (PLAN-013 lot 4, <see cref="AppDataRetentionSweep"/>), traces 14 days.
 /// Bounded PG growth per ADR-001.
 /// </summary>
 public sealed class AppTelemetryRetentionService(
@@ -89,24 +90,6 @@ public sealed class AppTelemetryRetentionService(
             configuration.GetValue("AppMonitoring:HourlyRetentionDays", AppMonitoringDefaults.DefaultHourlyRetentionDays),
             AppMonitoringDefaults.MinimumHourlyRetentionDays,
             AppMonitoringDefaults.MaximumHourlyRetentionDays);
-        var metricDetailedRetentionDays = Math.Clamp(
-            configuration.GetValue(
-                "AppMonitoring:MetricDetailedRetentionDays",
-                AppMonitoringDefaults.DefaultMetricDetailedRetentionDays),
-            AppMonitoringDefaults.MinimumMetricDetailedRetentionDays,
-            AppMonitoringDefaults.MaximumMetricDetailedRetentionDays);
-        var metricAggregateRetentionMonths = Math.Clamp(
-            configuration.GetValue(
-                "AppMonitoring:MetricAggregateRetentionMonths",
-                AppMonitoringDefaults.DefaultMetricAggregateRetentionMonths),
-            AppMonitoringDefaults.MinimumMetricAggregateRetentionMonths,
-            AppMonitoringDefaults.MaximumMetricAggregateRetentionMonths);
-        var logRetentionDays = Math.Clamp(
-            configuration.GetValue(
-                "AppMonitoring:LogRetentionDays",
-                AppMonitoringDefaults.DefaultLogRetentionDays),
-            AppMonitoringDefaults.MinimumLogRetentionDays,
-            AppMonitoringDefaults.MaximumLogRetentionDays);
         var traceRetentionDays = Math.Clamp(
             configuration.GetValue(
                 "AppMonitoring:TraceRetentionDays",
@@ -144,9 +127,6 @@ public sealed class AppTelemetryRetentionService(
         var aggFloor = currentHourStart.AddHours(-effectiveLookbackHours);
         var rawCutoff = now.AddDays(-rawRetentionDays);
         var hourlyCutoff = now.AddDays(-hourlyRetentionDays);
-        var metricDetailedCutoff = now.AddDays(-metricDetailedRetentionDays);
-        var metricAggregateCutoff = now.AddMonths(-metricAggregateRetentionMonths);
-        var logCutoff = now.AddDays(-logRetentionDays);
         var traceCutoff = now.AddDays(-traceRetentionDays);
         var visitorRetentionDays = Math.Clamp(
             configuration.GetValue("AppMonitoring:VisitorRetentionDays", AppMonitoringDefaults.DefaultVisitorRetentionDays),
@@ -162,14 +142,16 @@ public sealed class AppTelemetryRetentionService(
         var purgedRaw = await repo.PurgeRawOlderThanAsync(rawCutoff, ct).ConfigureAwait(false);
         var purgedHourly = await repo.PurgeHourlyOlderThanAsync(hourlyCutoff, ct).ConfigureAwait(false);
 
-        // Metrics (phase 2): purge raw and hourly
-        var purgedMetricRaw = await metricRepo.PurgeRawOlderThanAsync(metricDetailedCutoff, ct).ConfigureAwait(false);
-        var purgedMetricHourly = await metricRepo.PurgeHourlyOlderThanAsync(metricAggregateCutoff, ct).ConfigureAwait(false);
+        // Metrics (phase 2) and logs (phase 3): raw, hourly and logs purged per project (PLAN-013 lot 4).
+        var projectPurge = await AppDataRetentionSweep.PurgeAsync(
+            scope.ServiceProvider.GetRequiredService<IAppDataRetentionRepository>(), metricRepo, logRepo, now, ct).ConfigureAwait(false);
+        var purgedMetricRaw = projectPurge.MetricRaw;
+        var purgedMetricHourly = projectPurge.MetricHourly;
         // R-477: a name whose last sample has just been purged leaves the explorer and the name cap.
         await metricRepo.PruneMetricNamesAsync(ct).ConfigureAwait(false);
 
-        // Logs (phase 3): purge only (no aggregate). Trace/error groups use the independent trace window.
-        var purgedLogs = await logRepo.PurgeOlderThanAsync(logCutoff, ct).ConfigureAwait(false);
+        // Trace/error groups use the independent trace window.
+        var purgedLogs = projectPurge.Logs;
         var purgedErrors = await errorRepo.PurgeOlderThanAsync(traceCutoff, ct).ConfigureAwait(false);
         var purgedVisitors = await visitorRepo.PurgeOlderThanAsync(visitorCutoff, ct).ConfigureAwait(false);
         var analyticsDetailedDays = Math.Clamp(

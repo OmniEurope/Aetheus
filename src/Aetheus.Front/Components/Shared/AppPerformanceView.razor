@@ -42,7 +42,7 @@ else
        Markdown and CSV, each button with its file icon; Markdown blue, the user's choice (R2-009), set
        for every export bar by AetheusDataGrid. *@
     <AetheusDataGrid Data="@_report.Routes" TItem="AppRouteTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg"
-                     ExportFormats="@ExportFormats" ExportPosition="OmniDataGridPosition.Bottom" ExportTitle="@ExportTitle"
+                     ShowFooterBar="true" ExportTitle="@ExportTitle"
                      ExportFields="@ExportFields" ExportFileName="@ExportFileName">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="AppRouteTimingDto" Property="Method" Title="@L["Method"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />

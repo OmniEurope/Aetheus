@@ -59,12 +59,12 @@
                     <CountBadge Value="@_data.ClientsCount" Variant="OmniTone.Accent" />
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_clientsGrid" KeyProperty="ClientId" Data="@_data.Clients" Count="@_data.ClientsCount" TItem="TeamspeakClientDto"
-                    LoadData="@LoadClientsDataAsync" IsLoading="@_data.ClientsLoading" PageSize="25"
+                    LoadData="@LoadClientsDataAsync" ExportRead="@(args => _data.ReadClientsExportAsync(args))" ExportName="@L["Clients"]" IsLoading="@_data.ClientsLoading" PageSize="25"
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<TeamspeakClientDto>(_data.Clients, _data.ClientsCount))">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="TeamspeakClientDto" Property="Nickname" Title="@L["Nickname"]" Width="200px" Filterable="true" />
-                        <OmniDataGridColumn TItem="TeamspeakClientDto" Key="ChannelName" Title="@L["Channel"]" Width="200px" Filterable="true" >
+                        <OmniDataGridColumn TItem="TeamspeakClientDto" Key="ChannelName" ExportValue="@ChannelExport" Title="@L["Channel"]" Width="200px" Filterable="true" >
                             <Template Context="c">
                                 @(string.IsNullOrEmpty(c.ChannelName) ? c.ChannelId.ToString() : c.ChannelName)
                             </Template>
@@ -91,7 +91,7 @@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateChannelDialogAsync" title="@L["CreateChannel"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_channelsGrid" Data="@_data.Channels" Count="@_data.ChannelsCount" TItem="TeamspeakChannelDto"
-                    LoadData="@LoadChannelsDataAsync" IsLoading="@_data.ChannelsLoading" PageSize="25"
+                    LoadData="@LoadChannelsDataAsync" ExportRead="@(args => _data.ReadChannelsExportAsync(args))" ExportName="@L["Channels"]" IsLoading="@_data.ChannelsLoading" PageSize="25"
                     Density="OmniDensity.Compact" AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple"
                     RowRender="@((OmniDataGridRowRenderArgs<TeamspeakChannelDto> args) => {
                         if (args.Item.IsPermanent) args.Class = "omni-u-bg-accent-subtle";
@@ -186,7 +186,7 @@
                     @* R-181: no Refresh button, the grids reload on the server's heartbeats and TeamSpeak tasks. *@
                 </OmniStack>
                     <AetheusDataGrid FullHeight="true" @ref="_bansGrid" KeyProperty="BanId" Data="@_data.Bans" Count="@_data.BansCount" TItem="TeamspeakBanDto"
-                        LoadData="@LoadBansDataAsync" IsLoading="@_data.BansLoading" PageSize="25"
+                        LoadData="@LoadBansDataAsync" ExportRead="@(args => _data.ReadBansExportAsync(args))" ExportName="@L["Bans"]" IsLoading="@_data.BansLoading" PageSize="25"
                         Virtualize="@AetheusGrid.RemoteVirtualization"
                         VirtualData="@(() => new OmniDataGridResult<TeamspeakBanDto>(_data.Bans, _data.BansCount))">
                         <EmptyTemplate>

@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: EUPL-1.2
+# Deploys an already-qualified candidate release through the project's production adapter. Restore,
+# deploy and the "deployed" mark are three stages: the steps of one stage run concurrently (ADR-012), so
+# in one stage the release could be marked deployed before the adapter had run.
 name: application-deploy-prod-template
 trigger: manual
 parameters:
@@ -11,7 +14,7 @@ variables:
   APPLICATION_ROLLBACK_ENABLED: "true"
 
 stages:
-  - name: DeployProduction
+  - name: Restore candidate
     group: Deploy
     execution_role: deploy
     os: linux
@@ -21,6 +24,13 @@ stages:
         release: "$(APPLICATION_CANDIDATE_VERSION)"
         artifact: ApplicationPayload-artifacts
         timeout_seconds: 1800
+
+  - name: DeployProduction
+    group: Deploy
+    execution_role: deploy
+    os: linux
+    depends_on: [Restore candidate]
+    steps:
       - name: Run project production deployment adapter
         working_directory: "$(WORKSPACE)"
         shell: |
@@ -30,6 +40,13 @@ stages:
           APPLICATION_ROLLBACK_ENABLED="$(APPLICATION_ROLLBACK_ENABLED)" \
             sh .pipeline/scripts/deploy-prod.sh
         timeout_seconds: 7200
+
+  - name: Mark deployed
+    group: Deploy
+    execution_role: deploy
+    os: linux
+    depends_on: [DeployProduction]
+    steps:
       - name: Mark the exact candidate release as deployed
         type: release
         version: "$(APPLICATION_CANDIDATE_VERSION)"

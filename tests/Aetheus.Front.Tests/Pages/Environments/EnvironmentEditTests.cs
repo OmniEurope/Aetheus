@@ -61,6 +61,34 @@ public class EnvironmentEditTests : BunitContext
     }
 
     [Fact]
+    public void EditMode_UnknownEnvironment_ShowsNotFoundInsteadOfTheLoader()
+    {
+        // FRONT-001: a 404 used to leave _detail null, so the page spun on the loader forever.
+        SetupDefaultResponses();
+        _handler.SetResponse(HttpMethod.Get, "api/environments/404", System.Net.HttpStatusCode.NotFound);
+
+        var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 404));
+
+        cut.WaitForAssertion(() => Assert.Contains("EnvironmentNotFound", cut.Markup));
+        Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
+        Assert.Empty(cut.FindAll("form"));
+    }
+
+    [Fact]
+    public void EditMode_LoadFailure_ShowsTheFailureInsteadOfTheLoader()
+    {
+        SetupDefaultResponses();
+        _handler.SetResponse(HttpMethod.Get, "api/environments/500", System.Net.HttpStatusCode.InternalServerError);
+
+        var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 500));
+
+        cut.WaitForAssertion(() => Assert.Contains("LoadFailed", cut.Markup));
+        Assert.DoesNotContain("EnvironmentNotFound", cut.Markup);
+        Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
+        Assert.Empty(cut.FindAll("form"));
+    }
+
+    [Fact]
     public void Renders_FormFields()
     {
         SetupDefaultResponses();

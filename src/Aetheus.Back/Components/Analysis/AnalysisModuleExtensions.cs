@@ -18,6 +18,9 @@ public static class AnalysisModuleExtensions
                 "Analysis runtime quotas are outside their supported range.")
             .ValidateOnStart();
         services.AddScoped<IAnalysisRepository, AnalysisRepository>();
+        // PLAN-013 lot 2: the detail rows of analysis reports past their retention, purged in batches.
+        services.AddScoped<IAnalysisDetailRetentionRepository, AnalysisDetailRetentionRepository>();
+        services.AddScoped<AnalysisDetailRetentionService>();
         services.AddScoped<IAnalysisService, AnalysisService>();
         // Recette R-485: the run result reader, its stamp repository and its bounded result cache.
         services.AddScoped<IAnalysisRunResultRepository, AnalysisRunResultRepository>();

@@ -33,21 +33,28 @@ internal static class PipelineRunRepositoryResolver
         : run.RepositoryId is { } repositoryId ? BranchHref(repositoryId, run.ProjectId, run.BranchName)
         : null;
 
+    /// <summary>
+    /// The Aetheus repository a run's source tile links to. FRONT-011: what the run recorded wins (the
+    /// repository the backend resolved for it, else its <see cref="PipelineRunDto.RepositoryUrl"/>); the
+    /// definition's current source is only the fallback of a run that recorded none, so a run made before
+    /// the definition moved to another repository still opens the one it ran from.
+    /// </summary>
     public static async Task<int?> ResolveAsync(
         ApiClient api,
         PipelineRunDto run,
         CancellationToken ct = default)
     {
+        if (run.RepositoryId is { } recorded) return recorded;
         if (run.ProjectId is not { } projectId) return null;
         try
         {
-            var source = await api.Pipelines.GetPipelineSourceAsync(run.PipelineId, ct);
-            if (source is { RepositoryId: > 0 }) return source.RepositoryId;
-            if (string.IsNullOrWhiteSpace(run.RepositoryUrl)) return null;
-
             // Recette R-373: an internal clone URL is matched by project and slug, whatever host it
             // was re-homed to; any other URL by its canonical form. Never guessed among several.
-            return GitRepositoryUrl.ResolveRepositoryId(run.RepositoryUrl, await api.Git.GetGitReposAsync(projectId, ct));
+            if (!string.IsNullOrWhiteSpace(run.RepositoryUrl))
+                return GitRepositoryUrl.ResolveRepositoryId(run.RepositoryUrl, await api.Git.GetGitReposAsync(projectId, ct));
+
+            var source = await api.Pipelines.GetPipelineSourceAsync(run.PipelineId, ct);
+            return source is { RepositoryId: > 0 } ? source.RepositoryId : null;
         }
         catch (HttpRequestException) { return null; }
     }

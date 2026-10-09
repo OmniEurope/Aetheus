@@ -289,6 +289,20 @@ public class RunTimelineTreeTests : BunitContext
         Assert.Equal(2, Fetches());
     }
 
+    [Theory]
+    [InlineData("en", "(~2s)", "Average duration of this step over the last successful runs")]
+    [InlineData("fr-FR", "(~2s)", "Durée moyenne de cette étape sur les dernières exécutions réussies")]
+    public void R2084_UsualDuration_ReadsTildeAndTheHintStillSaysAverage(string culture, string label, string hint)
+    {
+        // Recette R2-084: the running step reads "(~16m 20s)", not "(moyenne 16m 20s)"; the tooltip
+        // keeps explaining that it is the average.
+        var resources = new System.Resources.ResourceManager("Aetheus.Front.Resources.AppStrings", typeof(Aetheus.Front.Resources.AppStrings).Assembly);
+        var cultureInfo = System.Globalization.CultureInfo.GetCultureInfo(culture);
+
+        Assert.Equal(label, string.Format(cultureInfo, resources.GetString("StepUsualDuration", cultureInfo)!, "2s"));
+        Assert.Equal(hint, resources.GetString("StepUsualDurationHint", cultureInfo));
+    }
+
     [Fact]
     public void RunningTask_ShowsOnlyItsUsualDuration()
     {
@@ -323,7 +337,7 @@ public class RunTimelineTreeTests : BunitContext
 
         var marker = Assert.Single(cut.FindAll(".run-tl-prev-dur"));
         Assert.Contains("StepUsualDuration", marker.TextContent);
-        // Recette R2-044: "2s (moyenne 2s)" in words, the reset arrow is gone.
+        // Recette R2-044: "2s (~2s)" since R2-084, the reset arrow is gone.
         Assert.Null(marker.QuerySelector(".omni-icon"));
         Assert.Equal("test", marker.Closest(".run-tl-row")!.QuerySelector(".run-tl-name")!.TextContent);
         var liveDurations = cut.FindComponents<PipelineRunLiveDuration>()

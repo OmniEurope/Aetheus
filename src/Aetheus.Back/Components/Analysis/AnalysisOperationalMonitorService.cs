@@ -41,6 +41,25 @@ public sealed class AnalysisOperationalMonitorService(
         {
             logger.LogError(exception, "Analysis operational health cycle failed");
         }
+
+        // PLAN-013 lot 2: the analysis detail retention rides the same hourly leader loop, apart from the
+        // health cycle so a failure of one never skips the other.
+        try
+        {
+            await PurgeExpiredDetailAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Analysis detail retention failed");
+        }
+    }
+
+    internal async Task<AnalysisDetailPurgeResult> PurgeExpiredDetailAsync(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<AnalysisDetailRetentionService>()
+            .PurgeAsync(timeProvider.GetUtcNow().UtcDateTime, ct).ConfigureAwait(false);
     }
 
     internal async Task RunCycleAsync(CancellationToken ct)

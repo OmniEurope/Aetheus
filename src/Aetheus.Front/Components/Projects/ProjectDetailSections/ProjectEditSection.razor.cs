@@ -126,20 +126,9 @@ public partial class ProjectEditSection
 
     private async Task OnDelete()
     {
-        var confirmed = await Dialog.Confirm(L["DeleteProjectConfirm"].Value, L["Delete"].Value,
-            new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
-        if (confirmed != true) return;
-
-        var success = await Api.Projects.DeleteProjectAsync(Project!.Id);
-        if (success)
-        {
-            Toast.Success("Deleted", "Deleted");
-            Nav.NavigateTo("/projects");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+        // Recette R2-122: the dialog counts what goes with the project, asks for its name and deletes it.
+        if (!await ProjectDeleteDialog.OpenAsync(Dialog, L, Project!.Id)) return;
+        Nav.NavigateTo("/projects");
     }
 
 }

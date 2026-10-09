@@ -40,13 +40,12 @@ public sealed class SubscribeProjectCreatorsMigrationTests(PostgresFixture fixtu
             var aliceUser = new User { Username = "alice-r2034" };
             var carolUser = new User { Username = "carol-r2034", IsActive = false };
             db.Users.AddRange(aliceUser, carolUser);
-            var projects = new[] { "Shop", "Blog", "Docs", "Legacy", "Followed" }
-                .Select(name => new Project { Name = name + "-r2034", OrganizationId = organizationId })
-                .ToArray();
-            db.Projects.AddRange(projects);
             await db.SaveChangesAsync(ct);
+            var projects = new List<int>();
+            foreach (var name in new[] { "Shop", "Blog", "Docs", "Legacy", "Followed" })
+                projects.Add(await LegacyProjectRows.InsertAsync(db, name + "-r2034", organizationId, ct));
             (alice, carol) = (aliceUser.Id, carolUser.Id);
-            (shop, blog, docs, legacy, followed) = (projects[0].Id, projects[1].Id, projects[2].Id, projects[3].Id, projects[4].Id);
+            (shop, blog, docs, legacy, followed) = (projects[0], projects[1], projects[2], projects[3], projects[4]);
 
             db.AuditLogs.AddRange(
                 Created(shop, "alice-r2034"),

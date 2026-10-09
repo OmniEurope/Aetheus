@@ -28,26 +28,43 @@ internal static class GridClientFilter
 
     /// <summary>Compares a typed value (date, date with offset, number) with the filter text parsed to the
     /// same type; any other value compares as text. False when the filter text does not parse.</summary>
-    private static bool TryCompare(object value, string text, string expected, out int comparison)
+    private static bool TryCompare(object value, string text, string expected, out int comparison) => value switch
+    {
+        DateTime date => TryCompareDate(date, expected, out comparison),
+        DateTimeOffset offset => TryCompareOffset(offset, expected, out comparison),
+        _ when IsNumber(value) => TryCompareNumber(value, expected, out comparison),
+        _ => CompareText(text, expected, out comparison)
+    };
+
+    private static bool TryCompareDate(DateTime date, string expected, out int comparison)
+    {
+        var parsed = DateTime.TryParse(expected, CultureInfo.InvariantCulture, DateTimeStyles.None, out var bound);
+        comparison = parsed ? date.CompareTo(bound) : 0;
+        return parsed;
+    }
+
+    private static bool TryCompareOffset(DateTimeOffset offset, string expected, out int comparison)
+    {
+        var parsed = DateTimeOffset.TryParse(expected, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var bound);
+        comparison = parsed ? offset.CompareTo(bound) : 0;
+        return parsed;
+    }
+
+    private static bool TryCompareNumber(object value, string expected, out int comparison)
+    {
+        var parsed = decimal.TryParse(expected, NumberStyles.Float, CultureInfo.InvariantCulture, out var bound);
+        comparison = parsed ? Convert.ToDecimal(value, CultureInfo.InvariantCulture).CompareTo(bound) : 0;
+        return parsed;
+    }
+
+    private static bool CompareText(string text, string expected, out int comparison)
     {
         comparison = string.Compare(text, expected, StringComparison.OrdinalIgnoreCase);
-        if (value is DateTime date)
-        {
-            if (!DateTime.TryParse(expected, CultureInfo.InvariantCulture, DateTimeStyles.None, out var bound)) return false;
-            comparison = date.CompareTo(bound);
-        }
-        else if (value is DateTimeOffset offset)
-        {
-            if (!DateTimeOffset.TryParse(expected, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var bound)) return false;
-            comparison = offset.CompareTo(bound);
-        }
-        else if (value is byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal)
-        {
-            if (!decimal.TryParse(expected, NumberStyles.Float, CultureInfo.InvariantCulture, out var bound)) return false;
-            comparison = Convert.ToDecimal(value, CultureInfo.InvariantCulture).CompareTo(bound);
-        }
         return true;
     }
+
+    private static bool IsNumber(object value) =>
+        value is byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal;
 
     private static bool Evaluate(OmniDataGridFilterOperator operation, int comparison, string text, string expected) =>
         operation switch

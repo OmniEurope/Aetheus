@@ -59,13 +59,14 @@ internal static class PipelineRunLogView
 
     // Preload the logs for every failed step so the Overview error card can render them without a click.
     public static async Task LoadFailedStepLogsAsync(
-        IReadOnlyList<PipelineStepRunDto> failedSteps, ApiClient api, Dictionary<int, List<TaskLogDto>> stepLogsCache)
+        IReadOnlyList<PipelineStepRunDto> failedSteps, ApiClient api, PipelineRunLogWindow logs)
     {
         foreach (var step in failedSteps)
         {
-            if (step.TaskId is not { } taskId || stepLogsCache.ContainsKey(taskId)) continue;
-            try { stepLogsCache[taskId] = await api.Monitoring.GetTaskLogsAsync(taskId) ?? []; }
-            catch (HttpRequestException) { stepLogsCache[taskId] = []; }
+            // Recette R2-104: lines streamed while the step ran are not its history; it is read all the same.
+            if (step.TaskId is not { } taskId || logs.HasSnapshot(taskId)) continue;
+            try { logs.ApplySnapshot(taskId, await api.Monitoring.GetTaskLogsAsync(taskId) ?? [], requested: null); }
+            catch (HttpRequestException) { logs.Lines[taskId] = []; }
         }
     }
 

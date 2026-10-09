@@ -35,11 +35,19 @@ public class LogRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task GetTaskLogsAsync_ReturnsOrderedLogs()
     {
+        // SaveChangesAsync stamps every Added TaskLog with the same "now", so the distinct
+        // timestamps are applied after the insert (Modified state is not re-stamped). The
+        // insertion order is the reverse of the timestamp order, so only a real sort passes.
         _db.TaskLogs.AddRange(
-            new TaskLog { TaskId = 1, Message = "second", Timestamp = DateTime.UtcNow.AddSeconds(1) },
-            new TaskLog { TaskId = 1, Message = "first", Timestamp = DateTime.UtcNow }
+            new TaskLog { TaskId = 1, Message = "second" },
+            new TaskLog { TaskId = 1, Message = "first" }
         );
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var origin = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        _db.TaskLogs.Local.Single(l => l.Message == "second").Timestamp = origin.AddSeconds(1);
+        _db.TaskLogs.Local.Single(l => l.Message == "first").Timestamp = origin;
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        _db.ChangeTracker.Clear();
 
         var logs = await _repo.GetTaskLogsAsync(1, null, ct: TestContext.Current.CancellationToken);
         Assert.Equal(2, logs.Count);

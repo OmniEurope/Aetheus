@@ -38,7 +38,7 @@
 
     <div class="role-assignment-grid">
         <AetheusDataGrid @ref="_grid" TItem="RoleDto" Data="@_roles" Count="@_totalCount"
-            PageSize="25" IsLoading="@_loading" LoadData="@LoadDataAsync"
+            PageSize="25" IsLoading="@_loading" LoadData="@LoadDataAsync" ExportMarkdown="false"
             Density="OmniDensity.Compact" AllowSorting="true" AllowFiltering="true"
             FilterMode="OmniDataGridFilterMode.Simple" EmptyText="@L["NoRecords"]"
             Virtualize="@AetheusGrid.RemoteVirtualization"

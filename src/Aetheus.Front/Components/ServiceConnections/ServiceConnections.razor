@@ -18,7 +18,7 @@
     </Filters>
 </OmniPageHeader>
 
-<AetheusDataGrid @ref="_grid" TItem="ServiceConnectionDto" Data="@_items" Count="@_count" LoadData="@LoadData"
+<AetheusDataGrid @ref="_grid" TItem="ServiceConnectionDto" Data="@_items" Count="@_count" LoadData="@LoadData" ExportRead="@ReadExportAsync"
     PageSize="20" AllowSorting="true" IsLoading="@_loading" Density="OmniDensity.Compact" FullHeight="true"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<ServiceConnectionDto>(_items, _count))">

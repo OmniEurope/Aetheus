@@ -278,4 +278,38 @@ public class RunGanttStripTests : BunitContext
         Assert.Contains("GanttTooltipWait", title, StringComparison.Ordinal);
         Assert.Contains("GanttTooltipDeviation", title, StringComparison.Ordinal);
     }
+    [Fact]
+    public void Front013_NowTakesTheKindOfTheRunTimestamps()
+    {
+        // The DTO timestamps arrive browser-local (UtcToLocalDateTimeConverter): a UTC "now" subtracted
+        // from them measured the browser's time-zone offset as elapsed time.
+        var clock = new FakeTimeProvider(Origin);
+        var local = Origin.ToLocalTime();
+
+        var now = RunGanttStrip.NowFor(clock, local);
+
+        Assert.Equal(DateTimeKind.Local, now.Kind);
+        Assert.Equal(TimeSpan.Zero, now - local);
+        Assert.Equal(DateTimeKind.Utc, RunGanttStrip.NowFor(clock, Origin).Kind);
+    }
+
+    [Fact]
+    public void Front013_ARunningRunDeserializedLikeTheApiAnswer_MeasuresItsRealDuration()
+    {
+        // Wire format: UTC. The client converter turns it browser-local, as in production.
+        var run = System.Text.Json.JsonSerializer.Deserialize<PipelineRunDto>(System.Text.Json.JsonSerializer.Serialize(new PipelineRunDto
+        {
+            Id = 1,
+            StartedAt = Origin,
+            Status = PipelineStatus.Running,
+            Steps = [Step(1, "Compile", 0, null, TaskExecutionStatus.Running)]
+        }), Aetheus.Front.Components.Shared.JsonOptions.Web)!;
+        Assert.Equal(DateTimeKind.Local, run.StartedAt.Kind);
+        var clock = new FakeTimeProvider(Origin.AddMinutes(5));
+
+        var component = Render<RunGanttStrip>(parameters => parameters.Add(p => p.Run, run).Add(p => p.Clock, clock));
+
+        Assert.Equal(TimeSpan.FromMinutes(5), component.Instance.RunDuration());
+        Assert.Equal(TimeSpan.FromMinutes(5), component.Instance.Layout!.Duration);
+    }
 }

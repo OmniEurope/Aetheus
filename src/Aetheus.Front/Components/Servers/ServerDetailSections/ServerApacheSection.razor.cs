@@ -265,4 +265,8 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
         _followTimer?.Dispose();
         _configTimeoutTimer?.Dispose();
     }
+
+    /// <summary>Recette R2-124: the export writes the ports of the group's virtual hosts.</summary>
+    private static readonly Func<ApacheVirtualHostGroup, object?> PortsExport = group =>
+        string.Join(", ", group.Members.Select(member => member.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 }

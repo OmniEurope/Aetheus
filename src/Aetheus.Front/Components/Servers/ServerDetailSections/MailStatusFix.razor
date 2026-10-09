@@ -1,0 +1,30 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R2-090: under the first red line of the mail status, what fixes it: an action Aetheus can run,
+   or the exact DNS record to publish (to copy). The line turns green on a later heartbeat. *@
+<OmniCard Class="mail-status-fix" data-key="@Item.Key">
+    <OmniStack Gap="OmniSpacing.Small">
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Explanation</OmniText>
+        @if (ShowsRecord)
+        {
+            <OmniCodeBlock Title="@($"{Item.RecordType} {Item.RecordName}")" Code="@Item.RecordValue" Wrap="true" />
+        }
+        @if (Kind == FixKind.Services && CanManage)
+        {
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnStartServices" Disabled="@Busy"><OmniIcon Name="OmniIconName.Play" /> <span>@L["MailStartServices"]</span></OmniButton>
+            </OmniStack>
+        }
+        else if (Kind == FixKind.Certificate && CanManage && HostnameKnown)
+        {
+            @* User decision (2026-09-28): Obtain and Install the mail certificate are both blue. *@
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnObtainCertificate" Disabled="@Busy"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["MailObtainCertificate"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnInstallCertificate" Disabled="@Busy"><OmniIcon Name="OmniIconName.Monitor" /> <span>@L["MailInstallCertificate"]</span></OmniButton>
+            </OmniStack>
+        }
+        @if (Kind == FixKind.Dns)
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailFixRecheck"]</OmniText>
+        }
+    </OmniStack>
+</OmniCard>

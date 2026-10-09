@@ -194,12 +194,17 @@ public sealed class PipelineTriggerReconcileService(
                     approvalId,
                     new ApprovalDecisionRequest { Decision = ApprovalStatus.TimedOut, Comments = "Approval timed out: nobody decided within the environment's approval timeout." },
                     ct).ConfigureAwait(false);
-                if (decided is not null)
-                    logger.LogWarning("Approval {ApprovalId} (run {RunId}) expired after its timeout; the run was failed", approvalId, decided.PipelineRunId);
+                logger.LogWarning("Approval {ApprovalId} (run {RunId}) expired after its timeout; the run was failed", approvalId, decided.PipelineRunId);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (Exception ex) when (ex is ConflictException or NotFoundException)
+            {
+                // Decided by a human between the read and now, or a run that did not move: the decide path
+                // said why (and audited it); a stranded run is the stranded-approval pass's to finish.
+                logger.LogWarning("Approval {ApprovalId} was not expired: {Reason}", approvalId, ex.Message);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -223,7 +228,8 @@ public sealed class PipelineTriggerReconcileService(
                 logger.LogWarning(
                     "Run {RunId} has cancellation pending but no in-flight task; reapplying cancellation to release orphan steps",
                     runId);
-                await runService.CancelRunAsync(runId, ct).ConfigureAwait(false);
+                await runService.CancelRunAsync(
+                    runId, PipelineRunCancellation.BySystem("Cancellation re-applied: no task was left in flight"), ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

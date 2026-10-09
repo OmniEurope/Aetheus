@@ -302,7 +302,7 @@
       "versionPackage": "jscpd",
       "containerWorkingDirectory": "/src",
       "fileExtensions": [".cs", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".py", ".java"],
-      "arguments": ["/src/node_modules/jscpd/run-jscpd.js", ".", "--ignore-pattern", "node_modules", "--reporters", "json", "--output", "{output}"],
+      "arguments": ["/src/node_modules/jscpd/run-jscpd.js", ".", "--reporters", "json", "--output", "{output}"],
       "reportPath": "jscpd-report.json",
       "reportFormat": "NativeJson",
       "findingExitCodes": [],

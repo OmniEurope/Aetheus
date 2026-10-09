@@ -506,7 +506,7 @@ public sealed class PipelineStateMachineIntegrationTests(PostgresFixture fixture
             runId = run.Id;
 
             var service = scope.ServiceProvider.GetRequiredService<IPipelineRunService>();
-            var result = await service.CancelRunAsync(run.Id, ct: TestContext.Current.CancellationToken);
+            var result = await service.CancelRunAsync(run.Id, PipelineRunCancellation.ByUser("alice"), ct: TestContext.Current.CancellationToken);
             Assert.True(result);
         }
 

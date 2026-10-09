@@ -27,7 +27,11 @@ public sealed class ErrorNotificationHandler(NotifyHelper toast, IStringLocalize
         var loginRequest = request.RequestUri?.AbsolutePath.EndsWith("/api/auth/login", StringComparison.OrdinalIgnoreCase) == true;
         var handledByCaller = response.StatusCode == HttpStatusCode.BadRequest
             && request.Options.TryGetValue(CallerHandlesBadRequest, out var handled) && handled;
-        if (!response.IsSuccessStatusCode && !SilentCodes.Contains(response.StatusCode) && !loginRequest && !handledByCaller)
+        // The backend refuses everything but the password change while one is forced (SITE-SEC-001); the
+        // layout already holds the user on that screen, so such a refusal is expected, not an error to show.
+        var passwordChangePending = response.Headers.Contains("X-Aetheus-Password-Change-Required");
+        if (!response.IsSuccessStatusCode && !SilentCodes.Contains(response.StatusCode) && !loginRequest && !handledByCaller
+            && !passwordChangePending)
         {
             // On Blazor WASM the response body is a one-shot BrowserHttpReadStream. Reading it here to
             // surface the API error consumes and disposes it, so HttpClient's own post-pipeline buffering

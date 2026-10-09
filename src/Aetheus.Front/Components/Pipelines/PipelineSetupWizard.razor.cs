@@ -30,6 +30,8 @@ public partial class PipelineSetupWizard
     private bool _quality = true;
     private bool _security = true;
     private bool _qa = true;
+    private bool _qaExtended;
+    private bool _securityHistory;
     private bool _candidate = true;
     private bool _nightly;
     private bool _production = true;
@@ -58,11 +60,14 @@ public partial class PipelineSetupWizard
         get
         {
             var roles = new List<PipelineRole>();
-            var requiresCi = _ci || _quality || _security || _qa || _candidate || _nightly;
+            var requiresCi = _ci || _quality || _security || _qa || _qaExtended || _securityHistory
+                || _candidate || _nightly;
             Add(requiresCi, "ci", "application-ci");
             Add(_quality, "quality", "application-quality");
             Add(_security, "security", "application-security");
             Add(_qa, "qa", "application-qa");
+            Add(_securityHistory, "security-history", "application-security-history");
+            Add(_qaExtended, "qa-extended", "application-qa-extended");
             Add(_candidate || _nightly, "candidate", "application-candidate");
             Add(_nightly, "nightly", "application-nightly");
             Add(_production, "deploy-prod", "application-deploy-prod");
@@ -157,6 +162,10 @@ public partial class PipelineSetupWizard
             nameof(PipelineSetupWizardStep.RollbackChanged), value => _rollback = value);
         AddToggle(builder, 130, nameof(PipelineSetupWizardStep.Packages), _packages,
             nameof(PipelineSetupWizardStep.PackagesChanged), value => _packages = value);
+        AddToggle(builder, 150, nameof(PipelineSetupWizardStep.QaExtended), _qaExtended,
+            nameof(PipelineSetupWizardStep.QaExtendedChanged), value => _qaExtended = value);
+        AddToggle(builder, 160, nameof(PipelineSetupWizardStep.SecurityHistory), _securityHistory,
+            nameof(PipelineSetupWizardStep.SecurityHistoryChanged), value => _securityHistory = value);
         builder.AddAttribute(140, nameof(PipelineSetupWizardStep.ProjectName), SelectedProject?.Name ?? string.Empty);
         builder.AddAttribute(141, nameof(PipelineSetupWizardStep.ArchitectureSummary), ArchitectureSummary);
         builder.AddAttribute(142, nameof(PipelineSetupWizardStep.SummaryItems), SelectedRoles
@@ -215,6 +224,8 @@ public partial class PipelineSetupWizard
         _quality = name == "application-quality";
         _security = name == "application-security";
         _qa = name == "application-qa";
+        _qaExtended = name == "application-qa-extended";
+        _securityHistory = name == "application-security-history";
         _candidate = name == "application-candidate";
         _nightly = name == "application-nightly";
         _production = name is "application-deploy-prod" or "application-promotion";
@@ -284,8 +295,7 @@ public partial class PipelineSetupWizard
         {
             foreach (var role in SelectedRoles)
             {
-                var template = _templates.FirstOrDefault(item =>
-                    string.Equals(item.Name, role.TemplateName, StringComparison.OrdinalIgnoreCase))
+                var template = TemplateFor(role.TemplateName)
                     ?? throw new InvalidOperationException($"Missing pipeline template '{role.TemplateName}'.");
                 var outcome = await Api.Pipelines.CreatePipelineAsync(new CreatePipelineRequest
                 {
@@ -329,10 +339,14 @@ public partial class PipelineSetupWizard
           APPLICATION_QUALITY_ENABLED: "{_quality.ToString().ToLowerInvariant()}"
           APPLICATION_SECURITY_ENABLED: "{_security.ToString().ToLowerInvariant()}"
           APPLICATION_QA_ENABLED: "{_qa.ToString().ToLowerInvariant()}"
+          APPLICATION_QA_EXTENDED_ENABLED: "{_qaExtended.ToString().ToLowerInvariant()}"
+          APPLICATION_SECURITY_HISTORY_ENABLED: "{_securityHistory.ToString().ToLowerInvariant()}"
           APPLICATION_CI_PIPELINE: "{_prefix}-ci"
           APPLICATION_QUALITY_PIPELINE: "{_prefix}-quality"
           APPLICATION_SECURITY_PIPELINE: "{_prefix}-security"
           APPLICATION_QA_PIPELINE: "{_prefix}-qa"
+          APPLICATION_QA_EXTENDED_PIPELINE: "{_prefix}-qa-extended"
+          APPLICATION_SECURITY_HISTORY_PIPELINE: "{_prefix}-security-history"
           APPLICATION_CANDIDATE_PIPELINE: "{_prefix}-candidate"
           APPLICATION_DEPLOY_PIPELINE: "{_prefix}-deploy-prod"
           APPLICATION_PACKAGE_TELEMETRY_PIPELINE: "{_prefix}-package-telemetry"
@@ -340,6 +354,16 @@ public partial class PipelineSetupWizard
           APPLICATION_PACKAGE_BROWSER_ANALYTICS_PIPELINE: "{_prefix}-package-web-analytics-browser"
         stages: []
         """;
+
+    /// <summary>
+    /// Recette R2-121: the template the backend will resolve for this project, so the pinned version
+    /// written into <c>extends:</c> is that template's. The project's organization's own template wins;
+    /// otherwise the shipped one the platform shares with every organization.
+    /// </summary>
+    private PipelineTemplateSummaryDto? TemplateFor(string name) => _templates
+        .Where(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(item => item.OrganizationId == SelectedProject?.OrganizationId)
+        .FirstOrDefault();
 
     private string PipelineName(PipelineRole role) => $"{_prefix}-{role.Suffix}";
     private void GoBack() => Nav.NavigateTo(BackHref);

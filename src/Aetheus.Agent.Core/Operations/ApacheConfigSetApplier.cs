@@ -58,7 +58,7 @@ internal sealed class ApacheConfigSetApplier(
             {
                 await onOutput("Apache config test failed; restoring the previous configuration set.", TaskLogLevel.Error)
                     .ConfigureAwait(false);
-                await RestoreAndReloadAsync(snapshots, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+                await RestoreAndReloadAsync(snapshots, timeoutSeconds, onOutput).ConfigureAwait(false);
                 return configTest;
             }
 
@@ -68,7 +68,7 @@ internal sealed class ApacheConfigSetApplier(
             {
                 await onOutput("Apache reload failed; restoring the previous configuration set.", TaskLogLevel.Error)
                     .ConfigureAwait(false);
-                await RestoreAndReloadAsync(snapshots, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+                await RestoreAndReloadAsync(snapshots, timeoutSeconds, onOutput).ConfigureAwait(false);
                 return reload;
             }
 
@@ -80,8 +80,17 @@ internal sealed class ApacheConfigSetApplier(
         {
             await onOutput($"Apache configuration apply failed: {ex.Message}. Restoring the previous set.", TaskLogLevel.Error)
                 .ConfigureAwait(false);
-            await RestoreAndReloadAsync(snapshots, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+            await RestoreAndReloadAsync(snapshots, timeoutSeconds, onOutput).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
+        }
+        catch
+        {
+            // Cancellation (or any other failure) after the first write would otherwise leave a
+            // partial, untested set on disk for the next Apache restart to load.
+            await onOutput("Apache configuration apply was interrupted; restoring the previous set.", TaskLogLevel.Error)
+                .ConfigureAwait(false);
+            await RestoreAndReloadAsync(snapshots, timeoutSeconds, onOutput).ConfigureAwait(false);
+            throw;
         }
     }
 
@@ -169,9 +178,12 @@ internal sealed class ApacheConfigSetApplier(
     private async Task<bool> RestoreAndReloadAsync(
         IReadOnlyDictionary<string, ApacheConfigSnapshot> snapshots,
         int timeoutSeconds,
-        Func<string, TaskLogLevel, Task> onOutput,
-        CancellationToken ct)
+        Func<string, TaskLogLevel, Task> onOutput)
     {
+        // The restore runs on its own bounded budget: the caller's token may already be cancelled,
+        // and a restore that stops half-way is as bad as the interrupted apply it compensates.
+        using var restoreCts = new CancellationTokenSource(TimeSpan.FromSeconds(2L * timeoutSeconds + 30));
+        var ct = restoreCts.Token;
         try
         {
             foreach (var (name, snapshot) in snapshots)
@@ -205,10 +217,6 @@ internal sealed class ApacheConfigSetApplier(
                 "Previous Apache configuration passed configtest but could not be reloaded; manual intervention is required.",
                 TaskLogLevel.Error).ConfigureAwait(false);
             return false;
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
         }
         catch (Exception ex)
         {

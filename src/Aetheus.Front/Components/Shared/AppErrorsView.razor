@@ -22,7 +22,7 @@
                  VirtualData="@(() => new OmniDataGridResult<AppErrorEventDto>(_errors, _total))"
                  FullHeight="true" RowClick="@OpenErrorAsync"
                  EmptyText="@(_loadFailed ? string.Empty : L["NoErrorsYet"].Value)"
-                 ExportFormats="@ExportFormats" ExportPosition="OmniDataGridPosition.Bottom" ExportTitle="@ExportTitle"
+                 ShowFooterBar="true" ExportTitle="@ExportTitle"
                  ExportFields="@ExportFields" ExportFileName="@ExportFileName" ExportLoad="@LoadExportPageAsync"
                  OnExportError="@OnExportFailed">
     <Columns>

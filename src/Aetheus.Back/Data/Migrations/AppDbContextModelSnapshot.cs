@@ -4445,6 +4445,9 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<string>("PreflightJson")
                         .HasColumnType("text");
 
+                    b.Property<int?>("ReleaseNumber")
+                        .HasColumnType("integer");
+
                     b.Property<string>("RepositoryUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)");
@@ -4896,6 +4899,12 @@ namespace Aetheus.Back.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("AnalysisDetailRetentionDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AppLogRetentionDays")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ArtifactLatestRetentionDays")
                         .HasColumnType("integer");
 
@@ -4904,6 +4913,9 @@ namespace Aetheus.Back.Data.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DataRetentionProfile")
+                        .HasColumnType("integer");
 
                     b.Property<string>("DefaultBranch")
                         .HasColumnType("text");
@@ -4922,6 +4934,9 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<int>("OrganizationId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ReleaseCounter")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ReleaseNumberingPattern")
                         .HasColumnType("text");
 
@@ -4931,9 +4946,24 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("StorageBudgetMegabytes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StorageQuotaAlertLevel")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Tags")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("TelemetryAggregateRetentionMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TelemetryDetailRetentionDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TelemetryExportIntervalMinutes")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

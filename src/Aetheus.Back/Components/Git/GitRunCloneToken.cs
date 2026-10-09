@@ -67,7 +67,7 @@ internal static class GitRunCloneToken
         // moves from the Auth:EncryptionKey fallback to a dedicated RunTokenKey, the two colours sign
         // with different secrets; each must still accept what the other minted. Both are server
         // secrets, so this widens nothing an outsider can forge.
-        foreach (var secret in ValidationSecrets(config))
+        foreach (var secret in GitCloneTokenSecrets.Validation(config))
         {
             if (CryptographicOperations.FixedTimeEquals(presented, Compute(secret, runId, projectId, expiryUnix)))
                 return runId;
@@ -75,28 +75,14 @@ internal static class GitRunCloneToken
         return null;
     }
 
-    private static IEnumerable<string> ValidationSecrets(IConfiguration config)
-    {
-        var dedicated = config["GitLight:RunTokenKey"];
-        var fallback = config["Auth:EncryptionKey"];
-        if (!string.IsNullOrEmpty(dedicated)) yield return dedicated;
-        if (!string.IsNullOrEmpty(fallback) && !string.Equals(fallback, dedicated, StringComparison.Ordinal))
-            yield return fallback;
-    }
-
     private static byte[] Compute(IConfiguration config, int runId, int projectId, long expiryUnix)
     {
         // Prefer a dedicated RunTokenKey; fall back to the AES secret only so dev/single-key
         // deployments keep working. Either way the HMAC key is HKDF-derived with a fixed info label,
         // so the signing key is domain-separated from any other use of the same raw secret (no
-        // cross-domain key reuse even on the Auth:EncryptionKey fallback).
-        // Fail closed: with no key configured an empty-keyed HMAC would be trivially forgeable, so a
-        // missing secret is a hard misconfiguration rather than a silent downgrade.
-        var secret = config["GitLight:RunTokenKey"] ?? config["Auth:EncryptionKey"];
-        if (string.IsNullOrEmpty(secret))
-            throw new InvalidOperationException(
-                "No signing key configured for git run clone tokens (set GitLight:RunTokenKey or Auth:EncryptionKey).");
-        return Compute(secret, runId, projectId, expiryUnix);
+        // cross-domain key reuse even on the Auth:EncryptionKey fallback). A missing secret fails
+        // closed (GitCloneTokenSecrets.Signing).
+        return Compute(GitCloneTokenSecrets.Signing(config, "git run clone tokens"), runId, projectId, expiryUnix);
     }
 
     private static byte[] Compute(string secret, int runId, int projectId, long expiryUnix)

@@ -45,6 +45,24 @@ public class GitRunCloneTokenTests
         Assert.Null(GitRunCloneToken.Validate(Config("another-secret-entirely-32-chars!"), newUser, newPass, projectId: 1, Now));
     }
 
+    // Recette R-464: Compose writes an unset ${GIT_RUN_TOKEN_KEY:-} as an empty string. An empty dedicated
+    // key is no key: tokens are signed with the fallback, not refused with "no signing key".
+    [Fact]
+    public void An_empty_dedicated_key_signs_with_the_fallback_and_the_fallback_colour_accepts_it()
+    {
+        var emptyDedicated = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Auth:EncryptionKey"] = "unit-test-encryption-key-32chars!",
+                ["GitLight:RunTokenKey"] = ""
+            })
+            .Build();
+
+        var (user, pass) = GitRunCloneToken.Mint(emptyDedicated, runId: 41, projectId: 1, Now, GitRunCloneToken.DefaultTtl);
+
+        Assert.Equal(41, GitRunCloneToken.Validate(Config(), user, pass, projectId: 1, Now));
+    }
+
     [Fact]
     public void Validate_rejects_every_token_when_no_secret_is_configured()
     {

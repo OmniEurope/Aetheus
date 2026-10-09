@@ -1,7 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md docker-toolbar" Gap="OmniSpacing.Small">
     <div class="blade-content-spacer"></div>
-    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OpenPruneDialogAsync" Class="@(_pruning ? "btn-busy" : null)" Busy="@(_pruning)"><OmniIcon Name="OmniIconName.Broom" /> <span>@L["DockerPrune"]</span></OmniButton>
+    @if (CanAdmin)
+    {
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OpenPruneDialogAsync" Class="@(_pruning ? "btn-busy" : null)" Busy="@(_pruning)"><OmniIcon Name="OmniIconName.Broom" /> <span>@L["DockerPrune"]</span></OmniButton>
+    }
     @* R-181: no Refresh button and no 10-second polling toggle. The inventory (Server.Docker) is rewritten from every agent heartbeat
        pushed on the servers hub (ServerDetailLoader), so the tabs follow the host by themselves. *@
 </OmniStack>
@@ -12,17 +15,17 @@
     <Tabs>
         <OmniTabsItem Key="containers" Title="@L["Containers"]">
             @* Four SignalR channels (inspect, exec, env, ls) come back through the parent, hence the @ref. *@
-            <DockerContainersTab @ref="_containersTab" @key="ServerId" Server="@Server" ServerId="@ServerId"
+            <DockerContainersTab @ref="_containersTab" @key="ServerId" Server="@Server" ServerId="@ServerId" CanAdmin="@CanAdmin"
                 InitialLoaded="@_dockerInitialLoaded" />
         </OmniTabsItem>
 
         <OmniTabsItem Key="images" Title="@L["DockerImages"]">
-            <DockerImagesTab @key="ServerId" ServerId="@ServerId" Images="@Server.Docker.Images" />
+            <DockerImagesTab @key="ServerId" ServerId="@ServerId" CanAdmin="@CanAdmin" Images="@Server.Docker.Images" />
         </OmniTabsItem>
 
         <OmniTabsItem Key="compose" Title="@L["DockerCompose"]">
             @* The compose file arrives over SignalR on the parent's connection, hence the @ref. *@
-            <DockerComposeTab @ref="_composeTab" @key="ServerId" ServerId="@ServerId" Stacks="@Server.Docker.ComposeStacks" />
+            <DockerComposeTab @ref="_composeTab" @key="ServerId" ServerId="@ServerId" CanAdmin="@CanAdmin" Stacks="@Server.Docker.ComposeStacks" />
         </OmniTabsItem>
 
         <OmniTabsItem Key="networks" Title="@L["DockerNetworks"]">

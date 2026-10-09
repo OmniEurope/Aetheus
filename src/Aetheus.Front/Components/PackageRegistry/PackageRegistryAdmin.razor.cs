@@ -18,6 +18,15 @@ public partial class PackageRegistryAdmin : Aetheus.Front.Components.Shared.Real
             return;
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    private Task<PaginatedResult<PackageRegistryPackageDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(PackageRegistryPackageDto.Name));
+        return Api.Packages.GetRegistryPackagesAsync(page, pageSize, _search,
+            sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
+    }
+
     private async Task LoadDataAsync(GridLoadArgs args)
     {
         if (!Auth.IsAdmin) return;

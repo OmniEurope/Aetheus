@@ -190,8 +190,86 @@ ensure_env_secret() {
     _val=$(eval "$2")
     eval "$_name=\$_val"
     sed -i "/^${_name}=/d" "$ENV_FILE"
-    printf '%s="%s"\n' "$_name" "$_val" >> "$ENV_FILE"
+    env_line "$_name" "$_val" >> "$ENV_FILE"
     printf '  %-16s: GENERATED (persisted to %s)\n' "$3" "$ENV_FILE"
+}
+
+# =========================================
+# The env file is data, never shell code (audit DEP-016)
+# =========================================
+# It used to be written with the values interpolated into "..." and then sourced: a password holding
+# $, `, " or \ did not keep its bytes, and could run a command when the file was read back. Now one
+# line per value, written by env_line and read back by env_get, which interprets nothing.
+#
+# env_line NAME VALUE prints NAME='VALUE': literal both for this reader and for docker compose
+# --env-file. A value holding a single quote, which single quotes cannot carry, is written "..." with
+# \, ", $ and ` escaped. Compose interpolates the remote compose file from the exported variables,
+# which win over the env file, so it sees the exact value either way.
+env_line() {
+    case "$2" in
+        *"'"*) printf '%s="%s"\n' "$1" "$(printf '%s' "$2" | sed 's/[\\"$`]/\\&/g')" ;;
+        *)     printf "%s='%s'\n" "$1" "$2" ;;
+    esac
+}
+
+# env_get NAME prints the value of the last NAME= line of $ENV_FILE. Exit 1 when there is none, 2
+# when the line cannot be read as data: an unescaped $ or ` in "..." was expanded by the former
+# sourcing, so the value in use may differ from the text, and guessing it would change a credential.
+# "..." follows the shell's rules otherwise (\\ \" \$ \` are escapes, any other \ is kept), so a line
+# an older deploy.sh wrote reads back as the value it had.
+env_get() {
+    awk -v key="$1" -v sq="'" '
+        { sub(/\r$/, "") }
+        /^[ \t]*(#|$)/ { next }
+        index($0, "=") == 0 { next }
+        substr($0, 1, index($0, "=") - 1) != key { next }
+        {
+            raw = substr($0, index($0, "=") + 1)
+            found = 1; ok = 1; out = ""
+            q = substr(raw, 1, 1)
+            if (q == sq) {
+                inner = substr(raw, 2, length(raw) - 2)
+                if (length(raw) < 2 || substr(raw, length(raw), 1) != sq || index(inner, sq) > 0) ok = 0
+                out = inner
+            } else if (q == "\"") {
+                inner = substr(raw, 2, length(raw) - 2)
+                if (length(raw) < 2 || substr(raw, length(raw), 1) != "\"") ok = 0
+                for (i = 1; ok && i <= length(inner); i++) {
+                    c = substr(inner, i, 1)
+                    if (c == "\\") {
+                        n = substr(inner, i + 1, 1)
+                        if (n == "") ok = 0
+                        else if (n == "\\" || n == "\"" || n == "$" || n == "`") { out = out n; i++ }
+                        else out = out c
+                    } else if (c == "$" || c == "`" || c == "\"") ok = 0
+                    else out = out c
+                }
+            } else {
+                if (raw !~ /^[A-Za-z0-9._+\/=:@%,-]*$/) ok = 0
+                out = raw
+            }
+            value = out; valid = ok
+        }
+        END {
+            if (!found) exit 1
+            if (!valid) exit 2
+            printf "%s", value
+        }
+    ' "$ENV_FILE"
+}
+
+# Reads the values this script uses from $ENV_FILE; any other line is left to docker compose.
+load_env_file() {
+    for _key in DB_PASSWORD ADMIN_PASSWORD JWT_KEY ENCRYPTION_KEY ENCRYPTION_SALT APP_VERSION; do
+        if _val="$(env_get "$_key")"; then
+            eval "$_key=\$_val"
+        elif [ "$?" -ne 1 ]; then
+            echo "ERROR: $_key in $ENV_FILE cannot be read as a value: an unescaped \$ or \` was expanded" >&2
+            echo "       when the file was sourced, or the quoting is incomplete. Rewrite the line as" >&2
+            echo "       $_key='<value>' with the exact value in use, then re-run. Nothing was changed." >&2
+            exit 1
+        fi
+    done
 }
 
 DB_USER="db${APPNAME}"
@@ -259,7 +337,7 @@ fi
 
 if [ -f "$ENV_FILE" ]; then
     echo ">>> Loading config from $ENV_FILE"
-    . "$ENV_FILE"
+    load_env_file
     if [ "$DIAG_ONLY" = "1" ]; then
         # Read-only: no mutation. Config presence is reported by
         # print_config_sanity below (runs for every mode).
@@ -271,7 +349,7 @@ if [ -f "$ENV_FILE" ]; then
         if [ "$ROTATE_JWT" = "1" ]; then
             JWT_KEY=$(head -c 48 /dev/urandom | base64 | tr -d '/+=')
             sed -i '/^JWT_KEY=/d' "$ENV_FILE"
-            printf 'JWT_KEY="%s"\n' "$JWT_KEY" >> "$ENV_FILE"
+            env_line JWT_KEY "$JWT_KEY" >> "$ENV_FILE"
             printf '  %-16s: ROTATED (-k)\n' "JWT key"
         fi
         # Self-heal: generate any secret that is missing OR empty and persist
@@ -302,29 +380,31 @@ else
     fi
     echo ">>> Creating $ENV_FILE"
     printf "DB password for %s: " "$DB_USER"
-    stty -echo; read DB_PASSWORD; stty echo; printf "\n"
+    # read -r keeps every byte the operator typed: a backslash is part of the password.
+    stty -echo; IFS= read -r DB_PASSWORD; stty echo; printf "\n"
     [ -z "$DB_PASSWORD" ] && echo "ERROR: empty password" && exit 1
 
     printf "Admin account password (admin): "
-    stty -echo; read ADMIN_PASSWORD; stty echo; printf "\n"
+    stty -echo; IFS= read -r ADMIN_PASSWORD; stty echo; printf "\n"
     [ -z "$ADMIN_PASSWORD" ] && echo "ERROR: empty admin password" && exit 1
 
     printf "Initial version (e.g. 1.0.0): "
-    read APP_VERSION
+    IFS= read -r APP_VERSION
     [ -z "$APP_VERSION" ] && echo "ERROR: empty version" && exit 1
 
     JWT_KEY=$(head -c 48 /dev/urandom | base64 | tr -d '/+=')
     ENCRYPTION_KEY=$(head -c 48 /dev/urandom | base64 | tr -d '/+=')
     ENCRYPTION_SALT=$(head -c 24 /dev/urandom | base64)
 
-    cat > "$ENV_FILE" <<EOF
-DB_PASSWORD="$DB_PASSWORD"
-ADMIN_PASSWORD="$ADMIN_PASSWORD"
-JWT_KEY="$JWT_KEY"
-ENCRYPTION_KEY="$ENCRYPTION_KEY"
-ENCRYPTION_SALT="$ENCRYPTION_SALT"
-APP_VERSION="$APP_VERSION"
-EOF
+    # Created 0600 before the first secret is written into it.
+    (umask 077 && {
+        env_line DB_PASSWORD "$DB_PASSWORD"
+        env_line ADMIN_PASSWORD "$ADMIN_PASSWORD"
+        env_line JWT_KEY "$JWT_KEY"
+        env_line ENCRYPTION_KEY "$ENCRYPTION_KEY"
+        env_line ENCRYPTION_SALT "$ENCRYPTION_SALT"
+        env_line APP_VERSION "$APP_VERSION"
+    } > "$ENV_FILE")
     chmod 600 "$ENV_FILE"
     echo "  Config saved to $ENV_FILE"
 fi
@@ -456,11 +536,25 @@ if [ "$DIAG_ONLY" = "1" ]; then
     # Health-aware exit code so -x is usable in cron/monitoring. Inspect every
     # container labeled for this compose project (same label filter the wipe
     # path uses) and fail when any is Restarting / unhealthy / Exited / dead.
-    _unhealthy=$(docker ps -a \
-        --filter "label=com.docker.compose.project=${PROJECT_NAME}" \
-        --format '{{.Names}}	{{.Status}}' 2>/dev/null \
-        | grep -Ei 'restarting|unhealthy|exited|dead' || true)
+    # Docker answering is part of the verdict (audit DEP-017): an unreachable daemon or a stack with no
+    # container used to read as an empty list of unhealthy containers, hence HEALTH OK.
     echo ""
+    if ! _states=$(docker ps -a \
+        --filter "label=com.docker.compose.project=${PROJECT_NAME}" \
+        --format '{{.Names}}	{{.Status}}' 2>&1); then
+        echo ">>> HEALTH: UNKNOWN - docker ps failed, the stack state could not be read:"
+        printf '%s\n' "$_states" | sed 's/^/    /'
+        exit 2
+    fi
+    _absent=""
+    for _service in database back front; do
+        printf '%s\n' "$_states" | grep -q "^${APPNAME}-${ENV}-${_service}	" || _absent="${_absent} ${APPNAME}-${ENV}-${_service}"
+    done
+    if [ -n "$_absent" ]; then
+        echo ">>> HEALTH: FAIL - container(s) of ${PROJECT_NAME} not found:${_absent}"
+        exit 1
+    fi
+    _unhealthy=$(printf '%s\n' "$_states" | grep -Ei 'restarting|unhealthy|exited|dead' || true)
     if [ -n "$_unhealthy" ]; then
         echo ">>> HEALTH: FAIL - unhealthy container(s):"
         echo "$_unhealthy" | sed 's/^/    /'

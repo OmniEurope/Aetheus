@@ -113,7 +113,6 @@ public class ApiClientMailGitTests
     [Theory]
     [InlineData("action")]
     [InlineData("logs")]
-    [InlineData("setup")]
     public async Task ExecuteMailCommandAsync_UsesPost(string command)
     {
         var url = $"api/servers/1/mail/{command}";
@@ -122,11 +121,27 @@ public class ApiClientMailGitTests
         var result = command switch
         {
             "action" => await _api.Mail.ExecuteMailActionAsync(1, new MailActionRequest(), Xunit.TestContext.Current.CancellationToken),
-            "logs" => await _api.Mail.GetMailLogsAsync(1, new MailLogRequest(), Xunit.TestContext.Current.CancellationToken),
-            _ => await _api.Mail.SetupMailAsync(1, new MailSetupRequest(), Xunit.TestContext.Current.CancellationToken)
+            _ => await _api.Mail.GetMailLogsAsync(1, new MailLogRequest(), Xunit.TestContext.Current.CancellationToken)
         };
 
         Assert.True(result.Success);
+        AssertRequest(HttpMethod.Post, url);
+    }
+
+    [Theory]
+    [InlineData("setup")]
+    [InlineData("purge")]
+    public async Task SetupAndPurge_PostAndReturnTheQueuedTaskId(string command)
+    {
+        // R2-085 / R2-083: the page follows the task the setup or the reinstall queued.
+        var url = $"api/servers/1/mail/{command}";
+        _handler.SetJsonResponse(HttpMethod.Post, url, new MailTaskQueuedDto { TaskId = 42 });
+
+        var result = command == "setup"
+            ? await _api.Mail.SetupMailAsync(1, new MailSetupRequest(), Xunit.TestContext.Current.CancellationToken)
+            : await _api.Mail.PurgeMailStackAsync(1, new MailPurgeRequest { Confirmation = "example.com" }, Xunit.TestContext.Current.CancellationToken);
+
+        Assert.Equal(42, result?.TaskId);
         AssertRequest(HttpMethod.Post, url);
     }
 

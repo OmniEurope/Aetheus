@@ -126,7 +126,9 @@ public sealed class ApiSmokeFixture(SharedPostgresContainer shared) : IAsyncLife
             {
                 Username = username,
                 Password = password,
-                Roles = ["Reader"]
+                Roles = ["Reader"],
+                // D1: a flagged account only reaches the password change; this one tests RBAC.
+                MustChangePassword = false
             }, cancellationToken: TestContext.Current.CancellationToken);
             createResp.EnsureSuccessStatusCode();
             var created = await createResp.Content.ReadFromJsonAsync<UserDto>(

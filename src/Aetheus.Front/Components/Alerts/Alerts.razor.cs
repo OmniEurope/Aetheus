@@ -155,4 +155,7 @@ public partial class Alerts : IAsyncDisposable
             _hubConnection = null;
         }
     }
+
+    /// <summary>Recette R2-124: the export writes the threshold as the cell does.</summary>
+    private static readonly Func<AlertRuleDto, object?> ThresholdExport = alert => $"{alert.Operator} {alert.Threshold}%";
 }

@@ -20,7 +20,7 @@ public interface IMailService
     Task DeleteAccountAsync(int serverId, int accountId, CancellationToken ct = default);
     Task<MailTaskQueuedDto> ExecuteActionAsync(int serverId, MailActionRequest request, CancellationToken ct = default);
     Task<MailTaskQueuedDto> GetLogsAsync(int serverId, MailLogRequest request, CancellationToken ct = default);
-    Task SetupAsync(int serverId, MailSetupRequest request, CancellationToken ct = default);
+    Task<MailTaskQueuedDto> SetupAsync(int serverId, MailSetupRequest request, CancellationToken ct = default);
     Task<MailDnsRecordsDto> GetDnsRecordsAsync(int serverId, int domainId, CancellationToken ct = default);
 
     // Aliases

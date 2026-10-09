@@ -41,6 +41,13 @@ stages:
           dotnet test --project $(WORKSPACE)/tests/Aetheus.Agent.Core.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
           sh $(WORKSPACE)/deploy/scripts/normalize-coverage-report.sh $(WORKSPACE)/coverage
         timeout_seconds: 300
+
+  # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
+  - name: CoverageReport
+    group: Build
+    os: linux
+    depends_on: [Coverage]
+    steps:
       - name: Publish Coverage
         type: coverage
         continue_on_error: true
@@ -49,7 +56,7 @@ stages:
     group: Quality
     os: linux
     depends_on:
-      - Coverage
+      - CoverageReport
     steps:
       - name: Publish the advisory coverage grade
         type: analysis-gate

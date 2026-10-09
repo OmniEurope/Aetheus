@@ -38,7 +38,6 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
     private DateTime? _dateFrom;
     private DateTime? _dateTo;
     private bool _isDownloading;
-    private bool _isExporting;
     private bool _initialized;
     private string? _appliedSearch;
 
@@ -99,6 +98,17 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
     /// dates, search), the column sort and the header filters, so the count and the rows describe the
     /// whole filtered log.
     /// </summary>
+    /// <summary>Recette R2-124: one page of the export, with the file, level, search and dates chosen above
+    /// the grid and its sort and column filters.</summary>
+    private Task<PaginatedResult<SystemLogEntryDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(defaultPageSize: 50);
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(SystemLogEntryDto.Timestamp), fallbackDescending: true);
+        return Api.Security.GetSystemLogEntriesAsync(
+            _selectedFile, _selectedLevel, _searchText, _dateFrom, _dateTo, page, pageSize,
+            sortBy, sortDescending, args.ToApiFilters());
+    }
+
     private async Task LoadDataAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(defaultPageSize: 50);
@@ -192,30 +202,6 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
         finally
         {
             _isDownloading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task OnExportCsvAsync()
-    {
-        _isExporting = true;
-        StateHasChanged();
-        try
-        {
-            var bytes = await Api.Security.ExportSystemLogsCsvAsync(_selectedFile, _selectedLevel, _searchText, _dateFrom, _dateTo);
-            if (bytes is not null)
-            {
-                var fileName = $"system-logs-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
-                await JS.InvokeVoidAsync("downloadFileFromBytes", bytes, fileName, "text/csv");
-            }
-            else
-            {
-                Toast.Error("Error", "ExportFailed");
-            }
-        }
-        finally
-        {
-            _isExporting = false;
             StateHasChanged();
         }
     }

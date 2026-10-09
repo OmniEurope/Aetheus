@@ -134,6 +134,16 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<int> RevokePersonalAccessTokensAsync(int userId, DateTime revokedAt, CancellationToken ct = default)
+    {
+        var tokens = await db.PersonalAccessTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ToListAsync(ct).ConfigureAwait(false);
+        foreach (var token in tokens)
+            token.RevokedAt = revokedAt;
+        return tokens.Count;
+    }
+
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

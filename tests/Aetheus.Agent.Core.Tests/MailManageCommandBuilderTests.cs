@@ -156,6 +156,27 @@ public class MailManageCommandBuilderTests
     }
 
     [Fact]
+    public void Purge_RunsTheManageHelperPurgeOnTheDashTargetOnly()
+    {
+        // "Réinstaller la messagerie" (R2-083 / R2-088): one fixed argv, nothing from the request reaches it.
+        Assert.Equal(["-n", Manage, "purge"], Argv(OperationKind.MailPurge, "-"));
+        Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailPurge, "example.com", NoEnv));
+        Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailPurge, "-;id", NoEnv));
+    }
+
+    [Fact]
+    public void Purge_IsAMailManagementKindTheMailExecutorClaims()
+    {
+        var executor = new MailOperationExecutor(
+            Microsoft.Extensions.Options.Options.Create(new Aetheus.Agent.Core.Configuration.AetheusAgentOptions()),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MailOperationExecutor>.Instance);
+        Assert.Equal(AgentCapabilities.MailManagement, AgentCapabilities.RequiredFor(OperationKind.MailPurge));
+        Assert.True(executor.CanHandle(OperationKind.MailPurge));
+        Assert.True(OperationTargetValidator.IsValid(OperationKind.MailPurge, "-"));
+        Assert.False(OperationTargetValidator.IsValid(OperationKind.MailPurge, "all"));
+    }
+
+    [Fact]
     public void Setup_PassesTheSpamFilterChoice()
     {
         var env = new Dictionary<string, string>

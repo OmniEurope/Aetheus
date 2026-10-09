@@ -65,7 +65,7 @@ public class PipelineRunTests : BunitContext
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 78));
 
-        cut.WaitForState(() => cut.Markup.Contains("ApprovalRequiredTitle"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("PipelineApprovalTitle"), TimeSpan.FromSeconds(2));
         var urls = _handler.Requests.Select(request => request.Url).ToList();
         var approvals = urls.FindIndex(url => url.Contains("runs/78/approvals", StringComparison.Ordinal));
         var releases = urls.FindIndex(url => url.Contains("releases/by-run/78", StringComparison.Ordinal));

@@ -89,9 +89,12 @@ public partial class VariableLibrariesList : IAsyncDisposable
 
     private async Task LoadServerLibrariesAsync()
     {
-        _serverAll = await Api.Servers.GetServerVariableLibrariesAsync(ServerId!.Value);
+        // FRONT-020: a list that arrives after a sign-out is neither cached nor shown.
+        var ticket = Cache.Begin();
+        var libraries = await Api.Servers.GetServerVariableLibrariesAsync(ServerId!.Value);
+        if (!Cache.TryStore(ticket, CacheKey, libraries)) return;
+        _serverAll = libraries;
         _totalCount = _serverAll.Count;
-        Cache.Set(CacheKey, _serverAll);
         _filterValues = new VariableLibraryFilterValuesDto
         {
             ProjectNames = [.. _serverAll.Select(item => item.ProjectName).OfType<string>()
@@ -106,6 +109,25 @@ public partial class VariableLibrariesList : IAsyncDisposable
     }
 
     private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.VariableLibrary);
+
+    /// <summary>Recette R2-124: one page of the export (the libraries, not their entries), in the scope of
+    /// the list, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<VariableLibraryDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        if (IsServerScope)
+        {
+            return Task.FromResult(new PaginatedResult<VariableLibraryDto>
+            {
+                Items = args.ToClientPage(_serverAll),
+                TotalCount = args.ClientFilteredCount(_serverAll)
+            });
+        }
+
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(VariableLibraryDto.Name));
+        return Api.Variables.GetVariableLibrariesAsync(page: page, pageSize: pageSize, projectId: ProjectId,
+            sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
+    }
 
     private async Task OnLoadData(GridLoadArgs args)
     {

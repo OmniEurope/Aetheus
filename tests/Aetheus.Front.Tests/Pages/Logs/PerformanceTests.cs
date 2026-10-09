@@ -95,7 +95,11 @@ public sealed class PerformanceTests : BunitContext
         var cut = Render<Performance>();
 
         cut.WaitForAssertion(() => Assert.Contains("api/analysis/findings/{id}/occurrences", cut.Markup, StringComparison.Ordinal));
-        Assert.Contains("PerformanceWindow", cut.Find("[data-testid='performance-window']").TextContent, StringComparison.Ordinal);
+        // Decision of 2026-10-07: the window is the detail of the first key-figure tile, beside three more.
+        var window = cut.Find("[data-testid='performance-window']");
+        Assert.Contains("PerformanceTileRequests", window.TextContent, StringComparison.Ordinal);
+        Assert.Contains("PerformanceWindow", window.TextContent, StringComparison.Ordinal);
+        Assert.Contains("PerformanceTileSlowestCall", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("4.20 s", cut.Markup.Replace(',', '.'), StringComparison.Ordinal);
         Assert.Contains("api/pipelines/{id}/runs", cut.Markup, StringComparison.Ordinal);
     }
@@ -144,7 +148,7 @@ public sealed class PerformanceTests : BunitContext
     }
 
     [Fact]
-    public void R454_TheThreeTables_AreTabs_AndTheWholePageExportsToMarkdown()
+    public void R2124_TheThreeTables_AreTabs_EachWithTheMarkdownExport_AndNoWholePageButton()
     {
         _handler.SetJsonResponse("api/admin/performance", new ApiPerformanceReportDto
         {
@@ -158,33 +162,52 @@ public sealed class PerformanceTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("api/projects", cut.Markup, StringComparison.Ordinal));
         var tabs = cut.FindAll("[role='tab']");
         Assert.Equal(["slowest", "routes", "browser"], tabs.Select(tab => tab.GetAttribute("data-key")).ToArray());
-        Assert.Contains(cut.FindAll("button"), button => button.TextContent.Contains("PerformanceExportMarkdown", StringComparison.Ordinal));
+        // Markdown alone under each of the three tables (second decision of 2026-10-05, no CSV); the former
+        // whole-page Markdown button is gone.
+        Assert.Equal(3, cut.FindAll(".omni-data-grid__export-button").Count);
+        Assert.DoesNotContain("PerformanceExportMarkdown", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void R454_TheExport_HoldsEveryRowOfTheThreeTables_BrowserCallsIncludedBeyondTheTwentyShown()
+    public async Task R2124_EachTableExport_SaysInItsHeaderSinceWhenTheFiguresCount()
     {
-        var report = new ApiPerformanceReportDto
+        var module = JSInterop.SetupModule("./_content/OmniEurope.Blazor/omni-document-editor.js");
+        module.SetupVoid("download", _ => true).SetVoidResult();
+        _handler.SetJsonResponse("api/admin/performance", new ApiPerformanceReportDto
         {
             Since = new DateTime(2026, 9, 10, 8, 0, 0, DateTimeKind.Utc),
             SampleCount = 3,
-            Slowest = [new ApiCallTimingDto { Method = "GET", Route = "api/projects", StatusCode = 200, DurationMs = 4200.5, At = new DateTime(2026, 9, 10, 9, 0, 0, DateTimeKind.Utc) }],
-            Endpoints = [new ApiEndpointTimingDto { Method = "GET", Route = "api/projects", Count = 3, P50Ms = 10, P95Ms = 4200.5, P99Ms = 4200.5, MaxMs = 4200.5 }]
-        };
-        var browser = Enumerable.Range(1, 25)
-            .Select(i => new ClientApiCall(new DateTime(2026, 9, 10, 9, 0, i, DateTimeKind.Utc), "GET", $"api/call/{i}", 200, i, 100))
-            .ToList();
+            Truncated = true,
+            Slowest = [new ApiCallTimingDto { Method = "GET", Route = "api/projects", StatusCode = 200, DurationMs = 10 }],
+            Endpoints = [new ApiEndpointTimingDto { Method = "GET", Route = "api/projects", Count = 3, P50Ms = 10, P95Ms = 10, P99Ms = 10, MaxMs = 10 }]
+        });
+        Services.GetRequiredService<ClientApiTimings>().Record(
+            new ClientApiCall(new DateTime(2026, 9, 10, 9, 0, 0, DateTimeKind.Utc), "GET", "api/browser-call", 200, 12, 100));
+        var cut = Render<Performance>();
+        cut.WaitForAssertion(() => Assert.Contains("api/projects", cut.Markup, StringComparison.Ordinal));
 
-        var rows = PerformanceMarkdownExport.Rows(report, browser, key => key);
-        var export = PerformanceMarkdownExport.Create(report, browser, key => key);
+        foreach (var index in new[] { 0, 1, 2 })
+            await cut.FindAll(".omni-data-grid__export-button")[index].ClickAsync(new());
 
-        Assert.Equal(27, rows.Count);
-        Assert.Equal(["PerformanceSlowestCalls", "PerformanceByRoute"], rows.Take(2).Select(row => row.Table).ToArray());
-        Assert.Equal("api/call/25", rows[2].Route);                       // the slowest browser call first
-        Assert.Equal(25, rows.Count(row => row.Table == "PerformanceThisBrowser"));
-        Assert.Equal("4200.5", export.Columns.Single(column => column.Title == "Duration (ms)").Value(rows[0]));
-        Assert.Equal("2026-09-10T09:00:00.000Z", export.Columns.Single(column => column.Title == "Date (UTC)").Value(rows[0]));
-        Assert.Null(export.Columns.Single(column => column.Title == "PerformanceCalls").Value(rows[0]));
+        cut.WaitForAssertion(() => Assert.Equal(3, module.Invocations["download"].Count));
+        foreach (var download in module.Invocations["download"])
+        {
+            var markdown = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
+            Assert.Contains("PerformanceExportSince", markdown, StringComparison.Ordinal);
+            Assert.Contains("2026-09-10T08:00:00.000Z", markdown, StringComparison.Ordinal);
+            Assert.Contains("PerformanceExportSamples", markdown, StringComparison.Ordinal);
+            Assert.Contains("PerformanceExportTruncated", markdown, StringComparison.Ordinal);
+            Assert.Contains("GridExportAddress", markdown, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void R2124_TheWindowFields_SayWhenNoSampleWasMeasured()
+    {
+        var fields = Performance.WindowFields(new ApiPerformanceReportDto(), key => key);
+
+        Assert.Equal(["PerformanceExportSince", "PerformanceExportSamples", "PerformanceExportTruncated"], fields.Select(field => field.Label).ToArray());
+        Assert.Equal(["ExportNone", "0", "No"], fields.Select(field => field.Value).ToArray());
     }
 
     [Fact]

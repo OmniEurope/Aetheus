@@ -269,7 +269,9 @@ public partial class ServerPortsSection
         var claimed = _reservations
             .Where(reservation => reservation.Source != PortReservationSource.Observed)
             .ToList();
-        var claimedPorts = claimed.Select(reservation => reservation.Port).ToHashSet();
+        // FRONT-018: a port is the pair (number, protocol). A TCP claim on 53 says nothing about a UDP
+        // listener on 53, which stays visible as an unclaimed observation.
+        var claimedPorts = claimed.Select(PortKey).ToHashSet();
         _newestRowStamp = _reservations.Max(reservation => reservation.ObservedAt);
 
         var rows = new List<PortRow>(_reservations.Count);
@@ -278,13 +280,16 @@ public partial class ServerPortsSection
 
         foreach (var observed in _reservations.Where(reservation =>
                      reservation.Source == PortReservationSource.Observed
-                     && !claimedPorts.Contains(reservation.Port)))
+                     && !claimedPorts.Contains(PortKey(reservation))))
         {
             rows.Add(ToRow(observed, ListeningState.Listening));
         }
 
         _rows = [.. rows.OrderBy(row => row.Port)];
     }
+
+    private static (int Port, string Protocol) PortKey(PortReservationDto reservation) =>
+        (reservation.Port, reservation.Protocol.ToLowerInvariant());
 
     /// <summary>
     /// A claim is listening when its observation stamp is at least as recent as the last scan we know

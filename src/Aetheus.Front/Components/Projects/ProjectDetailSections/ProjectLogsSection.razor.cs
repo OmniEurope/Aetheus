@@ -19,14 +19,17 @@ public partial class ProjectLogsSection : ProjectPagedSectionBase<TaskLogDto>
         PaginatedResult<TaskLogDto> result;
         try
         {
-            result = await Api.Projects.GetProjectLogsAsync(
-            projectId, _page, _pageSize, _sortBy, _sortDescending, filters: _columnFilters);
+            result = await ReadPageAsync(projectId, _page, _pageSize, _sortBy, _sortDescending, _columnFilters);
         }
         catch (HttpRequestException) { result = new PaginatedResult<TaskLogDto>(); }
         if (ProjectId != projectId) return;
         _result = result;
         _loading = false;
     }
+
+    protected override Task<PaginatedResult<TaskLogDto>> ReadPageAsync(
+        int projectId, int page, int pageSize, string sortBy, bool sortDescending, IReadOnlyList<GridFilter> filters) =>
+        Api.Projects.GetProjectLogsAsync(projectId, page, pageSize, sortBy, sortDescending, filters: filters);
 
     private static OmniTone GetLevelBadge(TaskLogLevel level) => DisplayFormatting.TaskLogBadge(level);
 }

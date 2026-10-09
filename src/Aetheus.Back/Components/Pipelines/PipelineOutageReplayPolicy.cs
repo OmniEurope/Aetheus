@@ -30,6 +30,23 @@ public static class PipelineOutageReplayPolicy
         OperationKind.BlueGreenRollback
     ];
 
+    /// <summary>
+    /// BACK-025 (user decision): operations whose handler is proven to have no effect when run twice, so
+    /// a copy already started may be run again. None today. A started shell command may already have
+    /// written to a third party; replaying it blind risks a second real effect, so a started task fails
+    /// instead, and an operation joins this set only with that proof.
+    /// </summary>
+    private static readonly HashSet<OperationKind> IdempotentOnceStarted = [];
+
+    /// <summary>The reason a started task that was not replayed fails with.</summary>
+    public const string NotReplayedReason =
+        "Agent session replaced while the task was running; not replayed automatically.";
+
     /// <summary><c>true</c> when the operation may be requeued for a replacement agent session.</summary>
     public static bool MayReplayAfterAnOutage(OperationKind operation) => !NeverReplayed.Contains(operation);
+
+    /// <summary><c>true</c> when a task may be requeued after an outage: never started, or started but
+    /// explicitly idempotent, and in both cases not a deployment operation.</summary>
+    public static bool MayReplayAfterAnOutage(OperationKind operation, bool started) =>
+        MayReplayAfterAnOutage(operation) && (!started || IdempotentOnceStarted.Contains(operation));
 }

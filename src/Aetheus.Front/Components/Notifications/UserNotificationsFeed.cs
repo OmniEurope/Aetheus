@@ -30,6 +30,10 @@ public sealed class UserNotificationsFeed : IDisposable
     private readonly TrailingReloadCoalescer _pushRefresh = new(PushCoalesceMilliseconds);
     private ITimer? _poll;
     private Task _startup = Task.CompletedTask;
+    // FRONT-005: bumped whenever the signed-in identity changes (sign-out, another account). An answer
+    // requested under an older generation belongs to the previous account and is dropped.
+    private int _authGeneration;
+    private string? _authUser;
 
     public UserNotificationsFeed(ApiClient api, AuthStateProvider auth, TimeProvider time, ILogger<UserNotificationsFeed> logger)
     {
@@ -37,6 +41,7 @@ public sealed class UserNotificationsFeed : IDisposable
         _auth = auth;
         _time = time;
         _logger = logger;
+        _authUser = CurrentUser();
         _auth.OnAuthStateChanged += OnAuthStateChanged;
     }
 
@@ -75,22 +80,39 @@ public sealed class UserNotificationsFeed : IDisposable
     /// </summary>
     public void RefreshFromPush() => _ = _pushRefresh.RequestBestEffortAsync(RefreshAsync, CancellationToken.None);
 
+    /// <summary>
+    /// Reloads the count and the newest deliveries. Recette R2-106: the two are read and kept
+    /// independently. The count used to be set only once both answers were in, so a list that could not
+    /// be read (an error answer, a body that does not parse, a timeout) left the bell without its number
+    /// while the count itself had been read fine; and a failure other than an HTTP error escaped the
+    /// first load, which every later view of the bell then re-threw.
+    /// </summary>
     public async Task RefreshAsync()
     {
         if (!_auth.IsAuthenticated) return;
+        var generation = Volatile.Read(ref _authGeneration);
+        var countTask = ReadAsync(() => _api.Notifications.GetUnreadCountAsync(), "unread count");
+        var latestTask = ReadAsync(() => _api.Notifications.GetMineAsync(1, LatestCount), "latest deliveries");
+        await Task.WhenAll(countTask, latestTask).ConfigureAwait(false);
+        var (countRead, count) = await countTask.ConfigureAwait(false);
+        var (latestRead, latest) = await latestTask.ConfigureAwait(false);
+        if (generation != Volatile.Read(ref _authGeneration) || !_auth.IsAuthenticated) return;
+        // Best effort like the other top-bar surfaces: what could not be read keeps its last known value.
+        if (countRead) UnreadCount = count;
+        if (latestRead && latest is not null) Latest = latest.Items;
+        if (countRead || latestRead) OnChanged?.Invoke();
+    }
+
+    private async Task<(bool Read, T? Value)> ReadAsync<T>(Func<Task<T>> read, string what)
+    {
         try
         {
-            var countTask = _api.Notifications.GetUnreadCountAsync();
-            var latestTask = _api.Notifications.GetMineAsync(1, LatestCount);
-            await Task.WhenAll(countTask, latestTask).ConfigureAwait(false);
-            UnreadCount = await countTask.ConfigureAwait(false);
-            Latest = (await latestTask.ConfigureAwait(false)).Items;
-            OnChanged?.Invoke();
+            return (true, await read().ConfigureAwait(false));
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException or OperationCanceledException)
         {
-            // Best effort like the other top-bar surfaces: the last known values stay.
-            _logger.LogWarning(ex, "[UserNotifications] refresh failed");
+            _logger.LogWarning(ex, "[UserNotifications] refresh of the {What} failed", what);
+            return (false, default);
         }
     }
 
@@ -109,8 +131,16 @@ public sealed class UserNotificationsFeed : IDisposable
         return changed is not null;
     }
 
+    private string? CurrentUser() => _auth.IsAuthenticated ? _auth.Username ?? string.Empty : null;
+
     private void OnAuthStateChanged()
     {
+        var user = CurrentUser();
+        if (!string.Equals(user, _authUser, StringComparison.Ordinal))
+        {
+            _authUser = user;
+            Interlocked.Increment(ref _authGeneration);
+        }
         if (_auth.IsAuthenticated) return;
         lock (_gate)
         {

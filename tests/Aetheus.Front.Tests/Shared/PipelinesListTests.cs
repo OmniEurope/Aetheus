@@ -640,6 +640,52 @@ public class PipelinesListTests : BunitContext
     private IReadOnlyList<AngleSharp.Dom.IElement> ViewItems() =>
         _host!.FindAll(".pipeline-view-switch .omni-select-bar__item");
 
+    [Fact]
+    public async Task R2100_LeavingThePageWhileItLoads_DoesNotUseTheDisposedLiveLifetime()
+    {
+        // Recette R2-100: "ObjectDisposedException - CancellationTokenSource_Disposed" reached the error
+        // boundary. Leaving a pipelines page before its overview had loaded disposed the live lifetime,
+        // then the resumed initialisation read its Token to start the live recovery loop.
+        var overview = new TaskCompletionSource<PipelineDependencyGroupsDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/pipelines/dependencies", _ => overview.Task);
+        _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
+        var cut = RenderList();
+
+        await cut.InvokeAsync(() => cut.Instance.DisposeAsync().AsTask());
+        overview.SetResult(Groups(leaves: [new PipelineDependencyDto { Id = 7, Name = "Build" }]));
+
+        var unhandled = Renderer.UnhandledException;
+        var first = await Task.WhenAny(unhandled, Task.Delay(TimeSpan.FromSeconds(2), Xunit.TestContext.Current.CancellationToken));
+        Assert.True(first != unhandled, $"Unhandled after the page was left: {(first == unhandled ? await unhandled : null)}");
+    }
+
+    /// <summary>
+    /// Recette R2-087: back on the list, the catalogue and its search are there at once, without the
+    /// page-wide loader, while the overview is read again behind them.
+    /// </summary>
+    [Fact]
+    public async Task R2087_ComingBack_ShowsTheListAndItsSearchAtOnce()
+    {
+        _handler.SetJsonResponse("api/pipelines/dependencies", Groups(leaves:
+            [new PipelineDependencyDto { Id = 7, Name = "Build" }, new PipelineDependencyDto { Id = 8, Name = "Deploy" }]));
+        _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
+        var first = RenderList();
+        first.WaitForState(() => first.FindComponents<PipelineDependencyGrid>().Count == 1, TimeSpan.FromSeconds(2));
+        typeof(PipelinesList).GetField("_search", Priv)!.SetValue(first.Instance, "build");
+        // Leaving the page disposes it, which keeps what it showed.
+        await DisposeComponentsAsync();
+
+        var overview = new TaskCompletionSource<PipelineDependencyGroupsDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/pipelines/dependencies", _ => overview.Task);
+        var back = RenderList();
+
+        Assert.Empty(back.FindAll(".aetheus-loader"));
+        var grid = Assert.Single(back.FindComponents<PipelineDependencyGrid>()).Instance;
+        Assert.Equal(["Build"], grid.Items.Select(item => item.Name));
+        Assert.Equal("build", typeof(PipelinesList).GetField("_search", Priv)!.GetValue(back.Instance));
+        overview.SetResult(Groups(leaves: [new PipelineDependencyDto { Id = 7, Name = "Build" }]));
+    }
+
     /// <summary>The list is rendered next to the header outlet its hosts give it, as a real page does.</summary>
     private IRenderedComponent<PipelinesList> RenderList(int? projectId = null, int? serverId = null, int? templateId = null)
     {

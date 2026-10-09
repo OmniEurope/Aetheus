@@ -114,4 +114,60 @@ public sealed class ScannerContainerProcessBuilderTests
             return arguments[index + 1];
         }
     }
+
+    [Theory]
+    [InlineData(".jscpd.json", "{\"ignorePattern\":[\"x\"]}")]
+    [InlineData("package.json", "{\"name\":\"app\",\"jscpd\":{\"minTokens\":70}}")]
+    public void Build_JscpdWithRepositoryConfiguration_PassesNoIgnoreThatWouldReplaceIt(
+        string fileName, string content)
+    {
+        // Recette R2-120: jscpd 5 replaces the configured lists with any list given on the command
+        // line, which once dropped the repository's ignorePattern and kept reporting duplicate #1156.
+        using var source = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(source.Path, fileName), content);
+
+        var arguments = BuildJscpd(source.Path);
+
+        Assert.DoesNotContain("--ignore", arguments);
+        Assert.DoesNotContain("--ignore-pattern", arguments);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("{\"name\":\"app\",\"devDependencies\":{\"jscpd\":\"5.0.12\"}}")]
+    [InlineData("not json")]
+    public void Build_JscpdWithoutRepositoryConfiguration_IgnoresInstalledPackages(string? packageJson)
+    {
+        using var source = new TemporaryDirectory();
+        if (packageJson is not null)
+            File.WriteAllText(Path.Combine(source.Path, "package.json"), packageJson);
+
+        var arguments = BuildJscpd(source.Path);
+
+        var index = arguments.IndexOf("--ignore");
+        Assert.InRange(index, arguments.IndexOf("/src/node_modules/jscpd/run-jscpd.js"), arguments.Count - 2);
+        Assert.Equal("**/node_modules/**", arguments[index + 1]);
+        Assert.DoesNotContain("--ignore-pattern", arguments);
+    }
+
+    private static List<string> BuildJscpd(string sourceDirectory)
+    {
+        var scanner = Assert.Single(ScannerManifestCatalog.Default.Scanners, entry => entry.Key == "jscpd");
+        return ScannerContainerProcessBuilder.Build(
+            scanner,
+            sourceDirectory,
+            sourceDirectory,
+            null,
+            null,
+            new Dictionary<string, string>(),
+            null).ArgumentList.ToList();
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public string Path { get; } = Directory.CreateDirectory(
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aetheus-jscpd-" + Guid.NewGuid().ToString("N"))).FullName;
+
+        public void Dispose() => Directory.Delete(Path, recursive: true);
+    }
 }

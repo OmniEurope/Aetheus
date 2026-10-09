@@ -28,6 +28,7 @@ internal sealed class AgentDetectionMonitor(
     private long? _listeningStartedTimestamp;
     private RegistrationTokenDto? _generatedToken;
     private int _completionState;
+    private int _tokenCheckInFlight;
 
     public bool Listening { get; private set; }
     public bool AgentFound { get; private set; }
@@ -61,13 +62,12 @@ internal sealed class AgentDetectionMonitor(
 
         _hubConnection = hubFactory.Create("servers");
 
-        _hubConnection.On<ServerDto>("ServerRegistered", server => MarkFoundAsync(server.Name, server.Id));
-
-        _hubConnection.On<int, ServerHeartbeatDto>("ServerHeartbeat", async (serverId, _) =>
-        {
-            if (AgentFound) return;
-            await MarkFoundAsync($"Server #{serverId}", serverId).ConfigureAwait(false);
-        });
+        // FRONT-015: a hub event only says that SOME server the user can see registered or is alive. On
+        // a fleet that is already running, an old server's heartbeat must never conclude that the new
+        // agent is installed, so every event is just a cue to re-read this wizard's own token: only its
+        // IsUsed/UsedByServerId (the same exact signal as the polling path) reports the agent found.
+        _hubConnection.On<ServerDto>("ServerRegistered", _ => CheckTokenOnServerEventAsync());
+        _hubConnection.On<int, ServerHeartbeatDto>("ServerHeartbeat", (_, _) => CheckTokenOnServerEventAsync());
 
         // Re-join on reconnect so a ServerRegistered broadcast still reaches the verify step after
         // a transient drop (group membership is per-connection). Polling remains the backstop.
@@ -86,6 +86,23 @@ internal sealed class AgentDetectionMonitor(
         }
 
         await StartPollingAsync(_monitorCts.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reacts to a <c>servers</c> hub event by re-reading the wizard's token. One check at a time: a
+    /// fleet's heartbeats arriving together trigger a single request, not one per server.
+    /// </summary>
+    private async Task CheckTokenOnServerEventAsync()
+    {
+        if (AgentFound || Interlocked.CompareExchange(ref _tokenCheckInFlight, 1, 0) != 0) return;
+        try
+        {
+            await TryDetectViaUsedTokenAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            Volatile.Write(ref _tokenCheckInFlight, 0);
+        }
     }
 
     private async Task MarkFoundAsync(string? name, int? serverId)

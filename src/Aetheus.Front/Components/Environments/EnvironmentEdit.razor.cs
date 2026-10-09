@@ -28,6 +28,10 @@ public partial class EnvironmentEdit
     private int? _previousId = int.MinValue;
     private int? _previousProjectId = int.MinValue;
     private int _loadGeneration;
+    // FRONT-001: an existing environment that answers 404 or cannot be fetched ends the loading
+    // state instead of leaving the page on the loader forever.
+    private bool _notFound;
+    private bool _loadFailed;
 
     private List<EnvironmentTypeOption> _typeOptions = [];
 
@@ -49,6 +53,8 @@ public partial class EnvironmentEdit
         var generation = Interlocked.Increment(ref _loadGeneration);
 
         _detail = null;
+        _notFound = false;
+        _loadFailed = false;
         _model = new EnvironmentModel();
         _sourceEnvironmentId = null;
         _copySources = [];
@@ -66,6 +72,7 @@ public partial class EnvironmentEdit
             {
                 _detail = await Api.Servers.GetEnvironmentAsync(Id!.Value);
                 if (generation != _loadGeneration) return;
+                _notFound = _detail is null;
                 if (_detail is not null)
                 {
                     _model = new EnvironmentModel
@@ -95,7 +102,17 @@ public partial class EnvironmentEdit
                 await LoadCopySourcesAsync(generation);
             }
         }
-        catch (HttpRequestException) { } // 401 on expired JWT - redirect handled by AuthProvider
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            if (generation != _loadGeneration) return;
+            _notFound = !_isNew;
+        }
+        catch (HttpRequestException)
+        {
+            // 401 on expired JWT - redirect handled by AuthProvider; any other failure is shown.
+            if (generation != _loadGeneration) return;
+            _loadFailed = !_isNew;
+        }
 
         ProjectNav.Set(_model.ProjectId);
 

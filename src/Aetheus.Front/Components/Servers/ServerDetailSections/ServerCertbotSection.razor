@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @inherits ServerActionSectionBase
 
 @* --- Status bar --- *@
@@ -30,7 +31,7 @@
                 <CountBadge Value="@FilteredCertificates.Count" Variant="OmniTone.Accent" />
                 <OmniTextBox aria-label="@L["FilterCertificates"]" @bind-Value="_certSearch" Placeholder="@L["FilterCertificates"]" />
             </OmniStack>
-            <OmniDataGrid @ref="_grid" FillAvailableHeight="true" Items="@FilteredCertificates" TItem="CertbotCertificateDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+            <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["Certificates"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@FilteredCertificates" TItem="CertbotCertificateDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="CertbotCertificateDto" Property="Name" Title="@L["CertName"]" Width="12.5rem" Filterable="true" />
                     <OmniDataGridColumn TItem="CertbotCertificateDto" Title="@L["Domains"]" Sortable="false">

@@ -260,6 +260,39 @@ public class RoleEditTests : BunitContext
         Assert.Contains(_handler.Requests, r => r.Method == "PUT" && r.Url.Contains("api/roles/1/permissions"));
     }
 
+    // FRONT-023: the role holds Server 42 Read plus Project All. Editing the Project row replaces the
+    // whole permission list on the server, so Server 42 Read must be in the request, unchanged.
+    [Fact]
+    public async Task EditingAGlobalPermission_KeepsTheRolesResourceScopedPermissions()
+    {
+        _handler.SetJsonResponse("api/roles/1", MakeRole(1) with
+        {
+            Permissions =
+            [
+                new ResourcePermissionDto { ResourceType = ResourceType.Server, ResourceId = 42, Permission = Permission.Read },
+                new ResourcePermissionDto { ResourceType = ResourceType.Project, Permission = Permission.Admin }
+            ]
+        });
+        _handler.SetResponse(HttpMethod.Put, "api/roles/1/permissions", System.Net.HttpStatusCode.NoContent);
+        var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 1));
+        cut.WaitForAssertion(() => Assert.Equal("Admin",
+            (string)typeof(RoleEdit).GetField("_name", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!));
+
+        var rows = (List<RoleEdit.PermissionRowModel>)typeof(RoleEdit).GetField("_permissionRows", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
+        var projectRow = rows.Single(row => row.ResourceType == ResourceType.Project);
+        projectRow.CanAdmin = false;
+        var toggle = typeof(RoleEdit).GetMethod("OnPermissionToggledAndSaveAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await cut.InvokeAsync(() => (Task)toggle.Invoke(cut.Instance, [projectRow])!);
+
+        var body = _handler.RequestDetails.Last(r => r.Method == "PUT" && r.Url.Contains("api/roles/1/permissions")).Body!;
+        var request = System.Text.Json.JsonSerializer.Deserialize<SetResourcePermissionsRequest>(body, JsonOptions.Web)!;
+        Assert.Contains(request.Permissions, p =>
+            p is { ResourceType: ResourceType.Server, ResourceId: 42, Permission: Permission.Read });
+        Assert.Contains(request.Permissions, p =>
+            p is { ResourceType: ResourceType.Project, ResourceId: null, Permission: Permission.Write });
+        Assert.DoesNotContain(request.Permissions, p => p is { ResourceType: ResourceType.Server, ResourceId: null });
+    }
+
     // --- OnCancel ---
 
     [Fact]

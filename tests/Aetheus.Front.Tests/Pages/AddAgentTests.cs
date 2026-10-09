@@ -144,10 +144,22 @@ public class AddAgentTests : BunitContext
     [Fact]
     public void SwitchToWindows_UpdatesPlatform()
     {
+        // FRONTTEST-002: the choice is made the way a user makes it, by clicking the Windows card,
+        // and its effect is read from what the wizard produces, not from the field the test wrote.
         var cut = Render<AddAgent>();
-        typeof(AddAgent).GetField("_platform", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, "windows");
-        var platform = (string)typeof(AddAgent).GetField("_platform", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Equal("windows", platform);
+
+        ClickPlatformCard(cut, "Windows");
+
+        var commands = cut.Instance.GetAllCommands();
+        Assert.Contains(commands, command => command.Contains("install-agent-windows.ps1"));
+        Assert.DoesNotContain(commands, command => command.Contains("install-agent-linux.sh"));
+    }
+
+    private static void ClickPlatformCard(IRenderedComponent<AddAgent> cut, string label)
+    {
+        var card = cut.FindComponents<OmniEurope.Blazor.Components.OmniSelectableCard>()
+            .Single(component => component.Instance.Title == label);
+        cut.InvokeAsync(() => card.Instance.ValueChanged.InvokeAsync(true)).GetAwaiter().GetResult();
     }
 
     // --- Token generation ---
@@ -169,15 +181,22 @@ public class AddAgentTests : BunitContext
     [Fact]
     public async Task GenerateTokenAsync_SetsGeneratingFlagDuringExecution()
     {
-        _handler.SetJsonResponse("api/auth/registration-tokens",
-            new RegistrationTokenDto { Token = "test-token", ExpiresAt = DateTime.UtcNow.AddHours(24) });
-
+        // FRONTTEST-002: the answer is held back, so the flag is observed while the request is pending
+        // (true) and after it (false), not only once everything is over.
+        var answer = new TaskCompletionSource<RegistrationTokenDto>();
+        _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/auth/registration-tokens", _ => answer.Task);
+        var generatingField = typeof(AddAgent).GetField("_tokenGenerating", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var cut = Render<AddAgent>();
         var method = typeof(AddAgent).GetMethod("GenerateTokenAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
 
-        var generating = (bool)typeof(AddAgent).GetField("_tokenGenerating", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.False(generating); // Should be false after completion
+        var generation = cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
+        Assert.True((bool)generatingField.GetValue(cut.Instance)!);
+
+        answer.SetResult(new RegistrationTokenDto { Token = "test-token", ExpiresAt = DateTime.UtcNow.AddHours(24) });
+        await generation;
+        Assert.False((bool)generatingField.GetValue(cut.Instance)!);
+        var token = (RegistrationTokenDto?)typeof(AddAgent).GetField("_generatedToken", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
+        Assert.Equal("test-token", token?.Token);
     }
 
     [Fact]
@@ -281,20 +300,24 @@ public class AddAgentTests : BunitContext
     }
 
     [Fact]
-    public async Task OnStepChanged_ToStep5_StartsSignalR()
+    public async Task OnStepChanged_ToVerifyStep_StartsSignalR()
     {
+        // FRONTTEST-003: no blanket catch. The verify step is index 3 (the old test asked for a step 5
+        // that does not exist). The test hub refuses the connection: the monitor must have tried it
+        // (its error is the hub's own), be listening, and have read the wizard's token once.
+        _handler.SetJsonResponse("api/auth/registration-tokens/9", new RegistrationTokenDto { Id = 9, IsUsed = false });
         var cut = Render<AddAgent>();
+        typeof(AddAgent).GetField("_generatedToken", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(cut.Instance, new RegistrationTokenDto { Id = 9, Token = "wizard-token" });
         var method = typeof(AddAgent).GetMethod("OnStepChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        try
-        {
-            await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [5])!);
-        }
-        catch (Exception)
-        {
-            // Expected - SignalR can't connect in test env
-        }
-        var step = (int)typeof(AddAgent).GetField("_currentStep", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Equal(5, step);
+
+        await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [3])!);
+
+        var detection = (AgentDetectionMonitor)typeof(AddAgent).GetField("_detection", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
+        Assert.True(detection.Listening);
+        Assert.Contains("hub not available", detection.HubError);
+        Assert.Contains(_handler.Requests, request => request.Url.EndsWith("api/auth/registration-tokens/9", StringComparison.Ordinal));
+        await detection.DisposeAsync();
     }
 
     // --- DisposeAsync ---
@@ -333,13 +356,20 @@ public class AddAgentTests : BunitContext
     [Fact]
     public void Render_WithWindowsSelected_ContainsWindowsContent()
     {
+        // FRONTTEST-002: the install step a Windows choice produces shows the Windows commands.
         var cut = Render<AddAgent>();
-        typeof(AddAgent).GetField("_platform", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, "windows");
-        var method = typeof(AddAgent).GetMethod("RefreshSteps", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        cut.InvokeAsync(() => { method.Invoke(cut.Instance, []); return Task.CompletedTask; });
-        cut.Render();
+        ClickPlatformCard(cut, "Windows");
+
+        var install = Render(InstallStep(cut));
+
+        Assert.Contains("install-agent-windows.ps1", install.Markup);
+        Assert.DoesNotContain("install-agent-linux.sh", install.Markup);
+    }
+
+    private static RenderFragment InstallStep(IRenderedComponent<AddAgent> cut)
+    {
         var steps = (List<WizardStep>)typeof(AddAgent).GetField("_steps", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Equal(4, steps.Count);
+        return steps[2].Content!;
     }
 
     // --- Token masking in summary ---
@@ -347,15 +377,21 @@ public class AddAgentTests : BunitContext
     [Fact]
     public void TokenMasking_LongToken_ShowsPartialMask()
     {
+        // FRONTTEST-002: the install step is rendered and the token block shows its first five
+        // characters only; the full token appears nowhere in the markup.
+        const string token = "abcdefghijklmnopqrstuvwxyz0123456789";
         var cut = Render<AddAgent>();
         typeof(AddAgent).GetField("_generatedToken", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance,
-            new RegistrationTokenDto { Token = "abcdefghijklmnop", ExpiresAt = DateTime.UtcNow.AddHours(24) });
-        typeof(AddAgent).GetField("_platform", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, "linux");
-        typeof(AddAgent).GetField("_currentStep", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, 2);
+            new RegistrationTokenDto { Token = token, ExpiresAt = DateTime.UtcNow.AddHours(24) });
         var method = typeof(AddAgent).GetMethod("RefreshSteps", BindingFlags.NonPublic | BindingFlags.Instance)!;
         cut.InvokeAsync(() => { method.Invoke(cut.Instance, []); return Task.CompletedTask; });
-        var steps = (List<WizardStep>)typeof(AddAgent).GetField("_steps", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.NotNull(steps[2].Content);
+
+        var install = Render(InstallStep(cut));
+
+        var tokenBlock = install.Find(".wizard-token-code");
+        Assert.Contains("abcde", tokenBlock.TextContent);
+        Assert.DoesNotContain("abcdef", tokenBlock.TextContent);
+        Assert.DoesNotContain(token, install.Markup);
     }
 
     // --- Build step content methods ---
@@ -508,12 +544,19 @@ public class AddAgentTests : BunitContext
     [Fact]
     public async Task GenerateTokenAsync_NullResponse_DoesNotSetToken()
     {
-        _handler.SetResponse("api/auth/registration-tokens", System.Net.HttpStatusCode.NotFound);
+        // FRONTTEST-003: no catch. A refused creation answers null; the wizard keeps no token, says so,
+        // and never claims success.
+        _handler.SetResponse(HttpMethod.Post, "api/auth/registration-tokens", System.Net.HttpStatusCode.NotFound);
         var cut = Render<AddAgent>();
         var method = typeof(AddAgent).GetMethod("GenerateTokenAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        try { await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!); } catch { }
+
+        await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
+
+        Assert.Contains(_handler.Requests, request => request.Method == "POST" && request.Url.EndsWith("api/auth/registration-tokens", StringComparison.Ordinal));
         var token = typeof(AddAgent).GetField("_generatedToken", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
         Assert.Null(token);
+        Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniEurope.Blazor.Components.OmniSeverity.Danger && toast.Detail == "WizardTokenFailed");
+        Assert.DoesNotContain(Services.Toasts(), toast => toast.Severity == OmniEurope.Blazor.Components.OmniSeverity.Success);
     }
 
     // --- Verify step listening state ---

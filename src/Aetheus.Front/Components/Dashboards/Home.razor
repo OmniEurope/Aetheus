@@ -39,7 +39,8 @@ else
                     <OmniIcon Name="OmniIconName.Database" />
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Servers"]</OmniHeading>
                 </OmniStack>
-                @* Recette R-066 to R-069: the tile summary, one badge per non-zero count, like Monitored applications. *@
+                @* Recette R-066 to R-069: the tile summary, one badge per non-zero count, like Monitored applications.
+                   R2-109: the status icon in place of its name on a phone. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     @if (_dashboard?.OnlineServers > 0)
                     {
@@ -51,7 +52,7 @@ else
                     }
                 </OmniStack>
             </OmniStack>
-            <AetheusDataGrid @ref="_serversGrid" Data="@(_dashboard?.Servers)" TItem="ServerDto" PageSize="20" Virtualize="@((_dashboard?.Servers.Count ?? 0) > 20)"
+            <AetheusDataGrid @ref="_serversGrid" ExportName="@L["Servers"]" Data="@(_dashboard?.Servers)" TItem="ServerDto" PageSize="20" Virtualize="@((_dashboard?.Servers.Count ?? 0) > 20)"
                 IsLoading="@_dashboardLoading"
                 EmptyText="@L["NoRecords"]" RowClick="@(server => Nav.NavigateTo($"/servers/{server.Id}/overview"))"
                 class="dashboard-clickable-grid">
@@ -137,18 +138,9 @@ else
                 </OmniStack>
                 @* Recette R-066 to R-069: the tile summary, one badge per non-zero count, like Monitored applications. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                    @if (RecentRunCount(PipelineStatus.Success) > 0)
-                    {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@($"{RecentRunCount(PipelineStatus.Success)} {L.Localize(PipelineStatus.Success)}")</OmniBadge>
-                    }
-                    @if (RecentRunCount(PipelineStatus.Failed) > 0)
-                    {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@($"{RecentRunCount(PipelineStatus.Failed)} {L.Localize(PipelineStatus.Failed)}")</OmniBadge>
-                    }
-                    @if (RecentRunCount(PipelineStatus.Running) > 0)
-                    {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Info">@($"{RecentRunCount(PipelineStatus.Running)} {L.Localize(PipelineStatus.Running)}")</OmniBadge>
-                    }
+                    <StatusCountBadge Count="@RecentRunCount(PipelineStatus.Success)" Label="@L.Localize(PipelineStatus.Success)" Icon="OmniIconName.Check" Tone="OmniTone.Success" />
+                    <StatusCountBadge Count="@RecentRunCount(PipelineStatus.Failed)" Label="@L.Localize(PipelineStatus.Failed)" Icon="OmniIconName.Close" Tone="OmniTone.Danger" />
+                    <StatusCountBadge Count="@RecentRunCount(PipelineStatus.Running)" Label="@L.Localize(PipelineStatus.Running)" Icon="OmniIconName.Play" Tone="OmniTone.Info" />
                 </OmniStack>
             </OmniStack>
             @* The dashboard lists runs from every project, so the project is part of reading a row:
@@ -174,7 +166,7 @@ else
                     }
                 </OmniStack>
             </OmniStack>
-            <AetheusDataGrid @ref="_projectsGrid" Data="@(_dashboard?.Projects)" TItem="ProjectDto" PageSize="20" Virtualize="@((_dashboard?.Projects.Count ?? 0) > 20)"
+            <AetheusDataGrid @ref="_projectsGrid" ExportName="@L["Projects"]" Data="@(_dashboard?.Projects)" TItem="ProjectDto" PageSize="20" Virtualize="@((_dashboard?.Projects.Count ?? 0) > 20)"
                 IsLoading="@_dashboardLoading"
                 EmptyText="@L["NoRecords"]" RowClick="@(project => Nav.NavigateTo($"/projects/{project.Id}"))"
                 class="dashboard-clickable-grid">
@@ -204,22 +196,10 @@ else
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-0">@L["MonitoredApps"]</OmniHeading>
                 </OmniStack>
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                    @if (_appSummary?.UpCount > 0)
-                    {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@($"{_appSummary.UpCount} {L["AppHealthUp"]}")</OmniBadge>
-                    }
-                    @if (_appSummary?.DownCount > 0)
-                    {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@($"{_appSummary.DownCount} {L["AppHealthDown"]}")</OmniBadge>
-                    }
-                    @if (_appSummary?.DegradedCount > 0)
-                    {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@($"{_appSummary.DegradedCount} {L["AppHealthDegraded"]}")</OmniBadge>
-                    }
-                    @if (_appSummary?.UnknownCount > 0)
-                    {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"{_appSummary.UnknownCount} {L["AppHealthUnknown"]}")</OmniBadge>
-                    }
+                    <StatusCountBadge Count="@(_appSummary?.UpCount ?? 0)" Label="@L["AppHealthUp"]" Icon="OmniIconName.Check" Tone="OmniTone.Success" />
+                    <StatusCountBadge Count="@(_appSummary?.DownCount ?? 0)" Label="@L["AppHealthDown"]" Icon="OmniIconName.Close" Tone="OmniTone.Danger" />
+                    <StatusCountBadge Count="@(_appSummary?.DegradedCount ?? 0)" Label="@L["AppHealthDegraded"]" Icon="OmniIconName.Warning" Tone="OmniTone.Warning" />
+                    <StatusCountBadge Count="@(_appSummary?.UnknownCount ?? 0)" Label="@L["AppHealthUnknown"]" Icon="OmniIconName.Question" Tone="OmniTone.Neutral" />
                 </OmniStack>
             </OmniStack>
             <MonitoredAppsStatusGrid Applications="@(_appSummary?.Applications)" IsLoading="@_appSummaryLoading" />

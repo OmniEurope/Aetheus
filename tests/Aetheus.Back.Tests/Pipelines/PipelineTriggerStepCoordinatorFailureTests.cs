@@ -28,6 +28,7 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();
     private readonly IPipelineGitService _git = Substitute.For<IPipelineGitService>();
     private readonly IPipelineRunPreparationService _preparations = Substitute.For<IPipelineRunPreparationService>();
+    private readonly IPipelineRunParameterResolver _parameters = Substitute.For<IPipelineRunParameterResolver>();
     private readonly IPipelineCheckpointReuseService _checkpoints = Substitute.For<IPipelineCheckpointReuseService>();
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
     private readonly IAuditService _audit = Substitute.For<IAuditService>();
@@ -40,7 +41,7 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
     public PipelineTriggerStepCoordinatorFailureTests()
     {
         _sut = new PipelineTriggerStepCoordinator(
-            _repo, _git, _preparations, _checkpoints, _authz, _audit,
+            _repo, _git, _preparations, _parameters, _checkpoints, _authz, _audit,
             new FakeTimeProvider(),
             NullLogger<PipelineTriggerStepCoordinator>.Instance);
 
@@ -66,6 +67,9 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
                 YamlSnapshot = "name: package-aetheus-telemetry",
                 TargetServerIds = [],
             });
+        _parameters.ResolveRunParametersAsync(
+                Arg.Any<PipelineRunPreparation>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<PipelineRunPreparation>(0));
         _authz.HasPermissionAsync(
                 Arg.Any<string>(), Arg.Any<ResourceType>(), Arg.Any<int>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -141,5 +145,87 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
 
         Assert.Equal(TaskExecutionStatus.Running, step.Status);
         Assert.Equal(1119, step.TriggeredRunId);
+    }
+
+    /// <summary>
+    /// BACK-021: the parent passes runner=B to a child whose stage reads agent: ${{ parameters.runner }}.
+    /// Prepared without parameters, that selector matched nothing and the owner was "authorized" on an
+    /// empty set; the child then ran on B. The owner's rights are checked on the targets the parameters
+    /// produce, and the child starts from that same preparation.
+    /// </summary>
+    [Fact]
+    public async Task ParameterChosenTarget_OwnerWithoutServerAdmin_FailsTheStepBeforeLaunch()
+    {
+        var resolved = new PipelineRunPreparation
+        {
+            PipelineId = 74,
+            YamlSnapshot = "name: package-aetheus-telemetry",
+            TargetServerIds = [42],
+        };
+        _parameters.ResolveRunParametersAsync(
+                Arg.Any<PipelineRunPreparation>(),
+                Arg.Is<IReadOnlyDictionary<string, string>?>(p => p != null && p["runner"] == "b"),
+                Arg.Any<CancellationToken>())
+            .Returns(resolved);
+        _authz.HasPermissionAsync("admin", ResourceType.Server, 42, Permission.Admin, Arg.Any<CancellationToken>())
+            .Returns(false);
+        var definition = Definition();
+        definition.Parameters["runner"] = "b";
+        var step = Step();
+
+        await _sut.CreateTriggerStepAsync(ParentRunId, step, definition, [], _launcher, CancellationToken.None);
+
+        Assert.Equal(TaskExecutionStatus.Failed, step.Status);
+        Assert.Contains("lacks Server.Admin", step.FailureReason);
+        await _launcher.DidNotReceive().TriggerPreparedRunAsync(
+            Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>>(),
+            Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task ParameterChosenTarget_OwnerWithServerAdmin_LaunchesTheAuthorizedPreparation()
+    {
+        var resolved = new PipelineRunPreparation
+        {
+            PipelineId = 74,
+            YamlSnapshot = "name: package-aetheus-telemetry",
+            TargetServerIds = [42],
+        };
+        _parameters.ResolveRunParametersAsync(
+                Arg.Any<PipelineRunPreparation>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(resolved);
+        _launcher.TriggerPreparedRunAsync(
+                Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>>(),
+                Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string>())
+            .Returns(new PipelineRunDto { Id = 1119 });
+        var definition = Definition();
+        definition.Parameters["runner"] = "b";
+
+        await _sut.CreateTriggerStepAsync(ParentRunId, Step(), definition, [], _launcher, CancellationToken.None);
+
+        await _authz.Received().HasPermissionAsync("admin", ResourceType.Server, 42, Permission.Admin, Arg.Any<CancellationToken>());
+        await _launcher.Received(1).TriggerPreparedRunAsync(
+            Arg.Is<PipelineRunPreparation>(prepared => ReferenceEquals(prepared, resolved)),
+            Arg.Any<Dictionary<string, string>>(), Arg.Any<Dictionary<string, string>?>(),
+            Arg.Any<CancellationToken>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task ChainedRun_ParameterChosenTarget_OwnerWithoutServerAdmin_IsNotLaunched()
+    {
+        var childPipeline = new Pipeline { Id = 74, Name = "package-aetheus-telemetry", CreatedByUsername = "admin" };
+        _repo.FindPipelineAsync(74, Arg.Any<CancellationToken>()).Returns(childPipeline);
+        _parameters.ResolveRunParametersAsync(
+                Arg.Any<PipelineRunPreparation>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineRunPreparation { PipelineId = 74, YamlSnapshot = "name: x", TargetServerIds = [42] });
+        _authz.HasPermissionAsync("admin", ResourceType.Server, 42, Permission.Admin, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var child = await _sut.TriggerChainedRunAsync(74, null, _launcher, CancellationToken.None);
+
+        Assert.Null(child);
+        await _launcher.DidNotReceive().TriggerPreparedRunAsync(
+            Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(),
+            Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>());
     }
 }

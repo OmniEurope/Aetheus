@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using OmniEurope.Performance;
 
 namespace Aetheus.Telemetry.Tests;
 
@@ -81,12 +83,13 @@ public sealed class AetheusTelemetryBuilderExtensionsTests : IDisposable
     }
 
     [Fact]
-    public void AddAetheusTelemetry_Enabled_RegistersTheRequestRecorderAndItsGaugesOnce()
+    public void AddAetheusTelemetry_Enabled_RegistersTheCollectorAndItsGaugesOnce_Over24HoursByDefault()
     {
         Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_ENABLED", "true");
         var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(Configuration());
 
-        services.AddAetheusRequestPerformance(options => options.QuietRoutes.Add("api/report"));
+        services.AddAetheusTelemetry(ValidConfiguration());
         services.AddAetheusTelemetry(ValidConfiguration());
 
         Assert.Single(services, descriptor => descriptor.ServiceType == typeof(RequestPerformanceRecorder));
@@ -94,9 +97,38 @@ public sealed class AetheusTelemetryBuilderExtensionsTests : IDisposable
         // Not resolving the hosted services keeps the OTLP providers unbuilt: nothing is exported here.
         using var provider = services.BuildServiceProvider();
         Assert.NotNull(provider.GetRequiredService<RequestPerformanceMetrics>());
-        // The host's configuration survives the package's own registration of the recorder.
-        Assert.Contains("api/report", provider
-            .GetRequiredService<Microsoft.Extensions.Options.IOptions<RequestPerformanceOptions>>().Value.QuietRoutes);
+        Assert.Equal(TimeSpan.FromHours(24), provider.GetRequiredService<IOptions<PerformanceOptions>>().Value.Window);
+    }
+
+    [Fact]
+    public void AHostThatRegisteredTheCollectorFirst_KeepsTheWindowAndFilterItChose()
+    {
+        Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_ENABLED", "true");
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(Configuration());
+        Func<string, bool> apiOnly = route => route.StartsWith("/api/", StringComparison.Ordinal);
+
+        services.AddOmniPerformanceCollector(options => options.RouteFilter = apiOnly);
+        services.AddAetheusTelemetry(ValidConfiguration());
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<PerformanceOptions>>().Value;
+        Assert.Equal(TimeSpan.FromDays(7), options.Window); // the package default the host kept
+        Assert.Same(apiOnly, options.RouteFilter);
+        Assert.Single(services, descriptor => descriptor.ServiceType == typeof(RequestPerformanceRecorder));
+    }
+
+    [Fact]
+    public void TheOmniPerformanceWindowSetting_WinsOverThe24HourDefault()
+    {
+        Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_ENABLED", "true");
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(Configuration(("OmniPerformance:Window", "02:00:00")));
+
+        services.AddAetheusTelemetry(ValidConfiguration());
+
+        using var provider = services.BuildServiceProvider();
+        Assert.Equal(TimeSpan.FromHours(2), provider.GetRequiredService<IOptions<PerformanceOptions>>().Value.Window);
     }
 
     [Fact]
@@ -109,6 +141,68 @@ public sealed class AetheusTelemetryBuilderExtensionsTests : IDisposable
 
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(RequestPerformanceRecorder));
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(RequestPerformanceMetrics));
+    }
+
+    [Fact]
+    public void PLAN013_TheDatabaseSize_IsMeasuredOnlyWhenTheHostHandsOverAConnection()
+    {
+        Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_ENABLED", "true");
+        Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_DATABASE_SIZE_ENABLED", null);
+        var without = new ServiceCollection();
+        without.AddAetheusTelemetry(ValidConfiguration());
+        Assert.DoesNotContain(without, descriptor => descriptor.ServiceType == typeof(DatabaseSizeMetrics));
+
+        var with = new ServiceCollection();
+        with.AddAetheusTelemetry(
+            ValidConfiguration(("Aetheus:Telemetry:DatabaseSize:IntervalMinutes", "30")),
+            options => options.DatabaseSize.UsePostgreSql(() => throw new InvalidOperationException("not opened")));
+
+        Assert.Single(with, descriptor => descriptor.ServiceType == typeof(DatabaseSizeMetrics));
+        using var provider = with.BuildServiceProvider();
+        var databaseSize = provider.GetRequiredService<DatabaseSizeOptions>();
+        Assert.True(databaseSize.Enabled);
+        Assert.Equal(30, databaseSize.IntervalMinutes);
+        Assert.Equal(DatabaseSizeOptions.DefaultTopTables, databaseSize.TopTables);
+    }
+
+    [Fact]
+    public void PLAN013_TheEnvironmentVariable_TurnsTheDatabaseSizeOff_AndOnWithoutAConnectionIsRefused()
+    {
+        Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_ENABLED", "true");
+        try
+        {
+            Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_DATABASE_SIZE_ENABLED", "false");
+            var off = new ServiceCollection();
+            off.AddAetheusTelemetry(ValidConfiguration(),
+                options => options.DatabaseSize.UsePostgreSql(() => throw new InvalidOperationException("not opened")));
+            Assert.DoesNotContain(off, descriptor => descriptor.ServiceType == typeof(DatabaseSizeMetrics));
+
+            Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_DATABASE_SIZE_ENABLED", "true");
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => new ServiceCollection().AddAetheusTelemetry(ValidConfiguration()));
+            Assert.Contains("connection factory", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_DATABASE_SIZE_ENABLED", null);
+        }
+    }
+
+    [Theory]
+    [InlineData("IntervalMinutes", "4", "IntervalMinutes")]
+    [InlineData("IntervalMinutes", "1441", "IntervalMinutes")]
+    [InlineData("TopTables", "0", "TopTables")]
+    [InlineData("TopTables", "101", "TopTables")]
+    public void PLAN013_TheDatabaseSizeBounds_AreChecked(string key, string value, string expected)
+    {
+        Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_ENABLED", "true");
+        Environment.SetEnvironmentVariable("AETHEUS_TELEMETRY_DATABASE_SIZE_ENABLED", null);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new ServiceCollection().AddAetheusTelemetry(
+            ValidConfiguration(($"Aetheus:Telemetry:DatabaseSize:{key}", value)),
+            options => options.DatabaseSize.UsePostgreSql(() => throw new InvalidOperationException("not opened"))));
+
+        Assert.Contains(expected, exception.Message, StringComparison.Ordinal);
     }
 
     public void Dispose() =>

@@ -1,10 +1,11 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @namespace Aetheus.Front.Components.Shared
 
 <div class="aetheus-grid-host">
     @* Recette R-432: the page's load reaches OE through Busy, which draws its loading bar on the table only,
        as on every other grid; the rows already there stay, and a grid with no row yet waits empty under it. *@
-    <OmniDataGrid @ref="_grid" Items="@DisplayItems" TItem="PipelineRunTableItem" NewRowHighlight="@NewRowHighlight"
+    <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["Runs"])" ExportFields="@ExportContext.Fields()" Items="@DisplayItems" TItem="PipelineRunTableItem" NewRowHighlight="@NewRowHighlight"
         ShowLoadingBar="true" Busy="@IsLoading"
         MaxHeight="@(FillHeight ? null : AetheusGrid.ScrollMaxHeight)"
         ScrollMode="@(UsesVirtualization ? OmniDataGridScrollMode.Virtual : OmniDataGridScrollMode.All)" VirtualizationOverscanCount="3" FillAvailableHeight="@FillHeight"
@@ -88,7 +89,7 @@
                 Class="pipeline-secondary-column" HeaderClass="pipeline-secondary-column" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             <OmniDataGridColumn TItem="PipelineRunTableItem" Property="CompletedAt" Title="@L["Completed"]" FormatString="{0:g}" Width="9rem"
                 Class="pipeline-secondary-column" HeaderClass="pipeline-secondary-column" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
-            <OmniDataGridColumn TItem="PipelineRunTableItem" Key="Duration" Title="@L["Duration"]" Width="8rem" Sortable="false"
+            <OmniDataGridColumn TItem="PipelineRunTableItem" Key="Duration" ExportValue="@DurationExport" Title="@L["Duration"]" Width="8rem" Sortable="false"
                 Visible="@(!Compact || ShowDurationInCompact)" Class="pipeline-secondary-column" HeaderClass="pipeline-secondary-column">
                 <Template Context="run">
                     <span class="pipeline-run-duration"><PipelineRunTableLiveDuration Run="@run" /></span>

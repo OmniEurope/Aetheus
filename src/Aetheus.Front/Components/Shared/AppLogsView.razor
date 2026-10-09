@@ -20,7 +20,7 @@
 <AetheusDataGrid @ref="_grid" TItem="AppLogEntryDto" Data="@_items" Count="@_total" IsLoading="@_loading"
     LoadData="@LoadDataAsync" PageSize="50" Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<AppLogEntryDto>(_items, _total))"
-    FullHeight="true" ExportFormats="@ExportFormats" ExportPosition="OmniDataGridPosition.Bottom"
+    FullHeight="true" ShowFooterBar="true"
     ExportTitle="@ExportTitle" ExportFields="@ExportFields" ExportFileName="@ExportFileName"
     ExportLoad="@LoadExportPageAsync" OnExportError="@OnExportFailed">
     <EmptyTemplate>

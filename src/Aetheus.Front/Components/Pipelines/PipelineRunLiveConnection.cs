@@ -18,8 +18,29 @@ internal sealed class PipelineRunLiveConnection(
     Func<Task> onReload,
     Func<Task> onQueueRefresh,
     Func<Func<Task>, Task> invokeAsync,
-    Func<bool>? needsQueuePolling = null) : IAsyncDisposable
+    Func<bool>? needsQueuePolling = null,
+    Func<bool>? runInProgress = null,
+    Action? onLiveStateChanged = null,
+    TimeProvider? timeProvider = null) : IAsyncDisposable
 {
+    /// <summary>How long the live connection may be down before the page says so and reloads by itself.</summary>
+    internal static readonly TimeSpan InterruptionThreshold = TimeSpan.FromSeconds(10);
+
+    /// <summary>How often a run still in progress is reloaded while the live connection is down.</summary>
+    internal static readonly TimeSpan FallbackReloadInterval = TimeSpan.FromSeconds(15);
+
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+    private DateTimeOffset? _downSince;
+    private DateTimeOffset _lastFallbackReload;
+    private bool _shownInterrupted;
+
+    /// <summary>
+    /// Since when the live updates of this run are interrupted, once they have been down for
+    /// <see cref="InterruptionThreshold"/>; null while they flow (a short blip shows nothing).
+    /// </summary>
+    public DateTimeOffset? InterruptedSince =>
+        _downSince is { } since && _clock.GetUtcNow() - since >= InterruptionThreshold ? since : null;
+
     private HubConnection? _hub;
     // Run groups already joined: the parent run plus every loaded child run of an orchestration. A child
     // pipeline broadcasts its step events to ITS OWN run group, so without joining the children the parent
@@ -53,13 +74,68 @@ internal sealed class PipelineRunLiveConnection(
             await _reload.RunNowAsync();
         }));
         hubFactory.BackendReplaced += OnBackendReplaced;
+        hubFactory.PageResumed += OnPageResumed;
+        _hub.Reconnecting += _ => invokeAsync(() => { MarkDown(); return Task.CompletedTask; });
+        _hub.Reconnected += _ => invokeAsync(() => { MarkUp(); return Task.CompletedTask; });
+        _hub.Closed += _ => invokeAsync(() => { MarkDown(); return Task.CompletedTask; });
 
         try
         {
             await _hub.StartAsync();
             await JoinGroupsAsync();
         }
-        catch { /* Hub unavailable - degrade to static */ }
+        catch (Exception ex)
+        {
+            // Hub unavailable: the page stays readable, says the live updates are interrupted once the
+            // threshold passes, reloads a running run by itself and retries the connection (PollQueueAsync).
+            logger.LogInformation(ex, "[PipelineRun] The live connection could not start");
+            MarkDown();
+        }
+    }
+
+    private void MarkDown() => _downSince ??= _clock.GetUtcNow();
+
+    private void MarkUp()
+    {
+        _downSince = null;
+        NotifyIfShownStateChanged();
+    }
+
+    private void NotifyIfShownStateChanged()
+    {
+        var shown = InterruptedSince is not null;
+        if (shown == _shownInterrupted) return;
+        _shownInterrupted = shown;
+        onLiveStateChanged?.Invoke();
+    }
+
+    // 2026-10-06: back in the foreground (or online again), the run is fetched again whatever the socket
+    // says: events pushed while the page was away are lost for good. A connection that is down entirely
+    // (it never started) is restarted, which re-joins and reloads.
+    private void OnPageResumed() => _ = invokeAsync(ResumeAsync);
+
+    internal async Task ResumeAsync()
+    {
+        if (_disposed || _hub is not { } hub) return;
+        if (hub.State == HubConnectionState.Disconnected)
+        {
+            await MoveToCurrentBackendAsync();
+            if (hub.State == HubConnectionState.Connected) MarkUp();
+            return;
+        }
+        await _reload.RunNowAsync();
+    }
+
+    // While the live connection is down, a run still in progress is reloaded every
+    // FallbackReloadInterval, and a connection down entirely is retried at the same pace.
+    private async Task FallBackWhileInterruptedAsync()
+    {
+        NotifyIfShownStateChanged();
+        if (_disposed || InterruptedSince is null || runInProgress?.Invoke() != true) return;
+        var now = _clock.GetUtcNow();
+        if (now - _lastFallbackReload < FallbackReloadInterval) return;
+        _lastFallbackReload = now;
+        await ResumeAsync();
     }
 
     // A blue-green switch of Aetheus leaves this socket on the previous colour while the new one runs
@@ -94,17 +170,20 @@ internal sealed class PipelineRunLiveConnection(
 
     private async Task PollQueueAsync()
     {
+        // Recette R2-100: the token is read once, while the reload's lifetime is alive.
+        var lifetime = _reload.LifetimeToken;
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-            while (await timer.WaitForNextTickAsync(_reload.LifetimeToken))
+            while (await timer.WaitForNextTickAsync(lifetime))
             {
                 await invokeAsync(() => needsQueuePolling?.Invoke() == true
                     ? onQueueRefresh()
                     : Task.CompletedTask);
+                await invokeAsync(FallBackWhileInterruptedAsync);
             }
         }
-        catch (OperationCanceledException) when (_reload.LifetimeToken.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception ex) { logger.LogWarning(ex, "[PipelineRun] Queue polling failed"); }
     }
 
@@ -152,6 +231,7 @@ internal sealed class PipelineRunLiveConnection(
         if (_disposed) return;
         _disposed = true;
         hubFactory.BackendReplaced -= OnBackendReplaced;
+        hubFactory.PageResumed -= OnPageResumed;
         await _reload.DisposeAsync();
         if (_queuePollTask is not null)
             await _queuePollTask;

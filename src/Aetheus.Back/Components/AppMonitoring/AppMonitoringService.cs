@@ -78,6 +78,7 @@ public sealed class AppMonitoringService(
     public async Task<MonitoredAppDto> CreateAppAsync(int projectId, CreateMonitoredAppRequest request, CancellationToken ct = default)
     {
         ValidateProbeUrl(request.ProbeUrl);
+        await ValidateTargetsAsync(projectId, request.EnvironmentId, request.ServerId, ct).ConfigureAwait(false);
 
         var app = new MonitoredApp
         {
@@ -107,6 +108,7 @@ public sealed class AppMonitoringService(
         var app = await repo.GetAppForUpdateAsync(id, ct).ConfigureAwait(false);
         if (app is null)
             return null;
+        await ValidateTargetsAsync(app.ProjectId, request.EnvironmentId, request.ServerId, ct).ConfigureAwait(false);
 
         app.Name = request.Name.Trim();
         app.EnvironmentId = request.EnvironmentId;
@@ -122,6 +124,34 @@ public sealed class AppMonitoringService(
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         await BroadcastAppChangeAsync(app.ProjectId, EntityChangeOps.Updated, ct).ConfigureAwait(false);
         return await MapWithUptimeAsync(app, ct).ConfigureAwait(false);
+    }
+
+    public async Task<int?> GetProbeServerChangeAsync(int id, UpdateMonitoredAppRequest request, CancellationToken ct = default)
+    {
+        if (request.ServerId is not { } serverId) return null;
+        var app = await repo.GetAppAsync(id, ct).ConfigureAwait(false);
+        if (app is null) return null;
+        var probeUrl = string.IsNullOrWhiteSpace(request.ProbeUrl) ? null : request.ProbeUrl.Trim();
+        return app.ServerId != serverId || !string.Equals(app.ProbeUrl, probeUrl, StringComparison.Ordinal)
+            ? serverId
+            : null;
+    }
+
+    // BACK-008: the probing server and the environment must belong to the app's own organization and
+    // project, refused before anything is persisted or handed to an agent.
+    private async Task ValidateTargetsAsync(int projectId, int? environmentId, int? serverId, CancellationToken ct)
+    {
+        if (serverId is { } server)
+        {
+            var projectOrganization = (await repo.GetProjectOrgIdsAsync([projectId], ct).ConfigureAwait(false))
+                .GetValueOrDefault(projectId);
+            var serverOrganization = await repo.GetServerOrganizationIdAsync(server, ct).ConfigureAwait(false);
+            if (serverOrganization is null || serverOrganization != projectOrganization)
+                throw new BadRequestException("The probing server must belong to the project's organization.");
+        }
+        if (environmentId is { } environment
+            && !await repo.EnvironmentIsUsableByProjectAsync(environment, projectId, ct).ConfigureAwait(false))
+            throw new BadRequestException("The environment does not belong to this project.");
     }
 
     public async Task<bool> DeleteAppAsync(int id, CancellationToken ct = default)

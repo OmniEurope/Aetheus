@@ -57,6 +57,16 @@ public partial class AnalysisPortfolio : ComponentBase, IAsyncDisposable
         await StartRealtimeAsync();
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    internal Task<PaginatedResult<AnalysisPortfolioRowDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var size = Math.Clamp(args.Top ?? 25, 1, 200);
+        var page = ((args.Skip ?? 0) / size) + 1;
+        var sort = args.Sorts?.FirstOrDefault();
+        return Api.Analysis.GetAnalysisPortfolioAsync(page, size, sortBy: sort?.Property,
+            sortDescending: sort?.SortOrder == GridSortOrder.Descending, filters: args.ToApiFilters());
+    }
+
     internal async Task LoadDataAsync(GridLoadArgs args)
     {
         var size = Math.Clamp(args.Top ?? 25, 1, 200);

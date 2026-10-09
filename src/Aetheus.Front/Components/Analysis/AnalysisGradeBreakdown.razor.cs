@@ -74,6 +74,7 @@ public partial class AnalysisGradeBreakdown
         "grade.security.critical" => L["AnalysisCriticalVulnerabilities"],
         "grade.security.high" => L["AnalysisHighVulnerabilities"],
         "grade.security.medium" => L["AnalysisMediumVulnerabilities"],
+        "grade.security.findings" => L["AnalysisOpenFindingsScore"],
         "grade.coverage.line" => L["AnalysisTestedLines"],
         "grade.coverage.branch" => L["AnalysisTestedBranches"],
         "grade.complexity.maximum" => L["AnalysisMaximumComplexity"],
@@ -91,6 +92,18 @@ public partial class AnalysisGradeBreakdown
         if (string.Equals(measure.Unit, "percent", StringComparison.OrdinalIgnoreCase)) return $"{value} %";
         return string.IsNullOrWhiteSpace(measure.Unit) ? value : $"{value} {measure.Unit}";
     }
+
+    // "Critical 0 · High 1 (×10) · Medium 2 (×3) · Low 0 (×1) · Info 1 (×0.5)": the score is the sum of
+    // the weighted counts, and any critical finding gives F whatever the score.
+    private string FindingCountsText(AnalysisGradeFindingCountsDto counts) => string.Join(" · ",
+        $"{L.Localize(AnalysisSeverity.Critical)} {counts.Critical}",
+        WeightedCount(AnalysisSeverity.High, counts.High, AnalysisFindingScore.HighWeight),
+        WeightedCount(AnalysisSeverity.Medium, counts.Medium, AnalysisFindingScore.MediumWeight),
+        WeightedCount(AnalysisSeverity.Low, counts.Low, AnalysisFindingScore.LowWeight),
+        WeightedCount(AnalysisSeverity.Info, counts.Info, AnalysisFindingScore.InfoWeight));
+
+    private string WeightedCount(AnalysisSeverity severity, int count, double weight) =>
+        $"{L.Localize(severity)} {count} (×{weight:0.##})";
 
     private void AddDomain(
         ICollection<DomainView> target,

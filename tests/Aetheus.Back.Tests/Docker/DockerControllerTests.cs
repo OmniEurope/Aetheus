@@ -215,6 +215,24 @@ public class DockerControllerTests
     }
 
     [Fact]
+    public async Task SaveComposeFileAndBuild_WithoutAdminPermission_ForbidAndQueueNothing()
+    {
+        // BACK-012: a Compose file or a Dockerfile is arbitrary code on the server, gated like exec.
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 1, Permission.Admin, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var compose = await _sut.SaveComposeFile(1, new DockerComposeFileSaveRequest { StackName = "web", Content = "services: {}" },
+            TestContext.Current.CancellationToken);
+        var build = await _sut.BuildImage(1, new DockerBuildRequest { ImageTag = "myapp:latest", DockerfileContent = "FROM alpine" },
+            TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(compose);
+        Assert.IsType<ForbidResult>(build);
+        await _service.DidNotReceive().SaveComposeFileAsync(Arg.Any<int>(), Arg.Any<DockerComposeFileSaveRequest>(), Arg.Any<CancellationToken>());
+        await _service.DidNotReceive().BuildImageAsync(Arg.Any<int>(), Arg.Any<DockerBuildRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SaveComposeFile_ReturnsOk()
     {
         var request = new DockerComposeFileSaveRequest { StackName = "monitoring", Content = "version: '3'" };

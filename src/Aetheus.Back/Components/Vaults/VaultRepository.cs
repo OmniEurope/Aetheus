@@ -239,7 +239,8 @@ public class VaultRepository(AppDbContext db, TimeProvider timeProvider) : IVaul
         return await db.VaultSecrets
             .AsNoTracking()
             .Where(s => s.ExpiresAt != null && s.ExpiresAt <= threshold && s.ExpiresAt > now)
-            .Include(s => s.Vault)
+            .Include(s => s.Vault).ThenInclude(v => v.Environment)
+            .Include(s => s.Vault).ThenInclude(v => v.ProjectServer)
             .ToListAsync(ct).ConfigureAwait(false);
     }
 

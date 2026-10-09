@@ -219,20 +219,52 @@ public sealed class DeployOperationExecutor(
         var currentLink = Path.Combine(appDir, "current");
         var previousTarget = DeployReleaseFileSystem.ReadLinkTarget(currentLink); // null on first deploy
 
-        if (!await FlipCurrentAsync(appDir, currentLink, appRoot, onOutput, ct).ConfigureAwait(false))
+        if (!await ActivateReleaseAsync(
+                app, appDir, currentLink, appRoot, previousTarget, timeoutSeconds, healthTimeoutSeconds, healthUrl, onOutput, ct)
+            .ConfigureAwait(false))
             return new ExecutorResult(1, false);
-        await onOutput($"current → {Path.GetFileName(releaseDir)}", TaskLogLevel.Info).ConfigureAwait(false);
-
-        if (!await RestartAndHealthCheckAsync(app, timeoutSeconds, healthTimeoutSeconds, healthUrl, onOutput, ct).ConfigureAwait(false))
-        {
-            await RollbackBinaryAsync(app, appDir, currentLink, previousTarget, timeoutSeconds, healthTimeoutSeconds, healthUrl, onOutput, ct).ConfigureAwait(false);
-            return new ExecutorResult(1, false);
-        }
 
         await PruneOldReleasesAsync(releasesRoot, currentLink, previousTarget, onOutput).ConfigureAwait(false);
         await onOutput($"Deploy succeeded - {UnitTemplatePrefix}{app} is active", TaskLogLevel.Info).ConfigureAwait(false);
         return new ExecutorResult(0, false);
     }
+
+    /// <summary>
+    /// Points <c>current</c> at the new release, restarts it and runs the health gate. From the flip
+    /// on, every exit that is not a healthy release (failed gate, cancellation, unexpected error)
+    /// rolls back to <paramref name="previousTarget"/> on a budget of its own, because the task token
+    /// may already be cancelled and a rollback cut short leaves an unvalidated release running.
+    /// </summary>
+    internal async Task<bool> ActivateReleaseAsync(
+        string app, string appDir, string currentLink, string appRoot, string? previousTarget,
+        int timeoutSeconds, int healthTimeoutSeconds, string? healthUrl,
+        Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
+        if (!await FlipCurrentAsync(appDir, currentLink, appRoot, onOutput, ct).ConfigureAwait(false))
+            return false;
+        await onOutput($"current → {appRoot}", TaskLogLevel.Info).ConfigureAwait(false);
+
+        bool healthy;
+        try
+        {
+            healthy = await RestartAndHealthCheckAsync(app, timeoutSeconds, healthTimeoutSeconds, healthUrl, onOutput, ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await onOutput("Deploy interrupted after current was switched; rolling back.", TaskLogLevel.Error).ConfigureAwait(false);
+            await RollbackBinaryAsync(app, appDir, currentLink, previousTarget, timeoutSeconds, healthTimeoutSeconds, healthUrl, onOutput)
+                .ConfigureAwait(false);
+            throw;
+        }
+        if (healthy) return true;
+        await RollbackBinaryAsync(app, appDir, currentLink, previousTarget, timeoutSeconds, healthTimeoutSeconds, healthUrl, onOutput)
+            .ConfigureAwait(false);
+        return false;
+    }
+
+    private static CancellationTokenSource CreateCompensationBudget(int timeoutSeconds, int healthTimeoutSeconds) =>
+        new(TimeSpan.FromSeconds(timeoutSeconds + DeployLayout.ResolveHealthWindowSeconds(timeoutSeconds, healthTimeoutSeconds) + 120));
 
     private async Task<bool> FlipCurrentAsync(
         string appDir, string currentLink, string targetDir,
@@ -258,8 +290,10 @@ public sealed class DeployOperationExecutor(
     private async Task RollbackBinaryAsync(
         string app, string appDir, string currentLink, string? previousTarget, int timeoutSeconds,
         int healthTimeoutSeconds, string? healthUrl,
-        Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+        Func<string, TaskLogLevel, Task> onOutput)
     {
+        using var budget = CreateCompensationBudget(timeoutSeconds, healthTimeoutSeconds);
+        var ct = budget.Token;
         if (previousTarget is null)
         {
             await onOutput("Health gate failed - no previous release to roll back to; app is DOWN", TaskLogLevel.Error).ConfigureAwait(false);
@@ -366,7 +400,7 @@ public sealed class DeployOperationExecutor(
     }
 
     // ── Container mode ─────────────────────────────────────────────────────────────────────────
-    private async Task<ExecutorResult> DeployContainerAsync(
+    internal async Task<ExecutorResult> DeployContainerAsync(
         string app, string releaseDir, string composeRel, IReadOnlyDictionary<string, string> appEnv,
         int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
     {
@@ -422,12 +456,22 @@ public sealed class DeployOperationExecutor(
 
         // --wait makes compose block until containers are running/healthy; its exit code is the health gate.
         await onOutput($"docker compose up -d --wait ({composeRel})…", TaskLogLevel.Info).ConfigureAwait(false);
-        var up = await shell.RunExecAsync("docker", [.. upArgs], ct,
-            TimeSpan.FromSeconds(timeoutSeconds)).ConfigureAwait(false);
+        ShellExecResult up;
+        try
+        {
+            up = await shell.RunExecAsync("docker", [.. upArgs], ct,
+                TimeSpan.FromSeconds(timeoutSeconds)).ConfigureAwait(false);
+        }
+        catch
+        {
+            await onOutput("Deploy interrupted while the stack was being recreated; rolling back.", TaskLogLevel.Error).ConfigureAwait(false);
+            await RollbackContainerAsync(project, composePath, previousImages, timeoutSeconds, onOutput).ConfigureAwait(false);
+            throw;
+        }
         if (up.ExitCode != 0)
         {
             await onOutput($"compose up failed: {up.StdErr}", TaskLogLevel.Error).ConfigureAwait(false);
-            await RollbackContainerAsync(project, composePath, previousImages, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+            await RollbackContainerAsync(project, composePath, previousImages, timeoutSeconds, onOutput).ConfigureAwait(false);
             return new ExecutorResult(1, false);
         }
 
@@ -463,8 +507,10 @@ public sealed class DeployOperationExecutor(
     /// </summary>
     private async Task RollbackContainerAsync(
         string project, string composePath, Dictionary<string, string> previousImages, int timeoutSeconds,
-        Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+        Func<string, TaskLogLevel, Task> onOutput)
     {
+        using var budget = CreateCompensationBudget(timeoutSeconds, 0);
+        var ct = budget.Token;
         if (previousImages.Count == 0)
         {
             await onOutput("Container rollback: no previous image to restore (first deploy) - stack is DOWN", TaskLogLevel.Error).ConfigureAwait(false);
@@ -472,7 +518,16 @@ public sealed class DeployOperationExecutor(
         }
         await onOutput("Restoring previous container image(s) and re-upping the stack…", TaskLogLevel.Warning).ConfigureAwait(false);
         foreach (var (tag, id) in previousImages)
-            await shell.RunExecAsync("docker", ["tag", id, tag], ct, AgentRuntimeDefaults.ShellCommandTimeout).ConfigureAwait(false);
+        {
+            var retag = await shell.RunExecAsync("docker", ["tag", id, tag], ct, AgentRuntimeDefaults.ShellCommandTimeout).ConfigureAwait(false);
+            if (retag.ExitCode == 0) continue;
+            // The tag still names the new image: re-upping would restart the release that just failed
+            // and announce it as the previous one.
+            await onOutput(
+                $"Container rollback could not restore the previous image of {tag} ({retag.StdErr.Trim()}) - stack is DOWN, manual intervention required",
+                TaskLogLevel.Error).ConfigureAwait(false);
+            return;
+        }
         // --wait so the rollback's success is gated on the restored containers ACTUALLY coming up healthy
         // (symmetric with the binary path's re-health-check) - not just a clean `up` exit while they crash.
         var up = await shell.RunExecAsync("docker", ["compose", "-p", project, "-f", composePath, "up", "-d", "--wait"], ct, TimeSpan.FromSeconds(timeoutSeconds)).ConfigureAwait(false);

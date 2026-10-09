@@ -24,6 +24,10 @@ public partial class OwnerTypeSelector
     private int? _selectedProjectId;
     private List<EnvironmentDto> _environments = [];
     private List<ProjectServerDto> _projectServers = [];
+    // FRONT-021: the project each list was last loaded for. An empty answer is a loaded list, not a
+    // missing one: gating the reload on Count == 0 re-fetched it after every render, without end.
+    private int? _environmentsLoadedFor;
+    private int? _projectServersLoadedFor;
 
     private IReadOnlyList<OmniOption<int?>> ProjectOptions =>
         Projects.Select(project => new OmniOption<int?>(project.Id,
@@ -80,15 +84,16 @@ public partial class OwnerTypeSelector
     }
 
     // Not gated on firstRender: the owner the mode was inferred from can arrive after it, and its
-    // dropdown would then render permanently empty. Gated on the list actually being missing
-    // instead, which is idempotent across the re-renders that follow.
+    // dropdown would then render permanently empty. Gated on the list not yet being loaded for the
+    // selected project instead, which is idempotent across the re-renders that follow, empty lists
+    // included.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (_selectedProjectId is not > 0) return;
 
-        if (_kind == OwnerKind.Environment && _environments.Count == 0)
+        if (_kind == OwnerKind.Environment && _environmentsLoadedFor != _selectedProjectId)
             await LoadEnvironmentsAsync(_selectedProjectId.Value);
-        else if (_kind == OwnerKind.ProjectServer && _projectServers.Count == 0)
+        else if (_kind == OwnerKind.ProjectServer && _projectServersLoadedFor != _selectedProjectId)
             await LoadProjectServersAsync(_selectedProjectId.Value);
         else
             return;
@@ -105,6 +110,8 @@ public partial class OwnerTypeSelector
         _selectedProjectId = null;
         _environments = [];
         _projectServers = [];
+        _environmentsLoadedFor = null;
+        _projectServersLoadedFor = null;
         await SetOwnership(null, null, null);
     }
 
@@ -113,6 +120,8 @@ public partial class OwnerTypeSelector
         _selectedProjectId = (int?)value;
         _environments = [];
         _projectServers = [];
+        _environmentsLoadedFor = null;
+        _projectServersLoadedFor = null;
 
         if (_kind == OwnerKind.Project)
         {
@@ -150,11 +159,13 @@ public partial class OwnerTypeSelector
     private async Task LoadEnvironmentsAsync(int projectId)
     {
         _environments = await Api.Servers.GetAllEnvironmentsAsync(projectId);
+        _environmentsLoadedFor = projectId;
     }
 
     private async Task LoadProjectServersAsync(int projectId)
     {
         _projectServers = await Api.Projects.GetProjectServersAsync(projectId);
+        _projectServersLoadedFor = projectId;
     }
 
     private async Task<int?> FindProjectForServerAsync(int projectServerId)

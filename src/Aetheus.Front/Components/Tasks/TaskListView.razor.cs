@@ -128,6 +128,14 @@ public partial class TaskListView : IAsyncDisposable
         if (_grid is not null) await _grid.Refresh();
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<ServerTaskDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(ServerTaskDto.CreatedAt), fallbackDescending: true);
+        return Api.Pipelines.GetTasksAsync(page, pageSize, ServerId, sortBy, sortDescending, args.ToApiFilters());
+    }
+
     private async Task OnLoadData(GridLoadArgs args)
     {
         _loadFailed = false;
@@ -189,4 +197,10 @@ public partial class TaskListView : IAsyncDisposable
             _hubConnection = null;
         }
     }
+
+    /// <summary>Recette R2-124: the export writes the source the cell links to.</summary>
+    private Func<ServerTaskDto, object?> SourceExport => _sourceExport ??= task => task.PipelineRunId is { } pipelineRunId
+        ? $"{L["PipelineRun"]} #{pipelineRunId}"
+        : $"{L["Server"]}: {GetSourceServerName(task)}";
+    private Func<ServerTaskDto, object?>? _sourceExport;
 }

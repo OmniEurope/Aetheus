@@ -226,19 +226,6 @@ public class SystemLogServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ExportCsvAsync_ReturnsCsvBytes()
-    {
-        var logContent = "2025-01-15 10:30:00.123 [INF] Test message\n";
-        await File.WriteAllTextAsync(Path.Combine(_tempDir, "app.log"), logContent, cancellationToken: TestContext.Current.CancellationToken);
-
-        var csv = await _sut.ExportCsvAsync(null, null, null, null, null, ct: TestContext.Current.CancellationToken);
-
-        Assert.NotEmpty(csv);
-        var text = System.Text.Encoding.UTF8.GetString(csv);
-        Assert.Contains("Timestamp", text);
-    }
-
-    [Fact]
     public async Task PurgeOldLogsAsync_DeletesOldFiles()
     {
         var oldFile = Path.Combine(_tempDir, "old.log");

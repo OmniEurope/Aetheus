@@ -74,4 +74,34 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
         Assert.Equal(1, rechecked);
         Assert.Contains(_handler.Requests, request => request.Url.Contains("api/pipelines/setup/provision", StringComparison.Ordinal));
     }
+
+    /// <summary>Recette R2-121: each missing adapter says what the project has to write in it, not only
+    /// its name; an adapter no template documents is listed bare.</summary>
+    [Fact]
+    public void AMissingAdapter_SaysWhatItHasToDo()
+    {
+        var cut = Render<PipelineSetupReadinessPanel>(parameters => parameters
+            .Add(panel => panel.ProjectId, 4)
+            .Add(panel => panel.Readiness, Missing(PipelineSetupReadinessKind.MissingAdapterScripts,
+                ".pipeline/scripts/ci.sh", ".pipeline/scripts/quality.sh", ".pipeline/scripts/custom.sh")));
+
+        var roles = cut.FindAll("[data-testid='setup-readiness-item-role']").Select(role => role.TextContent).ToList();
+        Assert.Equal(2, roles.Count);
+        Assert.Contains(roles, role => role.Contains("ReadinessAdapterCi", StringComparison.Ordinal));
+        Assert.Contains(roles, role => role.Contains("ReadinessAdapterQuality", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AMissingScannerConfiguration_IsNamedExplainedAndLinkedToTheRepository()
+    {
+        var cut = Render<PipelineSetupReadinessPanel>(parameters => parameters
+            .Add(panel => panel.ProjectId, 4)
+            .Add(panel => panel.Readiness, Missing(PipelineSetupReadinessKind.MissingScannerConfiguration, ".gitleaks.toml")));
+
+        Assert.Contains("ReadinessMissingScannerConfiguration", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReadinessMissingEnvironments", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("ReadinessScannerFileGitleaks", cut.Find("[data-testid='setup-readiness-item-role']").TextContent,
+            StringComparison.Ordinal);
+        Assert.Contains("/git-repositories?projectId=4", cut.Markup, StringComparison.Ordinal);
+    }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Back.IntegrationTests;
 
@@ -73,6 +74,10 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     // Covers both AppMonitoringController and AppTelemetryController (shared api/appmonitoring prefix).
     [InlineData("/api/appmonitoring/summary")]
     [InlineData("/metrics")]
+    // PLAN-013 lots 5 and 6: the storage per project, and the size of the purged tables read from
+    // PostgreSQL (pg_total_relation_size) for the reclaim action.
+    [InlineData("/api/data-storage/projects")]
+    [InlineData("/api/data-storage/reclaim")]
     public async Task CollectionGetEndpoint_AsAdmin_ReturnsNonEmpty200(string route)
     {
         using var client = fixture.CreateAdminClient();
@@ -139,6 +144,53 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
             $"GET {prefix}{{projectId}} returned {(int)response.StatusCode}. Body: {Truncate(body)}");
         Assert.False(string.IsNullOrWhiteSpace(body),
             $"GET {prefix}{{projectId}} returned 200 with an empty body.");
+    }
+
+    /// <summary>PLAN-013 lot 4: the data retention setting of the seeded project, Standard by default.</summary>
+    [Theory]
+    [InlineData("/api/projects/0/data-retention")]
+    public async Task ProjectSettingGet_AsAdmin_ReturnsNonEmpty200(string template)
+    {
+        using var client = fixture.CreateAdminClient();
+        var route = template.Replace("/0/", $"/{fixture.ProjectId}/", StringComparison.Ordinal);
+
+        using var response = await client.GetAsync(route, cancellationToken: TestContext.Current.CancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(response.StatusCode == HttpStatusCode.OK,
+            $"GET {route} returned {(int)response.StatusCode}. Body: {Truncate(body)}");
+        Assert.Contains("telemetryExportIntervalMinutes", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// PLAN-013 lot 4: the configuration the Aetheus.Telemetry package reads with its ingest key. The
+    /// key belongs to an application of the seeded project (Standard profile: 5 minutes).
+    /// </summary>
+    [Theory]
+    [InlineData("/api/ingest/otlp/v1/configuration")]
+    public async Task IngestConfiguration_WithAnIngestKey_ReturnsTheSendInterval(string route)
+    {
+        var key = $"smoke-{Guid.NewGuid():N}";
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var hasher = scope.ServiceProvider.GetRequiredService<Aetheus.Back.Components.AppMonitoring.Ingest.IngestKeyHasher>();
+            var db = scope.ServiceProvider.GetRequiredService<Aetheus.Back.Data.AppDbContext>();
+            db.MonitoredApps.Add(new Aetheus.Back.Data.Entities.MonitoredApp
+            {
+                ProjectId = fixture.ProjectId,
+                Name = $"smoke-{Guid.NewGuid():N}",
+                IngestKeyHash = hasher.Hash(key),
+                IngestKeyExpiresAt = DateTime.UtcNow.AddDays(1)
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+        using var client = fixture.Factory.CreateClient();
+        client.DefaultRequestHeaders.Add("x-aetheus-ingest-key", key);
+
+        var configuration = await client.GetFromJsonAsync<IngestConfigurationDto>(
+            route, IntegrationJsonOptions.Default, TestContext.Current.CancellationToken);
+
+        Assert.Equal(300, configuration!.MetricExportIntervalSeconds);
     }
 
     [Fact]

@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: EUPL-1.2
+# The nightly extension of application-qa: what is too long or too heavy to run on every candidate
+# (long-running scenarios, performance, the whole API surface under dynamic scan). The project's adapter
+# decides what that is; only the nightly triggers this pipeline. The restore and the adapter sit in two
+# stages: the steps of one stage run concurrently (ADR-012).
+name: application-qa-extended-template
+trigger: manual
+variables:
+  APPLICATION_CI_PIPELINE: application-ci
+  APPLICATION_PERFORMANCE_ENABLED: "true"
+
+stages:
+  - name: Restore CI payload
+    group: QA
+    execution_role: build
+    os: linux
+    steps:
+      - name: Restore immutable CI payload
+        type: restore-artifacts
+        artifact: ApplicationPayload-artifacts
+        artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
+        timeout_seconds: 1800
+
+  - name: Extended QA
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [Restore CI payload]
+    steps:
+      - name: Run project extended QA adapter
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          test -f .pipeline/scripts/qa-extended.sh
+          APPLICATION_PERFORMANCE_ENABLED="$(APPLICATION_PERFORMANCE_ENABLED)" \
+            sh .pipeline/scripts/qa-extended.sh
+        timeout_seconds: 18000

@@ -19,4 +19,7 @@ else
     </OmniPageHeader>
     <Aetheus.Front.Components.Projects.ProjectDetailSections.ProjectEditSection
         Project="@Loader.Project" OnSaved="@OnSaved" />
+    @* PLAN-013 lot 4: how much data the project keeps, saved on its own. *@
+    <Aetheus.Front.Components.Projects.ProjectDetailSections.ProjectDataRetentionSection
+        ProjectId="@Loader.Project.Id" />
 }

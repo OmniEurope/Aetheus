@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @namespace Aetheus.Front.Components.Shared
 @*
     Every monitored application visible to the caller, one line each: name, status, people online,
@@ -9,7 +10,7 @@
    the page's load reaches OE through Busy, which keeps the headers and draws its loading bar on the table
    only; with no row yet the body waits empty under the bar instead of announcing an empty list. *@
 <div class="aetheus-grid-host">
-<OmniDataGrid @ref="_grid" Items="@(Applications ?? Array.Empty<MonitoredAppStatusDto>())" TItem="MonitoredAppStatusDto" KeyOf="@(row => row.Id)" NewRowHighlight="@NewRowHighlight"
+<OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["MonitoredApps"])" ExportFields="@ExportContext.Fields()" Items="@(Applications ?? Array.Empty<MonitoredAppStatusDto>())" TItem="MonitoredAppStatusDto" KeyOf="@(row => row.Id)" NewRowHighlight="@NewRowHighlight"
     ShowLoadingBar="true" Busy="@IsLoading"
     EmptyText="@L["NoMonitoredApps"].Value" OnRowClick="@(args => Nav.NavigateTo(AppHref(args.Item)))"
     Class="dashboard-clickable-grid" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">

@@ -89,7 +89,26 @@ public class PipelineCatalogViewTests
     }
 
     [Fact]
-    public void OrderFavoritesFirst_PutsStarredRowsFirst_ThenProjectThenName()
+    public void R2093_DefaultOrder_PutsPipelinesInProgressFirst_MostRecentlyStartedFirst_ThenTheUsualOrder()
+    {
+        var at = new DateTime(2026, 10, 4, 12, 0, 0);
+        PipelineRunSummaryDto Run(PipelineStatus status, int minutes) => new() { Status = status, StartedAt = at.AddMinutes(minutes) };
+        var pipelines = new[]
+        {
+            new PipelineDependencyDto { Id = 1, Name = "alpha", ProjectName = "A", RecentRuns = [Run(PipelineStatus.Success, 30)] },
+            new PipelineDependencyDto { Id = 2, Name = "deploy-prod", ProjectName = "Z", RecentRuns = [Run(PipelineStatus.WaitingForApproval, 5)] },
+            new PipelineDependencyDto { Id = 3, Name = "starred", ProjectName = "A", RecentRuns = [Run(PipelineStatus.Failed, 40)] },
+            new PipelineDependencyDto { Id = 4, Name = "nightly", ProjectName = "Z", RecentRuns = [Run(PipelineStatus.Running, 10), Run(PipelineStatus.Success, -60)] },
+            new PipelineDependencyDto { Id = 5, Name = "never", ProjectName = "A" }
+        };
+
+        var ordered = PipelineCatalogView.DefaultOrder(pipelines, new HashSet<int> { 3 });
+
+        Assert.Equal([4, 2, 3, 1, 5], ordered.Select(pipeline => pipeline.Id));
+    }
+
+    [Fact]
+    public void DefaultOrder_PutsStarredRowsFirst_ThenProjectThenName()
     {
         var pipelines = new[]
         {
@@ -99,7 +118,7 @@ public class PipelineCatalogViewTests
             new PipelineDependencyDto { Id = 4, Name = "audit", ProjectName = "Alpha" }
         };
 
-        var ordered = PipelineCatalogView.OrderFavoritesFirst(pipelines, new HashSet<int> { 3, 1 });
+        var ordered = PipelineCatalogView.DefaultOrder(pipelines, new HashSet<int> { 3, 1 });
 
         Assert.Equal([1, 3, 4, 2], ordered.Select(pipeline => pipeline.Id));
     }

@@ -234,30 +234,33 @@ public class PipelineHostOperationSmokeTaskTests
     }
 
     /// <summary>
-    /// D-01: a rollback after a failure that came before the image tags were published still runs,
-    /// and the names it could not forward are written to the run's warnings rather than dropped.
+    /// D-01: a rollback after a failure that came before the image tags were published still runs.
+    /// Recette R2-092 (aetheus-demo #2534): it no longer writes a run warning about the names it could
+    /// not forward. bluegreen-up refuses an undefined name, so such a rollback belongs to a run that
+    /// never started a colour; the agent's rollback says there is nothing to undo.
     /// </summary>
     [Fact]
-    public async Task ARollbackMissingPublishedTags_IsDispatchedAndNamesWhatItSkipped()
+    public async Task R2092_ARollbackMissingPublishedTags_IsDispatchedWithoutARunWarning()
     {
-        var definition = new PipelineStepDefinition
-        {
-            Name = "bg",
-            Project = "toto",
-            StateDir = "/var/lib/toto",
-            EnvFile = "/var/lib/toto/.env",
-            ComposeFiles = "deploy/compose/base.yml",
-            Ports = "10029,10030,10031,10032",
-            ReloadHelper = "/usr/local/lib/aetheus/apache-reload",
-            UpstreamConf = "/etc/apache2/sites-available/toto.conf",
-            ComposeEnv = "AETHEUS_BACK_IMAGE,APP_VERSION",
-            TimeoutSeconds = 300
-        };
-
         var step = await RunBlueGreenAsync(
             "bluegreen-rollback",
             new Dictionary<string, string>(StringComparer.Ordinal) { ["APP_VERSION"] = "1.1.7" },
-            definition);
+            MissingTagsDefinition());
+
+        Assert.NotEqual(TaskExecutionStatus.Failed, step.Status);
+        Assert.Equal(OperationKind.BlueGreenRollback, TrackedTask()!.Operation);
+        await _repo.DidNotReceive().AppendRunWarningsAsync(
+            Arg.Any<int>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>D-01 on the other steps acting on existing containers: a skipped name is still reported.</summary>
+    [Fact]
+    public async Task ACommitMissingPublishedTags_IsDispatchedAndNamesWhatItSkipped()
+    {
+        var step = await RunBlueGreenAsync(
+            "bluegreen-commit",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["APP_VERSION"] = "1.1.7" },
+            MissingTagsDefinition());
 
         Assert.NotEqual(TaskExecutionStatus.Failed, step.Status);
         Assert.NotNull(TrackedTask());
@@ -268,4 +271,18 @@ public class PipelineHostOperationSmokeTaskTests
                 && !warnings.Single().Contains("APP_VERSION", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());
     }
+
+    private static PipelineStepDefinition MissingTagsDefinition() => new()
+    {
+        Name = "bg",
+        Project = "toto",
+        StateDir = "/var/lib/toto",
+        EnvFile = "/var/lib/toto/.env",
+        ComposeFiles = "deploy/compose/base.yml",
+        Ports = "10029,10030,10031,10032",
+        ReloadHelper = "/usr/local/lib/aetheus/apache-reload",
+        UpstreamConf = "/etc/apache2/sites-available/toto.conf",
+        ComposeEnv = "AETHEUS_BACK_IMAGE,APP_VERSION",
+        TimeoutSeconds = 300
+    };
 }

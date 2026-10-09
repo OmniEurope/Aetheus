@@ -1,96 +1,33 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-@* --- Status bar --- *@
-<OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
-    <OmniBadge Fill="OmniFill.Solid" Tone="@(Mail.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Mail.IsInstalled ? L["Installed"] : L["MailNotConfigured"])</OmniBadge>
-    @if (Mail.IsInstalled)
-    {
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-            <span class="aetheus-badge-dot mail-status-dot @(Mail.IsPostfixRunning ? "is-running" : "")"></span>
-            <OmniBadge Fill="OmniFill.Solid" Tone="@(Mail.IsPostfixRunning ? OmniTone.Accent : OmniTone.Danger)">
-                <OmniIcon Name="@MaterialIconMap.Resolve(Mail.IsPostfixRunning ? "check" : "close")" /> @L["Postfix"]
-            </OmniBadge>
-        </OmniStack>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-            <span class="aetheus-badge-dot mail-status-dot @(Mail.IsDovecotRunning ? "is-running" : "")"></span>
-            <OmniBadge Fill="OmniFill.Solid" Tone="@(Mail.IsDovecotRunning ? OmniTone.Accent : OmniTone.Danger)">
-                <OmniIcon Name="@MaterialIconMap.Resolve(Mail.IsDovecotRunning ? "check" : "close")" /> @L["Dovecot"]
-            </OmniBadge>
-        </OmniStack>
-        @if (!string.IsNullOrEmpty(Mail.PostfixVersion))
-        {
-            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">Postfix v@(Mail.PostfixVersion)</OmniText>
-        }
-        @if (!string.IsNullOrEmpty(Mail.DovecotVersion))
-        {
-            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">Dovecot v@(Mail.DovecotVersion)</OmniText>
-        }
-        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@string.Format(L["MailQueueCount"], Mail.QueueSize)</OmniBadge>
-    }
-    <div class="blade-content-spacer"></div>
+@* "Réinstaller la messagerie" (R2-083 / R2-088): offered whenever a mail stack is on the host. *@
+<ServerMailReinstall @ref="_reinstall" ServerId="@ServerId" Mail="@Mail" CanManage="@Server.MailSetupAvailable" />
 
-    @if (!Mail.IsInstalled)
-    {
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync" Disabled="@(!Server.MailSetupAvailable)" title="@(Server.MailSetupAvailable ? null : L["MailSetupCapabilityRequired"].Value)"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["MailSetupAction"]</span></OmniButton>
-    }
-    else
-    {
-        @* The main part restarts; each item maps to its own typed action (ServiceAction). *@
-        <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Postfix"]" Disabled="@_actionRunning" OnClick="@(() => OnServiceActionAsync("postfix", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
-            <OmniMenuItem OnClick="@(() => OnServiceActionAsync("postfix", "start"))"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => OnServiceActionAsync("postfix", "stop"))"><OmniIcon Name="@MaterialIconMap.Resolve("stop")" /> <span>@L["Stop"]</span></OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => OnServiceActionAsync("postfix", "restart"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => OnServiceActionAsync("postfix", "reload"))"><OmniIcon Name="@MaterialIconMap.Resolve("sync")" /> <span>@L["Reload"]</span></OmniMenuItem>
-        </ChildContent></OmniSplitButton>
-        <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Dovecot"]" Disabled="@_actionRunning" OnClick="@(() => OnServiceActionAsync("dovecot", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
-            <OmniMenuItem OnClick="@(() => OnServiceActionAsync("dovecot", "start"))"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => OnServiceActionAsync("dovecot", "stop"))"><OmniIcon Name="@MaterialIconMap.Resolve("stop")" /> <span>@L["Stop"]</span></OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => OnServiceActionAsync("dovecot", "restart"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => OnServiceActionAsync("dovecot", "reload"))"><OmniIcon Name="@MaterialIconMap.Resolve("sync")" /> <span>@L["Reload"]</span></OmniMenuItem>
-        </ChildContent></OmniSplitButton>
-    }
-</OmniRow>
-
-@* Recette R2-059: "installed" means a configured mail stack (Postfix configured, Dovecot, OpenDKIM),
-   not one package: Dovecot installed alone from the Services tab read "Not installed" on an empty page.
-   The page now says what is missing and the order of the work. *@
+@* Recette R2-080: not configured yet, the page is the step-by-step setup assistant. "Installed" means a
+   configured mail stack (R2-059): Postfix and Dovecot installed alone from the Services tab, with no domain
+   and no account, still need the setup. Recette R2-089: until the counts are read nothing is concluded. *@
 @if (!Mail.IsInstalled)
 {
-    <OmniAlert Severity="OmniSeverity.Info" Title="@L["MailNotConfiguredTitle"]" Class="omni-u-mb-lg mail-setup-guide">
-        <ol class="mail-setup-guide-steps">
-            <li>@L["MailGuideServicesNotEnough"]</li>
-            <li>@L["MailGuidePrerequisites"]</li>
-            <li>@L["MailGuideRunSetup"]</li>
-            <li>@L["MailGuideAfterSetup"]</li>
-        </ol>
-        @if (!Server.MailSetupAvailable)
-        {
-            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 mail-setup-capability">@L["MailSetupCapabilityRequired"]</OmniText>
-        }
-    </OmniAlert>
+    <ServerMailSetupAssistant @ref="_assistant" Server="@Server" ServerId="@ServerId" />
+}
+else if (!_countsRead)
+{
+    <AetheusLoader Size="OmniControlSize.Small" Class="omni-u-mb-lg mail-counts-loading" />
+}
+else if (_domainCount == 0 && _accountCount == 0)
+{
+    <ServerMailSetupAssistant @ref="_assistant" Server="@Server" ServerId="@ServerId" StackPresent="true" />
+}
+else
+{
+    @* Recette R2-090: the page opens on the state of the stack, the work tabs below. *@
+    <ServerMailStatusList @ref="_statusList" ServerId="@ServerId" Mail="@Mail" CanManage="@Server.MailSetupAvailable"
+        DefaultSender="@DefaultSender" OnUsageMeasured="@ReloadDataAsync" />
 }
 
 @if (Mail.IsInstalled)
 {
-    <ServerMailStatusCard Mail="@Mail" ServerId="@ServerId" CanManage="@Server.MailSetupAvailable" />
-}
-
-@* S-FEAT-MSTK: postfix/dovecot can be apt-installed via the Services tab, which leaves them running
-   but with no virtual mailboxes / Dovecot auth / DKIM. Detect that half-configured state (installed but
-   no domain configured) and steer the operator to the full Mail stack setup instead of a dead-looking UI. *@
-@if (Mail.IsInstalled && _domainCount == 0 && _accountCount == 0)
-{
-                <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-lg">
-        <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Justify="OmniJustification.Between">
-            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailInstalledNotConfigured"]</OmniText>
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync" Disabled="@(!Server.MailSetupAvailable)" title="@(Server.MailSetupAvailable ? null : L["MailSetupCapabilityRequired"].Value)"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["MailSetup"]</span></OmniButton>
-        </OmniRow>
-                </OmniAlert>
-}
-
-@if (Mail.IsInstalled)
-{
-    <UrlSyncedTabs Slugs="@(new[] { "domains", "accounts", "aliases", "spam", "queue", "logs", "diagnostics", "relations" })">
+    <UrlSyncedTabs Slugs="@(new[] { "domains", "accounts", "aliases", "spam", "queue", "logs", "relations" })">
         <Tabs>
             @* --- Domains tab --- *@
             <OmniTabsItem Key="domains" Title="@L["MailDomains"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("dns"))" /></Icon><ChildContent>
@@ -100,7 +37,7 @@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddDomainDialogAsync" title="@L["AddDomain"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_domainsGrid" Data="@_domains" Count="@_domainCount"
-                    TItem="MailDomainDto" IsLoading="@_domainsLoading" LoadData="@LoadDomainsAsync"
+                    TItem="MailDomainDto" IsLoading="@_domainsLoading" LoadData="@LoadDomainsAsync" ExportRead="@ReadDomainsExportAsync" ExportName="@L["MailDomains"]"
                     PageSize="25" Density="OmniDensity.Compact" AllowSorting="true" EmptyText="@L["NoMailDomains"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<MailDomainDto>(_domains, _domainCount))">
@@ -111,7 +48,7 @@
                                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@d.DkimSelector</OmniText>
                             </Template>
                         </OmniDataGridColumn>
-                        <OmniDataGridColumn TItem="MailDomainDto" Title="DNS" Width="180px" Filterable="false" >
+                        <OmniDataGridColumn TItem="MailDomainDto" Title="DNS" ExportValue="@DnsExport" Width="180px" Filterable="false" >
                             <Template Context="d">
                                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
                                     <OmniBadge Fill="OmniFill.Solid" Tone="@(d.HasSpf ? OmniTone.Success : OmniTone.Neutral)">SPF</OmniBadge>
@@ -148,7 +85,7 @@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddAccountDialogAsync" title="@L["AddAccount"]"><OmniIcon Name="OmniIconName.UserPlus" /> <span>@L["Add"]</span></OmniButton>
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_accountsGrid" Data="@_accounts" Count="@_accountCount"
-                    TItem="MailAccountDto" IsLoading="@_accountsLoading" LoadData="@LoadAccountsAsync"
+                    TItem="MailAccountDto" IsLoading="@_accountsLoading" LoadData="@LoadAccountsAsync" ExportRead="@ReadAccountsExportAsync" ExportName="@L["MailAccounts"]"
                     PageSize="25" Density="OmniDensity.Compact" AllowSorting="true" EmptyText="@L["NoRecords"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<MailAccountDto>(_accounts, _accountCount))">
@@ -194,7 +131,7 @@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddAliasDialogAsync" title="@L["AddAlias"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_aliasesGrid" Data="@_aliases" Count="@_aliasCount"
-                    TItem="MailAliasDto" IsLoading="@_aliasesLoading" LoadData="@LoadAliasesAsync"
+                    TItem="MailAliasDto" IsLoading="@_aliasesLoading" LoadData="@LoadAliasesAsync" ExportRead="@ReadAliasesExportAsync" ExportName="@L["Aliases"]"
                     PageSize="25" Density="OmniDensity.Compact" AllowSorting="true" EmptyText="@L["NoMailAliases"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<MailAliasDto>(_aliases, _aliasCount))">
@@ -234,12 +171,6 @@
             @* --- Logs tab --- *@
             <OmniTabsItem Key="logs" Title="@L["Logs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("article")" /></Icon><ChildContent>
                 <ServerMailLogsTab @ref="_logsTab" ServerId="@ServerId" />
-            </ChildContent></OmniTabsItem>
-
-            @* --- Diagnostics tab --- *@
-            <OmniTabsItem Key="diagnostics" Title="@L["MailDiagnostics"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("health_and_safety")" /></Icon><ChildContent>
-                <ServerMailDiagnosticsTab @ref="_diagnosticsTab" ServerId="@ServerId" CanManage="@Server.MailSetupAvailable"
-                    DefaultSender="@DefaultSender" OnUsageMeasured="@ReloadDataAsync" />
             </ChildContent></OmniTabsItem>
 
             @* --- Relations tab --- *@

@@ -96,4 +96,6 @@ else
     {
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NotEnoughDataPoints"]</OmniText>
     }
+    @* Beside the chart: one point per send up to 24 hours, one per hour beyond (the hourly rollup). *@
+    <TelemetrySendIntervalNote AppId="AppId" HourlyPoints="@(_hours > 24)" Class="omni-u-mt-sm" />
 }

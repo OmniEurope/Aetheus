@@ -135,6 +135,40 @@ public class RouteAccessPolicyTests
         Assert.True(RouteAccessPolicy.CanAccess("login", true, false, permissions));
     }
 
+    // FRONT-022: the task detail (/tasks/{id}) follows Server Read, Supervision (/monitoring) Project
+    // Read; each stays closed to a user without that permission, and to the other one.
+    [Theory]
+    [InlineData("tasks/42", ResourceType.Server, true)]
+    [InlineData("tasks/42", ResourceType.Project, false)]
+    [InlineData("monitoring", ResourceType.Project, true)]
+    [InlineData("monitoring", ResourceType.Server, false)]
+    public void TaskDetailAndSupervision_FollowTheReadPermissionTheirApiChecks(
+        string route, ResourceType granted, bool expected)
+    {
+        var permissions = Loaded(new EffectivePermissionDto
+        {
+            ResourceType = granted,
+            ResourceId = 7,
+            Permission = Permission.Read
+        });
+
+        Assert.Equal(expected, RouteAccessPolicy.CanAccess(route, true, false, permissions));
+        Assert.False(RouteAccessPolicy.CanAccess(route, true, false, Loaded()));
+    }
+
+    [Fact]
+    public void TaskRoute_WithANonNumericTail_StaysUnclassified()
+    {
+        var permissions = Loaded(new EffectivePermissionDto
+        {
+            ResourceType = ResourceType.Server,
+            ResourceId = null,
+            Permission = Permission.Read
+        });
+
+        Assert.False(RouteAccessPolicy.CanAccess("tasks/abc", true, false, permissions));
+    }
+
     private static PermissionService Loaded(params EffectivePermissionDto[] grants)
     {
         var permissions = new PermissionService();

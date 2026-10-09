@@ -23,12 +23,16 @@ public partial class MonacoEditor : IAsyncDisposable
     private bool _initialized;
     private string? _pendingValue;
     private readonly CancellationTokenSource _lifetimeCts = new();
+    // Read once, while its source is alive (recette R2-100, see OnYamlChanged).
+    private readonly CancellationToken _lifetime;
     private CancellationTokenSource? _debounceCts;
     private Task? _debounceTask;
     private int _debounceGeneration;
     private bool _disposed;
     private int _cursorLine = 1;
     private int _cursorColumn = 1;
+
+    public MonacoEditor() => _lifetime = _lifetimeCts.Token;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -98,12 +102,16 @@ public partial class MonacoEditor : IAsyncDisposable
     {
         await ValueChanged.InvokeAsync(value);
 
-        if (DebouncedValueChanged.HasDelegate)
+        // Recette R2-100: the JS editor keeps sending changes until DisposeAsync has disposed it, which
+        // happens after the sources are disposed: a change arriving then cancelled the disposed debounce
+        // source and read the disposed lifetime's Token (ObjectDisposedException).
+        if (DebouncedValueChanged.HasDelegate && !_disposed)
         {
             _debounceCts?.Cancel();
             if (_debounceTask is not null) await _debounceTask;
+            if (_disposed) return;
             _debounceCts?.Dispose();
-            _debounceCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
+            _debounceCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
             var generation = ++_debounceGeneration;
             _debounceTask = InvokeDebouncedValueChangedAsync(value, generation, _debounceCts.Token);
         }

@@ -36,7 +36,7 @@ done
 [ -S /var/spool/postfix/private/dovecot-lmtp ] && pass "dovecot LMTP socket in postfix chroot" || fail "dovecot LMTP socket missing"
 [ -S /var/spool/postfix/private/auth ] && pass "dovecot auth socket in postfix chroot" || fail "dovecot auth socket missing"
 [ -f /etc/aetheus/mail-stack.managed ] && pass "ownership marker written" || fail "ownership marker missing"
-expect_ok "helper version reported" sh -c "\"$MANAGE\" version | grep -qx 'aetheus-mail-helper-version: 2'"
+expect_ok "helper version reported" sh -c "\"$MANAGE\" version | grep -qx 'aetheus-mail-helper-version: 3'"
 # The agent collector runs unprivileged: every inventory source must be readable without sudo, and the
 # DKIM private key must stay out of reach.
 for path in /etc/postfix/vmailbox /etc/opendkim/KeyTable /etc/aetheus/mail-stack.managed \
@@ -158,6 +158,36 @@ expect_refused "service refuses an unknown unit" "$MANAGE" service ssh restart
 expect_refused "queue-delete refuses a path" "$MANAGE" queue-delete ../../etc
 expect_refused "send-test refuses an invalid recipient" "$MANAGE" send-test admin@example.test 'x;id'
 expect_refused "unknown sub-command" "$MANAGE" rm-rf
+
+echo "== purge (Réinstaller la messagerie) and a fresh setup"
+# Tasks 23257 and 23258 (2026-10-03): the host had postfix masked. purge must leave nothing masked.
+systemctl mask postfix.service >/dev/null 2>&1
+[ "$(cat /etc/mailname 2>/dev/null)" = mail.example.test ] && pass "mail-setup wrote /etc/mailname" || fail "/etc/mailname not written by mail-setup"
+expect_ok "purge" "$MANAGE" purge
+for unit in postfix dovecot opendkim rspamd redis-server; do
+  if systemctl list-unit-files "$unit.service" --no-legend 2>/dev/null | grep -q .; then fail "$unit unit still present ($(systemctl is-enabled "$unit.service" 2>&1))"; else pass "$unit unit gone"; fi
+done
+for pkg in postfix dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd opendkim opendkim-tools rspamd redis-server; do
+  case "$(dpkg-query -W -f='${db:Status-Abbrev}' "$pkg" 2>/dev/null)" in ""|?n*) pass "$pkg purged" ;; *) fail "$pkg still known to dpkg: $(dpkg-query -W -f='${db:Status-Abbrev}' "$pkg")" ;; esac
+done
+for path in /etc/postfix /etc/dovecot /etc/opendkim /etc/opendkim.conf /etc/rspamd /var/mail/vhosts /etc/mailname \
+  /etc/aetheus/mail-stack.managed /etc/aetheus/mail-spam.packages /etc/letsencrypt/renewal-hooks/deploy/aetheus-mail; do
+  [ -e "$path" ] && fail "$path still present" || pass "$path removed"
+done
+id vmail >/dev/null 2>&1 && fail "vmail user still present" || pass "vmail user removed"
+getent group vmail >/dev/null 2>&1 && fail "vmail group still present" || pass "vmail group removed"
+if debconf-show postfix 2>/dev/null | grep -q main_mailer_type; then fail "postfix debconf answers still preseeded"; else pass "postfix debconf answers purged"; fi
+[ -d /etc/letsencrypt/live/mail.example.test ] && pass "certificate lineage kept (certbot owns it)" || fail "certificate lineage removed"
+expect_ok "purge again (nothing installed)" "$MANAGE" purge
+if out="$(printf 'Sup3rSecret!\n' | "$SETUP" mail.example.test example.test default admin@example.test 1024 none 2>&1)"; then
+  pass "mail-setup after purge"
+else
+  fail "mail-setup after purge -> $(printf '%s' "$out" | tail -n 5 | tr '\n' ' ')"
+fi
+for unit in postfix dovecot opendkim; do
+  if [ "$(systemctl is-active "$unit")" = active ]; then pass "$unit active after the fresh setup"; else fail "$unit not active after the fresh setup"; fi
+done
+grep -qx 'hostname=mail.example.test' /etc/aetheus/mail-stack.managed && pass "marker records the mail host name" || fail "marker has no hostname line"
 
 echo "RESULT: $passes passed, $failures failed"
 [ "$failures" -eq 0 ]

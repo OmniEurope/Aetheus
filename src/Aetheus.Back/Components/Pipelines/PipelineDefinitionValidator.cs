@@ -42,8 +42,17 @@ internal static class PipelineDefinitionValidator
         if (definition.PathsIgnore.Count > 0
             && !string.Equals(definition.Trigger, "webhook", StringComparison.OrdinalIgnoreCase))
             warnings.Add("`paths_ignore:` only applies to the webhook trigger; it will be ignored for this trigger type.");
+        ValidateReleaseNumber(definition, errors);
         if (definition.Stages.Count == 0)
             errors.Add("Pipeline must have at least one stage.");
+    }
+
+    // Recette R2-110: release_number: takes one mode. Its own method so ValidateDefinitionBasics stays
+    // under the grade-A cyclomatic threshold.
+    private static void ValidateReleaseNumber(PipelineYamlDefinition definition, ICollection<string> errors)
+    {
+        if (definition.ReleaseNumber is not null && !PipelineReleaseNumbers.Allocates(definition))
+            errors.Add(PipelineReleaseNumbers.InvalidModeMessage);
     }
 
     // Recette R-534: the source: block names a repository of the project by its slug. Whether that
@@ -406,7 +415,12 @@ internal static class PipelineDefinitionValidator
         string context)
     {
         if (!string.Equals(step.Type, "advance-branch", StringComparison.OrdinalIgnoreCase))
+        {
+            // Decision of 2026-10-07: the release tag is written by the advance step, nowhere else.
+            if (!string.IsNullOrWhiteSpace(step.Tag))
+                errors.Add($"Step '{step.Name}' in {context} sets 'tag', which only a type: advance-branch step takes.");
             return;
+        }
         var branch = step.Branch?.Trim();
         if (string.IsNullOrEmpty(branch))
             errors.Add($"Step '{step.Name}' in {context} requires a branch to advance.");

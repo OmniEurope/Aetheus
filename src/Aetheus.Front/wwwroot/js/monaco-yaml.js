@@ -53,7 +53,7 @@ function keywordCompletions(text, range) {
         'analysis_scope', 'analysis_preset', 'analysis_rules', 'analysis_grading',
         'key', 'minimum', 'maximum', 'operator', 'threshold',
         'metric', 'category', 'scanner', 'rule', 'severity',
-        'new_findings_only', 'branch', 'environment',
+        'new_findings_only', 'finding_score', 'branch', 'environment',
         'behavior', 'priority', 'enabled', 'minimum_grade',
         'required_domains', 'domain', 'direction',
         'a', 'b', 'c', 'd', 'e', 'required'

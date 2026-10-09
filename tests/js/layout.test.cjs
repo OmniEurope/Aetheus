@@ -11,9 +11,13 @@ function loadLayout(markup = '<div id="app-splash"></div><link href="material-ba
     global.window = dom.window;
     global.document = dom.window.document;
     global.navigator = dom.window.navigator;
+    // layout.js reads the bare `location` global when it loads (page-scroll memory, R2-087).
+    global.location = dom.window.location;
     global.MutationObserver = dom.window.MutationObserver;
     // layout.js tests "instanceof Element" when it labels grid buttons.
     global.Element = dom.window.Element;
+    // The page-header observer tests node types (Node.ELEMENT_NODE) on every change, a title included.
+    global.Node = dom.window.Node;
     global.localStorage = dom.window.localStorage;
     // jsdom has no ResizeObserver; layout.js only needs to be able to create one when it loads.
     global.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
@@ -76,5 +80,44 @@ test('clipboard helper reports provider success and failure honestly', async () 
         value: { writeText: async () => { throw new Error('denied'); } }
     });
     assert.equal(await Aetheus.copyToClipboard('expected'), false);
+    dom.window.close();
+});
+
+test('approvals waiting: the tab title carries the count, follows the page title and blinks while hidden', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const dom = loadLayout();
+    const tick = () => new Promise(resolve => setImmediate(resolve));
+    const setVisibility = state => {
+        Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+        document.dispatchEvent(new dom.window.Event('visibilitychange'));
+    };
+
+    Aetheus.titleAttention.set(2, '● 2 approvals waiting');
+    assert.equal(document.title, '(2) Aetheus');
+
+    // A navigation rewrites the title: the count goes back in front of the new one.
+    document.title = 'Pipelines - Aetheus';
+    await tick();
+    assert.equal(document.title, '(2) Pipelines - Aetheus');
+
+    // In the background the title alternates every second with the attention message.
+    setVisibility('hidden');
+    t.mock.timers.tick(1000);
+    assert.equal(document.title, '● 2 approvals waiting');
+    t.mock.timers.tick(1000);
+    assert.equal(document.title, '(2) Pipelines - Aetheus');
+    t.mock.timers.tick(1000);
+    assert.equal(document.title, '● 2 approvals waiting');
+
+    // Back in the foreground it stops on the counted title; nothing waiting, the page title alone.
+    setVisibility('visible');
+    assert.equal(document.title, '(2) Pipelines - Aetheus');
+    t.mock.timers.tick(3000);
+    assert.equal(document.title, '(2) Pipelines - Aetheus');
+    Aetheus.titleAttention.set(0, '');
+    assert.equal(document.title, 'Pipelines - Aetheus');
+    setVisibility('hidden');
+    t.mock.timers.tick(2000);
+    assert.equal(document.title, 'Pipelines - Aetheus');
     dom.window.close();
 });

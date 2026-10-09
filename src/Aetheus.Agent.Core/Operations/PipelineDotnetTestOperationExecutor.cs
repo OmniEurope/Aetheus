@@ -44,6 +44,11 @@ public sealed class PipelineDotnetTestOperationExecutor(
                 : "No global.json test runner selected; running the suite with the VSTest command line.",
             TaskLogLevel.Info).ConfigureAwait(false);
         var startInfo = DotnetTestCommandLine.Build(request, testingPlatform);
+        // Evidence left by an earlier run must never grade this one: the TRX this step names is
+        // removed, and the coverage reports already present are remembered so that only a report
+        // this run wrote counts.
+        if (File.Exists(request.TrxPath)) File.Delete(request.TrxPath);
+        var staleCoverage = request.CollectCoverage ? SnapshotCoverageReports(request.ResultsDirectory) : null;
         // The suite's own exit code is captured rather than allowed to end the step: a test that ran
         // and failed is graded, and only unusable evidence is a technical failure of the run. On the
         // testing platform a failed test exits 2, not 1; the classifier reads the TRX, not the value.
@@ -60,6 +65,12 @@ public sealed class PipelineDotnetTestOperationExecutor(
         if (testingPlatform && request.CollectCoverage)
             foreach (var report in DotnetTestCommandLine.NormalizeCoverageReports(request.ResultsDirectory))
                 await onOutput($"Coverage report: {report}", TaskLogLevel.Info).ConfigureAwait(false);
+        if (staleCoverage is { Count: > 0 } && !HasFreshCoverageReport(request.ResultsDirectory, staleCoverage))
+        {
+            const string reason = "Every Cobertura report in the results directory predates this run; it wrote none of its own.";
+            await onOutput($"The test evidence cannot be graded: {reason}", TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(1, false, "untrustworthy-evidence", reason);
+        }
 
         var verdict = DotnetTestResultClassifier.Classify(
             NormalizeExitCode(run.ExitCode),
@@ -96,4 +107,18 @@ public sealed class PipelineDotnetTestOperationExecutor(
     /// accepts 0..255, and every such code means the same thing here: not zero.
     /// </summary>
     private static int NormalizeExitCode(int exitCode) => exitCode is >= 0 and <= 255 ? exitCode : 1;
+
+    // A report is identified by its size and write time, which a move (the stamped-report
+    // normalisation) preserves: a stale report renamed after the run is still recognised as stale.
+    private static HashSet<(long Length, DateTime WrittenUtc)> SnapshotCoverageReports(string resultsDirectory) =>
+        Directory.Exists(resultsDirectory)
+            ? Directory.EnumerateFiles(resultsDirectory, "coverage.cobertura*.xml", SearchOption.AllDirectories)
+                .Select(path => new FileInfo(path))
+                .Select(info => (info.Length, info.LastWriteTimeUtc))
+                .ToHashSet()
+            : [];
+
+    private static bool HasFreshCoverageReport(
+        string resultsDirectory, HashSet<(long Length, DateTime WrittenUtc)> stale) =>
+        SnapshotCoverageReports(resultsDirectory).Any(report => !stale.Contains(report));
 }

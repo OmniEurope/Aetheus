@@ -103,6 +103,17 @@ internal static class AnalysisGradeEngine
             summaries.Max(summary => summary.EvaluatedAt)));
     }
 
+    /// <summary>
+    /// Recette R2-118 (decided 2026-10-05): the grade of a run tree (a candidate or a nightly and the
+    /// runs its trigger steps started: quality, security, QA...) merges the runs domain by domain, by the
+    /// rule the run's Gate tab also applies (<see cref="AnalysisGradeMerge"/>). Grades are compared, never
+    /// counts added, so a finding two runs report is not counted twice.
+    /// </summary>
+    public static AnalysisGradeSummaryDto MergeRuns(
+        IReadOnlyCollection<AnalysisGradeSummaryDto> runs,
+        int pipelineRunId) =>
+        WithHash(AnalysisGradeMerge.MergeRuns(runs, pipelineRunId));
+
     private static PipelineAnalysisGradingDefinition? Resolve(
         string yaml,
         AnalysisCategory category)
@@ -132,6 +143,14 @@ internal static class AnalysisGradeEngine
         PipelineAnalysisGateRuleValidator.TryParseEnum<AnalysisSeverity>(rule.Severity, out var severity);
         var applies = evidenceAvailable
             && (!category.HasValue || category.Value == report.Category);
+        if (PipelineAnalysisGradingValidator.IsWeightedFindingScore(rule))
+        {
+            var counts = applies
+                ? AnalysisFindingScore.Count(OpenFindings(report, rule).Select(finding => finding.Severity))
+                : null;
+            return BuildMeasure(rule, domain!.Value, direction!.Value, category, null,
+                counts is null ? null : AnalysisFindingScore.Score(counts), null, counts);
+        }
         var values = new List<double>();
         string? unit = null;
 
@@ -148,12 +167,7 @@ internal static class AnalysisGradeEngine
         }
         else if (applies && severity.HasValue)
         {
-            values.Add(report.Occurrences
-                .Where(occurrence => occurrence.AnalysisFinding.Severity == severity.Value
-                    && (!rule.NewFindingsOnly || occurrence.IsNew))
-                .Select(occurrence => occurrence.AnalysisFinding.Fingerprint)
-                .Distinct(StringComparer.Ordinal)
-                .Count());
+            values.Add(OpenFindings(report, rule).Count(finding => finding.Severity == severity.Value));
         }
 
         var observed = values.Count > 0;
@@ -164,17 +178,41 @@ internal static class AnalysisGradeEngine
                     ? values.Min()
                     : values.Max()
             : null;
-        return BuildMeasure(rule, domain!.Value, direction!.Value, category, severity, observedValue, unit);
+        return BuildMeasure(rule, domain!.Value, direction!.Value, category, severity, observedValue, unit, null);
     }
+
+    /// <summary>
+    /// Recette R2-119: the findings a grading rule counts, one per fingerprint, and only the open ones. A
+    /// finding someone accepted, marked as a false positive or mitigated is decided, not left to do, and
+    /// a fixed one is no longer reported (one that comes back is reopened before the report is graded).
+    /// </summary>
+    private static IEnumerable<AnalysisFinding> OpenFindings(
+        AnalysisReport report,
+        PipelineAnalysisGradeRuleDefinition rule) =>
+        report.Occurrences
+            .Where(occurrence => occurrence.AnalysisFinding.Status == AnalysisFindingStatus.Open
+                && (!rule.NewFindingsOnly || occurrence.IsNew))
+            .Select(occurrence => occurrence.AnalysisFinding)
+            .DistinctBy(finding => finding.Fingerprint, StringComparer.Ordinal);
 
     private static AnalysisGradeMeasureDto AggregateMeasure(
         IGrouping<string, AnalysisGradeMeasureDto> group)
     {
         var first = group.First();
-        var values = group
+        var observed = group
             .Where(measure => measure.Observed && measure.ObservedValue.HasValue)
-            .Select(measure => measure.ObservedValue!.Value)
             .ToList();
+        if (first.WeightedFindingScore)
+        {
+            // The reports of one run each counted their own findings; the score follows the summed counts.
+            var counts = observed.Count == 0
+                ? null
+                : AnalysisFindingScore.Sum(observed.Select(measure => measure.FindingCounts ?? new AnalysisGradeFindingCountsDto()));
+            return BuildMeasure(
+                first with { FindingCounts = counts },
+                counts is null ? null : AnalysisFindingScore.Score(counts));
+        }
+        var values = observed.Select(measure => measure.ObservedValue!.Value).ToList();
         double? value = values.Count == 0
             ? null
             : first.Severity.HasValue
@@ -192,7 +230,8 @@ internal static class AnalysisGradeEngine
         AnalysisCategory? category,
         AnalysisSeverity? severity,
         double? observedValue,
-        string? unit) =>
+        string? unit,
+        AnalysisGradeFindingCountsDto? findingCounts) =>
         BuildMeasure(new AnalysisGradeMeasureDto
         {
             Key = rule.Key,
@@ -207,7 +246,9 @@ internal static class AnalysisGradeEngine
             BThreshold = rule.B,
             CThreshold = rule.C,
             DThreshold = rule.D,
-            EThreshold = rule.E
+            EThreshold = rule.E,
+            WeightedFindingScore = PipelineAnalysisGradingValidator.IsWeightedFindingScore(rule),
+            FindingCounts = findingCounts
         }, observedValue);
 
     private static AnalysisGradeMeasureDto BuildMeasure(
@@ -244,13 +285,19 @@ internal static class AnalysisGradeEngine
 
     private static AnalysisGrade Grade(AnalysisGradeMeasureDto measure, double value)
     {
+        // Recette R2-119: one open critical finding makes a weighted finding score not deliverable.
+        if (measure.FindingCounts is { Critical: > 0 }) return AnalysisGrade.F;
         var thresholds = new[]
         {
             measure.AThreshold!.Value,
             measure.BThreshold!.Value,
             measure.CThreshold!.Value,
             measure.DThreshold!.Value,
-            measure.EThreshold!.Value
+            // Only a weighted finding score may leave E open (the validator refuses it elsewhere):
+            // everything above D is then E.
+            measure.EThreshold ?? (measure.Direction == AnalysisMetricDirection.HigherIsBetter
+                ? double.NegativeInfinity
+                : double.PositiveInfinity)
         };
         for (var index = 0; index < thresholds.Length; index++)
         {
@@ -292,26 +339,7 @@ internal static class AnalysisGradeEngine
                 };
             })
             .ToList();
-        var required = domains.Where(domain => domain.Required).ToList();
-        var complete = required.Count > 0
-            && required.All(domain => domain.Completeness == AnalysisGradeCompleteness.Complete
-                && domain.Grade.HasValue);
-        var grade = complete ? required.Max(domain => domain.Grade) : null;
-        return new AnalysisGradeSummaryDto
-        {
-            OverallGrade = grade,
-            MinimumGrade = minimumGrade,
-            Completeness = complete
-                ? AnalysisGradeCompleteness.Complete
-                : AnalysisGradeCompleteness.Incomplete,
-            LimitingDomain = grade.HasValue
-                ? required.First(domain => domain.Grade == grade).Domain
-                : null,
-            CommitHash = commitHash,
-            PipelineRunId = pipelineRunId,
-            EvaluatedAt = evaluatedAt,
-            Domains = domains
-        };
+        return AnalysisGradeMerge.Summarize(domains, minimumGrade, commitHash, pipelineRunId, evaluatedAt);
     }
 
     private static AnalysisGradeSummaryDto WithHash(AnalysisGradeSummaryDto summary)

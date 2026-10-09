@@ -197,17 +197,86 @@ public class ReleasesControllerTests
         Assert.IsType<ForbidResult>(result.Result);
     }
 
+    private PipelineRunPreparation AllowLaunch(int pipelineId, params int[] targets)
+    {
+        var preparation = new PipelineRunPreparation { PipelineId = pipelineId, YamlSnapshot = "name: p", TargetServerIds = targets };
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, pipelineId, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _pipelineRunService.PrepareRunAsync(pipelineId, Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(preparation);
+        _pipelineRunService.ResolveRunParametersAsync(
+                Arg.Any<PipelineRunPreparation>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<PipelineRunPreparation>(0));
+        foreach (var target in targets)
+            _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, target, Permission.Admin, Arg.Any<CancellationToken>())
+                .Returns(true);
+        return preparation;
+    }
+
     [Fact]
     public async Task TriggerBuild_Authorized_ReturnsAccepted()
     {
         _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
             .Returns(true);
-        _serviceMock.TriggerReleaseBuildAsync(1, Arg.Any<TriggerReleaseBuildRequest>(), Arg.Any<CancellationToken>())
+        var preparation = AllowLaunch(10, 42);
+        _serviceMock.TriggerReleaseBuildAsync(1, Arg.Any<TriggerReleaseBuildRequest>(), Arg.Any<PipelineRunPreparation>(), Arg.Any<CancellationToken>())
             .Returns(new ReleaseDto { Id = 1, Version = "1.0.0" });
 
         var result = await _sut.TriggerBuild(1, new TriggerReleaseBuildRequest { PipelineId = 10 }, TestContext.Current.CancellationToken);
 
         Assert.IsType<AcceptedAtActionResult>(result.Result);
+        await _serviceMock.Received(1).TriggerReleaseBuildAsync(1, Arg.Any<TriggerReleaseBuildRequest>(),
+            Arg.Is<PipelineRunPreparation>(p => ReferenceEquals(p, preparation)), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TriggerBuild_WithoutServerAdminOnAPipelineTarget_ReturnsForbidBeforeLaunch()
+    {
+        // BACK-023: Release.Write alone launched a pipeline the direct route refuses to this caller.
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        AllowLaunch(10, 42);
+        _pipelineRunService.PrepareRunAsync(10, Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineRunPreparation { PipelineId = 10, YamlSnapshot = "name: p", TargetServerIds = [42, 43] });
+
+        var result = await _sut.TriggerBuild(1, new TriggerReleaseBuildRequest { PipelineId = 10 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _serviceMock.DidNotReceive().TriggerReleaseBuildAsync(
+            Arg.Any<int>(), Arg.Any<TriggerReleaseBuildRequest>(), Arg.Any<PipelineRunPreparation>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TriggerBuild_WithoutPipelineWrite_ReturnsForbidBeforeLaunch()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var result = await _sut.TriggerBuild(1, new TriggerReleaseBuildRequest { PipelineId = 10 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _pipelineRunService.DidNotReceive().PrepareRunAsync(Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await _serviceMock.DidNotReceive().TriggerReleaseBuildAsync(
+            Arg.Any<int>(), Arg.Any<TriggerReleaseBuildRequest>(), Arg.Any<PipelineRunPreparation>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Rollback_WithoutServerAdminOnAPipelineTarget_ReturnsForbidBeforeLaunch()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _serviceMock.GetReleaseAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new ReleaseDto { Id = 1, ProjectId = 7, Version = "1.0.0" });
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 7, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        AllowLaunch(5);
+        _pipelineRunService.PrepareRunAsync(5, Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineRunPreparation { PipelineId = 5, YamlSnapshot = "name: p", TargetServerIds = [42] });
+
+        var result = await _sut.Rollback(1, new RollbackReleaseRequest { PipelineId = 5 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _serviceMock.DidNotReceive().RollbackReleaseAsync(
+            Arg.Any<int>(), Arg.Any<RollbackReleaseRequest>(), Arg.Any<PipelineRunPreparation>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -219,9 +288,8 @@ public class ReleasesControllerTests
             .Returns(new ReleaseDto { Id = 1, ProjectId = 7, Version = "1.0.0" });
         _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 7, Permission.Write, Arg.Any<CancellationToken>())
             .Returns(true);
-        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 5, Permission.Write, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _serviceMock.RollbackReleaseAsync(1, Arg.Any<RollbackReleaseRequest>(), Arg.Any<CancellationToken>())
+        AllowLaunch(5, 42);
+        _serviceMock.RollbackReleaseAsync(1, Arg.Any<RollbackReleaseRequest>(), Arg.Any<PipelineRunPreparation>(), Arg.Any<CancellationToken>())
             .Returns(new ReleaseRollbackDto { Id = 1, SourceReleaseId = 1, TargetReleaseId = 0 });
 
         var result = await _sut.Rollback(1, new RollbackReleaseRequest { PipelineId = 5 }, TestContext.Current.CancellationToken);
@@ -242,7 +310,7 @@ public class ReleasesControllerTests
         var result = await _sut.Rollback(1, new RollbackReleaseRequest { PipelineId = 5 }, TestContext.Current.CancellationToken);
 
         Assert.IsType<ForbidResult>(result.Result);
-        await _serviceMock.DidNotReceive().RollbackReleaseAsync(Arg.Any<int>(), Arg.Any<RollbackReleaseRequest>(), Arg.Any<CancellationToken>());
+        await _serviceMock.DidNotReceive().RollbackReleaseAsync(Arg.Any<int>(), Arg.Any<RollbackReleaseRequest>(), Arg.Any<PipelineRunPreparation>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -259,14 +327,18 @@ public class ReleasesControllerTests
     }
 
     [Fact]
-    public async Task Webhook_NoSecret_Returns503()
+    public async Task Webhook_NoSecret_ReturnsNotFoundAndProcessesNothing()
     {
         _configMock["Webhook:Secret"].Returns((string?)null);
 
         var result = await _sut.Webhook(TestContext.Current.CancellationToken);
 
-        var status = Assert.IsType<ObjectResult>(result);
-        Assert.Equal(503, status.StatusCode);
+        // R2-120: a webhook that is not configured answers 404 with the ApiError body, never 503.
+        var status = Assert.IsType<NotFoundObjectResult>(result);
+        Assert.Equal(StatusCodes.Status404NotFound, status.StatusCode);
+        Assert.IsType<Aetheus.Shared.Components.Shared.ApiError>(status.Value);
+        _serviceMock.DidNotReceiveWithAnyArgs().ValidateWebhookSignature(default, default!, default!);
+        await _serviceMock.DidNotReceiveWithAnyArgs().HandleWebhookAsync(default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]

@@ -28,7 +28,7 @@ public sealed class PipelineRunPreflightChainTests
 
     public PipelineRunPreflightChainTests()
     {
-        _checks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>())
+        _checks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
@@ -133,7 +133,7 @@ public sealed class PipelineRunPreflightChainTests
     {
         ChildExists("aetheus-qa", Child(environment: "qa"));
         _checks.CheckEnvironmentChecksAsync(
-                Arg.Is<PipelineStageDefinition>(stage => stage.Environment == "qa"), Arg.Any<CancellationToken>())
+                Arg.Is<PipelineStageDefinition>(stage => stage.Environment == "qa"), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         var problems = await RunAsync(Orchestrator("aetheus-qa"));
@@ -150,7 +150,7 @@ public sealed class PipelineRunPreflightChainTests
     {
         ChildExists("aetheus-qa", Child(environment: "qa"));
         _checks.CheckEnvironmentChecksAsync(
-                Arg.Is<PipelineStageDefinition>(stage => stage.Environment == "qa"), Arg.Any<CancellationToken>())
+                Arg.Is<PipelineStageDefinition>(stage => stage.Environment == "qa"), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         var outcome = await BuildSut().FindBlockingProblemsAsync(
@@ -192,7 +192,7 @@ public sealed class PipelineRunPreflightChainTests
     {
         ChildExists("aetheus-deploy-prod", Child(environment: "prod"));
         _checks.CheckEnvironmentChecksAsync(
-                Arg.Is<PipelineStageDefinition>(stage => stage.Environment == "prod"), Arg.Any<CancellationToken>())
+                Arg.Is<PipelineStageDefinition>(stage => stage.Environment == "prod"), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(false);
         var definition = new PipelineYamlDefinition
         {

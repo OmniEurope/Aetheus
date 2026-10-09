@@ -74,6 +74,97 @@ public sealed class MailHelperPathAuditTests
         Assert.True(unmask > 0 && unmask < script.IndexOf("systemctl enable postfix dovecot opendkim", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void Setup_marks_the_stack_provisioned_only_once_its_services_run()
+    {
+        // Tasks 23257 and 23258 (2026-10-03): the marker was written before enable, so a setup that died
+        // there left the page saying "Provisionné par Aetheus" over a stopped Postfix.
+        var script = LinuxHostConfigTemplates.Read("mail/mail-setup");
+        Assert.True(script.IndexOf("/etc/aetheus/mail-stack.managed", StringComparison.Ordinal)
+            > script.IndexOf("systemctl restart postfix", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Purge_unmasks_the_units_before_purging_the_packages()
+    {
+        // Tasks 23257 and 23258 (2026-10-03): postfix was masked on the host. A unit still masked after
+        // "Réinstaller la messagerie" would make the next setup's enable fail the same way.
+        var purge = PurgeBlock();
+        var unmask = purge.IndexOf("systemctl unmask \"$u.service\"", StringComparison.Ordinal);
+        var aptPurge = purge.IndexOf("apt-get purge", StringComparison.Ordinal);
+        Assert.True(unmask > 0, "purge never unmasks");
+        Assert.True(aptPurge > unmask, "purge runs apt-get purge before unmasking");
+        Assert.True(purge.IndexOf("systemctl disable --now", StringComparison.Ordinal) is var disable && disable > unmask && disable < aptPurge);
+        Assert.Contains("postfix dovecot-core dovecot-imapd dovecot-pop3d dovecot-lmtpd opendkim opendkim-tools", purge, StringComparison.Ordinal);
+        // Never autoremove: on a shared host it would take packages that have nothing to do with mail.
+        Assert.DoesNotContain("autoremove", purge, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Purge_removes_the_ownership_marker_last()
+    {
+        // The page reads "provisioned by Aetheus" from the marker: it goes only once everything else is gone,
+        // so a purge that dies half-way is still offered again.
+        var purge = PurgeBlock();
+        Assert.Contains("marker=/etc/aetheus/mail-stack.managed", purge, StringComparison.Ordinal);
+        var markerRemoval = purge.IndexOf("rm -f \"$marker\"", StringComparison.Ordinal);
+        Assert.True(markerRemoval > 0, "purge never removes the ownership marker");
+        Assert.True(markerRemoval > purge.LastIndexOf("rm -rf", StringComparison.Ordinal));
+        Assert.True(markerRemoval > purge.IndexOf("userdel vmail", StringComparison.Ordinal));
+        foreach (var path in new[] { "/etc/postfix", "/etc/dovecot", "/etc/opendkim", "/etc/opendkim.conf", "/var/mail/vhosts" })
+            Assert.Contains(path, purge, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Purge_only_acts_on_what_is_there_so_a_second_run_succeeds()
+    {
+        // Idempotent shape: packages dpkg does not know, units that do not exist and a vmail account that
+        // is not mail-setup's (uid/gid 5000) are left alone, and every removal tolerates a missing path.
+        var purge = PurgeBlock();
+        Assert.True(purge.IndexOf("dpkg-query -W", StringComparison.Ordinal) is var query && query > 0
+            && query < purge.IndexOf("apt-get purge", StringComparison.Ordinal));
+        Assert.Contains("if [ -n \"$to_purge\" ]; then", purge, StringComparison.Ordinal);
+        Assert.True(purge.IndexOf("systemctl list-unit-files", StringComparison.Ordinal) is var exists && exists > 0
+            && exists < purge.IndexOf("systemctl disable --now", StringComparison.Ordinal));
+        Assert.Contains("if [ \"$(id -u vmail 2>/dev/null || true)\" = 5000 ]; then userdel vmail; fi", purge, StringComparison.Ordinal);
+        Assert.Contains("if [ \"$(getent group vmail | cut -d: -f3)\" = 5000 ]; then groupdel vmail; fi", purge, StringComparison.Ordinal);
+        Assert.DoesNotMatch(new Regex(@"(^|\s)rm (?!-f |-rf )"), purge);
+        Assert.DoesNotContain("eval", purge, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Purge_removes_redis_only_when_spam_install_installed_it()
+    {
+        // A Redis the host already ran for another application must survive the mail purge.
+        var script = LinuxHostConfigTemplates.Read("mail/mail-manage");
+        Assert.Contains("for p in $installed_here; do printf '%s\\n' \"$p\"; done >> /etc/aetheus/mail-spam.packages", script, StringComparison.Ordinal);
+        var purge = PurgeBlock();
+        Assert.Matches(new Regex(
+            @"if grep -qsx redis-server /etc/aetheus/mail-spam\.packages; then\n\s+units=""\$units redis-server""; packages=""\$packages redis-server""\n\s+fi"),
+            purge);
+        // Nowhere else does the purge name Redis.
+        Assert.Equal(3, Regex.Matches(purge, "redis-server").Count);
+    }
+
+    [Fact]
+    public void The_helper_announces_version_3_which_carries_purge()
+    {
+        // The page gates "Réinstaller la messagerie" on the reported helper version (3 = purge exists).
+        var script = LinuxHostConfigTemplates.Read("mail/mail-manage");
+        Assert.Contains("# aetheus-mail-helper-version: 3\n", script, StringComparison.Ordinal);
+        Assert.Contains("echo \"aetheus-mail-helper-version: 3\"", script, StringComparison.Ordinal);
+    }
+
+    // The `purge)` branch of mail-manage, up to its closing `;;`.
+    private static string PurgeBlock()
+    {
+        var script = LinuxHostConfigTemplates.Read("mail/mail-manage");
+        var start = script.IndexOf("\n  purge)\n", StringComparison.Ordinal);
+        Assert.True(start > 0, "mail-manage has no purge sub-command");
+        var end = script.IndexOf("\n    ;;\n", start, StringComparison.Ordinal);
+        return script[start..end];
+    }
+
     // Resolve a `$AETHEUS_HELPER_DIR/...`-shaped helper path var against the script's AETHEUS_HELPER_DIR.
     private static string ResolveHelperPath(string varName)
     {

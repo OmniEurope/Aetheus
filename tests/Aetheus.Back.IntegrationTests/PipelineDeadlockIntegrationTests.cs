@@ -12,12 +12,14 @@ namespace Aetheus.Back.IntegrationTests;
 /// End-to-end (real Npgsql + real DI graph + real EF migrations on the Postgres container)
 /// regression for the "run stuck in Running forever" class of bug.
 /// <para>
-/// When stage B <c>depends_on</c> stage A and A completes but NOT successfully (a failed step
-/// flagged <c>continue_on_error</c>), B can never be scheduled. The old code returned silently
-/// from <c>CreateTasksForNextStageAsync</c>, leaving the run <c>Running</c> with no message -
-/// invisible to the Moq unit suite because it never touches a real DbContext. This drives the
-/// real <see cref="IPipelineRunService"/> against real PostgreSQL and asserts the run ends
-/// <c>Failed</c> with a concrete deadlock reason persisted.
+/// Stage A ends with a failed step flagged <c>continue_on_error</c>, which the continue-on-error
+/// contract lets the run continue past: stage B becomes ready. B pins <c>agent: x</c> and no
+/// pipeline runner is registered at all, so B cannot be dispatched. The old code returned silently
+/// from <c>CreateTasksForNextStageAsync</c> in such a case, leaving the run <c>Running</c> with no
+/// message - invisible to the mocked unit suite because it never touches a real DbContext. This
+/// drives the real <see cref="IPipelineRunService"/> against real PostgreSQL and asserts the run
+/// ends <c>Failed</c> with the dispatch refusal ("no online pipeline runner") persisted as its
+/// reason. It is not a dependency deadlock: a continue-on-error failure does not block B.
 /// </para>
 /// </summary>
 [Collection(PostgresCollection.Name)]
@@ -41,15 +43,15 @@ public sealed class PipelineDeadlockIntegrationTests(PostgresFixture fixture)
         """;
 
     [Fact]
-    public async Task AdvanceStage_WhenDependencyCompletedUnsuccessfully_FailsRunWithReason()
+    public async Task AdvanceStage_WhenTheReadyStageHasNoOnlineRunner_FailsRunWithReason()
     {
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
 
         int runId;
         int blockedStepId;
 
-        // Seed a deadlock state directly: stage A's only step Failed+ContinueOnError (so A is
-        // "completed but not successful"), stage B still Pending and depends_on A.
+        // Seed the state directly: stage A's only step Failed+ContinueOnError (so A lets the run
+        // continue), stage B still Pending and depends_on A, and no runner exists to take B.
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

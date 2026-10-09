@@ -362,6 +362,92 @@ public class UserEditTests : BunitContext
             message => message.Severity == OmniSeverity.Danger);
     }
 
+    // --- FRONT-024: the account shown is the account acted on ---
+
+    private void SetupAccount(int id, string username)
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, $"api/users/{id}", new UserDto { Id = id, Username = username, IsActive = true });
+        _handler.SetJsonResponse(HttpMethod.Get, $"api/users/{id}/effective-permissions", new UserPermissionSummaryDto());
+    }
+
+    private static UserDto? DisplayedUser(IRenderedComponent<UserEdit> cut) =>
+        (UserDto?)typeof(UserEdit).GetField("_user", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
+
+    [Fact]
+    public async Task LateAnswerForThePreviousAccount_IsDropped_AndPasswordAndDeleteTargetTheDisplayedOne()
+    {
+        SetupRoles("Admin");
+        var aliceAnswer = new TaskCompletionSource<UserDto>();
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/users/1", _ => aliceAnswer.Task);
+        _handler.SetJsonResponse(HttpMethod.Get, "api/users/1/effective-permissions", new UserPermissionSummaryDto());
+        SetupAccount(2, "bob");
+        _handler.SetResponse(HttpMethod.Post, "api/users/2/change-password", System.Net.HttpStatusCode.NoContent);
+        _handler.SetResponse(HttpMethod.Delete, "api/users/2", System.Net.HttpStatusCode.NoContent);
+        var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
+
+        cut.Render(p => p.Add(x => x.Id, 2));
+        cut.WaitForAssertion(() => Assert.Equal("bob", DisplayedUser(cut)?.Username));
+        aliceAnswer.SetResult(new UserDto { Id = 1, Username = "alice", IsActive = true });
+        // Let the late answer travel through the client and back onto the renderer before looking.
+        await Task.Delay(300, Xunit.TestContext.Current.CancellationToken);
+        await cut.InvokeAsync(() => { });
+
+        Assert.Equal("bob", DisplayedUser(cut)?.Username);
+        Assert.DoesNotContain("alice", cut.Markup);
+        SetFormValue(cut.Instance, "_passwordChange", "NewPassword", "correct-horse-battery");
+        await cut.InvokeAsync(() => InvokeFormSubmitAsync(cut.Instance, "OnChangePassword", "_passwordChange"));
+        var dialog = Services.GetRequiredService<OmniDialogService>();
+        var delete = cut.InvokeAsync(() => (Task)typeof(UserEdit).GetMethod("OnDelete", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(cut.Instance, [])!);
+        await cut.InvokeAsync(() => dialog.Close(true));
+        await delete;
+
+        Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.EndsWith("api/users/2/change-password", StringComparison.Ordinal));
+        Assert.Contains(_handler.Requests, r => r.Method == "DELETE" && r.Url.EndsWith("api/users/2", StringComparison.Ordinal));
+        Assert.DoesNotContain(_handler.Requests, r => r.Method != "GET" && r.Url.Contains("api/users/1", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FailedLoadOfTheNextAccount_LeavesNothingToActOn()
+    {
+        SetupRoles("Admin");
+        SetupAccount(1, "alice");
+        _handler.SetResponse(HttpMethod.Get, "api/users/2", System.Net.HttpStatusCode.InternalServerError);
+        _handler.SetJsonResponse(HttpMethod.Get, "api/users/2/effective-permissions", new UserPermissionSummaryDto());
+        var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
+        cut.WaitForAssertion(() => Assert.Equal("alice", DisplayedUser(cut)?.Username));
+
+        cut.Render(p => p.Add(x => x.Id, 2));
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, r => r.Url.EndsWith("api/users/2", StringComparison.Ordinal)));
+
+        Assert.Null(DisplayedUser(cut));
+        Assert.DoesNotContain("alice", cut.Markup);
+        var delete = cut.InvokeAsync(() => (Task)typeof(UserEdit).GetMethod("OnDelete", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(cut.Instance, [])!);
+        await delete;
+        SetFormValue(cut.Instance, "_passwordChange", "NewPassword", "correct-horse-battery");
+        await cut.InvokeAsync(() => InvokeFormSubmitAsync(cut.Instance, "OnChangePassword", "_passwordChange"));
+
+        Assert.DoesNotContain(_handler.Requests, r => r.Method is "DELETE" or "POST");
+    }
+
+    [Fact]
+    public async Task DeleteConfirmedAfterTheRouteMovedToAnotherAccount_DeletesNobody()
+    {
+        SetupRoles("Admin");
+        SetupAccount(1, "alice");
+        SetupAccount(2, "bob");
+        var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
+        cut.WaitForAssertion(() => Assert.Equal("alice", DisplayedUser(cut)?.Username));
+        var dialog = Services.GetRequiredService<OmniDialogService>();
+        var delete = cut.InvokeAsync(() => (Task)typeof(UserEdit).GetMethod("OnDelete", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(cut.Instance, [])!);
+
+        cut.Render(p => p.Add(x => x.Id, 2));
+        cut.WaitForAssertion(() => Assert.Equal("bob", DisplayedUser(cut)?.Username));
+        await cut.InvokeAsync(() => dialog.Close(true));
+        await delete;
+
+        Assert.DoesNotContain(_handler.Requests, r => r.Method == "DELETE");
+    }
+
     // --- OnChangePassword ---
 
     [Fact]
@@ -385,6 +471,7 @@ public class UserEditTests : BunitContext
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
         cut.Find("input[type='password']").Input("short");
+        BunitTestHelper.Interactive(this);
 
         cut.Find("form").Submit();
 

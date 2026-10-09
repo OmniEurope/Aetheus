@@ -69,17 +69,27 @@ public sealed class PrometheusNamingScorieAuditTests
         // whitelists such an intentional usage without disabling the guard for accidental scorie.
         if (line.Contains("prometheus-ok", StringComparison.OrdinalIgnoreCase)) return false;
 
-        if (isShell)
-        {
-            var trimmed = line.TrimStart();
-            if (trimmed.StartsWith('#')) return false;
-            // Strip an inline '#' comment (best-effort: '#' not inside a quoted string). Good enough for
-            // sudoers/heredoc lines, where PROM_ would appear as a live alias, not in a quoted literal.
-            var hashIdx = IndexOfUnquoted(line, '#');
-            var code = hashIdx >= 0 ? line[..hashIdx] : line;
-            return PromToken.IsMatch(code);
-        }
+        // Recette R2-107: the shell and the C# readings are their own methods, each under the grade-A
+        // cyclomatic threshold.
+        return isShell
+            ? PromToken.IsMatch(ShellCode(line))
+            : PromToken.IsMatch(CodeOutsideComments(line, ref inBlockComment));
+    }
 
+    /// <summary>A shell line without its comment: nothing for a comment line, the text before an unquoted <c>#</c> otherwise.</summary>
+    private static string ShellCode(string line)
+    {
+        var trimmed = line.TrimStart();
+        if (trimmed.StartsWith('#')) return string.Empty;
+        // Strip an inline '#' comment (best-effort: '#' not inside a quoted string). Good enough for
+        // sudoers/heredoc lines, where PROM_ would appear as a live alias, not in a quoted literal.
+        var hashIdx = IndexOfUnquoted(line, '#');
+        return hashIdx >= 0 ? line[..hashIdx] : line;
+    }
+
+    /// <summary>A C#/Razor line without its <c>//</c> comment and the parts inside <c>/* */</c> block comments.</summary>
+    private static string CodeOutsideComments(string line, ref bool inBlockComment)
+    {
         var buffer = new System.Text.StringBuilder();
         for (var i = 0; i < line.Length; i++)
         {
@@ -93,7 +103,7 @@ public sealed class PrometheusNamingScorieAuditTests
             if (c == '/' && i + 1 < line.Length && line[i + 1] == '*') { inBlockComment = true; i++; continue; }
             buffer.Append(c);
         }
-        return PromToken.IsMatch(buffer.ToString());
+        return buffer.ToString();
     }
 
     private static int IndexOfUnquoted(string line, char target)

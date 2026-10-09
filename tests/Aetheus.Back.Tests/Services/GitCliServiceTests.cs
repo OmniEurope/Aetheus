@@ -76,4 +76,18 @@ public class GitCliServiceTests
     public async Task ResolveBranchCommit_DisallowedUrl_FailsBeforeGitStarts(string url)
         => await Assert.ThrowsAsync<BadRequestException>(() =>
             _sut.ResolveBranchCommitAsync(url, "main", TestContext.Current.CancellationToken));
+
+    [Fact]
+    public void ListReleaseBranches_NeverFollowsARedirectAwayFromThePinnedAddress()
+    {
+        var psi = GitCliService.BuildListReleaseBranchesStartInfo(
+            "https://github.com/acme/demo.git", ("github.com", 443, "140.82.121.4"));
+        var args = psi.ArgumentList.ToList();
+        var lsRemote = args.IndexOf("ls-remote");
+
+        var redirect = args.IndexOf("http.followRedirects=false");
+        Assert.True(redirect > 0 && redirect < lsRemote, string.Join(' ', args));
+        Assert.Equal("-c", args[redirect - 1]);
+        Assert.Contains("http.curloptResolve=github.com:443:140.82.121.4", args);
+    }
 }

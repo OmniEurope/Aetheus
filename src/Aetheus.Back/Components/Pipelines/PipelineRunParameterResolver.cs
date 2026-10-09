@@ -66,11 +66,19 @@ public sealed class PipelineRunParameterResolver(
         var ids = new HashSet<int>();
         foreach (var stage in YamlParsingHelper.FlattenJobs(definition))
         {
+            // BACK-021: a selector still holding a parameter expression matches no server by name, which
+            // read as "nothing to authorize". Whatever value it receives later stays inside the
+            // organization's eligible servers, so that whole set is what it must be authorized against.
+            var unresolved = IsUnresolved(stage.Pool) || IsUnresolved(stage.Environment) || IsUnresolved(stage.Agent);
             var candidates = await repo.FindCandidateTargetServerIdsAsync(
-                stage.Pool, stage.Environment, stage.Agent, OsTypeHelper.Parse(stage.Os),
-                organizationId, dispatchServers.StageHasDeployStep(stage), ct).ConfigureAwait(false);
+                unresolved ? null : stage.Pool, unresolved ? null : stage.Environment, unresolved ? null : stage.Agent,
+                OsTypeHelper.Parse(stage.Os), organizationId, dispatchServers.StageHasDeployStep(stage), ct)
+                .ConfigureAwait(false);
             ids.UnionWith(candidates);
         }
         return ids;
     }
+
+    private static bool IsUnresolved(string? selector) =>
+        selector?.Contains("${{", StringComparison.Ordinal) == true;
 }

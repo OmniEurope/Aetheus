@@ -319,15 +319,9 @@ public sealed class MigrationRegressionTests(PostgresFixture fixture)
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync(migrations[targetIndex - 1], TestContext.Current.CancellationToken);
 
-        var project = new Project
-        {
-            Name = "Release invariant",
-            Description = "Migration regression fixture",
-            OrganizationId = await SeededOrganizationIdAsync(db)
-        };
-        db.Projects.Add(project);
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        var projectId = project.Id;
+        var projectId = await LegacyProjectRows.InsertAsync(
+            db, "Release invariant", await SeededOrganizationIdAsync(db), TestContext.Current.CancellationToken,
+            "Migration regression fixture");
 
         // Releases, unlike Projects, is written in SQL rather than through the entity. The database
         // sits at a 2026-07 migration while Release describes today's schema, so an EF insert or

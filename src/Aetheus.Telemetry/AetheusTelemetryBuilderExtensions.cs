@@ -15,6 +15,7 @@ namespace Aetheus.Telemetry;
 public static class AetheusTelemetryBuilderExtensions
 {
     private const string EnabledEnvironmentVariable = "AETHEUS_TELEMETRY_ENABLED";
+    private const string DatabaseSizeEnabledEnvironmentVariable = "AETHEUS_TELEMETRY_DATABASE_SIZE_ENABLED";
 
     public static IServiceCollection AddAetheusTelemetry(
         this IServiceCollection services,
@@ -30,6 +31,8 @@ public static class AetheusTelemetryBuilderExtensions
         var enabledOverride = Environment.GetEnvironmentVariable(EnabledEnvironmentVariable);
         if (bool.TryParse(enabledOverride, out var enabled))
             options.Enabled = enabled;
+        if (bool.TryParse(Environment.GetEnvironmentVariable(DatabaseSizeEnabledEnvironmentVariable), out var databaseSize))
+            options.DatabaseSize.Enabled = databaseSize;
 
         options.Validate();
         services.AddSingleton<AetheusTelemetryMarker>();
@@ -78,16 +81,25 @@ public static class AetheusTelemetryBuilderExtensions
         // process, exported as gauges on the same metrics pipeline.
         services.AddAetheusRequestPerformanceMetrics();
 
+        // PLAN-013 lot 1: the database size, when the host handed over a connection.
+        AddDatabaseSizeMetrics(services, options.DatabaseSize);
+
+        // PLAN-013 lot 4: the metrics are sent at the interval of the project's « Conservation des
+        // données » setting, read from Aetheus with the ingest key, instead of the fixed periodic reader.
+        var metricReader = AddScheduledMetricExport(services, options);
+
         openTelemetry.WithMetrics(builder =>
         {
             builder.AddAspNetCoreInstrumentation();
             builder.AddMeter(RequestPerformanceMetrics.MeterName);
+            if (options.DatabaseSize.Enabled)
+                builder.AddMeter(DatabaseSizeMetrics.MeterName);
             if (options.EnableHttpClientTracing)
                 builder.AddHttpClientInstrumentation();
             if (options.EnableRuntimeMetrics)
                 builder.AddRuntimeInstrumentation();
 
-            builder.AddOtlpExporter(exporter => ConfigureExporter(exporter, options.MetricsEndpoint!, options));
+            builder.AddReader(metricReader);
         });
 
         if (options.EnableLogs)
@@ -109,6 +121,39 @@ public static class AetheusTelemetryBuilderExtensions
         }
 
         return services;
+    }
+
+    private static BaseExportingMetricReader AddScheduledMetricExport(
+        IServiceCollection services,
+        AetheusTelemetryOptions options)
+    {
+        var exporterOptions = new OtlpExporterOptions();
+        ConfigureExporter(exporterOptions, options.MetricsEndpoint!, options);
+        var reader = new BaseExportingMetricReader(new OtlpMetricExporter(exporterOptions));
+        var schedule = MetricExportSchedule.FromEnvironment();
+        services.AddSingleton(schedule);
+        services.AddHostedService(provider => new MetricExportScheduler(
+            reader,
+            schedule,
+            new ServerConfigurationClient(
+                new HttpClient { Timeout = TimeSpan.FromMilliseconds(options.ExportTimeoutMilliseconds) },
+                ServerConfigurationClient.ConfigurationUriFor(options.MetricsEndpoint!),
+                options.IngestKey),
+            provider.GetService<TimeProvider>() ?? TimeProvider.System,
+            provider.GetService<ILogger<MetricExportScheduler>>()));
+        return reader;
+    }
+
+    private static void AddDatabaseSizeMetrics(IServiceCollection services, DatabaseSizeOptions options)
+    {
+        if (!options.Enabled)
+            return;
+        services.AddSingleton(options);
+        services.AddSingleton(provider => new DatabaseSizeMetrics(
+            provider.GetRequiredService<DatabaseSizeOptions>(),
+            provider.GetService<TimeProvider>() ?? TimeProvider.System,
+            provider.GetService<ILogger<DatabaseSizeMetrics>>()));
+        services.AddHostedService(provider => provider.GetRequiredService<DatabaseSizeMetrics>());
     }
 
     private static bool ReadBool(string? raw, bool fallback) =>
@@ -150,7 +195,13 @@ public static class AetheusTelemetryBuilderExtensions
             TraceSampleRatio = section.GetValue("TraceSampleRatio", 0.1),
             ExportTimeoutMilliseconds = section.GetValue("ExportTimeoutMilliseconds", 3000),
             MaxExportQueueSize = section.GetValue("MaxExportQueueSize", 2048),
-            MaxExportBatchSize = section.GetValue("MaxExportBatchSize", 512)
+            MaxExportBatchSize = section.GetValue("MaxExportBatchSize", 512),
+            DatabaseSize = new DatabaseSizeOptions
+            {
+                Enabled = section.GetValue("DatabaseSize:Enabled", false),
+                IntervalMinutes = section.GetValue("DatabaseSize:IntervalMinutes", DatabaseSizeOptions.DefaultIntervalMinutes),
+                TopTables = section.GetValue("DatabaseSize:TopTables", DatabaseSizeOptions.DefaultTopTables)
+            }
         };
     }
 

@@ -21,6 +21,14 @@ public partial class RetiredServersDialog
     private bool _loading;
     private bool _loadFailed;
 
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<RetiredServerDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, descending) = args.ToSortRequest(nameof(RetiredServerDto.RetiredAt), fallbackDescending: true);
+        return Api.Servers.GetRetiredServersAsync(page, pageSize, sortBy, descending, filters: args.ToApiFilters());
+    }
+
     private async Task LoadDataAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();

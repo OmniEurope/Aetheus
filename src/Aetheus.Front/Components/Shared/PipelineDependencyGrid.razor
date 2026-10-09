@@ -1,6 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @namespace Aetheus.Front.Components.Shared
-<OmniDataGrid Items="@DisplayItems" TItem="PipelineDependencyDto"
+<OmniDataGrid Items="@DisplayItems" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" TItem="PipelineDependencyDto"
     MaxHeight="@(FillHeight ? null : AetheusGrid.ScrollMaxHeight)"
     ScrollMode="@(Virtualize ? OmniDataGridScrollMode.Virtual : OmniDataGridScrollMode.All)" VirtualizationOverscanCount="3" FillAvailableHeight="@FillHeight"
     ExpandMode="OmniDataGridRowMode.Single" RowRender="@OnRowRender" OnRowClick="@(args => OnRowClick(args.Item))"

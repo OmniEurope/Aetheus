@@ -107,6 +107,25 @@ public class MailRepository(AppDbContext db) : IMailRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<MailDomain?> FindDomainByNameAsync(int serverId, string name, CancellationToken ct = default)
+    {
+        var lowered = name.ToLowerInvariant();
+        return await db.MailDomains
+            .Where(d => d.ServerId == serverId && d.Name.ToLower() == lowered)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<MailAccount?> FindAccountByEmailAsync(string email, CancellationToken ct = default)
+    {
+        var lowered = email.ToLowerInvariant();
+        return await db.MailAccounts
+            .Where(a => a.Email.ToLower() == lowered)
+            .Include(a => a.MailDomain)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
+
     public async Task AddDomainAsync(MailDomain domain, CancellationToken ct = default)
     {
         db.MailDomains.Add(domain);
@@ -148,6 +167,16 @@ public class MailRepository(AppDbContext db) : IMailRepository
         db.Tasks.Add(task);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
+
+    public async Task<bool> HasOpenTaskAsync(int serverId, IReadOnlyCollection<OperationKind> kinds, CancellationToken ct = default) =>
+        await db.Tasks
+            .AsNoTracking()
+            .AnyAsync(t => t.ServerId == serverId
+                && kinds.Contains(t.Operation)
+                && (t.Status == TaskExecutionStatus.Pending
+                    || t.Status == TaskExecutionStatus.Assigned
+                    || t.Status == TaskExecutionStatus.Running), ct)
+            .ConfigureAwait(false);
 
     // --- Aliases ---
 

@@ -10,15 +10,17 @@ namespace Aetheus.Back.Tests.DataSeed;
 
 public sealed class DeliveryPipelineTemplateSeederTests
 {
+    /// <summary>
+    /// Recette R2-094: the numbering restarted at v1 with the current contents. The candidate kept its
+    /// v1 (same hash as before the reset), the promotion's v1 is its former v2 and the blue-green
+    /// cutover's v1 its former v6. A published v1 never changes again: the seeder refuses it at startup.
+    /// </summary>
     [Theory]
     [InlineData("application-candidate-v1.yaml", "e518dbb44946507c765c7206e1351b9cc03b2fd25e3c4be60a7783c9288d5788")]
-    [InlineData("application-candidate-v2.yaml", "45879dce840b5a204df957296008c22e0f84b0788cac6e0329055abf8d987d14")]
-    [InlineData("application-candidate-v3.yaml", "8467249a0e54eafbb80f65b936fe9b151f1ec2f6c9bb1234959a8730bcb42ac0")]
-    [InlineData("application-candidate-v4.yaml", "7dcfbc0fc77892dad9e67b5011f659116daf3548a57ae1b7fbaed06fac2cb22a")]
-    [InlineData("application-candidate-v5.yaml", "eabb46f37ec19b0fdcf3bad1a53e279b5296b5c086a1c7496b68c11141464064")]
-    [InlineData("application-candidate-v6.yaml", "7b3b57fb0d4b9b94621bf74df45a87b10f047283150eeb72265ea62c7b5a4037")]
-    [InlineData("application-candidate-v7.yaml", "40d0be0b54823f6096eae8b03017ee8d9e3ad3da3e42429468fe6d1d1a006e10")]
-    public void CandidatePublishedVersions_HaveStableContent(string resource, string expectedSha256)
+    [InlineData("application-candidate-v2.yaml", "140793bce04abf756465316c11c73929af72e0aff3d4e04aa6b32153d8f9f421")]
+    [InlineData("application-promotion-v1.yaml", "02ffed7982ade22b01b722f7fd312b348c66871d7fd03d8b2c9e58a9ea05b78c")]
+    [InlineData("host-bluegreen-deploy-v1.yaml", "04722e3c4e8c9cc766c597b43ce71207b2ba92e1c3ccf04e1127050d0e884723")]
+    public void ShippedVersions_HaveStableContent(string resource, string expectedSha256)
     {
         var normalized = DeliveryPipelineTemplateSeeder.ReadResource(resource)
             .Replace("\r\n", "\n", StringComparison.Ordinal)
@@ -69,66 +71,33 @@ public sealed class DeliveryPipelineTemplateSeederTests
         Assert.Contains(templates, template => template.Name == "application-release-fast");
         Assert.Contains(templates, template => template.Name == "publish-observability-packages");
         Assert.DoesNotContain(templates, template => template.Name.Contains("aetheus", StringComparison.OrdinalIgnoreCase));
+        // Recette R2-094: every shipped template restarted at v1; one shipped file per published version
+        // since (the candidate's v2, recette R2-121).
+        Assert.All(templates, template =>
+        {
+            var shippedFiles = DeliveryPipelineTemplateSeeder.Definitions[template.Name].Resources.Length;
+            Assert.Equal(shippedFiles, template.LatestVersion);
+            Assert.Equal(Enumerable.Range(1, shippedFiles), template.Versions.Select(version => version.Version).Order());
+        });
         var candidate = Assert.Single(templates, template => template.Name == "application-candidate");
-        Assert.Equal(7, candidate.LatestVersion);
-        Assert.Equal([1, 2, 3, 4, 5, 6, 7], candidate.Versions.OrderBy(version => version.Version).Select(version => version.Version));
-        var promotion = Assert.Single(templates, template => template.Name == "application-promotion");
-        Assert.Equal(2, promotion.LatestVersion);
-        Assert.Equal([1, 2], promotion.Versions.OrderBy(version => version.Version).Select(version => version.Version));
+        Assert.Equal(2, candidate.LatestVersion);
+        Assert.Contains("R2-121", candidate.Versions.Single(version => version.Version == 2).ChangelogEntry,
+            StringComparison.Ordinal);
+        Assert.Contains(templates, template => template.Name == "application-qa-extended");
+        Assert.Contains(templates, template => template.Name == "application-security-history");
         var light = Assert.Single(templates, template => template.Name == "application-light");
         Assert.Equal(1, light.LatestVersion);
         Assert.Equal(1, Assert.Single(light.Versions).Version);
-        // v1 could describe an environment but not the run acting on it, so v2 adds the Compose
-        // inputs; v2 then handed that one list to every blue-green step including the identity only
-        // the starting step receives, so v3 separates the cutover's list; v3 still handed the cutover
-        // list to the rollback, which fires on runs that never produced those tags, so v4 gives the
-        // rollback its own; v5 goes back to one list now that the control plane decides per step what
-        // it can forward (D-01); v6 lets a consumer arm a host-side confirmation window (PLAN-003 2.7).
-        // All six stay published: a version, once seeded, is immutable.
+        // The blue-green cutover's v1 is the content last published as v6 (confirmation window).
         var blueGreen = Assert.Single(templates, template => template.Name == "host-bluegreen-deploy");
-        Assert.Equal(6, blueGreen.LatestVersion);
-        Assert.Equal([1, 2, 3, 4, 5, 6], blueGreen.Versions.OrderBy(version => version.Version).Select(version => version.Version));
-        var v5 = Assert.Single(blueGreen.Versions, version => version.Version == 5);
-        Assert.Contains("one Compose variable list", v5.ChangelogEntry, StringComparison.Ordinal);
-        var v6 = Assert.Single(blueGreen.Versions, version => version.Version == 6);
-        Assert.Contains("confirm_minutes: \"$(BG_CONFIRM_MINUTES)\"", v6.YamlContent, StringComparison.Ordinal);
+        Assert.Contains("confirm_minutes: \"$(BG_CONFIRM_MINUTES)\"", Assert.Single(blueGreen.Versions).YamlContent,
+            StringComparison.Ordinal);
+        // A fresh database has nothing to renumber; the reset is marked done all the same.
+        Assert.True(await db.AppSettings.AnyAsync(setting => setting.Key == DeliveryTemplateVersionReset.MarkerKey,
+            TestContext.Current.CancellationToken));
         // "Revenir à N-1" is its own template: nothing is built or migrated on the way back.
         var revert = Assert.Single(templates, template => template.Name == "host-bluegreen-revert");
         Assert.Contains("type: bluegreen-revert", Assert.Single(revert.Versions).YamlContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task SeedAsync_PreservesRecognizedHistoricalCandidateVersionCollision()
-    {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
-            .Options;
-        await using var db = new AppDbContext(options);
-        db.Organizations.Add(new Organization
-        {
-            Name = "Aetheus",
-            Slug = "aetheus",
-            CreatedAt = DateTime.UnixEpoch,
-            UpdatedAt = DateTime.UnixEpoch
-        });
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        var organizationId = await db.Organizations
-            .Select(organization => organization.Id)
-            .SingleAsync(TestContext.Current.CancellationToken);
-        var historicalYaml = DeliveryPipelineTemplateSeeder.ReadResource(
-            "application-candidate-v3-legacy-advisory.yaml");
-        db.PipelineTemplates.Add(CreateHistoricalCandidate(organizationId, historicalYaml));
-        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        var seeder = new DeliveryPipelineTemplateSeeder(db, TimeProvider.System);
-
-        await seeder.SeedAsync(TestContext.Current.CancellationToken);
-
-        var candidate = await db.PipelineTemplates
-            .Include(template => template.Versions)
-            .SingleAsync(template => template.Name == "application-candidate", TestContext.Current.CancellationToken);
-        var versionThree = Assert.Single(candidate.Versions, version => version.Version == 3);
-        Assert.Equal(historicalYaml, versionThree.YamlContent);
-        Assert.Equal(7, candidate.LatestVersion);
     }
 
     [Fact]
@@ -149,7 +118,8 @@ public sealed class DeliveryPipelineTemplateSeederTests
         var organizationId = await db.Organizations
             .Select(organization => organization.Id)
             .SingleAsync(TestContext.Current.CancellationToken);
-        db.PipelineTemplates.Add(CreateHistoricalCandidate(organizationId, "stages: []"));
+        // A lone v1 that differs is not something the reset renumbers: immutability refuses it.
+        db.PipelineTemplates.Add(CreateHistoricalCandidate(organizationId, "stages: []", versions: 1));
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var seeder = new DeliveryPipelineTemplateSeeder(db, TimeProvider.System);
 
@@ -161,66 +131,20 @@ public sealed class DeliveryPipelineTemplateSeederTests
     [Fact]
     public void CandidateTemplate_UsesProductionBaselineAndBuildOnceReleaseContract()
     {
+        // Recette R2-094 kept the candidate's v1 content, the one aetheus-candidate always pinned.
         var versionOne = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v1.yaml");
-        var versionTwo = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v2.yaml");
-        var versionThree = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v3.yaml");
-        var versionFour = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v4.yaml");
-        var yaml = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v5.yaml");
 
         Assert.Contains("release: previous-deployed", versionOne, StringComparison.Ordinal);
-        Assert.Contains("release: current-deployed", versionTwo, StringComparison.Ordinal);
-        Assert.DoesNotContain("isolation:", versionTwo, StringComparison.Ordinal);
-        Assert.Contains("mode: container", versionThree, StringComparison.Ordinal);
-        Assert.Contains("network: none", versionThree, StringComparison.Ordinal);
-        Assert.DoesNotContain("continue_on_error: true", versionThree, StringComparison.Ordinal);
-        Assert.Contains("release: current-deployed", versionFour, StringComparison.Ordinal);
-        Assert.Contains("network: none", versionFour, StringComparison.Ordinal);
-        Assert.Contains("DELIVERY_BASELINE_CONTRACT_SHA256", versionFour, StringComparison.Ordinal);
-        Assert.Contains("mode: container", versionFour, StringComparison.Ordinal);
-        Assert.Contains("node:24.4.1-alpine@sha256:", versionFour, StringComparison.Ordinal);
-        Assert.Contains("network: none", versionFour, StringComparison.Ordinal);
-        Assert.Contains("artifact_source_pipeline: \"$(APPLICATION_CI_PIPELINE)\"", versionFour, StringComparison.Ordinal);
-        Assert.Contains("deployed: false", versionFour, StringComparison.Ordinal);
-        Assert.Equal(2, versionFour.Split("continue_on_error: true", StringSplitOptions.None).Length - 1);
-        Assert.Contains("name: cacheScenario", yaml, StringComparison.Ordinal);
-        Assert.Contains("APPLICATION_ARTIFACT_NAME: ApplicationPayload-artifacts", yaml, StringComparison.Ordinal);
-        Assert.Contains("APPLICATION_GITLEAKS_MODE: release-range", yaml, StringComparison.Ordinal);
-        Assert.Contains("APPLICATION_FORMAT_MODE: affected", yaml, StringComparison.Ordinal);
-        Assert.Contains("depends_on: [BaselineIdentity]", yaml, StringComparison.Ordinal);
-        Assert.Contains("APPLICATION_CACHE_SCENARIO: \"${{ parameters.cacheScenario }}\"", yaml, StringComparison.Ordinal);
-        Assert.Contains("APPLICATION_GITLEAKS_MODE: \"$(APPLICATION_GITLEAKS_MODE)\"", yaml, StringComparison.Ordinal);
-        Assert.Contains("APPLICATION_FORMAT_MODE: \"$(APPLICATION_FORMAT_MODE)\"", yaml, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void LatestCandidateTemplate_CompletesAssuranceBeforePublishingRelease()
-    {
-        var yaml = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v7.yaml");
-        var candidate = Assert.IsType<PipelineYamlDefinition>(
-            YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(yaml));
-
-        Assert.Equal(["CI", "Quality", "Security", "QA", "Candidate"],
-            candidate.Stages.Select(stage => stage.Name));
-        Assert.Equal(["CI"], candidate.Stages.Single(stage => stage.Name == "Quality").DependsOn);
-        Assert.Equal(["Quality"], candidate.Stages.Single(stage => stage.Name == "Security").DependsOn);
-        Assert.Equal(["Security"], candidate.Stages.Single(stage => stage.Name == "QA").DependsOn);
-        Assert.Equal(["QA"], candidate.Stages.Single(stage => stage.Name == "Candidate").DependsOn);
-        Assert.All(candidate.Stages.Take(4).SelectMany(stage => stage.Steps),
-            step => Assert.Equal("trigger", step.Type));
-        var release = Assert.Single(candidate.Stages.Single(stage => stage.Name == "Candidate").Steps);
-        Assert.Equal("release", release.Type);
-        Assert.False(release.Deployed);
     }
 
     [Fact]
     public void PromotionTemplate_RequiresAnExplicitImmutableCandidateVersion()
     {
+        // Recette R2-094: v1 is the content formerly published as v2.
         var versionOne = DeliveryPipelineTemplateSeeder.ReadResource("application-promotion-v1.yaml");
-        var versionTwo = DeliveryPipelineTemplateSeeder.ReadResource("application-promotion-v2.yaml");
 
-        Assert.Contains("default: \"c-$(BUILD_SOURCEVERSION)\"", versionOne, StringComparison.Ordinal);
-        Assert.Contains("required: true", versionTwo, StringComparison.Ordinal);
-        Assert.DoesNotContain("default: \"c-$(BUILD_SOURCEVERSION)\"", versionTwo, StringComparison.Ordinal);
+        Assert.Contains("required: true", versionOne, StringComparison.Ordinal);
+        Assert.DoesNotContain("default: \"c-$(BUILD_SOURCEVERSION)\"", versionOne, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -250,7 +174,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
             .Where(resource => resource.StartsWith("generic/", StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal(11, genericResources.Length);
+        Assert.Equal(13, genericResources.Length);
         foreach (var resource in genericResources)
         {
             var yaml = DeliveryPipelineTemplateSeeder.ReadResource(resource);
@@ -262,16 +186,97 @@ public sealed class DeliveryPipelineTemplateSeederTests
             PipelineDefinitionValidator.ValidateStages(definition, errors, warnings);
             Assert.Empty(errors);
             Assert.NotEmpty(definition.Stages);
-            Assert.DoesNotContain("Aetheus", yaml, StringComparison.OrdinalIgnoreCase);
+            // The platform's own interface (its output-variable marker, its checkout-depth variable)
+            // is not an implementation detail of the Aetheus product; anything else named Aetheus is.
+            var withoutPlatformInterface = yaml
+                .Replace("##aetheus[setvariable", string.Empty, StringComparison.Ordinal)
+                .Replace("AETHEUS_GIT_HISTORY_DEPTH", string.Empty, StringComparison.Ordinal);
+            Assert.DoesNotContain("Aetheus", withoutPlatformInterface, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("sonytumen.com", yaml, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("/var/lib/", yaml, StringComparison.Ordinal);
             Assert.DoesNotContain("src/", yaml, StringComparison.Ordinal);
             Assert.DoesNotContain("tests/", yaml, StringComparison.Ordinal);
         }
 
-        Assert.All(genericResources.Where(resource => resource is not "generic/application-nightly.yaml"),
+        // The nightly only orchestrates; the security scans are the platform's own scanners.
+        string[] adapterFree =
+        [
+            "generic/application-nightly.yaml",
+            "generic/application-security.yaml",
+            "generic/application-security-history.yaml"
+        ];
+        Assert.All(genericResources.Where(resource => !adapterFree.Contains(resource)),
             resource => Assert.Contains(".pipeline/scripts/",
                 DeliveryPipelineTemplateSeeder.ReadResource(resource), StringComparison.Ordinal));
+    }
+
+    private static PipelineYamlDefinition Shipped(string resource) =>
+        YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(
+            DeliveryPipelineTemplateSeeder.ReadResource(resource))!;
+
+    private static IEnumerable<string> GenericResourcesAndCandidateV2() =>
+        DeliveryPipelineTemplateSeeder.Definitions.Values
+            .SelectMany(definition => definition.Resources)
+            .Where(resource => resource.StartsWith("generic/", StringComparison.Ordinal))
+            .Append("application-candidate-v2.yaml");
+
+    /// <summary>
+    /// Recette R2-121, ADR-012: the steps of a stage run concurrently. A restore beside the adapter
+    /// that reads it, or a "mark deployed" beside the deployment, raced in the v1 generic templates.
+    /// A stage that restores artifacts or writes a release does only that.
+    /// </summary>
+    [Fact]
+    public void GenericTemplates_NeverShareAStageBetweenARestoreOrReleaseAndAnotherStep()
+    {
+        foreach (var resource in GenericResourcesAndCandidateV2())
+            foreach (var stage in YamlParsingHelper.FlattenJobs(Shipped(resource)))
+            {
+                var types = stage.Steps.Select(step => step.Type ?? "shell").Distinct().ToList();
+                if (types.Contains("restore-artifacts") || types.Contains("release"))
+                    Assert.True(types.Count == 1, $"{resource} stage '{stage.Name}' mixes {string.Join(", ", types)}.");
+            }
+    }
+
+    /// <summary>Recette R2-121: a new project's quality and security runs carry a grade, on rules the
+    /// deployed backend accepts (no finding_score until R2-119 ships), with every gate after its producers.</summary>
+    [Theory]
+    [InlineData("generic/application-quality.yaml", "quality")]
+    [InlineData("generic/application-security.yaml", "security")]
+    [InlineData("generic/application-security-history.yaml", "security")]
+    public void GenericAnalysisTemplates_GradeAfterTheirProducersWithAcceptedRules(string resource, string scope)
+    {
+        var definition = Shipped(resource);
+        var stages = YamlParsingHelper.FlattenJobs(definition);
+        var gate = Assert.Single(stages.SelectMany(stage => stage.Steps), step => step.Type == "analysis-gate");
+
+        Assert.Equal(scope, gate.AnalysisScope);
+        Assert.NotNull(gate.AnalysisGrading);
+        Assert.Empty(PipelineAnalysisGradingValidator.Validate(scope, gate.AnalysisGrading));
+        Assert.All(gate.AnalysisGrading.Rules, rule => Assert.Null(rule.FindingScore));
+        Assert.NotEmpty(gate.AnalysisGrading.RequiredDomains);
+        Assert.Contains(stages.SelectMany(stage => stage.Steps), step => step.Type == "scanner");
+        Assert.Empty(PipelineAnalysisGateOrderingValidator.Validate(stages));
+    }
+
+    /// <summary>Recette R2-121: the candidate a wizard creates releases the artifact the generic CI
+    /// packages; v1 defaulted to Package-artifacts, which no generic pipeline produces.</summary>
+    [Fact]
+    public void CandidateV2_ReleasesThePayloadTheGenericCiPackages_AndSkipsAbsentPipelines()
+    {
+        var candidate = Shipped("application-candidate-v2.yaml");
+        var ciArtifact = Assert.Single(Shipped("generic/application-ci.yaml").Stages).ArtifactName;
+
+        Assert.Equal(ciArtifact, candidate.Variables["APPLICATION_ARTIFACT_NAME"]);
+        foreach (var (stage, toggle) in new[]
+                 {
+                     ("Quality", "APPLICATION_QUALITY_ENABLED"),
+                     ("Security", "APPLICATION_SECURITY_ENABLED"),
+                     ("QA", "APPLICATION_QA_ENABLED")
+                 })
+        {
+            Assert.Equal($"eq(variables['{toggle}'], 'true')", candidate.Stages.Single(item => item.Name == stage).Condition);
+            Assert.Equal("true", candidate.Variables[toggle]);
+        }
     }
 
     [Fact]
@@ -380,26 +385,23 @@ public sealed class DeliveryPipelineTemplateSeederTests
             template.Versions.Single(item => item.Version == 2).YamlContent, StringComparison.Ordinal);
     }
 
-    private static PipelineTemplate CreateHistoricalCandidate(int organizationId, string yamlContent) =>
+    private static PipelineTemplate CreateHistoricalCandidate(int organizationId, string yamlContent, int versions) =>
         new()
         {
             Name = "application-candidate",
             Description = "Historical application candidate",
             Category = "Application Delivery",
             OrganizationId = organizationId,
-            LatestVersion = 3,
+            LatestVersion = versions,
             CreatedAt = DateTime.UnixEpoch,
             UpdatedAt = DateTime.UnixEpoch,
-            Versions =
-            [
-                new PipelineTemplateVersion
-                {
-                    Version = 3,
-                    YamlContent = yamlContent,
-                    ChangelogEntry = "Historical published variant",
-                    CreatedAt = DateTime.UnixEpoch,
-                    CreatedByUsername = "system"
-                }
-            ]
+            Versions = Enumerable.Range(1, versions).Select(version => new PipelineTemplateVersion
+            {
+                Version = version,
+                YamlContent = yamlContent,
+                ChangelogEntry = "Historical published variant",
+                CreatedAt = DateTime.UnixEpoch,
+                CreatedByUsername = "system"
+            }).ToList()
         };
 }

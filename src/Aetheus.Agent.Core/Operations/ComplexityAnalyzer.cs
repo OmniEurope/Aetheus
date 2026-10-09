@@ -105,35 +105,22 @@ public static class ComplexityAnalyzer
         _ => node.Kind().ToString()
     };
 
-    private static int CyclomaticComplexity(SyntaxNode body)
-    {
-        var complexity = 1;
-        foreach (var node in body.DescendantNodesAndSelf(
-                     descendIntoChildren: node => ReferenceEquals(node, body) || MemberBody(node) is null))
-        {
-            switch (node)
-            {
-                case IfStatementSyntax:
-                case WhileStatementSyntax:
-                case DoStatementSyntax:
-                case ForStatementSyntax:
-                case ForEachStatementSyntax:
-                case CaseSwitchLabelSyntax:
-                case CasePatternSwitchLabelSyntax:
-                case SwitchExpressionArmSyntax:
-                case CatchClauseSyntax:
-                case ConditionalExpressionSyntax:
-                    complexity++;
-                    break;
-                case BinaryExpressionSyntax be when be.IsKind(SyntaxKind.LogicalAndExpression)
-                                                 || be.IsKind(SyntaxKind.LogicalOrExpression)
-                                                 || be.IsKind(SyntaxKind.CoalesceExpression):
-                    complexity++;
-                    break;
-            }
-        }
-        return complexity;
-    }
+    private static int CyclomaticComplexity(SyntaxNode body) =>
+        1 + body.DescendantNodesAndSelf(
+                descendIntoChildren: node => ReferenceEquals(node, body) || MemberBody(node) is null)
+            .Count(node => DecisionKinds.Contains(node.Kind()));
+
+    /// <summary>Each node of these kinds is one more path: branches, loops, case labels and arms, catch
+    /// clauses, the conditional operator, and the short-circuit and coalescing operators.</summary>
+    private static readonly System.Collections.Frozen.FrozenSet<SyntaxKind> DecisionKinds =
+        System.Collections.Frozen.FrozenSet.ToFrozenSet(
+        [
+            SyntaxKind.IfStatement, SyntaxKind.WhileStatement, SyntaxKind.DoStatement, SyntaxKind.ForStatement,
+            SyntaxKind.ForEachStatement, SyntaxKind.CaseSwitchLabel,
+            SyntaxKind.CasePatternSwitchLabel, SyntaxKind.SwitchExpressionArm, SyntaxKind.CatchClause,
+            SyntaxKind.ConditionalExpression, SyntaxKind.LogicalAndExpression, SyntaxKind.LogicalOrExpression,
+            SyntaxKind.CoalesceExpression
+        ]);
 
     private static int CountNonCommentLines(string content)
     {

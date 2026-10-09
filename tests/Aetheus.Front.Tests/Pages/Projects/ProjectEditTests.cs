@@ -38,6 +38,7 @@ public class ProjectEditTests : BunitContext
 
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         var cut = Render<ProjectEdit>(p => p.Add(x => x.Id, null));
+        BunitTestHelper.Interactive(this);
 
         var form = cut.Find("form");
         form.Submit();

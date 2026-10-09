@@ -19,7 +19,7 @@ public class ServerOverviewAgentUpdateTests : BunitContext
     {
         _handler = BunitTestHelper.RegisterServices(this);
         BunitTestHelper.UseImmediateDialogs(this);
-        _handler.SetJsonResponse("api/servers/7/agent/update", new AgentUpdateResponse { ServerId = 7, RequestId = 1 });
+        _handler.SetJsonResponse("api/servers/7/agent/update", new AgentUpdateResponse { ServerId = 7, RequestId = 4, TargetVersion = "1.0.1552" });
     }
 
     private static ServerDetailDto Server(AgentCompatibilityStatus status, string installed = "1.0.1547",
@@ -122,6 +122,105 @@ public class ServerOverviewAgentUpdateTests : BunitContext
         UpdateButton(cut)!.Click();
 
         Assert.Equal(1, dialog.OpenCount);
+        Assert.False(UpdateRequested);
+    }
+
+    // ──── Recette R2-111: after the confirmation, the update shows as running until it ends ────
+
+    private static AngleSharp.Dom.IElement? UpdateState(IRenderedComponent<ServerOverviewSection> cut) =>
+        AgentVersionItem(cut).QuerySelector(".agent-update-overview-state");
+
+    private IRenderedComponent<ServerOverviewSection> ConfirmUpdate(ServerDetailDto server)
+    {
+        var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        dialog.ConfirmResult = true;
+        var cut = RenderOverview(server);
+        UpdateButton(cut)!.Click();
+        cut.WaitForAssertion(() => Assert.True(UpdateRequested));
+        return cut;
+    }
+
+    [Fact]
+    public void AfterTheConfirmation_TheButtonIsBusyAndTheTargetVersionIsShown()
+    {
+        var cut = ConfirmUpdate(Server(AgentCompatibilityStatus.UpdateRequired));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("true", UpdateButton(cut)!.GetAttribute("aria-busy"));
+            Assert.Equal("AgentUpdateInProgressTo", UpdateState(cut)!.TextContent.Trim());
+        });
+        Assert.Equal("1.0.1552", cut.Instance.AgentUpdateState.InProgressTarget);
+    }
+
+    [Fact]
+    public void TheNewVersionReported_EndsTheUpdateState()
+    {
+        var cut = ConfirmUpdate(Server(AgentCompatibilityStatus.UpdateRequired));
+        cut.WaitForAssertion(() => Assert.NotNull(UpdateState(cut)));
+
+        cut.Render(parameters => parameters.Add(section => section.Server,
+            Server(AgentCompatibilityStatus.UpToDate, installed: "1.0.1552")));
+
+        Assert.Null(UpdateState(cut));
+        Assert.Null(UpdateButton(cut));
+    }
+
+    [Fact]
+    public void AFailedUpdate_ShowsTheFailureAndItsReason_AndTheButtonIsFreeAgain()
+    {
+        var cut = ConfirmUpdate(Server(AgentCompatibilityStatus.UpdateRequired));
+        cut.WaitForAssertion(() => Assert.NotNull(UpdateState(cut)));
+
+        cut.Render(parameters => parameters.Add(section => section.Server, Server(AgentCompatibilityStatus.UpdateRequired) with
+        {
+            AgentUpdateRequest = new AgentUpdateRequestSummaryDto
+            {
+                RequestId = 4,
+                TargetVersion = "1.0.1552",
+                Status = AgentUpdateRequestStatus.Failed,
+                FailureDiagnostic = "download refused"
+            }
+        }));
+
+        var state = UpdateState(cut)!;
+        Assert.Equal("alert", state.GetAttribute("role"));
+        Assert.Equal("AgentUpdateFailedWithReason", state.TextContent.Trim());
+        Assert.Equal("download refused", cut.Instance.AgentUpdateState.FailureDiagnostic);
+        Assert.NotEqual("true", UpdateButton(cut)!.GetAttribute("aria-busy"));
+    }
+
+    [Fact]
+    public void AnOlderFailedRequest_DoesNotEndTheUpdateJustQueued()
+    {
+        var cut = ConfirmUpdate(Server(AgentCompatibilityStatus.UpdateRequired) with
+        {
+            AgentUpdateRequest = new AgentUpdateRequestSummaryDto
+            {
+                RequestId = 3,
+                TargetVersion = "1.0.1552",
+                Status = AgentUpdateRequestStatus.Failed
+            }
+        });
+
+        cut.WaitForAssertion(() => Assert.Equal("AgentUpdateInProgressTo", UpdateState(cut)!.TextContent.Trim()));
+    }
+
+    [Fact]
+    public void ARunningUpdate_ShowsAfterAReload_WithoutAClick()
+    {
+        var cut = RenderOverview(Server(AgentCompatibilityStatus.UpdateRequired) with
+        {
+            AgentUpdateRequest = new AgentUpdateRequestSummaryDto
+            {
+                RequestId = 9,
+                TargetVersion = "1.0.1552",
+                Status = AgentUpdateRequestStatus.Downloading
+            }
+        });
+
+        Assert.Equal("AgentUpdateInProgressTo", UpdateState(cut)!.TextContent.Trim());
+        Assert.Equal("true", UpdateButton(cut)!.GetAttribute("aria-busy"));
         Assert.False(UpdateRequested);
     }
 }

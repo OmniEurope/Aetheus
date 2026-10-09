@@ -12,10 +12,11 @@ namespace Aetheus.Back.IntegrationTests;
 /// End-to-end exercise of the forced first-login password change cycle (S-FEAT-UE4K / S-TECH-MDP7)
 /// through the real HTTP pipeline backed by PostgreSQL.
 /// <para>
-/// The documented contract is NOT a 403 block: a user created with <c>MustChangePassword = true</c>
-/// logs in successfully, but the response carries <c>MustChangePassword = true</c> AND the minted JWT
-/// carries the <c>aetheus:mcp</c> claim (<see cref="AetheusClaimTypes.MustChangePassword"/>) so
-/// the Front can gate navigation onto the change-password screen. After a self-service change, the
+/// A user created with <c>MustChangePassword = true</c> logs in successfully, but the response carries
+/// <c>MustChangePassword = true</c> AND the minted JWT carries the <c>aetheus:mcp</c> claim
+/// (<see cref="AetheusClaimTypes.MustChangePassword"/>): the Front gates navigation onto the
+/// change-password screen, and <see cref="ForcedPasswordChangeMiddleware"/> refuses every other request
+/// with 403 (SITE-SEC-001). After a self-service change, the
 /// flag is cleared in the DB and a fresh login no longer sets <c>MustChangePassword</c> nor mints the
 /// <c>aetheus:mcp</c> claim. This whole flag → change → cleared cycle depends on real persisted
 /// state and a real token mint, which the InMemory suite cannot model.
@@ -83,6 +84,63 @@ public sealed class ForcedPasswordChangeIntegrationTests(PostgresFixture fixture
             Password = initialPassword
         }, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Unauthorized, staleResp.StatusCode);
+    }
+
+    // SITE-SEC-001: the server, not only the front, holds a forced change, and an admin reset ends the
+    // personal access tokens the previous holder of the account could still use.
+    [Fact]
+    public async Task AdminReset_RevokesPats_AndTheFlaggedTokenReachesOnlyTheChange()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
+        using var admin = factory.CreateClient();
+        IntegrationAuth.SetBearer(admin, await IntegrationAuth.LoginAsAdminAsync(admin, ct));
+
+        var username = $"reset-user-{Guid.NewGuid():N}";
+        const string password = "Before-Reset-Pwd-2026!";
+        var created = await admin.PostAsJsonAsync("/api/users", new CreateUserRequest
+        {
+            Username = username,
+            Password = password,
+            Roles = ["Reader"],
+            MustChangePassword = false
+        }, ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var userId = (await created.Content.ReadFromJsonAsync<UserDto>(IntegrationJsonOptions.Default, ct))!.Id;
+
+        // The user mints a personal access token, then an admin resets the password.
+        using var user = factory.CreateClient();
+        IntegrationAuth.SetBearer(user, (await LoginAsync(user, username, password)).Token);
+        var patResponse = await user.PostAsJsonAsync("/api/personal-access-tokens",
+            new CreatePersonalAccessTokenRequest { Name = "before-reset", Scope = PatScope.ReadOnly, ExpirationDays = 30 }, ct);
+        patResponse.EnsureSuccessStatusCode();
+        var pat = (await patResponse.Content.ReadFromJsonAsync<CreatedPersonalAccessTokenDto>(IntegrationJsonOptions.Default, ct))!.PlaintextToken;
+        using var patClient = factory.CreateClient();
+        IntegrationAuth.SetBearer(patClient, pat);
+        Assert.Equal(HttpStatusCode.OK, (await patClient.GetAsync("/api/users/me", ct)).StatusCode);
+
+        const string resetPassword = "Admin-Reset-Pwd-2026!";
+        var reset = await admin.PostAsJsonAsync($"/api/users/{userId}/change-password",
+            new ChangeUserPasswordRequest { NewPassword = resetPassword }, ct);
+        Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await patClient.GetAsync("/api/users/me", ct)).StatusCode);
+
+        // The reset re-arms the forced change: the new token reaches the change and nothing else.
+        var flagged = await LoginAsync(user, username, resetPassword);
+        Assert.True(flagged.MustChangePassword);
+        IntegrationAuth.SetBearer(user, flagged.Token);
+        Assert.Equal(HttpStatusCode.OK, (await user.GetAsync("/api/users/me", ct)).StatusCode);
+        var refused = await user.GetAsync("/api/servers", ct);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.True(refused.Headers.Contains(ForcedPasswordChangeMiddleware.RequiredHeader));
+        Assert.Equal(HttpStatusCode.Forbidden, (await user.PostAsJsonAsync("/api/personal-access-tokens",
+            new CreatePersonalAccessTokenRequest { Name = "during-change", Scope = PatScope.ReadOnly, ExpirationDays = 30 }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await user.PostAsync("/hubs/servers/negotiate?negotiateVersion=1", null, ct)).StatusCode);
+
+        var change = await user.PostAsJsonAsync("/api/users/me/change-password",
+            new ChangeUserPasswordRequest { CurrentPassword = resetPassword, NewPassword = "Own-Choice-Pwd-2026!" }, ct);
+        Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
     }
 
     private static async Task<LoginResponse> LoginAsync(HttpClient client, string username, string password)

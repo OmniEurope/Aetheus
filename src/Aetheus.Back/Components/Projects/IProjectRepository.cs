@@ -54,7 +54,6 @@ public interface IProjectRepository
 
     Task AddProjectAsync(Project project, CancellationToken ct = default);
 
-    Task RemoveProjectAsync(Project project, CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);
 

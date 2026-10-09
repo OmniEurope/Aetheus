@@ -58,7 +58,7 @@ public sealed class SarifSuppressedResultTests
     public void AnAcceptedSuppressionIsHonoured()
     {
         var sarif = Report(Result("""
-            "suppressions": [{ "kind": "external", "state": "accepted" }]
+            "suppressions": [{ "kind": "external", "status": "accepted" }]
             """));
 
         Assert.Empty(SarifAnalysisParser.Parse(sarif, AnalysisCategory.Sast));
@@ -86,12 +86,12 @@ public sealed class SarifSuppressedResultTests
     [Theory]
     [InlineData("rejected")]
     [InlineData("underReview")]
-    public void ASuppressionThatWasNotAcceptedLeavesTheFindingOpen(string state)
+    public void ASuppressionThatWasNotAcceptedLeavesTheFindingOpen(string status)
     {
         // A rejected or still-reviewed suppression is an open question; hiding the finding would
         // answer it on the tool's behalf.
         var sarif = Report(Result($$"""
-            "suppressions": [{ "kind": "external", "state": "{{state}}" }]
+            "suppressions": [{ "kind": "external", "status": "{{status}}" }]
             """));
 
         Assert.Single(SarifAnalysisParser.Parse(sarif, AnalysisCategory.Sast));

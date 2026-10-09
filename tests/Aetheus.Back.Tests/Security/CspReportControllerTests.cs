@@ -145,9 +145,53 @@ public sealed class CspReportControllerTests
         Assert.Equal(string.Empty, _logger.Last);
     }
 
+    [Theory]
+    [InlineData("moz-extension", "inline")]
+    [InlineData("moz-extension://4f1c/content.js", "inline")]
+    [InlineData(null, "chrome-extension://abcdef/inject.js")]
+    [InlineData("safari-web-extension://x/a.js", "eval")]
+    public void A_Report_From_A_Browser_Extension_Goes_To_Debug(string? sourceFile, string blockedUri)
+    {
+        // Seen locally on 2026-10-05: a Firefox extension injecting inline script and style, refused by
+        // the policy as it should be, logged as three warnings that said nothing about Aetheus.
+        Controller().Report(new CspReportEnvelope
+        {
+            CspReport = new CspReportBody
+            {
+                DocumentUri = "https://localhost:5403/",
+                BlockedUri = blockedUri,
+                ViolatedDirective = "script-src-elem",
+                SourceFile = sourceFile,
+                LineNumber = 74
+            }
+        });
+
+        Assert.Equal(LogLevel.Debug, _logger.LastLevel);
+        Assert.Contains("script-src-elem", _logger.Last, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_Report_From_The_Page_Itself_Stays_A_Warning()
+    {
+        Controller().Report(new CspReportEnvelope
+        {
+            CspReport = new CspReportBody
+            {
+                DocumentUri = "https://app.example/",
+                BlockedUri = "inline",
+                ViolatedDirective = "script-src-elem",
+                SourceFile = "https://app.example/_framework/blazor.webassembly.js"
+            }
+        });
+
+        Assert.Equal(LogLevel.Warning, _logger.LastLevel);
+    }
+
     private sealed class FakeLogger : ILogger<CspReportController>
     {
         public string Last { get; private set; } = string.Empty;
+
+        public LogLevel? LastLevel { get; private set; }
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
@@ -155,6 +199,10 @@ public sealed class CspReportControllerTests
 
         public void Log<TState>(
             LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) => Last = formatter(state, exception);
+            Func<TState, Exception?, string> formatter)
+        {
+            Last = formatter(state, exception);
+            LastLevel = logLevel;
+        }
     }
 }

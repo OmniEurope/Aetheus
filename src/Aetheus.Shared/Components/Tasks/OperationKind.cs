@@ -17,6 +17,29 @@ public enum OperationKind
     DockerStopContainer = 102,
     DockerPullImage = 103,
 
+    /// <summary>
+    /// BACK-012: deploy a Compose stack from a user-supplied file. Target is the Compose project name
+    /// (<c>ComposeProjectRegex</c>); the base64 file travels in <c>AETHEUS_DOCKER_COMPOSE_B64</c>. The
+    /// agent writes it under its work directory (one folder per stack) and runs <c>docker compose -f &lt;file&gt; -p &lt;stack&gt; up -d</c>
+    /// as an argv - no shell, no pipe for the command validator to refuse.
+    /// </summary>
+    DockerComposeUp = 104,
+
+    /// <summary>
+    /// BACK-012: run a user-supplied script inside a container. Target is the container ID; the
+    /// base64 script travels in <c>AETHEUS_DOCKER_EXEC_B64</c> and is written to the stdin of
+    /// <c>docker exec -i &lt;id&gt; sh</c>, so its text never reaches a host shell.
+    /// </summary>
+    DockerExecScript = 105,
+
+    /// <summary>
+    /// BACK-012: build an image from a user-supplied Dockerfile. Target is the image tag; the base64
+    /// Dockerfile travels in <c>AETHEUS_DOCKER_DOCKERFILE_B64</c>. The agent writes it to a fresh temp
+    /// directory that is also the build context (empty but for the Dockerfile) and runs
+    /// <c>docker build -t &lt;tag&gt; -f &lt;dir&gt;/Dockerfile &lt;dir&gt;</c>.
+    /// </summary>
+    DockerBuildImage = 106,
+
     // systemd / service
     ServiceStart = 200,
     ServiceStop = 201,
@@ -273,6 +296,18 @@ public enum OperationKind
 
     /// <summary>Report the Maildir size of every virtual mailbox (<c>QUOTA email kib</c> lines). Target <c>"-"</c>.</summary>
     MailQuotaReport = 529,
+
+    /// <summary>Erase the whole mail stack (<c>mail-manage purge</c>, helper version 3): services, packages,
+    /// configuration, mailboxes, DKIM keys and the ownership marker, so it can be configured again from
+    /// scratch ("Réinstaller la messagerie", recette R2-083 / R2-088). Target <c>"-"</c>.</summary>
+    MailPurge = 530,
+
+    /// <summary>Recette R2-080: whether the server can open an outbound SMTP connection (TCP port 25), a
+    /// prerequisite of sending mail that many hosting providers block. The agent connects to the target
+    /// host on port 25 itself (no helper, no privilege), reads the greeting and prints one
+    /// <c>CHECK outbound-25</c> line. Target is the host name to reach. Outside the mail-manage range on
+    /// purpose: it needs only an agent recent enough to publish <c>mail.outbound-probe</c>.</summary>
+    MailOutboundProbe = 531,
 
     // Portsentry (service control + status + unblock)
     PortsentryStart = 550,

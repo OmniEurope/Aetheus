@@ -111,15 +111,17 @@ internal static class PipelineArtifactRestorer
             return new ExecutorResult(1, false);
         }
 
-        var extraction = Stopwatch.StartNew();
-        DeployLayout.ExtractSafely(archive, restoreDirectory);
-        extraction.Stop();
-
-        if (VerifyProvenance(restoreDirectory, request.ExpectedSourceCommit) is { } provenanceFailure)
+        // Provenance is read from this archive's own entries, before anything is extracted: markers
+        // already present in the workspace (an earlier restore, a checkout) prove nothing about it.
+        if (VerifyProvenance(archive, request.ExpectedSourceCommit) is { } provenanceFailure)
         {
             await onOutput(provenanceFailure, TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(1, false);
         }
+
+        var extraction = Stopwatch.StartNew();
+        DeployLayout.ExtractSafely(archive, restoreDirectory);
+        extraction.Stop();
 
         var downloadDuration = ArtifactDownloadTelemetry.TryGet(zip, out var measured)
             ? measured.DownloadDuration
@@ -145,36 +147,40 @@ internal static class PipelineArtifactRestorer
     /// Returns null when there is nothing to check (a release selector deliberately restores another
     /// commit) or when the artifact checks out; otherwise the reason to refuse it.
     /// </summary>
-    private static string? VerifyProvenance(string restoreDirectory, string? expectedSourceCommit)
+    private static string? VerifyProvenance(ZipArchive archive, string? expectedSourceCommit)
     {
         if (string.IsNullOrWhiteSpace(expectedSourceCommit)) return null;
 
-        var metadata = Path.Combine(restoreDirectory, ".pipeline-artifacts");
-        var commitPath = Path.Combine(metadata, "source-commit");
-        if (!File.Exists(commitPath))
+        var commitEntry = FindProvenanceEntry(archive, "source-commit");
+        if (commitEntry is null)
             return "Artifact provenance refused: the restored artifact carries no "
                 + ".pipeline-artifacts/source-commit, so the revision it was built from cannot be proved.";
 
         // Bounded on purpose: this file holds one commit id, and anything else is not evidence.
-        var info = new FileInfo(commitPath);
-        if (info.Length is <= 0 or > 256)
+        if (commitEntry.Length is <= 0 or > 256)
             return "Artifact provenance refused: .pipeline-artifacts/source-commit is empty or "
                 + "implausibly large.";
 
-        var actual = File.ReadAllText(commitPath).Trim();
+        string actual;
+        using (var reader = new StreamReader(commitEntry.Open()))
+            actual = reader.ReadToEnd().Trim();
         if (!string.Equals(actual, expectedSourceCommit.Trim(), StringComparison.OrdinalIgnoreCase))
             return $"Artifact provenance refused: built from {actual}, but this run was launched on "
                 + $"{expectedSourceCommit}.";
 
         foreach (var required in RequiredProvenanceFiles)
         {
-            var path = Path.Combine(metadata, required);
-            if (!File.Exists(path) || new FileInfo(path).Length <= 0)
+            if (FindProvenanceEntry(archive, required) is not { Length: > 0 })
                 return $"Artifact provenance refused: .pipeline-artifacts/{required} is missing or empty.";
         }
 
         return null;
     }
+
+    // The last entry of a name is the one extraction leaves on disk.
+    private static ZipArchiveEntry? FindProvenanceEntry(ZipArchive archive, string name) =>
+        archive.Entries.LastOrDefault(entry => string.Equals(
+            entry.FullName.Replace('\\', '/'), $".pipeline-artifacts/{name}", StringComparison.Ordinal));
 
     /// <summary>The delivery contract and the provenance manifest travel with every artifact built by
     /// the pipelines; an artifact missing either is not one a consumer can attest anything about.</summary>

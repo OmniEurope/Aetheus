@@ -42,6 +42,31 @@ public sealed class ContainerWorkspaceMaterializerTests : IDisposable
     }
 
     [Fact]
+    public void RemoveStaleEntries_DeletesNestedOutputsRemovedFromSource_AndKeepsNestedGit()
+    {
+        var source = Directory.CreateDirectory(Path.Combine(_root, "nested-source")).FullName;
+        var destination = Directory.CreateDirectory(Path.Combine(_root, "nested-destination")).FullName;
+        Directory.CreateDirectory(Path.Combine(source, "out", "deep"));
+        File.WriteAllText(Path.Combine(source, "out", "kept.dll"), "new");
+        File.WriteAllText(Path.Combine(source, "out", "type-changed"), "file now");
+        Directory.CreateDirectory(Path.Combine(destination, "out", "deep"));
+        File.WriteAllText(Path.Combine(destination, "out", "kept.dll"), "old");
+        File.WriteAllText(Path.Combine(destination, "out", "obsolete.dll"), "stale");
+        File.WriteAllText(Path.Combine(destination, "out", "deep", "obsolete.pdb"), "stale");
+        Directory.CreateDirectory(Path.Combine(destination, "out", "type-changed"));
+        Directory.CreateDirectory(Path.Combine(destination, "out", ".git"));
+        File.WriteAllText(Path.Combine(destination, "out", ".git", "HEAD"), "submodule");
+
+        ContainerWorkspaceMaterializer.RemoveStaleEntries(source, destination, excludeProtectedMetadata: true);
+
+        Assert.True(File.Exists(Path.Combine(destination, "out", "kept.dll")));
+        Assert.False(File.Exists(Path.Combine(destination, "out", "obsolete.dll")));
+        Assert.False(File.Exists(Path.Combine(destination, "out", "deep", "obsolete.pdb")));
+        Assert.False(Directory.Exists(Path.Combine(destination, "out", "type-changed")));
+        Assert.True(File.Exists(Path.Combine(destination, "out", ".git", "HEAD")));
+    }
+
+    [Fact]
     public void RemoveStaleEntries_RemovesEntriesWhoseFileTypeChanged()
     {
         var source = Directory.CreateDirectory(Path.Combine(_root, "type-source")).FullName;

@@ -442,7 +442,9 @@ public class GitLightCliService(
             // the protection semantics, so reject it on write (git ref names cannot contain these anyway).
             if (!IsSafeProtectionPattern(pattern))
                 throw new BadRequestException($"Invalid branch-protection pattern '{pattern}'.");
-            sb.AppendLine($"{pattern}|{del.ToString().ToLowerInvariant()}|{force.ToString().ToLowerInvariant()}");
+            // '\n', never AppendLine: on Windows its CRLF left "true\r" in the last field, so the
+            // hook's [ "$force" = "true" ] never matched and force pushes went through.
+            sb.Append($"{pattern}|{del.ToString().ToLowerInvariant()}|{force.ToString().ToLowerInvariant()}").Append('\n');
         }
 
         File.WriteAllText(configPath, sb.ToString());

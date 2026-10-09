@@ -1276,6 +1276,11 @@ public class PipelineServiceTests
                     type: coverage
                     min_coverage: 75
                     target_files: [coverage.xml]
+              # BACK-016: a gate never shares the stage of its producer (steps of a stage run concurrently).
+              - name: Grade
+                agent: build
+                depends_on: [Analysis]
+                steps:
                   - name: Gate
                     type: analysis-gate
                     analysis_scope: quality
@@ -1487,6 +1492,34 @@ public class PipelineServiceTests
             Assert.Contains(result.Errors, error => error.Contains("branch", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ValidateYamlStrict_ReleaseTag_IsAKeyOfTheAdvanceStepOnly(bool valid)
+    {
+        var body = valid ? "type: advance-branch" : "shell: echo deployed";
+        var branch = valid ? "branch: main" : "timeout_seconds: 60";
+        var yaml = $$"""
+            name: deploy
+            trigger: manual
+            stages:
+              - name: Advance main
+                environment: prod
+                steps:
+                  - name: Advance main
+                    {{body}}
+                    {{branch}}
+                    tag: "v$(APP_VERSION)"
+            """;
+
+        var result = _sut.ValidateYamlStrict(yaml);
+
+        Assert.Equal(valid, result.IsValid);
+        Assert.DoesNotContain(result.Warnings, warning => warning.Contains("'tag'", StringComparison.Ordinal));
+        if (!valid)
+            Assert.Contains(result.Errors, error => error.Contains("'tag'", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ValidateYamlStrict_AScalarWhereAListIsExpected_IsStillRejected()
     {
@@ -1640,7 +1673,7 @@ public class PipelineServiceTests
     [Fact]
     public void ValidateYamlStrict_LatestCandidateTemplate_IsValid()
     {
-        var yaml = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v7.yaml");
+        var yaml = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v1.yaml");
 
         var result = _sut.ValidateYamlStrict(yaml);
 

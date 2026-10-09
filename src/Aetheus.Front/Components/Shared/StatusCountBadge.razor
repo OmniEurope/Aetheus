@@ -1,0 +1,16 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@*
+    Recette R2-109: a count of items in one status ("20 Succeeded", "5 Failed"). Wide, it reads as the
+    number and the status name. Below the phone width (app.css, .status-count-badge) the name gives way
+    to the status icon, so a row of these badges no longer breaks the title line: the name stays the
+    badge's accessible text (visually hidden, never removed) and its tooltip. Zero renders nothing, like
+    CountBadge.
+*@
+@if (Count > 0)
+{
+    <OmniBadge Fill="OmniFill.Solid" Tone="@Tone" Class="@CssClass" title="@Label">
+        <Icon><OmniIcon Name="@Icon" Class="status-count-badge__icon" /></Icon>
+        <ChildContent><span class="status-count-badge__count">@CountText</span> <span class="status-count-badge__label">@Label</span></ChildContent>
+    </OmniBadge>
+}

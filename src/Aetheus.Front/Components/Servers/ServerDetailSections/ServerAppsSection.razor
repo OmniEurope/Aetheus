@@ -12,7 +12,7 @@ else
     <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="OnSearchChangedAsync"
         Class="pipeline-list-search omni-u-mb-sm" />
     <AetheusDataGrid @ref="_grid" Data="@_apps" TItem="ServerAppDto"
-        Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync"
+        Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
         PageSize="25" EmptyText="@L["NoRecords"]"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<ServerAppDto>(_apps ?? [], _totalCount))">

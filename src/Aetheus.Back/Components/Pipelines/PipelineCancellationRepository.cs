@@ -50,13 +50,18 @@ internal sealed class PipelineCancellationRepository(
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task RequestPipelineRunCancellationAsync(int runId, CancellationToken ct)
+    public async Task RequestPipelineRunCancellationAsync(int runId, PipelineRunCancellation cancellation, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(cancellation);
         var run = await db.PipelineRuns.FindAsync([runId], ct).ConfigureAwait(false);
         if (run is null) return;
 
         var variables = PipelineRunHelpers.DeserializeResolvedVariables(run.AdditionalVariablesJson);
         variables[PipelineRunService.CancellationRequestedVariable] = "true";
+        // Recette R2-103: the first request names the author; a repeated click or the recovery that
+        // re-applies a stalled cancellation does not rename it.
+        variables.TryAdd(PipelineRunService.CancelledByVariable, cancellation.By);
+        variables.TryAdd(PipelineRunService.CancellationReasonVariable, cancellation.Reason);
         run.AdditionalVariablesJson = JsonSerializer.Serialize(variables);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }

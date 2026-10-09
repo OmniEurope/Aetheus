@@ -58,7 +58,7 @@ else
 @* Recette R-303: virtualized, rows pulled from the server as the list scrolls (LoadData alone made a
    paged grid). *@
 <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_rows" Count="@_count" TItem="AnalysisPortfolioRowDto"
-                LoadData="LoadDataAsync" RowClick="OpenRun" AllowSorting="true"
+                LoadData="LoadDataAsync" ExportRead="@ReadExportAsync" RowClick="OpenRun" AllowSorting="true"
                 AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<AnalysisPortfolioRowDto>(_rows, _count))"

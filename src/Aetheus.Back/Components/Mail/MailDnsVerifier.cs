@@ -8,6 +8,9 @@ public interface IMailDnsVerifier
     /// <summary>Checks MX, SPF, DKIM and DMARC of <paramref name="domain"/> and updates its
     /// <c>HasSpf</c> / <c>HasDkim</c> / <c>HasDmarc</c> flags and <c>DnsCheckedAt</c> (caller saves).</summary>
     Task<MailDnsCheckDto> VerifyAsync(MailDomain domain, string? hostname, CancellationToken ct = default);
+
+    /// <summary>The same four checks, read-only: the domain is left untouched (recette R2-090 status list).</summary>
+    Task<IReadOnlyList<MailDnsRecordCheckDto>> CheckAsync(MailDomain domain, string? hostname, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -22,8 +25,20 @@ public sealed class MailDnsVerifier(IMailDnsResolver resolver, TimeProvider time
 
     public async Task<MailDnsCheckDto> VerifyAsync(MailDomain domain, string? hostname, CancellationToken ct = default)
     {
+        var records = await CheckAsync(domain, hostname, ct).ConfigureAwait(false);
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        domain.HasSpf = records.Single(r => r.Kind == MailDnsRecordKind.Spf).Verdict == MailCheckVerdict.Ok;
+        domain.HasDkim = records.Single(r => r.Kind == MailDnsRecordKind.Dkim).Verdict == MailCheckVerdict.Ok;
+        domain.HasDmarc = records.Single(r => r.Kind == MailDnsRecordKind.Dmarc).Verdict == MailCheckVerdict.Ok;
+        domain.DnsCheckedAt = now;
+        return new MailDnsCheckDto { DomainId = domain.Id, Domain = domain.Name, CheckedAt = now, Records = [.. records] };
+    }
+
+    public async Task<IReadOnlyList<MailDnsRecordCheckDto>> CheckAsync(MailDomain domain, string? hostname, CancellationToken ct = default)
+    {
         ArgumentNullException.ThrowIfNull(domain);
-        var records = new List<MailDnsRecordCheckDto>
+        return new List<MailDnsRecordCheckDto>
         {
             await CheckAsync(MailDnsRecordKind.Mx, domain.Name, MailDnsRecordFactory.MxHost(domain, hostname),
                 () => resolver.MxAsync(domain.Name, ct), (observed, expected) => EvaluateMx(observed, expected)).ConfigureAwait(false),
@@ -34,13 +49,6 @@ public sealed class MailDnsVerifier(IMailDnsResolver resolver, TimeProvider time
             await CheckAsync(MailDnsRecordKind.Dmarc, $"_dmarc.{domain.Name}", MailDnsRecordFactory.DmarcRecord(domain),
                 () => resolver.TxtAsync($"_dmarc.{domain.Name}", ct), (observed, _) => EvaluateDmarc(observed)).ConfigureAwait(false)
         };
-
-        var now = timeProvider.GetUtcNow().UtcDateTime;
-        domain.HasSpf = records.Single(r => r.Kind == MailDnsRecordKind.Spf).Verdict == MailCheckVerdict.Ok;
-        domain.HasDkim = records.Single(r => r.Kind == MailDnsRecordKind.Dkim).Verdict == MailCheckVerdict.Ok;
-        domain.HasDmarc = records.Single(r => r.Kind == MailDnsRecordKind.Dmarc).Verdict == MailCheckVerdict.Ok;
-        domain.DnsCheckedAt = now;
-        return new MailDnsCheckDto { DomainId = domain.Id, Domain = domain.Name, CheckedAt = now, Records = records };
     }
 
     private static async Task<MailDnsRecordCheckDto> CheckAsync(

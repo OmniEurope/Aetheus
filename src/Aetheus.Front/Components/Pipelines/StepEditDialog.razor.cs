@@ -25,7 +25,10 @@ public partial class StepEditDialog
 
     private void OnSave()
     {
-        var result = new PipelineStepDefinition
+        // FRONT-014: the dialog edits three fields of a wide record; every other one (Condition,
+        // WorkingDirectory, Type and the type's own options) is kept, so renaming a conditional step
+        // never makes it unconditional.
+        var result = (Step ?? new PipelineStepDefinition()) with
         {
             Name = _name,
             Shell = _shell,

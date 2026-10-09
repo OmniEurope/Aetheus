@@ -27,7 +27,8 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);
 
-    private static (TaskTimeoutService Sut, ITaskRepository Repo) BuildSut(TimeSpan? grace = null)
+    private static (TaskTimeoutService Sut, ITaskRepository Repo) BuildSut(
+        TimeSpan? grace = null, IClientProxy? proxy = null)
     {
         var repo = Substitute.For<ITaskRepository>();
         repo.GetStaleRunningTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([]);
@@ -43,7 +44,7 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
             .BuildServiceProvider();
 
         var clients = Substitute.For<IHubClients>();
-        clients.Group(Arg.Any<string>()).Returns(Substitute.For<IClientProxy>());
+        clients.Group(Arg.Any<string>()).Returns(proxy ?? Substitute.For<IClientProxy>());
         var hub = Substitute.For<IHubContext<ServerHub>>();
         hub.Clients.Returns(clients);
 
@@ -78,6 +79,21 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
             CreatedAt = Now.UtcDateTime - (age ?? TimeSpan.FromMinutes(30))
         };
 
+    // Claimed (or queued) but never reported as started: the work an outage may replay.
+    private static ServerTask NeverStarted(TaskExecutionStatus status, OperationKind operation = OperationKind.None,
+        TimeSpan? age = null)
+    {
+        var task = Task(operation, age: age);
+        task.Status = status;
+        task.StartedAt = null;
+        if (status == TaskExecutionStatus.Pending)
+        {
+            task.AssignedAt = null;
+            task.AssignedAgentSessionId = null;
+        }
+        return task;
+    }
+
     private static void Offline(ITaskRepository repo)
         => repo.GetServerStatusAsync(5, Arg.Any<CancellationToken>()).Returns(ServerStatus.Offline);
 
@@ -91,8 +107,7 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
     public async Task PendingPipelineTaskWhoseOnlineAgentStoppedClaiming_WaitsInsteadOfTimingOut()
     {
         var (sut, repo) = BuildSut();
-        var task = Task();
-        task.Status = TaskExecutionStatus.Pending;
+        var task = NeverStarted(TaskExecutionStatus.Pending);
         repo.GetStalePendingTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([task]);
         // Online, but its task loop is not claiming: exactly the restarting-agent window.
         repo.GetServerStatusAsync(5, Arg.Any<CancellationToken>()).Returns(ServerStatus.Online);
@@ -139,11 +154,26 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
     }
 
     [Fact]
-    public async Task RunningPipelineTaskOfAnOfflineAgent_GoesBackToTheQueueInsteadOfTimingOut()
+    public async Task RunningPipelineTaskOfAnOfflineAgent_IsNotReplayed_BecauseItAlreadyStarted()
+    {
+        // BACK-025 (user decision): a started command may already have written to a third party.
+        var (sut, repo) = BuildSut();
+        var task = Task(OperationKind.None);
+        repo.GetStaleRunningTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([task]);
+        Offline(repo);
+
+        await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Timeout, task.Status);
+        Assert.NotNull(task.CompletedAt);
+    }
+
+    [Fact]
+    public async Task AssignedNeverStartedPipelineTaskOfAnOfflineAgent_GoesBackToTheQueueInsteadOfTimingOut()
     {
         var (sut, repo) = BuildSut();
-        var task = Task();
-        repo.GetStaleRunningTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([task]);
+        var task = NeverStarted(TaskExecutionStatus.Assigned);
+        repo.GetStaleAssignedTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([task]);
         Offline(repo);
 
         await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
@@ -181,9 +211,10 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
     {
         // A cutover interrupted half-way has already changed the target. Replaying it could switch
         // traffic onto a stack whose migration never finished, so it fails closed and waits for a human.
+        // Never started, so only the operation itself keeps it from replaying.
         var (sut, repo) = BuildSut();
-        var task = Task(operation);
-        repo.GetStaleRunningTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([task]);
+        var task = NeverStarted(TaskExecutionStatus.Assigned, operation);
+        repo.GetStaleAssignedTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([task]);
         Offline(repo);
 
         await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
@@ -222,21 +253,43 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
     }
 
     [Fact]
-    public async Task HostShutdown_PipelineWorkOfTheRestartedAgentSession_IsRequeuedNotFailed()
+    public async Task HostShutdown_NeverStartedWorkOfTheRestartedAgentSession_IsRequeuedNotFailed()
     {
         // The real incident (2026-08-19): the PC went down overnight mid-pipeline. The agent came
         // back with a NEW session, so its tasks arrived through the superseded-session sweep, not the
-        // offline sweeps, and were failed as Timeout (the 539-minute ComplexityProducer). The
-        // replacement session is alive and can simply redo the work.
+        // offline sweeps. Work the old session claimed but never started is redone by the new one.
         var (sut, repo) = BuildSut();
-        var task = Task();
+        var task = NeverStarted(TaskExecutionStatus.Assigned);
         repo.GetTasksFromSupersededAgentSessionsAsync(Arg.Any<CancellationToken>()).Returns([task]);
 
         await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(TaskExecutionStatus.Pending, task.Status);
         Assert.Null(task.AssignedAgentSessionId);
-        Assert.Null(task.StartedAt);
+        Assert.Null(task.AssignedAt);
+    }
+
+    [Fact]
+    public async Task HostShutdown_StartedShellCommandOfTheReplacedSession_FailsWithItsReasonInsteadOfReplaying()
+    {
+        // BACK-025 (user decision): the shell step was Running when the session was replaced. Put back
+        // to Pending, the new session would claim and execute it a second time, with a second real
+        // effect. It fails, the run says why, and nothing is queued again.
+        var (sut, repo) = BuildSut();
+        var task = Task(OperationKind.None);
+        var step = new PipelineStepRun { Id = 9, PipelineRunId = 42, StageName = "Publish", StepName = "push", Status = TaskExecutionStatus.Running };
+        repo.GetTasksFromSupersededAgentSessionsAsync(Arg.Any<CancellationToken>()).Returns([task]);
+        repo.FindPipelineStepRunsByIdsAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, PipelineStepRun> { [9] = step });
+
+        await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(TaskExecutionStatus.Pending, task.Status);
+        Assert.Equal(TaskExecutionStatus.Timeout, task.Status);
+        Assert.NotNull(task.StartedAt);
+        Assert.Equal(PipelineOutageReplayPolicy.NotReplayedReason, task.FailureReason);
+        Assert.Equal(TaskExecutionStatus.Timeout, step.Status);
+        Assert.Equal(PipelineOutageReplayPolicy.NotReplayedReason, step.FailureReason);
     }
 
     [Fact]
@@ -257,7 +310,7 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
         // A 539-minute outage resumes (9h < 24h); a task older than the grace does not: nobody wants
         // a qualification from three days ago silently completing under a newer one.
         var (sut, repo) = BuildSut(grace: TimeSpan.FromHours(1));
-        var task = Task(age: TimeSpan.FromHours(9));
+        var task = NeverStarted(TaskExecutionStatus.Assigned, age: TimeSpan.FromHours(9));
         repo.GetTasksFromSupersededAgentSessionsAsync(Arg.Any<CancellationToken>()).Returns([task]);
 
         await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
@@ -270,14 +323,16 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
     {
         // The run is still going. Broadcasting TaskCompleted would drop the chip from the top bar and
         // tell the user the work ended.
-        var (sut, repo) = BuildSut();
-        var task = Task();
-        repo.GetStaleRunningTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([task]);
-        Offline(repo);
+        // The proxy is the one the hub hands out, so a TaskCompleted broadcast would land on it.
         var proxy = Substitute.For<IClientProxy>();
+        var (sut, repo) = BuildSut(proxy: proxy);
+        var task = NeverStarted(TaskExecutionStatus.Assigned);
+        repo.GetStaleAssignedTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([task]);
+        Offline(repo);
 
         await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
 
+        Assert.Equal(TaskExecutionStatus.Pending, task.Status);
         await proxy.DidNotReceive().SendCoreAsync(
             "TaskCompleted", Arg.Any<object?[]>(), Arg.Any<CancellationToken>());
     }

@@ -19,9 +19,24 @@ namespace Aetheus.Back.Components.AppMonitoring.Ingest;
 public sealed class IngestController(
     IIngestService ingest,
     IVisitorIngestService visitorIngest,
-    IAppWebAnalyticsService webAnalytics) : ControllerBase
+    IAppWebAnalyticsService webAnalytics,
+    IIngestConfigurationService configuration) : ControllerBase
 {
     private const string KeyHeader = "x-aetheus-ingest-key";
+
+    /// <summary>
+    /// PLAN-013 lot 4: the configuration the <c>Aetheus.Telemetry</c> package reads with its ingest key,
+    /// the metric send interval of the application's project. 401 for an unknown key, like the exports.
+    /// </summary>
+    [HttpGet("configuration")]
+    public async Task<ActionResult<IngestConfigurationDto>> Configuration(CancellationToken ct)
+    {
+        var appId = await ResolveRequestAppIdAsync(ct).ConfigureAwait(false);
+        if (appId is null)
+            return Unauthorized();
+        var result = await configuration.GetAsync(appId.Value, ct).ConfigureAwait(false);
+        return result is null ? NotFound() : Ok(result);
+    }
 
     [HttpPost("metrics")]
     public Task<IActionResult> Metrics(CancellationToken ct) =>

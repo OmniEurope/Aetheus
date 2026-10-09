@@ -75,49 +75,52 @@ public class InboundStringBoundsAuditTests
         try
         {
             foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-            {
-                var propertyPath = $"{path}.{property.Name}";
-                if (property.PropertyType == typeof(string))
-                {
-                    if (property.GetCustomAttribute<StringLengthAttribute>() is null
-                        && property.GetCustomAttribute<MaxLengthAttribute>() is null)
-                    {
-                        failures.Add(propertyPath);
-                    }
-                    continue;
-                }
-
-                if (TryGetDictionary(property.PropertyType, out var keyType, out var valueType))
-                {
-                    if ((keyType == typeof(string) || valueType == typeof(string))
-                        && property.GetCustomAttribute<BoundedDictionaryAttribute>() is null)
-                    {
-                        failures.Add(propertyPath + " (dictionary)");
-                    }
-                    continue;
-                }
-
-                if (TryGetEnumerableElement(property.PropertyType, out elementType))
-                {
-                    if (elementType == typeof(string))
-                    {
-                        if (property.GetCustomAttribute<MaxItemStringLengthAttribute>() is null)
-                            failures.Add(propertyPath + "[]");
-                    }
-                    else
-                    {
-                        Inspect(elementType, propertyPath + "[]", failures, ancestry);
-                    }
-                    continue;
-                }
-
-                Inspect(property.PropertyType, propertyPath, failures, ancestry);
-            }
+                InspectProperty(property, $"{path}.{property.Name}", failures, ancestry);
         }
         finally
         {
             ancestry.Remove(type);
         }
+    }
+
+    /// <summary>One property of an inbound DTO; recette R2-107 moved it out of <see cref="Inspect"/>, under the grade-A cyclomatic threshold.</summary>
+    private static void InspectProperty(PropertyInfo property, string propertyPath, ISet<string> failures, HashSet<Type> ancestry)
+    {
+        if (property.PropertyType == typeof(string))
+        {
+            if (property.GetCustomAttribute<StringLengthAttribute>() is null
+                && property.GetCustomAttribute<MaxLengthAttribute>() is null)
+            {
+                failures.Add(propertyPath);
+            }
+            return;
+        }
+
+        if (TryGetDictionary(property.PropertyType, out var keyType, out var valueType))
+        {
+            if ((keyType == typeof(string) || valueType == typeof(string))
+                && property.GetCustomAttribute<BoundedDictionaryAttribute>() is null)
+            {
+                failures.Add(propertyPath + " (dictionary)");
+            }
+            return;
+        }
+
+        if (TryGetEnumerableElement(property.PropertyType, out var elementType))
+        {
+            if (elementType == typeof(string))
+            {
+                if (property.GetCustomAttribute<MaxItemStringLengthAttribute>() is null)
+                    failures.Add(propertyPath + "[]");
+            }
+            else
+            {
+                Inspect(elementType, propertyPath + "[]", failures, ancestry);
+            }
+            return;
+        }
+
+        Inspect(property.PropertyType, propertyPath, failures, ancestry);
     }
 
     private static bool TryGetEnumerableElement(Type type, out Type elementType)

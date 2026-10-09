@@ -23,7 +23,7 @@ public sealed class PipelineScannerManifestPreflightTests
 
     public PipelineScannerManifestPreflightTests()
     {
-        _checks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>())
+        _checks.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
@@ -170,5 +170,44 @@ public sealed class PipelineScannerManifestPreflightTests
 
         Assert.Empty(outcome.Problems);
         Assert.DoesNotContain(outcome.Checks, check => check.Kind == "scanner-manifest");
+    }
+
+    /// <summary>Recette R2-121: a project's candidate created by the setup wizard is a candidate because
+    /// it extends application-candidate, not because of its name.</summary>
+    [Fact]
+    public async Task AnyProjectsCandidate_ExtendingTheCandidateTemplate_IsHeldToTheManifest()
+    {
+        RunnerReports(StaleManifest);
+        _repo.FindPipelineByNameAndProjectAsync("portfolio-candidate", 5, Arg.Any<CancellationToken>())
+            .Returns(new Pipeline
+            {
+                Id = 9,
+                ProjectId = 5,
+                Name = "portfolio-candidate",
+                TemplateReferenceName = "application-candidate",
+                TemplateReferenceVersion = 2
+            });
+
+        var problem = Assert.Single((await LaunchAsync("portfolio-candidate")).Problems);
+
+        Assert.Contains(ScannerManifestCatalog.Sha256, problem, StringComparison.Ordinal);
+        Assert.Contains(StaleManifest, problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnyProjectsPipeline_ExtendingAnotherTemplate_IsNotHeldToTheManifest()
+    {
+        RunnerReports(StaleManifest);
+        _repo.FindPipelineByNameAndProjectAsync("portfolio-nightly", 5, Arg.Any<CancellationToken>())
+            .Returns(new Pipeline
+            {
+                Id = 9,
+                ProjectId = 5,
+                Name = "portfolio-nightly",
+                TemplateReferenceName = "application-nightly",
+                TemplateReferenceVersion = 2
+            });
+
+        Assert.Empty((await LaunchAsync("portfolio-nightly")).Problems);
     }
 }

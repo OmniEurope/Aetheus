@@ -65,7 +65,7 @@ public class PipelineRunCollaboratorTests : BunitContext
         {
             PipelineRunId = 1,
             Status = AnalysisGateStatus.Warning,
-            Grade = new AnalysisGradeSummaryDto { OverallGrade = AnalysisGrade.A },
+            Grade = Graded(AnalysisGrade.A, AnalysisGradeDomain.CodeQuality),
             FindingCount = 700,
             NewFindingCount = 120,
             Findings = [new AnalysisRunGateFindingDto { FindingId = 10, IsNew = true }]
@@ -74,7 +74,7 @@ public class PipelineRunCollaboratorTests : BunitContext
         {
             PipelineRunId = 2,
             Status = AnalysisGateStatus.Passed,
-            Grade = new AnalysisGradeSummaryDto { OverallGrade = AnalysisGrade.F },
+            Grade = Graded(AnalysisGrade.F, AnalysisGradeDomain.Security),
             FindingCount = 800,
             NewFindingCount = 80,
             Findings =
@@ -101,6 +101,86 @@ public class PipelineRunCollaboratorTests : BunitContext
         Assert.Contains("runIds=2", countRequest, StringComparison.Ordinal);
         Assert.Equal(AnalysisGrade.F, state.Result.Grade?.OverallGrade);
     }
+
+    /// <summary>
+    /// Recette R2-129 (candidate #2571): the quality run graded every domain but security (incomplete,
+    /// optional there), the security run graded security A. The Gate tab showed the quality run's
+    /// breakdown alone, security incomplete; merged domain by domain, security is the security run's A.
+    /// </summary>
+    [Fact]
+    public async Task GateState_MergesTheTreeDomainByDomain_SoTheSecurityRunGradesSecurity()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/1/result", new AnalysisRunGateDto
+        {
+            PipelineRunId = 1,
+            Status = AnalysisGateStatus.Warning,
+            Grade = new AnalysisGradeSummaryDto
+            {
+                OverallGrade = AnalysisGrade.A,
+                Completeness = AnalysisGradeCompleteness.Complete,
+                Domains =
+                [
+                    Domain(AnalysisGradeDomain.CodeQuality, AnalysisGrade.A, required: true),
+                    new AnalysisGradeDomainDto { Domain = AnalysisGradeDomain.Security, Completeness = AnalysisGradeCompleteness.Incomplete }
+                ]
+            }
+        });
+        _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/2/result", new AnalysisRunGateDto
+        {
+            PipelineRunId = 2,
+            Status = AnalysisGateStatus.Passed,
+            Grade = Graded(AnalysisGrade.A, AnalysisGradeDomain.Security)
+        });
+        // The candidate itself publishes no report: its gate is empty, as #2571's.
+        _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/3/result", new AnalysisRunGateDto
+        {
+            PipelineRunId = 3,
+            Status = AnalysisGateStatus.Error
+        });
+        var state = new PipelineRunGateState();
+
+        await state.LoadAsync(
+            Services.GetRequiredService<ApiClient>(),
+            new PipelineRunDto { Id = 3, Status = PipelineStatus.Success },
+            [new PipelineRunDto { Id = 1, Status = PipelineStatus.Success }, new PipelineRunDto { Id = 2, Status = PipelineStatus.Success }],
+            ct: Xunit.TestContext.Current.CancellationToken);
+
+        var security = Assert.Single(state.Result!.Grade!.Domains, domain => domain.Domain == AnalysisGradeDomain.Security);
+        Assert.Equal(AnalysisGradeCompleteness.Complete, security.Completeness);
+        Assert.Equal(AnalysisGrade.A, security.Grade);
+        Assert.True(security.Required);
+        Assert.Equal(AnalysisGrade.A, state.Result.Grade.OverallGrade);
+        Assert.Equal(AnalysisGradeCompleteness.Complete, state.Result.Grade.Completeness);
+    }
+
+    /// <summary>Recette R2-129: the gate shows the letter the run is listed with, and says so when the
+    /// candidate's seal set it rather than the analysis.</summary>
+    [Fact]
+    public void GatePresentation_HeadlineGradeIsTheListedRunGrade()
+    {
+        var gate = new AnalysisRunGateDto { Grade = Graded(AnalysisGrade.A, AnalysisGradeDomain.CodeQuality) };
+
+        Assert.Equal(AnalysisGrade.F, PipelineRunGatePresentation.HeadlineGrade(gate, AnalysisGrade.F));
+        Assert.True(PipelineRunGatePresentation.GradeComesFromSeal(gate, AnalysisGrade.F));
+        Assert.Equal(AnalysisGrade.A, PipelineRunGatePresentation.HeadlineGrade(gate, null));
+        Assert.False(PipelineRunGatePresentation.GradeComesFromSeal(gate, null));
+        Assert.False(PipelineRunGatePresentation.GradeComesFromSeal(gate, AnalysisGrade.A));
+    }
+
+    private static AnalysisGradeDomainDto Domain(AnalysisGradeDomain domain, AnalysisGrade grade, bool required) => new()
+    {
+        Domain = domain,
+        Grade = grade,
+        Required = required,
+        Completeness = AnalysisGradeCompleteness.Complete
+    };
+
+    private static AnalysisGradeSummaryDto Graded(AnalysisGrade grade, AnalysisGradeDomain domain) => new()
+    {
+        OverallGrade = grade,
+        Completeness = AnalysisGradeCompleteness.Complete,
+        Domains = [Domain(domain, grade, required: true)]
+    };
 
     /// <summary>Recette R-485: figures that could not be read are not shown as checked.</summary>
     [Fact]
@@ -483,12 +563,13 @@ public class PipelineRunCollaboratorTests : BunitContext
     public async Task LogStreamer_FallbackIsSingleAndRejectsLateTaskLines()
     {
         _handler.SetJsonResponse("api/logs/task/20", new List<TaskLogDto>());
-        var cache = new Dictionary<int, List<TaskLogDto>>();
+        var window = new PipelineRunLogWindow();
+        var cache = window.Lines;
         var streamer = new PipelineRunLogStreamer(
             Services.GetRequiredService<ApiClient>(),
             Services.GetRequiredService<HubConnectionFactory>(),
             NullLogger.Instance,
-            cache,
+            window,
             callback => callback(),
             () => { });
         var selected = new PipelineStepRunDto
@@ -530,7 +611,10 @@ public class PipelineRunCollaboratorTests : BunitContext
             new TaskLogDto { Id = 2, TaskId = 20, Message = "between join and snapshot", Timestamp = DateTime.UtcNow.AddSeconds(1) }
         };
 
-        var merged = PipelineRunLogSnapshot.Merge(snapshot, streamedWhileReading);
+        var window = new PipelineRunLogWindow();
+        window.AppendStreamed(20, streamedWhileReading);
+        window.ApplySnapshot(20, snapshot, PipelineRunLogWindow.LiveWindow);
+        var merged = window.Lines[20];
 
         Assert.Equal([1, 2], merged.Select(log => log.Id));
         Assert.Contains(merged, log => log.Message == "between join and snapshot");

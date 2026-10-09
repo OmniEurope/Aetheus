@@ -50,6 +50,13 @@ stages:
           $reports = @(Get-ChildItem -Path $(WORKSPACE)/coverage -Recurse -Filter coverage.cobertura.xml)
           if ($reports.Count -ne 3) { Write-Error "Expected exactly 3 coverage reports, found $($reports.Count)."; exit 1 }
         timeout_seconds: 300
+
+  # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
+  - name: CoverageReport
+    group: Build
+    os: windows
+    depends_on: [Coverage]
+    steps:
       - name: Publish Coverage
         type: coverage
         continue_on_error: true
@@ -69,7 +76,7 @@ stages:
     group: Quality
     os: windows
     depends_on:
-      - Coverage
+      - CoverageReport
       - Lint
     steps:
       - name: Publish the advisory coverage grade
@@ -129,7 +136,7 @@ stages:
         target_files:
           - $(WORKSPACE)/publish/back/appsettings.json
 
-  - name: Deploy
+  - name: Stop
     group: Deploy
     os: windows
     depends_on:
@@ -139,11 +146,24 @@ stages:
         shell: Stop-Service -Name "AetheusBack" -Force -ErrorAction SilentlyContinue
         timeout_seconds: 30
         continue_on_error: true
+
+  # Steps of one stage run concurrently (ADR-012): each deploy step waits for the previous stage (DEP-008).
+  - name: Copy
+    group: Deploy
+    os: windows
+    depends_on: [Stop]
+    steps:
       - name: Copy Files
         shell: >-
           robocopy $(WORKSPACE)/publish/back $(DEPLOY_DIR) /MIR /NFL /NDL /NJH /NJS /NP ;
           if ($LASTEXITCODE -le 7) { $LASTEXITCODE = 0 }
         timeout_seconds: 120
+
+  - name: Start
+    group: Deploy
+    os: windows
+    depends_on: [Copy]
+    steps:
       - name: Start Service
         shell: Start-Service -Name "AetheusBack"
         timeout_seconds: 30

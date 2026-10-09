@@ -14,7 +14,10 @@ public partial class ServerMailSection
     [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
-    private bool _actionRunning;
+    // Recette R2-089: the "installed but not configured" warning waits for the counts to be read.
+    private bool _countsRead;
+    private bool _countsReading;
+    private ServerMailReinstall? _reinstall;
 
     // Data
     private List<MailDomainDto> _domains = [];
@@ -61,21 +64,13 @@ public partial class ServerMailSection
     private string _dkimNewSelector = string.Empty;
     private int _dkimRotationDomainId;
 
-    // Setup wizard
-    private string _setupHostname = string.Empty;
-    private string _setupDomain = string.Empty;
-    private string _setupDkimSelector = "default";
-    private string _setupAdminEmail = string.Empty;
-    private string _setupAdminPassword = string.Empty;
-    private int _setupQuota = 1024;
-    private bool _setupSpamFilter = true;
-
     private MailDataDto Mail => Server.Mail;
 
     // PLAN-005 child tabs that follow the output of the tasks they queue.
     private ServerMailQueueTab? _queueTab;
     private ServerMailLogsTab? _logsTab;
-    private ServerMailDiagnosticsTab? _diagnosticsTab;
+    private ServerMailStatusList? _statusList;
+    private ServerMailSetupAssistant? _assistant;
 
     // First known account of the server: a sensible default sender for the delivery test.
     private string DefaultSender => _firstAccounts.FirstOrDefault(a => a.IsActive)?.Email ?? string.Empty;
@@ -84,21 +79,54 @@ public partial class ServerMailSection
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedServerId == ServerId) return;
-        _loadedServerId = ServerId;
-        Interlocked.Increment(ref _loadGeneration);
-        _domains = [];
-        _accounts = [];
-        _aliases = [];
-        _dialogDomains = [];
-        _firstDomains = [];
-        _firstAccounts = [];
-        _domainCount = 0;
-        _accountCount = 0;
-        _aliasCount = 0;
-        if (Mail.IsInstalled)
+        if (_loadedServerId != ServerId)
         {
-            await ReloadDataAsync();
+            _loadedServerId = ServerId;
+            Interlocked.Increment(ref _loadGeneration);
+            _domains = [];
+            _accounts = [];
+            _aliases = [];
+            _dialogDomains = [];
+            _firstDomains = [];
+            _firstAccounts = [];
+            _domainCount = 0;
+            _accountCount = 0;
+            _aliasCount = 0;
+            _countsRead = false;
+            if (Mail.IsInstalled)
+                await ReloadDataAsync();
+        }
+        // A stack erased then configured again is counted again.
+        if (!Mail.IsInstalled)
+            _countsRead = false;
+        else if (!_countsRead && !_countsReading)
+            await ReadCountsAsync();
+    }
+
+    // The grids load only the tabs that are shown; the warning needs both counts whatever the tab.
+    private async Task ReadCountsAsync()
+    {
+        var serverId = ServerId;
+        var generation = _loadGeneration;
+        _countsReading = true;
+        try
+        {
+            var domains = Api.Mail.GetMailDomainsPageAsync(ServerId, 1, 1);
+            var accounts = Api.Mail.GetMailAccountsPageAsync(ServerId, 1, 1);
+            await Task.WhenAll(domains, accounts);
+            if (serverId != ServerId || generation != _loadGeneration) return;
+            _domainCount = (await domains).TotalCount;
+            _accountCount = (await accounts).TotalCount;
+            _countsRead = true;
+        }
+        catch (HttpRequestException ex)
+        {
+            // Nothing concluded: the loader stays and the next heartbeat reads the counts again.
+            Logger.LogWarning(ex, "Mail counts read failed for server {ServerId}", serverId);
+        }
+        finally
+        {
+            _countsReading = false;
         }
     }
 
@@ -117,6 +145,28 @@ public partial class ServerMailSection
         var accountsRefresh = _accountsGrid?.Refresh() ?? Task.CompletedTask;
         var aliasesRefresh = _aliasesGrid?.Refresh() ?? Task.CompletedTask;
         await Task.WhenAll(domainsRefresh, accountsRefresh, aliasesRefresh);
+    }
+
+    // Recette R2-124: one page of each list's export, with the grid's sort and column filters.
+    private Task<PaginatedResult<MailDomainDto>> ReadDomainsExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, descending) = GetSort(args, "Name");
+        return Api.Mail.GetMailDomainsPageAsync(ServerId, page, pageSize, sortBy: sortBy, sortDescending: descending, filters: args.ToApiFilters());
+    }
+
+    private Task<PaginatedResult<MailAccountDto>> ReadAccountsExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, descending) = GetSort(args, "Email");
+        return Api.Mail.GetMailAccountsPageAsync(ServerId, page, pageSize, sortBy: sortBy, sortDescending: descending, filters: args.ToApiFilters());
+    }
+
+    private Task<PaginatedResult<MailAliasDto>> ReadAliasesExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, descending) = GetSort(args, "SourceEmail");
+        return Api.Mail.GetMailAliasesPageAsync(ServerId, page, pageSize, sortBy: sortBy, sortDescending: descending, filters: args.ToApiFilters());
     }
 
     private async Task LoadDomainsAsync(GridLoadArgs args)
@@ -198,45 +248,6 @@ public partial class ServerMailSection
         var parts = args.OrderBy.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return (parts[0], parts.Length > 1 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase));
     }
-
-    private async Task ExecuteActionAsync(MailAction action)
-    {
-        _actionRunning = true;
-        try
-        {
-            var success = await Api.Mail.ExecuteMailActionAsync(ServerId, new MailActionRequest { Action = action });
-            if (success)
-                Toast.Success(L["TaskQueued"]);
-            else
-                Toast.Error(L["ActionFailed"]);
-        }
-        catch (HttpRequestException ex)
-        {
-            Logger.LogWarning(ex, "Mail action {Action} failed for server {ServerId}", action, ServerId);
-            Toast.Error(L["ActionFailed"]);
-        }
-        finally
-        {
-            _actionRunning = false;
-        }
-    }
-
-    // The main part of a split button restarts; each item maps to its own typed action. The items used to
-    // carry values no handler read, so Start/Stop/Reload silently did a restart.
-    private Task OnServiceActionAsync(string unit, string verb) =>
-        ExecuteActionAsync(ServiceAction(unit, verb));
-
-    internal static MailAction ServiceAction(string unit, string verb) => (unit, verb) switch
-    {
-        ("postfix", "start") => MailAction.StartPostfix,
-        ("postfix", "stop") => MailAction.StopPostfix,
-        ("postfix", "reload") => MailAction.ReloadPostfix,
-        ("postfix", _) => MailAction.RestartPostfix,
-        ("dovecot", "start") => MailAction.StartDovecot,
-        ("dovecot", "stop") => MailAction.StopDovecot,
-        ("dovecot", "reload") => MailAction.ReloadDovecot,
-        _ => MailAction.RestartDovecot
-    };
 
     private async Task VerifyDnsAsync(MailDomainDto domain)
     {
@@ -390,59 +401,6 @@ public partial class ServerMailSection
         }
     }
 
-    private async Task RunSetupAsync()
-    {
-        try
-        {
-            var success = await Api.Mail.SetupMailAsync(ServerId, new MailSetupRequest
-            {
-                Hostname = _setupHostname,
-                Domain = _setupDomain,
-                DkimSelector = _setupDkimSelector,
-                AdminEmail = _setupAdminEmail,
-                AdminPassword = _setupAdminPassword,
-                QuotaMb = _setupQuota,
-                EnableSpamFilter = _setupSpamFilter
-            });
-            if (success)
-            {
-                Toast.Success(L["TaskQueued"]);
-            }
-            else
-            {
-                Toast.Error(L["ActionFailed"]);
-            }
-        }
-        catch (HttpRequestException ex)
-        {
-            Logger.LogWarning(ex, "Mail setup failed for server {ServerId}", ServerId);
-            Toast.Error(L["ActionFailed"]);
-        }
-    }
-
-    private async Task OpenSetupDialogAsync()
-    {
-        var result = await OpenMailDialogAsync(MailDialogMode.Setup, L["MailSetup"], new MailDialogModel
-        {
-            Hostname = _setupHostname,
-            Domain = _setupDomain,
-            DkimSelector = _setupDkimSelector,
-            Email = _setupAdminEmail,
-            Password = _setupAdminPassword,
-            QuotaMb = _setupQuota,
-            EnableSpamFilter = _setupSpamFilter
-        }, "38rem");
-        if (result is null) return;
-        _setupHostname = result.Hostname;
-        _setupDomain = result.Domain;
-        _setupDkimSelector = result.DkimSelector;
-        _setupAdminEmail = result.Email;
-        _setupAdminPassword = result.Password;
-        _setupQuota = result.QuotaMb;
-        _setupSpamFilter = result.EnableSpamFilter;
-        await RunSetupAsync();
-    }
-
     private async Task<MailDialogModel?> OpenMailDialogAsync(MailDialogMode mode, string title, MailDialogModel model, string width = "32rem")
     {
         if (mode is MailDialogMode.AddAccount or MailDialogMode.AddAlias && _dialogDomains.Count == 0)
@@ -464,11 +422,14 @@ public partial class ServerMailSection
     {
         _ = InvokeAsync(async () =>
         {
+            var setupDone = _assistant?.OwnsSetupTask(notification.TaskId) == true;
             if (Mail.IsInstalled)
-                await RefreshDataAsync();
+                await Task.WhenAll(RefreshDataAsync(), setupDone ? ReadCountsAsync() : Task.CompletedTask);
+            if (_reinstall is not null) await _reinstall.HandleTaskCompletedAsync(notification);
             if (_queueTab is not null) await _queueTab.HandleTaskCompletedAsync(notification);
             if (_logsTab is not null) await _logsTab.HandleTaskCompletedAsync(notification);
-            if (_diagnosticsTab is not null) await _diagnosticsTab.HandleTaskCompletedAsync(notification);
+            if (_statusList is not null) await _statusList.HandleTaskCompletedAsync(notification);
+            if (_assistant is not null) await _assistant.HandleTaskCompletedAsync(notification);
             StateHasChanged();
         });
     }
@@ -569,4 +530,10 @@ public partial class ServerMailSection
             Toast.Error(L["OperationFailed"]);
     }
 
+
+    /// <summary>Recette R2-124: the export writes the DNS records the domain has, and the quota as the cell does.</summary>
+    private static readonly Func<MailDomainDto, object?> DnsExport = domain => string.Join(", ",
+        new[] { (domain.HasSpf, "SPF"), (domain.HasDkim, "DKIM"), (domain.HasDmarc, "DMARC") }.Where(record => record.Item1).Select(record => record.Item2));
+    private Func<MailAccountDto, object?> QuotaExport => _quotaExport ??= QuotaText;
+    private Func<MailAccountDto, object?>? _quotaExport;
 }

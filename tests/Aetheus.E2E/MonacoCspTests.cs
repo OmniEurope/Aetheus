@@ -34,6 +34,17 @@ public sealed class MonacoCspTests : E2ETestBase
                 .every(frame => frame.contentWindow?.document.querySelector('.monaco-editor'))
             """);
 
+        // E2E-001: both policies are response headers of the production static server
+        // (deploy/docker, MonacoFramePolicy). The local development host serves neither, and the
+        // launchers say so through E2E_REQUIRE_FRONTEND_SECURITY_HEADERS=false, as for
+        // ProductionSmokeTests; the editor rendering above is asserted on both hosts.
+        if (!PlaywrightConfig.RequireFrontendSecurityHeaders)
+        {
+            TestContext.Progress.WriteLine(
+                "Monaco rendered in its frame; CSP headers are outside the local development host's scope.");
+            return;
+        }
+
         var shellResponse = await Page.APIRequest.GetAsync(FrontendUrl);
         var frameResponse = await Page.APIRequest.GetAsync($"{FrontendUrl}/monaco-frame.html");
         Assert.Multiple(() =>

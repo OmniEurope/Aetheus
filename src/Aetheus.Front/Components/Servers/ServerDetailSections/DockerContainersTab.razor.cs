@@ -31,6 +31,10 @@ public partial class DockerContainersTab
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
+    /// <summary>BACK-012: the backend takes Server.Admin for this tab's agent-reaching writes (compose
+    /// deploy, image build and delete, container shell); without it they are not offered.</summary>
+    [Parameter] public bool CanAdmin { get; set; }
+
     /// <summary>False until the parent's first inventory load lands; drives the skeleton rows.</summary>
     [Parameter] public bool InitialLoaded { get; set; }
 

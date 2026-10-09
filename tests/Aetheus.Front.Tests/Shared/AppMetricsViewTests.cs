@@ -16,6 +16,7 @@ public sealed class AppMetricsViewTests : BunitContext
         var handler = BunitTestHelper.RegisterServices(this);
         handler.SetJsonResponse("api/appmonitoring/apps/3/metrics/names", new List<string> { "http.server.request.duration" });
         handler.SetJsonResponse("metrics/series-groups", new List<string?> { "{\"route\":\"/a\"}", null });
+        handler.SetJsonResponse("/send-interval", new AppTelemetrySendIntervalDto { ServerIntervalSeconds = 300 });
         handler.SetJsonResponse("metrics/series?metric", new MetricSeriesDto
         {
             MetricName = "http.server.request.duration",
@@ -70,6 +71,7 @@ public sealed class AppMetricsViewTests : BunitContext
         var handler = BunitTestHelper.RegisterServices(this);
         handler.SetJsonResponse("api/appmonitoring/apps/3/metrics/names", new List<string> { "http.server.request.duration" });
         handler.SetJsonResponse("metrics/series-groups", new List<string?> { "{\"route\":\"/a\"}", "{\"route\":\"/b\"}" });
+        handler.SetJsonResponse("/send-interval", new AppTelemetrySendIntervalDto { ServerIntervalSeconds = 300 });
         handler.SetJsonResponse("metrics/series?metric", new MetricSeriesDto { MetricName = "http.server.request.duration" });
 
         var cut = Render<AppMetricsView>(parameters => parameters.Add(component => component.AppId, 3));
@@ -82,5 +84,31 @@ public sealed class AppMetricsViewTests : BunitContext
         }
         // The metric picker filters as one types (OE autocomplete): its field carries its own name.
         Assert.NotEmpty(cut.FindAll("[aria-label='Metric']"));
+    }
+
+    [Fact]
+    public void TheSendInterval_SitsUnderTheChart_AndBeyondADayAPointIsAnHour()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        handler.SetJsonResponse("api/appmonitoring/apps/3/metrics/names", new List<string> { "process.cpu" });
+        handler.SetJsonResponse("metrics/series-groups", new List<string?> { null });
+        handler.SetJsonResponse("metrics/series?metric", new MetricSeriesDto { MetricName = "process.cpu" });
+        handler.SetJsonResponse("api/appmonitoring/apps/3/send-interval", new AppTelemetrySendIntervalDto
+        {
+            ServerIntervalSeconds = 300,
+            Profile = DataRetentionProfile.Standard,
+            ObservedIntervalSeconds = 300
+        });
+
+        var cut = Render<AppMetricsView>(parameters => parameters.Add(component => component.AppId, 3));
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid=telemetry-send-interval]")));
+        Assert.DoesNotContain("TelemetrySendIntervalHourly", cut.Find("[data-testid=telemetry-send-interval]").TextContent);
+
+        // OmniDropDown options carry their index: 0 = 24h, 1 = 7d.
+        cut.Find("select#app-metrics-period").Change("1");
+
+        cut.WaitForAssertion(() => Assert.Contains(
+            "TelemetrySendIntervalHourly", cut.Find("[data-testid=telemetry-send-interval]").TextContent));
     }
 }

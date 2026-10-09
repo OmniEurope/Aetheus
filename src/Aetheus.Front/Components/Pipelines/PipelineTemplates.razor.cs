@@ -82,6 +82,8 @@ public partial class PipelineTemplates : IAsyncDisposable
     {
         try
         {
+            // FRONT-012: the event says the server list changed; the client cache must not answer for it.
+            Api.PipelineTemplates.InvalidateTemplateCache();
             var templates = await Api.PipelineTemplates.GetPipelineTemplatesAsync();
             if (_grid is not null) await _grid.Refresh();
             _templates = templates;

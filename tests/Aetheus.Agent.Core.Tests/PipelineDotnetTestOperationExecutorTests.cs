@@ -7,9 +7,9 @@ namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
 /// End to end for the typed step, against a real process: a tiny script stands in for the test
-/// runner, exits with the code the case needs, and the TRX and coverage it "produced" are written
-/// beforehand. That is what makes these tests prove the step's actual contract rather than the
-/// classifier's, which is pinned separately.
+/// runner, writes the TRX and coverage the case stages for it into the results directory, and exits
+/// with the code the case needs. That is what makes these tests prove the step's actual contract
+/// rather than the classifier's, which is pinned separately.
 ///
 /// The contract being pinned: findings travel as a PUBLISHED STATUS on a green step, never as a red
 /// one. A red step would tell the gate nothing about whether the suite ran, and that distinction is
@@ -33,9 +33,9 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
     }
 
     /// <summary>
-    /// Stands in for the test runner. It writes nothing itself, the evidence is laid down by the test;
-    /// all it does is exit with the code the case is about, which is the input the step reconciles
-    /// against that evidence.
+    /// Stands in for the test runner. Like a real one it writes its evidence during the run: it
+    /// copies whatever the case staged into the results directory, then exits with the code the
+    /// case is about, which is the input the step reconciles against that evidence.
     /// </summary>
     private string FakeRunner(int exitCode)
     {
@@ -44,8 +44,8 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
         File.WriteAllText(
             path,
             OperatingSystem.IsWindows()
-                ? $"@echo off\r\nexit /b {exitCode}\r\n"
-                : $"#!/bin/sh\nexit {exitCode}\n");
+                ? $"@echo off\r\n{WindowsPublishStaged}exit /b {exitCode}\r\n"
+                : $"#!/bin/sh\n{PosixPublishStaged}exit {exitCode}\n");
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(
                 path,
@@ -53,22 +53,30 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
         return path;
     }
 
+    // Script lines that publish the staged evidence into coverage/backend, next to the script.
+    private const string WindowsPublishStaged =
+        "if exist \"%~dp0staged\\*\" copy /y \"%~dp0staged\\*\" \"%~dp0coverage\\backend\\\" >nul\r\n";
+    private const string PosixPublishStaged =
+        "d=\"$(dirname \"$0\")\"; cp \"$d\"/staged/* \"$d/coverage/backend/\" 2>/dev/null\n";
+
+    /// <summary>Evidence the fake runner writes into the results directory when it runs.</summary>
+    private void Stage(string fileName, string content)
+    {
+        var staged = Directory.CreateDirectory(Path.Combine(_workspace, "staged")).FullName;
+        File.WriteAllText(Path.Combine(staged, fileName), content);
+    }
+
+    private string ResultsDirectory => Directory.CreateDirectory(Path.Combine(_workspace, "coverage", "backend")).FullName;
+
     private async Task<ExecutorResult> RunAsync(
         int runnerExitCode,
         string? trx,
         string? coverage = null,
         bool collectCoverage = false)
     {
-        var results = Path.Combine(_workspace, "coverage", "backend");
-        Directory.CreateDirectory(results);
-        if (trx is not null)
-            await File.WriteAllTextAsync(
-                Path.Combine(results, "backend.trx"), trx, TestContext.Current.CancellationToken);
-        if (coverage is not null)
-            await File.WriteAllTextAsync(
-                Path.Combine(results, "coverage.cobertura.xml"),
-                coverage,
-                TestContext.Current.CancellationToken);
+        _ = ResultsDirectory;
+        if (trx is not null) Stage("backend.trx", trx);
+        if (coverage is not null) Stage("coverage.cobertura.xml", coverage);
 
         var executor = new PipelineDotnetTestOperationExecutor(
             NullLogger<PipelineDotnetTestOperationExecutor>.Instance, new PhysicalFileSystemReader());
@@ -164,6 +172,35 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
     }
 
     [Fact]
+    public async Task ATrxLeftByAnEarlierRunIsNotThisRunsEvidence()
+    {
+        // A valid report from a previous run, and a runner that exits 0 without writing one.
+        await File.WriteAllTextAsync(
+            Path.Combine(ResultsDirectory, "backend.trx"), Trx(), TestContext.Current.CancellationToken);
+
+        var result = await RunAsync(runnerExitCode: 0, trx: null);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Equal("untrustworthy-evidence", result.FailureCode);
+        Assert.Null(PublishedStatus());
+    }
+
+    [Fact]
+    public async Task ACoverageReportLeftByAnEarlierRunIsNotThisRunsEvidence()
+    {
+        var earlier = Directory.CreateDirectory(Path.Combine(ResultsDirectory, "earlier-run")).FullName;
+        await File.WriteAllTextAsync(
+            Path.Combine(earlier, "coverage.cobertura.xml"), ValidCoverage, TestContext.Current.CancellationToken);
+
+        var result = await RunAsync(runnerExitCode: 0, trx: Trx(), coverage: null, collectCoverage: true);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Equal("untrustworthy-evidence", result.FailureCode);
+        Assert.Contains("predates this run", result.FailureReason!, StringComparison.Ordinal);
+        Assert.Null(PublishedStatus());
+    }
+
+    [Fact]
     public async Task AnInvalidStepDefinitionIsRefusedBeforeAnyProcessRuns()
     {
         var executor = new PipelineDotnetTestOperationExecutor(
@@ -203,8 +240,8 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
         File.WriteAllText(
             path,
             OperatingSystem.IsWindows()
-                ? "@echo off\r\n(for %%a in (%*) do @echo %%~a) > \"%~dp0args.txt\"\r\nexit /b 0\r\n"
-                : "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/args.txt\"\nexit 0\n");
+                ? "@echo off\r\n(for %%a in (%*) do @echo %%~a) > \"%~dp0args.txt\"\r\n" + WindowsPublishStaged + "exit /b 0\r\n"
+                : "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/args.txt\"\n" + PosixPublishStaged + "exit 0\n");
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return path;
@@ -219,11 +256,9 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
     public async Task OnTheTestingPlatform_TheRunnerReceivesItsCommandLine()
     {
         SelectTestingPlatform();
-        var results = Path.Combine(_workspace, "coverage", "backend");
-        Directory.CreateDirectory(results);
-        await File.WriteAllTextAsync(Path.Combine(results, "backend.trx"), Trx(), TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(
-            Path.Combine(results, "coverage.cobertura.20260912101500123.xml"), ValidCoverage, TestContext.Current.CancellationToken);
+        _ = ResultsDirectory;
+        Stage("backend.trx", Trx());
+        Stage("coverage.cobertura.20260912101500123.xml", ValidCoverage);
         var executor = new PipelineDotnetTestOperationExecutor(
             NullLogger<PipelineDotnetTestOperationExecutor>.Instance, new PhysicalFileSystemReader());
 
@@ -267,10 +302,8 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
     public async Task OnTheTestingPlatform_AStampedCoverageReportIsNormalizedThenGraded()
     {
         SelectTestingPlatform();
-        var results = Path.Combine(_workspace, "coverage", "backend");
-        Directory.CreateDirectory(results);
-        await File.WriteAllTextAsync(
-            Path.Combine(results, "coverage.cobertura.20260912101500123.xml"), ValidCoverage, TestContext.Current.CancellationToken);
+        var results = ResultsDirectory;
+        Stage("coverage.cobertura.20260912101500123.xml", ValidCoverage);
 
         var result = await RunAsync(runnerExitCode: 0, trx: Trx(), collectCoverage: true);
 

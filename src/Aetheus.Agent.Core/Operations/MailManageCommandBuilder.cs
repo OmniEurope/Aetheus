@@ -53,7 +53,8 @@ internal static class MailManageCommandBuilder
         [OperationKind.MailServiceControl] = (target, _) => ServiceControl(target),
         [OperationKind.MailSendTest] = SendTest,
         [OperationKind.MailQueueDelete] = (target, _) => MailValidation.IsValidQueueId(target) ? Manage("queue-delete", target) : null,
-        [OperationKind.MailQuotaReport] = (target, _) => target == "-" ? Manage("quota-report") : null
+        [OperationKind.MailQuotaReport] = (target, _) => target == "-" ? Manage("quota-report") : null,
+        [OperationKind.MailPurge] = (target, _) => target == "-" ? Manage("purge") : null
     };
 
     public static MailHelperCommand? Build(OperationKind kind, string target, IReadOnlyDictionary<string, string> env) =>

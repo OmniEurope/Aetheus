@@ -233,14 +233,48 @@ public class ReleaseServiceTests
             .Returns(Task.CompletedTask);
         _pipelineServiceMock.GetPipelineAsync(5, Arg.Any<CancellationToken>())
             .Returns(new PipelineDto { Id = 5, ProjectId = 1 });
-        _pipelineLauncherMock.TriggerRunAsync(5, Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>())
+        _pipelineLauncherMock.TriggerPreparedRunAsync(Arg.Is<PipelineRunPreparation>(p => p.PipelineId == 5), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>())
             .Returns(new PipelineRunDto { Id = 100 });
         SetupHubClients();
 
-        var result = await _sut.TriggerReleaseBuildAsync(1, new TriggerReleaseBuildRequest { PipelineId = 5 }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.TriggerReleaseBuildAsync(1, new TriggerReleaseBuildRequest { PipelineId = 5 }, Authorized(5), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(ReleaseStatus.Building, result.Status);
         await _repoMock.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    private static PipelineRunPreparation Authorized(int pipelineId) =>
+        new() { PipelineId = pipelineId, YamlSnapshot = "name: p", TargetServerIds = [] };
+
+    [Fact]
+    public async Task TriggerReleaseBuildAsync_LaunchesTheRunTheCallerWasAuthorizedFor()
+    {
+        // BACK-023: the build used to launch the pipeline by id, on a preparation nobody had authorized.
+        var release = new Release { Id = 1, ProjectId = 1, Status = ReleaseStatus.Detected, Project = new Project { Id = 1, Name = "P" } };
+        _repoMock.FindReleaseAsync(1, Arg.Any<CancellationToken>()).Returns(release);
+        _pipelineServiceMock.GetPipelineAsync(5, Arg.Any<CancellationToken>()).Returns(new PipelineDto { Id = 5, ProjectId = 1 });
+        var authorized = Authorized(5);
+        SetupHubClients();
+
+        await _sut.TriggerReleaseBuildAsync(1, new TriggerReleaseBuildRequest { PipelineId = 5 }, authorized, TestContext.Current.CancellationToken);
+
+        await _pipelineLauncherMock.Received(1).TriggerPreparedRunAsync(
+            Arg.Is<PipelineRunPreparation>(p => ReferenceEquals(p, authorized)), Arg.Any<Dictionary<string, string>?>(),
+            Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>());
+        await _pipelineLauncherMock.DidNotReceive().TriggerRunAsync(
+            Arg.Any<int>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TriggerReleaseBuildAsync_AuthorizedRunOfAnotherPipeline_IsRefusedBeforeAnyEffect()
+    {
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.TriggerReleaseBuildAsync(
+            1, new TriggerReleaseBuildRequest { PipelineId = 5 }, Authorized(6), TestContext.Current.CancellationToken));
+
+        await _repoMock.DidNotReceive().FindReleaseAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _pipelineLauncherMock.DidNotReceive().TriggerPreparedRunAsync(
+            Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>());
     }
 
     [Fact]
@@ -250,7 +284,7 @@ public class ReleaseServiceTests
             .Returns((Release?)null);
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
-            _sut.TriggerReleaseBuildAsync(99, new TriggerReleaseBuildRequest { PipelineId = 5 }, ct: TestContext.Current.CancellationToken));
+            _sut.TriggerReleaseBuildAsync(99, new TriggerReleaseBuildRequest { PipelineId = 5 }, Authorized(5), ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -280,11 +314,11 @@ public class ReleaseServiceTests
         {
             Stages = [new PipelineStageDefinition { Name = "Deploy", Steps = [new PipelineStepDefinition { Name = "deploy", Type = "deploy", Release = "$(RELEASE)" }] }]
         });
-        _pipelineLauncherMock.TriggerRunAsync(5, Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>())
+        _pipelineLauncherMock.TriggerPreparedRunAsync(Arg.Is<PipelineRunPreparation>(p => p.PipelineId == 5), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>())
             .Returns(new PipelineRunDto { Id = 100 });
         SetupHubClients();
 
-        var result = await _sut.RollbackReleaseAsync(1, new RollbackReleaseRequest { PipelineId = 5 }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.RollbackReleaseAsync(1, new RollbackReleaseRequest { PipelineId = 5 }, Authorized(5), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(RollbackStatus.Pending, result.Status);
         Assert.Equal(ReleaseStatus.Deployed, release.Status);
@@ -322,10 +356,10 @@ public class ReleaseServiceTests
                 Steps = [new PipelineStepDefinition { Name = "deploy", Type = "deploy", Release = "$(RELEASE)" }]
             }]
         });
-        _pipelineLauncherMock.TriggerRunAsync(5, Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>())
+        _pipelineLauncherMock.TriggerPreparedRunAsync(Arg.Is<PipelineRunPreparation>(p => p.PipelineId == 5), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>())
             .Returns(new PipelineRunDto { Id = 100, Status = PipelineStatus.Failed });
 
-        var result = await _sut.RollbackReleaseAsync(2, new RollbackReleaseRequest { PipelineId = 5 }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.RollbackReleaseAsync(2, new RollbackReleaseRequest { PipelineId = 5 }, Authorized(5), ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(RollbackStatus.Failed, result.Status);
         Assert.NotNull(result.CompletedAt);
@@ -339,7 +373,7 @@ public class ReleaseServiceTests
     {
         _repoMock.FindReleaseAsync(99, Arg.Any<CancellationToken>()).Returns((Release?)null);
 
-        await Assert.ThrowsAsync<NotFoundException>(() => _sut.RollbackReleaseAsync(99, new RollbackReleaseRequest { PipelineId = 5 }, ct: TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<NotFoundException>(() => _sut.RollbackReleaseAsync(99, new RollbackReleaseRequest { PipelineId = 5 }, Authorized(5), ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -359,11 +393,11 @@ public class ReleaseServiceTests
         _artifactStorageMock.OpenArtifact("1/1/1/missing-release.zip").Returns((Stream?)null);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
-            _sut.RollbackReleaseAsync(2, new RollbackReleaseRequest { PipelineId = 5 }, ct: TestContext.Current.CancellationToken));
+            _sut.RollbackReleaseAsync(2, new RollbackReleaseRequest { PipelineId = 5 }, Authorized(5), ct: TestContext.Current.CancellationToken));
 
         Assert.Contains("artifact", exception.Message, StringComparison.OrdinalIgnoreCase);
-        await _pipelineLauncherMock.DidNotReceive().TriggerRunAsync(
-            Arg.Any<int>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>());
+        await _pipelineLauncherMock.DidNotReceive().TriggerPreparedRunAsync(
+            Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>());
     }
 
     [Fact]
@@ -404,10 +438,10 @@ public class ReleaseServiceTests
         });
 
         await Assert.ThrowsAsync<BadRequestException>(() => _sut.RollbackReleaseAsync(2,
-            new RollbackReleaseRequest { PipelineId = 5, RestoreDatabase = true, BackupRunId = 7 }, ct: TestContext.Current.CancellationToken));
+            new RollbackReleaseRequest { PipelineId = 5, RestoreDatabase = true, BackupRunId = 7 }, Authorized(5), ct: TestContext.Current.CancellationToken));
 
-        await _pipelineLauncherMock.DidNotReceive().TriggerRunAsync(
-            Arg.Any<int>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>());
+        await _pipelineLauncherMock.DidNotReceive().TriggerPreparedRunAsync(
+            Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>());
     }
 
     [Fact]

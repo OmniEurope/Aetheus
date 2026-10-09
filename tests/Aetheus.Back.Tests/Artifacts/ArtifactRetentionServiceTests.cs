@@ -34,6 +34,23 @@ public class ArtifactRetentionServiceTests
     }
 
     [Fact]
+    public async Task ApplyBuildAndReleaseRetention_NullProjectId_DoNotThrow()
+    {
+        // BACK-009: a project-less artifact used to NRE on ProjectId!.Value after it was stored.
+        var build = new PipelineArtifact { Id = 1, PipelineId = 1, ProjectId = null };
+        var released = new PipelineArtifact { Id = 2, PipelineId = 1, ProjectId = null };
+
+        await _sut.ApplyBuildRetentionAsync(build, ct: TestContext.Current.CancellationToken);
+        await _sut.ApplyReleaseRetentionAsync(released, 8, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(ArtifactRetentionPolicy.Build, build.RetentionPolicy);
+        Assert.Equal(ArtifactRetentionPolicy.Released, released.RetentionPolicy);
+        Assert.True(build.RetentionExpiresAt > DateTime.MinValue);
+        await _repo.Received(1).LinkReleaseAsync(released, 8, Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().GetProjectRetentionOverridesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ApplyDeployRetentionAsync_UpgradesPolicy()
     {
         var artifact = new PipelineArtifact { Id = 1, PipelineId = 1, ProjectId = 1, RetentionPolicy = ArtifactRetentionPolicy.Build };

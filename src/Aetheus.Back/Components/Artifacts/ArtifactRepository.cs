@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Linq.Expressions;
 using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Artifacts;
@@ -308,11 +309,8 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
             .AsNoTracking()
             .Where(release => release.ProjectId == projectId
                               && release.Status == ReleaseStatus.Deployed
-                              && release.Artifacts.Any()
-                              && release.PipelineRun != null
-                              && (release.PipelineRun.Pipeline.Name == "aetheus-candidate"
-                                  || release.PipelineRun.Pipeline.Name == "aetheus-release-with-rollback"
-                                  || release.PipelineRun.Pipeline.Name == "aetheus-release-fast"))
+                              && release.Artifacts.Any())
+            .Where(ProducedByRollbackContractPipeline)
             .AnyAsync(ct)
             .ConfigureAwait(false);
 
@@ -325,11 +323,8 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
                                    || release.Status == ReleaseStatus.Superseded)
                                // Metadata alone is not a rollback contract: the retained bytes must
                                // still exist and be linked to the release.
-                               && release.Artifacts.Any()
-                               && release.PipelineRun != null
-                              && (release.PipelineRun.Pipeline.Name == "aetheus-candidate"
-                                  || release.PipelineRun.Pipeline.Name == "aetheus-release-with-rollback"
-                                  || release.PipelineRun.Pipeline.Name == "aetheus-release-fast"))
+                               && release.Artifacts.Any())
+            .Where(ProducedByRollbackContractPipeline)
             .AnyAsync(ct)
             .ConfigureAwait(false);
 
@@ -388,27 +383,48 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
         ReleaseStatus[] statuses,
         CancellationToken ct)
     {
-        var pipelineName = await db.Releases
+        var producer = await db.Releases
             .AsNoTracking()
             .Where(release => release.ProjectId == projectId
                               && statuses.Contains(release.Status)
                               && release.Artifacts.Any(artifact =>
-                                    artifact.PipelineRun.CommitHash != currentCommitHash)
-                              && release.PipelineRun != null
-                              && (release.PipelineRun.Pipeline.Name == "aetheus-candidate"
-                                  || release.PipelineRun.Pipeline.Name == "aetheus-release-with-rollback"
-                                  || release.PipelineRun.Pipeline.Name == "aetheus-release-fast"))
+                                    artifact.PipelineRun.CommitHash != currentCommitHash))
+            .Where(ProducedByRollbackContractPipeline)
             .OrderByDescending(release => release.PublishedAt ?? release.DetectedAt)
-            .Select(release => release.PipelineRun!.Pipeline.Name)
+            .Select(release => new
+            {
+                release.PipelineRun!.Pipeline.Name,
+                release.PipelineRun.Pipeline.TemplateReferenceName
+            })
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
 
-        if (pipelineName is null)
+        if (producer is null)
             return false;
 
-        return !string.Equals(pipelineName, "aetheus-release-fast", StringComparison.Ordinal)
+        // A fast release carries the application payload only, whatever the project named it.
+        var fastRelease = string.Equals(producer.Name, LegacyFastReleasePipeline, StringComparison.Ordinal)
+            || DeliveryTemplateNames.Is(producer.TemplateReferenceName, DeliveryTemplateNames.ReleaseFast);
+        return !fastRelease
                || string.Equals(artifactName, "ApplicationPayload-artifacts", StringComparison.Ordinal);
     }
+
+    private const string LegacyFastReleasePipeline = "aetheus-release-fast";
+
+    /// <summary>
+    /// Recette R2-121: a release honours the rollback contract when the pipeline that published it is
+    /// a candidate or a fast release. The self-deploy pipelines are recognised by their historical
+    /// names, unchanged; any other project's pipeline by the shipped template it extends, which is how
+    /// the setup wizard creates them (<c>portfolio-candidate</c> extends <c>application-candidate@N</c>).
+    /// </summary>
+    private static readonly Expression<Func<Release, bool>> ProducedByRollbackContractPipeline = release =>
+        release.PipelineRun != null
+        && (release.PipelineRun.Pipeline.Name == "aetheus-candidate"
+            || release.PipelineRun.Pipeline.Name == "aetheus-release-with-rollback"
+            || release.PipelineRun.Pipeline.Name == LegacyFastReleasePipeline
+            || release.PipelineRun.Pipeline.TemplateReferenceName != null
+                && (release.PipelineRun.Pipeline.TemplateReferenceName.ToLower() == DeliveryTemplateNames.Candidate
+                    || release.PipelineRun.Pipeline.TemplateReferenceName.ToLower() == DeliveryTemplateNames.ReleaseFast));
 
     public async Task<int?> GetServerOrganizationIdAsync(int serverId, CancellationToken ct = default) =>
         await db.Servers
@@ -439,9 +455,20 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
         // here instead, so the public shape is unchanged.
         var context = await db.PipelineRuns.AsNoTracking()
             .Where(run => run.Id == runId)
-            .Select(run => new { run.PipelineId, run.Pipeline.ProjectId })
+            .Select(run => new
+            {
+                run.PipelineId,
+                run.Pipeline.ProjectId,
+                run.Pipeline.EnvironmentId,
+                run.Pipeline.ProjectServerId
+            })
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        return context is null ? null : (context.PipelineId, context.ProjectId);
+        if (context is null) return null;
+        // BACK-009: an Environment- or ProjectServer-owned pipeline has no direct ProjectId; its
+        // artifacts still belong to a project, which carries their quota and their retention.
+        var projectId = await ResolveOwningProjectIdAsync(
+            context.ProjectId, context.EnvironmentId, context.ProjectServerId, ct).ConfigureAwait(false);
+        return (context.PipelineId, projectId);
     }
 
     /// <summary>
@@ -463,18 +490,25 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
             })
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (owner is null) return null;
-        if (owner.ProjectId is { } direct) return direct;
+        return await ResolveOwningProjectIdAsync(
+            owner.ProjectId, owner.EnvironmentId, owner.ProjectServerId, ct).ConfigureAwait(false);
+    }
 
-        if (owner.EnvironmentId is { } environmentId)
+    private async Task<int?> ResolveOwningProjectIdAsync(
+        int? projectId, int? environmentId, int? projectServerId, CancellationToken ct)
+    {
+        if (projectId is { } direct) return direct;
+
+        if (environmentId is { } environment)
             return await db.Environments.AsNoTracking()
-                .Where(environment => environment.Id == environmentId)
-                .Select(environment => environment.ProjectId)
+                .Where(item => item.Id == environment)
+                .Select(item => item.ProjectId)
                 .FirstOrDefaultAsync(ct).ConfigureAwait(false);
 
-        if (owner.ProjectServerId is { } projectServerId)
+        if (projectServerId is { } projectServer)
             return await db.ProjectServers.AsNoTracking()
-                .Where(projectServer => projectServer.Id == projectServerId)
-                .Select(projectServer => (int?)projectServer.ProjectId)
+                .Where(item => item.Id == projectServer)
+                .Select(item => (int?)item.ProjectId)
                 .FirstOrDefaultAsync(ct).ConfigureAwait(false);
 
         // A legacy pipeline with all three owners null. No project can be named, so no permission

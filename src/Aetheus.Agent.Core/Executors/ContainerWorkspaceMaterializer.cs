@@ -190,9 +190,17 @@ internal static class ContainerWorkspaceMaterializer
             var sourceIsFile = File.Exists(sourceEntry);
             var sourceIsDirectory = Directory.Exists(sourceEntry);
             var destinationIsDirectory = Directory.Exists(destinationEntry);
-            if ((sourceIsFile && !destinationIsDirectory)
-                || (sourceIsDirectory && destinationIsDirectory))
+            if (sourceIsFile && !destinationIsDirectory)
                 continue;
+            if (sourceIsDirectory && destinationIsDirectory)
+            {
+                // `cp -a` merges into an existing directory, so a file deleted deeper in the source
+                // would survive here and be published back. Recurse into real directories only: a
+                // symbolic link is replaced by the copy, never followed into its target.
+                if (!IsSymbolicLink(sourceEntry) && !IsSymbolicLink(destinationEntry))
+                    RemoveStaleEntries(sourceEntry, destinationEntry, excludeProtectedMetadata);
+                continue;
+            }
 
             if (destinationIsDirectory)
                 Directory.Delete(destinationEntry, recursive: true);
@@ -203,6 +211,8 @@ internal static class ContainerWorkspaceMaterializer
 
     internal static bool IsProtectedSyncEntry(string entry) =>
         Path.GetFileName(entry) is GitMetadataDirectory or ReadyMarker;
+
+    private static bool IsSymbolicLink(string path) => new DirectoryInfo(path).LinkTarget is not null;
 
 }
 

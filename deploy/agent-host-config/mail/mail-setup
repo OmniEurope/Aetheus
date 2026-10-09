@@ -8,10 +8,17 @@
 set -eu
 
 die() { echo "$1" >&2; exit 1; }
-valid_domain() { printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'; }
-valid_email()  { printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'; }
-valid_sel()    { printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9_-]+$'; }
-valid_quota()  { printf '%s' "$1" | grep -Eq '^[0-9]{1,7}$'; }
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
+valid_domain() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'; }
+valid_email()  { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'; }
+valid_sel()    { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9_-]+$'; }
+valid_quota()  { one_line "$1" && printf '%s' "$1" | grep -Eq '^[0-9]{1,7}$'; }
 
 hostname="${1:-}"
 domain="${2:-}"
@@ -158,11 +165,6 @@ OPENDKIM_EOF
 
 postfix check || die "postfix configuration rejected"
 
-# Ownership marker read by the agent collector (world-readable, no secret).
-mkdir -p /etc/aetheus
-printf 'managed-by=aetheus\ndomain=%s\n' "$domain" > /etc/aetheus/mail-stack.managed
-chmod 644 /etc/aetheus/mail-stack.managed
-
 # Enable + (re)start services. A unit masked on the host (postfix was, tasks 23257 and 23258 of
 # 2026-10-03: "Unit file /etc/systemd/system/postfix.service is masked") refuses enable; asking for
 # this stack is asking for these three units, and unmask is a no-op on a unit that is not masked.
@@ -177,5 +179,13 @@ systemctl restart postfix
 if [ "$spam" = "rspamd" ]; then
   /usr/local/lib/aetheus/mail-manage spam-install
 fi
+
+# Ownership marker read by the agent collector (world-readable, no secret). Written last: the page
+# shows the stack as provisioned from this file, and a setup that died before its services started
+# (tasks 23257 and 23258, 2026-10-03) showed "Provisionné par Aetheus" over a stopped Postfix.
+mkdir -p /etc/aetheus
+# The host name lets mail-manage purge tell its own /etc/mailname from one the host had before.
+printf 'managed-by=aetheus\ndomain=%s\nhostname=%s\n' "$domain" "$hostname" > /etc/aetheus/mail-stack.managed
+chmod 644 /etc/aetheus/mail-stack.managed
 
 echo "Mail server setup completed successfully for $domain (quota ${quota}MB, spam filter $spam)"

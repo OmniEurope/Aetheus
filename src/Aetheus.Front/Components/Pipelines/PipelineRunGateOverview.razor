@@ -16,7 +16,7 @@
                 {
                     <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineRunGatePresentation.GateStyle(Gate.Status)">@L[PipelineRunGatePresentation.StatusKey(Gate.Status)]</OmniBadge>
                 }
-                @if (Gate.Grade?.OverallGrade is { } grade)
+                @if (PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is { } grade)
                 {
                     <GradeBadge Value="@grade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge" />
                 }

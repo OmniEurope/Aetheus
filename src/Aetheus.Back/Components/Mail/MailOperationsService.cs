@@ -21,6 +21,9 @@ public interface IMailOperationsService
     Task<MailTaskQueuedDto> DeleteQueuedMessageAsync(int serverId, string queueId, CancellationToken ct = default);
     Task<MailTaskQueuedDto> RefreshQuotaAsync(int serverId, CancellationToken ct = default);
     Task<int> IngestQuotaReportAsync(int serverId, int taskId, CancellationToken ct = default);
+
+    /// <summary>Recette R2-080: queues the outbound port 25 check of the setup assistant on the server's agent.</summary>
+    Task<MailTaskQueuedDto> ProbeOutboundSmtpAsync(int serverId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -187,6 +190,22 @@ public sealed class MailOperationsService(
         if (updated > 0)
             await inventory.SaveChangesAsync(ct).ConfigureAwait(false);
         return updated;
+    }
+
+    // Needs no mail grant (the agent opens the socket itself, before any mail stack exists), only an agent
+    // that publishes the capability: an older one would leave the task pending until the watchdog.
+    public async Task<MailTaskQueuedDto> ProbeOutboundSmtpAsync(int serverId, CancellationToken ct = default)
+    {
+        var server = await serverRepo.FindServerAsync(serverId, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException($"Server {serverId} not found.");
+        if (server.AgentCapabilitiesJson?.Contains($"\"{AgentCapabilities.MailOutboundProbe}\"", StringComparison.Ordinal) != true)
+            throw new BadRequestException(
+                $"The agent on '{server.Name}' does not publish the '{AgentCapabilities.MailOutboundProbe}' capability: " +
+                "update the agent to check outbound port 25.");
+        var task = ServerTaskFactory.Operation(serverId, "Mail - outbound port 25 check", OperationKind.MailOutboundProbe,
+            MailOutboundProbe.Target, 60);
+        await TaskQueuePersistence.PersistAndNotifyAsync(mailRepo.AddTaskAsync, taskService, task, ct).ConfigureAwait(false);
+        return new MailTaskQueuedDto { TaskId = task.Id };
     }
 
     private async Task<MailTaskQueuedDto> QueueAsync(

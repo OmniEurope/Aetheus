@@ -53,15 +53,22 @@ Aetheus.hideSplash = function () {
     const el = document.getElementById('app-splash');
     if (!el) return;
     el.classList.add('app-splash--hidden');
-    const remove = function () { if (el.parentNode) el.parentNode.removeChild(el); };
+    const remove = function () {
+        if (el.parentNode) el.parentNode.removeChild(el);
+        // The splash was the last thing painted from the boot copy of the tokens: OmniThemeScope paints
+        // the application from here on.
+        Aetheus.releaseBootTheme();
+    };
     el.addEventListener('transitionend', remove, { once: true });
     // Fallback if transitionend never fires (reduced-motion, display quirks, interrupted transition).
     setTimeout(remove, 600);
 };
 
-// PLAN-008 lot 11: the stored appearance is 'dark', 'light' or 'system'. 'system' follows the OS
-// and repaints when the OS preference changes, without a reload. Anything else reads as dark, which
-// is what the application defaulted to before the System option existed.
+// PLAN-008 lot 11, STD-SHELL: the stored appearance is 'dark', 'light' or 'system'. OmniThemeScope paints the
+// application in it; the document root carries the same mode, resolved to light or dark, for what lives
+// outside the scope (the boot splash, the page behind it) and for the app.css rules keyed on the dark half,
+// which the scope's own 'system' value cannot select. 'system' follows the OS and repaints when the OS
+// preference changes, without a reload. Anything else reads as dark, the application's default.
 Aetheus.effectiveTheme = function (appearance) {
     if (appearance === 'light') return 'light';
     if (appearance !== 'system') return 'dark';
@@ -71,57 +78,58 @@ Aetheus.effectiveTheme = function (appearance) {
 Aetheus.setOmniTheme = function (appearance) {
     Aetheus._appearance = appearance;
     document.documentElement.setAttribute('data-omni-theme', Aetheus.effectiveTheme(appearance));
-    Aetheus.paintThemeTokens();
 
     if (!Aetheus._systemTheme && window.matchMedia) {
         Aetheus._systemTheme = window.matchMedia('(prefers-color-scheme: light)');
         Aetheus._systemTheme.addEventListener('change', function () {
             if (Aetheus._appearance === 'system') {
                 document.documentElement.setAttribute('data-omni-theme', Aetheus.effectiveTheme('system'));
-                Aetheus.paintThemeTokens();
             }
         });
     }
     return Aetheus.effectiveTheme(appearance);
 };
 
-// Recette R-232: the chosen theme and palette of the whole site. Their token values ({ light, dark },
-// resolved by the settings page from the OmniEurope.Blazor catalogue) are kept in localStorage, so the
-// boot script of index.html paints the same values before the first frame. They go through the CSSOM
-// on <html>, as OmniEurope.Blazor's own theme scope does: no style attribute in markup, so the strict
-// style policy holds, and the menus and dialogs rendered at the end of <body> follow too.
-Aetheus._themeTokenNames = [];
-Aetheus.paintThemeTokens = function () {
-    var root = document.documentElement;
-    Aetheus._themeTokenNames.forEach(function (name) { root.style.removeProperty(name); });
-    Aetheus._themeTokenNames = [];
-    var raw = localStorage.getItem('aetheus_theme_tokens');
-    if (!raw) return;
-    var tokens;
-    try { tokens = JSON.parse(raw); } catch { return; }
-    var half = root.getAttribute('data-omni-theme') === 'light' ? tokens.light : tokens.dark;
-    Object.keys(half || {}).forEach(function (name) {
-        root.style.setProperty(name, half[name]);
-        Aetheus._themeTokenNames.push(name);
-    });
+// STD-SHELL: the boot copy of the theme. OmniThemeScope writes the tokens of the chosen theme, palette and
+// font on its own element once the application runs, which is after the boot splash has been painted. So
+// that the splash shows in those colours, this keeps a copy of the tokens the scope painted, under the half
+// they were painted for ({ "dark": {...} } or { "light": {...} }); the boot script of index.html lays it on
+// the document root before the first frame, and releaseBootTheme removes it once the scope has taken over.
+// Nothing here resolves a theme: the values are exactly the ones OE painted.
+Aetheus.followThemeScope = function (scopeId) {
+    var scope = document.getElementById(scopeId);
+    if (!scope || Aetheus._themeScopeObserver) return;
+    var copy = function () {
+        var half = {};
+        var count = 0;
+        for (var i = 0; i < scope.style.length; i++) {
+            var name = scope.style[i];
+            if (name.indexOf('--') !== 0) continue;
+            half[name] = scope.style.getPropertyValue(name);
+            count++;
+        }
+        if (count === 0) {
+            localStorage.removeItem('aetheus_theme_tokens');
+            return;
+        }
+        var mode = scope.getAttribute('data-omni-theme');
+        if (mode !== 'light' && mode !== 'dark') {
+            mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        var stored = {};
+        stored[mode] = half;
+        localStorage.setItem('aetheus_theme_tokens', JSON.stringify(stored));
+    };
+    copy();
+    Aetheus._themeScopeObserver = new MutationObserver(copy);
+    Aetheus._themeScopeObserver.observe(scope, { attributes: true, attributeFilter: ['style', 'data-omni-theme'] });
 };
 
-Aetheus.setThemeTokens = function (tokensJson) {
-    if (tokensJson) localStorage.setItem('aetheus_theme_tokens', tokensJson);
-    else localStorage.removeItem('aetheus_theme_tokens');
-    Aetheus.paintThemeTokens();
-};
-
-// Recette R-232: the density of the whole site; 'comfortable' is the shipped one and carries no attribute.
-Aetheus.setDensity = function (density) {
+// Removes the tokens the boot script laid on the document root (their names are in Aetheus._bootTokenNames).
+Aetheus.releaseBootTheme = function () {
     var root = document.documentElement;
-    if (density === 'compact' || density === 'spacious') {
-        root.setAttribute('data-aetheus-density', density);
-        root.setAttribute('data-omni-density', density);
-    } else {
-        root.removeAttribute('data-aetheus-density');
-        root.removeAttribute('data-omni-density');
-    }
+    (Aetheus._bootTokenNames || []).forEach(function (name) { root.style.removeProperty(name); });
+    Aetheus._bootTokenNames = [];
 };
 
 // Recette R-390: OE's text size and control size, 1 to 10. Level 5 is the site as drawn and carries no
@@ -442,6 +450,79 @@ Aetheus.disposeConnectivityWatcher = function () {
     Aetheus._connectivityRef = null;
 };
 
+// Approvals waiting, in the browser tab's title (decision of 2026-10-06): "(2) <page title>" while any
+// waits and, while the tab is in the background, the title alternates every second with the attention
+// message so the tab is noticed among the others. The page title is Blazor's <PageTitle>, rewritten at
+// every navigation: an observer on <title> puts the count back in front of the new title.
+Aetheus.titleAttention = (function () {
+    const prefix = /^\(\d+\+?\) /;
+    let count = 0;
+    let message = '';
+    let base = null;
+    let written = null;
+    let blinkOn = false;
+    let timer = null;
+    let observer = null;
+
+    function write(title) {
+        written = title;
+        if (document.title !== title) document.title = title;
+    }
+
+    function render() {
+        if (base === null) base = document.title.replace(prefix, '');
+        if (count === 0) write(base);
+        else if (blinkOn) write(message);
+        else write('(' + (count > 99 ? '99+' : count) + ') ' + base);
+    }
+
+    function onTitleChanged() {
+        // Our own write comes back through the observer: only a title the page set is a new base.
+        if (document.title === written) return;
+        base = document.title.replace(prefix, '');
+        render();
+    }
+
+    function stopBlinking() {
+        if (timer !== null) clearInterval(timer);
+        timer = null;
+        blinkOn = false;
+    }
+
+    function syncBlinking() {
+        if (count > 0 && document.visibilityState === 'hidden') {
+            if (timer === null) {
+                timer = setInterval(function () {
+                    blinkOn = !blinkOn;
+                    render();
+                }, 1000);
+            }
+        } else {
+            stopBlinking();
+        }
+        render();
+    }
+
+    function watch() {
+        if (observer !== null) return;
+        const head = document.querySelector('head');
+        if (head && typeof MutationObserver !== 'undefined') {
+            observer = new MutationObserver(onTitleChanged);
+            observer.observe(head, { subtree: true, childList: true, characterData: true });
+        }
+        document.addEventListener('visibilitychange', syncBlinking);
+    }
+
+    return {
+        set: function (waiting, attentionMessage) {
+            count = Math.max(0, waiting | 0);
+            message = attentionMessage || '';
+            watch();
+            syncBlinking();
+        }
+    };
+})();
+
 // The page leaving and regaining the foreground, both ways, for the synchronising indicator: a phone
 // put down freezes the tab, and what the realtime side must catch up on is only known on return.
 Aetheus._onPageVisibility = function () {
@@ -582,4 +663,93 @@ Aetheus.unwatchVirtualList = function (root) {
     if (typeof ResizeObserver !== 'function') return;
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
     else start();
+})();
+
+// Recette R2-087: a page the reader comes back to finds its scroll positions again: the page's own
+// (#main-content) and those of the scrolling blocks inside it, such as a grid that fills the page and
+// scrolls its rows itself. The layout reports each navigation twice: before it (leaving: the positions
+// are kept under the address being left) and after it (arrived). A return is a browser back/forward
+// (popstate) or a move to the page just left, where the "Revenir" button usually leads. Each position is
+// put back once its block exists and is tall enough again (rows may still be arriving), and given up as
+// soon as the reader scrolls, presses a key or four seconds pass. Any other arrival changes nothing.
+Aetheus.pageScroll = (function () {
+    var positions = new Map();
+    var current = location.pathname + location.search;
+    var previous = null;
+    var popped = false;
+    var restoring = false;
+    var gestures = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+
+    function main() { return document.getElementById('main-content'); }
+
+    // A scrolled block is found again by its tag and classes, and its rank among the blocks alike.
+    function selectorOf(element) {
+        return element.tagName.toLowerCase() + Array.prototype.map.call(element.classList, function (name) {
+            return '.' + CSS.escape(name);
+        }).join('');
+    }
+
+    function capture(root) {
+        var kept = [{ selector: null, index: 0, top: root.scrollTop }];
+        root.querySelectorAll('*').forEach(function (element) {
+            if (element.scrollTop <= 0) return;
+            var selector = selectorOf(element);
+            var index = Array.prototype.indexOf.call(root.querySelectorAll(selector), element);
+            kept.push({ selector: selector, index: index, top: element.scrollTop });
+        });
+        return kept;
+    }
+
+    // Registered before Blazor starts, so it runs before Blazor handles the same popstate.
+    window.addEventListener('popstate', function () { popped = true; });
+
+    function stop() {
+        if (!restoring) return;
+        restoring = false;
+        gestures.forEach(function (name) { window.removeEventListener(name, stop, true); });
+    }
+
+    function restore(kept) {
+        var started = performance.now();
+        var steady = 0;
+        restoring = true;
+        gestures.forEach(function (name) { window.addEventListener(name, stop, true); });
+        (function step() {
+            if (!restoring) return;
+            var root = main();
+            var placed = 0;
+            kept.forEach(function (position) {
+                var element = !root ? null : position.selector === null ? root
+                    : root.querySelectorAll(position.selector)[position.index];
+                if (!element || element.scrollHeight - element.clientHeight < position.top - 1) return;
+                element.scrollTop = position.top;
+                if (Math.abs(element.scrollTop - position.top) <= 1) placed++;
+            });
+            steady = placed === kept.length ? steady + 1 : 0;
+            if (steady >= 10 || performance.now() - started > 4000) { stop(); return; }
+            requestAnimationFrame(step);
+        })();
+    }
+
+    return {
+        // The address is the one this helper last saw arrive: on a popstate the browser has already
+        // moved location to the destination.
+        leaving: function () {
+            stop();
+            var root = main();
+            if (root) positions.set(current, capture(root));
+        },
+        arrived: function () {
+            var url = location.pathname + location.search;
+            var isReturn = popped || url === previous;
+            popped = false;
+            if (url === current) return false;
+            previous = current;
+            current = url;
+            var kept = positions.get(url);
+            if (!isReturn || !kept || !kept.some(function (position) { return position.top > 0; })) return false;
+            restore(kept.filter(function (position) { return position.top > 0; }));
+            return true;
+        }
+    };
 })();

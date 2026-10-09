@@ -7,7 +7,7 @@
    loaded list as the reader scrolls. Clicking a row fills the version field, when there is exactly
    one to fill. *@
 <div class="release-picker" data-testid="release-picker">
-    <AetheusDataGrid Data="@_page" Count="@_count" LoadData="@LoadPage" TItem="ReleaseDto" PageSize="@PageSize"
+    <AetheusDataGrid Data="@_page" Count="@_count" LoadData="@LoadPage" TItem="ReleaseDto" PageSize="@PageSize" ExportMarkdown="false"
                      Virtualize="@AetheusGrid.RemoteVirtualization"
                      VirtualData="@(() => new OmniDataGridResult<ReleaseDto>(_page, _count))"
                      EmptyText="@L["NoDeployableRelease"]"

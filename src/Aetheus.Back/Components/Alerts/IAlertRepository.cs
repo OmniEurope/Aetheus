@@ -24,5 +24,11 @@ public interface IAlertRepository
         IReadOnlyCollection<int> serverIds,
         int seconds,
         CancellationToken ct = default);
+    /// <summary>
+    /// Reserves one trigger of the rule by moving <c>LastTriggeredAt</c> from the value that was read
+    /// to <paramref name="triggeredAt"/>, committed before any notification is emitted. False when
+    /// another evaluator moved it first: that one emits, this one stays silent.
+    /// </summary>
+    Task<bool> TryReserveTriggerAsync(int ruleId, DateTime? readLastTriggeredAt, DateTime triggeredAt, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
 }

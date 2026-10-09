@@ -145,7 +145,8 @@ public partial class PipelineWebhookService(
         if (preparation is null) return false;
         var activeRunIds = await pipelineRepo.GetActiveRunIdsAsync(pipeline.Id, ct).ConfigureAwait(false);
         foreach (var activeRunId in activeRunIds)
-            await runService.CancelRunAsync(activeRunId, ct).ConfigureAwait(false);
+            await runService.CancelRunAsync(
+                activeRunId, PipelineRunCancellation.BySystem("Superseded by a newer webhook delivery (latest wins)"), ct).ConfigureAwait(false);
         logger.LogInformation(
             "Webhook latest-wins requested cancellation of {Count} superseded run(s) for pipeline {PipelineId}",
             activeRunIds.Count, pipeline.Id);

@@ -117,6 +117,34 @@ public sealed class AppMonitoringControllerTests
     }
 
     [Fact]
+    public async Task CreateApp_AgentProbedOnAServerWithoutServerWrite_IsForbiddenBeforeCreation()
+    {
+        var request = new CreateMonitoredAppRequest { Name = "api", ProjectId = 4, ServerId = 30, ProbeUrl = "http://10.0.0.1/" };
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 30, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var action = await _controller.CreateApp(4, request, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(action.Result);
+        await _service.DidNotReceive().CreateAppAsync(Arg.Any<int>(), Arg.Any<CreateMonitoredAppRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdateApp_NewProbeTargetWithoutServerWrite_IsForbiddenBeforeUpdate()
+    {
+        _service.GetAppProjectIdAsync(2, Arg.Any<CancellationToken>()).Returns(4);
+        var request = new UpdateMonitoredAppRequest { Name = "api", ServerId = 30, ProbeUrl = "http://10.0.0.1/" };
+        _service.GetProbeServerChangeAsync(2, request, Arg.Any<CancellationToken>()).Returns(30);
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 30, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var action = await _controller.UpdateApp(2, request, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(action.Result);
+        await _service.DidNotReceive().UpdateAppAsync(Arg.Any<int>(), Arg.Any<UpdateMonitoredAppRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task GetSummary_PassesAuthorizationScopeToService()
     {
         _authz.GetAccessibleResourceIdsAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, Permission.Read, Arg.Any<CancellationToken>())

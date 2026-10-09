@@ -409,7 +409,11 @@ public sealed partial class AiTaskService(
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var json = JsonSerializer.Serialize(payload);
-        foreach (var definition in await repo.GetDefinitionsForEventAsync(eventType, ct).ConfigureAwait(false))
+        // BACK-003: only the definitions of the project or server the event is about.
+        var owner = AiEventOwner.Read(json);
+        if (!owner.IsKnown) return;
+        foreach (var definition in await repo.GetDefinitionsForEventAsync(
+                     eventType, owner.ProjectId, owner.ServerId, ct).ConfigureAwait(false))
         {
             var trigger = definition.Triggers.First(item => item.EventType == eventType);
             if (trigger.LastTriggeredAt is { } last && now - last < EventCooldown)

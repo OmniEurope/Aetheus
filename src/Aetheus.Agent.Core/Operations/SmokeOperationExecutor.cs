@@ -311,14 +311,42 @@ public sealed class SmokeOperationExecutor(
             inheritEnvironment: true, MaxCapturedOutputBytes, ct, TimeSpan.FromSeconds(timeoutSeconds))
             .ConfigureAwait(false);
         await EmitBoundedAsync(result.StdOut, TaskLogLevel.Info, onOutput).ConfigureAwait(false);
+        if (result.ExitCode != 0)
+            await EmitBoundedAsync(result.StdErr, TaskLogLevel.Warning, onOutput).ConfigureAwait(false);
+        if (DescribeSuiteThatDidNotRun(result) is { } notRun)
+        {
+            await onOutput(notRun, TaskLogLevel.Error).ConfigureAwait(false);
+            return (false, false);
+        }
         if (result.ExitCode == 0)
         {
             await onOutput("Browser suite passed.", TaskLogLevel.Info).ConfigureAwait(false);
             return (true, true);
         }
-        await EmitBoundedAsync(result.StdErr, TaskLogLevel.Warning, onOutput).ConfigureAwait(false);
         await onOutput("Browser suite reported failing tests.", TaskLogLevel.Warning).ConfigureAwait(false);
         return (true, false);
+    }
+
+    /// <summary>
+    /// Why a <c>docker run</c> of the suite produced no test evidence, or null when it did. Docker
+    /// itself answers 125 when the container cannot start, 126 when the command cannot be invoked and
+    /// 127 when it does not exist: none of them ran a test. A filter that selects no test runs none
+    /// either, whatever the exit code says.
+    /// </summary>
+    internal static string? DescribeSuiteThatDidNotRun(ShellExecResult result)
+    {
+        var reason = result.ExitCode switch
+        {
+            125 => "docker could not start the browser suite container (exit 125)",
+            126 => "the browser suite command could not be invoked in the container (exit 126)",
+            127 => "the browser suite command was not found in the container (exit 127)",
+            _ => null
+        };
+        if (reason is null
+            && (result.StdOut.Contains("No test matches the given testcase filter", StringComparison.Ordinal)
+                || result.StdOut.Contains("Zero tests ran", StringComparison.Ordinal)))
+            reason = "the browser suite filter selected no test";
+        return reason is null ? null : $"Browser suite did not run: {reason}.";
     }
 
     /// <summary>Test category the browser suite is restricted to when a step names no filter.</summary>

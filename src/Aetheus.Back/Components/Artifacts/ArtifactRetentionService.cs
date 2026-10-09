@@ -21,13 +21,21 @@ public sealed class ArtifactRetentionService(
     public async Task ApplyBuildRetentionAsync(PipelineArtifact newArtifact, CancellationToken ct = default)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var (defaultDays, latestDays) = await ResolveRetentionAsync(newArtifact.ProjectId!.Value, ct).ConfigureAwait(false);
-
         newArtifact.RetentionPolicy = ArtifactRetentionPolicy.Build;
+        // A project-less artifact (stored before BACK-009) has no per-project retention or cohort:
+        // the global latest window applies, instead of dereferencing a null ProjectId.
+        if (newArtifact.ProjectId is not { } projectId)
+        {
+            newArtifact.RetentionExpiresAt = now.AddDays(LatestRetentionDays);
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            return;
+        }
+        var (defaultDays, latestDays) = await ResolveRetentionAsync(projectId, ct).ConfigureAwait(false);
+
         newArtifact.RetentionExpiresAt = now.AddDays(latestDays);
 
         var previousBuilds = await repo.GetByPipelineAndProjectAsync(
-            newArtifact.PipelineId, newArtifact.ProjectId!.Value, ArtifactRetentionPolicy.Build, ct).ConfigureAwait(false);
+            newArtifact.PipelineId, projectId, ArtifactRetentionPolicy.Build, ct).ConfigureAwait(false);
 
         var previousDeadline = now.AddDays(defaultDays);
         foreach (var prev in previousBuilds.Where(a => a.Id != newArtifact.Id))
@@ -70,14 +78,20 @@ public sealed class ArtifactRetentionService(
     public async Task ApplyReleaseRetentionAsync(PipelineArtifact artifact, int releaseId, CancellationToken ct = default)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var (defaultDays, latestDays) = await ResolveRetentionAsync(artifact.ProjectId!.Value, ct).ConfigureAwait(false);
-
         artifact.RetentionPolicy = ArtifactRetentionPolicy.Released;
         await repo.LinkReleaseAsync(artifact, releaseId, ct).ConfigureAwait(false);
+        if (artifact.ProjectId is not { } projectId)
+        {
+            artifact.RetentionExpiresAt = now.AddDays(LatestRetentionDays);
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            return;
+        }
+        var (defaultDays, latestDays) = await ResolveRetentionAsync(projectId, ct).ConfigureAwait(false);
+
         artifact.RetentionExpiresAt = now.AddDays(latestDays);
 
         var previousReleases = await repo.GetReleasesAsync(
-            artifact.PipelineId, artifact.ProjectId!.Value, ct).ConfigureAwait(false);
+            artifact.PipelineId, projectId, ct).ConfigureAwait(false);
 
         var previousDeadline = now.AddDays(defaultDays);
         foreach (var prev in previousReleases.Where(a => a.Id != artifact.Id))

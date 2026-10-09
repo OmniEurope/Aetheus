@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @page "/admin/settings"
 
 <PageTitle>@L["PlatformSettings"] - Aetheus</PageTitle>
@@ -46,7 +47,7 @@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddSecret"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
                 </OmniRow>
 
-                <OmniDataGrid FillAvailableHeight="true" Items="@_secrets" TItem="SecretDto" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                <OmniDataGrid FillAvailableHeight="true" Items="@_secrets" ExportTitle="@ExportContext.Title(L["Secrets"])" ExportFields="@ExportContext.Fields()" TItem="SecretDto" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="SecretDto" Property="Key" Title="@L["Key"]" Filterable="true" />
                         <OmniDataGridColumn TItem="SecretDto" Title="@L["Value"]" Width="12.5rem" Sortable="false">
@@ -69,7 +70,7 @@
             <OmniCard Class="omni-u-mt-sm">
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GenerateToken" Class="omni-u-mb-lg" title="@L["GenerateToken"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Generate"]</span></OmniButton>
 
-                <OmniDataGrid @ref="_tokensGrid" FillAvailableHeight="true" Items="@_tokens" TItem="RegistrationTokenDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" EmptyText="@L["NoRecords"]" Class="aetheus-grid-fullheight" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                <OmniDataGrid @ref="_tokensGrid" ExportMarkdown="false" FillAvailableHeight="true" Items="@_tokens" TItem="RegistrationTokenDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" EmptyText="@L["NoRecords"]" Class="aetheus-grid-fullheight" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="RegistrationTokenDto" Property="Token" Title="@L["Token"]" Filterable="true">
                             <Template Context="t">

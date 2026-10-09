@@ -222,6 +222,58 @@ public sealed class VaultEditDialogActionTests : BunitContext
             () => Assert.True(Sent("DELETE", "api/vaults/1/secrets/10")), TimeSpan.FromSeconds(2));
     }
 
+    // ---------- FRONT-025: a refused mutation never reports success ----------
+
+    private void AssertFailureReportedWithoutSuccess(string detail)
+    {
+        Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniSeverity.Danger && toast.Detail == detail);
+        Assert.DoesNotContain(Services.Toasts(), toast => toast.Severity == OmniSeverity.Success);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public void ARefusedSecretUpdateReportsTheFailure(HttpStatusCode status)
+    {
+        _handler.SetResponse(HttpMethod.Put, "api/vaults/1/secrets/10", status);
+        _dialog.OpenResult = "new-secret-value";
+        var cut = RenderVault();
+
+        Button(cut, "Edit").Click();
+
+        cut.WaitForAssertion(() => AssertFailureReportedWithoutSuccess("SaveFailed"), TimeSpan.FromSeconds(2));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public void ARefusedRotationReportsTheFailure(HttpStatusCode status)
+    {
+        _handler.SetResponse(HttpMethod.Post, "api/vaults/1/secrets/10/rotate", status);
+        _dialog.ConfirmResult = true;
+        _dialog.OpenResult = "rotated-value";
+        var cut = RenderVault();
+
+        Button(cut, "Rotate").Click();
+
+        cut.WaitForAssertion(() => AssertFailureReportedWithoutSuccess("SaveFailed"), TimeSpan.FromSeconds(2));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, "AccessDenied")]
+    [InlineData(HttpStatusCode.InternalServerError, "DeleteFailed")]
+    public void ARefusedSecretDeleteReportsTheFailure(HttpStatusCode status, string detail)
+    {
+        _handler.SetResponse(HttpMethod.Delete, "api/vaults/1/secrets/10", status);
+        _dialog.ConfirmResult = true;
+        var cut = RenderVault();
+
+        Button(cut, "Delete").Click();
+
+        cut.WaitForAssertion(() => AssertFailureReportedWithoutSuccess(detail), TimeSpan.FromSeconds(2));
+    }
+
     // ---------- version history ----------
 
     [Fact]

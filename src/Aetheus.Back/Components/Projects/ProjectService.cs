@@ -14,7 +14,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
     PortRegistry.IPortRegistryService portRegistry,
     Notifications.IUserNotificationService userNotifications) : IProjectService
 {
-    private const string RepoUrlsCacheKey = "projects:repo-urls";
+    internal const string RepoUrlsCacheKey = "projects:repo-urls";
     private static readonly TimeSpan CacheDuration = BackendRuntimeDefaults.ReferenceDataCacheDuration;
     public async Task<PaginatedResult<ProjectDto>> GetProjectsAsync(ProjectPaginationRequest request, List<int>? accessibleIds = null, CancellationToken ct = default)
     {
@@ -190,37 +190,6 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
         await audit.LogAsync("Updated", "Project", project.Id, project.Name, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.Project, project.Id, EntityChangeOps.Updated, ct, organizationId: project.OrganizationId).ConfigureAwait(false);
         return ProjectDtoMapper.ToDto(project, includePipelineSummary: true);
-    }
-
-    public async Task<bool> DeleteProjectAsync(int id, CancellationToken ct = default)
-    {
-        var project = await repo.FindProjectAsync(id, ct).ConfigureAwait(false);
-        if (project is null) return false;
-
-        var name = project.Name;
-
-        // External-Git: a project's optional GitConnectionId is a Restrict/NoAction back-reference to a
-        // GitConnection that the GitConnection -> Project FK cascade-deletes with the project. Deleting
-        // the project while that self-reference still points at the (also-being-cascaded) connection
-        // trips PostgreSQL's multiple-cascade-path check (23503). Null the back-reference and persist it
-        // first so the cascade can run cleanly. No-op for internal projects (GitConnectionId already null).
-        if (project.GitConnectionId is not null)
-        {
-            project.GitConnectionId = null;
-            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
-        }
-
-        // PLAN-005 lot 6: the reservation rows survive the project (their FK is set to null, not
-        // removed), so without this the deleted project's ports stay blocked forever by an owner that
-        // no longer exists. Called from here, downward: the registry is storage and must not learn
-        // what a project is.
-        await portRegistry.ReleaseProjectPortsAsync(id, ct).ConfigureAwait(false);
-
-        await repo.RemoveProjectAsync(project, ct).ConfigureAwait(false);
-        cache.Remove(RepoUrlsCacheKey);
-        await audit.LogAsync("Deleted", "Project", id, name, ct).ConfigureAwait(false);
-        await notifier.BroadcastAsync(ResourceType.Project, id, EntityChangeOps.Deleted, ct, organizationId: project.OrganizationId).ConfigureAwait(false);
-        return true;
     }
 
     // S-TECH-G7LM: the per-project "last git update" is a relatively expensive batched lookup that

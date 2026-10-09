@@ -24,6 +24,7 @@ public interface IAnalysisRepository
         string scannerKey, AnalysisCategory category, CancellationToken ct = default);
     Task<Dictionary<string, AnalysisFinding>> GetFindingsByFingerprintsAsync(int projectId, IReadOnlyCollection<string> fingerprints, CancellationToken ct = default);
     Task AddReportAsync(AnalysisReport report, CancellationToken ct = default);
+    Task AddMetricsAsync(int reportId, IReadOnlyCollection<AnalysisMetric> metrics, CancellationToken ct = default);
     Task<List<AnalysisPolicy>> GetApplicablePoliciesAsync(int organizationId, int projectId, CancellationToken ct = default);
     Task<List<AnalysisPolicyException>> GetActiveExceptionsAsync(int projectId, DateTime now, CancellationToken ct = default);
     Task AddEvaluationAsync(AnalysisEvaluation evaluation, CancellationToken ct = default);

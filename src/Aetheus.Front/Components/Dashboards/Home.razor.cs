@@ -34,6 +34,13 @@ public partial class Home : IAsyncDisposable
     private HubConnection? _entitiesHub;
     private bool _reloading;
     private readonly CancellationTokenSource _lifetimeCts = new();
+    // Recette R2-100: the token is read once, while its source is alive. A hub event or a tracked-task
+    // change that arrives after the page was left read _lifetimeCts.Token from the disposed source and
+    // threw ObjectDisposedException into the error boundary; this copy only reports the cancellation.
+    private readonly CancellationToken _lifetime;
+    private bool _disposed;
+
+    public Home() => _lifetime = _lifetimeCts.Token;
 
     // A single server or pipeline transition can emit several hub events in quick succession.
     // Collapse those bursts into one trailing dashboard request instead of refetching the same
@@ -81,8 +88,10 @@ public partial class Home : IAsyncDisposable
 
         try
         {
-            _dashboard = await Api.Monitoring.GetDashboardAsync();
-            if (_dashboard is not null) Cache.Set(DashboardCacheKey, _dashboard);
+            // FRONT-020: an answer that lands after a sign-out is neither cached nor shown.
+            var ticket = Cache.Begin();
+            var dashboard = await Api.Monitoring.GetDashboardAsync();
+            if (Cache.TryStore(ticket, DashboardCacheKey, dashboard)) _dashboard = dashboard;
         }
         catch (HttpRequestException ex)
         {
@@ -98,8 +107,9 @@ public partial class Home : IAsyncDisposable
 
         try
         {
-            _appSummary = await Api.Monitoring.GetAppMonitoringSummaryAsync();
-            if (_appSummary is not null) Cache.Set(AppSummaryCacheKey, _appSummary);
+            var ticket = Cache.Begin();
+            var summary = await Api.Monitoring.GetAppMonitoringSummaryAsync();
+            if (Cache.TryStore(ticket, AppSummaryCacheKey, summary)) _appSummary = summary;
         }
         catch (HttpRequestException ex)
         {
@@ -119,7 +129,7 @@ public partial class Home : IAsyncDisposable
     private void OnTrackedTasksChanged()
     {
         if (Auth.IsAdmin)
-            _ = _dashboardCoalescer.RequestAsync(ReloadAsync, _lifetimeCts.Token);
+            _ = _dashboardCoalescer.RequestAsync(ReloadAsync, _lifetime);
     }
 
     // Keep the dashboard cards and grids fresh: server lifecycle/heartbeat changes the
@@ -127,6 +137,9 @@ public partial class Home : IAsyncDisposable
     // failure leaves the page static (still loaded once).
     private async Task ConnectHubsAsync()
     {
+        // Recette R2-100: the page may have been left while it loaded; a hub created now would never be
+        // disposed and its events would reach a disposed page.
+        if (_disposed) return;
         try
         {
             _serversHub = HubFactory.Create("servers");
@@ -144,6 +157,8 @@ public partial class Home : IAsyncDisposable
         }
         catch { /* best-effort */ }
 
+        // Left while the previous hub started (R2-100).
+        if (_disposed) return;
         try
         {
             _pipelinesHub = HubFactory.Create("pipelines");
@@ -160,12 +175,14 @@ public partial class Home : IAsyncDisposable
         }
         catch { /* best-effort */ }
 
+        // Left while the previous hub started (R2-100).
+        if (_disposed) return;
         try
         {
             _entitiesHub = HubFactory.Create("entities");
             _entitiesHub.On<ResourceType, int, string>("EntityChanged", (type, _, _) =>
                 type == ResourceType.Project
-                    ? _appSummaryCoalescer.RequestAsync(ReloadAppSummaryAsync, _lifetimeCts.Token)
+                    ? _appSummaryCoalescer.RequestAsync(ReloadAppSummaryAsync, _lifetime)
                     : Task.CompletedTask);
             _entitiesHub.RejoinOnReconnect(async () =>
             {
@@ -182,15 +199,16 @@ public partial class Home : IAsyncDisposable
     {
         try
         {
-            _appSummary = await Api.Monitoring.GetAppMonitoringSummaryAsync();
-            if (_appSummary is not null) Cache.Set(AppSummaryCacheKey, _appSummary);
+            var ticket = Cache.Begin();
+            var summary = await Api.Monitoring.GetAppMonitoringSummaryAsync();
+            if (Cache.TryStore(ticket, AppSummaryCacheKey, summary)) _appSummary = summary;
         }
         catch (HttpRequestException) { /* hub-triggered reload - silent on auth failure */ }
         StateHasChanged();
     });
 
     private Task RequestDashboardReloadAsync() =>
-        _dashboardCoalescer.RequestAsync(ReloadAsync, _lifetimeCts.Token);
+        _dashboardCoalescer.RequestAsync(ReloadAsync, _lifetime);
 
     private Task ReloadAsync()
     {
@@ -200,13 +218,14 @@ public partial class Home : IAsyncDisposable
         {
             try
             {
+                var ticket = Cache.Begin();
                 var dashboard = await Api.Monitoring.GetDashboardAsync();
+                if (!Cache.IsCurrent(ticket)) return;
                 // Recette R-227: the grids note the rows they hold before the new ones land, so a
                 // server or project that appeared reads bold for a few seconds.
                 if (_serversGrid is not null) await _serversGrid.Refresh();
                 if (_projectsGrid is not null) await _projectsGrid.Refresh();
-                _dashboard = dashboard;
-                if (_dashboard is not null) Cache.Set(DashboardCacheKey, _dashboard);
+                if (Cache.TryStore(ticket, DashboardCacheKey, dashboard)) _dashboard = dashboard;
             }
             catch (HttpRequestException) { /* hub-triggered reload - silent on auth failure */ }
             finally { _reloading = false; }
@@ -218,6 +237,9 @@ public partial class Home : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Disposed once: a second call would Cancel() the already disposed lifetime source.
+        if (_disposed) return;
+        _disposed = true;
         _lifetimeCts.Cancel();
         Permissions.OnPermissionsChanged -= OnPermissionsChanged;
         TaskTracker.OnChanged -= OnTrackedTasksChanged;

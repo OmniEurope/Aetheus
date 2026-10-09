@@ -15,7 +15,8 @@
 #   WORKSPACE                     the run's checkout, and the parent of .pipeline-artifacts (required)
 #   BUILD_SOURCEVERSION           the immutable revision this run is pinned to (required)
 #   BUILD_BUILDID                 the globally unique run id, used for cache cohorts (required)
-#   BUILD_PIPELINE_RUNNUMBER      the per-pipeline counter; falls back to BUILD_BUILDID (optional)
+#   BUILD_RELEASENUMBER           the project release number, the last number of the version (required)
+#   AETHEUS_CI_VERSION_SUFFIX     the version suffix of a build that is no release (the nightly's); empty otherwise
 #   AETHEUS_CACHE_SCENARIO        warm (shared cache) or cold (per-run cache); defaults to warm
 #   DELIVERY_BASELINE_SOURCE_SHA  the last delivered revision, to skip unaffected optional packages
 #   DELIVERY_BASELINE_BOOTSTRAP   passed through to the delivery contract; defaults to true
@@ -30,16 +31,16 @@ test "$COMMIT" = "${BUILD_SOURCEVERSION:-}" || {
 }
 RUN_ID="${BUILD_BUILDID:-}"
 case "$RUN_ID" in ''|*[!0-9]*) echo "Invalid BUILD_BUILDID."; exit 1 ;; esac
-# The application version ends with the globally unique run id of the build, like every other
-# build of the application (recette R2-076, user decision of 2026-10-03). The per-pipeline counter
-# gave the CI 1.2.402 while release-fast and the deployment counted on their own: the agents built
-# here and the site never carried the same version, and a release-fast build fell below the agents
-# already installed, which were then never offered its update.
+RELEASE_NUMBER="${BUILD_RELEASENUMBER:-}"
+case "$RELEASE_NUMBER" in ''|*[!0-9]*) echo "Invalid BUILD_RELEASENUMBER."; exit 1 ;; esac
+# The application version ends with the project's release number (recette R2-110, 2026-10-04): this
+# CI runs under a candidate, whose number it inherits, so the site and the agents packaged here carry
+# the release's version (1.3.0, 1.3.1...). Under a nightly it is the latest release number, with the
+# nightly's suffix (AETHEUS_CI_VERSION_SUFFIX), so a nightly build never takes a release's version.
 #
 # The code's major.minor, from Directory.Build.props through the one script that composes versions:
 # this used to be a literal "1.1." here, a third copy beside that file and the library entry.
-# No suffix: the CI packages what a release is built from, not an environment's build.
-APP_VERSION="$(env VERSION_SUFFIX= sh deploy/scripts/app-version.sh "$RUN_ID")"
+APP_VERSION="$(env VERSION_SUFFIX="${AETHEUS_CI_VERSION_SUFFIX:-}" sh deploy/scripts/app-version.sh "$RELEASE_NUMBER")"
 PACKAGE_DIR="$WORKSPACE/.pipeline-artifacts"
 rm -rf "$PACKAGE_DIR"
 mkdir -p "$PACKAGE_DIR"
@@ -133,10 +134,12 @@ rm -rf "$BROWSER_SMOKE_CONTEXT"
 # level 9 for only 0.019% more bytes and remains far below the 1 GiB upload boundary.
 # The dense level-9 browser reference was already about 1.14 GB in CI #1484, so its
 # four-part publication remains required; no gzip level offers a 15% safety margin.
+# save-image-archive.sh is the same `docker save | gzip -1`, failing when the save fails: inline, the
+# pipe returned gzip's status and a failed save sealed an empty archive (DEP-014).
 sh deploy/scripts/run-with-progress.sh "Export the backend image" \
-  sh -c 'docker save "$1" | gzip -1 > "$2"' export-back "$BACK_IMAGE" "$PACKAGE_DIR/aetheus-back.tar.gz"
+  sh deploy/scripts/ci/save-image-archive.sh "$BACK_IMAGE" "$PACKAGE_DIR/aetheus-back.tar.gz"
 sh deploy/scripts/run-with-progress.sh "Export the frontend image" \
-  sh -c 'docker save "$1" | gzip -1 > "$2"' export-front "$FRONT_IMAGE" "$PACKAGE_DIR/aetheus-front.tar.gz"
+  sh deploy/scripts/ci/save-image-archive.sh "$FRONT_IMAGE" "$PACKAGE_DIR/aetheus-front.tar.gz"
 BROWSER_SMOKE_CONTAINER="$(docker create "$BROWSER_SMOKE_IMAGE" true)"
 cleanup_browser_smoke_container() {
   if [ -n "${BROWSER_SMOKE_CONTAINER:-}" ]; then

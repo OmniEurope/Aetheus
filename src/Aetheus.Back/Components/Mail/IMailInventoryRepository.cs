@@ -32,5 +32,8 @@ public interface IMailInventoryRepository
 
     void AddDomain(MailDomain domain);
 
+    /// <summary>Removes a tracked domain; its accounts and aliases go with it (cascade).</summary>
+    void RemoveDomain(MailDomain domain);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }

@@ -18,8 +18,10 @@ log_info() { printf '[INFO] %s\n' "$1"; }
 log_error() { printf '[ERROR] %s\n' "$1" >&2; }
 
 FUNCTIONS_FILE="$TEST_ROOT/installer-function.sh"
-sed -n '/^derive_existing_posture() {$/,/^}$/p' "$INSTALLER" > "$FUNCTIONS_FILE"
-grep -q '^derive_existing_posture() {$' "$FUNCTIONS_FILE"
+for function in mark_explicit is_explicit preserve derive_existing_posture; do
+    sed -n "/^${function}() {$/,/^}$/p" "$INSTALLER" >> "$FUNCTIONS_FILE"
+    grep -q "^${function}() {$" "$FUNCTIONS_FILE"
+done
 # shellcheck disable=SC1090
 . "$FUNCTIONS_FILE"
 
@@ -42,6 +44,7 @@ AGENT_USER="aetheus-posture-user-does-not-exist"
 
 reset_flags() {
     POSTURE_EXPLICIT=0
+    EXPLICIT_CAPABILITIES=" "
     ENABLE_SERVICE_CONTROL=0; ENABLE_APACHE=0; ENABLE_APACHE_MANAGE=0
     ENABLE_CERTBOT=0; ENABLE_CERTBOT_MANAGE=0; ENABLE_RKHUNTER_MANAGE=0
     ENABLE_DOCKER=0; ENABLE_TEAMSPEAK=0; ENABLE_CRON_MANAGE=0
@@ -94,14 +97,17 @@ assert_one "teamspeak-setup"   "$ENABLE_TEAMSPEAK_SETUP"
 assert_one "deployment"        "$ENABLE_DEPLOYMENT"
 log_info "Established host keeps every capability across a reinstall - OK"
 
-# An explicit --enable-*/--disable-* on the command line still wins over the derivation.
+# An explicit --enable-*/--disable-* on the command line still wins over the derivation, for the
+# capability it names only: the others keep what the host shows (audit DEP-021).
 reset_flags
-POSTURE_EXPLICIT=1
+mark_explicit CERTBOT_MANAGE
 derive_existing_posture
 if [ "$ENABLE_CERTBOT_MANAGE" -ne 0 ]; then
     log_error "Explicit posture flags must override the on-disk derivation."
     exit 1
 fi
-log_info "Explicit flags override the derivation - OK"
+assert_one "deployment beside an explicit certbot flag" "$ENABLE_DEPLOYMENT"
+assert_one "cron-manage beside an explicit certbot flag" "$ENABLE_CRON_MANAGE"
+log_info "Explicit flags override the derivation for what they name - OK"
 
 log_info "Agent posture idempotence proof passed."

@@ -174,6 +174,59 @@ public sealed class AppMonitoringServiceCrudTests
     }
 
     [Fact]
+    public async Task CreateApp_ServerOfAnotherOrganization_RejectsBeforePersistence()
+    {
+        // The project belongs to organization 9 (constructor stub); the chosen server to organization 2.
+        _repo.GetServerOrganizationIdAsync(30, Arg.Any<CancellationToken>()).Returns(2);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _service.CreateAppAsync(4,
+            new CreateMonitoredAppRequest { Name = "api", ProjectId = 4, ServerId = 30, ProbeUrl = "http://10.0.0.1/" },
+            ct: TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().AddAppAsync(Arg.Any<MonitoredApp>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdateApp_EnvironmentOfAnotherProject_RejectsBeforeSaving()
+    {
+        _repo.GetAppForUpdateAsync(2, Arg.Any<CancellationToken>()).Returns(new MonitoredApp { Id = 2, ProjectId = 4, Name = "api" });
+        _repo.EnvironmentIsUsableByProjectAsync(50, 4, Arg.Any<CancellationToken>()).Returns(false);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _service.UpdateAppAsync(2,
+            new UpdateMonitoredAppRequest { Name = "api", EnvironmentId = 50 }, ct: TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateApp_ServerAndEnvironmentOfTheProject_ArePersisted()
+    {
+        _repo.GetServerOrganizationIdAsync(30, Arg.Any<CancellationToken>()).Returns(9);
+        _repo.EnvironmentIsUsableByProjectAsync(50, 4, Arg.Any<CancellationToken>()).Returns(true);
+
+        await _service.CreateAppAsync(4,
+            new CreateMonitoredAppRequest { Name = "api", ProjectId = 4, ServerId = 30, EnvironmentId = 50, ProbeUrl = "http://10.0.0.1/" },
+            ct: TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).AddAppAsync(Arg.Is<MonitoredApp>(app => app.ServerId == 30 && app.EnvironmentId == 50), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(7, "https://api.example/health", null)]
+    [InlineData(8, "https://api.example/health", 8)]
+    [InlineData(7, "http://10.0.0.1/", 7)]
+    [InlineData(null, "http://10.0.0.1/", null)]
+    public async Task GetProbeServerChange_OnlyANewAgentTargetNeedsTheServer(int? serverId, string probeUrl, int? expected)
+    {
+        _repo.GetAppAsync(2, Arg.Any<CancellationToken>())
+            .Returns(new MonitoredApp { Id = 2, ProjectId = 4, ServerId = 7, ProbeUrl = "https://api.example/health" });
+
+        var server = await _service.GetProbeServerChangeAsync(2,
+            new UpdateMonitoredAppRequest { Name = "api", ServerId = serverId, ProbeUrl = probeUrl },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, server);
+    }
+
+    [Fact]
     public async Task UpdateApp_MissingReturnsNull_ExistingMutatesAndBroadcasts()
     {
         _repo.GetAppForUpdateAsync(99, Arg.Any<CancellationToken>()).Returns((MonitoredApp?)null);

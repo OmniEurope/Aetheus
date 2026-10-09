@@ -49,6 +49,8 @@ internal static class ScannerContainerProcessBuilder
         // Right after the subcommand (`fs`, `image`): a Trivy flag, decided by TrivyDatabaseFreshness.
         if (skipDatabaseUpdate && TrivyDatabaseFreshness.Applies(scanner) && resolvedArguments.Count > 0)
             resolvedArguments.Insert(1, TrivyDatabaseFreshness.SkipUpdateArgument);
+        if (JscpdRepositoryConfiguration.Applies(scanner))
+            resolvedArguments.AddRange(JscpdRepositoryConfiguration.AdditionalArguments(sourceDirectory));
         AddEntrypoint(args, scanner);
         foreach (var argument in resolvedArguments) args.Add(argument);
         return psi;

@@ -34,8 +34,10 @@ public sealed class ArtifactService(
 
         var (pipelineId, projectId) = context.Value;
 
+        // BACK-009: refused before a byte is stored. Without an owning project there is no quota to
+        // apply, no retention to resolve, and no permission under which the artifact could be read.
         if (projectId is not int pid)
-            return await SaveArtifactAsync(runId, pipelineId, null, name, stageName, fileContent, ct).ConfigureAwait(false);
+            throw new BadRequestException("The pipeline of this run has no owning project; its artifacts cannot be stored.");
 
         var uploadLock = ProjectUploadLocks.GetOrAdd(pid, static _ => new SemaphoreSlim(1, 1));
         await uploadLock.WaitAsync(ct).ConfigureAwait(false);

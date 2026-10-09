@@ -2,7 +2,6 @@
 using Aetheus.Agent.Core.Configuration;
 using Aetheus.Agent.Core.Executors;
 using Aetheus.Back.Components.Apache;
-using Aetheus.Back.Components.Docker;
 using Aetheus.Back.Components.Mail;
 using Aetheus.Back.Components.Rkhunter;
 using Microsoft.Extensions.Options;
@@ -84,21 +83,5 @@ public class CommandHelperValidationTests
     {
         Assert.False(_validator.IsAllowed(command),
             $"Apache command '{label}' contains shell metacharacters and must be rejected by the default validator: {command}");
-    }
-
-    // ───────────────────────────────────────────────────────────────────
-    // Docker - EncodeBase64Shell wraps a base64 blob in `printf '...' | base64 -d`; the pipe
-    // is a metacharacter, so the default validator rejects it (it is embedded into a larger
-    // elevated docker shell, never run standalone through the standard executor).
-    // ───────────────────────────────────────────────────────────────────
-
-    [Theory]
-    [InlineData("simple content")]
-    [InlineData("multi\nline\ncontent with $pecial ; chars && metachars")]
-    public void DockerEncodeBase64Shell_IsRejected(string content)
-    {
-        var command = DockerCommandHelper.EncodeBase64Shell(content);
-        Assert.False(_validator.IsAllowed(command),
-            $"DockerCommandHelper.EncodeBase64Shell output contains a pipe and must be rejected by the default validator: {command}");
     }
 }

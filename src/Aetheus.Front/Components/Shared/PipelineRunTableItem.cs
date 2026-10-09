@@ -80,7 +80,11 @@ public sealed record PipelineRunTableItem
                 var groupRunIds = group.Select(run => run.RunId).ToHashSet();
                 return BuildTree(group.Key, byId, parentByChild, groupRunIds, []);
             })
-            .OrderByDescending(run => run.LatestStartedAt)
+            // Recette R2-102: what still runs or awaits an approval leads, most recently started first,
+            // then the rest by date: a deployment started before newer, finished runs no longer sinks
+            // under them. A column sort chosen in the grid still reorders the rows.
+            .OrderByDescending(run => !run.Status.IsTerminal())
+            .ThenByDescending(run => run.LatestStartedAt)
             .ThenByDescending(run => run.RunId)
             .ToList();
     }

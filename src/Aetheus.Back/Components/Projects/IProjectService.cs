@@ -10,7 +10,6 @@ public interface IProjectService
     /// has a user row, follows it at once so its events reach them.</summary>
     Task<ProjectDto> CreateProjectAsync(CreateProjectRequest request, int? creatorUserId, CancellationToken ct = default);
     Task<ProjectDto?> UpdateProjectAsync(int id, UpdateProjectRequest request, CancellationToken ct = default);
-    Task<bool> DeleteProjectAsync(int id, CancellationToken ct = default);
     Task<List<ProjectDto>> GetProjectsWithRepoUrlAsync(CancellationToken ct = default);
     Task<List<ProjectServerDto>> GetProjectServersAsync(int projectId, CancellationToken ct = default);
     Task<PaginatedResult<ProjectServerDto>> GetProjectServersPageAsync(

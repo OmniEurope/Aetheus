@@ -29,8 +29,7 @@ public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServ
         _loading = true;
         try
         {
-            var result = await Api.Projects.GetProjectServersPageAsync(
-                projectId, _page, _pageSize, _sortBy, _sortDescending, filters: _columnFilters);
+            var result = await ReadPageAsync(projectId, _page, _pageSize, _sortBy, _sortDescending, _columnFilters);
             if (ProjectId != projectId) return;
             _servers = result.Items;
             _totalCount = result.TotalCount;
@@ -43,6 +42,10 @@ public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServ
         }
         finally { if (ProjectId == projectId) _loading = false; }
     }
+
+    protected override Task<PaginatedResult<ProjectServerDto>> ReadPageAsync(
+        int projectId, int page, int pageSize, string sortBy, bool sortDescending, IReadOnlyList<GridFilter> filters) =>
+        Api.Projects.GetProjectServersPageAsync(projectId, page, pageSize, sortBy, sortDescending, filters: filters);
 
     private void OnRowClick(ProjectServerDto server)
     {
@@ -152,4 +155,11 @@ public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServ
         _ => OmniTone.Neutral
     };
 
+
+    /// <summary>Recette R2-124: the export writes the state the badge shows.</summary>
+    private Func<ProjectServerDto, object?> StatusExport => _statusExport ??= server =>
+        server.Type == ProjectServerType.AgentServer && server.ServerStatus.HasValue
+            ? L[server.ServerStatus.Value.ToString()].Value
+            : L["External"].Value;
+    private Func<ProjectServerDto, object?>? _statusExport;
 }

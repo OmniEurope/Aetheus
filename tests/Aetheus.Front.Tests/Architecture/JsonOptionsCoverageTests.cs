@@ -153,42 +153,58 @@ public class JsonOptionsCoverageTests
     {
         var sb = new StringBuilder(source.Length);
         var i = 0;
-        var len = source.Length;
-        while (i < len)
+        while (i < source.Length)
         {
-            // Block comment /* ... */
-            if (i + 1 < len && source[i] == '/' && source[i + 1] == '*')
+            var next = SkipCommentOrString(source, i, sb);
+            if (next < 0) break;
+            if (next > i)
             {
-                var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                if (end < 0) break;
-                for (var j = i; j < end + 2; j++) if (source[j] == '\n') sb.Append('\n');
-                i = end + 2;
-                continue;
-            }
-            // Line comment // (covers /// too)
-            if (i + 1 < len && source[i] == '/' && source[i + 1] == '/')
-            {
-                while (i < len && source[i] != '\n') i++;
-                continue;
-            }
-            // String literal "..." - skip its content; the codebase doesn't put
-            // ReadFromJsonAsync inside string interpolations.
-            if (source[i] == '"')
-            {
-                i++;
-                while (i < len && source[i] != '"')
-                {
-                    if (source[i] == '\\' && i + 1 < len) { i += 2; continue; }
-                    if (source[i] == '\n') sb.Append('\n');
-                    i++;
-                }
-                if (i < len) i++;
+                i = next;
                 continue;
             }
             sb.Append(source[i]);
             i++;
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Recette R2-107 (one method per kind of span, under the grade-A cyclomatic threshold): the index
+    /// after the comment (<c>/* */</c>, <c>//</c> and <c>///</c>) or string literal starting at
+    /// <paramref name="i"/>, their line breaks kept in <paramref name="sb"/>; <paramref name="i"/> itself
+    /// when none starts there; -1 for a block comment that never ends (the rest of the source is dropped).
+    /// </summary>
+    private static int SkipCommentOrString(string source, int i, StringBuilder sb)
+    {
+        if (string.CompareOrdinal(source, i, "/*", 0, 2) == 0)
+        {
+            var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
+            if (end < 0) return -1;
+            sb.Append('\n', source.AsSpan(i, end + 2 - i).Count('\n'));
+            return end + 2;
+        }
+        if (string.CompareOrdinal(source, i, "//", 0, 2) == 0)
+        {
+            var lineEnd = source.IndexOf('\n', i);
+            return lineEnd < 0 ? source.Length : lineEnd;
+        }
+        return source[i] == '"' ? SkipStringLiteral(source, i + 1, sb) : i;
+    }
+
+    /// <summary>Skips a string literal's content from <paramref name="i"/> (just after its quote), escapes included.</summary>
+    private static int SkipStringLiteral(string source, int i, StringBuilder sb)
+    {
+        while (i < source.Length && source[i] != '"')
+        {
+            if (source[i] == '\\' && i + 1 < source.Length)
+            {
+                i += 2;
+                continue;
+            }
+            if (source[i] == '\n') sb.Append('\n');
+            i++;
+        }
+        return i < source.Length ? i + 1 : i;
     }
 
     private static string FindRepoRoot() => Aetheus.Front.Tests.Architecture.RepositoryScan.Root;

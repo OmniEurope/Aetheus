@@ -131,34 +131,46 @@ public sealed partial class RkhunterCollector(ILogger<RkhunterCollector> logger,
             if (!_fileExists(LogPath))
                 return (DateTime.MinValue, "none", 0);
 
-            // Was: grep -E 'System checks summary|Warning|[Started]' LOG | tail -20
-            var matched = File.ReadLines(LogPath)
-                .Where(l => l.Contains("System checks summary", StringComparison.Ordinal)
-                         || l.Contains("Warning", StringComparison.Ordinal)
-                         || l.Contains("[Started]", StringComparison.Ordinal))
-                .ToList();
-            var output = string.Join('\n', matched.Skip(Math.Max(0, matched.Count - 20)));
-
-            var lastScanTime = DateTime.MinValue;
-            var lastScanStatus = "none";
-            var warningCount = 0;
-
-            var startMatch = StartedRegex().Match(output);
-            if (startMatch.Success && DateTime.TryParse(startMatch.Groups[1].Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
-                lastScanTime = parsed;
-
-            if (output.Contains("System checks summary", StringComparison.OrdinalIgnoreCase))
-            {
-                warningCount = WarningRegex().Matches(output).Count;
-                lastScanStatus = warningCount > 0 ? "warning" : "clean";
-            }
-
-            return (lastScanTime, lastScanStatus, warningCount);
+            return ParseLastScan(File.ReadLines(LogPath));
         }
         catch
         {
             return (DateTime.MinValue, "none", 0);
         }
+    }
+
+    /// <summary>
+    /// Reads the most recent scan of an rkhunter log: everything from its last <c>[Started]</c> line on
+    /// (the whole log when no scan start was logged). Every warning of that scan is counted, and no
+    /// line of an earlier scan is, however many lines either one holds.
+    /// </summary>
+    internal static (DateTime LastScanTime, string LastScanStatus, int WarningCount) ParseLastScan(IEnumerable<string> lines)
+    {
+        string? startedLine = null;
+        var hasSummary = false;
+        var warningCount = 0;
+        foreach (var line in lines)
+        {
+            if (line.Contains("[Started]", StringComparison.Ordinal))
+            {
+                startedLine = line;
+                hasSummary = false;
+                warningCount = 0;
+                continue;
+            }
+            if (line.Contains("System checks summary", StringComparison.OrdinalIgnoreCase))
+                hasSummary = true;
+            warningCount += WarningRegex().Matches(line).Count;
+        }
+
+        var lastScanTime = DateTime.MinValue;
+        var startMatch = startedLine is null ? Match.Empty : StartedRegex().Match(startedLine);
+        if (startMatch.Success && DateTime.TryParse(startMatch.Groups[1].Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            lastScanTime = parsed;
+
+        if (!hasSummary)
+            return (lastScanTime, "none", 0);
+        return (lastScanTime, warningCount > 0 ? "warning" : "clean", warningCount);
     }
 
     private DateTime GetDatabaseLastUpdated()

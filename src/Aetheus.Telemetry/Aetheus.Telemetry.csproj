@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <PackageId>Aetheus.Telemetry</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.2.0</Version>
     <Authors>Aetheus</Authors>
     <Description>Safe optional OpenTelemetry configuration for applications monitored by Aetheus.</Description>
     <PackageTags>opentelemetry;otlp;observability;apm;aetheus</PackageTags>
@@ -19,6 +19,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Aetheus.Telemetry.Tests" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <!-- Decision of 2026-10-07: the request timings come from the OmniEurope.Performance collector. -->
+    <PackageReference Include="OmniEurope.Performance" />
     <PackageReference Include="OpenTelemetry" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />

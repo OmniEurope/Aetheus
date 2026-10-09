@@ -302,8 +302,37 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
 
     // --- Lockout (F-011) ---
 
-    public async Task IncrementFailedLoginAsync(int userId, CancellationToken ct = default)
-        => await UpdateUserAsync(userId, user => user.FailedLoginCount++, ct).ConfigureAwait(false);
+    public async Task<int> IncrementFailedLoginAsync(int userId, CancellationToken ct = default)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        if (db.Database.IsRelational())
+        {
+            // BACK-010: the increment happens in the UPDATE, so concurrent failures each add one
+            // instead of all writing "snapshot + 1". The value read back afterwards includes this
+            // request's increment, so the last of N concurrent failures always sees all N.
+            await db.Users
+                .Where(u => u.Id == userId)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(u => u.FailedLoginCount, u => u.FailedLoginCount + 1)
+                        .SetProperty(u => u.UpdatedAt, now),
+                    ct)
+                .ConfigureAwait(false);
+            return await db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.FailedLoginCount)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+        }
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct).ConfigureAwait(false);
+        if (user is null) return 0;
+        user.FailedLoginCount++;
+        user.UpdatedAt = now;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return user.FailedLoginCount;
+    }
 
     public async Task ResetFailedLoginAsync(int userId, CancellationToken ct = default)
         => await UpdateUserAsync(userId, ClearLockout, ct).ConfigureAwait(false);
@@ -421,11 +450,46 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
 
     // --- TOTP (F-010) ---
 
-    public async Task<User?> FindUserByIdForUpdateAsync(int userId, CancellationToken ct = default)
+    public async Task<User?> FindUserByIdTrackedAsync(int userId, CancellationToken ct = default)
     {
         return await db.Users
             .FirstOrDefaultAsync(u => u.Id == userId, ct)
             .ConfigureAwait(false);
+    }
+
+    public async Task<string?> GetTotpRecoveryCodesAsync(int userId, CancellationToken ct = default) =>
+        await db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.TotpRecoveryCodes)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+    public async Task<bool> ReplaceTotpRecoveryCodesAsync(int userId, string expectedCodes, string newCodes, CancellationToken ct = default)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        if (db.Database.IsRelational())
+        {
+            // BACK-011: compare-and-set on the JSON that was read, so of two concurrent consumes of
+            // one code exactly one rewrites the list; the row lock makes the later UPDATE re-check
+            // the predicate and match nothing.
+            var replaced = await db.Users
+                .Where(u => u.Id == userId && u.TotpRecoveryCodes == expectedCodes)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(u => u.TotpRecoveryCodes, newCodes)
+                        .SetProperty(u => u.UpdatedAt, now),
+                    ct)
+                .ConfigureAwait(false);
+            return replaced == 1;
+        }
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct).ConfigureAwait(false);
+        if (user is null || user.TotpRecoveryCodes != expectedCodes) return false;
+        user.TotpRecoveryCodes = newCodes;
+        user.UpdatedAt = now;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return true;
     }
 
     public async Task SaveChangesAsync(CancellationToken ct = default)

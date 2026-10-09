@@ -81,7 +81,10 @@ public sealed class ScannerManifestTests
         Assert.Equal("/home/aetheus-runtime", jscpd.TemporaryHomeDirectory);
         Assert.Equal("/home/aetheus-runtime", jscpd.HomeDirectory);
         Assert.Equal(134_217_728, jscpd.MaxTemporaryHomeBytes);
-        Assert.Contains("node_modules", OptionValues(jscpd, "--ignore-pattern"));
+        // Recette R2-120: jscpd 5 replaces the repository's configured lists with any list given on
+        // the command line, so the manifest passes none and the repository's .jscpd.json applies.
+        Assert.DoesNotContain(jscpd.Arguments, argument =>
+            argument is "--ignore-pattern" or "--ignore" or "-i" or "--config" or "-c");
         var gitleaksHistory = Assert.Single(manifest.Scanners, scanner => scanner.Key == "gitleaks-history");
         Assert.All(manifest.Scanners.Where(scanner => scanner.Key is "gitleaks" or "gitleaks-history"), scanner =>
             Assert.Equal("/src/.gitleaks.toml", OptionValue(scanner, "--config")));

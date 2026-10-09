@@ -24,6 +24,16 @@ public class PipelineWebhookServiceTests
             _pipelineRepoMock, _runServiceMock, _settingsMock, _loggerMock, _pipelineGitMock);
     }
 
+    // BTEST-007: the negative cases below run with a configured secret and a valid signature. With no
+    // secret the service refuses before parsing the payload or reading the catalogue, so a negative
+    // assertion there would hold whatever the branch, repository or latest-wins logic does.
+    private const string NegativeCaseSecret = "negative-case-secret";
+
+    private static string SignGitHub(string body) => "sha256=" + Convert.ToHexStringLower(
+        System.Security.Cryptography.HMACSHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(NegativeCaseSecret),
+            System.Text.Encoding.UTF8.GetBytes(body)));
+
     [Fact]
     public async Task HandleWebhookAsync_InvalidSignature_ReturnsFalse()
     {
@@ -36,7 +46,7 @@ public class PipelineWebhookServiceTests
     }
 
     [Fact]
-    public async Task HandleWebhookAsync_NoSecret_NoSignatureValidation()
+    public async Task HandleWebhookAsync_NoSecret_IsRefusedBeforeTheCatalogueIsRead()
     {
         _settingsMock.GetSettingValueAsync("WebhookSecret", Arg.Any<CancellationToken>())
             .Returns((string?)null);
@@ -48,6 +58,7 @@ public class PipelineWebhookServiceTests
         var result = await _sut.HandleWebhookAsync(body, null, ct: TestContext.Current.CancellationToken);
 
         Assert.False(result);
+        await _pipelineRepoMock.DidNotReceive().GetWebhookTriggeredPipelinesWithProjectAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -176,7 +187,7 @@ public class PipelineWebhookServiceTests
     public async Task HandleWebhookAsync_ActiveRun_SkipsPipeline()
     {
         _settingsMock.GetSettingValueAsync("WebhookSecret", Arg.Any<CancellationToken>())
-            .Returns((string?)null);
+            .Returns(NegativeCaseSecret);
 
         var project = new Project { Id = 1, Name = "P", Description = "d", RepositoryUrl = "https://github.com/org/repo" };
         var pipeline = new Pipeline { Id = 10, Name = "Build", TriggerType = PipelineTriggerType.Webhook, ProjectId = 1, Project = project };
@@ -187,10 +198,12 @@ public class PipelineWebhookServiceTests
             .Returns(true);
 
         var body = "{\"repository\":{\"html_url\":\"https://github.com/org/repo\"},\"ref\":\"refs/heads/main\"}";
-        var result = await _sut.HandleWebhookAsync(body, null, ct: TestContext.Current.CancellationToken);
+        await _sut.HandleWebhookAsync(body, SignGitHub(body), ct: TestContext.Current.CancellationToken);
 
-        Assert.False(result);
+        // The active-run gate was reached, and without supersede_running nothing was launched or prepared.
+        await _pipelineRepoMock.Received(1).HasActiveRunAsync(10, Arg.Any<CancellationToken>());
         await _runServiceMock.DidNotReceive().TriggerAutomatedRunAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
+        await _runServiceMock.DidNotReceive().PrepareAutomatedRunAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -227,7 +240,7 @@ public class PipelineWebhookServiceTests
             .Returns([pipeline]);
         _pipelineRepoMock.HasActiveRunAsync(10, Arg.Any<CancellationToken>()).Returns(true);
         _pipelineRepoMock.GetActiveRunIdsAsync(10, Arg.Any<CancellationToken>()).Returns([40, 41]);
-        _runServiceMock.CancelRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
+        _runServiceMock.CancelRunAsync(Arg.Any<int>(), Arg.Any<PipelineRunCancellation>(), Arg.Any<CancellationToken>()).Returns(true);
         var preparation = new PipelineRunPreparation
         {
             PipelineId = 10,
@@ -251,8 +264,8 @@ public class PipelineWebhookServiceTests
             body, signature, ct: TestContext.Current.CancellationToken);
 
         Assert.True(result);
-        await _runServiceMock.Received(1).CancelRunAsync(40, Arg.Any<CancellationToken>());
-        await _runServiceMock.Received(1).CancelRunAsync(41, Arg.Any<CancellationToken>());
+        await _runServiceMock.Received(1).CancelRunAsync(40, Arg.Is<PipelineRunCancellation>(c => c.By == PipelineRunCancellation.SystemAuthor), Arg.Any<CancellationToken>());
+        await _runServiceMock.Received(1).CancelRunAsync(41, Arg.Is<PipelineRunCancellation>(c => c.By == PipelineRunCancellation.SystemAuthor), Arg.Any<CancellationToken>());
         await _runServiceMock.Received(1).TriggerPreparedAutomatedRunAsync(
             preparation, "Webhook", Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
     }
@@ -304,7 +317,7 @@ public class PipelineWebhookServiceTests
     public async Task HandleWebhookAsync_LatestWinsAuthorizationFailure_DoesNotCancelCurrentRun()
     {
         _settingsMock.GetSettingValueAsync("WebhookSecret", Arg.Any<CancellationToken>())
-            .Returns((string?)null);
+            .Returns(NegativeCaseSecret);
         var project = new Project
         {
             Id = 1,
@@ -329,30 +342,36 @@ public class PipelineWebhookServiceTests
 
         var body =
             "{\"repository\":{\"html_url\":\"https://github.com/org/repo\"},\"ref\":\"refs/heads/main\"}";
-        var result = await _sut.HandleWebhookAsync(
-            body, null, ct: TestContext.Current.CancellationToken);
+        await _sut.HandleWebhookAsync(
+            body, SignGitHub(body), ct: TestContext.Current.CancellationToken);
 
-        Assert.False(result);
+        // The refused preparation was really attempted, and nothing was cancelled or launched after it.
+        await _runServiceMock.Received(1).PrepareAutomatedRunAsync(
+            10, "Webhook", Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
         await _runServiceMock.DidNotReceive().CancelRunAsync(
-            Arg.Any<int>(), Arg.Any<CancellationToken>());
+            Arg.Any<int>(), Arg.Any<PipelineRunCancellation>(), Arg.Any<CancellationToken>());
+        await _runServiceMock.DidNotReceive().TriggerPreparedAutomatedRunAsync(
+            Arg.Any<PipelineRunPreparation>(), Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task HandleWebhookAsync_UnparsablePayload_ReturnsFalse()
     {
         _settingsMock.GetSettingValueAsync("WebhookSecret", Arg.Any<CancellationToken>())
-            .Returns((string?)null);
+            .Returns(NegativeCaseSecret);
 
-        var result = await _sut.HandleWebhookAsync("not json at all", null, ct: TestContext.Current.CancellationToken);
+        const string body = "not json at all";
+        var result = await _sut.HandleWebhookAsync(body, SignGitHub(body), ct: TestContext.Current.CancellationToken);
 
         Assert.False(result);
+        await _pipelineRepoMock.DidNotReceive().GetWebhookTriggeredPipelinesWithProjectAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task HandleWebhookAsync_NoMatchingProject_ReturnsFalse()
+    public async Task HandleWebhookAsync_NoMatchingProject_LaunchesNothing()
     {
         _settingsMock.GetSettingValueAsync("WebhookSecret", Arg.Any<CancellationToken>())
-            .Returns((string?)null);
+            .Returns(NegativeCaseSecret);
 
         var project = new Project { Id = 1, Name = "P", Description = "d", RepositoryUrl = "https://github.com/other/repo" };
         var pipeline = new Pipeline { Id = 10, Name = "Build", TriggerType = PipelineTriggerType.Webhook, ProjectId = 1, Project = project };
@@ -361,16 +380,20 @@ public class PipelineWebhookServiceTests
             .Returns([pipeline]);
 
         var body = "{\"repository\":{\"html_url\":\"https://github.com/org/different-repo\"},\"ref\":\"refs/heads/main\"}";
-        var result = await _sut.HandleWebhookAsync(body, null, ct: TestContext.Current.CancellationToken);
+        await _sut.HandleWebhookAsync(body, SignGitHub(body), ct: TestContext.Current.CancellationToken);
 
-        Assert.False(result);
+        // The catalogue was read, the repository comparison stopped the pipeline before its YAML was read.
+        await _pipelineRepoMock.Received(1).GetWebhookTriggeredPipelinesWithProjectAsync(Arg.Any<CancellationToken>());
+        await _pipelineGitMock.DidNotReceive().ReadProjectPipelineYamlAsync(
+            Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>());
+        await _runServiceMock.DidNotReceive().TriggerAutomatedRunAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task HandleWebhookAsync_NullProjectUrl_SkipsPipeline()
     {
         _settingsMock.GetSettingValueAsync("WebhookSecret", Arg.Any<CancellationToken>())
-            .Returns((string?)null);
+            .Returns(NegativeCaseSecret);
 
         var pipeline = new Pipeline { Id = 10, Name = "Build", TriggerType = PipelineTriggerType.Webhook, ProjectId = null, Project = null };
 
@@ -378,9 +401,11 @@ public class PipelineWebhookServiceTests
             .Returns([pipeline]);
 
         var body = "{\"repository\":{\"html_url\":\"https://github.com/org/repo\"},\"ref\":\"refs/heads/main\"}";
-        var result = await _sut.HandleWebhookAsync(body, null, ct: TestContext.Current.CancellationToken);
+        await _sut.HandleWebhookAsync(body, SignGitHub(body), ct: TestContext.Current.CancellationToken);
 
-        Assert.False(result);
+        await _pipelineRepoMock.Received(1).GetWebhookTriggeredPipelinesWithProjectAsync(Arg.Any<CancellationToken>());
+        await _pipelineRepoMock.DidNotReceive().HasActiveRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _runServiceMock.DidNotReceive().TriggerAutomatedRunAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -540,7 +565,7 @@ public class PipelineWebhookServiceTests
     public async Task HandleWebhookAsync_BranchFilter_SkipsNonMatchingBranch()
     {
         _settingsMock.GetSettingValueAsync("WebhookSecret", Arg.Any<CancellationToken>())
-            .Returns((string?)null);
+            .Returns(NegativeCaseSecret);
 
         var project = new Project { Id = 1, Name = "P", Description = "d", RepositoryUrl = "https://github.com/org/repo" };
         var pipeline = new Pipeline
@@ -558,9 +583,12 @@ public class PipelineWebhookServiceTests
 
         // Push to develop but the pipeline only listens on main.
         var body = "{\"repository\":{\"html_url\":\"https://github.com/org/repo\"},\"ref\":\"refs/heads/develop\"}";
-        var result = await _sut.HandleWebhookAsync(body, null, ct: TestContext.Current.CancellationToken);
+        await _sut.HandleWebhookAsync(body, SignGitHub(body), ct: TestContext.Current.CancellationToken);
 
-        Assert.False(result);
+        // The repository matched (its YAML was read), the branch filter stopped it before the run gate.
+        await _pipelineGitMock.Received(1).ReadProjectPipelineYamlAsync(
+            1, "Build", Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>());
+        await _pipelineRepoMock.DidNotReceive().HasActiveRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
         await _runServiceMock.DidNotReceive().TriggerAutomatedRunAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<CancellationToken>());
     }
 

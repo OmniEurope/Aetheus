@@ -46,6 +46,15 @@ public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto
 
     internal Task LoadDataAsync(GridLoadArgs args) => LoadPageFromArgsAsync(args);
 
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    internal Task<PaginatedResult<AiRunnerProfileDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(25);
+        var (sortBy, sortDescending) = args.ToSortRequest("Name");
+        return Api.Ai.GetAiRunnerProfilesAsync(page, pageSize, filters: args.ToApiFilters(),
+            sortBy: sortBy, sortDescending: sortDescending);
+    }
+
     protected override async Task LoadPageAsync(int page, int pageSize)
     {
         var filters = _columnFilters;

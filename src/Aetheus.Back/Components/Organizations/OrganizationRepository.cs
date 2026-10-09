@@ -116,6 +116,14 @@ public class OrganizationRepository(AppDbContext db) : IOrganizationRepository
     public Task<int> CountExistingProjectsAsync(List<int> projectIds, CancellationToken ct) =>
         db.Projects.CountAsync(p => projectIds.Contains(p.Id), ct);
 
+    public Task<List<int>> GetProjectOrganizationIdsAsync(List<int> projectIds, CancellationToken ct) =>
+        db.Projects
+            .AsNoTracking()
+            .Where(p => projectIds.Contains(p.Id))
+            .Select(p => p.OrganizationId)
+            .Distinct()
+            .ToListAsync(ct);
+
     public async Task AssignProjectsAsync(int organizationId, List<int> projectIds, CancellationToken ct)
     {
         // Every project must belong to exactly one organization (NOT NULL FK), so this

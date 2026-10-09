@@ -40,6 +40,8 @@ public partial class MainLayout : IAsyncDisposable
     internal bool IsViewportKnown => _viewportKnown;
     private bool _desktopSidebarExpanded = true;
     private DotNetObjectReference<MainLayout>? _selfRef;
+    // Recette R2-087: a page come back to finds its scroll position again.
+    private PageScrollMemory? _scrollMemory;
 
     private bool _appReady;
     private bool AppReady => _appReady;
@@ -104,17 +106,9 @@ public partial class MainLayout : IAsyncDisposable
         _devBranch = Configuration["DevBanner:Branch"];
         _devLabel = Configuration["DevBanner:Label"];
 
+        // The stored mode (light, dark or system, PLAN-008 lot 11) and theme the menu shows: App loads them
+        // for its OmniThemeScope, and the menu redraws when they change.
         Appearance.Changed += OnAppearanceChanged;
-        try
-        {
-            // The stored mode (light, dark or system, PLAN-008 lot 11) and theme the menu shows.
-            await Appearance.LoadAsync();
-        }
-        catch (Exception ex)
-        {
-            // Prerendering guard - localStorage not available on server
-            Logger.LogWarning(ex, "[MainLayout] localStorage read failed");
-        }
 
         await Auth.InitializeAsync();
         await Auth.WatchStorageAsync();
@@ -125,12 +119,15 @@ public partial class MainLayout : IAsyncDisposable
         Auth.OnAuthStateChanged += OnAuthStateChanged;
         Auth.OnNeedsLogin += OnNeedsLogin;
         Nav.LocationChanged += OnLocationChanged;
+        _scrollMemory = new PageScrollMemory(Nav, JS);
         TaskTracker.OnConnectionStateChanged += OnSignalRStateChanged;
         TaskTracker.OnReconnectAttempt += OnReconnectAttempt;
         _signalRState = TaskTracker.ConnectionState;
         _wasConnectedOnce = _signalRState == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected;
 
-        if (Auth.IsAuthenticated)
+        // A forced password change holds the user on its own screen, and the backend refuses everything else
+        // until then (SITE-SEC-001): the session starts after the change, from the next login.
+        if (Auth.IsAuthenticated && !Auth.MustChangePassword)
         {
             // Same start as after a later login: permissions and organizations, then the realtime hub.
             Orgs.Changed += OnOrgsChanged;
@@ -141,7 +138,7 @@ public partial class MainLayout : IAsyncDisposable
             _wasConnectedOnce = session.WasConnected;
             _backendLive = session.BackendLive;
         }
-        _authenticatedSessionReady = Auth.IsAuthenticated;
+        _authenticatedSessionReady = Auth.IsAuthenticated && !Auth.MustChangePassword;
 
         RedirectIfUnauthenticated();
         _appReady = true;
@@ -151,12 +148,6 @@ public partial class MainLayout : IAsyncDisposable
     {
         if (firstRender)
         {
-            // The stored preference, read again here: the first render can run before OnInitializedAsync
-            // has read it, and repainting from the dark default then overrode a saved light theme while
-            // the menu said "Light mode" (seen 2026-09-21).
-            await Appearance.LoadAsync();
-            await JS.InvokeAsync<string?>("Aetheus.setOmniTheme",
-                Aetheus.Front.Components.Settings.SiteAppearanceState.StoredAppearance(Appearance.Appearance));
             _version = Configuration["App:Version"] ?? "dev";
             await JS.InvokeVoidAsync("Aetheus.lockTitle", $"Aetheus v{_version}");
             if (!string.IsNullOrWhiteSpace(_devLabel))
@@ -215,7 +206,7 @@ public partial class MainLayout : IAsyncDisposable
 
     private async Task InitializeAuthenticatedSessionAsync()
     {
-        if (!Auth.IsAuthenticated || _authenticatedSessionReady) return;
+        if (!Auth.IsAuthenticated || Auth.MustChangePassword || _authenticatedSessionReady) return;
         try
         {
             Orgs.Changed -= OnOrgsChanged;
@@ -287,7 +278,12 @@ public partial class MainLayout : IAsyncDisposable
     /// step became pointless: it was scheduled for a network that no longer applies.
     /// </summary>
     [JSInvokable]
-    public void OnConnectivityWake() => TaskTracker.RequestImmediateReconnect();
+    public void OnConnectivityWake()
+    {
+        TaskTracker.RequestImmediateReconnect();
+        // 2026-10-06: every live view fetches what it may have missed while the page was away.
+        HubFactory.AnnouncePageResumed();
+    }
 
     private void OnSidebarOpenChanged(bool open)
     {
@@ -500,6 +496,7 @@ public partial class MainLayout : IAsyncDisposable
         Auth.OnAuthStateChanged -= OnAuthStateChanged;
         Auth.OnNeedsLogin -= OnNeedsLogin;
         Nav.LocationChanged -= OnLocationChanged;
+        _scrollMemory?.Dispose();
         Orgs.Changed -= OnOrgsChanged;
         Appearance.Changed -= OnAppearanceChanged;
         if (TaskTracker is not null)

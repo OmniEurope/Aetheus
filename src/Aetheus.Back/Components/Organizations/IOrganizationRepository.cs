@@ -25,6 +25,8 @@ public interface IOrganizationRepository
     Task<OrganizationMember?> GetMemberWithUserByIdAsync(int memberId, int organizationId, CancellationToken ct);
     Task AssignProjectsAsync(int organizationId, List<int> projectIds, CancellationToken ct);
     Task<int> CountExistingProjectsAsync(List<int> projectIds, CancellationToken ct);
+    /// <summary>The distinct organizations that currently own the given projects.</summary>
+    Task<List<int>> GetProjectOrganizationIdsAsync(List<int> projectIds, CancellationToken ct);
     Task<List<int>> GetOrganizationIdsForUserAsync(int userId, CancellationToken ct);
     Task<int?> GetDefaultOrganizationIdAsync(CancellationToken ct);
 

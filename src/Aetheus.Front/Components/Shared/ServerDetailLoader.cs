@@ -29,6 +29,7 @@ public sealed class ServerDetailLoader : IAsyncDisposable
     private readonly HubConnectionFactory _hubFactory;
     private readonly NavigationManager _nav;
     private readonly ILogger<ServerDetailLoader> _logger;
+    private readonly PageStateCache? _pageState;
 
     private int? _currentId;
     private HubConnection? _hub;
@@ -63,12 +64,14 @@ public sealed class ServerDetailLoader : IAsyncDisposable
     /// </summary>
     public event Func<TaskCompletedNotification, Task>? OnTaskCompleted;
 
-    public ServerDetailLoader(ApiClient api, HubConnectionFactory hubFactory, NavigationManager nav, ILogger<ServerDetailLoader> logger)
+    public ServerDetailLoader(ApiClient api, HubConnectionFactory hubFactory, NavigationManager nav, ILogger<ServerDetailLoader> logger,
+        PageStateCache? pageState = null)
     {
         _api = api;
         _hubFactory = hubFactory;
         _nav = nav;
         _logger = logger;
+        _pageState = pageState;
         _nav.LocationChanged += OnLocationChanged;
     }
 
@@ -94,9 +97,22 @@ public sealed class ServerDetailLoader : IAsyncDisposable
             _loadCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var token = _loadCts.Token;
 
+            // Recette R2-087: a return to a server's pages shows its last known detail at once; the
+            // fetch below then replaces it.
+            var address = $"servers/{id}";
+            var ticket = _pageState?.Begin() ?? default;
+            if (_pageState?.TryRestore<ServerDetailState>(address, out var shown) == true)
+            {
+                Server = shown.Server;
+                Metrics = [.. shown.Metrics];
+                OnChanged?.Invoke();
+            }
+
             Server = await _api.Servers.GetServerDetailAsync(id, token).ConfigureAwait(false);
             Metrics = await LoadMetricsAsync(id, afterUtc: null, ct: token).ConfigureAwait(false);
             InitialLoadCompleted = true;
+            if (Server is null) _pageState?.Forget<ServerDetailState>(address);
+            else _pageState?.Remember(ticket, address, new ServerDetailState(Server, [.. Metrics]));
             if (Server is { MemoryTotalMb: > 0 })
             {
                 MetricsReceived = true;
@@ -117,6 +133,7 @@ public sealed class ServerDetailLoader : IAsyncDisposable
             // found" state instead of the error boundary, as the project loader already does.
             _logger.LogWarning(ex, "[ServerDetailLoader] Failed to load server {ServerId}", id);
             Server = null;
+            _pageState?.Forget<ServerDetailState>($"servers/{id}");
             InitialLoadCompleted = true;
             OnChanged?.Invoke();
         }
@@ -160,6 +177,40 @@ public sealed class ServerDetailLoader : IAsyncDisposable
     // live heartbeat already brought, and an unchanged list keeps its instance so the page does not take
     // it for the result of the action (it clears the action's "succeeded" line on a new list).
     private int _heartbeatsApplied;
+
+    private void ReloadAgentUpdate(int serverId, int id, CancellationToken ct)
+    {
+        if (serverId == id) _ = ReloadAgentUpdateAsync(id, ct);
+    }
+
+    /// <summary>
+    /// Recette R2-111: replaces the agent version, its compatibility and the persisted update request of
+    /// the loaded server with the backend's, leaving the live heartbeat fields alone. Best effort: a
+    /// failed read keeps what is shown, the next event or heartbeat brings it.
+    /// </summary>
+    internal async Task ReloadAgentUpdateAsync(int id, CancellationToken ct)
+    {
+        try
+        {
+            var fresh = await _api.Servers.GetServerDetailAsync(id, ct).ConfigureAwait(false);
+            if (fresh is null || Server is null || _currentId != id) return;
+            Server = Server with
+            {
+                AgentVersion = fresh.AgentVersion,
+                AgentCompatibility = fresh.AgentCompatibility,
+                AgentUpdateRequest = fresh.AgentUpdateRequest
+            };
+            OnChanged?.Invoke();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "[ServerDetailLoader] Agent update state reload failed for server {ServerId}", id);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The page left this server.
+        }
+    }
 
     internal static ServerDetailDto KeepNewerServices(ServerDetailDto current, ServerDetailDto fetched, bool heartbeatDuringFetch) =>
         heartbeatDuringFetch || current.Services.SequenceEqual(fetched.Services)
@@ -232,6 +283,17 @@ public sealed class ServerDetailLoader : IAsyncDisposable
                 .ToArray() ?? [];
             await Task.WhenAll(handlers).ConfigureAwait(false);
         });
+
+        // Recette R2-111: each agent-update event reloads the server's update request and agent version, so
+        // the Overview's "Update in progress to x.y.z" ends on the new version, or on the failure and its reason.
+        hub.On<int>("AgentUpdateQueued", serverId => ReloadAgentUpdate(serverId, id, ct));
+        hub.On<AgentUpdateProgressDto>("AgentUpdateProgress", progress =>
+        {
+            if (progress.Phase is AgentUpdatePhase.Failed or AgentUpdatePhase.Done)
+                ReloadAgentUpdate(progress.ServerId, id, ct);
+        });
+        hub.On<int, int>("AgentUpdateConfirmed", (serverId, _) => ReloadAgentUpdate(serverId, id, ct));
+        hub.On<int, int>("AgentUpdateFailed", (serverId, _) => ReloadAgentUpdate(serverId, id, ct));
 
         // Group membership is per-connection and lost on auto-reconnect - re-join so server
         // updates/heartbeats keep flowing (the next heartbeat re-syncs the metrics).
@@ -447,4 +509,7 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         await TeardownAsync().ConfigureAwait(false);
         _gate.Dispose();
     }
+
+    /// <summary>The server detail last shown, kept for a return to its pages (recette R2-087).</summary>
+    private sealed record ServerDetailState(ServerDetailDto Server, List<ServerMetricDto> Metrics);
 }

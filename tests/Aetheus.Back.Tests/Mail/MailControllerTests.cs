@@ -201,9 +201,10 @@ public class MailControllerTests
     public async Task Setup_Authorized_ReturnsOk()
     {
         AllowWrite(1);
-        _serviceMock.SetupAsync(1, Arg.Any<MailSetupRequest>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _serviceMock.SetupAsync(1, Arg.Any<MailSetupRequest>(), Arg.Any<CancellationToken>()).Returns(new MailTaskQueuedDto { TaskId = 23257 });
         var result = await _sut.Setup(1, new MailSetupRequest(), TestContext.Current.CancellationToken);
-        Assert.IsType<OkResult>(result);
+        // R2-085: the page follows this task and keeps "Configurer" busy until it completes.
+        Assert.Equal(23257, Assert.IsType<MailTaskQueuedDto>(Assert.IsType<OkObjectResult>(result.Result).Value).TaskId);
     }
 
     [Fact]

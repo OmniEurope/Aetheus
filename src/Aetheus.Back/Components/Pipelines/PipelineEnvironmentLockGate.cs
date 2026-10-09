@@ -20,7 +20,8 @@ internal sealed class PipelineEnvironmentLockGate(IPipelineRepository repo, IPip
 
     /// <returns>Null when the stage may go on, otherwise the sentence the run shows while it waits.</returns>
     public async Task<string?> TryHoldAsync(
-        int runId, PipelineStageDefinition stage, IReadOnlyList<PipelineStageDefinition> runStages, CancellationToken ct)
+        int runId, int? projectId, PipelineStageDefinition stage, IReadOnlyList<PipelineStageDefinition> runStages,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(stage.Environment) && !PipelineStageApprovalGate.IsDeploymentStage(stage))
             return null;
@@ -31,7 +32,8 @@ internal sealed class PipelineEnvironmentLockGate(IPipelineRepository repo, IPip
                      .Select(n => n!.Trim())
                      .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var environment = await repo.FindEnvironmentByNameAsync(name, ct).ConfigureAwait(false);
+            // BACK-018: the run's project's environment, the one its approvals were asked for.
+            var environment = await repo.FindEnvironmentByNameAsync(name, projectId, ct).ConfigureAwait(false);
             if (environment is not null) names[Key(environment.Id)] = environment.Name;
         }
         if (names.Count == 0) return null;

@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Secret scan of the repository's Git history, the nightly extension of application-security.
+#
+# Scanning every reachable commit costs minutes and answers a question about the repository, not about
+# the change a candidate packages: the current-tree scan of application-security catches the secret a
+# commit adds. So only the nightly triggers this pipeline. It reads .gitleaks.toml at the repository
+# root, like the current-tree scan.
+name: application-security-history-template
+trigger: manual
+variables:
+  # The checkout holds this many commits (the platform clones depth 1 otherwise): the history scan
+  # covers what the checkout holds, so the depth is what makes it a history scan.
+  AETHEUS_GIT_HISTORY_DEPTH: "100000"
+
+stages:
+  - name: Scan git history
+    group: Security
+    execution_role: build
+    os: linux
+    steps:
+      - name: Produce Git-history secret evidence
+        type: scanner
+        scanner: gitleaks-history
+        timeout_seconds: 1800
+
+  # The severity rules every security pipeline uses; recette R2-119 will switch them to the weighted
+  # finding score once the deployed backend parses `finding_score`.
+  - name: Grade security history
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Scan git history]
+    steps:
+      - name: Publish summaries and calculate the versioned security grade
+        type: analysis-gate
+        analysis_scope: security
+        analysis_grading:
+          version: 1
+          minimum_grade: F
+          required_domains:
+            - security
+          rules:
+            - key: grade.security.critical
+              domain: security
+              severity: critical
+              direction: lower-is-better
+              a: 0
+              b: 0
+              c: 0
+              d: 0
+              e: 0
+            - key: grade.security.high
+              domain: security
+              severity: high
+              direction: lower-is-better
+              a: 0
+              b: 1
+              c: 3
+              d: 5
+              e: 10
+            - key: grade.security.medium
+              domain: security
+              severity: medium
+              required: false
+              direction: lower-is-better
+              a: 0
+              b: 5
+              c: 15
+              d: 30
+              e: 60
+        timeout_seconds: 300

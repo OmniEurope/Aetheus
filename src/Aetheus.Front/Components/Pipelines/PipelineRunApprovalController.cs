@@ -9,7 +9,8 @@ namespace Aetheus.Front.Components.Pipelines;
 /// </summary>
 // Public rather than internal only because PipelineRunApprovalPanel takes it as a [Parameter], and a
 // Razor component's generated class is public: an internal parameter type will not compile.
-public sealed class PipelineRunApprovalController(ApiClient api, NotifyHelper toast, Func<Task> reloadRunAsync)
+public sealed class PipelineRunApprovalController(
+    ApiClient api, NotifyHelper toast, Func<Task> reloadRunAsync, PendingApprovalsService? pendingApprovals = null)
 {
     public PipelineApprovalDto? Pending { get; private set; }
     public string? EnvironmentInstructions { get; private set; }
@@ -75,6 +76,12 @@ public sealed class PipelineRunApprovalController(ApiClient api, NotifyHelper to
         return true;
     }
 
+    /// <summary>
+    /// Recette R2-116: a refused decision says why (the backend's reason, or the status it answered), and
+    /// whatever the answer the banner is read again, here and in the top bar: on release-fast #2555 the
+    /// banner kept offering an approval already decided, and every click on it failed the same silent way.
+    /// The comment is kept on a refusal, it is the operator's typed input.
+    /// </summary>
     public async Task DecideAsync(ApprovalStatus decision)
     {
         if (Pending is null || Deciding) return;
@@ -82,14 +89,15 @@ public sealed class PipelineRunApprovalController(ApiClient api, NotifyHelper to
         try
         {
             var request = new ApprovalDecisionRequest { Decision = decision, Comments = Comments };
-            var result = await api.Pipelines.DecideApprovalAsync(Pending.Id, request);
-            if (result is null)
-            {
-                toast.Error("ApprovalDecisionFailed");
-                return;
-            }
-            Comments = null;
+            var outcome = await api.Pipelines.DecideApprovalAsync(Pending.Id, request);
+            if (outcome.IsSuccess)
+                Comments = null;
+            else if (outcome.Error?.Message is { Length: > 0 } reason)
+                toast.Notify(OmniSeverity.Danger, "ApprovalDecisionFailed", reason);
+            else
+                toast.Error("ApprovalDecisionFailed", "ApprovalDecisionFailedStatus", (int?)outcome.StatusCode ?? 0);
             await reloadRunAsync();
+            if (pendingApprovals is not null) await pendingApprovals.ReloadAsync();
         }
         finally
         {

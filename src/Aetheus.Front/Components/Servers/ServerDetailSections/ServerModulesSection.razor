@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @if (_modules is null)
 {
     <AetheusLoader />
@@ -9,7 +10,7 @@ else
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _addVisible = true)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
     </OmniStack>
 
-    <OmniDataGrid Items="@_modules" TItem="ServerModuleDto" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+    <OmniDataGrid Items="@_modules" ExportTitle="@ExportContext.Title(L["Modules"])" ExportFields="@ExportContext.Fields()" TItem="ServerModuleDto" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="ServerModuleDto" Property="Name" Title="@L["Name"]"  Filterable="true"/>
             <OmniDataGridColumn TItem="ServerModuleDto" Property="Type" Title="@L["Type"]" Width="8.125rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@TypeText">

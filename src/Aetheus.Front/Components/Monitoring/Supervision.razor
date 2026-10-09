@@ -45,4 +45,9 @@ else
         }
     }
     <MonitoredAppsStatusGrid Applications="@_summary?.Applications" IsLoading="@(_summary is null)" ShowLastEvent="true" />
+    <ProjectStorageUsageView />
+    @if (Auth.IsAdmin)
+    {
+        <ReclaimSpaceView />
+    }
 }

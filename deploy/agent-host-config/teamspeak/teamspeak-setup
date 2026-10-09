@@ -13,8 +13,15 @@ CRED_FILE="$CRED_DIR/query-credentials"
 die() { echo "$1" >&2; exit 1; }
 # S-TECH-TSPR: reject any ".." segment (path traversal) before the charclass check - POSIX ERE has no
 # lookahead, so the "no .." rule is a separate guard, mirroring the backend TeamspeakInstallPathRegex.
-valid_path() { case "$1" in *..*) return 1 ;; esac; printf '%s' "$1" | grep -Eq '^/[a-zA-Z0-9._/-]{1,127}$'; }
-valid_port() { printf '%s' "$1" | grep -Eq '^[0-9]{1,5}$' && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
+valid_path() { one_line "$1" || return 1; case "$1" in *..*) return 1 ;; esac; printf '%s' "$1" | grep -Eq '^/[a-zA-Z0-9._/-]{1,127}$'; }
+valid_port() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[0-9]{1,5}$' && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
 
 install_path="${1:-}"
 voice_port="${2:-9987}"
@@ -29,12 +36,34 @@ valid_port "$query_port"   || die "invalid query port"
 # stock user name if SUDO_USER is somehow unset.
 agent_user="${SUDO_USER:-aetheus-agent}"
 
+UNIT_FILE=/etc/systemd/system/teamspeak3.service
+# systemd unit (matches the TeamspeakCollector's detection of the teamspeak3 unit).
+write_unit() {
+    cat > "$UNIT_FILE" <<UNIT
+#{include:teamspeak/teamspeak3.service}#
+UNIT
+}
+
 # S-TECH-TSID: idempotent re-run guard. If a server is already installed at this path (its binary is
 # present) or the unit is live, do NOT re-download/re-extract - that would clobber a running TS3 server
 # and its data. A retry from the UI (or a detection false-positive) must be a no-op, not destructive.
-if [ -x "$install_path/ts3server" ] || systemctl is-active --quiet teamspeak3 2>/dev/null; then
+if systemctl is-active --quiet teamspeak3 2>/dev/null; then
     echo "TeamSpeak already installed at $install_path - leaving it untouched (idempotent)."
-    systemctl start teamspeak3 2>/dev/null || true
+    exit 0
+fi
+# Installed but not running: the files stay as they are, the unit is written again when it is
+# missing, and the start must succeed and leave the unit active. A failed start used to be masked
+# and reported as an installed server (audit DEP-007).
+if [ -x "$install_path/ts3server" ]; then
+    if [ ! -f "$UNIT_FILE" ]; then
+        echo "TeamSpeak files found at $install_path without the teamspeak3 unit - writing it again."
+        write_unit
+        systemctl daemon-reload
+        systemctl enable teamspeak3
+    fi
+    systemctl start teamspeak3 || die "TeamSpeak is installed at $install_path but teamspeak3 did not start"
+    systemctl is-active --quiet teamspeak3 || die "TeamSpeak is installed at $install_path but teamspeak3 is not active"
+    echo "TeamSpeak already installed at $install_path - started the existing server (idempotent)."
     exit 0
 fi
 
@@ -83,10 +112,8 @@ touch "$install_path/.ts3server_license_accepted"
 printf 'default_voice_port=%s\nquery_port=%s\n' "$voice_port" "$query_port" > "$install_path/ts3server.ini"
 chown teamspeak:teamspeak "$install_path/ts3server.ini"
 
-# 5. systemd unit (matches the TeamspeakCollector's detection of the teamspeak3 unit).
-cat > /etc/systemd/system/teamspeak3.service <<UNIT
-#{include:teamspeak/teamspeak3.service}#
-UNIT
+# 5. systemd unit.
+write_unit
 
 # 6. Enable + start.
 systemctl daemon-reload

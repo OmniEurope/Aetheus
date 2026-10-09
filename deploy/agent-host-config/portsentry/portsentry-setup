@@ -2,36 +2,48 @@
 # SPDX-License-Identifier: EUPL-1.2
 # Aetheus Agent portsentry-setup helper - root-owned, invoked via
 # /etc/sudoers.d/aetheus-portsentry (NOPASSWD). Positional args: <mode> <tcp_ports> <udp_ports>.
+# Exits non-zero when a step fails and says "completed" only once the service is active (audit DEP-006).
 set -u
+die() { echo "$1" >&2; exit 1; }
+# grep tries each line on its own, so one valid line used to let a multi-line argument through whole
+# (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
+# argv and the environment cannot carry NUL, so the pattern then judges the whole argument.
+NL='
+'
+CR="$(printf '\r')"
+one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
 mode="${1:-}"
 tcp_ports="${2:-}"
 udp_ports="${3:-}"
 
 # Mode: 1-16 alphanumerics. Port lists: comma-separated digit groups. No shell metachars, no spaces.
-printf '%s' "$mode"      | grep -Eq '^[a-zA-Z0-9]{1,16}$'   || { echo "invalid mode" >&2; exit 1; }
-printf '%s' "$tcp_ports" | grep -Eq '^[0-9]{1,5}(,[0-9]{1,5})*$' || { echo "invalid tcp ports" >&2; exit 1; }
-printf '%s' "$udp_ports" | grep -Eq '^[0-9]{1,5}(,[0-9]{1,5})*$' || { echo "invalid udp ports" >&2; exit 1; }
+one_line "$mode"      && printf '%s' "$mode"      | grep -Eq '^[a-zA-Z0-9]{1,16}$'   || { echo "invalid mode" >&2; exit 1; }
+one_line "$tcp_ports" && printf '%s' "$tcp_ports" | grep -Eq '^[0-9]{1,5}(,[0-9]{1,5})*$' || { echo "invalid tcp ports" >&2; exit 1; }
+one_line "$udp_ports" && printf '%s' "$udp_ports" | grep -Eq '^[0-9]{1,5}(,[0-9]{1,5})*$' || { echo "invalid udp ports" >&2; exit 1; }
 
 # Advanced UDP scan mode mirrors the mode, forced to the 'a' (advanced) family for parity with the
 # previous behaviour (e.g. mode "tcp"/"atcp" -> UDP mode "atcp").
 udp_mode="a$(printf '%s' "$mode" | sed 's/^a*//')"
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq portsentry
+# A failed index refresh is reported but not fatal: the install below may still succeed from the
+# current index, and it is the install that decides.
+apt-get update -qq || echo "warning: apt-get update failed, installing from the current package index" >&2
+apt-get install -y -qq portsentry || die "apt-get install portsentry failed"
 
 # Scan modes live in /etc/default/portsentry; the port lists / block toggles in portsentry.conf.
 if [ -f /etc/default/portsentry ]; then
-    sed -i "s/^TCP_MODE=.*/TCP_MODE=\"$mode\"/"     /etc/default/portsentry
-    sed -i "s/^UDP_MODE=.*/UDP_MODE=\"$udp_mode\"/" /etc/default/portsentry
+    sed -i "s/^TCP_MODE=.*/TCP_MODE=\"$mode\"/"     /etc/default/portsentry || die "could not write TCP_MODE"
+    sed -i "s/^UDP_MODE=.*/UDP_MODE=\"$udp_mode\"/" /etc/default/portsentry || die "could not write UDP_MODE"
 fi
 if [ -f /etc/portsentry/portsentry.conf ]; then
-    sed -i "s/^TCP_PORTS=.*/TCP_PORTS=\"$tcp_ports\"/" /etc/portsentry/portsentry.conf
-    sed -i "s/^UDP_PORTS=.*/UDP_PORTS=\"$udp_ports\"/" /etc/portsentry/portsentry.conf
-    sed -i "s/^BLOCK_TCP=.*/BLOCK_TCP=\"1\"/"           /etc/portsentry/portsentry.conf
-    sed -i "s/^BLOCK_UDP=.*/BLOCK_UDP=\"1\"/"           /etc/portsentry/portsentry.conf
+    sed -i "s/^TCP_PORTS=.*/TCP_PORTS=\"$tcp_ports\"/" /etc/portsentry/portsentry.conf || die "could not write TCP_PORTS"
+    sed -i "s/^UDP_PORTS=.*/UDP_PORTS=\"$udp_ports\"/" /etc/portsentry/portsentry.conf || die "could not write UDP_PORTS"
+    sed -i "s/^BLOCK_TCP=.*/BLOCK_TCP=\"1\"/"           /etc/portsentry/portsentry.conf || die "could not write BLOCK_TCP"
+    sed -i "s/^BLOCK_UDP=.*/BLOCK_UDP=\"1\"/"           /etc/portsentry/portsentry.conf || die "could not write BLOCK_UDP"
 fi
 
-systemctl enable portsentry
-systemctl restart portsentry
+systemctl enable portsentry || die "systemctl enable portsentry failed"
+systemctl restart portsentry || die "systemctl restart portsentry failed"
+systemctl is-active --quiet portsentry || die "portsentry is not active after the restart"
 echo "PortSentry setup completed (mode $mode)"

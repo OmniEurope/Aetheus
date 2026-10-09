@@ -22,7 +22,7 @@
     {
     <div class="iam-grid-surface">
         <AetheusDataGrid @ref="_grid" TItem="RoleDto" Data="@_roles" Count="@_totalCount"
-                LoadData="@LoadDataAsync" PageSize="20" IsLoading="@_loading"
+                LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="20" IsLoading="@_loading"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<RoleDto>(_roles, _totalCount))"
                 FullHeight="true" RowClick="@OnRowClick">

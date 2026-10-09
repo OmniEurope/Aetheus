@@ -270,6 +270,15 @@ public partial class Servers : IAsyncDisposable
         _totalCount = Math.Max(0, result.TotalCount - optimisticRowsStillReturned);
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort (none by default) and column filters.</summary>
+    private Task<PaginatedResult<ServerDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var sort = args.Sorts?.FirstOrDefault();
+        return Api.Servers.GetServersAsync(page, pageSize, sortBy: sort?.Property,
+            sortDescending: sort?.SortOrder == GridSortOrder.Descending, filters: args.ToApiFilters());
+    }
+
     private async Task OnLoadData(GridLoadArgs args)
     {
         _loadFailed = false;
@@ -431,4 +440,7 @@ public partial class Servers : IAsyncDisposable
             if (_grid is not null) await _grid.Reload();
         }
     }
+
+    /// <summary>Recette R2-124: the export writes every tag of the server, the cell shows three.</summary>
+    private static readonly Func<ServerDto, object?> TagsExport = server => string.Join(", ", server.Tags);
 }

@@ -68,8 +68,8 @@ internal sealed class RestrictedScannerEgress : IAsyncDisposable
                 Value(envVars, "AETHEUS_SCANNER_TARGET_CLASSIFICATION"), "ephemeral", StringComparison.Ordinal);
         AddUriDestination(
             requested, Value(envVars, "AETHEUS_SCANNER_TARGET_URL"), trustedDastTarget);
-        AddUriDestination(
-            requested, Value(envVars, "AETHEUS_SCANNER_API_SPECIFICATION_URL"), trustedDastTarget);
+        foreach (var specification in ScannerApiSpecifications.Read(envVars))
+            AddUriDestination(requested, specification, trustedDastTarget);
         if (requested.Count == 0)
             throw new IOException("Networked scanner has no audited destination allowlist.");
 

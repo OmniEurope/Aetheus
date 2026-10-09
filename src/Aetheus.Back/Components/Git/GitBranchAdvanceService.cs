@@ -14,9 +14,13 @@ public enum GitBranchAdvanceOutcome
     /// <summary>The branch already pointed at that commit. Nothing to do.</summary>
     AlreadyUpToDate,
 
-    /// <summary>The commit is not a descendant of the branch tip - the classic rollback case. Refused
-    /// on purpose: the branch keeps trailing what is actually live and realigns on the next forward
-    /// deployment.</summary>
+    /// <summary>The branch is already past the commit: the commit is an ancestor of the branch tip
+    /// (someone pushed the branch beyond the release, or a rollback deploys an older release). The
+    /// branch already contains what was deployed; nothing to do (recette R2-105).</summary>
+    AlreadyContains,
+
+    /// <summary>The branch and the commit diverged: neither descends from the other. Refused on
+    /// purpose, the branch is left where it is.</summary>
     NotFastForward,
 
     /// <summary>No internal repository of the project contains that commit (an external-only project,
@@ -36,6 +40,33 @@ public sealed record GitBranchAdvanceResult(
     string? PreviousSha = null,
     string? Detail = null);
 
+/// <summary>Why a release tag was or was not created. Like a branch advance, every outcome is reported.</summary>
+public enum GitTagOutcome
+{
+    /// <summary>The tag now names the requested commit.</summary>
+    Created,
+
+    /// <summary>The tag already named that commit (a replayed deploy step). Nothing to do.</summary>
+    AlreadyThere,
+
+    /// <summary>The tag exists on another commit. Left as it is: a version names one commit, and moving
+    /// a published tag would rewrite what that version meant.</summary>
+    OnAnotherCommit,
+
+    /// <summary>No internal repository of the project contains that commit.</summary>
+    CommitNotFound,
+
+    /// <summary>The tag name or the commit id is malformed, or git refused the ref write.</summary>
+    Refused
+}
+
+/// <param name="ExistingSha">The commit the tag already named, for <see cref="GitTagOutcome.OnAnotherCommit"/>.</param>
+public sealed record GitTagResult(
+    GitTagOutcome Outcome,
+    string? RepositorySlug = null,
+    string? ExistingSha = null,
+    string? Detail = null);
+
 public interface IGitBranchAdvanceService
 {
     /// <summary>Fast-forwards <paramref name="branch"/> onto <paramref name="targetSha"/> in whichever
@@ -43,6 +74,12 @@ public interface IGitBranchAdvanceService
     /// history and never throws; the caller reads the outcome.</summary>
     Task<GitBranchAdvanceResult> TryFastForwardAsync(
         int projectId, string branch, string targetSha, CancellationToken ct = default);
+
+    /// <summary>Creates the lightweight tag <paramref name="tag"/> on <paramref name="targetSha"/> in whichever
+    /// internal repository of <paramref name="projectId"/> contains that commit. Never moves an existing
+    /// tag and never throws; the caller reads the outcome.</summary>
+    Task<GitTagResult> TryCreateTagAsync(
+        int projectId, string tag, string targetSha, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -55,6 +92,8 @@ public interface IGitBranchAdvanceService
 /// credential entirely. It also means the update does not run the receive-pack path, so no
 /// <c>GitPushProcessedEvent</c> is raised - moving the branch onto an already-built, already-deployed
 /// commit must not re-trigger the pipelines that watch it.
+///
+/// The release tag of a deploy (<see cref="TryCreateTagAsync"/>) is written the same way, create-only.
 /// </summary>
 public sealed class GitBranchAdvanceService(
     IGitLightRepository lightRepo,
@@ -110,8 +149,16 @@ public sealed class GitBranchAdvanceService(
                 .ConfigureAwait(false);
             if (ancestorCode != 0)
             {
+                // Recette R2-105: 'main' had been pushed past the deployed candidate, so the release
+                // was already on it. That is no divergence; the branch simply has nothing to catch up.
+                var (containsCode, _, _) = await git.RunGitAsync(
+                    diskPath, ["merge-base", "--is-ancestor", targetSha, previousSha], ct, ignoreExitCode: true)
+                    .ConfigureAwait(false);
+                if (containsCode == 0)
+                    return new GitBranchAdvanceResult(GitBranchAdvanceOutcome.AlreadyContains, slug, previousSha);
+
                 logger.LogInformation(
-                    "Branch {Branch} of {Slug} left at {Previous}: {Target} is not a descendant (rollback or diverged history).",
+                    "Branch {Branch} of {Slug} left at {Previous}: {Target} and the branch diverged (neither descends from the other).",
                     branch, slug, previousSha, targetSha);
                 return new GitBranchAdvanceResult(GitBranchAdvanceOutcome.NotFastForward, slug, previousSha);
             }
@@ -136,6 +183,65 @@ public sealed class GitBranchAdvanceService(
             "Branch {Branch} of {Slug} advanced from {Previous} to {Target}.",
             branch, slug, previousSha ?? "(new)", targetSha);
         return new GitBranchAdvanceResult(GitBranchAdvanceOutcome.Advanced, slug, previousSha);
+    }
+
+    public async Task<GitTagResult> TryCreateTagAsync(
+        int projectId, string tag, string targetSha, CancellationToken ct = default)
+    {
+        if (!IsCommitId(targetSha))
+            return new GitTagResult(GitTagOutcome.Refused, Detail: "target is not a full commit id");
+        if (string.IsNullOrWhiteSpace(tag) || tag.Length > 200)
+            return new GitTagResult(GitTagOutcome.Refused, Detail: $"invalid tag name '{tag}'");
+
+        var repos = await lightRepo.GetByProjectAsync(projectId, ct).ConfigureAwait(false);
+        foreach (var repo in repos)
+        {
+            var diskPath = GitRepoPathResolver.TryResolve(_options.RepositoriesPath, repo.ProjectId, repo.Slug);
+            if (diskPath is null) continue;
+            var (containsCode, _, _) = await git.RunGitAsync(
+                diskPath, ["cat-file", "-e", $"{targetSha}^{{commit}}"], ct, ignoreExitCode: true).ConfigureAwait(false);
+            if (containsCode != 0) continue;
+
+            return await TagInRepositoryAsync(diskPath, repo.Slug, tag, targetSha, ct).ConfigureAwait(false);
+        }
+
+        return new GitTagResult(GitTagOutcome.CommitNotFound);
+    }
+
+    private async Task<GitTagResult> TagInRepositoryAsync(
+        string diskPath, string slug, string tag, string targetSha, CancellationToken ct)
+    {
+        var reference = $"refs/tags/{tag}";
+        // git's own rule for ref names, so a name it would refuse is reported before any write.
+        var (formatCode, _, _) = await git.RunGitAsync(
+            diskPath, ["check-ref-format", reference], ct, ignoreExitCode: true).ConfigureAwait(false);
+        if (formatCode != 0)
+            return new GitTagResult(GitTagOutcome.Refused, slug, Detail: $"invalid tag name '{tag}'");
+
+        // Peeled to its commit, so an annotated tag created by hand on the same commit counts as there.
+        var (revCode, revOut, _) = await git.RunGitAsync(
+            diskPath, ["rev-parse", "--verify", "--quiet", $"{reference}^{{commit}}"], ct, ignoreExitCode: true)
+            .ConfigureAwait(false);
+        if (revCode == 0)
+        {
+            var existing = revOut.Trim();
+            return string.Equals(existing, targetSha, StringComparison.OrdinalIgnoreCase)
+                ? new GitTagResult(GitTagOutcome.AlreadyThere, slug, existing)
+                : new GitTagResult(GitTagOutcome.OnAnotherCommit, slug, existing);
+        }
+
+        // The empty old value makes the write create-only: a tag pushed meanwhile is never overwritten.
+        var (updateCode, _, updateError) = await git.RunGitAsync(
+            diskPath, ["update-ref", reference, targetSha, string.Empty], ct, ignoreExitCode: true).ConfigureAwait(false);
+        if (updateCode != 0)
+        {
+            logger.LogWarning("Tag {Tag} of {Slug} was not created on {Target}: git update-ref failed ({Error}).",
+                tag, slug, targetSha, updateError.Trim());
+            return new GitTagResult(GitTagOutcome.Refused, slug, Detail: updateError.Trim());
+        }
+
+        logger.LogInformation("Tag {Tag} of {Slug} created on {Target}.", tag, slug, targetSha);
+        return new GitTagResult(GitTagOutcome.Created, slug);
     }
 
     // SHA-1 (40) and SHA-256 (64) object ids, the two hash lengths git repositories use.

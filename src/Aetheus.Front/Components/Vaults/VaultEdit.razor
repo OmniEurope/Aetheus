@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @page "/vaults/new"
 @page "/vaults/{Id:int}"
 
@@ -96,7 +97,7 @@ else
         </div>
         </OmniTemplateForm>
 
-        <OmniDataGrid FillAvailableHeight="true" Items="@_detail.Secrets" TItem="VaultSecretDto" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+        <OmniDataGrid FillAvailableHeight="true" Items="@_detail.Secrets" ExportTitle="@ExportContext.Title(L["Secrets"])" ExportFields="@ExportContext.Fields()" TItem="VaultSecretDto" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
             <Columns>
                 <OmniDataGridColumn Frozen="true" TItem="VaultSecretDto" Property="Key" Title="@L["Key"]" Filterable="true">
                     <Template Context="secret">
@@ -133,7 +134,7 @@ else
                         }
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="VaultSecretDto" Title="@L["Versions"]" Width="5.625rem" TextAlign="OmniDataGridTextAlign.Center" Sortable="false">
+                <OmniDataGridColumn TItem="VaultSecretDto" Title="@L["Versions"]" ExportValue="@VersionsExport" Width="5.625rem" TextAlign="OmniDataGridTextAlign.Center" Sortable="false">
                     <Template Context="secret">
                         <CountBadge Value="@secret.VersionCount" Variant="OmniTone.Neutral" />
                     </Template>

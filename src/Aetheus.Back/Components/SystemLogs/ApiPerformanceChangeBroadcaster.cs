@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
-using Aetheus.Telemetry;
+using OmniEurope.Performance;
 
 namespace Aetheus.Back.Components.SystemLogs;
 

@@ -69,6 +69,12 @@ public sealed class SecretExpirationService(
                 SecretId = secret.Id,
                 SecretKey = secret.Key,
                 VaultName = secret.Vault.Name,
+                // The project owning the vault, directly or through its environment or project server:
+                // the AI tasks and the per-user notifications of an event are those of that project. A
+                // vault of a shared environment has none, and its event reaches no project.
+                ProjectId = secret.Vault.ProjectId
+                    ?? secret.Vault.Environment?.ProjectId
+                    ?? secret.Vault.ProjectServer?.ProjectId,
                 ExpiresAt = secret.ExpiresAt,
                 DaysRemaining = (secret.ExpiresAt!.Value - now).Days
             }, ct).ConfigureAwait(false);

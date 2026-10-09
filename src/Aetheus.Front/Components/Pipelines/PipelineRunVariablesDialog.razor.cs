@@ -28,4 +28,9 @@ public partial class PipelineRunVariablesDialog
         await Js.InvokeVoidAsync("Aetheus.copyToClipboard", text);
         Toast.Success("Copied");
     }
+
+    /// <summary>Recette R2-124: the export writes the source the badge shows.</summary>
+    private Func<KeyValuePair<string, string>, object?> SourceExport => _sourceExport ??= variable =>
+        L[IsSystemVariable(variable.Key) ? "VarSourceSystem" : "VarSourceResolved"].Value;
+    private Func<KeyValuePair<string, string>, object?>? _sourceExport;
 }

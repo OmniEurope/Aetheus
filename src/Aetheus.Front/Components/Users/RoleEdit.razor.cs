@@ -24,6 +24,9 @@ public partial class RoleEdit
     private string _name = string.Empty;
     private RoleFormModel _model = new();
     private List<PermissionRowModel> _permissionRows = [];
+    // FRONT-023: the role's permissions on one resource (Server 42 Read...). The grid edits only the
+    // global ones, but saving replaces the whole list, so these are sent back unchanged with it.
+    private List<ResourcePermissionEntry> _scopedPermissions = [];
     private List<OmniOption<string>> _scopeOptions = [];
     private Permission? _bulkPermission;
     private List<OmniOption<Permission?>> _permissionLevels = [];
@@ -124,6 +127,7 @@ public partial class RoleEdit
         _name = string.Empty;
         _model = new RoleFormModel();
         _permissionRows = [];
+        _scopedPermissions = [];
         _roleUsers = [];
         _availableUsers = [];
         _roleUsersCount = 0;
@@ -150,6 +154,15 @@ public partial class RoleEdit
     {
         _usersLoaded = true;
         await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Recette R2-124: one page of the role's users export, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<RoleUserDto>> ReadRoleUsersExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(25);
+        var (sortBy, sortDescending) = ResolveSort(args);
+        return Api.Auth.GetRoleUsersAsync(Id, page, pageSize, sortBy: sortBy, sortDescending: sortDescending,
+            filters: args.ToApiFilters());
     }
 
     private async Task LoadRoleUsersAsync(GridLoadArgs args)
@@ -286,6 +299,15 @@ public partial class RoleEdit
 
     private void BuildPermissionRows(List<ResourcePermissionDto> permissions)
     {
+        _scopedPermissions = permissions
+            .Where(p => p.ResourceId is not null)
+            .Select(p => new ResourcePermissionEntry
+            {
+                ResourceType = p.ResourceType,
+                ResourceId = p.ResourceId,
+                Permission = p.Permission
+            })
+            .ToList();
         _permissionRows = Enum.GetValues<ResourceType>().Select(rt =>
         {
             var perms = permissions.Where(p => p.ResourceType == rt && p.ResourceId is null).ToList();
@@ -388,6 +410,7 @@ public partial class RoleEdit
                 });
             }
 
+            entries.AddRange(_scopedPermissions);
             var success = await Api.Auth.SetRolePermissionsAsync(Id, new SetResourcePermissionsRequest
             {
                 Permissions = entries
@@ -447,6 +470,17 @@ public partial class RoleEdit
         await OnSavePermissions();
     }
 
+    // Recette R2-124: the matrix is a dropdown and checkboxes; its export writes what they say.
+    private Func<PermissionRowModel, object?>? _resourceTypeExport;
+    private Func<PermissionRowModel, object?>? _readExport;
+    private Func<PermissionRowModel, object?>? _writeExport;
+    private Func<PermissionRowModel, object?>? _adminExport;
+    private Func<PermissionRowModel, object?> ResourceTypeExport => _resourceTypeExport ??= row => L[row.ResourceType.ToString()].Value;
+    private static readonly Func<PermissionRowModel, object?> ScopeExport = row => row.Scope;
+    private Func<PermissionRowModel, object?> ReadExport => _readExport ??= row => YesNo(row.CanRead);
+    private Func<PermissionRowModel, object?> WriteExport => _writeExport ??= row => YesNo(row.CanWrite);
+    private Func<PermissionRowModel, object?> AdminExport => _adminExport ??= row => YesNo(row.CanAdmin);
+    private string YesNo(bool value) => L[value ? "Yes" : "No"].Value;
 
     internal class PermissionRowModel
     {
@@ -456,4 +490,7 @@ public partial class RoleEdit
         public bool CanWrite { get; set; }
         public bool CanAdmin { get; set; }
     }
+
+    private Func<RoleUserDto, object?> UserStatusExport => _userStatusExport ??= user => L[user.IsActive ? "Active" : "Inactive"].Value;
+    private Func<RoleUserDto, object?>? _userStatusExport;
 }

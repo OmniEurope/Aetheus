@@ -56,6 +56,15 @@ public partial class ServiceConnections : IAsyncDisposable
         catch (HttpRequestException) { _filterValues = new ServiceConnectionFilterValuesDto(); }
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    internal Task<PaginatedResult<ServiceConnectionDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(20);
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(ServiceConnectionDto.Name));
+        return Api.Settings.GetServiceConnectionsAsync(page, pageSize, _search,
+            sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
+    }
+
     internal async Task LoadData(GridLoadArgs args)
     {
         _loading = true;

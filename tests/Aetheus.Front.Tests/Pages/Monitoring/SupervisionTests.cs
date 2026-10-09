@@ -13,7 +13,12 @@ public sealed class SupervisionTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
 
-    public SupervisionTests() => _handler = BunitTestHelper.RegisterServices(this);
+    public SupervisionTests()
+    {
+        _handler = BunitTestHelper.RegisterServices(this);
+        // PLAN-013 lot 5: the page also lists the storage of each project.
+        _handler.SetJsonResponse("api/data-storage/projects", new ProjectStorageReportDto());
+    }
 
     [Fact]
     public void ListsAppsOfEveryProject_WithTheirLastEvent_OrNever()
@@ -102,5 +107,17 @@ public sealed class SupervisionTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains("GridLoadFailed", cut.Markup, StringComparison.Ordinal));
         Assert.DoesNotContain("NoMonitoredApps", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PLAN013Lot6_ANonAdministrator_DoesNotSeeTheReclaimAction()
+    {
+        _handler.SetJsonResponse("api/appmonitoring/summary", new AppMonitoringSummaryDto());
+
+        var cut = Render<Supervision>();
+
+        cut.WaitForAssertion(() => Assert.Contains("ProjectStorage", cut.Markup, StringComparison.Ordinal));
+        Assert.DoesNotContain("ReclaimSpaceHelp", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain(_handler.Requests, request => request.Url.Contains("reclaim", StringComparison.Ordinal));
     }
 }

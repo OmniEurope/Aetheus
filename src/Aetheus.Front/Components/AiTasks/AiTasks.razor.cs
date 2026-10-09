@@ -77,6 +77,15 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
 
     internal Task LoadDataAsync(GridLoadArgs args) => LoadPageFromArgsAsync(args);
 
+    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    internal Task<PaginatedResult<AiTaskDefinitionDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(25);
+        var (sortBy, sortDescending) = args.ToSortRequest("Name");
+        return Api.Ai.GetAiTasksAsync(page: page, pageSize: pageSize, search: _search, projectId: ProjectId,
+            filters: args.ToApiFilters(), sortBy: sortBy, sortDescending: sortDescending);
+    }
+
     protected override async Task LoadPageAsync(int page, int pageSize)
     {
         var filters = _columnFilters;
@@ -227,4 +236,11 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
         Permissions.OnPermissionsChanged -= OnPermissionsChanged;
         TaskTracker.OnTaskCompleted -= OnTaskCompleted;
     }
+
+    /// <summary>Recette R2-124: the export writes the source the cell links to.</summary>
+    private Func<AiTaskDefinitionDto, object?> SourceExport => _sourceExport ??= task =>
+        task.ProjectId is { } projectId ? $"{L["Project"]}: {task.ProjectName ?? $"#{projectId}"}"
+        : task.ServerId is { } serverId ? $"{L["Server"]}: {task.ServerName ?? $"#{serverId}"}"
+        : string.Empty;
+    private Func<AiTaskDefinitionDto, object?>? _sourceExport;
 }

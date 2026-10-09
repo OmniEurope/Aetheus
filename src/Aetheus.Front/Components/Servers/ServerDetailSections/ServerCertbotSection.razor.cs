@@ -83,4 +83,7 @@ public partial class ServerCertbotSection : ServerActionSectionBase
             new OmniDialogOptions { Width = "32rem", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
     }
 
+
+    /// <summary>Recette R2-124: the export writes the domains as the cell does.</summary>
+    private static readonly Func<CertbotCertificateDto, object?> DomainsExport = certificate => string.Join(", ", certificate.Domains);
 }

@@ -160,13 +160,18 @@ public class PipelineRunApprovalControllerTests : BunitContext
     }
 
     [Fact]
-    public async Task DecideAsync_Refused_KeepsTheCommentAndDoesNotReload()
+    public async Task DecideAsync_Refused_SaysWhy_KeepsTheComment_AndRefreshesTheBanner()
     {
-        // The decision is the operator's typed input; losing it on a failed call would make them retype
-        // the comment they just wrote.
+        // Recette R2-116: on release-fast #2555 a refused click showed one generic toast and left the
+        // banner as it was, offering again an approval the server had already settled. The reason the
+        // server gives is shown, and the banner is read again. The comment is the operator's typed
+        // input, kept for the next attempt.
         _handler.SetJsonResponse("api/pipelines/runs/1/approvals", new List<PipelineApprovalDto> { Pending() });
         _handler.SetJsonResponse("api/environments/3", new EnvironmentDto { Id = 3 });
-        _handler.SetResponse(HttpMethod.Post, "api/pipelines/approvals/7/decide", HttpStatusCode.Conflict);
+        _handler.SetRawResponse(
+            HttpMethod.Post, "api/pipelines/approvals/7/decide",
+            """{"message":"Approval 7 (run 1, stage 'deploy') was already Approved by sony; there is nothing left to decide."}""",
+            "application/json", HttpStatusCode.Conflict);
         var reloaded = 0;
         var sut = Sut(() => { reloaded++; return Task.CompletedTask; });
         await sut.LoadAsync(Waiting(), Xunit.TestContext.Current.CancellationToken);
@@ -174,9 +179,27 @@ public class PipelineRunApprovalControllerTests : BunitContext
 
         await sut.DecideAsync(ApprovalStatus.Approved);
 
-        Assert.Equal(0, reloaded);
+        Assert.Equal(1, reloaded);
         Assert.Equal("not yet", sut.Comments);
         Assert.False(sut.Deciding);
+        var toast = Assert.Single(Services.Toasts());
+        Assert.Equal(OmniSeverity.Danger, toast.Severity);
+        Assert.Contains("already Approved by sony", toast.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DecideAsync_RefusedWithoutAReason_SaysWhatTheServerAnswered()
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/1/approvals", new List<PipelineApprovalDto> { Pending() });
+        _handler.SetJsonResponse("api/environments/3", new EnvironmentDto { Id = 3 });
+        _handler.SetResponse(HttpMethod.Post, "api/pipelines/approvals/7/decide", HttpStatusCode.Forbidden);
+        var sut = Sut();
+        await sut.LoadAsync(Waiting(), Xunit.TestContext.Current.CancellationToken);
+
+        await sut.DecideAsync(ApprovalStatus.Approved);
+
+        var toast = Assert.Single(Services.Toasts());
+        Assert.Contains("ApprovalDecisionFailedStatus", toast.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

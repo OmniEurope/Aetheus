@@ -1,4 +1,9 @@
-:root {
+/* STD-SHELL: every block of this sheet that derives a value from an OE token on :root (an alias, a
+   colour mixed from the surface, a size from the density) is declared on .omni-theme-scope too.
+   OmniThemeScope paints the theme, palette, font and density tokens on its own element, so a value
+   resolved on :root alone would keep the shipped tokens inside the scope. */
+:root,
+.omni-theme-scope {
     /* Neutral dark palette — matches the production Material Dark theme. */
     --icon-xs: 0.75rem;
     --icon-sm: 0.8125rem;
@@ -704,7 +709,9 @@ html, body {
     height: 100%;
 }
 
-#app > .omni-layout {
+/* STD-SHELL: the theme scope wraps the layout, so it carries the full height on to it. */
+#app > .omni-theme-scope,
+.omni-theme-scope > .omni-layout {
     height: 100%;
 }
 
@@ -1168,7 +1175,8 @@ code {
 
 /* One compact legacy UI row. Kept as a variable so the row floor above and any future height maths
    stay tied to the real row height instead of a number copied by hand. */
-:root {
+:root,
+.omni-theme-scope {
     --aetheus-grid-row-height: 2.25rem;
 
     /* Floor of a full-height grid: ten compact rows plus the sticky column header and the pager that
@@ -4668,23 +4676,25 @@ a.pipeline-relation-card:hover {
    touch cooler in light mode, tiles and cards with a softer border than the text colour, their inner
    separators lighter still, and tile titles darker than the body text. Applied to every OE card
    through its border token, so grids, tiles and cards share one frame. */
-:root {
-    --aetheus-page-background: #eceef2;
-    --aetheus-tile-background: #ffffff;
-    --aetheus-tile-border: #c9cdd6;
-    --aetheus-tile-separator: #e3e5ea;
-    --aetheus-tile-title: #1f1f24;
-    --omni-card-border-color: var(--aetheus-tile-border);
+/* Decision of 2026-10-06: these shades are derived from the theme and palette picked in the appearance
+   window instead of fixed values, so every palette repaints the page, the tiles and their borders. The
+   page is handed to the scope as OE's --omni-scope-page, which OE paints under the content: a theme that
+   brings its own page (Trou noir) writes that token on the scope itself and wins, and nothing paints over
+   its field (Givre's gradient, Trou noir's canvas), which an opaque .omni-main used to hide. */
+:root,
+.omni-theme-scope {
+    --aetheus-page-background: color-mix(in srgb, var(--omni-color-surface) 92%, var(--omni-color-text));
+    --aetheus-tile-background: var(--omni-card-background, var(--omni-color-surface));
+    --aetheus-tile-border: color-mix(in srgb, var(--omni-color-border) 80%, var(--omni-color-surface));
+    --aetheus-tile-separator: var(--omni-color-surface-highlight);
+    --aetheus-tile-title: color-mix(in srgb, var(--omni-color-text) 65%, #000000);
+    --omni-scope-page: var(--aetheus-page-background);
 }
-[data-omni-theme="dark"] {
+[data-omni-theme="dark"],
+html[data-omni-theme="dark"] .omni-theme-scope {
     --aetheus-page-background: color-mix(in srgb, var(--omni-color-surface) 62%, #000000);
-    --aetheus-tile-background: #26262b;
-    --aetheus-tile-border: #4a4a52;
-    --aetheus-tile-separator: #3a3a40;
-    --aetheus-tile-title: #f2f2f2;
-    --omni-card-border-color: var(--aetheus-tile-border);
+    --aetheus-tile-title: color-mix(in srgb, var(--omni-color-text) 60%, #ffffff);
 }
-.omni-main:has(> .app-body-wrapper) { background: var(--aetheus-page-background); }
 
 /* A neutral (secondary) button in the dark theme: the theme's own neutral fill sank into the dark
    surfaces (recette R-005, R-037), so it stays a grey lighter than the tiles. Recette R-384 (user
@@ -4713,7 +4723,7 @@ a.pipeline-relation-card:hover {
 }
 
 /* The password eye fills the inside of the shared field border (recette R-003). */
-:root { --omni-password-toggle-size: calc(var(--aetheus-control-height) - 2 * var(--omni-border-width)); }
+:root, .omni-theme-scope { --omni-password-toggle-size: calc(var(--aetheus-control-height) - 2 * var(--omni-border-width)); }
 
 /* Recette R-309: every password field, not only the login one, is one control height border included;
    the input inside it gives up its own height (the vault secret field measured 30px beside 28px). */
@@ -5076,6 +5086,14 @@ a.pipeline-relation-card:hover {
    837px of content for 833px visible; reproduced, then gone with this rule: 598 for 598). Only the end
    side is given up: the start side does not scroll, and the tabs keep their place. */
 .omni-tabs > .omni-tabs__strip .omni-tabs__viewport {
+    margin-inline-end: 0;
+}
+
+/* Recette R2-125: the same 0.1875rem bleed on every horizontally scrolling OmniStack (OmniStackScroll),
+   such as the status chips above the pipeline lists: a second horizontal scrollbar under the grid's own
+   (measured in production on /projects/1/pipelines: 954px of content for 951px visible; gone with this
+   rule). Same answer as R-503, to drop once OE stops the bleed itself. */
+.omni-stack-scroll > .omni-stack--overflow-scroll {
     margin-inline-end: 0;
 }
 
@@ -5935,15 +5953,6 @@ textarea:focus-visible,
     margin: 0;
 }
 
-/* Mail service status indicator dot */
-.mail-status-dot {
-    background-color: var(--omni-color-danger);
-}
-
-.mail-status-dot.is-running {
-    background-color: var(--omni-color-success);
-}
-
 .lang-toggle-wrapper {
     display: inline-flex;
     align-items: center;
@@ -6381,7 +6390,7 @@ textarea:focus-visible,
 }
 
 /* Alias of OE's badge height for the rules that align with a badge (run tiles, grade letters). */
-:root { --aetheus-badge-height: var(--omni-badge-height); }
+:root, .omni-theme-scope { --aetheus-badge-height: var(--omni-badge-height); }
 
 /* A grid cell caps its children at the content height; a badge keeps the one badge height there
    too, which the 2.25rem row has room for. */
@@ -6491,25 +6500,26 @@ textarea:focus-visible,
     min-width: 12rem;
 }
 
-/* Recette R-232: the density of the whole site. Comfortable is the look as shipped and carries no
-   attribute; the two others move the Aetheus sizes (PLAN-003 lot 3 and lot 4) by one step each way,
-   and the OmniEurope.Blazor spacing follows through data-omni-density on the same element. */
+/* Recette R-232, STD-SHELL: the density of the whole site is OmniThemeScope's (data-omni-density on the
+   scope element, comfortable as shipped). The two others move the Aetheus sizes (PLAN-003 lot 3 and
+   lot 4) by one step each way, beside OE's own spacing on the same element. */
 /* Recette R-309: one control height. OE sizes the controls this sheet does not name (selects, split
    buttons, pickers, pager...) from --omni-control-height; it now reads the Aetheus height, so no OE
-   control stands taller than the button beside it. html:root outweighs OE's :root and
-   [data-omni-density] (measured: a bare html selector lost, the bell stayed 36px wide). */
+   control stands taller than the button beside it. html:root outweighs OE's :root (measured: a bare
+   html selector lost, the bell stayed 36px wide); the theme scope declares OE's density tokens on its
+   own element, so the alias is declared there too, one class above OE's [data-omni-density] rule. */
 html:root,
-html:root[data-omni-density] {
+.omni-theme-scope[data-omni-density] {
     --omni-control-height: var(--aetheus-control-height);
 }
 
-html[data-aetheus-density="compact"] {
+.omni-theme-scope[data-omni-density="compact"] {
     --aetheus-control-height: calc(1.5rem * var(--omni-control-scale, 1));
     --aetheus-grid-row-content-height: 1.125rem;
     --aetheus-grid-row-height: 2rem;
 }
 
-html[data-aetheus-density="spacious"] {
+.omni-theme-scope[data-omni-density="spacious"] {
     --aetheus-control-height: calc(2.125rem * var(--omni-control-scale, 1));
     --aetheus-grid-row-content-height: 1.5rem;
     --aetheus-grid-row-height: 2.75rem;
@@ -7409,6 +7419,22 @@ textarea.omni-text-box,
 .tpl-select { max-width: 100%; min-width: 0; width: 20rem; }
 .bulk-perm-select { width: 10rem; }
 .role-edit-stack { max-width: 32rem; }
+
+/* Recette R2-095: nothing runs past the run page's approval banner on a phone. OE's alert body is a
+   one-column grid whose auto track grew to the width of the buttons' row, so the text and the buttons
+   went past the banner; the track is held to the banner, long words break, the buttons wrap. */
+.run-approval-banner .omni-alert__body { grid-template-columns: minmax(0, 1fr); overflow-wrap: anywhere; }
+@media (max-width: 39.99rem) {
+    /* Below phone width Approve and Reject show their icon alone (named by Label, explained by their
+       tooltip); Comment keeps its text. Same square as the run logs' reduced buttons (R-425). */
+    .run-approval-banner .approval-decision .omni-button__content > span:not(.omni-icon) { display: none; }
+    .run-approval-banner .approval-decision {
+        inline-size: var(--omni-button-size, var(--omni-control-height));
+        min-inline-size: var(--omni-button-size, var(--omni-control-height));
+        padding-inline: 0;
+        justify-content: center;
+    }
+}
 .role-perm-select { width: 100%; }
 .icon-inherit { font-size: inherit; }
 
@@ -9259,16 +9285,57 @@ a.short-id__text:hover {
     --omni-progress-thickness: 4px;
 }
 
-/* Recette R2-059: the steps to a working mail server, on the page shown before the setup. */
-.mail-setup-guide-steps {
+/* Recette R2-080: what follows the mail setup, in the assistant; R2-083: what "Réinstaller la messagerie"
+   erases, listed the same way. */
+.mail-after-setup,
+.mail-reinstall-erased {
     display: grid;
     gap: 0.25rem;
     margin: 0.25rem 0 0;
     padding-left: 1.25rem;
 }
 
+/* Recette R2-080 / R2-090: a checked mail line keeps its details (addresses, host names, DNS answers)
+   inside a phone-width screen: long words break instead of running past the card. */
+.mail-check-line {
+    min-width: 0;
+}
+
+.mail-check-detail {
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+
+/* Recette R2-090: the fix of the first red line sits under it, set in from the list. */
+.mail-status-fix {
+    margin: 0.25rem 0 0.5rem 1rem;
+}
+
+@media (max-width: 39.99rem) {
+    .mail-status-fix {
+        margin-left: 0;
+    }
+}
+
 /* Recette R2-071: a run warning carries commit hashes and release names with no break point; on a
    phone they ran past the alert. Long words wrap, so the whole message stays readable. */
 .run-warning-line {
     overflow-wrap: anywhere;
+}
+
+/* Recette R2-109: a status count badge (StatusCountBadge) reads "20 Succeeded" when there is room. On a
+   phone the status name gives way to the status icon, so a row of them stays on the title line: the name
+   is visually hidden, not removed, and remains the badge's accessible text, with the tooltip. */
+.status-count-badge .status-count-badge__icon { display: none; }
+@media (max-width: 39.99rem) {
+    .status-count-badge { position: relative; }
+    .status-count-badge .status-count-badge__icon { display: inline-block; }
+    .status-count-badge__label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
 }

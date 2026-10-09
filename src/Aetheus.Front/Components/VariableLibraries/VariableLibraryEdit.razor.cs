@@ -474,6 +474,17 @@ public partial class VariableLibraryEdit
         await LoadEntryPageAsync();
     }
 
+    /// <summary>Recette R2-124: one page of the entries export (a library holds plain values, secrets live in
+    /// vaults), with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<VariableEntryDto>> ReadEntriesExportAsync(GridLoadArgs args)
+    {
+        if (Id is null or 0) return Task.FromResult(new PaginatedResult<VariableEntryDto>());
+        var (page, pageSize) = args.ToPageRequest(25);
+        var (sortBy, sortDescending) = ResolveEntrySort(args);
+        return Api.Variables.GetVariableEntriesPageAsync(Id.Value, page, pageSize,
+            sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
+    }
+
     private async Task LoadEntryPageAsync()
     {
         if (Id is null or 0) return;
@@ -527,4 +538,7 @@ public partial class VariableLibraryEdit
     private sealed class LibraryModel : ScopedResourceFormModel
     {
     }
+
+    /// <summary>Recette R2-124: the export writes the count the badge shows.</summary>
+    private static readonly Func<VariableEntryDto, object?> VersionsExport = entry => entry.VersionCount;
 }

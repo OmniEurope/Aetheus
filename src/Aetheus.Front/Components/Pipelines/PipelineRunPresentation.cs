@@ -12,6 +12,13 @@ internal static class PipelineRunPresentation
         ? $"/pipelines/runs/{runId}?serverId={server}"
         : projectId is { } project ? $"/pipelines/runs/{runId}?projectId={project}" : $"/pipelines/runs/{runId}";
 
+    /// <summary>Recette R2-128: the run opened on its Gate tab, where its findings are listed.</summary>
+    public static string GateHref(int runId, int? projectId, int? serverId)
+    {
+        var href = Href(runId, projectId, serverId);
+        return href + (href.Contains('?', StringComparison.Ordinal) ? "&tab=gate" : "?tab=gate");
+    }
+
     public static string? CurrentStep(PipelineRunDto run) => PipelineHelper.GetCurrentStepLabel(run);
     public static bool IsFailed(PipelineRunDto run) => run.Status == PipelineStatus.Failed;
 
@@ -20,6 +27,19 @@ internal static class PipelineRunPresentation
     public static bool CanCancel(PipelineRunDto run) =>
         !run.CancellationRequested
         && run.Status is PipelineStatus.Pending or PipelineStatus.Running or PipelineStatus.WaitingForApproval;
+
+    /// <summary>Recette R2-103: "Cancelled by alice", or "Cancelled by Aetheus" for a cancellation the
+    /// system made (latest-wins replacement, recovery); null when the author is unknown (a run cancelled
+    /// before it was recorded).</summary>
+    public static string? CancelledByText(PipelineRunDto run, IStringLocalizer localizer)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(localizer);
+        if (string.IsNullOrWhiteSpace(run.CancelledBy)) return null;
+        return string.Equals(run.CancelledBy, "system", StringComparison.Ordinal)
+            ? localizer["RunCancelledBySystem"]
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, localizer["RunCancelledBy"], run.CancelledBy);
+    }
 
     /// <summary>
     /// Recette R-329: the width of the frozen ID column of a pipeline's runs, sized to what it holds:

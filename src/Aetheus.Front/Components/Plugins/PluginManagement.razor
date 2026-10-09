@@ -20,7 +20,7 @@
         Class="pipeline-list-search omni-u-mb-sm" />
 
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_plugins" TItem="PluginRegistrationDto"
-        Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync"
+        Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
         PageSize="25" EmptyText="@L["NoRecords"]" class="aetheus-grid-fullheight"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<PluginRegistrationDto>(_plugins, _totalCount))">

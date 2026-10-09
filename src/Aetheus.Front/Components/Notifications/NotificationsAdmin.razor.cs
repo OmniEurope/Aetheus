@@ -54,6 +54,24 @@ public partial class NotificationsAdmin : ComponentBase
         catch (HttpRequestException) { _ruleFilterValues = new NotificationAdminFilterValuesDto(); }
     }
 
+    /// <summary>Recette R2-124: one page of the channels export, with the search, sort and column filters of the grid.</summary>
+    internal Task<PaginatedResult<NotificationChannelDto>> ReadChannelsExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = GetSort(args, "Name");
+        return Api.Monitoring.GetNotificationChannelsPagedAsync(
+            page, pageSize, _channelSearch, sortBy, sortDescending, args.ToApiFilters());
+    }
+
+    /// <summary>Recette R2-124: one page of the rules export, with the search, sort and column filters of the grid.</summary>
+    internal Task<PaginatedResult<NotificationRuleDto>> ReadRulesExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = GetSort(args, "EventType");
+        return Api.Monitoring.GetNotificationRulesPagedAsync(
+            page, pageSize, _ruleSearch, sortBy, sortDescending, args.ToApiFilters());
+    }
+
     internal async Task LoadChannelsAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();

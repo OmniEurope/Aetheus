@@ -35,7 +35,7 @@ public sealed class PipelineRunPreflightServiceTests
     private static IPipelineEnvironmentCheckGuard Admits(bool verdict)
     {
         var guard = Substitute.For<IPipelineEnvironmentCheckGuard>();
-        guard.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<CancellationToken>())
+        guard.CheckEnvironmentChecksAsync(Arg.Any<PipelineStageDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(verdict);
         return guard;
     }
@@ -337,7 +337,7 @@ public sealed class PipelineRunPreflightServiceTests
     public async Task EnvironmentEntityIsNeverRequiredToExistForAStageWithoutOne()
     {
         ConfiguredTargets(42);
-        _repo.FindEnvironmentByNameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _repo.FindEnvironmentByNameAsync(Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns((Environment?)null);
 
         var problems = await RunAsync(Definition(Stage("build", agent: "linux-01")));

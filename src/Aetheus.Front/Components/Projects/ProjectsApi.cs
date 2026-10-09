@@ -138,6 +138,17 @@ public sealed class ProjectsApi(HttpClient http) : ApiClientBase(http)
     public Task<ApiStatus> DeleteProjectAsync(int id, CancellationToken ct = default)
         => DeleteAsync($"api/projects/{id}", ct);
 
+    /// <summary>PLAN-013 lot 4: the project's « Conservation des données » setting.</summary>
+    public Task<ProjectDataRetentionDto?> GetDataRetentionAsync(int id, CancellationToken ct = default)
+        => GetJsonAsync<ProjectDataRetentionDto>($"api/projects/{id}/data-retention", ct);
+
+    public Task<ProjectDataRetentionDto?> UpdateDataRetentionAsync(int id, UpdateProjectDataRetentionRequest request, CancellationToken ct = default)
+        => PutJsonAsync<UpdateProjectDataRetentionRequest, ProjectDataRetentionDto>($"api/projects/{id}/data-retention", request, ct);
+
+    /// <summary>Recette R2-122: what deleting the project would remove, counted per kind.</summary>
+    public Task<ProjectDeletionPreviewDto?> GetDeletionPreviewAsync(int id, CancellationToken ct = default)
+        => GetJsonAsync<ProjectDeletionPreviewDto>($"api/projects/{id}/deletion-preview", ct);
+
     public async Task<PaginatedResult<ReleaseDto>> GetReleasesAsync(
         int page = 1, int pageSize = 25, int? projectId = null,
         string? sortBy = null, bool sortDescending = true, bool deployableOnly = false,

@@ -3,7 +3,7 @@
 namespace Aetheus.Back.Components.ExternalRepos;
 
 /// <summary>
-/// Registration surface for mirror-backed external repositories (Features:ExternalRepos).
+/// Registration surface for mirror-backed external repositories (always on since recette R-295).
 /// Enforces at most one external repository per project (the project's source, or an additional
 /// source beside its internal repository, recette R-534) and keeps every credential on the backend.
 /// </summary>

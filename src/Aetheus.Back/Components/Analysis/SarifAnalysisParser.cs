@@ -60,7 +60,8 @@ public static class SarifAnalysisParser
     /// suppressed. An EMPTY array means the opposite, that the tool looked and found no suppression,
     /// so it must not be read as one.
     ///
-    /// Only <c>accepted</c> and absent states count as suppressed. A suppression the tool marked
+    /// Only an <c>accepted</c> or absent <c>status</c> counts as suppressed (the schema names it
+    /// <c>status</c>; a <c>state</c> property is not SARIF). A suppression the tool marked
     /// <c>rejected</c> or <c>underReview</c> is still an open question, and hiding it would answer
     /// that question on the tool's behalf.
     /// </summary>
@@ -73,9 +74,9 @@ public static class SarifAnalysisParser
         foreach (var suppression in suppressions.EnumerateArray())
         {
             if (suppression.ValueKind != JsonValueKind.Object) continue;
-            var state = ReadString(suppression, "state");
-            if (state is null
-                || state.Equals("accepted", StringComparison.OrdinalIgnoreCase))
+            var status = ReadString(suppression, "status");
+            if (status is null
+                || status.Equals("accepted", StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 

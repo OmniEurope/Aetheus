@@ -181,11 +181,11 @@ public class PipelineTriggerReconcileServiceTests
     {
         _repo.GetStalledCancellationRunIdsAsync(Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns([1524]);
-        _runService.CancelRunAsync(1524, Arg.Any<CancellationToken>()).Returns(true);
+        _runService.CancelRunAsync(1524, Arg.Is<PipelineRunCancellation>(c => c.By == PipelineRunCancellation.SystemAuthor), Arg.Any<CancellationToken>()).Returns(true);
 
         await _sut.ReconcileAsync(TestContext.Current.CancellationToken);
 
-        await _runService.Received(1).CancelRunAsync(1524, Arg.Any<CancellationToken>());
+        await _runService.Received(1).CancelRunAsync(1524, Arg.Is<PipelineRunCancellation>(c => c.By == PipelineRunCancellation.SystemAuthor), Arg.Any<CancellationToken>());
         await _runService.DidNotReceive().FailStuckRunAsync(1524, Arg.Any<CancellationToken>());
     }
 
@@ -240,7 +240,7 @@ public class PipelineTriggerReconcileServiceTests
         _repo.GetExpiredPendingApprovalIdsAsync(Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
             .Returns([42, 43]);
         _approvalService.DecideApprovalAsync(42, Arg.Any<ApprovalDecisionRequest>(), Arg.Any<CancellationToken>())
-            .Returns<Task<PipelineApprovalDto?>>(_ => throw new InvalidOperationException("transient failure"));
+            .Returns<Task<PipelineApprovalDto>>(_ => throw new InvalidOperationException("transient failure"));
 
         await _sut.ReconcileAsync(TestContext.Current.CancellationToken);
 
@@ -262,7 +262,7 @@ public class PipelineTriggerReconcileServiceTests
             Arg.Any<IReadOnlyDictionary<string, string>>(),
             Arg.Any<CancellationToken>());
         await _runService.DidNotReceive().ReconcileRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
-        await _runService.DidNotReceive().CancelRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _runService.DidNotReceive().CancelRunAsync(Arg.Any<int>(), Arg.Any<PipelineRunCancellation>(), Arg.Any<CancellationToken>());
         await _runService.DidNotReceive().FailStuckRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
         await _approvalService.DidNotReceive().DecideApprovalAsync(
             Arg.Any<int>(), Arg.Any<ApprovalDecisionRequest>(), Arg.Any<CancellationToken>());

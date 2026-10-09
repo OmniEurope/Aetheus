@@ -59,7 +59,7 @@ else
                        also prevents double-fetching the initial page (we already load it
                        in OnInitializedAsync via LoadCommits). *@
                     <AetheusDataGrid @ref="_grids.Commits" FullHeight="true" TItem="GitLightCommitDto" Data="@_commits.Items"
-                        Count="@_commits.TotalCount" IsLoading="@_commits.Loading" LoadData="@OnLoadCommits"
+                        Count="@_commits.TotalCount" IsLoading="@_commits.Loading" LoadData="@OnLoadCommits" ExportRead="@(args => Exports.CommitsAsync(Id, args))" ExportName="@L["Commits"]"
                         Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<GitLightCommitDto>(_commits.Items, _commits.TotalCount))"
                         AutoLoad="false" EmptyText="@L["NoCommitsFound"]"
                         RowClick="@(c => Nav.NavigateTo($"/git-repositories/{Id}/commits/{c.Sha}"))">
@@ -109,7 +109,7 @@ else
                 }
                 <AetheusDataGrid @ref="_grids.Branches" FullHeight="true" TItem="GitLightBranchDto" Data="@_branchRows"
                     Count="@_branchPage.TotalCount" IsLoading="@_branchPage.Loading"
-                    LoadData="@OnLoadBranches" AutoLoad="false" EmptyText="@L["NoBranchesFound"]"
+                    LoadData="@OnLoadBranches" ExportRead="@(args => Exports.BranchesAsync(Id, BranchSearch, args))" ExportName="@L["Branches"]" AutoLoad="false" EmptyText="@L["NoBranchesFound"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<GitLightBranchDto>(_branchRows, _branchPage.TotalCount))">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="GitLightBranchDto" Property="Name" Title="@L["Name"]" Width="auto" Filterable="true" >
@@ -158,7 +158,7 @@ else
                 }
                 <AetheusDataGrid @ref="_grids.Tags" FullHeight="true" TItem="GitLightTagDto" Data="@_tags"
                     Count="@_tagPage.TotalCount" IsLoading="@_tagPage.Loading"
-                    LoadData="@OnLoadTags" AutoLoad="false" EmptyText="@L["NoTagsFound"]"
+                    LoadData="@OnLoadTags" ExportRead="@(args => Exports.TagsAsync(Id, args))" ExportName="@L["Tags"]" AutoLoad="false" EmptyText="@L["NoTagsFound"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<GitLightTagDto>(_tags, _tagPage.TotalCount))">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="GitLightTagDto" Property="Name" Title="@L["Name"]" Width="auto" Filterable="true" />
@@ -235,7 +235,7 @@ else
                     {
                         <AetheusDataGrid @ref="_grids.Tree" FullHeight="true" TItem="GitLightTreeEntryDto" Data="@_treeEntries"
                             Count="@_treeTotalCount" IsLoading="@_treeLoading"
-                            LoadData="@OnLoadTree" AutoLoad="false" EmptyText="@L["NoFilesFound"]"
+                            LoadData="@OnLoadTree" ExportRead="@(args => Exports.TreeAsync(Id, _treeRef, _treePath, args))" ExportName="@L["Files"]" AutoLoad="false" EmptyText="@L["NoFilesFound"]"
                             Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<GitLightTreeEntryDto>(_treeEntries, _treeTotalCount))">
                             <Columns>
                                 <OmniDataGridColumn Frozen="true" TItem="GitLightTreeEntryDto" Property="Name" Title="@L["Name"]" Width="auto" Filterable="true" >
@@ -271,7 +271,7 @@ else
                     </OmniAlert>
                 }
                 <AetheusDataGrid @ref="_grids.PullRequests" FullHeight="true" TItem="InternalPullRequestDto" Data="@_pullRequests.Items"
-                    Count="@_pullRequests.TotalCount" IsLoading="@_pullRequests.Loading" LoadData="@OnLoadPrs"
+                    Count="@_pullRequests.TotalCount" IsLoading="@_pullRequests.Loading" LoadData="@OnLoadPrs" ExportRead="@(args => Exports.PullRequestsAsync(Id, args))" ExportName="@L["PullRequests"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<InternalPullRequestDto>(_pullRequests.Items, _pullRequests.TotalCount))"
                     EmptyText="@L["NoPullRequestsFound"]">
                     <Columns>
@@ -344,7 +344,7 @@ else
                 }
                 <AetheusDataGrid @ref="_grids.Protection" FullHeight="true" TItem="BranchProtectionRuleDto" Data="@_protectionRows"
                     Count="@_protectionPage.TotalCount" IsLoading="@_protectionPage.Loading"
-                    LoadData="@OnLoadProtectionRules" AutoLoad="false" EmptyText="@L["NoRulesFound"]"
+                    LoadData="@OnLoadProtectionRules" ExportRead="@(args => Exports.ProtectionRulesAsync(Id, args))" ExportName="@L["BranchProtection"]" AutoLoad="false" EmptyText="@L["NoRulesFound"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<BranchProtectionRuleDto>(_protectionRows, _protectionPage.TotalCount))">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="BranchProtectionRuleDto" Property="Pattern" Title="@L["Pattern"]" Width="auto" Filterable="true" />

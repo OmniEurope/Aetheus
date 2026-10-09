@@ -98,7 +98,8 @@ public static partial class OperationTargetValidator
         OperationKind.MailDkimRotate,
         OperationKind.MailRemoveDomain,
         OperationKind.MailDkimRead,
-        OperationKind.MailInstallCertificate
+        OperationKind.MailInstallCertificate,
+        OperationKind.MailOutboundProbe
     ];
 
     private static readonly HashSet<OperationKind> s_mailEmailTargets =
@@ -138,6 +139,10 @@ public static partial class OperationTargetValidator
 
     [GeneratedRegex(@"^[a-zA-Z0-9][a-zA-Z0-9_.\-:/]{0,127}$")]
     public static partial Regex DockerTargetRegex();
+
+    // A container ID as Docker prints it: 12 to 64 hex characters.
+    [GeneratedRegex(@"^[a-fA-F0-9]{12,64}$")]
+    public static partial Regex DockerContainerIdRegex();
 
     [GeneratedRegex(@"^[a-zA-Z0-9][a-zA-Z0-9_.\-@]{0,63}$")]
     public static partial Regex ServiceNameRegex();
@@ -192,6 +197,12 @@ public static partial class OperationTargetValidator
             return true;
         if (s_dockerTargets.Contains(kind))
             return DockerTargetRegex().IsMatch(target);
+        if (kind == OperationKind.DockerComposeUp)
+            return ComposeProjectRegex().IsMatch(target);
+        if (kind == OperationKind.DockerExecScript)
+            return DockerContainerIdRegex().IsMatch(target);
+        if (kind == OperationKind.DockerBuildImage)
+            return DockerTargetRegex().IsMatch(target);
         if (s_serviceTargets.Contains(kind))
             return ServiceNameRegex().IsMatch(target);
         if (kind == OperationKind.ServiceInstall)
@@ -232,7 +243,7 @@ public static partial class OperationTargetValidator
             return MailValidation.IsValidDomainName(target);
         if (s_mailEmailTargets.Contains(kind))
             return MailValidation.IsValidEmail(target);
-        if (kind is OperationKind.MailSpamInstall or OperationKind.MailSpamConfigure or OperationKind.MailQuotaReport)
+        if (kind is OperationKind.MailSpamInstall or OperationKind.MailSpamConfigure or OperationKind.MailQuotaReport or OperationKind.MailPurge)
             return target == "-";
         if (kind == OperationKind.MailSpamLearn)
             return target is "spam" or "ham";

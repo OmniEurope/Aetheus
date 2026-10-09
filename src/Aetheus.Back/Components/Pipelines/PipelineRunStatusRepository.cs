@@ -11,6 +11,12 @@ internal sealed class PipelineRunStatusRepository(AppDbContext db, ILogger logge
         PipelineStatus requestedStatus,
         CancellationToken ct)
     {
+        // BACK-019: an artifact the run declared but never collected is a failure, whatever its steps
+        // did. Checked outside the safety net's catch: a Success must never be granted on a failed query.
+        if (requestedStatus == PipelineStatus.Success)
+            return await HasFailedArtifactCollectionAsync(runId, ct).ConfigureAwait(false)
+                ? PipelineStatus.Failed
+                : requestedStatus;
         if (requestedStatus != PipelineStatus.Failed)
             return requestedStatus;
 
@@ -21,13 +27,7 @@ internal sealed class PipelineRunStatusRepository(AppDbContext db, ILogger logge
                     && (step.Status == TaskExecutionStatus.Failed
                         || step.Status == TaskExecutionStatus.Timeout), ct)
                 .ConfigureAwait(false);
-            var hasFailedArtifactCollection = await db.Tasks
-                .AnyAsync(task => task.PipelineRunId == runId
-                    && task.Operation == OperationKind.PipelineCollectArtifacts
-                    && (task.Status == TaskExecutionStatus.Failed
-                        || task.Status == TaskExecutionStatus.Timeout
-                        || task.Status == TaskExecutionStatus.Cancelled), ct)
-                .ConfigureAwait(false);
+            var hasFailedArtifactCollection = await HasFailedArtifactCollectionAsync(runId, ct).ConfigureAwait(false);
             var hasSucceededStep = await db.PipelineStepRuns
                 .AnyAsync(step => step.PipelineRunId == runId
                     && !step.IsSystem
@@ -51,4 +51,11 @@ internal sealed class PipelineRunStatusRepository(AppDbContext db, ILogger logge
             return requestedStatus;
         }
     }
+
+    public Task<bool> HasFailedArtifactCollectionAsync(int runId, CancellationToken ct) =>
+        db.Tasks.AnyAsync(task => task.PipelineRunId == runId
+            && task.Operation == OperationKind.PipelineCollectArtifacts
+            && (task.Status == TaskExecutionStatus.Failed
+                || task.Status == TaskExecutionStatus.Timeout
+                || task.Status == TaskExecutionStatus.Cancelled), ct);
 }

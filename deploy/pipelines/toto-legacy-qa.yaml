@@ -75,6 +75,11 @@ stages:
       - name: Verify QA runtime probe
         working_directory: "$(WORKSPACE)"
         timeout_seconds: 60
+        # An explicit refusal: a bare `test` followed by an echo returned the echo's status, so the
+        # gate printed "passed" and succeeded after a failed probe (DEP-009).
         shell: |
-          test ! -f "$WORKSPACE/.qa-failed"
+          if [ -f "$WORKSPACE/.qa-failed" ]; then
+            echo "QA validation failed: the runtime probe did not pass." >&2
+            exit 1
+          fi
           echo "QA validation passed."

@@ -10,14 +10,14 @@ else
     @* Recette R-184: no search box and no pager; the grid is virtualized (R-049) and its header
        filters do the searching. *@
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_result.Items" TItem="ServerTaskDto"
-        Count="@_result.TotalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync"
+        Count="@_result.TotalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
         PageSize="25" EmptyText="@L["NoRecords"]"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<ServerTaskDto>(_result.Items, _result.TotalCount))">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="ServerTaskDto" Property="Name" Title="@L["Task"]" Filterable="true" />
             <OmniDataGridColumn TItem="ServerTaskDto" Property="ServerName" Title="@L["Server"]" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ServerNames" FilterSearchable="true" />
-            <OmniDataGridColumn TItem="ServerTaskDto" Title="@L["Source"]" Width="210px" Sortable="false" Filterable="false" >
+            <OmniDataGridColumn TItem="ServerTaskDto" Title="@L["Source"]" ExportValue="@SourceExport" Width="210px" Sortable="false" Filterable="false" >
                 <Template Context="task">
                     @if (task.PipelineRunId is { } pipelineRunId)
                     {

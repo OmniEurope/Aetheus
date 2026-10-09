@@ -485,6 +485,94 @@ public class MailServiceTests
         await _repo.DidNotReceive().AddDomainAsync(Arg.Any<MailDomain>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task SetupAsync_WhileASetupOrReinstallRuns_IsRefused_AndQueuesNoTask()
+    {
+        // Recette R2-085: tasks 23257 and 23258, two full setups of one domain 3 s apart, the second
+        // started while the first ran.
+        _repo.HasOpenTaskAsync(1, Arg.Is<IReadOnlyCollection<OperationKind>>(k =>
+                k.Contains(OperationKind.MailSetup) && k.Contains(OperationKind.MailPurge)), Arg.Any<CancellationToken>())
+            .Returns(true);
+        var request = new MailSetupRequest
+        {
+            Hostname = "mail.example.com",
+            Domain = "example.com",
+            DkimSelector = "default",
+            AdminEmail = "admin@example.com",
+            AdminPassword = "secure-password",
+            QuotaMb = 2048
+        };
+
+        await Assert.ThrowsAsync<ConflictException>(() => _sut.SetupAsync(1, request, ct: TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().AddDomainAsync(Arg.Any<MailDomain>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R2101_SetupAsync_OnADomainAlreadyRecorded_UpdatesTheRows_ThenQueuesTheTask()
+    {
+        // Recette R2-101: a setup re-run on a domain already recorded inserted it again and died on the
+        // unique (ServerId, Name) index with HTTP 500, after its task had been queued.
+        var domain = new MailDomain { Id = 7, ServerId = 1, Name = "example.com", DkimSelector = "old", IsActive = false };
+        var account = new MailAccount { Id = 9, MailDomainId = 7, MailDomain = domain, Email = "admin@example.com", QuotaMb = 512, IsActive = false };
+        _repo.FindDomainByNameAsync(1, "example.com", Arg.Any<CancellationToken>()).Returns(domain);
+        _repo.FindAccountByEmailAsync("admin@example.com", Arg.Any<CancellationToken>()).Returns(account);
+
+        await _sut.SetupAsync(1, SetupRequest(), ct: TestContext.Current.CancellationToken);
+
+        await _repo.DidNotReceive().AddDomainAsync(Arg.Any<MailDomain>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().AddAccountAsync(Arg.Any<MailAccount>(), Arg.Any<CancellationToken>());
+        Assert.Equal("default", domain.DkimSelector);
+        Assert.True(domain.IsActive);
+        Assert.Equal(2048, account.QuotaMb);
+        Assert.True(account.IsActive);
+        Received.InOrder(() =>
+        {
+            _repo.UpdateDomainAsync(domain, Arg.Any<CancellationToken>());
+            _repo.UpdateAccountAsync(account, Arg.Any<CancellationToken>());
+            _repo.AddTaskAsync(Arg.Is<ServerTask>(t => t.Operation == OperationKind.MailSetup), Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task R2101_SetupAsync_WhenTheRecordsCannotBeSaved_QueuesNoTask()
+    {
+        _repo.AddDomainAsync(Arg.Any<MailDomain>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("save failed")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.SetupAsync(1, SetupRequest(), ct: TestContext.Current.CancellationToken));
+
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+        await _taskService.DidNotReceive().NotifyTaskQueuedAsync(Arg.Any<ServerTask>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R2101_SetupAsync_AnAddressRecordedOnAnotherServer_IsAConflict_AndQueuesNothing()
+    {
+        _repo.FindAccountByEmailAsync("admin@example.com", Arg.Any<CancellationToken>()).Returns(new MailAccount
+        {
+            Email = "admin@example.com",
+            MailDomain = new MailDomain { ServerId = 2, Name = "example.com" }
+        });
+
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            _sut.SetupAsync(1, SetupRequest(), ct: TestContext.Current.CancellationToken));
+
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().AddDomainAsync(Arg.Any<MailDomain>(), Arg.Any<CancellationToken>());
+    }
+
+    private static MailSetupRequest SetupRequest() => new()
+    {
+        Hostname = "mail.example.com",
+        Domain = "example.com",
+        DkimSelector = "default",
+        AdminEmail = "admin@example.com",
+        AdminPassword = "secure-password",
+        QuotaMb = 2048
+    };
+
     // --- GetDnsRecordsAsync ---
 
     [Fact]

@@ -61,6 +61,15 @@ public interface IPipelineRepository
     /// Returns 0 when the pipeline no longer exists.</summary>
     Task<int> ReserveNextBuildNumberAsync(int pipelineId, CancellationToken ct = default);
 
+    /// <summary>Recette R2-110: takes the project's next release number (<c>BUILD_RELEASENUMBER</c>), atomically; null when the project is gone.</summary>
+    Task<int?> AllocateNextReleaseNumberAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>Recette R2-110: the last release number the project handed out, 0 before its first; null when the project is gone.</summary>
+    Task<int?> GetLatestReleaseNumberAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>Recette R2-110: the release number a run was created with, null when it has none.</summary>
+    Task<int?> GetRunReleaseNumberAsync(int runId, CancellationToken ct = default);
+
     /// <summary>Tracks a step run on the change tracker. Caller must invoke <see cref="SaveChangesAsync"/> to flush.</summary>
     void TrackPipelineStepRun(PipelineStepRun stepRun);
 
@@ -242,6 +251,10 @@ public interface IPipelineRepository
     /// the per-stage failure poll when evaluating conditional expressions.</summary>
     Task<bool> HasAnyFailedStepInRunAsync(int runId, CancellationToken ct = default);
 
+    /// <summary>BACK-019: true when an artifact collection of this run failed, timed out, was cancelled
+    /// or could not be dispatched. Such a run can never end Success.</summary>
+    Task<bool> HasFailedArtifactCollectionAsync(int runId, CancellationToken ct = default);
+
     /// <summary>
     /// True when a step failed but carried <c>continue_on_error</c>, so the run was allowed to finish.
     /// PLAN-003 D13 turns that case into <see cref="PipelineStatus.Partial"/> instead of a plain success.
@@ -304,7 +317,9 @@ public interface IPipelineRepository
     Task CancelActiveStepRunsAndTasksAsync(int runId, CancellationToken ct = default);
 
     Task CancelPendingStepRunsAsync(int runId, CancellationToken ct = default);
-    Task RequestPipelineRunCancellationAsync(int runId, CancellationToken ct = default);
+    /// <summary>Marks the run as cancellation-requested; the first request's author and reason are kept
+    /// (recette R2-103), a repeated request does not overwrite them.</summary>
+    Task RequestPipelineRunCancellationAsync(int runId, PipelineRunCancellation cancellation, CancellationToken ct = default);
     Task CancelPendingStepRunsExceptStagesAsync(
         int runId,
         IReadOnlyCollection<string> preservedStages,
@@ -346,12 +361,23 @@ public interface IPipelineRepository
 
     Task AddApprovalAsync(PipelineApproval approval, CancellationToken ct = default);
 
-    Task<Data.Entities.Environment?> FindEnvironmentByNameAsync(string name, CancellationToken ct = default);
+    /// <summary>BACK-018: the environment called <paramref name="name"/> as a run of
+    /// <paramref name="projectId"/> sees it: the project's own first, then a shared one (no project),
+    /// never one of another project. Loaded with its servers and checks.</summary>
+    Task<Data.Entities.Environment?> FindEnvironmentByNameAsync(string name, int? projectId, CancellationToken ct = default);
+
+    /// <summary>Project owning the run's pipeline (directly, or through its environment or project
+    /// server). Null when the run does not exist or its pipeline belongs to no project.</summary>
+    Task<int?> GetRunProjectIdAsync(int runId, CancellationToken ct = default);
     Task<Data.Entities.Environment?> FindEnvironmentByNameForProjectAsync(string name, int projectId, CancellationToken ct = default);
 
     Task<PipelineTemplate?> FindTemplateByNameAsync(string name, CancellationToken ct = default);
 
     Task<PipelineTemplate?> FindTemplateByNameAsync(string name, int organizationId, CancellationToken ct = default);
+
+    /// <summary>Recette R2-121: a delivery template the platform ships, as the platform organization
+    /// holds it. Every organization may extend it; null for any other name.</summary>
+    Task<PipelineTemplate?> FindSharedTemplateByNameAsync(string name, CancellationToken ct = default);
 
     Task<PipelineTemplateVersion?> GetTemplateVersionAsync(int templateId, int version, CancellationToken ct = default);
 

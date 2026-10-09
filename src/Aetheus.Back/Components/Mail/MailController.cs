@@ -117,12 +117,11 @@ public class MailController(IMailService mailService, IResourceAuthorizationServ
     }
 
     [HttpPost("setup")]
-    public async Task<IActionResult> Setup(int serverId, [FromBody] MailSetupRequest request, CancellationToken ct)
+    public async Task<ActionResult<MailTaskQueuedDto>> Setup(int serverId, [FromBody] MailSetupRequest request, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Write, ct))
             return Forbid();
-        await mailService.SetupAsync(serverId, request, ct);
-        return Ok();
+        return Ok(await mailService.SetupAsync(serverId, request, ct));
     }
 
     [HttpGet("domains/{domainId:int}/dns")]

@@ -31,6 +31,14 @@ public partial class ServerProjectsSection
         if (_grid is not null) await _grid.Reload();
     }
 
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<ProjectDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest();
+        var (sortBy, sortDescending) = GetSort(args);
+        return Api.Servers.GetServerProjectsPageAsync(ServerId, page, pageSize, sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
+    }
+
     private async Task LoadProjectsAsync(GridLoadArgs args)
     {
         var serverId = ServerId;

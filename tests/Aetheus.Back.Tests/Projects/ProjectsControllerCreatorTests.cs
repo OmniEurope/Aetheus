@@ -38,7 +38,7 @@ public sealed class ProjectsControllerCreatorTests
         await _service.Received(1).CreateProjectAsync(request, expected, TestContext.Current.CancellationToken);
     }
 
-    private ProjectsController Controller(string nameIdentifier) => new(_service, _authz)
+    private ProjectsController Controller(string nameIdentifier) => new(_service, _authz, Substitute.For<IProjectDeletionService>())
     {
         ControllerContext = new ControllerContext
         {

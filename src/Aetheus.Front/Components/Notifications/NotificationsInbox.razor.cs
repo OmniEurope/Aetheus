@@ -76,6 +76,21 @@ public partial class NotificationsInbox : IDisposable
             StateHasChanged();
     });
 
+    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    private Task<PaginatedResult<NotificationDeliveryDto>> ReadExportAsync(GridLoadArgs args)
+    {
+        var (page, pageSize) = args.ToPageRequest(DefaultPageSize);
+        var (sortBy, sortDescending) = args.ToSortRequest(nameof(NotificationDeliveryDto.CreatedAt), fallbackDescending: true);
+        return Api.Notifications.GetMineAsync(new UserNotificationPageRequest
+        {
+            Filters = args.ToApiFilters(),
+            Page = page,
+            PageSize = pageSize,
+            SortBy = sortBy,
+            SortDescending = sortDescending
+        });
+    }
+
     private async Task LoadData(GridLoadArgs args)
     {
         (_page, _pageSize) = args.ToPageRequest(DefaultPageSize);

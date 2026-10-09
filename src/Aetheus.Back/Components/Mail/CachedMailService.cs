@@ -94,10 +94,10 @@ public class CachedMailService(IMailService inner, IMemoryCache cache) : IMailSe
     public async Task<MailTaskQueuedDto> GetLogsAsync(int serverId, MailLogRequest request, CancellationToken ct = default) =>
         await inner.GetLogsAsync(serverId, request, ct).ConfigureAwait(false);
 
-    public async Task SetupAsync(int serverId, MailSetupRequest request, CancellationToken ct = default)
+    public async Task<MailTaskQueuedDto> SetupAsync(int serverId, MailSetupRequest request, CancellationToken ct = default)
     {
         InvalidateCache(serverId);
-        await inner.SetupAsync(serverId, request, ct).ConfigureAwait(false);
+        return await inner.SetupAsync(serverId, request, ct).ConfigureAwait(false);
     }
 
     public async Task<MailDnsRecordsDto> GetDnsRecordsAsync(int serverId, int domainId, CancellationToken ct = default) =>

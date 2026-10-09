@@ -34,7 +34,7 @@
 </OmniRow>
 
 <AetheusDataGrid @ref="_grid" Data="@_packages" TItem="PackageRegistryPackageDto"
-    Count="@_totalCount" IsLoading="@_loading" LoadData="@LoadDataAsync" PageSize="20"
+    Count="@_totalCount" IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="20"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<PackageRegistryPackageDto>(_packages, _totalCount))"
  FullHeight="true">

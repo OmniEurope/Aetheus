@@ -72,6 +72,10 @@ services:
         # leak into two. Provisioned by prod-deploy-prepare.sh, which back-fills it when an older
         # environment file predates the requirement.
         - Deployment__BootstrapIdentityKey=${DEPLOYMENT_BOOTSTRAP_IDENTITY_KEY}
+        # The dedicated key pipeline clone tokens are signed with (R-464), back-filled once by
+        # prod-deploy-prepare.sh. An environment file without it gives an empty value, which the
+        # backend treats as absent: it keeps signing with the Auth__EncryptionKey fallback.
+        - GitLight__RunTokenKey=${GIT_RUN_TOKEN_KEY:-}
         - Cors__Origins__0=${FRONT_URL}
         - Cors__Origins__1=${FRONT_URL_ACCEPT}
         - Cors__Origins__2=${FRONT_URL_PROD}

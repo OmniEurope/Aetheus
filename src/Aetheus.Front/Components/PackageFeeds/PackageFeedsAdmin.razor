@@ -16,7 +16,7 @@
 </OmniPageHeader>
 
 <AetheusDataGrid @ref="_grid" Data="@_feeds" TItem="PackageFeedDto" Count="@_totalCount"
-    IsLoading="@_loading" LoadData="@LoadDataAsync" PageSize="20"
+    IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="20"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<PackageFeedDto>(_feeds, _totalCount))"
     class="omni-u-mt-lg" FullHeight="true">

@@ -37,10 +37,15 @@ internal sealed class PipelineDefinitionLiveSync(HubConnectionFactory hubFactory
         }
     }
 
-    /// <summary>True when the form differs from the pipeline as last loaded or saved.</summary>
-    public static bool HasUnsavedChanges(PipelineModel model, PipelineDto? saved) =>
+    /// <summary>
+    /// True when the form differs from the pipeline as last loaded or saved. FRONT-009: the source branch
+    /// counts too; <paramref name="savedSourceBranch"/> is the branch the form showed once loaded or saved
+    /// (the pipeline's own, or the fallback the page resolved when it has none).
+    /// </summary>
+    public static bool HasUnsavedChanges(PipelineModel model, PipelineDto? saved, string? savedSourceBranch) =>
         saved is not null
         && (model.Name != saved.Name
+            || (model.SourceBranch ?? string.Empty) != (savedSourceBranch ?? string.Empty)
             || (model.Description ?? string.Empty) != (saved.Description ?? string.Empty)
             || model.YamlDefinition != saved.YamlDefinition
             || model.ProjectId != saved.ProjectId

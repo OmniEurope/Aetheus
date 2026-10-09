@@ -44,6 +44,8 @@ public class AppMonitoringController(IAppMonitoringService service, IResourceAut
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Write, ct))
             return Forbid();
+        if (!await MayProbeFromServerAsync(request.ServerId, ct))
+            return Forbid();
         var app = await service.CreateAppAsync(projectId, request, ct);
         return CreatedAtAction(nameof(GetApp), new { id = app.Id }, app);
     }
@@ -56,9 +58,19 @@ public class AppMonitoringController(IAppMonitoringService service, IResourceAut
             return NotFound();
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId.Value, Permission.Write, ct))
             return Forbid();
+        if (!await MayProbeFromServerAsync(await service.GetProbeServerChangeAsync(id, request, ct), ct))
+            return Forbid();
         var app = await service.UpdateAppAsync(id, request, ct);
         return app is null ? NotFound() : Ok(app);
     }
+
+    // BACK-008: an agent-probed app makes that server's agent issue the requests, so choosing it (or
+    // a new URL for it) needs Write on the server, not only on the project. Null means no agent target
+    // is chosen: the backend probes the app itself behind its SSRF guard (create), or the update keeps
+    // the approved server and URL; the unconditional Project/Write gate already covers both.
+    private async Task<bool> MayProbeFromServerAsync(int? serverId, CancellationToken ct) =>
+        serverId is not { } server
+        || await authz.HasPermissionAsync(User, ResourceType.Server, server, Permission.Write, ct);
 
     [HttpDelete("apps/{id:int}")]
     public async Task<IActionResult> DeleteApp(int id, CancellationToken ct)

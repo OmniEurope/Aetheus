@@ -125,7 +125,7 @@ public class OmniButtonIconAuditTests
         Assert.Contains("button.getAttribute('aria-label')", script, StringComparison.Ordinal);
         Assert.Contains("button.setAttribute('title', label)", script, StringComparison.Ordinal);
         Assert.Contains("new MutationObserver", script, StringComparison.Ordinal);
-        Assert.Contains("js/layout.js?v=13", index, StringComparison.Ordinal);
+        Assert.Contains("js/layout.js?v=16", index, StringComparison.Ordinal);
     }
 
     private static IEnumerable<ButtonMarkup> EnumerateButtons()

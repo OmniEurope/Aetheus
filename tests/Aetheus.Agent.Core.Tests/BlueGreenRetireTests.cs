@@ -79,6 +79,34 @@ public sealed class BlueGreenRetireTests : IDisposable
     }
 
     [Fact]
+    public async Task StopRefusedByDocker_KeepsTheTransactionAndFails()
+    {
+        var conf = Path.Combine(_root, "upstream.conf");
+        File.WriteAllText(conf, "Define AETHEUS_FRONT_PORT 1\n");
+        var messages = new List<string>();
+
+        var result = await RunRetireAsync(
+            WriteJournal: dir =>
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "state"), "SWITCHED");
+                File.WriteAllText(Path.Combine(dir, "previous-live"), "none");
+                File.WriteAllText(Path.Combine(dir, "idle"), "blue");
+                File.WriteAllText(Path.Combine(dir, "upstream.before"), "# Active colour: none\n");
+            },
+            confPath: conf,
+            onOutput: messages.Add,
+            stopExitCode: 1);
+
+        // Containers that are still running must not be announced as retired, and the journal that
+        // records what remains to stop must survive for the retry.
+        Assert.Equal(1, result.ExitCode);
+        Assert.True(Directory.Exists(Path.Combine(_root, "deployment-transaction")));
+        Assert.DoesNotContain(messages, m => m.Contains("BLUEGREEN_RETIRED", StringComparison.Ordinal));
+        Assert.Contains(messages, m => m.Contains("could not be stopped", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task TransactionWithAPreviousColour_IsRefusedBecauseThatIsARollback()
     {
         var conf = Path.Combine(_root, "upstream.conf");
@@ -126,7 +154,8 @@ public sealed class BlueGreenRetireTests : IDisposable
     private async Task<ExecutorResult> RunRetireAsync(
         Action<string>? WriteJournal,
         string? confPath = null,
-        Action<string>? onOutput = null)
+        Action<string>? onOutput = null,
+        int stopExitCode = 0)
     {
         WriteJournal?.Invoke(Path.Combine(_root, "deployment-transaction"));
 
@@ -139,7 +168,7 @@ public sealed class BlueGreenRetireTests : IDisposable
 
         // A shell that answers the Docker probe, so a failure here is the executor's own decision
         // rather than the absence of Docker on the test machine.
-        var shell = new RetireShell();
+        var shell = new RetireShell(stopExitCode);
 
         return await CreateExecutor(shell).ExecuteAsync(
             OperationKind.BlueGreenRetire, "aetheus-demo", env, 60,
@@ -183,7 +212,7 @@ public sealed class BlueGreenRetireTests : IDisposable
     }
 
     /// <summary>Answers the Docker probe and lets every other invocation succeed.</summary>
-    private sealed class RetireShell : IShellRunner
+    private sealed class RetireShell(int stopExitCode = 0) : IShellRunner
     {
         [Obsolete("Matches the interface; the executor never uses the shell form.")]
         public Task<string> RunAsync(string command, CancellationToken ct, TimeSpan? timeout = null) =>
@@ -197,6 +226,7 @@ public sealed class BlueGreenRetireTests : IDisposable
             string fileName, IReadOnlyList<string> args, CancellationToken ct, TimeSpan? timeout = null)
         {
             if (args.Count > 0 && args[0] == "info") return Task.FromResult(new ShellExecResult(0, "27.0.0", string.Empty));
+            if (args.Contains("stop")) return Task.FromResult(new ShellExecResult(stopExitCode, string.Empty, "refused"));
             return Task.FromResult(new ShellExecResult(0, string.Empty, string.Empty));
         }
 

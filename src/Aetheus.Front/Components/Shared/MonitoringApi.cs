@@ -119,6 +119,36 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
             $"api/appmonitoring/apps/{appId}/performance", JsonOptions.Web);
     }
 
+    /// <summary>PLAN-013 lot 6: the purged tables, their size now and the « Récupérer la place » results (administrators).</summary>
+    public async Task<ReclaimSpaceStatusDto?> GetReclaimSpaceStatusAsync()
+    {
+        return await Http.GetFromJsonAsync<ReclaimSpaceStatusDto>("api/data-storage/reclaim", JsonOptions.Web);
+    }
+
+    /// <summary>PLAN-013 lot 6: starts the VACUUM FULL of one purged table; refused (409) while a pipeline runs.</summary>
+    public Task<ApiStatus> StartReclaimSpaceAsync(string table) =>
+        PostJsonNoBodyAsync("api/data-storage/reclaim", new ReclaimSpaceRequest { Table = table });
+
+    /// <summary>PLAN-013 lot 5: what each project the caller can read occupies, against its budget.</summary>
+    public async Task<ProjectStorageReportDto?> GetProjectStorageAsync()
+    {
+        return await Http.GetFromJsonAsync<ProjectStorageReportDto>("api/data-storage/projects", JsonOptions.Web);
+    }
+
+    /// <summary>PLAN-013 lot 1: the database size the application last measured through Aetheus.Telemetry.</summary>
+    public async Task<AppDatabaseSizeReportDto?> GetAppDatabaseSizeAsync(int appId)
+    {
+        return await Http.GetFromJsonAsync<AppDatabaseSizeReportDto>(
+            $"api/appmonitoring/apps/{appId}/database", JsonOptions.Web);
+    }
+
+    /// <summary>The interval the server hands to the application's Aetheus.Telemetry package, and the one its samples show.</summary>
+    public async Task<AppTelemetrySendIntervalDto?> GetAppSendIntervalAsync(int appId)
+    {
+        return await Http.GetFromJsonAsync<AppTelemetrySendIntervalDto>(
+            $"api/appmonitoring/apps/{appId}/send-interval", JsonOptions.Web);
+    }
+
     public async Task<List<string?>> GetAppMetricSeriesGroupsAsync(int appId, string metric)
     {
         return await Http.GetFromJsonAsync<List<string?>>(
@@ -250,6 +280,19 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
         return await Http.GetFromJsonAsync<List<TaskLogDto>>($"api/logs/task/{taskId}", JsonOptions.Web, ct) ?? [];
     }
 
+
+    /// <summary>The last <paramref name="maxLines"/> lines of a task's log, in log order.</summary>
+    public async Task<List<TaskLogDto>> GetTaskLogTailAsync(int taskId, int maxLines, CancellationToken ct = default)
+    {
+        return await Http.GetFromJsonAsync<List<TaskLogDto>>($"api/logs/task/{taskId}?maxLines={maxLines}", JsonOptions.Web, ct) ?? [];
+    }
+
+    /// <summary>Recette R2-104: one page of a task's complete log, from its first line.</summary>
+    public async Task<PaginatedResult<TaskLogDto>> GetTaskLogPageAsync(int taskId, int page, int pageSize, CancellationToken ct = default)
+    {
+        return await Http.GetFromJsonAsync<PaginatedResult<TaskLogDto>>(
+            $"api/logs/task/{taskId}/page?page={page}&pageSize={pageSize}", JsonOptions.Web, ct) ?? new();
+    }
 
     public async Task<List<TaskLogDto>> GetTaskLogsUnmaskedAsync(int taskId)
     {

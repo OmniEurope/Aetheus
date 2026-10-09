@@ -24,28 +24,91 @@ public class LoginTests : BunitContext
         Assert.Contains("Password", cut.Markup);
     }
 
+    /// <summary>
+    /// Recette R2-123: the demo account sits in two read-only fields under the "Public demo" title,
+    /// each with OE's Copy button welded to its end, outside the sign-in form.
+    /// </summary>
     [Fact]
-    public void PublicDemo_ShowsCredentials()
+    public void PublicDemo_ShowsTheAccountInTwoReadOnlyCopyableFields()
     {
         _handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto { Enabled = true });
 
         var cut = Render<Login>();
 
+        var box = cut.WaitForElement(".public-demo-account");
+        Assert.Contains("PublicDemo", box.QuerySelector("strong")!.TextContent, StringComparison.Ordinal);
+        foreach (var (id, value) in new[] { ("public-demo-username", "admin"), ("public-demo-password", "aetheus-demo") })
+        {
+            var input = box.QuerySelector($"input#{id}")!;
+            Assert.True(input.HasAttribute("readonly"));
+            Assert.Equal(value, input.GetAttribute("value"));
+            Assert.NotNull(box.QuerySelector($"label[for='{id}']"));
+            var copy = Assert.Single(input.Closest(".omni-text-box-field--copy")!.QuerySelectorAll("button"));
+            Assert.Contains("omni-text-box-field__copy", copy.ClassList);
+        }
+        Assert.Null(box.Closest("form"));
+    }
+
+    [Theory]
+    [InlineData("public-demo-username", "admin", true)]
+    [InlineData("public-demo-password", "aetheus-demo", false)]
+    public void PublicDemo_CopyButton_PutsTheValueOnTheClipboard_AndOnlyARefusedCopyToasts(string id, string value, bool accepted)
+    {
+        var clipboard = JSInterop.SetupModule("./_content/OmniEurope.Blazor/omniInterop.js");
+        clipboard.Setup<bool>("copyText", _ => true).SetResult(accepted);
+        _handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto { Enabled = true });
+        var cut = Render<Login>();
+
+        cut.WaitForElement($"input#{id}").Closest(".omni-text-box-field--copy")!.QuerySelector("button")!.Click();
+
+        Assert.Equal(value, Assert.Single(clipboard.Invocations["copyText"]).Arguments[0]);
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("PublicDemo", cut.Markup);
-            Assert.Contains("PublicDemoCredentials", cut.Markup);
+            if (accepted)
+                Assert.DoesNotContain(Services.Toasts(), toast => toast.Summary == "CopyFailed");
+            else
+                Assert.Contains(Services.Toasts(), toast => toast.Summary == "CopyFailed");
         });
     }
 
     [Fact]
-    public void RegularEnvironment_HidesPublicDemoCredentials()
+    public void PublicDemo_FillButton_WritesTheAccountIntoTheSignInForm_WhichSubmitsIt()
+    {
+        _handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto { Enabled = true });
+        _handler.SetJsonResponse("auth/login", new LoginResponse { Token = "jwt-token" });
+        var cut = Render<Login>();
+
+        var fill = cut.WaitForElement(".public-demo-account button.public-demo-fill");
+        Assert.Contains("PublicDemoFillForm", fill.TextContent, StringComparison.Ordinal);
+        Assert.Contains("omni-button--secondary", fill.ClassList);
+        fill.Click();
+
+        Assert.Equal("admin", cut.Find("form input#Username").GetAttribute("value"));
+        Assert.Equal("aetheus-demo", cut.Find("form input#Password").GetAttribute("value"));
+        cut.Find("form").Submit();
+        cut.WaitForAssertion(() => Assert.Contains(
+            _handler.RequestDetails,
+            request => request.Method == "POST" && request.Url.EndsWith("auth/login", StringComparison.Ordinal)));
+        var body = _handler.RequestDetails.Last(request =>
+            request.Method == "POST" && request.Url.EndsWith("auth/login", StringComparison.Ordinal)).Body;
+        var sent = System.Text.Json.JsonSerializer.Deserialize<LoginRequest>(
+            body!, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Equal("admin", sent!.Username);
+        Assert.Equal("aetheus-demo", sent.Password);
+    }
+
+    [Fact]
+    public void RegularEnvironment_HidesThePublicDemoAccount()
     {
         _handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto());
 
         var cut = Render<Login>();
 
-        cut.WaitForAssertion(() => Assert.DoesNotContain("PublicDemoCredentials", cut.Markup));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll(".public-demo-account"));
+            Assert.DoesNotContain("aetheus-demo", cut.Markup, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
@@ -70,21 +133,22 @@ public class LoginTests : BunitContext
     }
 
     [Fact]
-    public async Task SuccessfulLogin_NavigatesToHome()
+    public void SuccessfulLogin_NavigatesToHome()
     {
+        // FRONTTEST-005 (LoginTests): start on /login, which is not where a success lands, fill in
+        // valid credentials, and wait for the token to be held and the page to move home.
         _handler.SetJsonResponse("auth/login", new LoginResponse { Token = "jwt-token" });
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
-
+        nav.NavigateTo("/login");
         var cut = Render<Login>();
 
-        // Fill in form fields via rendered component
-        var inputs = cut.FindAll("input");
-        // Trigger form submit
-        var form = cut.Find("form");
-        form.Submit();
+        cut.Find("input#Username").Input("admin");
+        cut.Find("input#Password").Input("aetheus-dev-admin-pwd");
+        cut.Find("form").Submit();
 
-        cut.WaitForState(() => nav.Uri.EndsWith("/"), TimeSpan.FromSeconds(2));
-        Assert.EndsWith("/", nav.Uri);
+        cut.WaitForAssertion(() => Assert.Equal("/", new Uri(nav.Uri).AbsolutePath), TimeSpan.FromSeconds(2));
+        Assert.Equal("jwt-token", Services.GetRequiredService<AuthStateProvider>().Token);
+        Assert.Contains(nav.History, entry => new Uri(new Uri("http://localhost/"), entry.Uri).AbsolutePath == "/");
     }
 
     // FailedLogin_ShowsErrorMessage removed: it never submitted the form and asserted no error
@@ -184,10 +248,11 @@ public class LoginTests : BunitContext
     [Fact]
     public void Renders_RememberMeCheckbox()
     {
+        // FRONTTEST-005 (LoginTests): the remember-me control itself, a checkbox carrying its label,
+        // not merely "at least two inputs" (username and password alone satisfied that).
         var cut = Render<Login>();
-        // Login form should have inputs for username, password, and remember me
-        var inputs = cut.FindAll("input");
-        Assert.True(inputs.Count >= 2);
+        var checkbox = cut.Find("form input[type='checkbox']");
+        Assert.Contains("RememberMe", checkbox.Closest("label")?.TextContent ?? string.Empty);
     }
 
     [Fact]

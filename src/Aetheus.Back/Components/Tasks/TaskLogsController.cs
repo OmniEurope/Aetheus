@@ -25,6 +25,19 @@ public class TaskLogsController(
         return Ok(await logService.GetTaskLogsAsync(taskId, maxLines, ct));
     }
 
+    /// <summary>Recette R2-104: a page of the task's complete log, from its first line (pageSize 1 to 200).</summary>
+    [HttpGet("task/{taskId:int}/page")]
+    public async Task<ActionResult<PaginatedResult<TaskLogDto>>> GetTaskLogPage(
+        int taskId, [FromQuery] int page = 1, [FromQuery] int pageSize = 200, CancellationToken ct = default)
+    {
+        var serverId = await taskService.GetTaskServerIdAsync(taskId, ct);
+        if (serverId is null) return NotFound();
+        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId.Value, Permission.Read, ct))
+            return Forbid();
+
+        return Ok(await logService.GetTaskLogPageAsync(taskId, page, Math.Clamp(pageSize, 1, 200), ct));
+    }
+
     [HttpGet("task/{taskId:int}/unmasked")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<List<TaskLogDto>>> GetTaskLogsUnmasked(int taskId, [FromQuery] int? maxLines, CancellationToken ct)

@@ -27,6 +27,8 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     private string PrsCacheKey(int page, int pageSize, string? sortBy = null, bool sortDescending = true) =>
         GitRepositoryCacheKeys.PullRequests(Id, page, pageSize, sortBy, sortDescending);
     private GitRepositoryRealtimeSubscription? _realtime;
+    private GitRepositoryExportReader? _exports;
+    private GitRepositoryExportReader Exports => _exports ??= new(Api.Git);
     private bool _canWrite;
     private int? _loadedId;
     private string? _loadedCommitSearch, _loadedBranchSearch, _loadedFileRef, _loadedFilePath;
@@ -147,7 +149,7 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         _treeRef = null;
         _treePath = null;
         _blobContent = null;
-        _blameLines = null;
+        ClearBlame();
         _readmeContent = null;
         _readmeHtml = null;
         _commits.Clear();
@@ -325,8 +327,20 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         new Markdig.MarkdownPipelineBuilder().DisableHtml().Build();
     private async Task LoadReadme()
     {
+        var generation = _dataGeneration;
         _readmeContent = _readmeHtml = null;
-        (_readmeContent, _readmeHtml) = await GitReadme.LoadAsync(Api.Git, Id, _treeRef ?? _repo!.DefaultBranch, _treeEntries, _markdownPipeline);
+        var readme = await GitReadme.LoadAsync(Api.Git, Id, _treeRef ?? _repo!.DefaultBranch, _treeEntries, _markdownPipeline);
+        if (generation == _dataGeneration) (_readmeContent, _readmeHtml) = readme;
+    }
+    // FRONT-003: the file tab's answers apply only while they are the latest request of the repository
+    // still on screen; a late answer for another repository, folder or ref is dropped.
+    private int _treeRequest, _blobRequest;
+    private bool IsLatest(int generation, int request, int latest) => generation == _dataGeneration && request == latest;
+    // FRONT-002: blame annotations belong to one blob at one ref; any change of file or ref drops them.
+    private void ClearBlame()
+    {
+        _blameLines = null;
+        _blameFormatted = null;
     }
     private async Task LoadTree()
     {
@@ -334,7 +348,9 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         // it is, another folder or ref reloads it from its first row through its own loader.
         var mountedGrid = _treeError || _blobContent is not null ? null : _grids.Tree;
         await DisposeMonacoAsync();
+        _blobRequest++;
         _blobContent = null;
+        ClearBlame();
         await GitRepositoryGrids.ReloadOrLoadAsync(mountedGrid,
             () => LoadTreePageAsync(() => Api.Git.GetGitTreePageAsync(Id, _treeRef, _treePath, filters: _grids.TreeFilters)));
     }
@@ -349,21 +365,25 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     private async Task LoadTreePageAsync(
         Func<Task<PaginatedResult<GitLightTreeEntryDto>>> loadAsync)
     {
+        var generation = _dataGeneration;
+        var request = ++_treeRequest;
         _treeLoading = true;
         _treeError = false;
         try
         {
             var result = await loadAsync();
+            if (!IsLatest(generation, request, _treeRequest)) return;
             _treeEntries = result.Items;
             _treeTotalCount = result.TotalCount;
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException)
         {
+            if (!IsLatest(generation, request, _treeRequest)) return;
             _treeEntries = [];
             _treeTotalCount = 0;
             _treeError = true;
         }
-        finally { _treeLoading = false; }
+        finally { if (IsLatest(generation, request, _treeRequest)) _treeLoading = false; }
     }
     private async Task NavigateToEntry(GitLightTreeEntryDto entry)
     {
@@ -375,20 +395,26 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         else
         {
             await DisposeMonacoAsync();
+            var generation = _dataGeneration;
+            var request = ++_blobRequest;
+            ClearBlame();
             _treeLoading = true;
             _treeError = false;
             try
             {
-                _blobContent = await Api.Git.GetGitBlobAsync(
+                var blob = await Api.Git.GetGitBlobAsync(
                     Id, _treeRef ?? _repo!.DefaultBranch, entry.Path);
+                if (!IsLatest(generation, request, _blobRequest)) return;
+                _blobContent = blob;
                 _pendingMonacoInit = _blobContent is not null && !_blobContent.IsBinary;
             }
             catch (Exception ex) when (ex is HttpRequestException or JsonException)
             {
+                if (!IsLatest(generation, request, _blobRequest)) return;
                 _blobContent = null;
                 _treeError = true;
             }
-            finally { _treeLoading = false; }
+            finally { if (IsLatest(generation, request, _blobRequest)) _treeLoading = false; }
         }
     }
 
@@ -397,17 +423,22 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         var path = FilePath?.Trim().TrimStart('/');
         if (string.IsNullOrWhiteSpace(path) || path.EndsWith('/')) return;
         await DisposeMonacoAsync();
+        var generation = _dataGeneration;
+        var request = ++_blobRequest;
+        ClearBlame();
         _treePath = Path.GetDirectoryName(path)?.Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(_treePath)) _treePath = null;
-        _blobContent = await Api.Git.GetGitBlobAsync(Id, _treeRef ?? _repo!.DefaultBranch, path);
+        var blob = await Api.Git.GetGitBlobAsync(Id, _treeRef ?? _repo!.DefaultBranch, path);
+        if (!IsLatest(generation, request, _blobRequest)) return;
+        _blobContent = blob;
         _pendingMonacoInit = _blobContent is not null && !_blobContent.IsBinary;
     }
     private async Task CloseBlobAsync()
     {
         await DisposeMonacoAsync();
+        _blobRequest++;
         _blobContent = null;
-        _blameLines = null;
-        _blameFormatted = null;
+        ClearBlame();
     }
     private async Task NavigateUp()
     {
@@ -445,15 +476,21 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     // ── Commit Graph ───────────────────────────────────────────────
     private async Task LoadGraph()
     {
+        var generation = _dataGeneration;
         _graphLoading = true;
         _graphError = false;
-        try { _graphCommits = await Api.Git.GetGitGraphDataAsync(Id); }
+        try
+        {
+            var commits = await Api.Git.GetGitGraphDataAsync(Id);
+            if (generation == _dataGeneration) _graphCommits = commits;
+        }
         catch (Exception ex) when (ex is HttpRequestException or JsonException)
         {
+            if (generation != _dataGeneration) return;
             _graphCommits = [];
             _graphError = true;
         }
-        finally { _graphLoading = false; }
+        finally { if (generation == _dataGeneration) _graphLoading = false; }
     }
     // ── Branch Protection ───────────────────────────────────────────
     private Task LoadProtectionRules() => LoadProtectionRulesPageAsync(1, 25);
@@ -504,7 +541,12 @@ public partial class GitRepositoryDetail : IAsyncDisposable
             return;
         }
         if (_blobContent is null) return;
-        _blameLines = await Api.Git.GetGitBlameAsync(Id, _treeRef ?? _repo!.DefaultBranch, _blobContent.Path);
+        var generation = _dataGeneration;
+        var request = _blobRequest;
+        var blame = await Api.Git.GetGitBlameAsync(Id, _treeRef ?? _repo!.DefaultBranch, _blobContent.Path);
+        // FRONT-002: an answer for a file that is no longer open is not shown under the next one.
+        if (!IsLatest(generation, request, _blobRequest)) return;
+        _blameLines = blame;
         if (_blameLines.Count > 0)
         {
             _blameFormatted = GitRepositoryViewHelpers.FormatBlame(_blameLines);

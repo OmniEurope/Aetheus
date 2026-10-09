@@ -11,7 +11,7 @@
 }
 
 <AetheusDataGrid @ref="_grid" TItem="EnvironmentDto" Data="@_environments"
-    Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData"
+    Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData" ExportRead="@ReadExportAsync"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<EnvironmentDto>(_environments, _totalCount))"
     RowClick="@(env => Nav.NavigateTo($"/environments/{env.Id}"))"
@@ -46,7 +46,7 @@
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="EnvironmentDto" Property="Description" Title="@L["Description"]" MinWidth="10rem" Filterable="true" />
-        <OmniDataGridColumn TItem="EnvironmentDto" Title="@L["Servers"]" Width="100px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
+        <OmniDataGridColumn TItem="EnvironmentDto" Title="@L["Servers"]" ExportValue="@ServersExport" Width="100px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
             <Template Context="env">
                 <CountBadge Value="@env.Servers.Count" Variant="OmniTone.Neutral" />
             </Template>

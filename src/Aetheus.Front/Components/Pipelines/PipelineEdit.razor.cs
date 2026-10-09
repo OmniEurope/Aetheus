@@ -16,6 +16,7 @@ public partial class PipelineEdit : IAsyncDisposable
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private ProjectNavContextService ProjectNav { get; set; } = default!;
     [Inject] private ListCacheService Cache { get; set; } = default!;
+    [Inject] private PageStateCache PageState { get; set; } = default!;
     [Inject] private PipelineImportState ImportState { get; set; } = default!;
     [Inject] private PermissionService Permissions { get; set; } = default!;
     [Inject] private ILogger<PipelineEdit> Logger { get; set; } = default!;
@@ -34,6 +35,7 @@ public partial class PipelineEdit : IAsyncDisposable
     private PipelineSourceDto? _source;
     private List<string> _sourceBranches = [];
     private PipelineModel _model = new();
+    private string? _savedSourceBranch;
     private List<PipelineRunDto> _runs = [];
     private Aetheus.Front.Components.Shared.AetheusDataGrid<PipelineRunDto>? _runsGrid;
     private int _runsTotalCount;
@@ -42,6 +44,12 @@ public partial class PipelineEdit : IAsyncDisposable
 
     /// <summary>Runs tab tiles, from the first block of runs: the grid scrolls virtually (R-327).</summary>
     private PipelineRunsSummary RunsSummary => PipelineRunsSummary.Create(_firstRunsPage);
+
+    /// <summary>Recette R2-128: a summary tile that opens a run draws as the other clickable tiles.</summary>
+    private static string SummaryCardClass(int? runId) => runId is null
+        ? "analysis-summary-card pipeline-runs-summary-card"
+        : "analysis-summary-card pipeline-runs-summary-card tile-clickable";
+
     private List<PipelineRunDto> _firstRunsPage = [];
 
     /// <summary>Sort and column filters currently applied to the runs grid. Held across reloads so a
@@ -205,7 +213,13 @@ public partial class PipelineEdit : IAsyncDisposable
 
     private async Task LoadExistingPipelineAsync(int generation)
     {
-        _loading = true;
+        // Recette R2-087: a return shows at once what the page last showed, then refreshes behind it;
+        // the page-wide loader is for a first visit only.
+        var address = $"pipelines/{Id}";
+        var ticket = PageState.Begin();
+        var restored = PageState.TryRestore<PipelinePageState>(address, out var state);
+        if (restored) ApplyPageState(state);
+        _loading = !restored;
         var pipelineTask = Api.Pipelines.GetPipelineAsync(Id!.Value);
         var runsTask = Api.Pipelines.GetPipelineRunsPagedAsync(Id.Value, 1, _runsPageSize);
         var projectsTask = Api.Projects.GetAllProjectsAsync();
@@ -213,8 +227,10 @@ public partial class PipelineEdit : IAsyncDisposable
         var templatesTask = LoadTemplatesSafeAsync();
         await Task.WhenAll(pipelineTask, runsTask, projectsTask, sourceTask, templatesTask);
         if (generation != _loadGeneration) return;
+        // What the reader typed or filtered while the refresh ran stays theirs.
+        var editorUntouched = !restored || string.Equals(_model.YamlDefinition, _savedYaml, StringComparison.Ordinal);
         _pipeline = await pipelineTask;
-        ApplyRunsPage(await runsTask, 1, _runsPageSize);
+        if (!restored || _runsQuery is null) ApplyRunsPage(await runsTask, 1, _runsPageSize);
         _projects = await projectsTask;
         _templates = await templatesTask;
         _source = await sourceTask;
@@ -226,16 +242,42 @@ public partial class PipelineEdit : IAsyncDisposable
         }
         if (_pipeline is not null)
         {
-            ApplyPipelineModel(_pipeline);
+            if (editorUntouched) ApplyPipelineModel(_pipeline);
             await LoadBaseTemplateYamlAsync();
             await LoadFleetItemAsync();
             if (generation != _loadGeneration) return;
+            PageState.Remember(ticket, address, new PipelinePageState(_pipeline, _firstRunsPage, _runsTotalCount, _projects,
+                _templates, _source, _sourceBranches, _baseTemplateYaml, _fleetItem));
+        }
+        else
+        {
+            PageState.Forget<PipelinePageState>(address);
         }
         _loading = false;
         _suggestionsNeeded = true;
         await EnsureHubAsync();
         await _liveRuns!.SyncGroupsAsync();
     }
+
+    private void ApplyPageState(PipelinePageState state)
+    {
+        _pipeline = state.Pipeline;
+        ApplyRunsPage(new PaginatedResult<PipelineRunDto> { Items = state.FirstRuns, TotalCount = state.RunsTotalCount },
+            1, _runsPageSize);
+        _projects = state.Projects;
+        _templates = state.Templates;
+        _source = state.Source;
+        _sourceBranches = state.SourceBranches;
+        ApplyPipelineModel(state.Pipeline);
+        _baseTemplateYaml = state.BaseTemplateYaml;
+        _fleetItem = state.FleetItem;
+    }
+
+    /// <summary>What the pipeline page shows, kept for a return to it (recette R2-087).</summary>
+    private sealed record PipelinePageState(
+        PipelineDto Pipeline, List<PipelineRunDto> FirstRuns, int RunsTotalCount, List<ProjectDto> Projects,
+        List<PipelineTemplateSummaryDto> Templates, PipelineSourceDto? Source, List<string> SourceBranches,
+        string? BaseTemplateYaml, PipelineFleetItemDto? FleetItem);
 
     private void ApplyPipelineModel(PipelineDto pipeline)
     {
@@ -251,6 +293,7 @@ public partial class PipelineEdit : IAsyncDisposable
             ProjectServerId = pipeline.ProjectServerId
         };
         _savedYaml = pipeline.YamlDefinition;
+        _savedSourceBranch = _model.SourceBranch;
     }
 
     private async Task LoadNewPipelineAsync(int generation)
@@ -318,6 +361,13 @@ public partial class PipelineEdit : IAsyncDisposable
 
     private async Task OnSubmit()
     {
+        // FRONT-008: Monaco's Ctrl+S and the Settings tab's Save call this outside the form's validity-gated
+        // submit; the same rules gate every entry point.
+        if (!_model.IsValid())
+        {
+            Toast.Error("ValidationError", "PipelineFormInvalid");
+            return;
+        }
         if (!_isNew && !await ConfirmSaveAsync()) return;
 
         _saving = true;
@@ -336,6 +386,7 @@ public partial class PipelineEdit : IAsyncDisposable
                 {
                     _pipeline = updated;
                     _savedYaml = _model.YamlDefinition;
+                    _savedSourceBranch = _model.SourceBranch;
                     _ = RefreshSourceAsync();
                 });
             }
@@ -458,6 +509,14 @@ public partial class PipelineEdit : IAsyncDisposable
         if (_liveRuns is not null) await _liveRuns.SyncGroupsAsync();
     }
 
+    /// <summary>Recette R2-124: one page of the runs export, the same query as the grid's load.</summary>
+    private Task<PaginatedResult<PipelineRunDto>> ReadRunsExportAsync(GridLoadArgs args)
+    {
+        if (Id is not { } pipelineId) return Task.FromResult(new PaginatedResult<PipelineRunDto>());
+        var (page, pageSize) = args.ToPageRequest();
+        return Api.Pipelines.GetPipelineRunsPagedAsync(pipelineId, page, pageSize, PipelineRunsGridQuery.From(args));
+    }
+
     private async Task OnRunsLoadDataAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -514,7 +573,7 @@ public partial class PipelineEdit : IAsyncDisposable
         // Changed elsewhere: reloaded when nothing is being edited, otherwise a banner (never overwritten).
         _definitionSync = new PipelineDefinitionLiveSync(HubFactory, Id.Value, () => InvokeAsync(async () =>
         {
-            if (PipelineDefinitionLiveSync.HasUnsavedChanges(_model, _pipeline)) _changedElsewhere = true;
+            if (PipelineDefinitionLiveSync.HasUnsavedChanges(_model, _pipeline, _savedSourceBranch)) _changedElsewhere = true;
             else await OnRefresh();
             StateHasChanged();
         }));
@@ -592,7 +651,13 @@ public partial class PipelineEdit : IAsyncDisposable
         var status = await Api.Pipelines.DeletePipelineAsync(Id!.Value);
         if (!status.Success) { Toast.Error("Error", "DeleteFailed"); return; }
         Cache.InvalidatePrefix("pipelines:");
+        PageState.Forget<PipelinePageState>($"pipelines/{Id}");
         Toast.Success("Deleted", "Deleted");
         Nav.NavigateTo("/pipelines");
     }
+
+    // Recette R2-124: the export writes the duration and the server the cells show.
+    private static readonly Func<PipelineRunDto, object?> RunDurationExport = run => PipelineRunFormatting.FormatDuration(run.StartedAt, run.CompletedAt);
+    private static readonly Func<PipelineRunDto, object?> RunServerExport = run =>
+        run.Steps.FirstOrDefault(step => !step.IsSystem && step.ServerName is not null)?.ServerName ?? string.Empty;
 }

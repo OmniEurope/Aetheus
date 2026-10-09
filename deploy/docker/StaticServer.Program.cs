@@ -105,13 +105,18 @@ if (File.Exists(indexPath))
 }
 
 // PLAN-003 lot 14 / D16: the front document's policy is this one, not the API's, so a violation on
-// a front page was refused silently and reported nowhere. It reports to the API's collector, with
-// report-uri alone: report-to is fetched through the Reporting API, which is a cross-origin request
-// and would need CORS on an endpoint that exists only to receive beacons. report-uri is deprecated
-// in the spec and honoured by every browser the app supports; report-to is the reverse.
+// a front page was refused silently and reported nowhere. It reports to the API's collector.
+// Recette R2-108 (ZAP 10055-3, "CSP: Notices"): the collector is named through report-to and the
+// Reporting-Endpoints header, not report-uri. The scanner's CSP parser warns on report-uri whatever
+// else the policy says ("deprecated in favor of the new report-to directive"), which was the only
+// notice the front's policy raised. The Reporting API posts cross-origin to the API, which its
+// default CORS policy already admits for the front's origin (POST, Content-Type), the same origin
+// every API call of the front comes from. A browser without the Reporting API (Firefox) sends no
+// violation report at all; it still enforces the policy.
 var cspReportUri = Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var reportApi)
     ? $"{reportApi.GetLeftPart(UriPartial.Authority)}/api/security/csp-report"
     : null;
+var reportingEndpoints = cspReportUri is null ? null : $"{CspReporting.EndpointName}=\"{cspReportUri}\"";
 
 var contentSecurityPolicy =
     "default-src 'self'; " +
@@ -138,7 +143,7 @@ var contentSecurityPolicy =
     "frame-ancestors 'none'; " +
     "base-uri 'self'; " +
     "form-action 'self'" +
-    (cspReportUri is null ? string.Empty : $"; report-uri {cspReportUri}");
+    CspReporting.Directive(cspReportUri);
 
 // QA scans this container directly, before an Apache reverse proxy is involved. Emit the same
 // browser protections here so static assets, fallback HTML and error responses are all covered.
@@ -153,6 +158,8 @@ app.Use(async (context, next) =>
         context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
     context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    if (reportingEndpoints is not null)
+        context.Response.Headers["Reporting-Endpoints"] = reportingEndpoints;
     context.Response.Headers["Content-Security-Policy"] = isMonacoFrame
         ? MonacoFramePolicy.Build(cspReportUri)
         : contentSecurityPolicy;

@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @using static Aetheus.Front.Components.Pipelines.PipelineRunFormatting
 
 @if (Run.Artifacts.Count > 0)
@@ -6,7 +7,7 @@
     <OmniTabsItem Key="artifacts" Title="@L["Artifacts"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("inventory_2"))" /></Icon><ChildContent>
             @* Recette R-427: the table alone, no card around it and no "Artifacts (n)" title above it:
                the tab already names the content and the grid holds the rows. *@
-            <OmniDataGrid Items="@Run.Artifacts" TItem="PipelineArtifactDto"
+            <OmniDataGrid Items="@Run.Artifacts" ExportTitle="@ExportContext.Title(L["Artifacts"])" ExportFields="@ExportContext.Fields()" TItem="PipelineArtifactDto"
  Class="run-artifacts-grid" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="PipelineArtifactDto" Property="Name" Title="@L["Name"]" Filterable="true">

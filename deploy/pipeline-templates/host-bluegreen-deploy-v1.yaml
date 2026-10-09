@@ -8,6 +8,49 @@
 #
 # A consuming pipeline supplies its own identity through the variables below and extends this
 # template; nothing here is specific to any one application.
+#
+# v6 (PLAN-003 2.7). Since the agent release of 2.7, Commit keeps the replaced colour running "in
+# reserve" whatever the template version, so a return to N-1 takes seconds (host-bluegreen-revert)
+# instead of a redeploy; the next deployment recycles it and bluegreen-retire stops it. Twice the
+# memory per environment, assumed. What v6 adds is a confirmation window: BG_CONFIRM_MINUTES arms,
+# on the host, a countdown only Commit disarms, after which the agent puts traffic back by itself:
+# the one compensation that does not depend on the backend being deployed. A consumer adds its own
+# approval stage before Commit (approval_timeout_minutes) with the same delay; 0 arms nothing.
+#
+# v5 goes back to ONE list, BG_COMPOSE_ENV, on every blue-green step, and removes
+# BG_COMPOSE_ENV_CUTOVER and BG_COMPOSE_ENV_ROLLBACK. The two subsets below existed only because the
+# compose_env guard refused, on every step, a name the run did not define at that point. The control
+# plane now decides per step (D-01): bluegreen-up refuses any unresolved name; bluegreen-migrate
+# refuses too, except the run-scoped bootstrap identity it never receives; switch, commit and rollback
+# forward what resolves and report the rest as a run warning. A consumer therefore maintains one list,
+# and a name added to it can no longer be forgotten in a second or third copy.
+#
+# v4 added BG_COMPOSE_ENV_ROLLBACK. The Rollback stage fires on `failed()`, which includes a run that
+# failed BEFORE the step producing the image tags ever ran: on an artifact-driven consumer those tags
+# are published by a preparation step, so from the rollback's point of view the run genuinely does not
+# define them and the compose_env guard refuses the step. That turned the one compensation this
+# template has into a second failure, and it did so precisely in the window the rollback exists to
+# cover. The rollback never needs them anyway: it only starts, stops and reads logs of containers that
+# already exist, and the colour it restores is the PREVIOUS one, whose image is recorded in the
+# journal - interpolating THIS run's tags into it would be wrong even when they are available. The
+# list defaults to BG_COMPOSE_ENV_CUTOVER, so a consumer whose Compose files need no per-run tags is
+# unaffected.
+#
+# v3 adds BG_COMPOSE_ENV_CUTOVER. v2 handed ONE list to all five blue-green steps, but only the step
+# that starts a colour receives the run-scoped bootstrap identity: the control plane derives it for
+# bluegreen-up alone, deliberately, because the credential has to exist in the container environment
+# at start-up and every later step acts on a colour that already carries it. The compose_env guard
+# then fails closed on every other step that names it, because from that step's point of view the run
+# genuinely does not define it. A consumer listing the identity therefore could not get past its
+# first cutover step at all - which is what aetheus-deploy-prod did, unnoticed, because it had never
+# run. The cutover list defaults to BG_COMPOSE_ENV, so a consumer that never named the identity (the
+# nightly demo) is unaffected.
+#
+# v2 added BG_COMPOSE_ENV. v1 could describe an environment but not the run acting on it: a shell
+# cutover exported the image tags, the version and the source revision into the process it then ran
+# Compose from, and a typed step has no such process. Compose fell back to the defaults written in
+# the Compose file, so the first real adoption would have started a placeholder image and reported a
+# successful cutover.
 name: host-bluegreen-deploy-template
 trigger: manual
 
@@ -33,6 +76,11 @@ variables:
   BG_RELOAD_HELPER: ""
   # Public origin the evidence stages probe once traffic has moved.
   BG_PUBLIC_ORIGIN: ""
+  # Where the deployed API answers, when that is not BG_PUBLIC_ORIGIN. The browser suite logs in
+  # against it; left empty it stays same-origin, which is correct for a single-host deployment and
+  # wrong for one whose API has its own hostname - there the login reaches the static frontend and
+  # comes back 405.
+  BG_PUBLIC_API_ORIGIN: ""
   BG_PERFORMANCE_SAMPLES: "10"
   BG_PERFORMANCE_MAX_SECONDS: "2"
   # Empty skips the authenticated browser suite.
@@ -43,6 +91,17 @@ variables:
   # is set to, so a slow sample still cannot undo a deployment that is serving.
   BG_SMOKE_GATE: "blocking"
   BG_REVISION: "${{ parameters.revision }}"
+  # Names of the run variables the Compose files interpolate for THIS run - image tags, application
+  # version, source revision, a run-scoped bootstrap identity. Only the names listed here reach the
+  # `docker compose` child process; the rest of the run environment, vault secrets included, stays
+  # out of it. Empty means the Compose files need nothing per-run, which is true of a fixed-tag
+  # deployment and false of every artifact-driven one. The same list serves every step: the control
+  # plane forwards to each one what it can resolve there (see the v5 note above).
+  BG_COMPOSE_ENV: ""
+  # Minutes the host gives the deployment to be committed before it returns to the previous colour by
+  # itself. 0 arms nothing, which is right for every environment whose backend is not the one being
+  # deployed.
+  BG_CONFIRM_MINUTES: "0"
 
 stages:
   - name: Migrate
@@ -60,6 +119,7 @@ stages:
         env_file: "$(BG_ENV_FILE)"
         compose_files: "$(BG_COMPOSE_FILES)"
         ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
         migrations_dir: "$(BG_MIGRATIONS_DIR)"
         timeout_seconds: 3600
 
@@ -78,6 +138,7 @@ stages:
         env_file: "$(BG_ENV_FILE)"
         compose_files: "$(BG_COMPOSE_FILES)"
         ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
         timeout_seconds: 3600
 
   - name: Switch
@@ -95,10 +156,12 @@ stages:
         env_file: "$(BG_ENV_FILE)"
         compose_files: "$(BG_COMPOSE_FILES)"
         ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
         upstream_template: "$(BG_UPSTREAM_TEMPLATE)"
         upstream_conf: "$(BG_UPSTREAM_CONF)"
         reload_helper: "$(BG_RELOAD_HELPER)"
         revision: "$(BG_REVISION)"
+        confirm_minutes: "$(BG_CONFIRM_MINUTES)"
         timeout_seconds: 600
 
   - name: Evidence
@@ -114,6 +177,7 @@ stages:
       - name: Probe the deployed application
         type: smoke
         origin: "$(BG_PUBLIC_ORIGIN)"
+        api_origin: "$(BG_PUBLIC_API_ORIGIN)"
         samples: "$(BG_PERFORMANCE_SAMPLES)"
         max_seconds: "$(BG_PERFORMANCE_MAX_SECONDS)"
         frontend: true
@@ -127,8 +191,9 @@ stages:
     os: linux
     depends_on: [Evidence]
     steps:
-      # Records the deployed revision, stops the replaced colour and clears the journal. It runs
-      # after the evidence stage precisely so a finding can never undo a cutover already serving.
+      # Records the deployed revision, keeps the replaced colour running in reserve and clears the
+      # journal. It runs after the evidence stage precisely so a finding can never undo a cutover
+      # already serving.
       - name: Close the deployment transaction
         type: bluegreen-commit
         project: "$(BG_PROJECT)"
@@ -136,6 +201,7 @@ stages:
         env_file: "$(BG_ENV_FILE)"
         compose_files: "$(BG_COMPOSE_FILES)"
         ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
         timeout_seconds: 600
 
   - name: Rollback
@@ -160,6 +226,7 @@ stages:
         env_file: "$(BG_ENV_FILE)"
         compose_files: "$(BG_COMPOSE_FILES)"
         ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
         upstream_conf: "$(BG_UPSTREAM_CONF)"
         reload_helper: "$(BG_RELOAD_HELPER)"
         timeout_seconds: 1800

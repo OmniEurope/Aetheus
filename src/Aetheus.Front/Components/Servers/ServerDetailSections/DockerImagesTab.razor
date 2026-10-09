@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @* Images tab of the Docker section: the inventory grid plus the two write paths that only ever
    touch images (pull, build). Markup moved verbatim from the parent. *@
 <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
@@ -8,7 +9,7 @@
     <OmniTextBox aria-label="@L["ImageNamePlaceholder"]" @bind-Value="_pullImageName" Placeholder="@L["ImageNamePlaceholder"]" maxlength="200" />
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@PullImageAsync" Disabled="@string.IsNullOrWhiteSpace(_pullImageName)" Class="@(_imagePulling ? "btn-busy" : null)" Busy="@(_imagePulling)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["DockerPull"]</span></OmniButton>
 </OmniStack>
-<OmniDataGrid @ref="_grid" Items="@FilteredImages" TItem="DockerImageDto" KeyOf="@(row => row.ImageId)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
+<OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["DockerImages"])" ExportFields="@ExportContext.Fields()" Items="@FilteredImages" TItem="DockerImageDto" KeyOf="@(row => row.ImageId)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_imageGroups"
     AllGroupsExpanded="@_allImageGroupsExpanded" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
     <Columns>
@@ -30,24 +31,30 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="DockerImageDto" Title="@L["Actions"]" MinWidth="9rem" Sortable="false" Filterable="false">
             <Template Context="img">
-                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ConfirmRemoveImageAsync(img))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                @if (CanAdmin)
+                {
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ConfirmRemoveImageAsync(img))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                }
             </Template>
         </OmniDataGridColumn>
     </Columns>
 </OmniDataGrid>
 
-<OmniCard Class="omni-u-mt-md">
-    <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["DockerBuildImage"]</OmniText>
-    <OmniStack Gap="OmniSpacing.Small">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-            <OmniLabel For="docker-build-tag">@L["Tag"]</OmniLabel>
-            <OmniTextBox Id="docker-build-tag" @bind-Value="_buildImageTag" Placeholder="@L["BuildTagPlaceholder"]" maxlength="200" />
+@if (CanAdmin)
+{
+    <OmniCard Class="omni-u-mt-md">
+        <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["DockerBuildImage"]</OmniText>
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniLabel For="docker-build-tag">@L["Tag"]</OmniLabel>
+                <OmniTextBox Id="docker-build-tag" @bind-Value="_buildImageTag" Placeholder="@L["BuildTagPlaceholder"]" maxlength="200" />
+            </OmniStack>
+            <OmniCodeEditor @bind-Value="_buildDockerfileContent" Language="dockerfile" Height="18rem"
+                            InteropModulePath="./js/omni-code-editor-frame.js?v=1"
+                            Label="@L["DockerfilePlaceholder"]" />
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@BuildImageAsync" Disabled="@(string.IsNullOrWhiteSpace(_buildImageTag) || string.IsNullOrWhiteSpace(_buildDockerfileContent))" Class="@(_buildingImage ? "btn-busy" : null)" Busy="@(_buildingImage)"><OmniIcon Name="OmniIconName.Wrench" /> <span>@L["DockerBuild"]</span></OmniButton>
+            </OmniStack>
         </OmniStack>
-        <OmniCodeEditor @bind-Value="_buildDockerfileContent" Language="dockerfile" Height="18rem"
-                        InteropModulePath="./js/omni-code-editor-frame.js?v=1"
-                        Label="@L["DockerfilePlaceholder"]" />
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@BuildImageAsync" Disabled="@(string.IsNullOrWhiteSpace(_buildImageTag) || string.IsNullOrWhiteSpace(_buildDockerfileContent))" Class="@(_buildingImage ? "btn-busy" : null)" Busy="@(_buildingImage)"><OmniIcon Name="OmniIconName.Wrench" /> <span>@L["DockerBuild"]</span></OmniButton>
-        </OmniStack>
-    </OmniStack>
-</OmniCard>
+    </OmniCard>
+}

@@ -16,6 +16,7 @@ public static class AppMonitoringModuleExtensions
         services.AddScoped<IAppMonitoringService, AppMonitoringService>();
         services.AddScoped<IAppMetricRepository, AppMetricRepository>();
         services.AddScoped<IAppLogRepository, AppLogRepository>();
+        services.AddScoped<IAppDataRetentionRepository, AppDataRetentionRepository>();
         services.AddScoped<IAppErrorRepository, AppErrorRepository>();
         services.AddScoped<IAppVisitorRepository, AppVisitorRepository>();
         services.AddScoped<IAppWebAnalyticsRepository, AppWebAnalyticsRepository>();
@@ -23,8 +24,10 @@ public static class AppMonitoringModuleExtensions
         services.AddScoped<IAppWebAnalyticsConfigurationService, AppWebAnalyticsConfigurationService>();
         services.AddScoped<IAppTelemetryChangePublisher, AppTelemetryChangePublisher>();
         services.AddScoped<IIngestService, IngestService>();
+        services.AddScoped<IIngestConfigurationService, IngestConfigurationService>();
         services.AddScoped<IVisitorIngestService, VisitorIngestService>();
         services.AddScoped<IAppTelemetryService, AppTelemetryService>();
+        services.AddScoped<IAppTelemetrySendIntervalService, AppTelemetrySendIntervalService>();
         services.AddScoped<IAppDeployEnvProvider, AppDeployEnvProvider>();
         services.AddSingleton<IngestKeyHasher>();
         // Singleton so a refused key is reported once per period across request scopes (recette R2-013).

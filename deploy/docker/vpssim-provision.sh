@@ -40,7 +40,7 @@ log "  rkhunter scan done (log at /var/log/rkhunter.log)."
 #     that is really on disk removes the drift in both directions.
 #     This is not a TLS relaxation: the probes still require a valid chain, the simulated host simply
 #     provides the root for the certificate it serves, which a real Let's Encrypt host gets for free.
-DEMO_CERT=/etc/letsencrypt/live/demo.aetheus.sonytumen.com/fullchain.pem
+DEMO_CERT=/etc/letsencrypt/live/demo.app.aetheus.sonytumen.com/fullchain.pem
 DEMO_ANCHOR=/usr/local/share/ca-certificates/aetheus-local-simulation-demo.crt
 if [ -f "$DEMO_CERT" ]; then
     if ! cmp -s "$DEMO_CERT" "$DEMO_ANCHOR"; then

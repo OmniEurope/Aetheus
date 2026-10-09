@@ -26,7 +26,9 @@ internal sealed class BlueGreenJournal(BlueGreenContext context)
     /// <summary>The deployment is final. The journal is cleared immediately after this is written.</summary>
     internal const string Committed = "COMMITTED";
 
-    private string StatePath => Path.Combine(context.JournalDir, "state");
+    private const string StateFileName = "state";
+
+    private string StatePath => Path.Combine(context.JournalDir, StateFileName);
     private string PreviousPath => Path.Combine(context.JournalDir, "previous-live");
     private string IdlePath => Path.Combine(context.JournalDir, "idle");
     private string RevisionPath => Path.Combine(context.JournalDir, "revision");
@@ -89,6 +91,21 @@ internal sealed class BlueGreenJournal(BlueGreenContext context)
     }
 
     internal void MarkSwitched() => WriteAtomic(StatePath, Switched);
+
+    /// <summary>
+    /// Recette R2-092: whether the state directory holds no open transaction, read without building a
+    /// context, so without the env file and Compose files a run that failed early never wrote, and
+    /// without creating anything. Absent directory, absent journal, a journal without a state file
+    /// (TryOpen writes it last) or a committed one: nothing was switched. An unreadable state file is
+    /// a transaction whose record cannot be seen, so it counts as open.
+    /// </summary>
+    internal static bool HoldsNoOpenTransaction(string stateDir)
+    {
+        if (stateDir.Length == 0 || !Path.IsPathRooted(stateDir) || stateDir.Contains("..", StringComparison.Ordinal))
+            return false;
+        var statePath = Path.Combine(BlueGreenContext.JournalDirectoryOf(stateDir), StateFileName);
+        return !File.Exists(statePath) || ReadOrNull(statePath) == Committed;
+    }
 
     internal void Commit()
     {

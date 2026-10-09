@@ -28,6 +28,7 @@ public sealed class AetheusDataGridLoadingBarTests : BunitContext
             .Add(p => p.Count, rows.Count)
             .Add(p => p.Virtualize, true)
             .Add(p => p.LoadData, async _ => await gate.Task)
+            .Add(p => p.ExportMarkdown, false) // the export is AetheusDataGridExportTests' subject
             .Add(p => p.VirtualData, () => new OmniDataGridResult<Row>(rows, rows.Count))
             .Add(p => p.Columns, Columns));
 
@@ -54,6 +55,7 @@ public sealed class AetheusDataGridLoadingBarTests : BunitContext
             if (remote)
             {
                 parameters.Add(p => p.LoadData, _ => Task.CompletedTask)
+                    .Add(p => p.ExportMarkdown, false)
                     .Add(p => p.VirtualData, () => new OmniDataGridResult<Row>(rows, rows.Count));
             }
         });

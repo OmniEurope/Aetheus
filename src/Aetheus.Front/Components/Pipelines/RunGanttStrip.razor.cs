@@ -65,7 +65,8 @@ public partial class RunGanttStrip
 
     protected override void OnParametersSet()
     {
-        _now = (Clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+        // The bars are placed from the steps' timestamps: "now" takes their kind.
+        _now = NowFor(Clock, Run?.Steps.FirstOrDefault(step => step.StartedAt is not null)?.StartedAt ?? Run?.StartedAt ?? default);
         Layout = RunGanttChart.Build(RunStageBuilder.Build(Run), _now);
     }
 
@@ -207,6 +208,18 @@ public partial class RunGanttStrip
         return string.Join('\n', lines);
     }
 
+    /// <summary>
+    /// FRONT-013: "now" on the server's clock (<see cref="ServerClock"/>, or the clock a test injects),
+    /// in the same <see cref="DateTimeKind"/> as the run's timestamps. Those arrive browser-local
+    /// (<c>UtcToLocalDateTimeConverter</c>); subtracting them from a UTC value measured the browser's
+    /// time-zone offset as elapsed time, so in UTC+2 a running stage read zero for two hours.
+    /// </summary>
+    internal static DateTime NowFor(TimeProvider? clock, DateTime reference)
+    {
+        var utc = clock is not null ? clock.GetUtcNow().UtcDateTime : ServerClock.UtcNow;
+        return reference.Kind == DateTimeKind.Local ? utc.ToLocalTime() : utc;
+    }
+
     /// <summary>Recette R-158: the elapsed time at 0, 25, 50, 75 and 100 % of the axis.</summary>
     internal static IReadOnlyList<Tick> Ticks(RunGanttLayout layout) =>
         [.. new[] { 0, 25, 50, 75, 100 }.Select(percent =>
@@ -217,8 +230,7 @@ public partial class RunGanttStrip
     internal TimeSpan? RunDuration()
     {
         if (Run is null || Run.StartedAt == default) return null;
-        var end = Run.CompletedAt
-                  ?? (Clock ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+        var end = Run.CompletedAt ?? NowFor(Clock, Run.StartedAt);
         var span = end - Run.StartedAt;
         return span > TimeSpan.Zero ? span : TimeSpan.Zero;
     }

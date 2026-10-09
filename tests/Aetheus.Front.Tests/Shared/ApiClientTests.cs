@@ -1760,7 +1760,7 @@ public class ApiClientTests
         {
             Content = Json(new PaginatedResult<UserDto> { Items = [], TotalCount = 0 })
         };
-        Assert.Empty((await api.Auth.GetUsersAsync()).Items);
+        Assert.Empty((await api.Auth.GetUsersAsync(cancellationToken: TestContext.Current.CancellationToken)).Items);
     }
 
     [Fact]

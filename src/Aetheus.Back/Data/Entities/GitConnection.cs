@@ -15,7 +15,7 @@ public class GitConnection
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
-    // External-Git parity (Features:ExternalRepos). Base URL for self-hosted providers
+    // External-Git parity (always on since recette R-295). Base URL for self-hosted providers
     // (e.g. https://gitea.example.com); null for the SaaS defaults (github.com / gitlab.com).
     public string? BaseUrl { get; set; }
 

@@ -37,14 +37,17 @@ public partial class ProjectTasksSection : ProjectPagedSectionBase<ServerTaskDto
         PaginatedResult<ServerTaskDto> result;
         try
         {
-            result = await Api.Projects.GetProjectTasksAsync(
-            projectId, _page, _pageSize, _sortBy, _sortDescending, filters: _columnFilters);
+            result = await ReadPageAsync(projectId, _page, _pageSize, _sortBy, _sortDescending, _columnFilters);
         }
         catch (HttpRequestException) { result = new PaginatedResult<ServerTaskDto>(); }
         if (ProjectId != projectId) return;
         _result = result;
         _loading = false;
     }
+
+    protected override Task<PaginatedResult<ServerTaskDto>> ReadPageAsync(
+        int projectId, int page, int pageSize, string sortBy, bool sortDescending, IReadOnlyList<GridFilter> filters) =>
+        Api.Projects.GetProjectTasksAsync(projectId, page, pageSize, sortBy, sortDescending, filters: filters);
 
     private static OmniTone GetFailureBadge(string failureCode) =>
         failureCode == TaskFailureCodes.ToolError ? OmniTone.Warning : OmniTone.Danger;
@@ -59,4 +62,10 @@ public partial class ProjectTasksSection : ProjectPagedSectionBase<ServerTaskDto
 
     private static string SourceServerName(ServerTaskDto task) =>
         string.IsNullOrWhiteSpace(task.ServerName) ? $"#{task.ServerId}" : task.ServerName;
+
+    /// <summary>Recette R2-124: the export writes the source the cell links to.</summary>
+    private Func<ServerTaskDto, object?> SourceExport => _sourceExport ??= task => task.PipelineRunId is { } pipelineRunId
+        ? $"{L["PipelineRun"]} #{pipelineRunId}"
+        : $"{L["Server"]}: {SourceServerName(task)}";
+    private Func<ServerTaskDto, object?>? _sourceExport;
 }

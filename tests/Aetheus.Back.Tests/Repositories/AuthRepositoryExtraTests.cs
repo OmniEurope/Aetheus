@@ -60,12 +60,12 @@ public class AuthRepositoryExtraTests : IDisposable
     }
 
     [Fact]
-    public async Task FindUserByIdForUpdateAsync_FoundAndMissing()
+    public async Task FindUserByIdTrackedAsync_FoundAndMissing()
     {
         SeedUser(1);
 
-        Assert.NotNull(await _repo.FindUserByIdForUpdateAsync(1, ct: TestContext.Current.CancellationToken));
-        Assert.Null(await _repo.FindUserByIdForUpdateAsync(99, ct: TestContext.Current.CancellationToken));
+        Assert.NotNull(await _repo.FindUserByIdTrackedAsync(1, ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.FindUserByIdTrackedAsync(99, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]

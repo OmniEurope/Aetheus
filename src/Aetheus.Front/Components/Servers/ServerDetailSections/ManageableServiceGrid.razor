@@ -1,4 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
 @* One manageable-services grid (installed OR available) with multi-select + a bulk-action bar, so the
    same action can be applied to several services at once. Reused by both the Manageable and Other tabs.
    Logs stay per-service (no bulk) - viewing N log streams at once makes no sense. *@
@@ -38,7 +39,7 @@
 
 @* R-509: on the module grid a click on the row opens the service's module; the checkbox and the
    buttons keep their own click. *@
-<OmniDataGrid @ref="_grid" Items="@Services.ToList()" TItem="ServiceInfoDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
+<OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["Services"])" ExportFields="@ExportContext.Fields()" Items="@Services.ToList()" TItem="ServiceInfoDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     RowRender="@OnRowRenderInternal" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
     OnRowClick="@OnRowClickedAsync" Class="@(OpensModuleOnRowClick ? "aetheus-clickable-rows" : null)">
     <Columns>

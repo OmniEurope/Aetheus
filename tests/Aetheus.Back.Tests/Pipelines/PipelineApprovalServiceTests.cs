@@ -17,6 +17,7 @@ public class PipelineApprovalServiceTests
     private readonly IHttpContextAccessor _httpContextAccessorMock = Substitute.For<IHttpContextAccessor>();
     private readonly IHubContext<PipelineHub> _hubMock = Substitute.For<IHubContext<PipelineHub>>();
     private readonly IClientProxy _clientProxyMock;
+    private readonly Aetheus.Back.Components.Audit.IAuditService _audit = Substitute.For<Aetheus.Back.Components.Audit.IAuditService>();
     private readonly PipelineApprovalService _sut;
 
     public PipelineApprovalServiceTests()
@@ -31,9 +32,20 @@ public class PipelineApprovalServiceTests
         clientsMock.Group(Arg.Any<string>()).Returns(clientProxyMock);
         clientsMock.Groups(Arg.Any<IReadOnlyList<string>>()).Returns(clientProxyMock);
         _hubMock.Clients.Returns(clientsMock);
+        // By default the approval exists, is pending, and its run is still waiting on it.
+        _repoMock.FindApprovalAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => new PipelineApproval
+            {
+                Id = call.Arg<int>(),
+                PipelineRunId = 10,
+                StageName = "deploy",
+                Status = ApprovalStatus.Pending
+            });
+        _repoMock.GetRunStatusesByIdsAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, PipelineStatus> { [10] = PipelineStatus.WaitingForApproval });
 
         _sut = new PipelineApprovalService(
-            _repoMock, _runServiceMock, _httpContextAccessorMock, _hubMock,
+            _repoMock, _runServiceMock, _httpContextAccessorMock, _hubMock, _audit,
             NullLogger<PipelineApprovalService>.Instance, TimeProvider.System);
     }
 
@@ -55,44 +67,117 @@ public class PipelineApprovalServiceTests
     }
 
     [Fact]
-    public async Task DecideApprovalAsync_InvalidDecision_ReturnsNull()
+    public async Task DecideApprovalAsync_InvalidDecision_IsRefusedWithItsReason()
     {
-        var result = await _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
+        var refusal = await Assert.ThrowsAsync<BadRequestException>(() => _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
         {
             Decision = ApprovalStatus.Pending
-        }, ct: TestContext.Current.CancellationToken);
+        }, ct: TestContext.Current.CancellationToken));
 
-        Assert.Null(result);
+        Assert.Contains("not a decision", refusal.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task DecideApprovalAsync_ApprovalNotFound_ReturnsNull()
+    public async Task DecideApprovalAsync_ApprovalNotFound_IsANotFoundWithItsReason()
     {
-        _repoMock.TryResolveApprovalAsync(
-                99, ApprovalStatus.Approved, Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns((PipelineApproval?)null);
+        _repoMock.FindApprovalAsync(99, Arg.Any<CancellationToken>()).Returns((PipelineApproval?)null);
 
-        var result = await _sut.DecideApprovalAsync(99, new ApprovalDecisionRequest
+        var refusal = await Assert.ThrowsAsync<NotFoundException>(() => _sut.DecideApprovalAsync(99, new ApprovalDecisionRequest
         {
             Decision = ApprovalStatus.Approved
-        }, ct: TestContext.Current.CancellationToken);
+        }, ct: TestContext.Current.CancellationToken));
 
-        Assert.Null(result);
+        Assert.Contains("Approval 99 does not exist", refusal.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task DecideApprovalAsync_AlreadyResolved_ReturnsNull()
+    public async Task DecideApprovalAsync_AlreadyResolved_SaysByWhomAndWhen_AndIsAudited()
+    {
+        // Recette R2-116: on release-fast #2555 every click on a banner offering an approval already
+        // decided came back as the same bare 404, indistinguishable from a click that was lost.
+        _repoMock.FindApprovalAsync(1, Arg.Any<CancellationToken>()).Returns(new PipelineApproval
+        {
+            Id = 1,
+            PipelineRunId = 2555,
+            StageName = "Deploy blue-green",
+            Status = ApprovalStatus.Approved,
+            ResolvedAt = new DateTime(2026, 10, 4, 13, 35, 0, DateTimeKind.Utc),
+            ResolvedByUser = new User { Username = "sony" }
+        });
+
+        var refusal = await Assert.ThrowsAsync<ConflictException>(() => _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
+        {
+            Decision = ApprovalStatus.Approved
+        }, ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("already Approved by sony at 2026-10-04 13:35:00 UTC", refusal.Message, StringComparison.Ordinal);
+        await _repoMock.DidNotReceive().TryResolveApprovalAsync(
+            Arg.Any<int>(), Arg.Any<ApprovalStatus>(), Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await _audit.Received(1).LogAsync(
+            "ApprovalDecision", "PipelineApproval", 1,
+            Arg.Is<string>(details => details.Contains("Approved on run 2555, stage 'Deploy blue-green'", StringComparison.Ordinal)
+                && details.Contains("refused: ", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DecideApprovalAsync_DecidedByAnotherClickInBetween_IsAConflictWithItsReason()
     {
         _repoMock.TryResolveApprovalAsync(
                 1, ApprovalStatus.Approved, Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns((PipelineApproval?)null);
 
-        var result = await _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
+        var refusal = await Assert.ThrowsAsync<ConflictException>(() => _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
         {
             Decision = ApprovalStatus.Approved
-        }, ct: TestContext.Current.CancellationToken);
+        }, ct: TestContext.Current.CancellationToken));
 
-        Assert.Null(result);
+        Assert.Contains("Approval 1", refusal.Message, StringComparison.Ordinal);
+        await _runServiceMock.DidNotReceive().ResumeAfterApprovalAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DecideApprovalAsync_AnAppliedDecision_IsAuditedWithRunStageAndResult()
+    {
+        _repoMock.FindApprovalAsync(1, Arg.Any<CancellationToken>()).Returns(new PipelineApproval
+        {
+            Id = 1,
+            PipelineRunId = 10,
+            StageName = "Deploy blue-green",
+            Scope = ApprovalScope.Environment,
+            Environment = new Aetheus.Back.Data.Entities.Environment { Name = "prod" },
+            Status = ApprovalStatus.Pending
+        });
+        _repoMock.TryResolveApprovalAsync(
+                1, ApprovalStatus.Approved, Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineApproval { Id = 1, PipelineRunId = 10, StageName = "Deploy blue-green", Status = ApprovalStatus.Approved });
+        _runServiceMock.ResumeAfterApprovalAsync(10, Arg.Any<CancellationToken>()).Returns(true);
+
+        await _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest { Decision = ApprovalStatus.Approved },
+            ct: TestContext.Current.CancellationToken);
+
+        await _audit.Received(1).LogAsync(
+            "ApprovalDecision", "PipelineApproval", 1,
+            "Approved on run 10, stage 'Deploy blue-green', Environment approval 1 (environment 'prod'): approved, run resumed",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DecideApprovalAsync_AFailureWhileResuming_IsAuditedThenRethrown()
+    {
+        _repoMock.TryResolveApprovalAsync(
+                1, ApprovalStatus.Approved, Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineApproval { Id = 1, PipelineRunId = 10, StageName = "deploy", Status = ApprovalStatus.Approved });
+        _runServiceMock.ResumeAfterApprovalAsync(10, Arg.Any<CancellationToken>())
+            .Returns<bool>(_ => throw new InvalidOperationException("boom"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.DecideApprovalAsync(
+            1, new ApprovalDecisionRequest { Decision = ApprovalStatus.Approved }, ct: TestContext.Current.CancellationToken));
+
+        await _audit.Received(1).LogAsync(
+            "ApprovalDecision", "PipelineApproval", 1,
+            Arg.Is<string>(details => details.EndsWith("failed: InvalidOperationException", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -224,7 +309,7 @@ public class PipelineApprovalServiceTests
     }
 
     [Fact]
-    public async Task DecideApprovalAsync_TimedOut_RunNoLongerWaiting_ReturnsNull()
+    public async Task DecideApprovalAsync_TimedOut_RunNoLongerWaiting_IsAConflict()
     {
         _repoMock.TryResolveApprovalAsync(
                 1, ApprovalStatus.TimedOut, Arg.Any<DateTime>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
@@ -238,12 +323,11 @@ public class PipelineApprovalServiceTests
             });
         _runServiceMock.ApplyRefusalAsync(10, Arg.Any<CancellationToken>()).Returns((PipelineStatus?)null);
 
-        var result = await _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
+        await Assert.ThrowsAsync<ConflictException>(() => _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
         {
             Decision = ApprovalStatus.TimedOut
-        }, ct: TestContext.Current.CancellationToken);
+        }, ct: TestContext.Current.CancellationToken));
 
-        Assert.Null(result);
         await _clientProxyMock.DidNotReceive().SendCoreAsync(
             Arg.Any<string>(), Arg.Any<object?[]>(), Arg.Any<CancellationToken>());
     }
@@ -266,12 +350,12 @@ public class PipelineApprovalServiceTests
             });
         _runServiceMock.ResumeAfterApprovalAsync(10, Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
+        var refusal = await Assert.ThrowsAsync<ConflictException>(() => _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
         {
             Decision = ApprovalStatus.Approved
-        }, ct: TestContext.Current.CancellationToken);
+        }, ct: TestContext.Current.CancellationToken));
 
-        Assert.Null(result);
+        Assert.Contains("The approval was recorded, but run 10 did not resume", refusal.Message, StringComparison.Ordinal);
         await _runServiceMock.Received(1).ResumeAfterApprovalAsync(10, Arg.Any<CancellationToken>());
     }
 
@@ -290,12 +374,12 @@ public class PipelineApprovalServiceTests
             });
         _runServiceMock.ApplyRefusalAsync(10, Arg.Any<CancellationToken>()).Returns((PipelineStatus?)null);
 
-        var result = await _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
+        var refusal = await Assert.ThrowsAsync<ConflictException>(() => _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest
         {
             Decision = ApprovalStatus.Rejected
-        }, ct: TestContext.Current.CancellationToken);
+        }, ct: TestContext.Current.CancellationToken));
 
-        Assert.Null(result);
+        Assert.Contains("did not stop", refusal.Message, StringComparison.Ordinal);
     }
 
     [Theory]
