@@ -25,7 +25,24 @@ public static class MailModuleExtensions
         services.AddSingleton<IMailDnsResolver, DnsClientMailResolver>();
         services.AddScoped<IMailDnsVerifier, MailDnsVerifier>();
         services.AddScoped<IMailDiagnosticsService, MailDiagnosticsService>();
+        services.AddScoped<IMailNoReplySenderService, MailNoReplySenderService>();
         services.AddHostedService<MailDnsRefreshService>();
+
+        // Recette R1-17: the integrated mailbox. The typed mailbox passwords live in one in-memory store.
+        services.AddScoped<Mailbox.IMailboxRepository, Mailbox.MailboxRepository>();
+        services.AddScoped<Mailbox.IMailboxService, Mailbox.MailboxService>();
+        services.AddSingleton<Mailbox.IMailboxConnector, Mailbox.MailKitMailboxConnector>();
+        services.AddSingleton<Mailbox.IMailboxCredentialStore, Mailbox.MailboxCredentialStore>();
+        // Recette R1-37: a user's session end forgets the mailbox passwords they hold.
+        services.AddScoped<IDomainEventHandler<Users.Events.UserSessionEndedEvent>, Mailbox.MailboxCredentialSessionEndHandler>();
+        services.AddScoped<Mailbox.IMailboxRemoteImageFetcher, Mailbox.MailboxRemoteImageFetcher>();
+        // "Show images": the shared SSRF guard (no private or loopback target, no redirect, no cookie).
+        services.AddHttpClient(Mailbox.MailboxRemoteImageFetcher.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.MaxResponseContentBufferSize = Mailbox.MailboxRemoteImageFetcher.MaxImageBytes;
+        }).ConfigurePrimaryHttpMessageHandler(() => SsrfProtectedHttpHandlerFactory.Create(
+            allowPrivate: false, "The image address resolved to a forbidden (private or loopback) address."));
         return services;
     }
 }

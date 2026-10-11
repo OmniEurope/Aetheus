@@ -143,13 +143,16 @@ internal static class AnalysisGradeEngine
         PipelineAnalysisGateRuleValidator.TryParseEnum<AnalysisSeverity>(rule.Severity, out var severity);
         var applies = evidenceAvailable
             && (!category.HasValue || category.Value == report.Category);
-        if (PipelineAnalysisGradingValidator.IsWeightedFindingScore(rule))
+        if (PipelineAnalysisGradingValidator.IsFindingScore(rule))
         {
             var counts = applies
                 ? AnalysisFindingScore.Count(OpenFindings(report, rule).Select(finding => finding.Severity))
                 : null;
             return BuildMeasure(rule, domain!.Value, direction!.Value, category, null,
-                counts is null ? null : AnalysisFindingScore.Score(counts), null, counts);
+                counts is null
+                    ? null
+                    : AnalysisFindingScore.Value(counts, PipelineAnalysisGradingValidator.IsWeightedFindingScore(rule)),
+                null, counts);
         }
         var values = new List<double>();
         string? unit = null;
@@ -202,7 +205,7 @@ internal static class AnalysisGradeEngine
         var observed = group
             .Where(measure => measure.Observed && measure.ObservedValue.HasValue)
             .ToList();
-        if (first.WeightedFindingScore)
+        if (first.WeightedFindingScore || first.CountedFindingScore)
         {
             // The reports of one run each counted their own findings; the score follows the summed counts.
             var counts = observed.Count == 0
@@ -210,7 +213,7 @@ internal static class AnalysisGradeEngine
                 : AnalysisFindingScore.Sum(observed.Select(measure => measure.FindingCounts ?? new AnalysisGradeFindingCountsDto()));
             return BuildMeasure(
                 first with { FindingCounts = counts },
-                counts is null ? null : AnalysisFindingScore.Score(counts));
+                counts is null ? null : AnalysisFindingScore.Value(counts, first.WeightedFindingScore));
         }
         var values = observed.Select(measure => measure.ObservedValue!.Value).ToList();
         double? value = values.Count == 0
@@ -248,6 +251,8 @@ internal static class AnalysisGradeEngine
             DThreshold = rule.D,
             EThreshold = rule.E,
             WeightedFindingScore = PipelineAnalysisGradingValidator.IsWeightedFindingScore(rule),
+            CountedFindingScore = PipelineAnalysisGradingValidator.IsFindingScore(rule)
+                && !PipelineAnalysisGradingValidator.IsWeightedFindingScore(rule),
             FindingCounts = findingCounts
         }, observedValue);
 

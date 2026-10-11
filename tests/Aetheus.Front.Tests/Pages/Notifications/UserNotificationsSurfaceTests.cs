@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Notifications;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -261,5 +262,18 @@ public sealed class UserNotificationsSurfaceTests : BunitContext
         bell.WaitForAssertion(() => Assert.Empty(bell.FindAll(".notification-bell-count")));
         Assert.Contains(_handler.Requests, request => request.Method == "POST" && request.Url.EndsWith("api/notifications/me/read-all", StringComparison.Ordinal));
         Assert.Equal(0, Services.GetRequiredService<UserNotificationsFeed>().UnreadCount);
+    }
+
+    [Fact]
+    public void Inbox_RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/notifications/me?", [Delivery(1, "one")]);
+
+        var page = Render<NotificationsInbox>();
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(page.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }
 }

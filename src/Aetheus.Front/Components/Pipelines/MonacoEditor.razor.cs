@@ -168,7 +168,11 @@ public partial class MonacoEditor : IAsyncDisposable
         _lifetimeCts.Dispose();
         if (_initialized)
         {
-            await Js.InvokeVoidAsync("monacoInterop.dispose", ElementId);
+            // SITE-FUNC-MONACO-DISPOSE-001: the JS side releases an editor that is already gone as a
+            // no-op; a JS runtime that is itself gone has no editor left to release either.
+            _initialized = false;
+            try { await Js.InvokeVoidAsync("monacoInterop.dispose", ElementId); }
+            catch (JSDisconnectedException) { /* the JS runtime is gone, and the editor with it: nothing left to release */ }
         }
         _dotNetRef?.Dispose();
     }

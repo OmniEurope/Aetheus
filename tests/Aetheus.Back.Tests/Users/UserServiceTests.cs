@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Users;
+using Aetheus.Back.Components.Users.Events;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Exceptions;
 using Aetheus.Back.Services;
+using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -17,6 +19,7 @@ public class UserServiceTests
     private readonly IAdminChangeNotifier _notifier = Substitute.For<IAdminChangeNotifier>();
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
     private readonly IUserChangeNotifier _userNotifier = Substitute.For<IUserChangeNotifier>();
+    private readonly IDomainEventDispatcher _domainEvents = Substitute.For<IDomainEventDispatcher>();
     private readonly UserService _sut;
 
     public UserServiceTests()
@@ -29,7 +32,8 @@ public class UserServiceTests
                 new MemoryCache(new MemoryCacheOptions()),
                 TimeProvider.System,
                 _notifier,
-                _userNotifier);
+                _userNotifier,
+                _domainEvents);
     }
 
     [Fact]
@@ -239,6 +243,9 @@ public class UserServiceTests
 
         Assert.True(result);
         await _repoMock.Received(1).RemoveUserAsync(user, Arg.Any<CancellationToken>());
+        // R1-37: a deleted user's session is over, so what the modules hold in memory for them goes too.
+        await _domainEvents.Received(1).DispatchAsync(
+            new UserSessionEndedEvent(1, UserSessionEndReasons.Deleted), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -467,6 +474,9 @@ public class UserServiceTests
         Assert.True(result);
         Assert.True(user.MustChangePassword);
         Assert.True(BCrypt.Net.BCrypt.Verify("newpass123", user.PasswordHash));
+        // R1-37: an admin reset does not end the target's session (its refresh token stays valid).
+        await _domainEvents.DidNotReceive().DispatchAsync(
+            Arg.Any<UserSessionEndedEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -493,6 +503,9 @@ public class UserServiceTests
 
         Assert.True(result);
         Assert.False(user.MustChangePassword);
+        // R1-37: the client signs out right after, with a token the server already refuses.
+        await _domainEvents.Received(1).DispatchAsync(
+            new UserSessionEndedEvent(3, UserSessionEndReasons.PasswordChanged), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -693,6 +706,8 @@ public class UserServiceTests
         Assert.NotNull(updated);
         Assert.False(updated.IsActive);
         await _repoMock.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _domainEvents.Received(1).DispatchAsync(
+            new UserSessionEndedEvent(1, UserSessionEndReasons.Deactivated), Arg.Any<CancellationToken>());
     }
 
     [Fact]

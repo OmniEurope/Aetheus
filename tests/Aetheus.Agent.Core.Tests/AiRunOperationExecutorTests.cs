@@ -50,6 +50,7 @@ public sealed class AiRunOperationExecutorTests
                 api,
                 shell,
                 Options.Create(new AetheusAgentOptions { WorkDirectory = workDirectory }),
+                TimeProvider.System,
                 NullLogger<AiRunOperationExecutor>.Instance);
             var environment = new Dictionary<string, string>
             {
@@ -82,9 +83,11 @@ public sealed class AiRunOperationExecutorTests
             await shell.Received(1).RunExecAsync(
                 "mock-ai",
                 Arg.Any<IReadOnlyList<string>>(),
+                // The profile's variable, the agent's home (AiRunConfiguration.ReadRunnerEnvironment),
+                // and none of the executor's own AETHEUS_* settings.
                 Arg.Is<IReadOnlyDictionary<string, string>>(variables =>
-                    variables.Count == 1
-                    && variables["AI_PROVIDER_TOKEN"] == "profile-secret"),
+                    variables["AI_PROVIDER_TOKEN"] == "profile-secret"
+                    && variables.Keys.All(key => key == "AI_PROVIDER_TOKEN" || key == "HOME" || key == "USERPROFILE")),
                 Arg.Any<string>(),
                 false,
                 200000,
@@ -161,6 +164,7 @@ public sealed class AiRunOperationExecutorTests
                     WorkDirectory = workDirectory,
                     ServerUrl = "https://backend.test"
                 }),
+                TimeProvider.System,
                 NullLogger<AiRunOperationExecutor>.Instance);
             var environment = new Dictionary<string, string>
             {
@@ -245,6 +249,7 @@ public sealed class AiRunOperationExecutorTests
                 api,
                 shell,
                 Options.Create(new AetheusAgentOptions { WorkDirectory = workDirectory }),
+                TimeProvider.System,
                 NullLogger<AiRunOperationExecutor>.Instance);
 
             var result = await executor.ExecuteAsync(

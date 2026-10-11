@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Static security evidence for an external application, where the platform deploys nothing and writes nothing
+# into the repository (recette R1-33): the minimum the platform can run on a repository as it is.
+#
+# Only the scanners that read nothing from the analysed repository but its source run here: OpenGrep
+# (its rules are the platform's own, mounted beside the source), the dependency scan and the IaC scan
+# (an ignore file is honoured when present, never required). The secret scan of application-security
+# is left out on purpose: Gitleaks reads its rules from .gitleaks.toml at the repository root, a file
+# an external repository does not have to carry. No project adapter is called. The three scans are
+# independent, so they share a stage; the grade reads all three and sits in the stage after them
+# (ADR-012: the steps of a stage run together).
+name: application-security-external-template
+trigger: manual
+
+stages:
+  - name: Scan source
+    group: Security
+    execution_role: build
+    os: linux
+    steps:
+      - name: Scan code (SAST)
+        type: scanner
+        scanner: opengrep
+        retry_count: 1
+        timeout_seconds: 1200
+      - name: Scan dependencies
+        type: scanner
+        scanner: trivy-dependencies
+        retry_count: 1
+        timeout_seconds: 1200
+      - name: Scan IaC
+        type: scanner
+        scanner: trivy-iac
+        timeout_seconds: 900
+
+  # The severity rules every security pipeline uses (see application-security).
+  - name: Grade security
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Scan source]
+    steps:
+      - name: Publish summaries and calculate the versioned security grade
+        type: analysis-gate
+        analysis_scope: security
+        analysis_grading:
+          version: 1
+          minimum_grade: F
+          required_domains:
+            - security
+          rules:
+            - key: grade.security.critical
+              domain: security
+              severity: critical
+              direction: lower-is-better
+              a: 0
+              b: 0
+              c: 0
+              d: 0
+              e: 0
+            - key: grade.security.high
+              domain: security
+              severity: high
+              direction: lower-is-better
+              a: 0
+              b: 1
+              c: 3
+              d: 5
+              e: 10
+            - key: grade.security.medium
+              domain: security
+              severity: medium
+              required: false
+              direction: lower-is-better
+              a: 0
+              b: 5
+              c: 15
+              d: 30
+              e: 60
+        timeout_seconds: 300

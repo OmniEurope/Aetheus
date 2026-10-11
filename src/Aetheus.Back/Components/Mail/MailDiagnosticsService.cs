@@ -63,7 +63,7 @@ public sealed class MailDiagnosticsService(
         };
         items.Add(await HostnameAsync(state.Hostname, server.IpAddress, ct).ConfigureAwait(false));
         items.Add(await ReverseDnsAsync(state.Hostname, server.IpAddress, ct).ConfigureAwait(false));
-        items.AddRange(await DomainDnsAsync(serverId, state.Hostname, ct).ConfigureAwait(false));
+        items.AddRange(await DomainDnsAsync(serverId, state.Hostname, server.IpAddress, ct).ConfigureAwait(false));
         return new MailDiagnosticsDto { CheckedAt = now, Items = items };
     }
 
@@ -90,7 +90,8 @@ public sealed class MailDiagnosticsService(
         var domain = await inventory.GetTrackedDomainAsync(serverId, domainId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Mail domain {domainId} not found.");
         var state = await inventory.GetStateAsync(serverId, ct).ConfigureAwait(false);
-        var result = await verifier.VerifyAsync(domain, state?.Hostname, ct).ConfigureAwait(false);
+        var server = await serverRepo.FindServerAsync(serverId, ct).ConfigureAwait(false);
+        var result = await verifier.VerifyAsync(domain, state?.Hostname, server?.IpAddress, ct).ConfigureAwait(false);
         await inventory.SaveChangesAsync(ct).ConfigureAwait(false);
         return result;
     }
@@ -194,7 +195,7 @@ public sealed class MailDiagnosticsService(
 
     /// <summary>MX, then (recette R2-090) SPF, DKIM and DMARC of every active domain, each with the record to
     /// publish. Read-only: the verifier's <c>CheckAsync</c> leaves the domains' stored flags alone.</summary>
-    private async Task<List<MailDiagnosticItemDto>> DomainDnsAsync(int serverId, string hostname, CancellationToken ct)
+    private async Task<List<MailDiagnosticItemDto>> DomainDnsAsync(int serverId, string hostname, string serverAddress, CancellationToken ct)
     {
         var domains = (await mailRepo.GetDomainsAsync(serverId, ct).ConfigureAwait(false))
             .Where(d => d.IsActive)
@@ -204,7 +205,7 @@ public sealed class MailDiagnosticsService(
         foreach (var domain in domains)
         {
             var records = MailDnsRecordFactory.Build(domain, hostname);
-            foreach (var check in await verifier.CheckAsync(domain, hostname, ct).ConfigureAwait(false))
+            foreach (var check in await verifier.CheckAsync(domain, hostname, serverAddress, ct).ConfigureAwait(false))
                 items.Add(DomainItem(domain.Name, records, check));
         }
         return items;
@@ -220,9 +221,10 @@ public sealed class MailDiagnosticsService(
                 : check.Observed.Count == 0 ? check.Expected : string.Join(", ", check.Observed),
             RecordName = domain,
             RecordType = "MX",
-            RecordValue = records.MxRecord
+            RecordValue = records.MxRecord,
+            TimeToLiveSeconds = check.TimeToLiveSeconds
         },
-        MailDnsRecordKind.Spf => TxtItem($"spf:{domain}", check, domain, records.SpfRecord),
+        MailDnsRecordKind.Spf => TxtItem($"spf:{domain}", check, domain, MailDnsRecordFactory.SpfToPublish(check)),
         MailDnsRecordKind.Dkim => TxtItem($"dkim:{domain}", check, records.DkimRecord, records.DkimPublicKey),
         _ => TxtItem($"dmarc:{domain}", check, $"_dmarc.{domain}", records.DmarcRecord)
     };

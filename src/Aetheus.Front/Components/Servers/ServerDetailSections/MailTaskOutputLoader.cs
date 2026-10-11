@@ -14,4 +14,11 @@ public static class MailTaskOutputLoader
         var logs = await api.Monitoring.GetTaskLogsAsync(taskId, ct);
         return string.Join('\n', logs.OrderBy(l => l.Id).Select(l => l.Message));
     }
+
+    /// <summary>The last non-blank line of a task's output, or null when it printed nothing.</summary>
+    public static async Task<string?> LastLineAsync(ApiClient api, int taskId, CancellationToken ct = default)
+    {
+        var output = await ReadAsync(api, taskId, ct);
+        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
+    }
 }

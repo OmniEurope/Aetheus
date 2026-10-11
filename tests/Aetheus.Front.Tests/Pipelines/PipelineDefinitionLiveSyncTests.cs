@@ -57,4 +57,32 @@ public sealed class PipelineDefinitionLiveSyncTests
     [Fact]
     public void NothingLoadedYet_IsNotAnEdit() =>
         Assert.False(PipelineDefinitionLiveSync.HasUnsavedChanges(Form(), null, "main"));
+
+    private static UpdatePipelineRequest Sent() => new()
+    {
+        Name = "build",
+        Description = "d",
+        YamlDefinition = "stages: []",
+        ProjectId = 2,
+        SourceBranch = " main "
+    };
+
+    [Fact]
+    public void SelfSave001_StoredPipelineEqualToTheLastSubmittedUpdate_IsTheOwnSave() =>
+        Assert.True(PipelineDefinitionLiveSync.IsOwnSave(Sent(), Saved with { SourceBranch = "main" }));
+
+    [Fact]
+    public void SelfSave001_AnyOtherStoredContent_IsARemoteChange()
+    {
+        Assert.False(PipelineDefinitionLiveSync.IsOwnSave(Sent(), Saved with { SourceBranch = "main", YamlDefinition = "stages: [x]" }));
+        Assert.False(PipelineDefinitionLiveSync.IsOwnSave(Sent(), Saved with { SourceBranch = "develop" }));
+        Assert.False(PipelineDefinitionLiveSync.IsOwnSave(Sent(), Saved with { SourceBranch = "main", Description = "other" }));
+    }
+
+    [Fact]
+    public void SelfSave001_NothingSubmittedOrNothingStored_IsNotTheOwnSave()
+    {
+        Assert.False(PipelineDefinitionLiveSync.IsOwnSave(null, Saved));
+        Assert.False(PipelineDefinitionLiveSync.IsOwnSave(Sent(), null));
+    }
 }

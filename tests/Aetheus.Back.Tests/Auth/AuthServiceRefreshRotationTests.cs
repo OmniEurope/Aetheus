@@ -44,7 +44,7 @@ public sealed class AuthServiceRefreshRotationTests : IDisposable
             Substitute.For<IMemoryCache>(), Substitute.For<IOrganizationService>(),
             Substitute.For<ITotpService>(), _clock,
             Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(),
-            Substitute.For<ILogger<AuthService>>());
+            Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(), Substitute.For<ILogger<AuthService>>());
     }
 
     public void Dispose() => _db.Dispose();

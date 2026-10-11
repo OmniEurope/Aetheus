@@ -521,6 +521,34 @@ public sealed class AnalysisServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task R2_135_AnAcceptedFinding_IsFixedWhenGone_AndAcceptedAgainWhenBack()
+    {
+        await _service.PublishReportAsync(1, Request(1), TestContext.Current.CancellationToken);
+        var finding = Assert.Single(_db.AnalysisFindings);
+        await new AnalysisFindingDecisionService(new AnalysisRepository(_db), _time, Substitute.For<IAuditService>())
+            .CreateFindingDecisionAsync(finding.Id, new CreateAnalysisFindingDecisionRequest
+            {
+                Status = AnalysisFindingStatus.Accepted,
+                Reason = "Accepted while the affected component is being replaced."
+            }, "security-admin", TestContext.Current.CancellationToken);
+
+        await _service.PublishReportAsync(3, Request(3) with
+        {
+            ReportContent = EmptySarif(),
+            StartedAt = _now.AddMinutes(1),
+            CompletedAt = _now.AddMinutes(2)
+        }, TestContext.Current.CancellationToken);
+        Assert.Equal(AnalysisFindingStatus.Fixed, Assert.Single(_db.AnalysisFindings).Status);
+
+        await _service.PublishReportAsync(5, Request(5) with
+        {
+            StartedAt = _now.AddMinutes(3),
+            CompletedAt = _now.AddMinutes(4)
+        }, TestContext.Current.CancellationToken);
+        Assert.Equal(AnalysisFindingStatus.Accepted, Assert.Single(_db.AnalysisFindings).Status);
+    }
+
+    [Fact]
     public async Task PublishReportAsync_ReopensExpiredDecisionWhenFindingRemains()
     {
         var first = await _service.PublishReportAsync(2, Request(2), TestContext.Current.CancellationToken);

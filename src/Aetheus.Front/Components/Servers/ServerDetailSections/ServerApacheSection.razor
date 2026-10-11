@@ -2,6 +2,8 @@
 @inject GridExportContext ExportContext
 @inherits ServerActionSectionBase
 
+<AgentOfflineNotice Server="@Server" />
+
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
     <OmniBadge Fill="OmniFill.Solid" Tone="@GetStatusBadge(Apache.IsRunning)">@(Apache.IsRunning ? L["Running"] : L["Stopped"])</OmniBadge>
@@ -15,11 +17,11 @@
     }
     <div class="blade-content-spacer"></div>
 
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ExecuteActionAsync(ApacheAction.Start))" Disabled="@Apache.IsRunning" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniButton>
-    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["StopApache"], L["ConfirmStopApache"], () => ExecuteActionAsync(ApacheAction.Stop), L["Stop"].Value, OmniIconName.Stop))" Disabled="@(!Apache.IsRunning || _actionRunning)"><OmniIcon Name="OmniIconName.Stop" /> <span>@L["Stop"]</span></OmniButton>
-    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.Restart))" Disabled="@(!Apache.IsRunning)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniButton>
-    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.Reload))" Disabled="@(!Apache.IsRunning)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)"><OmniIcon Name="OmniIconName.Sync" /> <span>@L["Reload"]</span></OmniButton>
-    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.TestConfig))" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)" title="@L["TestConfig"]"><OmniIcon Name="OmniIconName.CheckCircle" /> <span>@L["Test"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ExecuteActionAsync(ApacheAction.Start))" Disabled="@(AgentOffline || Apache.IsRunning)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["StopApache"], L["ConfirmStopApache"], () => ExecuteActionAsync(ApacheAction.Stop), L["Stop"].Value, OmniIconName.Stop))" Disabled="@(AgentOffline || !Apache.IsRunning || _actionRunning)"><OmniIcon Name="OmniIconName.Stop" /> <span>@L["Stop"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.Restart))" Disabled="@(AgentOffline || !Apache.IsRunning)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.Reload))" Disabled="@(AgentOffline || !Apache.IsRunning)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)"><OmniIcon Name="OmniIconName.Sync" /> <span>@L["Reload"]</span></OmniButton>
+    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.TestConfig))" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)" title="@L["TestConfig"]"><OmniIcon Name="OmniIconName.CheckCircle" /> <span>@L["Test"]</span></OmniButton>
 </OmniRow>
 
 @if (Apache.CollectionDegraded)
@@ -78,10 +80,10 @@
                     <OmniDataGridColumn TItem="ApacheVirtualHostGroup" Title="@L["Actions"]" Width="20rem" Sortable="false" Filterable="false">
                         <Template Context="g">
                             <OmniRow Gap="OmniSpacing.XSmall">
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                                 @foreach (var m in g.Members)
                                 {
-                                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ExecuteActionAsync(ApacheAction.DisableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Disable"]} ({m.Port})")"><OmniIcon Name="OmniIconName.Prohibit" /> <span>@($":{m.Port}")</span></OmniButton>
+                                    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ExecuteActionAsync(ApacheAction.DisableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Disable"]} ({m.Port})")"><OmniIcon Name="OmniIconName.Prohibit" /> <span>@($":{m.Port}")</span></OmniButton>
                                 }
                             </OmniRow>
                         </Template>
@@ -118,10 +120,10 @@
                     <OmniDataGridColumn TItem="ApacheVirtualHostGroup" Title="@L["Actions"]" Width="20rem" Sortable="false" Filterable="false">
                         <Template Context="g">
                             <OmniRow Gap="OmniSpacing.XSmall">
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                                 @foreach (var m in g.Members)
                                 {
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Enable"]} ({m.Port})")"><OmniIcon Name="OmniIconName.Check" /> <span>@($":{m.Port}")</span></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Enable"]} ({m.Port})")"><OmniIcon Name="OmniIconName.Check" /> <span>@($":{m.Port}")</span></OmniButton>
                                 }
                             </OmniRow>
                         </Template>
@@ -150,12 +152,12 @@
                             {
                                 @if (m.IsEnabled)
                                 {
-                                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["DisableModule"], string.Format(L["ConfirmDisableModule"], m.Name),
+                                    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["DisableModule"], string.Format(L["ConfirmDisableModule"], m.Name),
                                             () => ExecuteActionAsync(ApacheAction.DisableModule, m.Name.Replace("_module", "")), L["Disable"].Value, OmniIconName.Prohibit))" title="@L["Disable"]" Label="@L["Disable"]"><OmniIcon Name="OmniIconName.Prohibit" /></OmniButton>
                                 }
                                 else
                                 {
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableModule, m.Name.Replace("_module", "")))" title="@L["Enable"]" Label="@L["Enable"]"><OmniIcon Name="OmniIconName.Check" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableModule, m.Name.Replace("_module", "")))" title="@L["Enable"]" Label="@L["Enable"]"><OmniIcon Name="OmniIconName.Check" /></OmniButton>
                                 }
                             }
                         </Template>
@@ -171,8 +173,8 @@
                     Class="w-rem-8-75" />
                 <OmniNumeric aria-label="@L["Lines"]" @bind-Value="_logLines" TValue="int" Minimum="1" Maximum="10000" Class="w-rem-6" />
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["Lines"]</OmniText>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@FetchLogsAsync" Class="@(_logLoading ? "btn-busy" : null)" Busy="@(_logLoading)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["ViewLogs"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ToggleFollow"><OmniIcon Name="@MaterialIconMap.Resolve((_logFollowing ? "stop" : "play_arrow"))" /> <span>@(_logFollowing ? L["StopFollow"] : L["FollowLogs"])</span></OmniButton>
+                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@FetchLogsAsync" Class="@(_logLoading ? "btn-busy" : null)" Busy="@(_logLoading)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["ViewLogs"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ToggleFollow" Disabled="@(AgentOffline && !_logFollowing)"><OmniIcon Name="@MaterialIconMap.Resolve((_logFollowing ? "stop" : "play_arrow"))" /> <span>@(_logFollowing ? L["StopFollow"] : L["FollowLogs"])</span></OmniButton>
             </OmniRow>
 
             @if (_logContent is not null)

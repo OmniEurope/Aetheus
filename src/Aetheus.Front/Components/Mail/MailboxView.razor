@@ -1,0 +1,119 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-17: the integrated mailbox of one account. Locked until the reader types the mailbox
+   password (held by the backend in memory only); then folders, the messages of the chosen folder and
+   the reading pane. On a narrow screen the folders, the list and the message stack one above the other. *@
+<OmniStack Gap="OmniSpacing.Medium" Class="mailbox-view">
+    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true" Class="mailbox-header">
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@BackToMail"><OmniIcon Name="@MaterialIconMap.Resolve("arrow_back")" /> <span>@L["MailboxBackToMail"]</span></OmniButton>
+        <OmniText Element="OmniTextElement.Strong" Class="mailbox-address">@(_access?.Email ?? string.Empty)</OmniText>
+        @if (_access is { IsUnlocked: true, UnlockedUntil: { } until })
+        {
+            <OmniBadge Tone="OmniTone.Success" Fill="OmniFill.Tonal">@string.Format(L["MailboxUnlockedUntil"], until.ToString("t"))</OmniBadge>
+        }
+        <div class="blade-content-spacer"></div>
+        @if (Unlocked)
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@(!CanWrite)" OnClick="@(() => ComposeAsync(MailboxComposeMode.New))"><OmniIcon Name="OmniIconName.Edit" /> <span>@L["MailboxCompose"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@(!CanWrite)" OnClick="@CreateFolderAsync"><OmniIcon Name="@MaterialIconMap.Resolve("note_add")" /> <span>@L["MailboxNewFolder"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RefreshAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Refresh"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LockAsync"><OmniIcon Name="@MaterialIconMap.Resolve("lock")" /> <span>@L["MailboxLock"]</span></OmniButton>
+        }
+    </OmniStack>
+
+    @if (_failed)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger" Class="mailbox-failed">@L["LoadFailed"]</OmniAlert>
+    }
+    else if (_access is null)
+    {
+        <AetheusLoader Size="OmniControlSize.Small" />
+    }
+    else if (!Unlocked)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning" Class="mailbox-locked">
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
+                <OmniText>@L["MailboxLocked"]</OmniText>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UnlockAsync"><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /> <span>@L["MailboxUnlock"]</span></OmniButton>
+            </OmniStack>
+        </OmniAlert>
+    }
+    else
+    {
+        <OmniRow>
+            <OmniColumn Span="12" MediumSpan="3">
+                <OmniCard Class="mailbox-folders">
+                    <Header><OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["MailboxFolders"]</OmniText></Header>
+                    <ChildContent>
+                        <OmniDataList TItem="MailboxFolderDto" Items="@_folders">
+                            <ItemTemplate Context="folder">
+                                <OmniButton Variant="@(folder.Path == _folder ? OmniButtonVariant.Secondary : OmniButtonVariant.Ghost)" Class="mailbox-folder"
+                                    OnClick="@(() => SelectFolderAsync(folder.Path))" aria-current="@(folder.Path == _folder ? "true" : null)">
+                                    <OmniIcon Name="@MaterialIconMap.Resolve(FolderIcon(folder.Role))" /> <span>@FolderLabel(folder)</span>
+                                    @if (folder.Unread > 0)
+                                    {
+                                        <OmniBadge Tone="OmniTone.Accent">@folder.Unread</OmniBadge>
+                                    }
+                                </OmniButton>
+                            </ItemTemplate>
+                            <EmptyContent>@L["MailboxNoFolders"]</EmptyContent>
+                        </OmniDataList>
+                    </ChildContent>
+                </OmniCard>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="9">
+                <OmniStack Gap="OmniSpacing.Medium">
+                    <AetheusDataGrid @ref="_grid" TItem="MailboxMessageSummaryDto" Data="@_messages" Count="@_total" IsLoading="@_loading"
+                        LoadData="@LoadMessagesAsync" KeyProperty="Uid" PageSize="25" ExportRead="@ReadExportAsync" ExportName="@L["Mailbox"]"
+                        EmptyText="@L["MailboxNoMessages"]" RowClick="@OpenAsync"
+                        Virtualize="@AetheusGrid.RemoteVirtualization"
+                        VirtualData="@(() => new OmniDataGridResult<MailboxMessageSummaryDto>(_messages, _total))">
+                        <Columns>
+                            <OmniDataGridColumn TItem="MailboxMessageSummaryDto" Property="From" Title="@L["MailboxFrom"]" MinWidth="12rem" Width="16rem" Sortable="false" Filterable="false">
+                                <Template Context="m">
+                                    @if (!m.IsRead)
+                                    {
+                                        <OmniText Element="OmniTextElement.Strong" Truncate="true">@m.From</OmniText>
+                                    }
+                                    else
+                                    {
+                                        <OmniText Truncate="true">@m.From</OmniText>
+                                    }
+                                </Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="MailboxMessageSummaryDto" Property="Subject" Title="@L["MailboxSubject"]" MinWidth="16rem" Sortable="false" Filterable="false">
+                                <Template Context="m">
+                                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                        @if (!m.IsRead)
+                                        {
+                                            <OmniBadge Tone="OmniTone.Accent">@L["MailboxUnread"]</OmniBadge>
+                                        }
+                                        @if (m.HasAttachments)
+                                        {
+                                            <OmniIcon Name="@MaterialIconMap.Resolve("link")" title="@L["MailboxAttachments"]" />
+                                        }
+                                        <OmniText Truncate="true">@m.Subject</OmniText>
+                                    </OmniStack>
+                                </Template>
+                            </OmniDataGridColumn>
+                            <OmniDataGridColumn TItem="MailboxMessageSummaryDto" Property="Date" Title="@L["Date"]" MinWidth="9rem" Width="10rem" Sortable="false" Filterable="false">
+                                <Template Context="m">@m.Date.ToString("g")</Template>
+                            </OmniDataGridColumn>
+                        </Columns>
+                    </AetheusDataGrid>
+                    @if (_message is not null)
+                    {
+                        <MailboxReader Message="@_message" CanWrite="@CanWrite" LoadingImages="@_loadingImages"
+                            OnCompose="@ComposeAsync" OnToggleRead="@ToggleReadAsync" OnDelete="@DeleteAsync"
+                            OnLoadImages="@LoadImagesAsync" OnDownload="@DownloadAsync" />
+                    }
+                    else
+                    {
+                        <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted">@L["MailboxSelectMessage"]</OmniText>
+                    }
+                </OmniStack>
+            </OmniColumn>
+        </OmniRow>
+    }
+
+    <MailClientSettingsHelp ServerId="@ServerId" Email="@_access?.Email" />
+</OmniStack>

@@ -67,8 +67,10 @@ public class TaskService(ITaskRepository repo, ILogService logService, IHubConte
 
     // A task can only run if an agent on the target server is polling to claim it. Refuse to queue
     // one for an offline server so it does not sit Pending forever with no logs (the apache2-install
-    // confusion). The server-management collaborator and the agent's own paths bypass this on purpose.
-    private async Task EnsureServerOnlineAsync(int serverId, CancellationToken ct)
+    // confusion). The module services that persist through their own repository reach it through
+    // TaskQueuePersistence (SITE-OFFLINE-001); the server-management collaborator has its own check and
+    // the agent's own paths bypass it on purpose.
+    public async Task EnsureServerOnlineAsync(int serverId, CancellationToken ct = default)
     {
         var status = await repo.GetServerStatusAsync(serverId, ct).ConfigureAwait(false);
         if (status is not null && status != ServerStatus.Online)

@@ -204,7 +204,7 @@ public class ServerTeamspeakSectionRenderTests : BunitContext
     [Fact]
     public void PokeDialog_RequiresNonWhitespaceMessage()
     {
-        var model = new TeamspeakDialogModel { Mode = TeamspeakDialogMode.Poke, Message = "   " };
+        var model = new TeamspeakDialogModel { Mode = TeamspeakDialogMode.Poke, Message = "   ", L = new BunitTestHelper.StubLocalizer() };
         var results = model.Validate(new System.ComponentModel.DataAnnotations.ValidationContext(model)).ToList();
 
         Assert.Contains(results, result => result.MemberNames.Contains(nameof(TeamspeakDialogModel.Message)));

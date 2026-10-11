@@ -8,7 +8,7 @@
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("tune")" /></Icon>
 </OmniPageHeader>
 
-<UrlSyncedTabs Slugs="@(new[] { "general", "quality-gates", "secrets", "tokens" })">
+<UrlSyncedTabs Slugs="@(new[] { "general", "quality-gates", "email", "daily-recap", "secrets", "tokens" })">
     <Tabs>
         <OmniTabsItem Key="general" Title="@L["General"]">
             <OmniCard Class="omni-u-mt-sm">
@@ -33,6 +33,20 @@
 
         <OmniTabsItem Key="quality-gates" Title="@L["QualityGates"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("rule"))" /></Icon><ChildContent>
             <QualityGatePolicyEditor Scope="AnalysisPolicyScope.Global" CanEdit="true" />
+        </ChildContent></OmniTabsItem>
+
+        @* Recette R1-16: the platform e-mail sender, default no-reply mailbox or custom SMTP server. *@
+        <OmniTabsItem Key="email" Title="@L["EmailSenderTab"]"><Icon><OmniIcon Name="OmniIconName.Envelope" /></Icon><ChildContent>
+            <div class="omni-u-mt-sm">
+                <EmailSenderSettingsPanel />
+            </div>
+        </ChildContent></OmniTabsItem>
+
+        @* The daily recap e-mail, sent every morning by the platform sender. *@
+        <OmniTabsItem Key="daily-recap" Title="@L["DailyRecapTab"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("schedule")" /></Icon><ChildContent>
+            <div class="omni-u-mt-sm">
+                <DailyRecapSettingsPanel />
+            </div>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="secrets" Title="@L["Secrets"]">

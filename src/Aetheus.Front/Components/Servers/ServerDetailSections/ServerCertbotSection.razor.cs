@@ -5,7 +5,6 @@ public partial class ServerCertbotSection : ServerActionSectionBase
 {
     [Inject] private ApiClient Api { get; set; } = default!;
 
-    [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
     private string _certSearch = string.Empty;
@@ -77,6 +76,8 @@ public partial class ServerCertbotSection : ServerActionSectionBase
 
     private async Task OpenCreateDialog()
     {
+        // SITE-OFFLINE-001: the dialog queues the request itself.
+        if (BlockedByOfflineAgent()) return;
         await Dialog.OpenAsync<ServerCertbotCreateDialog>(
             L["NewCertificate"],
             new Dictionary<string, object?> { { "ServerId", ServerId } },

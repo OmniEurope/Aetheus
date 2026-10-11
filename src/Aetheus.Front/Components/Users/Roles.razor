@@ -30,7 +30,7 @@
                 <OmniDataGridColumn Frozen="true" TItem="RoleDto" Property="Name" Title="@L["Name"]" MinWidth="180px" Filterable="true" >
                     <Template Context="role">
                         <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
-                            <a href="/admin/roles/@role.Id" class="server-name-link" @onclick:stopPropagation="true">@role.Name</a>
+                            <a href="/admin/roles/@role.Id" class="server-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@role.Name</a>
                         </OmniStack>
                     </Template>
                 </OmniDataGridColumn>
@@ -43,7 +43,7 @@
                 <OmniDataGridColumn TItem="RoleDto" Property="UserCount" Title="@L["Users"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" FilterOperator="OmniDataGridFilterOperator.Equals" />
                 <OmniDataGridColumn TItem="RoleDto" Title="@L["Actions"]" Width="120px" Sortable="false" Filterable="false" >
                     <Template Context="role">
-                        <span @onclick:stopPropagation="true">
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnClone(role))" title="@L["CloneRole"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
                             @if (role.Name != "Admin")
                             {

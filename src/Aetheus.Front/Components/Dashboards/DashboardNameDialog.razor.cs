@@ -9,20 +9,10 @@ public partial class DashboardNameDialog
 
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
-    [Inject] private IJSRuntime Js { get; set; } = default!;
 
     private string _value = string.Empty;
 
     protected override void OnInitialized() => _value = InitialName;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            try { await Js.InvokeVoidAsync("Aetheus.focusById", "dashboard-name-input"); }
-            catch { /* best effort */ }
-        }
-    }
 
     private void OnKeyDown(KeyboardEventArgs e)
     {

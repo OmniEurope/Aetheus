@@ -115,7 +115,7 @@ public sealed class UserNotificationRepository(AppDbContext db) : IUserNotificat
                     && !db.UserNotificationPreferences.Any(preference =>
                         preference.UserId == subscription.UserId && preference.EventType == eventType)))
             .OrderBy(subscription => subscription.UserId)
-            .Select(subscription => new NotificationRecipient(subscription.UserId, subscription.User.Username))
+            .Select(subscription => new NotificationRecipient(subscription.UserId, subscription.User.Username, subscription.User.Email))
             .ToListAsync(ct);
 
     public Task<string?> GetProjectNameAsync(int projectId, CancellationToken ct = default) =>
@@ -204,7 +204,7 @@ public sealed class UserNotificationRepository(AppDbContext db) : IUserNotificat
         db.Users.AsNoTracking()
             .Where(user => user.IsActive && user.UserRoles.Any(link => link.Role.Name == "Admin"))
             .OrderBy(user => user.Id)
-            .Select(user => new NotificationRecipient(user.Id, user.Username))
+            .Select(user => new NotificationRecipient(user.Id, user.Username, user.Email))
             .ToListAsync(ct);
 
     public Task<List<int>> GetServerProjectIdsAsync(int serverId, CancellationToken ct = default) =>

@@ -14,6 +14,10 @@ public partial class GitBranchProtectionDialog
     private string _pattern = string.Empty;
     private bool _preventDeletion = true;
     private bool _preventForcePush = true;
+    private BranchProtectionLevel _protectionLevel = BranchProtectionLevel.NotProtected;
+    private List<OmniOption<BranchProtectionLevel>> _levels = [];
+
+    protected override void OnInitialized() => _levels = BranchProtectionLevelOptions.Build(L);
 
     private async Task Save()
     {
@@ -28,8 +32,7 @@ public partial class GitBranchProtectionDialog
             Pattern = _pattern.Trim(),
             PreventDeletion = _preventDeletion,
             PreventForcePush = _preventForcePush,
-            // Recette R2-042: set aside, never enforced; the request keeps the field for the code kept.
-            RequirePullRequest = false
+            ProtectionLevel = _protectionLevel
         };
 
         var result = await Api.Git.CreateGitBranchProtectionRuleAsync(RepoId, request);

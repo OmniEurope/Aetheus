@@ -23,7 +23,7 @@
   <data name="CapDeploy" xml:space="preserve"><value>Pipeline de déploiement</value></data>
   <data name="CapManage" xml:space="preserve"><value>Pipeline de gestion</value></data>
   <data name="CapUnknown" xml:space="preserve"><value>Capacités inconnues (agent pas encore rapporté)</value></data>
-  <data name="CapabilityDiagnosticsHint" xml:space="preserve"><value>Pourquoi une capacité est désactivée :</value></data>
+  <data name="CapabilityDiagnosticsHint" xml:space="preserve"><value>Posture de l'agent et raisons d'une capacité désactivée :</value></data>
   <data name="PreflightResolved" xml:space="preserve"><value>Runners trouvés</value></data>
   <data name="Pipelines" xml:space="preserve"><value>Pipelines</value><comment>same in both languages</comment></data>
   <data name="Tasks" xml:space="preserve"><value>Tâches</value></data>
@@ -447,6 +447,13 @@
   <data name="RequireApproval" xml:space="preserve"><value>Approbation requise</value></data>
   <data name="ApprovalTimeoutMinutes" xml:space="preserve"><value>Délai d'approbation (minutes)</value></data>
   <data name="ApprovalInstructions" xml:space="preserve"><value>Instructions d'approbation</value></data>
+  <data name="ApprovalInstructionsHelp" xml:space="preserve"><value>Affichées à la personne qui approuve un déploiement vers cet environnement, sur la page de l'exécution, à côté d'Approuver et Rejeter.</value></data>
+  <data name="ApprovalInstructionsForApprover" xml:space="preserve"><value>Instructions pour l'approbateur :</value></data>
+  <data name="PipelineDefinitionStoredInAetheus" xml:space="preserve"><value>Définition conservée dans Aetheus, pas dans Git.</value></data>
+  <data name="PipelineDefinitionStoredInGit" xml:space="preserve"><value>Définition conservée dans Git : {0} sur la branche {1}.</value></data>
+  <data name="PipelineDefinitionOpenRepository" xml:space="preserve"><value>Ouvrir le dépôt</value></data>
+  <data name="ProjectPipelinesStoredInAetheus" xml:space="preserve"><value>Les définitions des pipelines de ce projet sont conservées dans Aetheus, pas dans Git.</value></data>
+  <data name="ProjectPipelinesStoredInGit" xml:space="preserve"><value>Les définitions des pipelines de ce projet sont conservées dans Git, dans .pipeline/ de {0}.</value></data>
   <data name="Approval" xml:space="preserve"><value>Approbation</value></data>
   <data name="EnvironmentApprovalTitle" xml:space="preserve"><value>Autoriser le déploiement en {0}</value></data>
   <data name="PipelineApprovalTitle" xml:space="preserve"><value>Confirmer que la nouvelle version fonctionne</value></data>
@@ -584,7 +591,7 @@
   <data name="Rules" xml:space="preserve"><value>Règles</value></data>
   <data name="EventType" xml:space="preserve"><value>Type d'événement</value></data>
   <data name="ChannelConfiguration" xml:space="preserve"><value>Configuration (JSON)</value><comment>same in both languages</comment></data>
-  <data name="NotificationChannelConfigHint" xml:space="preserve"><value>JSON. Slack/Teams : {"webhookUrl":"..."}. Webhook : {"url":"...","secret":"..."}.</value></data>
+  <data name="NotificationChannelConfigHint" xml:space="preserve"><value>JSON. Slack/Teams : {"webhookUrl":"..."}. Webhook : {"url":"...","secret":"..."}. E-mail : {} (envoyé aux administrateurs actifs, depuis l'expéditeur des paramètres de la plateforme).</value></data>
   <data name="NotificationEventTypeHint" xml:space="preserve"><value>La clé d'événement exacte qui déclenche cette règle, ex. alert.triggered ou SecretExpiring.</value></data>
   <data name="NotificationFilter" xml:space="preserve"><value>Filtre (JSON, optionnel)</value></data>
   <data name="NotificationFilterHint" xml:space="preserve"><value>JSON optionnel pour restreindre les événements concernés.</value></data>
@@ -659,6 +666,9 @@
   <data name="Enum_PipelineStatus_Cancelled" xml:space="preserve"><value>Annulé</value></data>
   <data name="Enum_PipelineStatus_Partial" xml:space="preserve"><value>Partiel</value></data>
   <data name="Enum_PipelineStatus_RolledBack" xml:space="preserve"><value>Revenu en arrière</value></data>
+  <data name="Enum_PipelineStatus_Rejected" xml:space="preserve"><value>Rejeté</value></data>
+  <data name="RunLaunchRefused" xml:space="preserve"><value>Lancement refusé</value></data>
+  <data name="RunLaunchRefusedTitle" xml:space="preserve"><value>Le lancement automatique a été refusé avant toute exécution ; le motif est sur l'exécution.</value></data>
   <data name="Enum_PipelineTriggerType_Manual" xml:space="preserve"><value>Manuel</value></data>
   <data name="Enum_PipelineTriggerType_Webhook" xml:space="preserve"><value>Webhook</value><comment>same in both languages</comment></data>
   <data name="Enum_PipelineTriggerType_Schedule" xml:space="preserve"><value>Planifié</value></data>
@@ -784,7 +794,7 @@
   <data name="AgentUpdateFailed" xml:space="preserve"><value>Échec de la mise à jour</value></data>
   <data name="AgentUpdateInProgressTo" xml:space="preserve"><value>Mise à jour en cours vers {0}</value></data>
   <data name="AgentUpdateFailedWithReason" xml:space="preserve"><value>Échec de la mise à jour : {0}</value></data>
-  <data name="AgentUpdateTimeoutHint" xml:space="preserve"><value>Aucun progrès reçu - l'agent est peut-être hors ligne ou injoignable.</value></data>
+  <data name="AgentUpdateCheckingHint" xml:space="preserve"><value>Pas de nouvelles de la mise à jour depuis un moment, vérification de son état réel…</value></data>
   <data name="AgentUpdateRestartingHint" xml:space="preserve"><value>Attente du redémarrage de l'agent…</value></data>
   <data name="AgentUpdateDoneHint" xml:space="preserve"><value>Agent redémarré en v{0}.</value></data>
   <data name="AgentUpdated" xml:space="preserve"><value>Agent mis à jour</value></data>
@@ -1170,6 +1180,11 @@
   <data name="CandidateNotDeployableTitle" xml:space="preserve"><value>Cette candidate ne peut pas être déployée</value></data>
   <data name="CandidateNotDeployableDetail" xml:space="preserve"><value>Le sceau d&apos;assurance a refusé le paquet. Le run peut être vert : ce qu&apos;il a construit n&apos;est pas autorisé en production.</value></data>
   <data name="CandidateBlockingTests" xml:space="preserve"><value>Tests bloquants</value></data>
+  <data name="CandidateBlockingTestSource" xml:space="preserve"><value>{0} : échec, étape « {1} » du run #{2} ({3})</value></data>
+  <data name="CandidateBlockingTestOpenLogs" xml:space="preserve"><value>Ouvrir les logs</value></data>
+  <data name="CandidateBlockingFailedTests" xml:space="preserve"><value>Tests en échec</value></data>
+  <data name="StepGateFindings" xml:space="preserve"><value>Avertissement</value></data>
+  <data name="StepGateFindingsHint" xml:space="preserve"><value>L&apos;étape a réussi mais a publié un statut de gate non nul : des tests ou des contrôles ont trouvé quelque chose.</value></data>
   <data name="GateSealedGradeTitle" xml:space="preserve"><value>Note scellée de la candidate</value></data>
   <data name="GateSealedGradeDetail" xml:space="preserve"><value>La liste des exécutions et cet onglet montrent la note scellée par le contrat d&apos;assurance de la candidate. L&apos;analyse ci-dessous, prise seule, vaut {0}.</value></data>
   <data name="LatestGradeOpenFindings" xml:space="preserve"><value>Ouvrir les constats de cette exécution notée</value></data>
@@ -1371,6 +1386,10 @@
   <data name="NoRulesFound" xml:space="preserve"><value>Aucune règle de protection trouvée.</value></data>
   <data name="PreventDeletion" xml:space="preserve"><value>Empêcher la suppression</value></data>
   <data name="PreventForcePush" xml:space="preserve"><value>Empêcher le force push</value></data>
+  <data name="BranchProtectionLevel" xml:space="preserve"><value>Qui peut faire avancer la branche</value></data>
+  <data name="Enum_BranchProtectionLevel_NotProtected" xml:space="preserve"><value>Non protégée : tout utilisateur ayant le droit d'écriture</value></data>
+  <data name="Enum_BranchProtectionLevel_ProtectedExceptPipelines" xml:space="preserve"><value>Protégée sauf pipelines : les personnes passent par une pull request</value></data>
+  <data name="Enum_BranchProtectionLevel_StrictlyProtected" xml:space="preserve"><value>Strictement protégée : pull requests fusionnées uniquement</value></data>
   <data name="RequirePR" xml:space="preserve"><value>Exiger une PR</value></data>
   <data name="Pattern" xml:space="preserve"><value>Motif</value></data>
   <data name="Graph" xml:space="preserve"><value>Graphe</value></data>
@@ -1998,7 +2017,7 @@
   <data name="ViewPipelinesUsingTemplate" xml:space="preserve"><value>Voir les pipelines qui utilisent {0}</value></data>
   <data name="AllTemplates" xml:space="preserve"><value>Tous les modèles</value></data>
   <data name="Current" xml:space="preserve"><value>À jour</value></data>
-  <data name="Outdated" xml:space="preserve"><value>En retard</value></data>
+  <data name="Outdated" xml:space="preserve"><value>Version plus récente disponible</value></data>
   <data name="Update" xml:space="preserve"><value>Mettre à jour</value></data>
   <data name="OffCatalog" xml:space="preserve"><value>Autonome</value></data>
   <data name="Owner" xml:space="preserve"><value>Propriétaire</value></data>
@@ -2069,17 +2088,16 @@
   <data name="AnalysisScannerMessage" xml:space="preserve"><value>Message du scanner</value></data>
   <data name="AnalysisFindingNotFound" xml:space="preserve"><value>Ce finding n’existe pas ou n’est pas accessible.</value></data>
   <data name="AnalysisDecision" xml:space="preserve"><value>Décision</value></data>
-  <data name="AnalysisDecisionHelp" xml:space="preserve"><value>Consignez l’arbitrage et expliquez pourquoi ce finding est accepté, atténué ou considéré comme un faux positif.</value></data>
   <data name="AnalysisDecisionSaved" xml:space="preserve"><value>La décision de gouvernance a été enregistrée.</value></data>
   <data name="AnalysisDecisionChooseOutcome" xml:space="preserve"><value>Choisir l’issue de la revue</value></data>
   <data name="AnalysisDecisionAcceptedDescription" xml:space="preserve"><value>Le risque est compris et consciemment accepté.</value></data>
   <data name="AnalysisDecisionFalsePositiveDescription" xml:space="preserve"><value>Le problème signalé ne s’applique pas à ce code ou à ce contexte.</value></data>
   <data name="AnalysisDecisionMitigatedDescription" xml:space="preserve"><value>Une mesure compensatoire réduit le risque sans supprimer le finding.</value></data>
   <data name="AnalysisDecisionReasonPlaceholder" xml:space="preserve"><value>Documentez les preuves, le contexte et le responsable de cette décision…</value></data>
-  <data name="AnalysisDecisionReasonHint" xml:space="preserve"><value>Obligatoire : 10 à 2 000 caractères. Expliquez les preuves afin que la décision reste auditable.</value></data>
-  <data name="AnalysisDecisionExpirationHint" xml:space="preserve"><value>Facultatif. Indiquez une date future à laquelle cette décision devra être réexaminée.</value></data>
   <data name="AnalysisDecisionExpirationFuture" xml:space="preserve"><value>La date d’expiration doit être située dans le futur.</value></data>
-  <data name="AnalysisDecisionSelected" xml:space="preserve"><value>Issue sélectionnée :</value></data>
+  <data name="AnalysisDecisionCurrentStatus" xml:space="preserve"><value>Statut actuel :</value></data>
+  <data name="AnalysisDecisionReopenDescription" xml:space="preserve"><value>Annule la décision en vigueur : le finding redevient ouvert.</value></data>
+  <data name="AnalysisDecisionOutcomeRequired" xml:space="preserve"><value>Choisissez une issue.</value></data>
   <data name="AnalysisSaveDecision" xml:space="preserve"><value>Enregistrer</value></data>
   <data name="AnalysisRevertDecision" xml:space="preserve"><value>Revenir sur la décision</value></data>
   <data name="AnalysisRevertDecisionConfirm" xml:space="preserve"><value>Le finding redevient ouvert ; la décision reste dans son historique.</value></data>
@@ -2283,7 +2301,6 @@
   <data name="AnalysisGateIncompleteDetail" xml:space="preserve"><value>Les preuves des exécutions de pipeline {0} n’ont pas pu être chargées. La gate affichée est incomplète et ne doit pas être considérée comme réussie.</value></data>
   <data name="UserRolesSavedPermissionRefreshUnauthorized" xml:space="preserve"><value>Les rôles ont été enregistrés, mais vos permissions effectives n’ont pas pu être actualisées car votre session doit être renouvelée.</value></data>
   <data name="UserRolesSavedPermissionRefreshFailed" xml:space="preserve"><value>Les rôles ont été enregistrés, mais les permissions effectives n’ont pas pu être actualisées.</value></data>
-  <data name="AnalysisLimitingDomain" xml:space="preserve"><value>Domaine limitant</value></data>
   <data name="AnalysisApplicationSecurity" xml:space="preserve"><value>Sécurité de l’application</value></data>
   <data name="AnalysisCodeQualityAndTests" xml:space="preserve"><value>Qualité du code et des tests</value></data>
   <data name="AnalysisCodeArchitecture" xml:space="preserve"><value>Architecture du code</value></data>
@@ -2291,7 +2308,7 @@
   <data name="AnalysisCriticalVulnerabilities" xml:space="preserve"><value>Failles critiques</value></data>
   <data name="AnalysisHighVulnerabilities" xml:space="preserve"><value>Failles de sévérité élevée</value></data>
   <data name="AnalysisMediumVulnerabilities" xml:space="preserve"><value>Failles de sévérité moyenne</value></data>
-  <data name="AnalysisOpenFindingsScore" xml:space="preserve"><value>Constats ouverts (score pondéré)</value></data>
+  <data name="AnalysisOpenFindingCount" xml:space="preserve"><value>Constats ouverts</value></data>
   <data name="AnalysisCriticalFindingNotDeliverable" xml:space="preserve"><value>Un constat critique ouvert donne F : non livrable.</value></data>
   <data name="AnalysisTestedLines" xml:space="preserve"><value>Lignes couvertes par les tests</value></data>
   <data name="AnalysisTestedBranches" xml:space="preserve"><value>Branches de code couvertes par les tests</value></data>
@@ -2300,11 +2317,8 @@
   <data name="AnalysisDependencyCycles" xml:space="preserve"><value>Cycles de dépendances entre composants</value></data>
   <data name="AnalysisCrapAverage" xml:space="preserve"><value>Score CRAP moyen (complexité × manque de tests)</value></data>
   <data name="AnalysisCrapExplanation" xml:space="preserve"><value>Indicateur de risque combinant complexité du code et couverture de tests insuffisante ; plus il est bas, mieux c’est.</value></data>
-  <data name="AnalysisRequired" xml:space="preserve"><value>Obligatoire</value></data>
   <data name="AnalysisAdvisory" xml:space="preserve"><value>Indicatif</value></data>
-  <data name="AnalysisFreshness" xml:space="preserve"><value>Fraîcheur</value></data>
   <data name="AnalysisDistanceToGrade" xml:space="preserve"><value>{0} pour atteindre la note {1}</value></data>
-  <data name="Complete" xml:space="preserve"><value>Complet</value></data>
   <data name="Incomplete" xml:space="preserve"><value>Incomplet</value></data>
   <data name="Performance" xml:space="preserve"><value>Performance</value><comment>same in both languages</comment></data>
   <data name="GitPatchTruncated" xml:space="preserve"><value>Ce patch a été tronqué pour préserver la réactivité de la page.</value></data>
@@ -2388,7 +2402,9 @@
   <data name="AnalysisGateShowDecided" xml:space="preserve"><value>Afficher les {0} constats déjà décidés</value></data>
   <data name="AnalysisGateFindings" xml:space="preserve"><value>Constats</value></data>
   <data name="AnalysisGateNewFindings" xml:space="preserve"><value>Nouveaux constats</value></data>
-  <data name="AnalysisGateViolations" xml:space="preserve"><value>Violations</value><comment>same in both languages</comment></data>
+  <data name="AnalysisGateViolations" xml:space="preserve"><value>Alertes de règles</value></data>
+  <data name="AnalysisGateViolationWarn" xml:space="preserve"><value>Avertissement</value></data>
+  <data name="AnalysisGateViolationBlock" xml:space="preserve"><value>Bloquant</value></data>
   <data name="AnalysisGateLine" xml:space="preserve"><value>Ligne</value></data>
   <data name="AnalysisGateNewBadge" xml:space="preserve"><value>Nouveau</value></data>
   <data name="AnalysisGateOpenFinding" xml:space="preserve"><value>Ouvrir le détail du constat</value></data>
@@ -2398,7 +2414,7 @@
   <data name="AnalysisFindingsReportDescription" xml:space="preserve"><value>Un rapport lisible regroupé par catégorie d’analyse et trié par sévérité.</value></data>
   <data name="AnalysisGateStatusPassed" xml:space="preserve"><value>Validée</value></data>
   <data name="AnalysisGateStatusWarning" xml:space="preserve"><value>Avertissement</value></data>
-  <data name="AnalysisGateStatusBlocked" xml:space="preserve"><value>Bloquée</value></data>
+  <data name="AnalysisGateStatusBlocked" xml:space="preserve"><value>Rejetée</value></data>
   <data name="AnalysisGateStatusError" xml:space="preserve"><value>Erreur</value></data>
   <data name="AnalysisSeverityNone" xml:space="preserve"><value>Aucune</value></data>
   <data name="AnalysisSeverityInfo" xml:space="preserve"><value>Information</value></data>
@@ -2646,6 +2662,7 @@
   <data name="AuditAction_TemplateVersionsReset" xml:space="preserve"><value>Versions du modèle repartues en v1</value></data>
   <data name="AuditAction_TemplateVersionRepinned" xml:space="preserve"><value>Version du modèle réépinglée en v1</value></data>
   <data name="AuditAction_Tested" xml:space="preserve"><value>Testé</value></data>
+  <data name="AuditAction_Sent" xml:space="preserve"><value>Envoyé</value></data>
   <data name="AuditAction_TotpDisabled" xml:space="preserve"><value>Double authentification désactivée</value></data>
   <data name="AuditAction_TotpEnabled" xml:space="preserve"><value>Double authentification activée</value></data>
   <data name="AuditAction_Triggered" xml:space="preserve"><value>Déclenché</value></data>
@@ -2667,7 +2684,58 @@
   <data name="SelectPipelineProject" xml:space="preserve"><value>Sélectionnez le projet qui possédera les pipelines générés.</value></data>
   <data name="PipelinePrefix" xml:space="preserve"><value>Préfixe des pipelines</value></data>
   <data name="PipelinePrefixHint" xml:space="preserve"><value>L’assistant utilise ce préfixe stable dans les noms et les références entre pipelines.</value></data>
-  <data name="ApplicationArchitecture" xml:space="preserve"><value>Architecture de l’application</value></data>
+  <data name="PipelineSetupStartFrom" xml:space="preserve"><value>Partir de</value></data>
+  <data name="PipelineSetupStartTemplates" xml:space="preserve"><value>Nouveaux pipelines à partir des modèles</value></data>
+  <data name="PipelineSetupStartExistingProject" xml:space="preserve"><value>Les pipelines d’un projet existant</value></data>
+  <data name="PipelineCopyFinish" xml:space="preserve"><value>Copier les pipelines</value></data>
+  <data name="PipelineCopyOpenPipelines" xml:space="preserve"><value>Ouvrir les pipelines du projet</value></data>
+  <data name="PipelineCopyStepPipelines" xml:space="preserve"><value>Pipelines à reprendre</value></data>
+  <data name="PipelineCopyProjectsTitle" xml:space="preserve"><value>Quel projet reçoit les pipelines, et de quel projet ils viennent</value></data>
+  <data name="PipelineCopyTargetProject" xml:space="preserve"><value>Nouveau projet</value></data>
+  <data name="PipelineCopySourceProject" xml:space="preserve"><value>Partir du projet</value></data>
+  <data name="PipelineCopySourcePrefix" xml:space="preserve"><value>Préfixe du projet source</value></data>
+  <data name="PipelineCopySourcePrefixHint" xml:space="preserve"><value>Remplacé par le nouveau préfixe dans le nom des copies et dans ce qu’elles désignent.</value></data>
+  <data name="PipelineCopyValuesRule" xml:space="preserve"><value>Les bibliothèques et les coffres sont copiés en structure : leur nom et le nom de leurs variables et secrets, jamais les valeurs. Les valeurs sont à saisir pour le nouveau projet.</value></data>
+  <data name="PipelineCopyPipelinesTitle" xml:space="preserve"><value>Pipelines du projet source, adaptés au nouveau</value></data>
+  <data name="PipelineCopyPlanFailed" xml:space="preserve"><value>Les pipelines du projet source n’ont pas pu être lus.</value></data>
+  <data name="PipelineCopyNoPipeline" xml:space="preserve"><value>Le projet source n’a aucun pipeline que vous pouvez lire.</value></data>
+  <data name="PipelineCopyFrom" xml:space="preserve"><value>depuis {0}</value></data>
+  <data name="PipelineCopyResultTitle" xml:space="preserve"><value>Copié : ce qu’il reste à régler</value></data>
+  <data name="PipelineCopySummary" xml:space="preserve"><value>{0} vers {1} : {2} pipeline(s)</value></data>
+  <data name="PipelineCopyDone" xml:space="preserve"><value>{0} pipeline(s) copié(s)</value></data>
+  <data name="PipelineCopyLibraries" xml:space="preserve"><value>Bibliothèques (structure copiée)</value></data>
+  <data name="PipelineCopyVaults" xml:space="preserve"><value>Coffres (structure copiée)</value></data>
+  <data name="PipelineCopyResourceKept" xml:space="preserve"><value>Déjà dans le nouveau projet, conservé</value></data>
+  <data name="PipelineCopyResourceValuesToFill" xml:space="preserve"><value>Valeurs à saisir</value></data>
+  <data name="PipelineCopyResourceValuesEmpty" xml:space="preserve"><value>Créé, valeurs vides</value></data>
+  <data name="PipelineCopyResourceKeys" xml:space="preserve"><value>Noms repris, valeurs vides :</value></data>
+  <data name="Enum_PipelineCopyStatus_Ready" xml:space="preserve"><value>Prêt</value></data>
+  <data name="Enum_PipelineCopyStatus_ToReview" xml:space="preserve"><value>À revoir</value></data>
+  <data name="Enum_PipelineCopyStatus_NotCopied" xml:space="preserve"><value>Non copié</value></data>
+  <data name="Enum_PipelineCopyIssueKind_SourceProjectNameRemains" xml:space="preserve"><value>Nomme encore le projet source :</value></data>
+  <data name="Enum_PipelineCopyIssueKind_PinnedAgent" xml:space="preserve"><value>Runner ou serveur imposé par son nom :</value></data>
+  <data name="Enum_PipelineCopyIssueKind_VirtualHostName" xml:space="preserve"><value>Nom d’hôte du site publié par une étape :</value></data>
+  <data name="Enum_PipelineCopyIssueKind_SourceRepository" xml:space="preserve"><value>Dépôt nommé dans le bloc source :</value></data>
+  <data name="Enum_PipelineCopyIssueKind_HardCodedHost" xml:space="preserve"><value>Adresse écrite dans la définition :</value></data>
+  <data name="Enum_PipelineCopyIssueKind_UncopiedPipeline" xml:space="preserve"><value>Lance ou lit un pipeline qui n’est pas copié :</value></data>
+  <data name="Enum_PipelineCopyIssueKind_InvalidDefinition" xml:space="preserve"><value>Non valide pour le nouveau projet :</value></data>
+  <data name="Enum_PipelineCopyIssueKind_NameTaken" xml:space="preserve"><value>Nom déjà pris par un pipeline du nouveau projet :</value></data>
+  <data name="PipelineArchitectureTitle" xml:space="preserve"><value>Architecture du pipeline</value></data>
+  <data name="PipelineArchitectureQuestion" xml:space="preserve"><value>Que construisent et vérifient ces pipelines ?</value></data>
+  <data name="PipelineArchitectureApplication" xml:space="preserve"><value>Application</value><comment>same in both languages</comment></data>
+  <data name="PipelineArchitectureApplicationHint" xml:space="preserve"><value>Une application construite et livrée par les pipelines : interface, serveur, base de données.</value></data>
+  <data name="PipelineSameProjectQuestion" xml:space="preserve"><value>L’interface est servie par le même projet que le serveur ? (ex. Blazor Server)</value></data>
+  <data name="PipelineSameProjectYesDetail" xml:space="preserve"><value>L’interface est servie par le projet serveur : aucun frontend séparé n’est construit.</value></data>
+  <data name="PipelineSameProjectSummary" xml:space="preserve"><value>Interface servie par le serveur</value></data>
+  <data name="ExternalSecurityPipeline" xml:space="preserve"><value>Sécurité minimale</value></data>
+  <data name="ExternalSecurityPipelineHint" xml:space="preserve"><value>Code, dépendances et fichiers d’infrastructure analysés par les outils de la plateforme, sans aucun fichier exigé dans le dépôt. Pas de recherche de secrets : elle exige .gitleaks.toml.</value></data>
+  <data name="PipelineArchitecturePackage" xml:space="preserve"><value>Paquet</value></data>
+  <data name="PipelineArchitecturePackageHint" xml:space="preserve"><value>Un paquet publié dans le registre d’Aetheus. Rien n’est déployé.</value></data>
+  <data name="PipelineArchitectureExternal" xml:space="preserve"><value>Application externe</value></data>
+  <data name="PipelineArchitectureExternalHint" xml:space="preserve"><value>Rien n’est déployé par Aetheus, seulement le minimum : une analyse de sécurité qui n’exige aucun fichier dans le dépôt externe.</value></data>
+  <data name="PipelineStack" xml:space="preserve"><value>Technologie</value></data>
+  <data name="PipelineStackHint" xml:space="preserve"><value>Détermine le paquet d’analyse web de l’ensemble de paquets. Seul .NET est pris en charge aujourd’hui.</value></data>
+  <data name="PipelineStackDotNet" xml:space="preserve"><value>.NET</value><comment>same in both languages</comment></data>
   <data name="Frontend" xml:space="preserve"><value>Frontend</value><comment>same in both languages</comment></data>
   <data name="Database" xml:space="preserve"><value>Base de données</value></data>
   <data name="FrontendPipelineHint" xml:space="preserve"><value>Compiler et vérifier une interface ou une application web.</value></data>
@@ -2922,6 +2990,8 @@
   <data name="ExportContent" xml:space="preserve"><value>Contenu exporté</value></data>
   <data name="StepFailedNonBlocking" xml:space="preserve"><value>Échoué, autorisé à continuer : le run ne s'est pas arrêté ici</value></data>
   <data name="StepSkippedArtifactMissing" xml:space="preserve"><value>Ignoré (artefact absent)</value></data>
+  <data name="StepAdvisory" xml:space="preserve"><value>Consultatif</value></data>
+  <data name="StepAdvisoryHint" xml:space="preserve"><value>Étape d'essai : son résultat n'influe jamais sur le statut du run.</value></data>
   <data name="GanttColumnDuration" xml:space="preserve"><value>Durée</value></data>
   <data name="GanttColumnDurationHint" xml:space="preserve"><value>Durée de l'étape, ou durée écoulée si elle est en cours</value></data>
   <data name="GanttColumnAverage" xml:space="preserve"><value>Moyenne</value></data>
@@ -3077,6 +3147,12 @@
   <data name="MailServerChecks" xml:space="preserve"><value>Contrôles serveur</value></data>
   <data name="MailCollectorFindings" xml:space="preserve"><value>Constats de l'inventaire</value></data>
   <data name="MailWaitingForTask" xml:space="preserve"><value>En attente de la tâche serveur</value></data>
+  <data name="MailTaskRunning" xml:space="preserve"><value>En cours : {0}</value></data>
+  <data name="MailTaskServiceAction" xml:space="preserve"><value>{1} {0}</value><comment>same in both languages</comment></data>
+  <data name="MailTaskStartServices" xml:space="preserve"><value>Démarrer les services</value></data>
+  <data name="MailTaskFailed" xml:space="preserve"><value>{0} a échoué ({1}) : {2}</value></data>
+  <data name="MailDkimKeyReading" xml:space="preserve"><value>La clé DKIM est en cours de lecture sur le serveur. Rouvrez les enregistrements DNS dans un instant pour obtenir l'enregistrement DKIM.</value></data>
+  <data name="MailDkimKeyAgentOffline" xml:space="preserve"><value>La clé DKIM n'est pas encore connue et l'agent du serveur est hors-ligne, elle ne peut donc pas être lue. Les autres enregistrements sont complets ; reconnectez l'agent pour obtenir l'enregistrement DKIM.</value></data>
   <data name="MailReinstall" xml:space="preserve"><value>Réinstaller la messagerie</value></data>
   <data name="MailReinstallAction" xml:space="preserve"><value>Réinstaller</value></data>
   <data name="MailReinstallConfirm" xml:space="preserve"><value>Réinstaller</value></data>
@@ -3170,7 +3246,7 @@
   <data name="NotificationEvent" xml:space="preserve"><value>Événement</value></data>
   <data name="NotificationChannelNone" xml:space="preserve"><value>Aucun</value></data>
   <data name="NotificationSubject" xml:space="preserve"><value>Sujet</value></data>
-  <data name="NotificationPreferencesIntro" xml:space="preserve"><value>Choisissez les événements des projets que vous suivez qui vous sont notifiés. Aucun canal d'envoi n'est encore configuré : les notifications sont listées dans Mes notifications et rien n'est envoyé.</value></data>
+  <data name="NotificationPreferencesIntro" xml:space="preserve"><value>Choisissez les événements des projets que vous suivez qui vous sont notifiés. Chaque notification est listée dans Mes notifications et envoyée aussi par e-mail à l'adresse de votre compte.</value></data>
   <data name="NotificationPreferencesUnavailable" xml:space="preserve"><value>Les préférences de notification n'ont pas pu être chargées.</value></data>
   <data name="NotificationPreferenceNoProject" xml:space="preserve"><value>{0} (sans projet associé, jamais notifié pour l'instant)</value></data>
   <data name="NotificationSubscriptions" xml:space="preserve"><value>Projets suivis</value></data>
@@ -3398,13 +3474,13 @@
   <data name="MailDomainHelp" xml:space="preserve"><value>Le domaine des adresses servies : ce qui suit le @, par exemple votredomaine.fr.</value></data>
   <data name="MailDkimSelectorHelp" xml:space="preserve"><value>Une étiquette libre (lettres, chiffres, - et _) qui nomme la clé de signature DKIM dans le DNS : l&apos;enregistrement sera sélecteur._domainkey.domaine. Prenez-en une différente de celles d&apos;un autre fournisseur du même domaine.</value></data>
   <data name="MailAdminEmailHelp" xml:space="preserve"><value>La première boîte créée, dans le domaine ci-dessus, par exemple postmaster@votredomaine.fr. Elle reçoit aussi les rapports DMARC.</value></data>
-  <data name="MailAdminPasswordHelp" xml:space="preserve"><value>Le mot de passe de cette boîte, au moins 12 caractères.</value></data>
+  <data name="MailAdminPasswordHelp" xml:space="preserve"><value>Le mot de passe de cette boîte.</value></data>
   <data name="MailQuotaHelp" xml:space="preserve"><value>La taille maximale de chaque boîte, en mégaoctets.</value></data>
   <data name="MailHostnameInvalid" xml:space="preserve"><value>Indiquez un nom complet, avec un point et une extension, par exemple mx.votredomaine.fr.</value></data>
   <data name="MailDkimSelectorInvalid" xml:space="preserve"><value>Le sélecteur ne peut contenir que des lettres, des chiffres, - et _.</value></data>
   <data name="MailDomainInvalid" xml:space="preserve"><value>Indiquez un domaine valide, par exemple votredomaine.fr.</value></data>
   <data name="MailEmailInvalid" xml:space="preserve"><value>Indiquez une adresse e-mail valide.</value></data>
-  <data name="MailPasswordInvalid" xml:space="preserve"><value>Le mot de passe doit faire au moins 12 caractères.</value></data>
+  <data name="MailPasswordInvalid" xml:space="preserve"><value>Le mot de passe doit faire de {0} à {1} caractères, sans retour à la ligne ni tabulation.</value></data>
   <data name="ApprovalAddComment" xml:space="preserve"><value>Commenter</value></data>
   <data name="ServiceActionRunningBanner" xml:space="preserve"><value>{0} de « {1} » en cours…</value></data>
   <data name="ServiceActionQueuedBanner" xml:space="preserve"><value>{0} de « {1} » : en attente de l&apos;agent…</value></data>
@@ -3509,7 +3585,7 @@
   <data name="MailSetupRunning" xml:space="preserve"><value>Configuration en cours...</value></data>
   <data name="MailSetupFailed" xml:space="preserve"><value>La configuration n'a pas abouti ({0}). Voir le journal de la tâche.</value></data>
   <data name="MailSpamFilterHelp" xml:space="preserve"><value>rspamd filtre le courrier indésirable entrant. Il peut aussi s'installer plus tard depuis l'onglet Antispam.</value></data>
-  <data name="MailAcmeEmailHelp" xml:space="preserve"><value>L'adresse à laquelle Let's Encrypt écrit avant l'expiration du certificat.</value></data>
+  <data name="MailAcmeEmailHelp" xml:space="preserve"><value>Facultatif. Elle ne reçoit que les avis que Let's Encrypt envoie avant l'expiration du certificat.</value></data>
   <data name="MailStatusTitle" xml:space="preserve"><value>État de la messagerie</value></data>
   <data name="MailStatusAllGreen" xml:space="preserve"><value>Tout est vert. Envoyez un message de test pour vérifier la livraison de bout en bout.</value></data>
   <data name="MailStartServices" xml:space="preserve"><value>Démarrer</value></data>
@@ -3523,6 +3599,48 @@
   <data name="MailFixDkimUnknown" xml:space="preserve"><value>La clé DKIM de ce domaine n'est pas encore lue ; elle apparaît après le prochain battement.</value></data>
   <data name="MailFixUnknown" xml:space="preserve"><value>Cette vérification n'a pas pu se faire (résolveur DNS, ou données pas encore collectées). Elle repasse au prochain battement.</value></data>
   <data name="MailFixRecheck" xml:space="preserve"><value>La ligne passe au vert dès que le DNS répond ; elle est revérifiée à chaque battement.</value></data>
+  <data name="MailDetailServerNotAuthorized" xml:space="preserve"><value>N'autorise pas ce serveur</value></data>
+  <data name="MailFixWhatA" xml:space="preserve"><value>L'enregistrement A donne l'adresse du nom d'hôte de messagerie. Les autres serveurs de messagerie et Let's Encrypt s'en servent pour joindre ce serveur.</value></data>
+  <data name="MailFixWhatPtr" xml:space="preserve"><value>Le DNS inverse donne le nom de l'adresse du serveur. Les serveurs destinataires vérifient qu'il correspond au nom d'hôte ; sans lui, les messages de ce serveur sont souvent classés comme spam.</value></data>
+  <data name="MailFixWhatTls" xml:space="preserve"><value>Le certificat chiffre les connexions des logiciels de messagerie et des autres serveurs. Sans certificat valide, les applications affichent un avertissement et certains serveurs refusent de livrer.</value></data>
+  <data name="MailFixWhatMx" xml:space="preserve"><value>MX : indique aux autres serveurs où livrer le courrier du domaine. Tant qu'il ne pointe pas ici, le courrier entrant n'arrive jamais sur ce serveur.</value></data>
+  <data name="MailFixWhatSpf" xml:space="preserve"><value>SPF : liste les serveurs autorisés à envoyer du courrier pour le domaine. Les destinataires classent en spam, ou refusent, le courrier envoyé par un serveur qu'il ne cite pas.</value></data>
+  <data name="MailFixWhatDkim" xml:space="preserve"><value>DKIM : ce serveur signe chaque message qu'il envoie ; les destinataires vérifient la signature avec cette clé publique pour savoir que le message est authentique et intact.</value></data>
+  <data name="MailFixWhatDmarc" xml:space="preserve"><value>DMARC : dit aux destinataires quoi faire d'un message qui échoue à la fois au SPF et au DKIM, et où envoyer leurs rapports.</value></data>
+  <data name="MailFixEffectMx" xml:space="preserve"><value>Effet : le courrier entrant du domaine arrive sur ce serveur. Supprimez les autres MX du domaine (ceux du fournisseur actuel) : le courrier n'arrive alors plus chez le fournisseur.</value></data>
+  <data name="MailFixEffectSpf" xml:space="preserve"><value>Effet : ce serveur peut envoyer pour le domaine. Un domaine n'a qu'un seul enregistrement SPF : remplacez celui qui existe par cette valeur, qui garde les expéditeurs qu'il citait déjà.</value></data>
+  <data name="MailFixEffectDkim" xml:space="preserve"><value>Effet : les messages de ce serveur passent le contrôle DKIM. Le courrier envoyé ailleurs n'est pas touché : le nom de l'enregistrement est propre au sélecteur de ce serveur.</value></data>
+  <data name="MailFixEffectDmarc" xml:space="preserve"><value>Effet : un message qui échoue aux deux contrôles va dans le dossier spam (p=quarantine). Les rapports sont envoyés à postmaster@{0} : créez cette boîte pour les lire.</value></data>
+  <data name="MailFixMxCacheTtl" xml:space="preserve"><value>Vous avez déjà publié le MX attendu ? C'est alors normal : les résolveurs DNS gardent l'ancienne réponse jusqu'à l'expiration de sa durée de vie. La réponse lue ici expire dans environ {0} ; la ligne passera ensuite au vert d'elle-même.</value></data>
+  <data name="MailFixMxCacheUnknown" xml:space="preserve"><value>Vous avez déjà publié le MX attendu ? C'est alors normal : les résolveurs DNS gardent l'ancienne réponse jusqu'à l'expiration de sa durée de vie (souvent 24 heures pour un MX). La ligne passera au vert d'elle-même à son expiration.</value></data>
+  <data name="MailTtlHoursMinutes" xml:space="preserve"><value>{0} h {1} min</value><comment>same in both languages</comment></data>
+  <data name="MailTtlMinutes" xml:space="preserve"><value>{0} min</value><comment>same in both languages</comment></data>
+  <data name="MailHelpTitle" xml:space="preserve"><value>Pas à pas : publier les enregistrements de messagerie chez votre fournisseur DNS</value></data>
+  <data name="MailHelpYourDomain" xml:space="preserve"><value>votre-domaine</value></data>
+  <data name="MailHelpRecordsTitle" xml:space="preserve"><value>Les quatre enregistrements</value></data>
+  <data name="MailHelpOrderTitle" xml:space="preserve"><value>Ordre conseillé</value></data>
+  <data name="MailHelpOrderA" xml:space="preserve"><value>Enregistrement A du nom d'hôte de messagerie, vers ce serveur.</value></data>
+  <data name="MailHelpOrderPtr" xml:space="preserve"><value>DNS inverse de l'adresse du serveur, chez l'hébergeur du serveur (pas chez le fournisseur DNS).</value></data>
+  <data name="MailHelpOrderTls" xml:space="preserve"><value>Certificat TLS, avec le bouton de sa ligne dès que l'enregistrement A répond.</value></data>
+  <data name="MailHelpOrderDkimSpf" xml:space="preserve"><value>DKIM et SPF : ils ne changent rien au courrier reçu aujourd'hui.</value></data>
+  <data name="MailHelpOrderDmarc" xml:space="preserve"><value>DMARC, après avoir créé la boîte postmaster@{0} qui reçoit ses rapports.</value></data>
+  <data name="MailHelpOrderMx" xml:space="preserve"><value>Le MX en dernier, une fois les boîtes créées sur ce serveur : à partir de là, le courrier entrant arrive ici.</value></data>
+  <data name="MailHelpValuesTitle" xml:space="preserve"><value>Valeurs à copier</value></data>
+  <data name="MailHelpValues" xml:space="preserve"><value>Chaque ligne rouge ci-dessus montre son enregistrement : le type, le nom et la valeur, avec un bouton de copie. Collez la valeur telle quelle.</value></data>
+  <data name="MailHelpValuesName" xml:space="preserve"><value>Le nom affiché est complet (par exemple _dmarc.{0}). La plupart des fournisseurs ne demandent que la partie avant le domaine (_dmarc), et un champ vide pour le domaine lui-même.</value></data>
+  <data name="MailHelpOvhTitle" xml:space="preserve"><value>Exemple : un domaine chez OVH</value></data>
+  <data name="MailHelpOvhOpen" xml:space="preserve"><value>Dans l'espace client OVH, ouvrez Web Cloud, Noms de domaine, votre domaine, puis l'onglet Zone DNS.</value></data>
+  <data name="MailHelpOvhFilter" xml:space="preserve"><value>Filtrez le tableau par type (MX, TXT, A) pour retrouver les enregistrements déjà présents.</value></data>
+  <data name="MailHelpOvhDelete" xml:space="preserve"><value>Pour supprimer un enregistrement : le bouton ••• au bout de sa ligne, puis Supprimer l'entrée.</value></data>
+  <data name="MailHelpOvhAdd" xml:space="preserve"><value>Pour en ajouter un : Ajouter une entrée, choisissez le type (MX, ou TXT pour SPF, DKIM et DMARC), saisissez le sous-domaine (vide pour le domaine lui-même), collez la valeur, puis validez.</value></data>
+  <data name="MailHelpOvhRua" xml:space="preserve"><value>Piège du DMARC : le type DMARC de l'assistant découpe l'enregistrement en champs, et son champ rua n'attend que l'adresse des rapports (mailto:postmaster@{0}), pas l'enregistrement entier. Choisir TXT et coller la valeur complète l'évite.</value></data>
+  <data name="MailHelpOtherProviders" xml:space="preserve"><value>Les autres fournisseurs ont les mêmes écrans, sous Zone DNS ou Enregistrements DNS.</value></data>
+  <data name="MailHelpMxWarningTitle" xml:space="preserve"><value>Avant de supprimer les MX du fournisseur</value></data>
+  <data name="MailHelpMxWarning" xml:space="preserve"><value>Dès que les MX de votre fournisseur actuel sont supprimés, le courrier n'arrive plus dans ses boîtes : il arrive sur ce serveur. Créez d'abord les comptes ici, et sauvegardez ce que vous voulez garder des boîtes du fournisseur.</value></data>
+  <data name="MailHelpPostmasterTitle" xml:space="preserve"><value>Rapports DMARC</value></data>
+  <data name="MailHelpPostmaster" xml:space="preserve"><value>Les destinataires envoient leurs rapports DMARC à postmaster@{0}. Créez ce compte, ou un alias vers votre propre boîte, dans l'onglet Comptes.</value></data>
+  <data name="MailHelpDelayTitle" xml:space="preserve"><value>Délai avant que ce soit visible</value></data>
+  <data name="MailHelpDelay" xml:space="preserve"><value>Un nouvel enregistrement est vu en quelques minutes. Un enregistrement modifié ou supprimé peut mettre jusqu'à la durée de vie de l'ancienne réponse (souvent 24 heures pour un MX) avant d'être vu par tous les résolveurs.</value></data>
   <data name="MailDiagSpf" xml:space="preserve"><value>SPF de {0}</value></data>
   <data name="MailDiagDkim" xml:space="preserve"><value>DKIM de {0}</value></data>
   <data name="MailDiagDmarc" xml:space="preserve"><value>DMARC de {0}</value></data>
@@ -3587,4 +3705,160 @@
   <data name="GridExportUntitled" xml:space="preserve"><value>Tableau Aetheus</value></data>
   <data name="GridExportSource" xml:space="preserve"><value>Source</value><comment>same in both languages</comment></data>
   <data name="GridExportAddress" xml:space="preserve"><value>Adresse de la page</value></data>
+  <data name="MailPasswordRule" xml:space="preserve"><value>De {0} à {1} caractères. Lettres, chiffres, espaces et symboles sont tous acceptés ; les retours à la ligne et les tabulations ne le sont pas.</value></data>
+  <data name="MailAccountAddressHelp" xml:space="preserve"><value>Le nom avant le @ suffit (contact, no-reply) : le domaine affiché à côté est ajouté. Une adresse complète est gardée telle quelle.</value></data>
+  <data name="MailAccountDomain" xml:space="preserve"><value>Domaine de l'adresse</value></data>
+  <data name="MailAccountAddressInvalid" xml:space="preserve"><value>Indiquez un nom comme contact, ou une adresse complète comme contact@exemple.fr.</value></data>
+  <data name="SnapshotConfirmationMismatch" xml:space="preserve"><value>Le texte saisi ne correspond pas au nom du serveur.</value></data>
+  <data name="ReadinessExternalRepositoryNotInspected" xml:space="preserve"><value>Dépôt externe : fichiers non vérifiés</value></data>
+  <data name="ReadinessExternalRepositoryNotInspectedHint" xml:space="preserve"><value>Le dépôt du projet est externe et Aetheus n'en a pas de copie lisible : les fichiers ci-dessous ne peuvent pas être vérifiés d'ici. Assurez-vous que le dépôt les contient.</value></data>
+  <data name="ExternalRepository" xml:space="preserve"><value>Dépôt externe</value></data>
+  <data name="PipelineSetupProvisionedCreated" xml:space="preserve"><value>Créé</value></data>
+  <data name="PipelineSetupProvisionedChecked" xml:space="preserve"><value>Vérifié</value></data>
+  <data name="PipelineSetupProvisionedOpen" xml:space="preserve"><value>Ouvrir pour vérifier</value></data>
+  <data name="PipelineSetupProvisionedCheckFirst" xml:space="preserve"><value>Ouvrez chaque élément créé pour le vérifier avant de créer les pipelines.</value></data>
+  <data name="ProjectPipelinesNotReady" xml:space="preserve"><value>Non configuré : une exécution de ces pipelines échouerait</value></data>
+  <data name="ProjectPipelinesToVerify" xml:space="preserve"><value>À vérifier avant d'exécuter ces pipelines</value></data>
+  <data name="PipelineRunNotReadyTitle" xml:space="preserve"><value>Cette exécution risque d'échouer</value></data>
+  <data name="PipelineRunNotReadyConfirm" xml:space="preserve"><value>Ce qui n'est pas configuré fera échouer cette exécution : {0}. Lancer quand même ?</value></data>
+  <data name="EmailSenderTab" xml:space="preserve"><value>E-mail</value><comment>same in both languages</comment></data>
+  <data name="EmailSenderTitle" xml:space="preserve"><value>Envoi des e-mails</value></data>
+  <data name="EmailSenderDescription" xml:space="preserve"><value>Le compte d'où partent les notifications et tous les e-mails d'Aetheus. Par défaut, la boîte no-reply du domaine de messagerie géré par Aetheus, sans rien à configurer.</value></data>
+  <data name="EmailSenderEffectiveDefault" xml:space="preserve"><value>Expéditeur par défaut utilisé</value></data>
+  <data name="EmailSenderEffectiveCustom" xml:space="preserve"><value>Serveur SMTP personnalisé utilisé</value></data>
+  <data name="EmailSenderEffectiveNone" xml:space="preserve"><value>Aucun e-mail n'est envoyé</value></data>
+  <data name="EmailSenderEffectiveDetail" xml:space="preserve"><value>Les e-mails partent de {0} par {1}, port {2}.</value></data>
+  <data name="EmailSenderPrepare" xml:space="preserve"><value>Préparer no-reply</value></data>
+  <data name="EmailSenderPrepareHint" xml:space="preserve"><value>Crée la boîte no-reply, ou lui donne un nouveau mot de passe, généré par Aetheus et gardé dans son coffre de secrets</value></data>
+  <data name="EmailSenderPrepareResetConfirm" xml:space="preserve"><value>Aetheus ne connaît pas le mot de passe de {0}. Il va le remplacer par un mot de passe qu'il génère et garde dans son coffre de secrets. Un client de messagerie qui utilise le mot de passe actuel ne pourra plus se connecter. Continuer ?</value></data>
+  <data name="EmailSenderUseCustom" xml:space="preserve"><value>Utiliser un serveur SMTP personnalisé à la place de la boîte no-reply</value></data>
+  <data name="EmailSenderHost" xml:space="preserve"><value>Serveur SMTP</value></data>
+  <data name="EmailSenderPort" xml:space="preserve"><value>Port</value><comment>same in both languages</comment></data>
+  <data name="EmailSenderTlsMode" xml:space="preserve"><value>Sécurité</value></data>
+  <data name="EmailSenderFromAddress" xml:space="preserve"><value>Adresse d'expédition</value></data>
+  <data name="EmailSenderUsername" xml:space="preserve"><value>Identifiant</value></data>
+  <data name="EmailSenderUsernameHint" xml:space="preserve"><value>Laisser vide pour un serveur sans authentification.</value></data>
+  <data name="EmailSenderPassword" xml:space="preserve"><value>Mot de passe</value></data>
+  <data name="EmailSenderPasswordHint" xml:space="preserve"><value>Gardé chiffré dans le coffre de secrets, jamais réaffiché.</value></data>
+  <data name="EmailSenderPasswordKept" xml:space="preserve"><value>Un mot de passe est enregistré. Laisser vide pour le garder.</value></data>
+  <data name="EmailSenderSaved" xml:space="preserve"><value>L'expéditeur des e-mails est enregistré.</value></data>
+  <data name="EmailSenderPrepared" xml:space="preserve"><value>La boîte no-reply est mise en place sur le serveur de messagerie par une tâche ; les e-mails en partent dès que la tâche est terminée.</value></data>
+  <data name="EmailSenderHostRequired" xml:space="preserve"><value>Le serveur SMTP est obligatoire.</value></data>
+  <data name="EmailSenderFromInvalid" xml:space="preserve"><value>Saisissez une adresse d'expédition valide.</value></data>
+  <data name="Enum_SmtpTlsMode_StartTls" xml:space="preserve"><value>STARTTLS (port 587)</value><comment>same in both languages</comment></data>
+  <data name="Enum_SmtpTlsMode_SslOnConnect" xml:space="preserve"><value>TLS dès la connexion (port 465)</value></data>
+  <data name="Enum_SmtpTlsMode_None" xml:space="preserve"><value>Aucune (réseau de confiance uniquement)</value></data>
+  <data name="Enum_EmailSenderProblem_None" xml:space="preserve"><value>Un expéditeur d'e-mails est configuré.</value></data>
+  <data name="Enum_EmailSenderProblem_NoMailDomain" xml:space="preserve"><value>Aetheus ne gère encore aucun domaine de messagerie : il n'y a pas de boîte no-reply d'où envoyer. Ajoutez un domaine de messagerie à un serveur, ou réglez un serveur SMTP personnalisé ci-dessous.</value></data>
+  <data name="Enum_EmailSenderProblem_NoReplyAccountMissing" xml:space="preserve"><value>La boîte {0} n'existe pas encore. Préparez-la et Aetheus la crée avec un mot de passe qu'il génère.</value></data>
+  <data name="Enum_EmailSenderProblem_NoReplyPasswordUnknown" xml:space="preserve"><value>La boîte {0} existe, mais Aetheus ne connaît pas son mot de passe. Préparez-la et Aetheus lui en donne un nouveau, gardé dans son coffre de secrets.</value></data>
+  <data name="Enum_EmailSenderProblem_CustomIncomplete" xml:space="preserve"><value>Il manque au serveur SMTP personnalisé son nom d'hôte ou son adresse d'expédition.</value></data>
+  <data name="Enum_EmailSenderProblem_CustomPasswordMissing" xml:space="preserve"><value>Le serveur SMTP personnalisé indique un identifiant, mais aucun mot de passe n'est enregistré.</value></data>
+  <data name="DailyRecapTab" xml:space="preserve"><value>Récapitulatif quotidien</value></data>
+  <data name="DailyRecapTitle" xml:space="preserve"><value>E-mail de récapitulatif quotidien</value></data>
+  <data name="DailyRecapDescription" xml:space="preserve"><value>Chaque matin, la synthèse de la veille, envoyée par l'expéditeur e-mail de la plateforme.</value></data>
+  <data name="DailyRecapEnabled" xml:space="preserve"><value>Envoyer le récapitulatif chaque jour</value></data>
+  <data name="DailyRecapSendTime" xml:space="preserve"><value>Heure d'envoi</value></data>
+  <data name="DailyRecapTimeZone" xml:space="preserve"><value>Fuseau horaire</value></data>
+  <data name="DailyRecapTimeZoneHint" xml:space="preserve"><value>Nom IANA, par exemple Europe/Paris. L'heure d'envoi se lit dans ce fuseau, et le récapitulatif couvre la veille, jour calendaire de ce fuseau.</value></data>
+  <data name="DailyRecapLanguage" xml:space="preserve"><value>Langue de l'e-mail</value></data>
+  <data name="DailyRecapSections" xml:space="preserve"><value>Rubriques de l'e-mail</value></data>
+  <data name="DailyRecapRecipients" xml:space="preserve"><value>Destinataires</value></data>
+  <data name="DailyRecapSaved" xml:space="preserve"><value>Réglages du récapitulatif quotidien enregistrés.</value></data>
+  <data name="DailyRecapLastTitle" xml:space="preserve"><value>Dernier envoi planifié</value></data>
+  <data name="DailyRecapLastNever" xml:space="preserve"><value>Le récapitulatif planifié n'a pas encore été envoyé.</value></data>
+  <data name="DailyRecapLastDelivered" xml:space="preserve"><value>{0} : le récapitulatif du {1} a été accepté pour {2} destinataires sur {3}.</value></data>
+  <data name="DailyRecapLastError" xml:space="preserve"><value>Premier refus : {0}</value></data>
+  <data name="DailyRecapSendNow" xml:space="preserve"><value>Envoyer maintenant</value></data>
+  <data name="DailyRecapShowPreview" xml:space="preserve"><value>Afficher l'aperçu</value></data>
+  <data name="DailyRecapHidePreview" xml:space="preserve"><value>Masquer l'aperçu</value></data>
+  <data name="DailyRecapPreviewTitle" xml:space="preserve"><value>Objet : {0}</value></data>
+  <data name="DailyRecapSendTimeRequired" xml:space="preserve"><value>Choisissez une heure d'envoi.</value></data>
+  <data name="DailyRecapTimeZoneRequired" xml:space="preserve"><value>Indiquez un fuseau horaire.</value></data>
+  <data name="DailyRecapRecipientInvalid" xml:space="preserve"><value>{0} n'est pas une adresse e-mail valide.</value></data>
+  <data name="Enum_DailyRecapSection_Pipelines" xml:space="preserve"><value>Pipelines (exécutions parentes uniquement)</value></data>
+  <data name="Enum_DailyRecapSection_Servers" xml:space="preserve"><value>Serveurs : état, mises à jour système, agent, espace disque</value></data>
+  <data name="Enum_DailyRecapSection_Releases" xml:space="preserve"><value>Versions promues ou restaurées</value></data>
+  <data name="Enum_DailyRecapSection_Backups" xml:space="preserve"><value>Sauvegardes</value></data>
+  <data name="Enum_DailyRecapSection_Certificates" xml:space="preserve"><value>Certificats expirant sous 30 jours</value></data>
+  <data name="Enum_DailyRecapSection_Secrets" xml:space="preserve"><value>Secrets de coffre proches de l'expiration</value></data>
+  <data name="Enum_DailyRecapSection_Findings" xml:space="preserve"><value>Constats de sécurité et de qualité nouveaux et résolus</value></data>
+  <data name="Enum_DailyRecapSection_Mail" xml:space="preserve"><value>Serveurs de messagerie</value></data>
+  <data name="Enum_DailyRecapLanguage_French" xml:space="preserve"><value>Français</value></data>
+  <data name="Enum_DailyRecapLanguage_English" xml:space="preserve"><value>Anglais</value></data>
+  <data name="DailyRecapRecipientsHint" xml:space="preserve"><value>N'importe quelle adresse e-mail, ajoutée une à une. Enregistrez pour appliquer la liste.</value></data>
+  <data name="DailyRecapRecipientsDefaultHint" xml:space="preserve"><value>Préremplie avec les adresses des administrateurs actifs : modifiez la liste à votre guise, puis enregistrez-la.</value></data>
+  <data name="DailyRecapRecipientPlaceholder" xml:space="preserve"><value>nom@exemple.fr</value></data>
+  <data name="DailyRecapAddRecipient" xml:space="preserve"><value>Ajouter</value></data>
+  <data name="DailyRecapRemoveRecipient" xml:space="preserve"><value>Retirer {0}</value></data>
+  <data name="DailyRecapRecipientsEmpty" xml:space="preserve"><value>Aucun destinataire pour l'instant.</value></data>
+  <data name="DailyRecapRecipientDuplicate" xml:space="preserve"><value>{0} est déjà dans la liste.</value></data>
+  <data name="DailyRecapRecipientsRequired" xml:space="preserve"><value>Ajoutez au moins un destinataire, ou désactivez le récapitulatif.</value></data>
+  <data name="DailyRecapNextRecipients" xml:space="preserve"><value>Le prochain récapitulatif part à : {0}.</value></data>
+  <data name="DailyRecapNextRecipientsNone" xml:space="preserve"><value>Le prochain récapitulatif n'a aucun destinataire : ajoutez-en un et enregistrez.</value></data>
+  <data name="DailyRecapSendNowHint" xml:space="preserve"><value>Envoie tout de suite le récapitulatif d'hier aux destinataires enregistrés : {0}.</value></data>
+  <data name="DailyRecapSendSent" xml:space="preserve"><value>Envoyé à {0} destinataires : {1}</value></data>
+  <data name="DailyRecapSendNotSent" xml:space="preserve"><value>Envoi incomplet : {0} accepté(s) sur {1}</value></data>
+  <data name="MailboxOpen" xml:space="preserve"><value>Ouvrir la boîte</value></data>
+  <data name="Mailbox" xml:space="preserve"><value>Boîte aux lettres</value></data>
+  <data name="MailboxUnlockTitle" xml:space="preserve"><value>Déverrouiller la boîte {0}</value></data>
+  <data name="MailboxUnlockExplain" xml:space="preserve"><value>Aetheus ne connaît pas les mots de passe des boîtes. Saisissez celui de cette boîte : Aetheus le garde dans la mémoire du serveur seulement, pour vous seul, et l'oublie après 30 minutes sans usage, après 8 heures au plus, au redémarrage ou quand vous verrouillez la boîte. Il n'est jamais enregistré.</value></data>
+  <data name="MailboxUnlock" xml:space="preserve"><value>Déverrouiller</value></data>
+  <data name="MailboxLock" xml:space="preserve"><value>Verrouiller</value></data>
+  <data name="MailboxLocked" xml:space="preserve"><value>La boîte est verrouillée : saisissez son mot de passe pour la lire.</value></data>
+  <data name="MailboxUnlockedUntil" xml:space="preserve"><value>Déverrouillée jusqu'à {0}</value></data>
+  <data name="MailboxUnlockRefused" xml:space="preserve"><value>Le serveur de messagerie a refusé ce mot de passe.</value></data>
+  <data name="MailboxFolders" xml:space="preserve"><value>Dossiers</value></data>
+  <data name="MailboxNewFolder" xml:space="preserve"><value>Nouveau dossier</value></data>
+  <data name="MailboxFolderName" xml:space="preserve"><value>Nom du dossier</value></data>
+  <data name="MailboxFolderNameRule" xml:space="preserve"><value>De 1 à 100 caractères, sans / \ . * % ni guillemet. Le dossier est créé à la racine de la boîte.</value></data>
+  <data name="MailboxFolderCreated" xml:space="preserve"><value>Dossier créé.</value></data>
+  <data name="MailboxCompose" xml:space="preserve"><value>Écrire</value></data>
+  <data name="MailboxNewMessage" xml:space="preserve"><value>Nouveau message</value></data>
+  <data name="MailboxReply" xml:space="preserve"><value>Répondre</value></data>
+  <data name="MailboxReplyAll" xml:space="preserve"><value>Répondre à tous</value></data>
+  <data name="MailboxForward" xml:space="preserve"><value>Transférer</value></data>
+  <data name="MailboxSend" xml:space="preserve"><value>Envoyer</value></data>
+  <data name="MailboxFrom" xml:space="preserve"><value>De</value></data>
+  <data name="MailboxTo" xml:space="preserve"><value>À</value></data>
+  <data name="MailboxCc" xml:space="preserve"><value>Cc</value><comment>same in both languages</comment></data>
+  <data name="MailboxBcc" xml:space="preserve"><value>Cci</value></data>
+  <data name="MailboxSubject" xml:space="preserve"><value>Objet</value></data>
+  <data name="MailboxBody" xml:space="preserve"><value>Message</value><comment>same in both languages</comment></data>
+  <data name="MailboxAddressesHint" xml:space="preserve"><value>Séparez plusieurs adresses par une virgule.</value></data>
+  <data name="MailboxRecipientRequired" xml:space="preserve"><value>Indiquez au moins un destinataire.</value></data>
+  <data name="MailboxForwardedAttachments" xml:space="preserve"><value>Pièces jointes renvoyées : {0}</value></data>
+  <data name="MailboxAttachmentsHint" xml:space="preserve"><value>Jusqu'à {0} fichiers, {1} Mo chacun et {2} Mo au total. Les fichiers sont seulement envoyés, jamais ouverts.</value></data>
+  <data name="MailboxAttachmentsTooLarge" xml:space="preserve"><value>Avec ces fichiers, les pièces jointes dépasseraient {0} Mo au total. Retirez un fichier ou choisissez-en de plus petits.</value></data>
+  <data name="MailboxSent" xml:space="preserve"><value>Message envoyé.</value></data>
+  <data name="MailboxSentCopyFailed" xml:space="preserve"><value>Message envoyé, mais sa copie n'a pas été classée dans Envoyés : {0}</value></data>
+  <data name="MailboxMarkRead" xml:space="preserve"><value>Marquer comme lu</value></data>
+  <data name="MailboxMarkUnread" xml:space="preserve"><value>Marquer comme non lu</value></data>
+  <data name="MailboxMovedToTrash" xml:space="preserve"><value>Message mis à la corbeille.</value></data>
+  <data name="MailboxDeletedPermanently" xml:space="preserve"><value>Message supprimé définitivement.</value></data>
+  <data name="MailboxDeletePermanentlyConfirm" xml:space="preserve"><value>Ce message est dans la corbeille : le supprimer définitivement ? Il ne pourra pas être récupéré.</value></data>
+  <data name="MailboxLoadImages" xml:space="preserve"><value>Voir les images</value></data>
+  <data name="MailboxImagesBlocked" xml:space="preserve"><value>{0} images distantes ne sont pas affichées, pour que l'expéditeur ne sache pas que vous avez lu le message.</value></data>
+  <data name="MailboxAttachments" xml:space="preserve"><value>Pièces jointes</value></data>
+  <data name="MailboxSelectMessage" xml:space="preserve"><value>Sélectionnez un message pour le lire.</value></data>
+  <data name="MailboxNoMessages" xml:space="preserve"><value>Aucun message dans ce dossier.</value></data>
+  <data name="MailboxNoFolders" xml:space="preserve"><value>Aucun dossier.</value></data>
+  <data name="MailboxBackToMail" xml:space="preserve"><value>Messagerie</value></data>
+  <data name="MailboxUnread" xml:space="preserve"><value>Non lu</value></data>
+  <data name="MailClientHelpTitle" xml:space="preserve"><value>Connecter un client de messagerie</value></data>
+  <data name="MailClientHelpButton" xml:space="preserve"><value>Client mail</value></data>
+  <data name="MailClientHelpIntro" xml:space="preserve"><value>Pour lire ces boîtes dans Thunderbird, Outlook ou un téléphone, ajoutez le compte avec ces réglages.</value></data>
+  <data name="MailClientServer" xml:space="preserve"><value>Serveur</value></data>
+  <data name="MailClientImap" xml:space="preserve"><value>Réception (IMAP, SSL/TLS)</value></data>
+  <data name="MailClientSmtp" xml:space="preserve"><value>Envoi (SMTP, STARTTLS, authentification requise)</value></data>
+  <data name="MailClientUsernameValue" xml:space="preserve"><value>L'adresse e-mail complète de la boîte</value></data>
+  <data name="MailClientPasswordValue" xml:space="preserve"><value>Le mot de passe de la boîte</value></data>
+  <data name="MailClientNoHost" xml:space="preserve"><value>Le serveur n'a pas encore de nom d'hôte ni d'adresse.</value></data>
+  <data name="Enum_MailboxFolderRole_Other" xml:space="preserve"><value>Autre</value></data>
+  <data name="Enum_MailboxFolderRole_Inbox" xml:space="preserve"><value>Boîte de réception</value></data>
+  <data name="Enum_MailboxFolderRole_Sent" xml:space="preserve"><value>Envoyés</value></data>
+  <data name="Enum_MailboxFolderRole_Drafts" xml:space="preserve"><value>Brouillons</value></data>
+  <data name="Enum_MailboxFolderRole_Trash" xml:space="preserve"><value>Corbeille</value></data>
+  <data name="Enum_MailboxFolderRole_Junk" xml:space="preserve"><value>Indésirables</value></data>
+  <data name="Enum_MailboxFolderRole_Archive" xml:space="preserve"><value>Archives</value></data>
 </root>

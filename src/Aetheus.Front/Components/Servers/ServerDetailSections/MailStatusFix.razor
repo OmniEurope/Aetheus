@@ -1,25 +1,38 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R2-090: under the first red line of the mail status, what fixes it: an action Aetheus can run,
-   or the exact DNS record to publish (to copy). The line turns green on a later heartbeat. *@
+@* Recette R2-090 / R1-9: under every red line of the mail status, what fixes it: what the record is and why
+   it matters, an action Aetheus can run or the exact DNS record to publish (to copy), and the effect of the
+   change. The line turns green on a later heartbeat. *@
 <OmniCard Class="mail-status-fix" data-key="@Item.Key">
     <OmniStack Gap="OmniSpacing.Small">
+        @if (WhatItIs is { } what)
+        {
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 mail-fix-what">@what</OmniText>
+        }
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Explanation</OmniText>
         @if (ShowsRecord)
         {
             <OmniCodeBlock Title="@($"{Item.RecordType} {Item.RecordName}")" Code="@Item.RecordValue" Wrap="true" />
         }
+        @if (Effect is { } effect)
+        {
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 mail-fix-effect">@effect</OmniText>
+        }
+        @if (CacheNote is { } cache)
+        {
+            <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted" Class="omni-u-m-0 mail-fix-cache">@cache</OmniText>
+        }
         @if (Kind == FixKind.Services && CanManage)
         {
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnStartServices" Disabled="@Busy"><OmniIcon Name="OmniIconName.Play" /> <span>@L["MailStartServices"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnStartServices" Busy="@StartServicesBusy"><OmniIcon Name="OmniIconName.Play" /> <span>@L["MailStartServices"]</span></OmniButton>
             </OmniStack>
         }
         else if (Kind == FixKind.Certificate && CanManage && HostnameKnown)
         {
             @* User decision (2026-09-28): Obtain and Install the mail certificate are both blue. *@
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnObtainCertificate" Disabled="@Busy"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["MailObtainCertificate"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnInstallCertificate" Disabled="@Busy"><OmniIcon Name="OmniIconName.Monitor" /> <span>@L["MailInstallCertificate"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnObtainCertificate" Busy="@ObtainCertificateBusy" Disabled="@InstallCertificateBusy"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["MailObtainCertificate"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnInstallCertificate" Busy="@InstallCertificateBusy" Disabled="@ObtainCertificateBusy"><OmniIcon Name="OmniIconName.Monitor" /> <span>@L["MailInstallCertificate"]</span></OmniButton>
             </OmniStack>
         }
         @if (Kind == FixKind.Dns)

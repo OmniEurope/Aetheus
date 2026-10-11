@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages;
@@ -58,5 +59,23 @@ public class RolesTests : BunitContext
         var cut = Render<Roles>();
         // The admin guard redirects before LoadAsync, so the roles list is never fetched.
         Assert.DoesNotContain(handler.Requests, r => r.Url.Contains("api/roles"));
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/roles", new PaginatedResult<RoleDto>
+        {
+            Items = [new() { Id = 2, Name = "Viewer", UserCount = 5 }],
+            TotalCount = 1
+        });
+
+        var cut = Render<Roles>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The role link, the clone and the delete buttons.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);
     }
 }

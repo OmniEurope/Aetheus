@@ -48,6 +48,8 @@ public partial class ServerOverviewSection : IDisposable
     [Inject] private PermissionService Permissions { get; set; } = default!;
     [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter] public bool MetricsReceived { get; set; }
+    /// <summary>The initial detail load is over: a metric still missing is unavailable, no longer loading.</summary>
+    [Parameter] public bool MetricsLoadCompleted { get; set; }
     [Parameter] public IReadOnlyList<ServerMetricDto> Metrics { get; set; } = [];
     // TC8R: toolchain capability lives on the heartbeat DTO (not ServerDetailDto); the loader surfaces
     // the latest value. Null = unknown (no heartbeat yet / legacy agent).
@@ -59,6 +61,9 @@ public partial class ServerOverviewSection : IDisposable
     private bool _isolationBusy;
 
     private bool CanAdmin => Permissions.CanAdmin(ResourceType.Server, Server.Id);
+
+    /// <summary>The agent sent a storage collection; DateTime.MinValue (default) is its "never collected".</summary>
+    private bool StorageCollected => Server.StorageDiagnostics.CollectedAtUtc != default;
 
     private long? BuildCacheGrowthBytes
     {
@@ -202,12 +207,17 @@ public partial class ServerOverviewSection : IDisposable
     internal AgentUpdateOverviewState AgentUpdateState =>
         AgentUpdateOverviewState.Read(Server, _requestedAgentTarget, _requestedAgentUpdateId);
 
+    // SITE-OFFLINE-001: the agent update is a task only the agent can claim; the status badge above says
+    // the agent is offline, the button waits for it. The runner and isolation toggles are server settings.
+    private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
+
     /// <summary>The button stays while an update runs, busy, even if the compatibility read changes meanwhile.</summary>
     private bool ShowAgentUpdateButton => CanWrite && (AgentUpdateAvailable || AgentUpdateState.InProgress);
 
     private async Task UpdateAgentAsync()
     {
         if (_agentUpdateBusy || AgentUpdateState.InProgress) return;
+        if (AgentOfflineGuard.Blocks(Server, Toast)) return;
         var target = AgentUpdateTarget;
         _agentUpdateBusy = true;
         try

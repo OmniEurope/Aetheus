@@ -7,7 +7,8 @@ namespace Aetheus.Front.Components.Pipelines;
 /// </summary>
 internal sealed class PipelineYamlEditorCoordinator(
     ApiClient api,
-    IStringLocalizer<AppStrings> localizer)
+    IStringLocalizer<AppStrings> localizer,
+    ILogger logger)
 {
     public async Task<bool> ValidateAsync(string yaml, MonacoEditor? editor)
     {
@@ -27,6 +28,11 @@ internal sealed class PipelineYamlEditorCoordinator(
         return valid;
     }
 
+    /// <summary>
+    /// Suggestions are an optional aid: when one of their lookups fails on the network
+    /// (SITE-FUNC-AUTOCOMPLETE-001) the failure is logged and the form gets no suggestions, instead
+    /// of the exception escaping the render cycle and replacing the whole pipeline form.
+    /// </summary>
     public async Task<(List<string> ServerNames, List<string> LibraryNames, List<string> VaultNames)>
         LoadSuggestionsAsync(int? projectId, MonacoEditor? editor)
     {
@@ -34,7 +40,15 @@ internal sealed class PipelineYamlEditorCoordinator(
         var vaultNamesTask = api.Variables.GetVaultNamesAsync(projectId);
         var serverNamesTask = api.Servers.GetServerNamesAsync();
         var variableKeysTask = LoadVariableKeysAsync(projectId);
-        await Task.WhenAll(libraryNamesTask, vaultNamesTask, serverNamesTask, variableKeysTask);
+        try
+        {
+            await Task.WhenAll(libraryNamesTask, vaultNamesTask, serverNamesTask, variableKeysTask);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "[PipelineEdit] Autocomplete suggestions could not be loaded for project {ProjectId}", projectId);
+            return ([], [], []);
+        }
 
         var libraryNames = await libraryNamesTask;
         var vaultNames = await vaultNamesTask;

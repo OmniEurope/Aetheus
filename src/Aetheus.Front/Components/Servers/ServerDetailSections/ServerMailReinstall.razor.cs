@@ -8,10 +8,14 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 /// line of a failure included. One click queues one purge: the button is busy from the click until the
 /// task completes (R2-085).
 /// </summary>
-public partial class ServerMailReinstall
+public partial class ServerMailReinstall : IDisposable
 {
     /// <summary>The first mail-manage helper version that has the <c>purge</c> sub-command.</summary>
     internal const int MinimumHelperVersion = 3;
+
+    /// <summary>Recette R1-12: the outlet beside the header's Réinstaller button where the status list puts
+    /// its "..." menu of mail actions.</summary>
+    internal const string HeaderMenuSection = "mail-header-menu";
 
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -23,8 +27,27 @@ public partial class ServerMailReinstall
     [Parameter, EditorRequired] public MailDataDto Mail { get; set; } = new();
     [Parameter] public bool CanManage { get; set; }
 
+    /// <summary>The server whose agent runs the purge (SITE-OFFLINE-001: nothing is queued while it is offline).</summary>
+    [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
+
+    /// <summary>Recette R2-126: raised when a purge starts or ends, so the mail section hides its
+    /// service actions and state list meanwhile.</summary>
+    [Parameter] public EventCallback RunningChanged { get; set; }
+
+    [Inject] private TimeProvider Clock { get; set; } = default!;
+
     private bool _starting;
     private int? _taskId;
+    private DateTimeOffset? _queuedAt;
+    private PeriodicTimer? _ticker;
+
+    /// <summary>A purge was queued and has not completed: the section shows only the banner.</summary>
+    internal bool Erasing => _taskId is not null;
+
+    private string Elapsed => _queuedAt is { } queued
+        ? (Clock.GetUtcNow() - queued).ToString(@"m\:ss", System.Globalization.CultureInfo.InvariantCulture)
+        : string.Empty;
+
     private ReinstallOutcome? _outcome;
 
     /// <summary>A stack is on the host: configured, or provisioned and left half-way.</summary>
@@ -36,10 +59,13 @@ public partial class ServerMailReinstall
 
     private bool HelperReady => Mail.HelperVersion >= MinimumHelperVersion;
 
-    private bool CanPurge => CanManage && HelperReady;
+    private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
+
+    private bool CanPurge => CanManage && HelperReady && !AgentOffline;
 
     private string? DisabledReason =>
         !CanManage ? L["MailSetupCapabilityRequired"].Value
+        : AgentOffline ? L["AgentOfflineActionBlocked"].Value
         : !HelperReady ? string.Format(L["MailReinstallHelperRequired"], Mail.HelperVersion, MinimumHelperVersion)
         : null;
 
@@ -52,13 +78,14 @@ public partial class ServerMailReinstall
     {
         if (_shownServerId == ServerId) return;
         _shownServerId = ServerId;
+        StopTicker();
         _taskId = null;
         _outcome = null;
     }
 
     private async Task PurgeAsync()
     {
-        if (Running || !CanPurge) return;
+        if (Running || AgentOfflineGuard.Blocks(Server, Toast) || !CanPurge) return;
         _starting = true;
         try
         {
@@ -73,7 +100,10 @@ public partial class ServerMailReinstall
             if (queued is null) return; // the refusal is already shown with its reason by the error toast
             _outcome = null;
             _taskId = queued.TaskId;
+            _queuedAt = Clock.GetUtcNow();
+            StartTicker();
             Toast.Info("TaskQueued", "MailWaitingForTask");
+            await RunningChanged.InvokeAsync();
         }
         catch (HttpRequestException ex)
         {
@@ -101,19 +131,50 @@ public partial class ServerMailReinstall
         ArgumentNullException.ThrowIfNull(notification);
         if (notification.TaskId != _taskId) return;
         _taskId = null;
+        StopTicker();
         var succeeded = notification.Status == TaskExecutionStatus.Success;
         var lastLine = succeeded ? string.Empty : await LastLogLineAsync(notification.TaskId);
         _outcome = new ReinstallOutcome(succeeded, notification.Status, lastLine);
         await InvokeAsync(StateHasChanged);
+        await RunningChanged.InvokeAsync();
     }
+
+    // The elapsed time moves once a second while the purge runs; nothing ticks otherwise.
+    private void StartTicker()
+    {
+        StopTicker();
+        var ticker = new PeriodicTimer(TimeSpan.FromSeconds(1), Clock);
+        _ticker = ticker;
+        _ = TickAsync(ticker);
+    }
+
+    private async Task TickAsync(PeriodicTimer ticker)
+    {
+        try
+        {
+            while (await ticker.WaitForNextTickAsync().ConfigureAwait(false))
+                await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The section went away while the purge ran.
+        }
+    }
+
+    private void StopTicker()
+    {
+        _ticker?.Dispose();
+        _ticker = null;
+        _queuedAt = null;
+    }
+
+    public void Dispose() => StopTicker();
 
     private async Task<string> LastLogLineAsync(int taskId)
     {
         try
         {
-            var output = await MailTaskOutputLoader.ReadAsync(Api, taskId);
-            return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .LastOrDefault() ?? L["MailReinstallNoLog"].Value;
+            return await MailTaskOutputLoader.LastLineAsync(Api, taskId) ?? L["MailReinstallNoLog"].Value;
         }
         catch (HttpRequestException ex)
         {

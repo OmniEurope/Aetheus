@@ -169,7 +169,7 @@ public sealed class PipelineStageDispatchPlanner(
         if (server is null) return false;
         if (await stepDispatcher.CreateTasksForStageAsync(
                 runId, server, stageSteps, stageDef, resolvedVars, completedStages,
-                previousStageFailed, secretKeys, organizationId, launcher, ct).ConfigureAwait(false)) return true;
+                previousStageFailed, secretKeys, organizationId, state.ProjectId, launcher, ct).ConfigureAwait(false)) return true;
         await RecordStageDispatchAsync(stageSteps, stageDef, state, ct).ConfigureAwait(false);
         return false;
     }
@@ -188,7 +188,7 @@ public sealed class PipelineStageDispatchPlanner(
     {
         var dispatch = await TryDispatchSystemStageAsync(
             runId, stageName, stageSteps, resolvedVars, definition, organizationId,
-            completedStages, flattenedStages, ct).ConfigureAwait(false);
+            completedStages, flattenedStages, state.ProjectId, ct).ConfigureAwait(false);
         if (!dispatch.Handled) return false;
         state.AnyTaskCreated |= dispatch.TaskCreated;
         state.AnyRunnerTemporarilyUnavailable |= dispatch.RunnerTemporarilyUnavailable;
@@ -199,6 +199,28 @@ public sealed class PipelineStageDispatchPlanner(
         state.UnmatchedStageSteps.AddRange(dispatch.UnmatchedSteps);
         return true;
     }
+
+    /// <summary>What a skipped rollback stage records as its unmet condition (recette R1-2).</summary>
+    internal const string NothingToUndoCondition = "failed() after a deployment stage started";
+
+    /// <summary>
+    /// Recette R1-2: a rollback failure handler (<c>condition: failed()</c> running <c>bluegreen-rollback</c>)
+    /// is skipped when no step of a stage that starts the new colour (<c>bluegreen-up</c>) ever started:
+    /// nothing was deployed, so there is nothing to undo. Nightly 2497 failed upstream and still ran
+    /// Rollback, with a misleading compose_env warning. As soon as a start step began, whatever its
+    /// outcome, the rollback runs as before.
+    /// </summary>
+    private async Task<bool> NothingStartedToUndoAsync(
+        int runId, PipelineStageDefinition stageDef, List<PipelineStageDefinition> flattenedStages, CancellationToken ct)
+    {
+        if (!IsFailureHandlerCondition(stageDef.Condition) || !RunsStep(stageDef, "bluegreen-rollback")) return false;
+        var startStages = flattenedStages.Where(stage => RunsStep(stage, "bluegreen-up")).Select(stage => stage.Name).ToList();
+        return startStages.Count > 0
+            && !await repo.DidAnyStepStartInStagesAsync(runId, startStages, ct).ConfigureAwait(false);
+    }
+
+    private static bool RunsStep(PipelineStageDefinition stage, string stepType) =>
+        stage.Steps.Any(step => string.Equals(step.Type, stepType, StringComparison.OrdinalIgnoreCase));
 
     private async Task<ReadyStagePreparation> PrepareReadyStageAsync(
         int runId,
@@ -217,6 +239,13 @@ public sealed class PipelineStageDispatchPlanner(
         if (!EvaluateCondition(stageDef.Condition, resolvedVars, completedStages, previousStageFailed))
         {
             finalizer.MarkStepsConditionNotMet(runId, stageSteps, stageDef.Condition!, resolvedVars, secretKeys);
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            state.AnyStageCancelled = true;
+            return ReadyStagePreparation.Skip;
+        }
+        if (await NothingStartedToUndoAsync(runId, stageDef, flattenedStages, ct).ConfigureAwait(false))
+        {
+            finalizer.MarkStepsConditionNotMet(runId, stageSteps, NothingToUndoCondition, resolvedVars, secretKeys);
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
             state.AnyStageCancelled = true;
             return ReadyStagePreparation.Skip;
@@ -261,7 +290,7 @@ public sealed class PipelineStageDispatchPlanner(
         var stageHasDeploy = dispatchServers.StageHasDeployStep(stageDef);
         var resolution = await _serverSelector.ResolveAsync(
             runId, stageName, stageDef, resolvedVars, organizationId,
-            stageHasDeploy, state.AffinityServerId, ct).ConfigureAwait(false);
+            stageHasDeploy, state.AffinityServerId, state.ProjectId, ct).ConfigureAwait(false);
         if (resolution.Server is null)
         {
             state.AnyRunnerTemporarilyUnavailable |= resolution.RunnerTemporarilyUnavailable;
@@ -438,12 +467,13 @@ public sealed class PipelineStageDispatchPlanner(
         int? organizationId,
         List<string> completedStages,
         List<PipelineStageDefinition> flattenedStages,
+        int? projectId,
         CancellationToken ct)
     {
         if (stageName is not (PipelineRunService.SystemPrepareStage or PipelineRunService.SystemCleanupStage))
             return new(false, false, false, false, [], []);
         if (await systemTasks.CreateSystemTasksAsync(
-                runId, stageSteps, resolvedVars, definition, organizationId, completedStages, ct)
+                runId, stageSteps, resolvedVars, definition, organizationId, projectId, completedStages, ct)
             .ConfigureAwait(false))
             return new(true, true, false, false, [], []);
 
@@ -451,7 +481,7 @@ public sealed class PipelineStageDispatchPlanner(
         var configuredTargets = stageName == PipelineRunService.SystemPrepareStage && firstStage is not null
             ? await repo.FindCandidateTargetServerIdsAsync(
                 firstStage.Pool, firstStage.Environment, firstStage.Agent,
-                OsTypeHelper.Parse(firstStage.Os), organizationId, false, ct).ConfigureAwait(false)
+                OsTypeHelper.Parse(firstStage.Os), organizationId, false, projectId, ct).ConfigureAwait(false)
             : [];
         if (configuredTargets.Count > 0)
         {

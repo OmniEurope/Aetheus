@@ -1,4 +1,7 @@
 window.visualPipeline = {
+    // The node width of .vp-node in app.css (13.75rem) and VisualPipelineGeometry.NodeWidth: one value,
+    // or the layout, the edges and the drawn node disagree (SITE-MOB-006).
+    NODE_WIDTH: 220,
     _canvases: {},
     _layoutCache: { key: null, result: null },
 
@@ -26,7 +29,7 @@ window.visualPipeline = {
 
         for (const stage of stages) {
             const height = 100 + Math.max(0, (stage.stepCount - 1)) * 28;
-            g.setNode(stage.id, { label: stage.name, width: 220, height: height });
+            g.setNode(stage.id, { label: stage.name, width: this.NODE_WIDTH, height: height });
         }
 
         for (const stage of stages) {
@@ -93,6 +96,13 @@ window.visualPipeline = {
         };
 
         this._canvases[elementId] = state;
+
+        // SITE-MOB-005: the canvas is panned by a transform only. overflow: hidden still lets the browser
+        // scroll it natively (focusing a node outside the frame, a resize), and that offset added to the pan
+        // pushed a centred stage out of the frame. Native scroll is put back to zero whenever it moves.
+        container.addEventListener('scroll', function () {
+            window.visualPipeline._resetNativeScroll(state);
+        });
 
         container.addEventListener('wheel', function (e) {
             e.preventDefault();
@@ -212,6 +222,7 @@ window.visualPipeline = {
     fitView: function (elementId) {
         const state = this._canvases[elementId];
         if (!state) return;
+        this._resetNativeScroll(state);
 
         const containerRect = state.container.getBoundingClientRect();
         const nodes = state.inner.querySelectorAll('.vp-node');
@@ -237,6 +248,11 @@ window.visualPipeline = {
         state.panX = (containerRect.width - graphW * state.scale) / 2 - minX * state.scale + 40;
         state.panY = (containerRect.height - graphH * state.scale) / 2 - minY * state.scale + 40;
         state.inner.style.transform = 'translate(' + state.panX + 'px, ' + state.panY + 'px) scale(' + state.scale + ')';
+    },
+
+    _resetNativeScroll: function (state) {
+        if (state.container.scrollLeft !== 0) state.container.scrollLeft = 0;
+        if (state.container.scrollTop !== 0) state.container.scrollTop = 0;
     },
 
     getScale: function (elementId) {
@@ -292,7 +308,7 @@ window.visualPipeline = {
             const t = self._nodeRect(canvasId, e.to);
             if (!f || !t) return;
             const path = layer.querySelector('path[data-from="' + e.from + '"][data-to="' + e.to + '"]');
-            if (path) path.setAttribute('d', self._edgePath(f.x + 220, f.y + f.h / 2, t.x, t.y + t.h / 2));
+            if (path) path.setAttribute('d', self._edgePath(f.x + self.NODE_WIDTH, f.y + f.h / 2, t.x, t.y + t.h / 2));
         });
     },
 
@@ -301,6 +317,7 @@ window.visualPipeline = {
         const state = this._canvases[elementId];
         const node = document.getElementById(nodeElementId);
         if (!state || !node) return;
+        this._resetNativeScroll(state);
         const x = parseFloat(node.style.getPropertyValue('--node-x')) || 0;
         const y = parseFloat(node.style.getPropertyValue('--node-y')) || 0;
         const rect = state.container.getBoundingClientRect();

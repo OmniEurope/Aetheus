@@ -115,12 +115,12 @@ public sealed class PipelineRunPreflightService(
         // trip per referenced pipeline NAME. A ten-stage pipeline paid all three ten times over.
         foreach (var stage in stages)
             await CheckRunnerIsConfiguredAsync(
-                stage, resolvedVariables, organizationId, problems, state, ct).ConfigureAwait(false);
+                stage, resolvedVariables, organizationId, projectId, problems, state, ct).ConfigureAwait(false);
 
         // After the runner check: a stage nobody is configured for is refused there, and this one only
         // asks whether a configured runner can serve the candidate's scanner steps.
         var manifestProblem = await scannerManifest.FindProblemAsync(
-            definition, resolvedVariables, upstreamPipeline, upstreamTemplate, organizationId, ct).ConfigureAwait(false);
+            definition, resolvedVariables, upstreamPipeline, upstreamTemplate, organizationId, projectId, ct).ConfigureAwait(false);
         if (manifestProblem is not null)
         {
             problems.Add(manifestProblem);
@@ -373,6 +373,7 @@ public sealed class PipelineRunPreflightService(
         PipelineStageDefinition stage,
         IReadOnlyDictionary<string, string> resolvedVariables,
         int? organizationId,
+        int? projectId,
         List<string> problems,
         ChainPreflightState state,
         CancellationToken ct)
@@ -385,12 +386,12 @@ public sealed class PipelineRunPreflightService(
         var cacheKey = string.Join(
             "|",
             effective.Pool, effective.Environment, effective.Agent, effective.Os,
-            organizationId?.ToString(CultureInfo.InvariantCulture), deploymentStage);
+            organizationId?.ToString(CultureInfo.InvariantCulture), projectId?.ToString(CultureInfo.InvariantCulture), deploymentStage);
         if (!candidateCache.TryGetValue(cacheKey, out var configured))
         {
             configured = await repo.FindCandidateTargetServerIdsAsync(
                 effective.Pool, effective.Environment, effective.Agent,
-                OsTypeHelper.Parse(effective.Os), organizationId, deploymentStage, ct).ConfigureAwait(false);
+                OsTypeHelper.Parse(effective.Os), organizationId, deploymentStage, projectId, ct).ConfigureAwait(false);
             candidateCache[cacheKey] = configured;
         }
 

@@ -50,4 +50,6 @@ echo "Agent unit-test evidence status: ${AGENT_STATUS}."
 echo "Product coverage reports: backend=${BACK_COVERAGE_REPORTS} frontend=${FRONT_COVERAGE_REPORTS} agent=${AGENT_COVERAGE_REPORTS}."
 echo "Unit-test evidence status: ${UNIT_STATUS} (1 means failed or unavailable)."
 echo "##aetheus[setvariable name=UNIT_TEST_GATE_STATUS]$UNIT_STATUS"
+# The failed names beside the status, read from the three TRX the status is made of.
+[ "$UNIT_STATUS" = 0 ] || sh deploy/scripts/publish-failed-tests.sh UNIT_TEST_FAILED_TESTS coverage/backend/backend.trx coverage/frontend/frontend.trx coverage/agent/agent.trx
 echo "Promotion evidence recorded; the gate step decides what it adds up to."

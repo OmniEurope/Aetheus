@@ -124,7 +124,8 @@ internal static class PipelineRunFormatting
     /// <summary>Tooltip of a step badge: why a failure did not block, why a step did no work, or the
     /// condition that kept it from running.</summary>
     public static string? StepStatusTitle(PipelineStepRunDto step, IStringLocalizer localizer) =>
-        IsNonBlockingFailure(step) ? localizer["StepFailedNonBlocking"].Value
+        IsNonBlockingFailure(step) && step.IsAdvisory ? localizer["StepAdvisoryHint"].Value
+        : IsNonBlockingFailure(step) ? localizer["StepFailedNonBlocking"].Value
         : IsSkippedWithoutWork(step) ? step.SkippedReason
         : IsSkippedByCondition(step) ? step.SkippedCondition
         : null;

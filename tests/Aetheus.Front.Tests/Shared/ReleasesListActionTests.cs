@@ -370,4 +370,15 @@ public sealed class ReleasesListActionTests : BunitContext
 
         Assert.DoesNotContain("RevertToPrevious", cut.Markup, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        var cut = RenderList(Release());
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);
+    }
 }

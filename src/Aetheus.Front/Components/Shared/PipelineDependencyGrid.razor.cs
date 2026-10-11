@@ -80,7 +80,9 @@ public partial class PipelineDependencyGrid
     private static OmniTone FreshnessStyle(PipelineFleetFreshness freshness) => freshness switch
     {
         PipelineFleetFreshness.Current => OmniTone.Success,
-        PipelineFleetFreshness.Outdated => OmniTone.Warning,
+        // Recette R2-145: a pinned version is a choice (aetheus-candidate pins application-candidate@1 on
+        // purpose), not a delay: a newer version in the catalogue is information, not a warning.
+        PipelineFleetFreshness.Outdated => OmniTone.Info,
         _ => OmniTone.Neutral
     };
 

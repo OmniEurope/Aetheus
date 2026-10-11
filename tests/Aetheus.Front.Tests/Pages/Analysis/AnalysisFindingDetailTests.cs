@@ -194,11 +194,16 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 9));
 
         cut.WaitForState(() => cut.Markup.Contains("analysis-decision-card", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
-        Assert.Contains("AnalysisDecisionHelp", cut.Find(".analysis-decision-card").TextContent);
+        // Recettes R2-130, R2-131: no arbitration instruction, no "required"/"optional" hints.
+        Assert.DoesNotContain("AnalysisDecisionHelp", cut.Find(".analysis-decision-card").TextContent);
         Assert.Equal(3, cut.FindAll(".analysis-decision-choice").Count);
         Assert.Equal(2, cut.FindAll(".analysis-decision-details .omni-form-field").Count);
         Assert.Empty(cut.FindAll(".analysis-decision-outcome .omni-drop-down"));
-        Assert.Contains("AnalysisDecisionReasonHint", cut.Find(".analysis-decision-card").TextContent);
+        Assert.DoesNotContain("AnalysisDecisionReasonHint", cut.Find(".analysis-decision-card").TextContent);
+        Assert.DoesNotContain("AnalysisDecisionExpirationHint", cut.Find(".analysis-decision-card").TextContent);
+        // Recette R2-134: an open finding reads as open; nothing is chosen until the reviewer picks.
+        Assert.Contains("AnalysisFindingStatusOpen", cut.Find(".analysis-decision-selected").TextContent);
+        Assert.Empty(cut.FindAll(".analysis-decision-choice.is-selected"));
         Assert.Contains("AnalysisDecisionHistory", cut.Markup);
     }
 
@@ -233,6 +238,12 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         cut.WaitForState(() => cut.Markup.Contains("analysis-decision-card", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
 
         cut.Find("textarea").Input("Risk accepted after architecture review.");
+        // Recette R2-134: no outcome is preselected, so a submit without a choice sends nothing.
+        BunitTestHelper.Interactive(this);
+        cut.Find(".analysis-decision-form form").Submit();
+        Assert.DoesNotContain(_handler.Requests, request => request.Method == "POST");
+
+        cut.Find(".analysis-decision-choice .omni-button").Click();
         cut.Find(".analysis-decision-form form").Submit();
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request =>

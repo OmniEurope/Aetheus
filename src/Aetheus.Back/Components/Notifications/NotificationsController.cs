@@ -46,7 +46,9 @@ public class NotificationsController(INotificationService service) : ControllerB
     [HttpPost("channels/{id:int}/test")]
     public async Task<ActionResult<NotificationTestResultDto>> TestChannel(int id, CancellationToken ct)
     {
-        var result = await service.TestChannelAsync(id, ct);
+        var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var userId = int.TryParse(claim, out var parsed) ? parsed : (int?)null;
+        var result = await service.TestChannelAsync(id, userId, ct);
         return result is null ? NotFound() : Ok(result);
     }
 

@@ -12,11 +12,11 @@
     }
     else
     {
-        <a href="@Href" class="short-id__text" @onclick:stopPropagation="true">@Shortened</a>
+        <a href="@Href" class="short-id__text" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@Shortened</a>
     }
     @if (ShowCopy)
     {
-        <span @onclick:stopPropagation="true" class="short-id__copy">
+        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true" class="short-id__copy">
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyAsync" Class="short-id__copy-btn"
                         title="@L["Copy"]" Label="@L["Copy"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
         </span>

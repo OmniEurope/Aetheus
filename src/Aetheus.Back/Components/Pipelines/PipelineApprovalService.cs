@@ -184,6 +184,7 @@ public class PipelineApprovalService(
         Scope = a.Scope,
         EnvironmentId = a.EnvironmentId,
         EnvironmentName = a.Environment?.Name,
+        EnvironmentInstructions = a.Scope == ApprovalScope.Environment ? a.Environment?.ApprovalInstructions : null,
         Status = a.Status,
         RequestedAt = a.RequestedAt,
         ResolvedAt = a.ResolvedAt,

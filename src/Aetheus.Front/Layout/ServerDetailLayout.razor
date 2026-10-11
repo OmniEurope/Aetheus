@@ -111,7 +111,7 @@
 
                 <AgentUpdateProgressCard @ref="_agentUpdateProgress" ServerId="Loader.Server.Id" Hub="Loader.Hub"
                     Request="@Loader.Server.AgentUpdateRequest"
-                    OnRetry="@UpdateAgentAsync" />
+                    OnRetry="@UpdateAgentAsync" OnStale="@ReloadAgentUpdateAsync" />
             }
             <div class="blade-content">
                 @Body

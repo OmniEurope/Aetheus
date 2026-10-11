@@ -279,6 +279,34 @@ public class AddAgentTests : BunitContext
         Assert.EndsWith("/servers", nav.Uri);
     }
 
+    /// <summary>Recette R1-19: opened from the pipeline setup wizard, Done and Cancel return to its
+    /// summary; an address that is not a local path is ignored.</summary>
+    [Theory]
+    [InlineData("OnFinish")]
+    [InlineData("GoBack")]
+    public void LeavingTheWizard_ReturnsToTheLocalReturnAddress(string exit)
+    {
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("http://localhost/servers/add-agent?returnUrl=" + Uri.EscapeDataString("/pipelines/setup?projectId=7&step=summary"));
+        var cut = Render<AddAgent>();
+
+        typeof(AddAgent).GetMethod(exit, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(cut.Instance, []);
+
+        Assert.EndsWith("/pipelines/setup?projectId=7&step=summary", nav.Uri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LeavingTheWizard_IgnoresAReturnAddressOutsideTheApplication()
+    {
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("http://localhost/servers/add-agent?returnUrl=" + Uri.EscapeDataString("https://evil.example/x"));
+        var cut = Render<AddAgent>();
+
+        typeof(AddAgent).GetMethod("OnFinish", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(cut.Instance, []);
+
+        Assert.Equal("http://localhost/servers", nav.Uri);
+    }
+
     // --- OnStepChanged ---
 
     [Fact]

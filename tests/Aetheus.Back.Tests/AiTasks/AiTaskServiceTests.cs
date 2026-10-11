@@ -644,6 +644,7 @@ public sealed class AiTaskServiceTests
             workingDirectory: "/workspace",
             TestContext.Current.CancellationToken);
 
+        Assert.NotNull(spec);
         Assert.Equal("ai-run", spec.Target);
         Assert.Equal(profile.TimeoutSeconds, spec.TimeoutSeconds);
         Assert.Equal("true", spec.EnvironmentVariables["AETHEUS_AI_GATE"]);
@@ -653,7 +654,7 @@ public sealed class AiTaskServiceTests
     }
 
     [Fact]
-    public async Task BuildPipelineExecutionAsync_MissingProfile_IsRejected()
+    public async Task BuildPipelineExecutionAsync_MissingProfile_ReturnsNoSpec()
     {
         _repo.FindProfileByNameAsync(
                 "missing",
@@ -661,7 +662,7 @@ public sealed class AiTaskServiceTests
                 Arg.Any<CancellationToken>())
             .Returns((AiRunnerProfile?)null);
 
-        await Assert.ThrowsAsync<BadRequestException>(() =>
+        Assert.Null(await
             _sut.BuildPipelineExecutionAsync(
                 "missing",
                 7,

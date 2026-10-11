@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -148,5 +149,23 @@ public class EnvironmentsListTests : BunitContext
         var cut = Render<EnvironmentsList>();
 
         await cut.InvokeAsync(() => cut.Instance.DisposeAsync().AsTask());
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/environments", new PaginatedResult<EnvironmentDto>
+        {
+            Items = [new EnvironmentDto { Id = 1, Name = "Prod", Type = EnvironmentType.Production }],
+            TotalCount = 1
+        });
+
+        var cut = Render<EnvironmentsList>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The name link and the duplicate button.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);
     }
 }

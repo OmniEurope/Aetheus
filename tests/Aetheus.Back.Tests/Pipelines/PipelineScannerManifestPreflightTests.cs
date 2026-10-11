@@ -27,7 +27,7 @@ public sealed class PipelineScannerManifestPreflightTests
             .Returns(true);
         _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([1]);
         _variables.ResolveVariablesWithWarningsAsync(
                 Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<Dictionary<string, string>?>(),

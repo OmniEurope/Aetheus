@@ -4,9 +4,12 @@
     <OmniFormField For="oe-pages-git-gitbranchprotectiondialog-1"><LabelContent>@L["Pattern"]</LabelContent><ChildContent>
         <OmniTextBox @bind-Value="_pattern" Placeholder="@L["PlaceholderBranchPattern"]" Id="oe-pages-git-gitbranchprotectiondialog-1" />
     </ChildContent></OmniFormField>
+    @* Decision D13: who may move the branch (not protected, protected except pipelines, strictly protected). *@
+    <OmniFormField For="oe-pages-git-gitbranchprotectiondialog-2"><LabelContent>@L["BranchProtectionLevel"]</LabelContent><ChildContent>
+        <OmniDropDown Id="oe-pages-git-gitbranchprotectiondialog-2" @bind-Value="_protectionLevel" Options="@_levels" />
+    </ChildContent></OmniFormField>
     <OmniCheckBox @bind-Value="_preventDeletion">@L["PreventDeletion"]</OmniCheckBox>
     <OmniCheckBox @bind-Value="_preventForcePush">@L["PreventForcePush"]</OmniCheckBox>
-    @* Recette R2-042: "require a pull request" is set aside (never enforced); the field stays false. *@
     <DialogFooter OnCancel="@(() => Dialog.Close(false))">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Save"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
     </DialogFooter>

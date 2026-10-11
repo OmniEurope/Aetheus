@@ -9,9 +9,9 @@ namespace Aetheus.Front.Components.Settings;
 /// browser and stores each change; the scope paints the mode, the theme, the palette, the font and the density
 /// from these values (OmniEurope.Blazor owns the tokens). Two things stay with the site because OE leaves them
 /// to the host: the text size and the control size levels (<c>data-oe-text-size</c>,
-/// <c>data-oe-control-size</c> on the document root, which OE's stylesheet reads), and the resolved mode
-/// mirrored on the document root (<see cref="RootMode"/>) for what lives outside the scope (the boot splash,
-/// the page behind it) and the stylesheet rules keyed on the light or dark half.
+/// <c>data-oe-control-size</c> on the document root, which OE's stylesheet reads). Recette R2-112: the
+/// resolved mode is no longer copied on the document root; the scope carries it
+/// (<c>data-omni-theme-resolved</c>) and omni-boot.js lays it on the root for the boot splash.
 /// </summary>
 public sealed class SiteAppearanceState(IJSRuntime js)
 {
@@ -30,13 +30,7 @@ public sealed class SiteAppearanceState(IJSRuntime js)
     /// turned it off. A system asking for less motion holds the field still whatever this says.</summary>
     public bool BackdropMotion { get; private set; } = true;
 
-    /// <summary>
-    /// The mode mirrored on the document root: the stored preference (<c>system</c> is resolved by the
-    /// browser), except under a theme drawn in dark only, which the scope always paints dark.
-    /// </summary>
-    internal string RootMode => Preset?.DarkOnly == true ? "dark" : StoredAppearance(Appearance);
-
-    /// <summary>Reads the choices stored in this browser and mirrors the mode on the document root.</summary>
+    /// <summary>Reads the choices stored in this browser.</summary>
     public async Task LoadAsync()
     {
         Appearance = ParseAppearance(await ReadAsync(StorageKeys.Theme));
@@ -47,7 +41,6 @@ public sealed class SiteAppearanceState(IJSRuntime js)
         TextSizeLevel = SiteAppearance.ParseLevel(await ReadAsync(StorageKeys.TextSize));
         ControlSizeLevel = SiteAppearance.ParseLevel(await ReadAsync(StorageKeys.ControlSize));
         BackdropMotion = await ReadAsync(StorageKeys.BackdropMotion) != "off";
-        await MirrorRootModeAsync();
         Changed?.Invoke();
     }
 
@@ -55,7 +48,6 @@ public sealed class SiteAppearanceState(IJSRuntime js)
     {
         Appearance = appearance;
         await StoreAsync(StorageKeys.Theme, StoredAppearance(appearance));
-        await MirrorRootModeAsync();
         Changed?.Invoke();
     }
 
@@ -69,7 +61,6 @@ public sealed class SiteAppearanceState(IJSRuntime js)
         await StoreAsync(StorageKeys.ThemePreset, preset?.Name ?? string.Empty);
         await StoreAsync(StorageKeys.ThemePalette, string.Empty);
         await StoreAsync(StorageKeys.ThemeFont, string.Empty);
-        await MirrorRootModeAsync();
         Changed?.Invoke();
     }
 
@@ -116,8 +107,6 @@ public sealed class SiteAppearanceState(IJSRuntime js)
         await StoreAsync(StorageKeys.BackdropMotion, motion ? "on" : "off");
         Changed?.Invoke();
     }
-
-    private ValueTask MirrorRootModeAsync() => js.InvokeVoidAsync("Aetheus.setOmniTheme", RootMode);
 
     private ValueTask StoreAsync(string key, string value) => js.InvokeVoidAsync("localStorage.setItem", key, value);
 

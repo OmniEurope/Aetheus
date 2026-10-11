@@ -184,9 +184,15 @@ public partial class AddAgent : IAsyncDisposable
         RefreshSteps();
     }
 
-    private void GoBack() => Navigation.NavigateTo("/servers");
+    /// <summary>Recette R1-19: the page that sent the user here to add a server (the pipeline setup
+    /// wizard's summary, with its choices). Done, Cancel and Back return to it when it is local.</summary>
+    [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
 
-    private void OnFinish() => Navigation.NavigateTo("/servers");
+    private string ExitHref => LocalReturnUrl.Validated(ReturnUrl) ?? "/servers";
+
+    private void GoBack() => Navigation.NavigateTo(ExitHref);
+
+    private void OnFinish() => Navigation.NavigateTo(ExitHref);
 
     private static bool IsLocalhostUrl(string url)
         => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.IsLoopback;

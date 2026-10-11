@@ -13,7 +13,18 @@
 }
 else
 {
-    <WizardDialog Steps="@_steps" CanAdvance="@CanAdvance" StepChanged="@OnStepChanged"
+    @* Recette R1-29: new pipelines from the templates, or the pipelines of an existing project. *@
+    <OmniRadioButtonList TValue="bool" Label="@L["PipelineSetupStartFrom"]" Options="@StartOptions"
+                         Value="@_copyMode" ValueChanged="@OnModeChanged" ValueExpression="@(() => _copyMode)"
+                         Class="omni-u-mb-md" data-testid="setup-start-from" />
+}
+@if (!_loading && _copyMode)
+{
+    <PipelineProjectCopyWizard Projects="@_projects" InitialProjectId="@_selectedProjectId" OnCancel="@GoBack" />
+}
+else if (!_loading)
+{
+    <WizardDialog Steps="@_steps" CanAdvance="@CanAdvance" StepChanged="@OnStepChanged" InitialStep="@_initialStep"
                   OnFinishClicked="@CreatePipelinesAsync" OnCancelClicked="@GoBack"
                   FinishText="@L["CreatePipelines"]" />
 }

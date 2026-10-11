@@ -45,11 +45,11 @@ public sealed class PipelineEnvironmentLockDispatchTests
             .Returns(callInfo => callInfo.Arg<PipelineStageDefinition>());
         servers.ResolveServerForTargetAsync(
                 Arg.Any<PipelineStageDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns((Server?)null);
         repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([7]);
 
         var planner = new PipelineStageDispatchPlanner(
@@ -80,7 +80,7 @@ public sealed class PipelineEnvironmentLockDispatchTests
             Arg.Any<CancellationToken>());
         await harness.Finalizer.DidNotReceiveWithAnyArgs().FailRunWithUnmatchedStagesAsync(default, default!, default!, TestContext.Current.CancellationToken);
         await harness.Dispatcher.DidNotReceiveWithAnyArgs().CreateTasksForStageAsync(
-            default, default!, default!, default!, default!, default!, default, default!, default, default!, TestContext.Current.CancellationToken);
+            default, default!, default!, default!, default!, default!, default, default!, default, null, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]

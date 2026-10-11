@@ -171,6 +171,9 @@ public sealed class HeartbeatService(
     internal async Task CollectAndSendHeartbeatAsync(CancellationToken ct)
     {
         var heartbeat = metricsCollector.Collect();
+        // Recette R1-8: a mail operation just completed, the cached mail inventory is collected again.
+        if (runtimeHealth.ConsumeMailInventoryInvalidation())
+            _mailCache.Invalidate();
 
         using var collectorCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var collectorToken = collectorCts.Token;
@@ -424,20 +427,34 @@ public sealed class HeartbeatService(
         private T? _value;
         private DateTimeOffset? _refreshedAt;
         private Task<T>? _inFlight;
+        // Recette R1-8: Invalidate marks the value outdated; a collection started before it does not clear the mark.
+        private bool _stale;
+        private int _generation;
 
         public Task<T> GetAsync(CancellationToken ct)
         {
             lock (_sync)
             {
                 var now = time.GetUtcNow();
-                if (_refreshedAt is not null && now - _refreshedAt < ttl && _value is not null)
+                if (!_stale && _refreshedAt is not null && now - _refreshedAt < ttl && _value is not null)
                     return Task.FromResult(_value);
 
                 if (_inFlight is not null)
                     return Task.FromResult(_value is null ? fallback() : _value);
 
-                _inFlight = CollectAndCacheAsync(ct);
+                _inFlight = CollectAndCacheAsync(_generation, ct);
                 return _inFlight;
+            }
+        }
+
+        /// <summary>The next <see cref="GetAsync"/> collects again, whatever the TTL left; the last value
+        /// is still reported while that collection runs.</summary>
+        public void Invalidate()
+        {
+            lock (_sync)
+            {
+                _stale = true;
+                _generation++;
             }
         }
 
@@ -465,7 +482,7 @@ public sealed class HeartbeatService(
             }
         }
 
-        private async Task<T> CollectAndCacheAsync(CancellationToken ct)
+        private async Task<T> CollectAndCacheAsync(int generation, CancellationToken ct)
         {
             await Task.Yield();
             try
@@ -475,6 +492,8 @@ public sealed class HeartbeatService(
                 {
                     _value = collected;
                     _refreshedAt = time.GetUtcNow();
+                    if (generation == _generation)
+                        _stale = false;
                 }
                 return collected;
             }

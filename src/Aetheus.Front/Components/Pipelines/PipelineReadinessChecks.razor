@@ -1,0 +1,38 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-28: one finding per alert, its items, and the fix: a page link, or for a missing
+   repository the creation dialog over the current page (recette R1-19). *@
+@foreach (var check in Checks)
+{
+    <OmniAlert Severity="@(check.Severity == PipelineSetupReadinessSeverity.Blocking ? OmniSeverity.Warning : OmniSeverity.Info)"
+               data-testid="setup-readiness-check">
+        <OmniStack Gap="OmniSpacing.Small">
+            <strong>@L[PipelineReadinessText.TitleKey(check.Kind)]</strong>
+            <span>@L[PipelineReadinessText.HintKey(check.Kind)]</span>
+            @if (check.Items.Count > 0)
+            {
+                <ul class="pipeline-setup-readiness-items">
+                    @foreach (var item in check.Items)
+                    {
+                        <li>
+                            <code>@item</code>
+                            @if (PipelineReadinessText.ItemRoleKey(check.Kind, item) is { } role)
+                            {
+                                <span data-testid="setup-readiness-item-role"> : @L[role]</span>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+            @if (check.Kind == PipelineSetupReadinessKind.NoRepository)
+            {
+                <div>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateRepositoryAsync" data-testid="setup-readiness-create-repository"><OmniIcon Name="OmniIconName.Add" /> <span>@L["CreateGitRepository"]</span></OmniButton>
+                </div>
+            }
+            else if (Href(check.Kind) is { } href)
+            {
+                <OmniLink Href="@href"><OmniIcon Name="OmniIconName.ArrowRight" /> @L[PipelineReadinessText.RemediationKey(check.Kind)!]</OmniLink>
+            }
+        </OmniStack>
+    </OmniAlert>
+}

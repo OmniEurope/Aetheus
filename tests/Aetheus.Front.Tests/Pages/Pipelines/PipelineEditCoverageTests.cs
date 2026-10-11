@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Pipelines;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -438,5 +439,19 @@ public class PipelineEditCoverageTests : BunitContext
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)0));
         var val = (bool)typeof(PipelineEdit).GetProperty("_isNew", Priv)!.GetValue(cut.Instance)!;
         Assert.True(val);
+    }
+
+    [Fact]
+    public void RunRowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        SetupEditStubs(30);
+
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 30));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The run links and the cancel button of the running run.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 4);
     }
 }

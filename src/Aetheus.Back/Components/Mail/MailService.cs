@@ -168,7 +168,7 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         if (!MailCommandHelper.IsValidEmail(request.Email))
             throw new BadRequestException("Invalid email address.");
         if (!MailCommandHelper.IsValidPassword(request.Password))
-            throw new BadRequestException("Password must be 8–128 characters and contain no control characters.");
+            throw new BadRequestException("Password must be 12 to 100 characters and contain no control characters.");
 
         // Find the domain for this email
         var emailDomain = request.Email.Split('@')[1];
@@ -217,7 +217,7 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         if (!string.IsNullOrWhiteSpace(request.NewPassword))
         {
             if (!MailCommandHelper.IsValidPassword(request.NewPassword))
-                throw new BadRequestException("Password must be 8-128 characters and contain no control characters.");
+                throw new BadRequestException("Password must be 12 to 100 characters and contain no control characters.");
 
             await EnsureMailManageableAsync(serverId, ct).ConfigureAwait(false);
 
@@ -441,15 +441,22 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         // PLAN-005: the DKIM public key comes from the heartbeat inventory (the agent reads the .txt the
         // helper leaves world-readable). Only when it is still unknown is the key read on demand through
         // mail-manage, whose output lands in the task log.
-        if (string.IsNullOrEmpty(domain.DkimPublicKey))
+        var records = MailDnsRecordFactory.Build(domain, state?.Hostname);
+        if (records.DkimKeyStatus != MailDkimKeyStatus.Available)
         {
+            // SITE-OFFLINE-001: an offline agent cannot read the key and the queue refuses the task (409).
+            // Reading the records must not fail for that: every other record is computed here, and the DKIM
+            // one is returned as unavailable with its reason.
+            var server = await serverRepo.FindServerAsync(serverId, ct).ConfigureAwait(false);
+            if (server?.Status != ServerStatus.Online)
+                return records with { DkimKeyStatus = MailDkimKeyStatus.AgentOffline };
             await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"Mail - read DKIM key ({domain.Name})",
                 OperationKind.MailDkimRead, domain.Name,
                 new Dictionary<string, string> { [MailSetupEnv.DkimSelector] = domain.DkimSelector },
                 timeoutSeconds: 30), ct).ConfigureAwait(false);
         }
 
-        return MailDnsRecordFactory.Build(domain, state?.Hostname);
+        return records;
     }
 
     private static MailDomainDto MapDomain(MailDomain domain) => new()

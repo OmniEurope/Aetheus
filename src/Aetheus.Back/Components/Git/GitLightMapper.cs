@@ -80,7 +80,7 @@ internal static partial class GitLightMapper
         Pattern = r.Pattern,
         PreventDeletion = r.PreventDeletion,
         PreventForcePush = r.PreventForcePush,
-        RequirePullRequest = r.RequirePullRequest,
+        ProtectionLevel = r.ProtectionLevel,
         CreatedAt = r.CreatedAt
     };
 

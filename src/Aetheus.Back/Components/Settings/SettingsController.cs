@@ -6,7 +6,7 @@ namespace Aetheus.Back.Components.Settings;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin")]
-public class SettingsController(ISettingsService settingsService) : ControllerBase
+public class SettingsController(ISettingsService settingsService, IEmailSenderSettingsService emailSender) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<AppSettingDto>>> GetSettings(CancellationToken ct)
@@ -20,6 +20,16 @@ public class SettingsController(ISettingsService settingsService) : ControllerBa
         await settingsService.UpdateSettingAsync(key, setting.Value, ct);
         return Ok();
     }
+
+    /// <summary>Recette R1-16: the platform e-mail sender, default no-reply account or custom SMTP server.</summary>
+    [HttpGet("email-sender")]
+    public async Task<ActionResult<EmailSenderSettingsDto>> GetEmailSender(CancellationToken ct) =>
+        Ok(await emailSender.GetAsync(ct));
+
+    [HttpPut("email-sender")]
+    public async Task<ActionResult<EmailSenderSettingsDto>> UpdateEmailSender(
+        [FromBody] UpdateEmailSenderSettingsRequest request, CancellationToken ct) =>
+        Ok(await emailSender.UpdateAsync(request, ct));
 
     [HttpGet("secrets")]
     public async Task<ActionResult<List<SecretDto>>> GetSecrets(CancellationToken ct)

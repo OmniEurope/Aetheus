@@ -6,7 +6,7 @@
 @namespace Aetheus.Front.Components.Servers.ServerDetailSections
 @if (_selected.Count > 0)
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm omni-u-p-sm omni-u-rounded service-bulk-bar">
+    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm omni-u-p-sm omni-u-rounded service-bulk-bar">
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["ServicesSelected"], _selected.Count)</OmniText>
         <div class="flex-spacer"></div>
         @if (Installed)
@@ -37,8 +37,8 @@
     </OmniAlert>
 }
 
-@* R-509: on the module grid a click on the row opens the service's module; the checkbox and the
-   buttons keep their own click. *@
+@* R-509: on the module grid a click on the row opens the service's module; the checkbox, the
+   buttons and the task link keep their own click and key (SITE-FUNC-HOME-CAPABILITY-001). *@
 <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["Services"])" ExportFields="@ExportContext.Fields()" Items="@Services.ToList()" TItem="ServiceInfoDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     RowRender="@OnRowRenderInternal" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
     OnRowClick="@OnRowClickedAsync" Class="@(OpensModuleOnRowClick ? "aetheus-clickable-rows" : null)">
@@ -49,7 +49,7 @@
             </HeaderContent>
             <Template Context="svc">
                 @{ var serviceSelected = _selected.Contains(svc.Name); }
-                <span @onclick:stopPropagation="true">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniCheckBox TValue="bool" Value="@serviceSelected" ValueChanged="@(value => ToggleOne(svc.Name, value))" ValueExpression="@(() => serviceSelected)" aria-label="@svc.Name" />
                 </span>
             </Template>
@@ -61,7 +61,7 @@
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall">
                         @* Recette R2-032 (user decision, 2026-10-01): opening the service's management is
                            the row's main action, blue. *@
-                        <span @onclick:stopPropagation="true">
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OnOpenModule.InvokeAsync(svc.Name))" title="@($"{L["OpenModule"]}: {svc.Name}")" Label="@($"{L["OpenModule"]}: {svc.Name}")"><OmniIcon Name="OmniIconName.OpenExternal" /></OmniButton>
                         </span>
                         <span>@svc.Name</span>
@@ -70,7 +70,9 @@
                 else if (Installed)
                 {
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnLogs.InvokeAsync(svc.Name))" title="@($"{L["ViewLogs"]}: {svc.Name}")" Label="@($"{L["ViewLogs"]}: {svc.Name}")"><OmniIcon Name="OmniIconName.Document" /></OmniButton>
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnLogs.InvokeAsync(svc.Name))" title="@($"{L["ViewLogs"]}: {svc.Name}")" Label="@($"{L["ViewLogs"]}: {svc.Name}")"><OmniIcon Name="OmniIconName.Document" /></OmniButton>
+                        </span>
                         <span>@svc.Name</span>
                     </OmniStack>
                 }
@@ -102,7 +104,7 @@
                     @* R-510: what the action launched on this service is doing, linked to its task. *@
                     @if (action is not null)
                     {
-                        <span @onclick:stopPropagation="true" class="service-action-state service-action-state--@action.Phase.ToString().ToLowerInvariant()">
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true" class="service-action-state service-action-state--@action.Phase.ToString().ToLowerInvariant()">
                             <OmniLink Href="@($"/tasks/{action.TaskId}")">@ActionText(action)</OmniLink>
                         </span>
                     }
@@ -115,7 +117,7 @@
             <Template Context="svc">
                 @if (Installed)
                 {
-                    <span @onclick:stopPropagation="true">
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Justify="OmniJustification.Center">
                         @* Recette R2-032 (user decision, 2026-10-01): Start is blue; Stop takes its place
                            on a running service, so the row keeps one blue button. *@
@@ -135,7 +137,9 @@
                 }
                 else
                 {
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OnInstall.InvokeAsync(svc.Name))" Disabled="@(!ServerOnline || !CanInstall(svc.Name))" Class="@(IsBusy(svc.Name) ? "btn-busy" : null)" Busy="@IsBusy(svc.Name)" title="@(!ServerOnline ? L["AgentOfflineActionBlocked"].Value : InstallTitle(svc.Name))"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
+                    </span>
                 }
             </Template>
         </OmniDataGridColumn>

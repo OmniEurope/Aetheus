@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Subject" xml:space="preserve"><value>Récapitulatif quotidien Aetheus - {0}</value></data>
+  <data name="Heading" xml:space="preserve"><value>Ce qui s'est passé le {0}</value></data>
+  <data name="Intro" xml:space="preserve"><value>Journée de 00:00 à 24:00 ({0}). Généré le {1}.</value></data>
+  <data name="Footer" xml:space="preserve"><value>Envoyé par Aetheus depuis son adresse no-reply. Destinataires, rubriques et heure d'envoi se règlent dans Administration &gt; Paramètres de la plateforme &gt; Récapitulatif quotidien.</value></data>
+  <data name="LabelSeparator" xml:space="preserve"><value> :</value></data>
+  <data name="TileRunsSucceeded" xml:space="preserve"><value>exécutions de pipeline réussies</value></data>
+  <data name="TileRunsFailed" xml:space="preserve"><value>exécutions de pipeline en échec</value></data>
+  <data name="TileServersOnline" xml:space="preserve"><value>serveurs en ligne</value></data>
+  <data name="Ratio" xml:space="preserve"><value>{0} / {1}</value></data>
+  <data name="RunPending" xml:space="preserve"><value>En attente</value></data>
+  <data name="RunRunning" xml:space="preserve"><value>En cours</value></data>
+  <data name="RunWaitingForApproval" xml:space="preserve"><value>En attente d'approbation</value></data>
+  <data name="RunSuccess" xml:space="preserve"><value>Réussi</value></data>
+  <data name="RunFailed" xml:space="preserve"><value>Échec</value></data>
+  <data name="RunCancelled" xml:space="preserve"><value>Annulé</value></data>
+  <data name="RunPartial" xml:space="preserve"><value>Partiel</value></data>
+  <data name="RunRolledBack" xml:space="preserve"><value>Restauré</value></data>
+  <data name="RunRejected" xml:space="preserve"><value>Rejeté</value></data>
+  <data name="PipelinesTitle" xml:space="preserve"><value>Pipelines</value></data>
+  <data name="PipelinesSummary" xml:space="preserve"><value>{0} exécutions terminées : {1} réussies, {2} en échec, {3} autres.</value></data>
+  <data name="PipelinesParentsOnly" xml:space="preserve"><value>Pipelines parents uniquement : un pipeline enfant lancé par un autre n'est pas listé, son résultat fait partie du statut de son parent.</value></data>
+  <data name="PipelinesTruncated" xml:space="preserve"><value>Seules les {0} premières exécutions de la journée sont listées.</value></data>
+  <data name="FinishedAt" xml:space="preserve"><value>Terminé à</value></data>
+  <data name="RunNumber" xml:space="preserve"><value>exécution n° {0} à {1}</value></data>
+  <data name="ServersTitle" xml:space="preserve"><value>Serveurs</value></data>
+  <data name="ServersSummary" xml:space="preserve"><value>{0} serveurs, dont {1} demandent de l'attention.</value></data>
+  <data name="LastSeen" xml:space="preserve"><value>dernier signal {0}</value></data>
+  <data name="ServerOnline" xml:space="preserve"><value>En ligne</value></data>
+  <data name="ServerOffline" xml:space="preserve"><value>Hors ligne</value></data>
+  <data name="ServerDisabled" xml:space="preserve"><value>Désactivé</value></data>
+  <data name="OsUpdates" xml:space="preserve"><value>Mises à jour système</value></data>
+  <data name="OsUpdatesUnknown" xml:space="preserve"><value>non vérifiées par l'agent</value></data>
+  <data name="OsUpdatesNone" xml:space="preserve"><value>aucune mise à jour en attente</value></data>
+  <data name="OsUpdatesPending" xml:space="preserve"><value>{0} en attente, dont {1} de sécurité</value></data>
+  <data name="UpToDate" xml:space="preserve"><value>À jour</value></data>
+  <data name="UpdatesPending" xml:space="preserve"><value>Mises à jour en attente</value></data>
+  <data name="Unknown" xml:space="preserve"><value>Inconnu</value></data>
+  <data name="Agent" xml:space="preserve"><value>Agent</value></data>
+  <data name="AgentVersion" xml:space="preserve"><value>version {0}</value></data>
+  <data name="AgentVersionTarget" xml:space="preserve"><value>version {0}, dernière {1}</value></data>
+  <data name="AgentUnknown" xml:space="preserve"><value>Inconnu</value></data>
+  <data name="AgentUpToDate" xml:space="preserve"><value>À jour</value></data>
+  <data name="AgentUpdateRecommended" xml:space="preserve"><value>Mise à jour conseillée</value></data>
+  <data name="AgentUpdateRequired" xml:space="preserve"><value>Mise à jour requise</value></data>
+  <data name="Disk" xml:space="preserve"><value>Disque</value></data>
+  <data name="DiskUnknown" xml:space="preserve"><value>aucune mesure reçue</value></data>
+  <data name="DiskFree" xml:space="preserve"><value>{0} Go libres sur {1} Go ({2} % libre)</value></data>
+  <data name="DiskOk" xml:space="preserve"><value>Correct</value></data>
+  <data name="DiskLow" xml:space="preserve"><value>Espace faible</value></data>
+  <data name="DiskCritical" xml:space="preserve"><value>Espace critique</value></data>
+  <data name="ReleasesTitle" xml:space="preserve"><value>Versions</value></data>
+  <data name="ReleasesSummary" xml:space="preserve"><value>Événements de version : {0}.</value></data>
+  <data name="ReleasePromoted" xml:space="preserve"><value>Promue</value></data>
+  <data name="ReleaseRolledBack" xml:space="preserve"><value>Retour arrière</value></data>
+  <data name="At" xml:space="preserve"><value>À</value></data>
+  <data name="BackupsTitle" xml:space="preserve"><value>Sauvegardes</value></data>
+  <data name="BackupsSummary" xml:space="preserve"><value>{0} sauvegardes terminées : {1} réussies, {2} en échec.</value></data>
+  <data name="BackupWhere" xml:space="preserve"><value>{0} sur {1}</value></data>
+  <data name="BackupSucceeded" xml:space="preserve"><value>Réussie</value></data>
+  <data name="BackupFailed" xml:space="preserve"><value>Échec</value></data>
+  <data name="Reason" xml:space="preserve"><value>Raison</value></data>
+  <data name="CertificatesTitle" xml:space="preserve"><value>Certificats</value></data>
+  <data name="CertificatesSummary" xml:space="preserve"><value>{0} certificats expirent dans les {1} jours.</value></data>
+  <data name="SecretsTitle" xml:space="preserve"><value>Secrets des coffres</value></data>
+  <data name="SecretsSummary" xml:space="preserve"><value>{0} secrets de coffre expirent dans les {1} jours.</value></data>
+  <data name="Expired" xml:space="preserve"><value>Expiré</value></data>
+  <data name="ExpiresInDays" xml:space="preserve"><value>Dans {0} jours</value></data>
+  <data name="ExpiresOn" xml:space="preserve"><value>Expire le</value></data>
+  <data name="FindingsTitle" xml:space="preserve"><value>Constats de sécurité et de qualité</value></data>
+  <data name="FindingsSummary" xml:space="preserve"><value>{0} nouveaux constats, {1} résolus.</value></data>
+  <data name="FindingsNewTitle" xml:space="preserve"><value>Nouveaux constats par gravité</value></data>
+  <data name="FindingsNewCount" xml:space="preserve"><value>{0} nouveaux</value></data>
+  <data name="SeverityNone" xml:space="preserve"><value>Aucune</value></data>
+  <data name="SeverityInfo" xml:space="preserve"><value>Info</value></data>
+  <data name="SeverityLow" xml:space="preserve"><value>Faible</value></data>
+  <data name="SeverityMedium" xml:space="preserve"><value>Moyenne</value></data>
+  <data name="SeverityHigh" xml:space="preserve"><value>Élevée</value></data>
+  <data name="SeverityCritical" xml:space="preserve"><value>Critique</value></data>
+  <data name="MailTitle" xml:space="preserve"><value>Serveurs de messagerie</value></data>
+  <data name="MailSummary" xml:space="preserve"><value>Serveurs de messagerie signalés : {0}.</value></data>
+  <data name="ReportedAt" xml:space="preserve"><value>signalé {0}</value></data>
+  <data name="MailRunning" xml:space="preserve"><value>En marche</value></data>
+  <data name="MailStopped" xml:space="preserve"><value>Service arrêté</value></data>
+  <data name="MailQueue" xml:space="preserve"><value>File d'attente</value></data>
+  <data name="MailQueueCount" xml:space="preserve"><value>{0} messages</value></data>
+  <data name="ServiceRunning" xml:space="preserve"><value>En marche</value></data>
+  <data name="ServiceStopped" xml:space="preserve"><value>Arrêté</value></data>
+  <data name="QuietDayTitle" xml:space="preserve"><value>Rien à signaler</value></data>
+  <data name="QuietDaySummary" xml:space="preserve"><value>Rien ne s'est passé ce jour-là dans les sections suivies par ce récap.</value></data>
+  <data name="SettingsLink" xml:space="preserve"><value>Régler le récap</value></data>
+</root>

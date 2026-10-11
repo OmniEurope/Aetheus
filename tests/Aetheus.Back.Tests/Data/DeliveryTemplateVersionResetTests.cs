@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Audit;
+using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -59,7 +60,262 @@ public sealed class DeliveryTemplateVersionResetTests
             "host-bluegreen-deploy: v6 -> v1", Arg.Any<CancellationToken>());
         await audit.Received(1).LogAsync("TemplateVersionRepinned", "Pipeline", Arg.Any<int?>(),
             Arg.Any<string?>(), Arg.Any<CancellationToken>());
-        Assert.True(await db.AppSettings.AnyAsync(setting => setting.Key == DeliveryTemplateVersionReset.MarkerKey,
+        // A database that never ran R2-094 gets one run, which writes both markers.
+        Assert.Equal(1, await db.AppSettings.CountAsync(setting => setting.Key == DeliveryTemplateVersionReset.MarkerKey,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(1, await db.AppSettings.CountAsync(setting => setting.Key == DeliveryTemplateVersionReset.FirstResetMarkerKey,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Recette R1-20: production ran R2-094 on 2026-10-05 and the generic templates grew to v6 since.
+    /// The second reset runs once more on such a database, under its own marker.
+    /// </summary>
+    [Fact]
+    public async Task SeedAsync_DatabaseThatRanOnlyTheFirstReset_IsResetAgain()
+    {
+        await using var db = NewDatabase();
+        var (organizationId, projectId) = await SeedOrganizationAsync(db, "aetheus");
+        db.AppSettings.Add(new AppSetting { Key = DeliveryTemplateVersionReset.FirstResetMarkerKey, Value = "2026-10-05" });
+        AddTemplate(db, organizationId, "application-ci", 6, Shipped("application-ci"));
+        var ciYaml = "name: ats-ci\nextends: application-ci@6\nstages: []\n";
+        var ci = AddPipeline(db, projectId, "ats-ci", ciYaml, "application-ci", 6);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var audit = Substitute.For<IAuditService>();
+
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit)
+            .SeedAsync(TestContext.Current.CancellationToken);
+
+        var template = await LoadTemplateAsync(db, organizationId, "application-ci");
+        Assert.Equal(1, template.LatestVersion);
+        var version = Assert.Single(template.Versions);
+        Assert.Equal(Shipped("application-ci"), version.YamlContent);
+        Assert.Contains("R1-20", version.ChangelogEntry, StringComparison.Ordinal);
+        var repinned = await db.Pipelines.SingleAsync(pipeline => pipeline.Id == ci.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(1, repinned.TemplateReferenceVersion);
+        Assert.Equal(ciYaml.Replace("@6", "@1", StringComparison.Ordinal), repinned.YamlDefinition);
+        await audit.Received(1).LogAsync("TemplateVersionsReset", "PipelineTemplate", template.Id,
+            "application-ci: v6 -> v1", Arg.Any<CancellationToken>());
+        await audit.Received(1).LogAsync("TemplateVersionRepinned", "Pipeline", ci.Id,
+            "application-ci: v6 -> v1", Arg.Any<CancellationToken>());
+        Assert.Equal(1, await db.AppSettings.CountAsync(setting => setting.Key == DeliveryTemplateVersionReset.MarkerKey,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(1, await db.AppSettings.CountAsync(setting => setting.Key == DeliveryTemplateVersionReset.FirstResetMarkerKey,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>With the R1-20 marker present nothing is renumbered, however many versions a template holds.</summary>
+    [Fact]
+    public async Task SeedAsync_WithTheMarkerPresent_RenumbersNothing()
+    {
+        await using var db = NewDatabase();
+        var (organizationId, projectId) = await SeedOrganizationAsync(db, "aetheus");
+        db.AppSettings.Add(new AppSetting { Key = DeliveryTemplateVersionReset.MarkerKey, Value = "2026-10-11" });
+        AddTemplate(db, organizationId, "application-ci", 6, Shipped("application-ci"));
+        var ci = AddPipeline(db, projectId, "ats-ci", "name: ats-ci\nextends: application-ci@6\nstages: []\n", "application-ci", 6);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var audit = Substitute.For<IAuditService>();
+        var git = Substitute.For<IPipelineGitService>();
+
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git)
+            .SeedAsync(TestContext.Current.CancellationToken);
+
+        var template = await LoadTemplateAsync(db, organizationId, "application-ci");
+        Assert.Equal(6, template.LatestVersion);
+        Assert.Equal(Enumerable.Range(1, 6), template.Versions.Select(version => version.Version).Order());
+        var pipeline = await db.Pipelines.SingleAsync(item => item.Id == ci.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(6, pipeline.TemplateReferenceVersion);
+        Assert.Empty(audit.ReceivedCalls());
+        Assert.Empty(git.ReceivedCalls());
+    }
+
+    /// <summary>
+    /// The candidate ships v1 and v2 (R2-121). Holding exactly those two files, it is left alone:
+    /// renumbering it would hand its v2 pipelines (the wizard's) the v1 content.
+    /// </summary>
+    [Fact]
+    public async Task SeedAsync_TemplateHoldingExactlyItsShippedFiles_IsLeftAlone()
+    {
+        await using var db = NewDatabase();
+        var (organizationId, projectId) = await SeedOrganizationAsync(db, "aetheus");
+        var files = DeliveryPipelineTemplateSeeder.Definitions["application-candidate"].Resources
+            .Select(DeliveryPipelineTemplateSeeder.ReadResource).ToArray();
+        Assert.Equal(2, files.Length);
+        AddTemplate(db, organizationId, "application-candidate", 2, files[1], firstVersionYaml: files[0]);
+        var candidateYaml = "name: ats-candidate\nextends: application-candidate@2\nstages: []\n";
+        var candidate = AddPipeline(db, projectId, "ats-candidate", candidateYaml, "application-candidate", 2);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var versionIds = await db.PipelineTemplateVersions.Select(version => version.Id)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System).SeedAsync(TestContext.Current.CancellationToken);
+
+        var template = await LoadTemplateAsync(db, organizationId, "application-candidate");
+        Assert.Equal(2, template.LatestVersion);
+        Assert.Equal(versionIds.Order(), template.Versions.Select(version => version.Id).Order());
+        var pipeline = await db.Pipelines.SingleAsync(item => item.Id == candidate.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(2, pipeline.TemplateReferenceVersion);
+        Assert.Equal(candidateYaml, pipeline.YamlDefinition);
+    }
+
+    /// <summary>
+    /// A run reads a project pipeline's <c>.pipeline/</c> file before its database row: the file is
+    /// repinned too, read on its own, and only when it extends a renumbered template. A failed write
+    /// never stops the start.
+    /// </summary>
+    [Fact]
+    public async Task SeedAsync_RepinsTheGitDefinitionsOfRenumberedTemplates()
+    {
+        await using var db = NewDatabase();
+        var (organizationId, projectId) = await SeedOrganizationAsync(db, "aetheus");
+        AddTemplate(db, organizationId, "application-ci", 6, Shipped("application-ci"));
+        AddTemplate(db, organizationId, "application-quality", 6, Shipped("application-quality"));
+        var ci = AddPipeline(db, projectId, "ats-ci", "name: ats-ci\nextends: application-ci@6\nstages: []\n", "application-ci", 6);
+        ci.SourceBranch = "develop";
+        var drifted = AddPipeline(db, projectId, "ats-drifted",
+            "name: ats-drifted\nextends: application-ci@6\nstages: []\n", "application-ci", 6);
+        var quality = AddPipeline(db, projectId, "ats-quality",
+            "name: ats-quality\nextends: application-quality@6\nstages: []\n", "application-quality", 6);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var gitCi = "# edited in Git\nname: ats-ci\nextends: 'application-ci@6' # pinned\ntrigger: manual\n";
+        var git = Substitute.For<IPipelineGitService>();
+        git.ReadProjectPipelineYamlAsync(projectId, "ats-ci", Arg.Any<CancellationToken>(), "develop", Arg.Any<int?>())
+            .Returns(gitCi);
+        git.ReadProjectPipelineYamlAsync(projectId, "ats-drifted", Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns("name: ats-drifted\nextends: my-own-template@4\n");
+        git.ReadProjectPipelineYamlAsync(projectId, "ats-quality", Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns("name: ats-quality\nextends: application-quality@6\n");
+        git.WriteProjectPipelineYamlAsync(projectId, "ats-ci", Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns((GitWriteOutcome.Committed, (string?)null));
+        git.WriteProjectPipelineYamlAsync(projectId, "ats-quality", Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns((GitWriteOutcome.Failed, "repository not initialized on disk"));
+        var audit = Substitute.For<IAuditService>();
+
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git)
+            .SeedAsync(TestContext.Current.CancellationToken);
+
+        await git.Received(1).WriteProjectPipelineYamlAsync(projectId, "ats-ci",
+            "# edited in Git\nname: ats-ci\nextends: 'application-ci@1' # pinned\ntrigger: manual\n", "system",
+            Arg.Any<CancellationToken>(), "develop", Arg.Any<int?>());
+        await git.DidNotReceive().WriteProjectPipelineYamlAsync(projectId, "ats-drifted", Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>());
+        await git.Received(1).WriteProjectPipelineYamlAsync(projectId, "ats-quality",
+            "name: ats-quality\nextends: application-quality@1\n", "system",
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>());
+        await audit.Received(1).LogAsync("TemplateVersionRepinned", "Pipeline", ci.Id,
+            "application-ci: Git definition -> v1", Arg.Any<CancellationToken>());
+        await audit.DidNotReceive().LogAsync("TemplateVersionRepinned", "Pipeline", quality.Id,
+            "application-quality: Git definition -> v1", Arg.Any<CancellationToken>());
+        // The failed write left the database reset in place.
+        var reloaded = await db.Pipelines.SingleAsync(item => item.Id == quality.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(1, reloaded.TemplateReferenceVersion);
+        Assert.Equal(1, (await LoadTemplateAsync(db, organizationId, "application-quality")).LatestVersion);
+        Assert.Equal(1, (await db.Pipelines.SingleAsync(item => item.Id == drifted.Id, TestContext.Current.CancellationToken))
+            .TemplateReferenceVersion);
+    }
+
+    /// <summary>
+    /// The Git repin is outside the database transaction: a failed write leaves
+    /// <see cref="DeliveryTemplateVersionReset.GitRepinDoneKey"/> absent, and the next start repins that
+    /// file, without auditing again the file already at @1, then writes the marker.
+    /// </summary>
+    [Fact]
+    public async Task SeedAsync_FailedGitWrite_IsRetriedOnTheNextStartUntilDone()
+    {
+        await using var db = NewDatabase();
+        var (organizationId, projectId) = await SeedOrganizationAsync(db, "aetheus");
+        AddTemplate(db, organizationId, "application-ci", 6, Shipped("application-ci"));
+        AddTemplate(db, organizationId, "application-quality", 6, Shipped("application-quality"));
+        var ci = AddPipeline(db, projectId, "ats-ci", "name: ats-ci\nextends: application-ci@6\n", "application-ci", 6);
+        var quality = AddPipeline(db, projectId, "ats-quality",
+            "name: ats-quality\nextends: application-quality@6\n", "application-quality", 6);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var gitFiles = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["ats-ci"] = "name: ats-ci\nextends: application-ci@6\n",
+            ["ats-quality"] = "name: ats-quality\nextends: application-quality@6\n"
+        };
+        var failQuality = true;
+        var git = Substitute.For<IPipelineGitService>();
+        git.ReadProjectPipelineYamlAsync(projectId, Arg.Any<string>(), Arg.Any<CancellationToken>(),
+                Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns(call => gitFiles[call.ArgAt<string>(1)]);
+        git.WriteProjectPipelineYamlAsync(projectId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns(call =>
+            {
+                var name = call.ArgAt<string>(1);
+                if (name == "ats-quality" && failQuality)
+                    return (GitWriteOutcome.Failed, (string?)"repository locked");
+                gitFiles[name] = call.ArgAt<string>(2);
+                return (GitWriteOutcome.Committed, (string?)null);
+            });
+        var audit = Substitute.For<IAuditService>();
+
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git)
+            .SeedAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("name: ats-ci\nextends: application-ci@1\n", gitFiles["ats-ci"]);
+        Assert.Equal("name: ats-quality\nextends: application-quality@6\n", gitFiles["ats-quality"]);
+        Assert.False(await HasSettingAsync(db, DeliveryTemplateVersionReset.GitRepinDoneKey));
+        var recorded = await db.AppSettings.SingleAsync(
+            setting => setting.Key == DeliveryTemplateVersionReset.GitRepinTemplatesKey, TestContext.Current.CancellationToken);
+        Assert.Equal(["application-ci", "application-quality"], recorded.Value.Split(',').Order());
+
+        failQuality = false;
+        git.ClearReceivedCalls();
+        audit.ClearReceivedCalls();
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, audit: audit, pipelineGit: git)
+            .SeedAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("name: ats-quality\nextends: application-quality@1\n", gitFiles["ats-quality"]);
+        await git.Received(1).WriteProjectPipelineYamlAsync(projectId, "ats-quality",
+            "name: ats-quality\nextends: application-quality@1\n", "system",
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>());
+        await git.DidNotReceive().WriteProjectPipelineYamlAsync(projectId, "ats-ci", Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>());
+        await audit.Received(1).LogAsync("TemplateVersionRepinned", "Pipeline", quality.Id,
+            "application-quality: Git definition -> v1", Arg.Any<CancellationToken>());
+        await audit.DidNotReceive().LogAsync(Arg.Any<string>(), Arg.Any<string>(), ci.Id,
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await audit.DidNotReceive().LogAsync("TemplateVersionsReset", Arg.Any<string>(), Arg.Any<int?>(),
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        Assert.True(await HasSettingAsync(db, DeliveryTemplateVersionReset.GitRepinDoneKey));
+        Assert.Equal(1, (await LoadTemplateAsync(db, organizationId, "application-quality")).LatestVersion);
+    }
+
+    /// <summary>A Git pass with every file repinned writes the done marker; the next start makes no Git call.</summary>
+    [Fact]
+    public async Task SeedAsync_CompleteGitRepin_WritesTheDoneMarkerAndTheNextStartSkipsGit()
+    {
+        await using var db = NewDatabase();
+        var (organizationId, projectId) = await SeedOrganizationAsync(db, "aetheus");
+        AddTemplate(db, organizationId, "application-ci", 6, Shipped("application-ci"));
+        AddPipeline(db, projectId, "ats-ci", "name: ats-ci\nextends: application-ci@6\n", "application-ci", 6);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var git = Substitute.For<IPipelineGitService>();
+        git.ReadProjectPipelineYamlAsync(projectId, "ats-ci", Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns("name: ats-ci\nextends: application-ci@6\n");
+        git.WriteProjectPipelineYamlAsync(projectId, "ats-ci", Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns((GitWriteOutcome.Committed, (string?)null));
+
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, pipelineGit: git)
+            .SeedAsync(TestContext.Current.CancellationToken);
+
+        await git.Received(1).WriteProjectPipelineYamlAsync(projectId, "ats-ci",
+            "name: ats-ci\nextends: application-ci@1\n", "system",
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<int?>());
+        Assert.True(await HasSettingAsync(db, DeliveryTemplateVersionReset.GitRepinDoneKey));
+
+        git.ClearReceivedCalls();
+        await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System, pipelineGit: git)
+            .SeedAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(git.ReceivedCalls());
+        Assert.Equal(1, await db.AppSettings.CountAsync(setting => setting.Key == DeliveryTemplateVersionReset.GitRepinDoneKey,
             TestContext.Current.CancellationToken));
     }
 
@@ -142,6 +398,15 @@ public sealed class DeliveryTemplateVersionResetTests
     public void RepinExtends_RewritesOnlyTheVersion(string yaml, string expected) =>
         Assert.Equal(expected, DeliveryTemplateVersionReset.RepinExtends(yaml));
 
+    [Theory]
+    [InlineData("name: a\nextends: 'application-ci@6' # keep\n", "name: a\nextends: 'application-ci@1' # keep\n")]
+    [InlineData("extends: Application-CI @3\n", "extends: Application-CI @1\n")]
+    [InlineData("extends: my-own-template@4\n", "extends: my-own-template@4\n")]
+    [InlineData("name: plain\nstages: []", "name: plain\nstages: []")]
+    public void RepinExtends_WithNames_RewritesOnlyARenumberedTemplate(string yaml, string expected) =>
+        Assert.Equal(expected, DeliveryTemplateVersionReset.RepinExtends(
+            yaml, new HashSet<string>(["application-ci"], StringComparer.OrdinalIgnoreCase)));
+
     private static string Shipped(string name) =>
         DeliveryPipelineTemplateSeeder.ReadResource(DeliveryPipelineTemplateSeeder.Definitions[name].Resources[0]);
 
@@ -202,6 +467,9 @@ public sealed class DeliveryTemplateVersionResetTests
         db.Pipelines.Add(pipeline);
         return pipeline;
     }
+
+    private static Task<bool> HasSettingAsync(AppDbContext db, string key) =>
+        db.AppSettings.AnyAsync(setting => setting.Key == key, TestContext.Current.CancellationToken);
 
     private static Task<PipelineTemplate> LoadTemplateAsync(AppDbContext db, int organizationId, string name) =>
         db.PipelineTemplates.Include(template => template.Versions)

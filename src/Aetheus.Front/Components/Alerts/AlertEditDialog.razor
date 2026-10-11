@@ -17,7 +17,7 @@
             </OmniFormField>
         </OmniColumn>
         <OmniColumn Span="12" MediumSpan="6">
-            <OmniFormField For="oe-pages-alerts-alerteditdialog-numeric-1"><LabelContent>@L["Threshold"]</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.Threshold" Id="oe-pages-alerts-alerteditdialog-numeric-1" /></ChildContent></OmniFormField>
+            <OmniFormField For="oe-pages-alerts-alerteditdialog-numeric-1"><LabelContent>@L["Threshold"] (@AlertThresholdUnit.Of(_model.Metric))</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.Threshold" Id="oe-pages-alerts-alerteditdialog-numeric-1" /></ChildContent></OmniFormField>
         </OmniColumn>
         <OmniColumn Span="12" MediumSpan="6">
             <OmniFormField For="oe-pages-alerts-alerteditdialog-numeric-2"><LabelContent>@L["SustainedSeconds"]</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.SustainedSeconds" Id="oe-pages-alerts-alerteditdialog-numeric-2" /></ChildContent></OmniFormField>

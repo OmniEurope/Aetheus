@@ -48,6 +48,16 @@ public sealed class PipelineAnalysisGradingValidatorTests
     }
 
     [Fact]
+    public void Validate_AcceptsACountedFindingScoreWithAnOpenEBand()
+    {
+        // Recette R1-4: finding_score: count grades the number of open findings, no weighting.
+        var grading = WeightedGrading();
+        grading = grading with { Rules = [grading.Rules[0] with { FindingScore = "count" }] };
+
+        Assert.Empty(PipelineAnalysisGradingValidator.Validate("security", grading));
+    }
+
+    [Fact]
     public void Validate_AcceptsAWeightedFindingScoreWithAnEThreshold()
     {
         var grading = WeightedGrading();
@@ -74,7 +84,7 @@ public sealed class PipelineAnalysisGradingValidatorTests
 
         var errors = PipelineAnalysisGradingValidator.Validate("security", grading);
 
-        Assert.Contains(errors, error => error.Contains("finding_score must be 'weighted'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("finding_score must be 'count' or 'weighted'", StringComparison.Ordinal));
     }
 
     [Fact]

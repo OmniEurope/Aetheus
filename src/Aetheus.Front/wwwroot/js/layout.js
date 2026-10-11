@@ -54,83 +54,14 @@ Aetheus.hideSplash = function () {
     if (!el) return;
     el.classList.add('app-splash--hidden');
     const remove = function () {
+        // Removing the splash lets omni-boot.js hand the look back to OmniThemeScope (data-theme-hold).
         if (el.parentNode) el.parentNode.removeChild(el);
-        // The splash was the last thing painted from the boot copy of the tokens: OmniThemeScope paints
-        // the application from here on.
-        Aetheus.releaseBootTheme();
     };
     el.addEventListener('transitionend', remove, { once: true });
     // Fallback if transitionend never fires (reduced-motion, display quirks, interrupted transition).
     setTimeout(remove, 600);
 };
 
-// PLAN-008 lot 11, STD-SHELL: the stored appearance is 'dark', 'light' or 'system'. OmniThemeScope paints the
-// application in it; the document root carries the same mode, resolved to light or dark, for what lives
-// outside the scope (the boot splash, the page behind it) and for the app.css rules keyed on the dark half,
-// which the scope's own 'system' value cannot select. 'system' follows the OS and repaints when the OS
-// preference changes, without a reload. Anything else reads as dark, the application's default.
-Aetheus.effectiveTheme = function (appearance) {
-    if (appearance === 'light') return 'light';
-    if (appearance !== 'system') return 'dark';
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-};
-
-Aetheus.setOmniTheme = function (appearance) {
-    Aetheus._appearance = appearance;
-    document.documentElement.setAttribute('data-omni-theme', Aetheus.effectiveTheme(appearance));
-
-    if (!Aetheus._systemTheme && window.matchMedia) {
-        Aetheus._systemTheme = window.matchMedia('(prefers-color-scheme: light)');
-        Aetheus._systemTheme.addEventListener('change', function () {
-            if (Aetheus._appearance === 'system') {
-                document.documentElement.setAttribute('data-omni-theme', Aetheus.effectiveTheme('system'));
-            }
-        });
-    }
-    return Aetheus.effectiveTheme(appearance);
-};
-
-// STD-SHELL: the boot copy of the theme. OmniThemeScope writes the tokens of the chosen theme, palette and
-// font on its own element once the application runs, which is after the boot splash has been painted. So
-// that the splash shows in those colours, this keeps a copy of the tokens the scope painted, under the half
-// they were painted for ({ "dark": {...} } or { "light": {...} }); the boot script of index.html lays it on
-// the document root before the first frame, and releaseBootTheme removes it once the scope has taken over.
-// Nothing here resolves a theme: the values are exactly the ones OE painted.
-Aetheus.followThemeScope = function (scopeId) {
-    var scope = document.getElementById(scopeId);
-    if (!scope || Aetheus._themeScopeObserver) return;
-    var copy = function () {
-        var half = {};
-        var count = 0;
-        for (var i = 0; i < scope.style.length; i++) {
-            var name = scope.style[i];
-            if (name.indexOf('--') !== 0) continue;
-            half[name] = scope.style.getPropertyValue(name);
-            count++;
-        }
-        if (count === 0) {
-            localStorage.removeItem('aetheus_theme_tokens');
-            return;
-        }
-        var mode = scope.getAttribute('data-omni-theme');
-        if (mode !== 'light' && mode !== 'dark') {
-            mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-        }
-        var stored = {};
-        stored[mode] = half;
-        localStorage.setItem('aetheus_theme_tokens', JSON.stringify(stored));
-    };
-    copy();
-    Aetheus._themeScopeObserver = new MutationObserver(copy);
-    Aetheus._themeScopeObserver.observe(scope, { attributes: true, attributeFilter: ['style', 'data-omni-theme'] });
-};
-
-// Removes the tokens the boot script laid on the document root (their names are in Aetheus._bootTokenNames).
-Aetheus.releaseBootTheme = function () {
-    var root = document.documentElement;
-    (Aetheus._bootTokenNames || []).forEach(function (name) { root.style.removeProperty(name); });
-    Aetheus._bootTokenNames = [];
-};
 
 // Recette R-390: OE's text size and control size, 1 to 10. Level 5 is the site as drawn and carries no
 // attribute; the others set data-oe-text-size / data-oe-control-size on <html>, which OE's stylesheet
@@ -201,15 +132,6 @@ Aetheus.setTitlePrefix = function (prefix) {
     const observer = new MutationObserver(apply);
     observer.observe(document.head, { childList: true, subtree: true, characterData: true });
     window._aetheusTitlePrefixObserver = observer;
-};
-
-Aetheus.focusById = function (id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    // The id may point at a wrapper (e.g. an OmniPassword/OmniFormField) whose
-    // real focusable target is a nested <input>; prefer that when present.
-    const target = el.matches('input, textarea, select') ? el : (el.querySelector('input, textarea, select') || el);
-    target.focus();
 };
 
 Aetheus.copyToClipboard = async function (text) {
@@ -292,17 +214,6 @@ Aetheus.initFormShortcuts = function () {
     });
 };
 
-Aetheus.trapFocus = function (containerSelector) {
-    const container = document.querySelector(containerSelector);
-    if (!container) return;
-
-    const focusable = container.querySelectorAll(
-        '[role="button"], button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusable.length === 0) return;
-
-    focusable[0].focus();
-};
 
 // Lightweight localStorage helpers used by ActiveOrganizationService and any other client
 // code that wants to persist a small string scalar across reloads. We swallow exceptions
@@ -753,3 +664,34 @@ Aetheus.pageScroll = (function () {
         }
     };
 })();
+
+// Daily recap preview. The recap is an e-mail: its look lives in inline style attributes, which the
+// shell's policy (style-src-attr 'none') refuses in markup. The HTML is parsed off-document, every
+// style attribute is moved aside, the nodes go into a shadow root (so app.css cannot reach them and
+// the e-mail's styles cannot leak out), and each style is then applied through the CSSOM, the path
+// the policy leaves open. Scripts, frames, links and event attributes are dropped first.
+Aetheus.renderEmailPreview = function (host, html) {
+    if (!host) return;
+    const root = host.shadowRoot || host.attachShadow({ mode: 'open' });
+    const parsed = new DOMParser().parseFromString(html || '', 'text/html');
+    parsed.querySelectorAll('script, iframe, object, embed, link, meta, base, form').forEach(node => node.remove());
+    const styles = [];
+    parsed.body.querySelectorAll('*').forEach(element => {
+        for (const attribute of Array.from(element.attributes)) {
+            if (attribute.name.toLowerCase().startsWith('on')) element.removeAttribute(attribute.name);
+        }
+        const style = element.getAttribute('style');
+        if (style !== null) {
+            element.setAttribute('data-preview-style', String(styles.length));
+            styles.push(style);
+            element.removeAttribute('style');
+        }
+    });
+    const container = document.createElement('div');
+    for (const node of Array.from(parsed.body.childNodes)) container.appendChild(document.importNode(node, true));
+    container.querySelectorAll('[data-preview-style]').forEach(element => {
+        element.style.cssText = styles[Number(element.getAttribute('data-preview-style'))] || '';
+        element.removeAttribute('data-preview-style');
+    });
+    root.replaceChildren(container);
+};

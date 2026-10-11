@@ -30,18 +30,17 @@ function loadLayout(markup = '<div id="app-splash"></div><link href="material-ba
     return dom;
 }
 
-test('layout helpers update language, theme and remove the splash idempotently', () => {
+test('layout helpers update language and remove the splash idempotently', () => {
     const dom = loadLayout();
     Aetheus.setLang('fr-BE');
-    assert.equal(Aetheus.setOmniTheme('light'), 'light');
     Aetheus.hideSplash();
     document.getElementById('app-splash').dispatchEvent(new dom.window.Event('transitionend'));
     Aetheus.hideSplash();
 
     assert.equal(document.documentElement.lang, 'fr');
-    assert.equal(document.documentElement.getAttribute('data-omni-theme'), 'light');
-    // Anything but 'light' and 'system' reads as dark, the default before the System option existed.
-    assert.equal(Aetheus.effectiveTheme('unknown'), 'dark');
+    // Recette R2-112: the mode is OE's (theme scope, omni-boot.js); layout.js no longer copies it.
+    assert.equal(Aetheus.setOmniTheme, undefined);
+    assert.equal(document.documentElement.getAttribute('data-omni-theme'), null);
     assert.equal(document.getElementById('app-splash'), null);
     dom.window.close();
 });

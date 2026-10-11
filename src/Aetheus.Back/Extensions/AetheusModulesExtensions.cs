@@ -12,6 +12,7 @@ using Aetheus.Back.Components.Artifacts;
 using Aetheus.Back.Components.Auth;
 using Aetheus.Back.Components.Certbot;
 using Aetheus.Back.Components.Cron;
+using Aetheus.Back.Components.DailyRecap;
 using Aetheus.Back.Components.Dashboards;
 using Aetheus.Back.Components.Docker;
 using Aetheus.Back.Components.Environments;
@@ -117,7 +118,8 @@ internal static class AetheusModulesExtensions
             .AddRkhunterModule()
             .AddModuleLinksModule()
             .AddPortRegistryModule()
-            .AddPortAllocationModule();
+            .AddPortAllocationModule()
+            .AddDailyRecapModule();
 
         return services;
     }

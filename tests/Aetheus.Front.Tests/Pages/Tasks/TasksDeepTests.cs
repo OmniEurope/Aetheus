@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Tasks;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -172,5 +173,22 @@ public class TasksDeepTests : BunitContext
         Assert.Contains("Deploy", cut.Markup);
         Assert.Contains("href=\"/tasks/1\"", cut.Markup);
         Assert.DoesNotContain("receipt_long", cut.Markup);
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/tasks", new PaginatedResult<ServerTaskDto>
+        {
+            Items = [new ServerTaskDto { Id = 1, Name = "Build", Status = TaskExecutionStatus.Success, ServerId = 3, PipelineRunId = 9 }],
+            TotalCount = 1
+        });
+        var cut = Render<TaskListView>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The task link, then the run and server links of its source.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);
     }
 }

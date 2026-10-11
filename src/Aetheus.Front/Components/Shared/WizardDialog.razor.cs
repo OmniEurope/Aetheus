@@ -33,9 +33,16 @@ public partial class WizardDialog
     [Parameter] public EventCallback OnFinishClicked { get; set; }
     [Parameter] public EventCallback OnCancelClicked { get; set; }
 
+    /// <summary>The step shown first (recette R1-19: the pipeline setup wizard comes back on its summary).
+    /// Read once, when the wizard is created.</summary>
+    [Parameter] public int InitialStep { get; set; }
+
     private int _currentStep;
 
     public int CurrentStep => _currentStep;
+
+    protected override void OnInitialized() =>
+        _currentStep = Math.Clamp(InitialStep, 0, Math.Max(Steps.Count - 1, 0));
 
     /// <summary>
     /// Moves to the next step from code (a platform card chosen, a test), asking

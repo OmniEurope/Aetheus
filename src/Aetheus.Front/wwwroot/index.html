@@ -13,17 +13,14 @@
     <link rel="stylesheet" href="css/app#[.{fingerprint}].css" />
     <link rel="icon" type="image/svg+xml" href="aetheus-icon.svg" />
     <script type="importmap"></script>
+    <!-- Recette R2-112 (STD-SHELL): OE replays the theme snapshot OmniThemeScope wrote (App.razor,
+         SnapshotKey) on the document before the first frame, so the boot splash shows in the chosen
+         colours; it hands the look back to the scope once the splash (#app-splash) is gone. -->
+    <script src="_content/OmniEurope.Blazor/omni-boot.js" data-theme-snapshot-key="aetheus:theme" data-theme-hold="#app-splash"></script>
     <script>
         (function() {
-            var t = localStorage.getItem('aetheus_theme');
-            // PLAN-008 (D17, lot 11), STD-SHELL: OmniThemeScope paints the application once Blazor runs, but
-            // the boot splash is painted before that and lives outside the scope. So the stored mode is laid
-            // on the document root here, dark by default, through the same data-omni-theme attribute the
-            // scope uses; SiteAppearanceState keeps it in step afterwards (Aetheus.setOmniTheme). 'system'
-            // reads the OS preference here too, so the first paint is already the right one.
-            var light = t === 'light'
-                || (t === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
-            document.documentElement.setAttribute('data-omni-theme', light ? 'light' : 'dark');
+            // Recette R2-112 (STD-SHELL): the mode of the boot splash comes from OE's snapshot (omni-boot.js
+            // above), which the theme scope rewrites on every change; nothing is copied on the root here.
             // Align <html lang> with the effective boot culture: the saved preference if any,
             // otherwise the browser's own language (which is what Blazor.start falls back to).
             // Without this, a French-browser user with no saved preference kept lang="en",
@@ -36,21 +33,9 @@
                 var level = parseInt(localStorage.getItem(scale[0]), 10);
                 if (level >= 1 && level <= 10 && level !== 5) document.documentElement.setAttribute(scale[1], String(level));
             });
-            // STD-SHELL: the tokens OmniThemeScope painted last time (theme, palette, font), copied by
-            // layout.js (Aetheus.followThemeScope) under the half they were painted for. Laid on the root
-            // only for the boot splash, so it shows in the chosen colours instead of flashing the shipped
-            // ones; Aetheus.releaseBootTheme removes them once the splash is gone and the scope paints the
-            // application. A copy of the other half (the mode changed since) is ignored.
-            window.Aetheus = window.Aetheus || {};
-            window.Aetheus._bootTokenNames = [];
-            try {
-                var tokens = JSON.parse(localStorage.getItem('aetheus_theme_tokens') || 'null');
-                var half = tokens && (light ? tokens.light : tokens.dark);
-                if (half) Object.keys(half).forEach(function (name) {
-                    document.documentElement.style.setProperty(name, half[name]);
-                    window.Aetheus._bootTokenNames.push(name);
-                });
-            } catch (e) { /* a malformed entry leaves the shipped look */ }
+            // Recette R2-112: the boot copy of the theme tokens is OE's now (omni-boot.js above); the copy
+            // Aetheus kept before is dropped once.
+            try { localStorage.removeItem('aetheus_theme_tokens'); } catch (e) { /* blocked storage */ }
         })();
     </script>
 </head>
@@ -103,10 +88,10 @@
          changed layout.js would otherwise stay stale in the browser (a new function like
          Aetheus.scrollToBottom would be "undefined" and its buttons silently no-op). Bump ?v= on any
          edit to these files. -->
-    <script src="js/layout.js?v=16"></script>
+    <script src="js/layout.js?v=17"></script>
     <script src="js/offline-registration.js?v=1"></script>
     <script src="js/docker-interop.js?v=3"></script>
-    <script src="js/monaco-frame-host.js?v=1"></script>
+    <script src="js/monaco-frame-host.js?v=2"></script>
     <script src="lib/dagre/dagre.min.js"></script>
     <script src="js/visual-pipeline.js?v=3"></script>
     <script type="module" src="js/aetheus-analytics-bootstrap.js?v=3"></script>

@@ -12,6 +12,9 @@ public sealed record PipelineApprovalDto
     /// <summary>The stage's environment, when it has one; null for an environment-less pipeline approval.</summary>
     public int? EnvironmentId { get; init; }
     public string? EnvironmentName { get; init; }
+    /// <summary>Recette R1-24: the environment's approval instructions, shown to the person deciding an
+    /// environment approval; null for a pipeline approval or an environment without instructions.</summary>
+    public string? EnvironmentInstructions { get; init; }
     public ApprovalStatus Status { get; init; }
     public DateTime RequestedAt { get; init; }
     public DateTime? ResolvedAt { get; init; }

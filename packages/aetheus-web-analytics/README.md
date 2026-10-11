@@ -31,12 +31,17 @@ opaque id already known to the host application (never an email or other raw PII
 events as authenticated; the backend hashes it server-side into `AuthenticatedPseudonym` and never stores
 it raw. `window.__AETHEUS_ANALYTICS_USER__`, if set before `install()`, seeds the same identity.
 
-**`identify()` requires the Aetheus public ingest endpoint** (`api/ingest/web-analytics/v1/public/{siteId}`).
-The self-hosted endpoint shipped by the `Aetheus.WebAnalytics` Razor Class Library refuses an
-`authenticatedUserId` (`AnalyticsBrowserEvent` is declared `JsonUnmappedMemberHandling.Disallow`) and
-derives identity server-side, through `AetheusWebAnalyticsOptions.AuthenticatedUserIdResolver`. It accepts
-heartbeats, and a bare `signedIn: true` flag set by the `isSignedIn: () => boolean` option: a host whose
-users authenticate against another origin (a bearer-token API) can then count signed-in visits without
+**`identify()` works with both endpoints.** The Aetheus public ingest endpoint
+(`api/ingest/web-analytics/v1/public/{siteId}`) always reads it. The self-hosted endpoint shipped by the
+`Aetheus.WebAnalytics` Razor Class Library derives identity server-side first, through
+`AetheusWebAnalyticsOptions.AuthenticatedUserIdResolver`, and that session identity always wins. It reads
+the `authenticatedUserId` declared by the browser only when the host opts in with `AcceptDeclaredUserId`
+(`Aetheus:WebAnalytics:AcceptDeclaredUserId`, off by default) and the session provides no identity; the
+value is then restricted to `^[A-Za-z0-9_-]+$`. That mode serves a single-page application host that never
+sees who is signed in. See the [web-analytics-v1 contract](../../docs/contracts/web-analytics-v1.md). The
+RCL endpoint also accepts heartbeats, and a bare `signedIn: true` flag set by the
+`isSignedIn: () => boolean` option: a host whose users authenticate against another origin (a bearer-token
+API) can then count signed-in visits without
 sending any account or token. Such a visit is counted per network prefix and per month, never under a
 stable identity.
 

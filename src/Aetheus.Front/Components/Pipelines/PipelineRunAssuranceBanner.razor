@@ -6,12 +6,7 @@
 {
     <OmniAlert Severity="OmniSeverity.Warning" Title="@L["CandidateNotDeployableTitle"]" Class="omni-u-mt-sm">
         <div>@L["CandidateNotDeployableDetail"]</div>
-        @if (Verdict.BlockingTests.Count > 0)
-        {
-            <div class="omni-u-mt-xs">
-                @L["CandidateBlockingTests"]: <strong>@string.Join(", ", Verdict.BlockingTests)</strong>
-            </div>
-        }
+        <PipelineRunBlockingTests Tests="Verdict.BlockingTests" />
     </OmniAlert>
 }
 else if (Verdict is { Deployable: true })

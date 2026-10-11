@@ -1,0 +1,19 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-17: how to read the mailboxes in an external mail client, as a card under the mailbox or
+   alone in a dialog opened from the accounts tab. *@
+@if (InDialog)
+{
+    <MailClientSettings ServerId="@ServerId" Email="@Email" />
+    <DialogFooter CancelText="@L["Close"]" OnCancel="@(() => Dialog.Close())" />
+}
+else
+{
+    <OmniCard Class="mail-client-help">
+        <Header>
+            <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["MailClientHelpTitle"]</OmniText>
+        </Header>
+        <ChildContent>
+            <MailClientSettings ServerId="@ServerId" Email="@Email" />
+        </ChildContent>
+    </OmniCard>
+}

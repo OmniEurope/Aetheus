@@ -15,6 +15,7 @@ public class ApiClient(HttpClient http)
     public AuthApi Auth { get; } = new(http);
     public GitApi Git { get; } = new(http);
     public MailApi Mail { get; } = new(http);
+    public MailboxApi Mailbox { get; } = new(http);
     public MonitoringApi Monitoring { get; } = new(http);
     public Aetheus.Front.Components.Notifications.UserNotificationsApi Notifications { get; } = new(http);
     public PackagesApi Packages { get; } = new(http);

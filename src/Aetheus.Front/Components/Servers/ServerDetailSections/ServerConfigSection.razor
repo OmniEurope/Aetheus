@@ -17,10 +17,10 @@
         <OmniCard>
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["ImportYamlConfiguration"]</OmniText>
             <OmniTextArea aria-label="@L["ImportYamlConfiguration"]" @bind-Value="_configImportYaml" Rows="15" Class="config-yaml-editor" />
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ValidateConfigAsync" Class="@(_configValidating ? "btn-busy" : null)" Busy="@(_configValidating)"><OmniIcon Name="OmniIconName.CheckCircle" /> <span>@L["ValidateYaml"]</span></OmniButton>
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@PreviewConfigAsync" Class="@(_configPreviewing ? "btn-busy" : null)" Busy="@(_configPreviewing)"><OmniIcon Name="OmniIconName.Eye" /> <span>@L["Preview"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@DeployConfigAsync" Disabled="@string.IsNullOrWhiteSpace(_configImportYaml)" Class="@(_configDeploying ? "btn-busy" : null)" Busy="@(_configDeploying)"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["Deploy"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@DeployConfigAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_configImportYaml))" title="@(AgentOffline ? L["AgentOfflineActionBlocked"].Value : null)" Class="@(_configDeploying ? "btn-busy" : null)" Busy="@(_configDeploying)"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["Deploy"]</span></OmniButton>
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _configImportVisible = false; _configPreview = null; })"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
             </OmniStack>
 

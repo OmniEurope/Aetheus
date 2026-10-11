@@ -145,6 +145,20 @@ public class NotificationRepository(AppDbContext db) : INotificationRepository
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
+    public Task<string?> GetUserEmailAsync(int userId, CancellationToken ct = default) =>
+        db.Users.AsNoTracking()
+            .Where(user => user.Id == userId && user.Email != null && user.Email != string.Empty)
+            .Select(user => user.Email)
+            .FirstOrDefaultAsync(ct);
+
+    public Task<List<string>> GetActiveAdministratorEmailsAsync(CancellationToken ct = default) =>
+        db.Users.AsNoTracking()
+            .Where(user => user.IsActive && user.Email != null && user.Email != string.Empty
+                && user.UserRoles.Any(link => link.Role.Name == "Admin"))
+            .OrderBy(user => user.Id)
+            .Select(user => user.Email!)
+            .ToListAsync(ct);
+
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

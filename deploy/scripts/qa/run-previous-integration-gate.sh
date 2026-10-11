@@ -30,4 +30,6 @@ else
 fi
 printf '%s\n' "$STATUS" > "$WORKSPACE/.qa-previous-integration-gate-status"
 echo "##aetheus[setvariable name=QA_PREVIOUS_INTEGRATION_GATE_STATUS]$STATUS"
+[ "$STATUS" = 0 ] || sh deploy/scripts/publish-failed-tests.sh QA_PREVIOUS_INTEGRATION_FAILED_TESTS \
+  "$WORKSPACE/.qa-test-results/previous/failed-tests.txt" "$WORKSPACE/.qa-test-results/previous/deployed/failed-tests.txt"
 echo "Previous integration findings status: $STATUS."

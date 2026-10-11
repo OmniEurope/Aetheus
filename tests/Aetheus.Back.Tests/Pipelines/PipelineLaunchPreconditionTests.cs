@@ -26,7 +26,7 @@ public sealed class PipelineLaunchPreconditionTests
     {
         _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([1]);
         Runner(AgentProtocol.CurrentVersion, AgentCapabilities.PipelineBuild);
         _variables.ResolveVariablesWithWarningsAsync(

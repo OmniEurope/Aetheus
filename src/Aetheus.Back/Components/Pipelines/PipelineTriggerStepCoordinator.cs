@@ -17,7 +17,8 @@ public interface IPipelineTriggerStepCoordinator
     /// fails it with a readable reason.</summary>
     Task CreateTriggerStepAsync(
         int runId, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
-        Dictionary<string, string> legVars, IPipelineChildRunLauncher launcher, CancellationToken ct);
+        Dictionary<string, string> legVars, IReadOnlySet<string> secretKeys,
+        IPipelineChildRunLauncher launcher, CancellationToken ct);
 
     /// <summary>Starts a downstream run declared by an upstream pipeline's <c>on_success:</c>.</summary>
     Task<PipelineRunDto?> TriggerChainedRunAsync(
@@ -55,6 +56,7 @@ public sealed class PipelineTriggerStepCoordinator(
     public async Task CreateTriggerStepAsync(
         int runId, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
         Dictionary<string, string> legVars,
+        IReadOnlySet<string> secretKeys,
         IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -65,7 +67,12 @@ public sealed class PipelineTriggerStepCoordinator(
             await repo.AppendRunWarningsAsync(runId, [$"Trigger step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
         }
 
-        var targetName = SubstituteVariables(stepDef.Pipeline ?? string.Empty, legVars).Trim();
+        // Neighbour of BACK-022: what this step hands the child is persisted with the child run
+        // (AdditionalVariablesJson, ParametersJson). It is substituted without the secrets, so a secret or an
+        // alias of one travels as its reference, which the child resolves from its own vault and classifies
+        // as a secret, or refuses at launch when it cannot provide it. Never its clear value.
+        var forwardable = WithoutSecrets(legVars, secretKeys);
+        var targetName = SubstituteVariables(stepDef.Pipeline ?? string.Empty, forwardable).Trim();
         if (string.IsNullOrWhiteSpace(targetName))
         {
             await FailAsync("missing 'pipeline' name to trigger.").ConfigureAwait(false);
@@ -101,11 +108,11 @@ public sealed class PipelineTriggerStepCoordinator(
             return;
         }
 
-        var vars = BuildSubstitutedValues(stepDef.Variables, legVars);
-        var parameters = BuildSubstitutedValues(stepDef.Parameters, legVars);
+        var vars = BuildSubstitutedValues(stepDef.Variables, forwardable, secretKeys);
+        var parameters = BuildSubstitutedValues(stepDef.Parameters, forwardable, secretKeys);
         PropagateLocalDeploymentContext(legVars, vars);
         ApplyUpstreamContext(vars, run.Pipeline!.Name, runId, chain, run.Pipeline.TemplateReferenceName);
-        var sourceError = ApplyTriggerSourceContext(stepDef, run, legVars, vars);
+        var sourceError = ApplyTriggerSourceContext(stepDef, run, forwardable, vars);
         if (sourceError is not null)
         {
             await FailAsync(sourceError).ConfigureAwait(false);
@@ -229,14 +236,27 @@ public sealed class PipelineTriggerStepCoordinator(
             : null;
     }
 
+    private static Dictionary<string, string> WithoutSecrets(
+        Dictionary<string, string> variables, IReadOnlySet<string> secretKeys) =>
+        variables.Where(entry => !secretKeys.Contains(entry.Key))
+            .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+
     private static Dictionary<string, string> BuildSubstitutedValues(
         IReadOnlyDictionary<string, string> configured,
-        Dictionary<string, string> variables)
+        Dictionary<string, string> forwardable,
+        IReadOnlySet<string> secretKeys)
     {
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in configured)
         {
-            if (!string.IsNullOrWhiteSpace(key)) values[key] = SubstituteVariables(value, variables);
+            if (string.IsNullOrWhiteSpace(key)) continue;
+            // A secret passed under its own name would reach the child as its own reference and replace
+            // the child's vault value with that literal: the child reads its vault instead.
+            if (secretKeys.Contains(key)
+                && PipelineCommandBuilder.ReferencedVariableNames(value).Contains(key, StringComparer.OrdinalIgnoreCase))
+                continue;
+            // A secret reference keeps its `:-default` too: the default must not stand in for the secret.
+            values[key] = PipelineCommandBuilder.Substitute(value, forwardable, name => !secretKeys.Contains(name));
         }
         return values;
     }

@@ -192,21 +192,33 @@ test("the portsentry and TeamSpeak setup helpers get the system writes apt-get n
 });
 
 // ---- DEP-019: a disabled docker capability takes the dedicated account out of the docker group ----
+// Decision D12 (option A): the installer records the membership it adds in a root-owned marker, and
+// only that marker authorizes taking it back from an account that is not the dedicated one.
 
-function docker({ flags, passwd = "aetheus-agent:x:998:998::/var/lib/aetheus-agent:/bin/false", gpasswdStatus = 0 }) {
+const sharedAccount = "aetheus-agent:x:1000:1000:Ops:/home/ops:/bin/bash";
+
+function docker({ flags, passwd = "aetheus-agent:x:998:998::/var/lib/aetheus-agent:/bin/false", gpasswdStatus = 0, member = true, marker = null }) {
   const quoted = flags.map(flag => `'${flag}'`).join(" ");
   const body = `${stubs}
 AGENT_USER="aetheus-agent"; WORK_DIR="/var/lib/aetheus-agent"
+DOCKER_GROUP_MARKER_FILE="$ROOT/docker-group-added"
+${marker === null ? "" : `printf '%s\n' '${marker}' > "$DOCKER_GROUP_MARKER_FILE"`}
+${member ? "" : ': > "$ROOT/removed"'}
 id() { [ -f "$ROOT/removed" ] && echo "aetheus-agent" || echo "aetheus-agent docker"; }
 getent() { echo "${passwd}"; }
 gpasswd() { echo "CALL gpasswd $*" >> "$ROOT/calls"; [ ${gpasswdStatus} -eq 0 ] && : > "$ROOT/removed"; return ${gpasswdStatus}; }
+usermod() { echo "CALL usermod $*" >> "$ROOT/calls"; rm -f "$ROOT/removed"; }
+chown() { :; }
 docker() { return 0; }
 set -- --upgrade ${quoted}
 ${extractParser()}
+${extractFunction("docker_group_added_by_installer")}
+${extractFunction("record_docker_group_added")}
 ${extractFunction("revoke_docker_group")}
 ${extractFunction("ensure_docker_group")}
 ensure_docker_group
 echo "STATUS=$?"; cat "$ROOT/calls" 2>/dev/null || true
+if [ -f "$DOCKER_GROUP_MARKER_FILE" ]; then echo "MARKER=$(cat "$DOCKER_GROUP_MARKER_FILE")"; else echo "MARKER="; fi
 `;
   const result = run(body);
   assert.equal(result.status, 0, result.stderr);
@@ -220,10 +232,33 @@ for (const flag of ["--disable-all", "--disable-docker"]) {
   });
 }
 
-test("an account that is not the dedicated agent account keeps its membership", () => {
-  const output = docker({ flags: ["--disable-all"], passwd: "aetheus-agent:x:1000:1000:Ops:/home/ops:/bin/bash" });
+test("an account that is not the dedicated agent account keeps a membership the installer did not add", () => {
+  const output = docker({ flags: ["--disable-all"], passwd: sharedAccount });
   assert.doesNotMatch(output, /CALL gpasswd/);
-  assert.match(output, /WARN .*not the dedicated agent account.*DECISION REQUIRED/);
+  assert.match(output, /WARN .*which this installer did not add.*root-equivalent/);
+});
+
+test("a membership the installer recorded is removed even from a shared account, and the marker goes", () => {
+  const output = docker({ flags: ["--disable-docker"], passwd: sharedAccount, marker: "aetheus-agent" });
+  assert.match(output, /CALL gpasswd -d aetheus-agent docker/);
+  assert.equal(values(output).MARKER, "");
+});
+
+test("a marker written for another account does not authorize the removal", () => {
+  const output = docker({ flags: ["--disable-docker"], passwd: sharedAccount, marker: "someone-else" });
+  assert.doesNotMatch(output, /CALL gpasswd/);
+});
+
+test("adding the membership records the marker", () => {
+  const output = docker({ flags: ["--enable-docker"], member: false });
+  assert.match(output, /CALL usermod -aG docker aetheus-agent/);
+  assert.equal(values(output).MARKER, "aetheus-agent");
+});
+
+test("a membership found in place is never claimed by the installer", () => {
+  const output = docker({ flags: ["--enable-docker"], passwd: sharedAccount });
+  assert.doesNotMatch(output, /CALL usermod/);
+  assert.equal(values(output).MARKER, "");
 });
 
 test("an upgrade that does not name docker leaves the membership alone", () => {
@@ -231,10 +266,18 @@ test("an upgrade that does not name docker leaves the membership alone", () => {
   assert.doesNotMatch(output, /CALL gpasswd/);
 });
 
-test("a failed removal is reported, not hidden", () => {
-  const output = docker({ flags: ["--disable-all"], gpasswdStatus: 3 });
+test("a failed removal is reported, not hidden, and keeps the marker", () => {
+  const output = docker({ flags: ["--disable-all"], gpasswdStatus: 3, marker: "aetheus-agent" });
   assert.match(output, /CALL gpasswd -d aetheus-agent docker/);
   assert.match(output, /ERROR .*Could not remove aetheus-agent from the docker group/);
+  assert.equal(values(output).MARKER, "aetheus-agent");
+});
+
+test("the purge withdraws only a docker membership the installer recorded", () => {
+  const purge = installer.slice(installer.indexOf('if [ "$MODE" = "purge" ]; then'), installer.indexOf("# Mode: UPGRADE"));
+  assert.match(purge, /if docker_group_added_by_installer; then\n\s+gpasswd -d "\$AGENT_USER" docker/);
+  assert.doesNotMatch(purge.replace(/if docker_group_added_by_installer; then\n\s+gpasswd -d "\$AGENT_USER" docker/, ""), /gpasswd -d "\$AGENT_USER" docker/);
+  assert.match(purge, /rm -f "\$DOCKER_GROUP_MARKER_FILE"/);
 });
 
 // ---- DEP-020: a reinstall clears the agent's state and keeps the deployed applications ------------

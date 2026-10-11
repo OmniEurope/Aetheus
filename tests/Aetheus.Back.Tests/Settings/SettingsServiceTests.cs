@@ -22,6 +22,21 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public async Task GetSettingsAsync_HidesTheEmailSenderRows_WhichHaveTheirOwnTab()
+    {
+        _repoMock.GetAllSettingsAsync(Arg.Any<CancellationToken>()).Returns(
+        [
+            new AppSetting { Key = "Theme", Value = "dark" },
+            new AppSetting { Key = Aetheus.Back.Services.Email.EmailSenderSettingKeys.Host, Value = "smtp.x" }
+        ]);
+
+        var result = await _sut.GetSettingsAsync(ct: TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(result, setting => setting.Key.StartsWith("EmailSender:", StringComparison.Ordinal));
+        Assert.Contains(result, setting => setting.Key == "Theme");
+    }
+
+    [Fact]
     public async Task GetSettingsAsync_ReturnsMappedDtos_PlusOperationalDefaults()
     {
         var settings = new List<AppSetting>

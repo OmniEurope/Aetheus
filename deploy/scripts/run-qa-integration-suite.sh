@@ -59,4 +59,10 @@ sh "$WORKSPACE/deploy/scripts/run-with-progress.sh" "Integration tests ($RESULT_
 
 STATUS="$("$NODE" "$WORKSPACE/deploy/scripts/classify-dotnet-test-result.mjs" "$RAW_TEST_EXIT" "$TRX" -)"
 echo "Integration suite $RESULT_LABEL produced an executed-test proof with findings status $STATUS."
+# The failed names, for the gate script to publish beside its status: a status of 1 alone sent the
+# reader into a 5000-line log to find which tests made it (candidate 2634, QA run 2638).
+if [ "$STATUS" != 0 ]; then
+  "$NODE" "$WORKSPACE/deploy/scripts/list-failed-tests.mjs" record "$TRX" "$RESULTS_DIR/failed-tests.txt" \
+    || echo "The failed test names could not be read from $TRX." >&2
+fi
 [ "$STATUS" = 0 ] || exit 10

@@ -40,6 +40,9 @@ public partial class PipelineRun : IAsyncDisposable
     private bool _detailsLoading;
     private bool _childrenLoaded;
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+    /// <summary>A step a link asks to open in the logs (the Gate tab's "the F comes from here").</summary>
+    [SupplyParameterFromQuery(Name = "step")] public int? StepId { get; set; }
+    private int? _appliedStepId;
     private int _selectedTab;
     private readonly HashSet<string> _expandedMatrixGroups = [];
     // Owns the pipelines-hub connection + debounced reload + child-group joining (extracted collaborator).
@@ -59,7 +62,14 @@ public partial class PipelineRun : IAsyncDisposable
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedRunId == RunId) return;
+        if (_loadedRunId == RunId)
+        {
+            // Same run, another ?step=: a link from this run's own Gate tab to one of its steps.
+            if (StepId == _appliedStepId || _detailsLoading) return;
+            _appliedStepId = StepId;
+            if (RequestedStep() is { } requested) await SelectStep(requested);
+            return;
+        }
 
         _loadedRunId = RunId;
         var load = _loadSession.Begin();
@@ -217,7 +227,11 @@ public partial class PipelineRun : IAsyncDisposable
 
     private async Task<bool> AutoSelectStepAsync(int runId, int generation)
     {
-        var autoSelect = _stages.SelectMany(s => s.Steps)
+        var requested = RequestedStep();
+        _appliedStepId = StepId;
+        if (requested is not null) _userPinnedStep = true;
+        var autoSelect = requested
+            ?? _stages.SelectMany(s => s.Steps)
             .FirstOrDefault(s => s.Status == TaskExecutionStatus.Running && s.TriggeredRunId is null)
             ?? _stages.SelectMany(s => s.Steps)
                 .LastOrDefault(s => s.TriggeredRunId is null
@@ -230,6 +244,11 @@ public partial class PipelineRun : IAsyncDisposable
         await LoadTaskLogSnapshotAsync(autoSelect.TaskId.Value);
         return IsCurrentLoad(runId, generation);
     }
+
+    // The ?step= step, in this run or a child it triggered; a trigger step has no log of its own.
+    private PipelineStepRunDto? RequestedStep() => StepId is { } wanted
+        ? AllStepsAcrossChildren().FirstOrDefault(step => step.Id == wanted && step.TriggeredRunId is null)
+        : null;
 
     private void ResetRunState()
     {

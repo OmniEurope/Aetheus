@@ -285,6 +285,10 @@ public sealed record PipelineStepRunDto
     public Dictionary<string, string> OutputVariables { get; init; } = [];
     public int RetryCount { get; init; }
     public bool ContinueOnError { get; init; }
+
+    /// <summary>True for a <c>type: ai</c> step declared <c>advisory: true</c> in the run's YAML snapshot:
+    /// its result never changes the run status. Computed server-side with the scheduler's own helper.</summary>
+    public bool IsAdvisory { get; init; }
     public string? MatrixLeg { get; init; }
     public bool IsSystem { get; init; }
     public string? GroupName { get; init; }

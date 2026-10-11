@@ -18,10 +18,11 @@ using NSubstitute;
 namespace Aetheus.Back.Tests.Git;
 
 /// <summary>
-/// BACK-013 against a REAL repository and real receive-pack requests: a RequirePullRequest branch
-/// refuses a direct push before git runs, while the platform's own moves (the merge of a pull request,
-/// the advance-branch step) and the deletion/force-push protections of the pre-receive hook keep
-/// working as before.
+/// BACK-013 and decision D13 against a REAL repository and real receive-pack requests: a branch
+/// ProtectedExceptPipelines refuses a direct push before git runs while the platform's own moves (the
+/// merge of a pull request, the advance-branch step) keep working; StrictlyProtected also refuses the
+/// advance-branch step; NotProtected accepts the push. The deletion/force-push protections of the
+/// pre-receive hook keep working as before.
 /// </summary>
 public sealed class GitPullRequestPushGuardTests : IDisposable
 {
@@ -50,7 +51,7 @@ public sealed class GitPullRequestPushGuardTests : IDisposable
         var repository = new GitInternalRepo { Id = 1, ProjectId = ProjectId, Slug = Slug, Name = "Guarded" };
         _repos.FindBySlugAsync(ProjectId, Slug, Arg.Any<CancellationToken>()).Returns(repository);
         _repos.GetByProjectAsync(ProjectId, Arg.Any<CancellationToken>()).Returns([repository]);
-        Rules(new BranchProtectionRule { GitInternalRepoId = 1, Pattern = "main", RequirePullRequest = true });
+        Rules(Rule("main", BranchProtectionLevel.ProtectedExceptPipelines));
 
         var hubClients = Substitute.For<IHubClients>();
         hubClients.Group(Arg.Any<string>()).Returns(Substitute.For<IClientProxy>());
@@ -167,6 +168,80 @@ public sealed class GitPullRequestPushGuardTests : IDisposable
         Assert.True(deleted is null || deleted.UpdatedRefs.All(update => update.Reference != "refs/heads/release"));
         Assert.Equal(first, ReadBareRef("refs/heads/release"));
     }
+
+    [Fact]
+    public async Task D13_StrictlyProtected_RefusesTheDirectPush()
+    {
+        Rules(Rule("main", BranchProtectionLevel.StrictlyProtected));
+        var first = CommitAndSeed("one");
+        var second = Commit("two");
+
+        var refused = await Assert.ThrowsAsync<BadHttpRequestException>(() => PushAsync(first, second, "refs/heads/main"));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.StatusCode);
+        Assert.Contains("strictly protected", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(first, ReadBareRef("refs/heads/main"));
+    }
+
+    [Fact]
+    public async Task D13_StrictlyProtected_StillLetsAPullRequestMergeMoveTheBranch()
+    {
+        Rules(Rule("main", BranchProtectionLevel.StrictlyProtected));
+        var first = CommitAndSeed("one");
+        var feature = Commit("feature");
+        RunGit(_work, $"push --quiet origin {feature}:refs/heads/feature");
+        var cli = new GitLightCliService(
+            _runner, new GitLightCliWriter(_runner, NullLogger<GitLightCliWriter>.Instance),
+            NullLogger<GitLightCliService>.Instance, TimeProvider.System);
+
+        var (success, mergeSha, error) = await cli.MergeBranchesAsync(
+            _bare, "feature", "main", "Reviewer", "reviewer@aetheus.test", TestContext.Current.CancellationToken);
+
+        Assert.True(success, error);
+        Assert.NotEqual(first, ReadBareRef("refs/heads/main"));
+        Assert.Equal(mergeSha, ReadBareRef("refs/heads/main"));
+    }
+
+    [Fact]
+    public async Task D13_StrictlyProtected_RefusesTheAdvanceBranchStep()
+    {
+        // A broad NotProtected rule never loosens the stricter rule on main: the strictest level wins.
+        Rules(Rule("*", BranchProtectionLevel.NotProtected), Rule("main", BranchProtectionLevel.StrictlyProtected));
+        var first = CommitAndSeed("one");
+        var released = Commit("released");
+        RunGit(_work, $"push --quiet origin +{released}:refs/fixtures/objects");
+
+        var result = await Advance().TryFastForwardAsync(ProjectId, "main", released, TestContext.Current.CancellationToken);
+
+        Assert.Equal(GitBranchAdvanceOutcome.Protected, result.Outcome);
+        Assert.Contains("strictly protected", result.Detail, StringComparison.Ordinal);
+        Assert.Equal(first, ReadBareRef("refs/heads/main"));
+    }
+
+    [Fact]
+    public async Task D13_NotProtected_AcceptsTheDirectPushAndTheAdvanceBranchStep()
+    {
+        Rules(Rule("main", BranchProtectionLevel.NotProtected));
+        var first = CommitAndSeed("one");
+        var second = Commit("two");
+        var third = Commit("three");
+
+        var response = await PushAsync(first, second, "refs/heads/main");
+        RunGit(_work, $"push --quiet origin +{third}:refs/fixtures/objects");
+        var result = await Advance().TryFastForwardAsync(ProjectId, "main", third, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(response);
+        Assert.Contains(response.UpdatedRefs, update => update.Reference == "refs/heads/main");
+        Assert.Equal(GitBranchAdvanceOutcome.Advanced, result.Outcome);
+        Assert.Equal(third, ReadBareRef("refs/heads/main"));
+    }
+
+    private GitBranchAdvanceService Advance() => new(
+        _repos, _runner, Options.Create(new GitLightOptions { RepositoriesPath = _root }),
+        NullLogger<GitBranchAdvanceService>.Instance);
+
+    private static BranchProtectionRule Rule(string pattern, BranchProtectionLevel level) =>
+        new() { GitInternalRepoId = 1, Pattern = pattern, ProtectionLevel = level, PreventDeletion = false, PreventForcePush = false };
 
     private void Rules(params BranchProtectionRule[] rules) =>
         _repos.GetBranchProtectionRulesAsync(1, Arg.Any<CancellationToken>()).Returns(rules.ToList());

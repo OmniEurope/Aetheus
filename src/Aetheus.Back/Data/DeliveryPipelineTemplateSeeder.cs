@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Audit;
+using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,7 +12,8 @@ public sealed class DeliveryPipelineTemplateSeeder(
     TimeProvider timeProvider,
     ILogger<DeliveryPipelineTemplateSeeder>? logger = null,
     IAuditService? audit = null,
-    IPostgresLeaderLease? lease = null)
+    IPostgresLeaderLease? lease = null,
+    IPipelineGitService? pipelineGit = null)
 {
     private const string ResourceRoot = "DeliveryPipelineTemplates/";
 
@@ -46,6 +48,10 @@ public sealed class DeliveryPipelineTemplateSeeder(
                 "Scan secrets, code, dependencies and infrastructure files with the platform's scanners and grade the findings.",
                 "Security",
                 ["generic/application-security.yaml"]),
+            ["application-security-external"] = (
+                "Scan code, dependencies and infrastructure files of an external repository with the platform's scanners and grade the findings, with no file required in that repository.",
+                "Security",
+                ["generic/application-security-external.yaml"]),
             ["application-qa"] = (
                 "Run the project's QA adapter against the immutable application payload.",
                 "Quality",
@@ -225,19 +231,22 @@ public sealed class DeliveryPipelineTemplateSeeder(
     }
 
     /// <summary>
-    /// Recette R2-094: the one-time restart of every shipped template at v1. It runs under the catalog
-    /// lock <see cref="SeedAsync"/> holds and re-reads its marker there: the second of two colours
-    /// starting together finds the work done and changes nothing.
+    /// Recettes R2-094 then R1-20: the one-time restart of every shipped template at v1. It runs under
+    /// the catalog lock <see cref="SeedAsync"/> holds and re-reads its marker there: the second of two
+    /// colours starting together finds the work done and changes nothing.
     /// </summary>
     private async Task ResetVersionNumberingOnceAsync(int organizationId, CancellationToken ct)
     {
         // The first shipped file is v1. With one file per template that was also the last; once a
         // template ships a v2 (application-candidate, R2-121), renumbering a database that never ran the
-        // reset must still give v1 the v1 content, or the seeding below would refuse its own v1.
+        // reset must still give v1 the v1 content, or the seeding below would refuse its own v1. Every
+        // file is passed so a template already holding exactly its shipped files is left alone.
         var shipped = Definitions.ToDictionary(
-            entry => entry.Key, entry => ReadResource(entry.Value.Resources[0]), StringComparer.Ordinal);
+            entry => entry.Key,
+            entry => (IReadOnlyList<string>)entry.Value.Resources.Select(ReadResource).ToArray(),
+            StringComparer.Ordinal);
         var reset = new DeliveryTemplateVersionReset(
-            db, timeProvider, logger ?? (ILogger)NullLogger.Instance, audit);
+            db, timeProvider, logger ?? (ILogger)NullLogger.Instance, audit, pipelineGit);
         await reset.RunAsync(organizationId, shipped, ct).ConfigureAwait(false);
     }
 

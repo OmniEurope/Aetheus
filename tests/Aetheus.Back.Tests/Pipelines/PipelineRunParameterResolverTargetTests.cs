@@ -17,7 +17,7 @@ public sealed class PipelineRunParameterResolverTargetTests
     {
         _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<string?>(2) is null && call.ArgAt<string?>(0) is null
                 ? [41, 42]
                 : new List<int>());
@@ -38,11 +38,11 @@ public sealed class PipelineRunParameterResolverTargetTests
             Stages = [new PipelineStageDefinition { Name = "Build", Pool = pool, Environment = environment, Agent = agent ?? string.Empty }]
         };
 
-        var targets = await _sut.ResolveCandidateTargetServerIdsAsync(definition, 7, TestContext.Current.CancellationToken);
+        var targets = await _sut.ResolveCandidateTargetServerIdsAsync(definition, 7, null, TestContext.Current.CancellationToken);
 
         Assert.Equal([41, 42], targets.Order());
         await _repo.Received(1).FindCandidateTargetServerIdsAsync(
-            null, null, null, OsType.Unknown, 7, false, Arg.Any<CancellationToken>());
+            null, null, null, OsType.Unknown, 7, false, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -54,10 +54,10 @@ public sealed class PipelineRunParameterResolverTargetTests
             Stages = [new PipelineStageDefinition { Name = "Build", Agent = "runner-b" }]
         };
 
-        var targets = await _sut.ResolveCandidateTargetServerIdsAsync(definition, 7, TestContext.Current.CancellationToken);
+        var targets = await _sut.ResolveCandidateTargetServerIdsAsync(definition, 7, null, TestContext.Current.CancellationToken);
 
         Assert.Empty(targets);
         await _repo.Received(1).FindCandidateTargetServerIdsAsync(
-            null, null, "runner-b", OsType.Unknown, 7, false, Arg.Any<CancellationToken>());
+            null, null, "runner-b", OsType.Unknown, 7, false, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 }

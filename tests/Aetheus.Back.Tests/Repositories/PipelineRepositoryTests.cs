@@ -1297,7 +1297,7 @@ public class PipelineRepositoryTests : IDisposable
         _db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = env.Id, ServerId = server.Id });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await _repo.FindOnlineServerInEnvironmentAsync("prod", ct: TestContext.Current.CancellationToken);
+        var result = await _repo.FindOnlineServerInEnvironmentAsync("prod", projectId: null, ct: TestContext.Current.CancellationToken);
         Assert.NotNull(result);
     }
 

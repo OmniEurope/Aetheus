@@ -3,6 +3,7 @@ using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Exceptions;
+using Aetheus.Back.Services.Email;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -13,14 +14,19 @@ public class PipelineGitServiceTests
     private readonly IGitLightService _gitServiceMock = Substitute.For<IGitLightService>();
     private readonly IGitLightCliService _cliMock = Substitute.For<IGitLightCliService>();
     private readonly IPipelineRepository _pipelineRepoMock = Substitute.For<IPipelineRepository>();
+    private readonly IGitCommitRecorder _commitRecorderMock = Substitute.For<IGitCommitRecorder>();
+    private readonly IEmailSenderConfigurationResolver _senderResolverMock = Substitute.For<IEmailSenderConfigurationResolver>();
     private readonly PipelineGitService _sut;
 
     public PipelineGitServiceTests()
     {
+        _senderResolverMock.ResolveAsync(Arg.Any<CancellationToken>()).Returns(new EmailSenderResolution());
         _sut = new PipelineGitService(
             _gitServiceMock,
             _cliMock,
             _pipelineRepoMock,
+            _commitRecorderMock,
+            _senderResolverMock,
             NullLogger<PipelineGitService>.Instance);
     }
 
@@ -223,13 +229,15 @@ public class PipelineGitServiceTests
 
         _cliMock.CommitFileAsync(
             Arg.Any<string>(), "main", ".pipeline/deploy.yaml", "yaml content",
-            Arg.Any<string>(), "admin", "admin@aetheus", Arg.Any<CancellationToken>())
+            Arg.Any<string>(), PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail, Arg.Any<CancellationToken>())
             .Returns((true, "abc123", (string?)null));
 
         var (outcome, error) = await _sut.WriteProjectPipelineYamlAsync(1, "deploy", "yaml content", "admin", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(GitWriteOutcome.Committed, outcome);
         Assert.Null(error);
+        // Recette R1-21: an Aetheus-made commit clears the repository's empty flag.
+        await _commitRecorderMock.Received(1).RecordCommitAsync(1, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -238,7 +246,7 @@ public class PipelineGitServiceTests
         SetupRepoWithDiskPath(1, "my-repo", "main");
         _cliMock.CommitFileAsync(
             Arg.Any<string>(), "develop", ".pipeline/deploy.yaml", "yaml content",
-            Arg.Any<string>(), "admin", "admin@aetheus", Arg.Any<CancellationToken>())
+            Arg.Any<string>(), PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail, Arg.Any<CancellationToken>())
             .Returns((true, "abc123", (string?)null));
 
         var (outcome, _) = await _sut.WriteProjectPipelineYamlAsync(
@@ -247,7 +255,7 @@ public class PipelineGitServiceTests
         Assert.Equal(GitWriteOutcome.Committed, outcome);
         await _cliMock.Received(1).CommitFileAsync(
             Arg.Any<string>(), "develop", ".pipeline/deploy.yaml", "yaml content",
-            Arg.Any<string>(), "admin", "admin@aetheus", Arg.Any<CancellationToken>());
+            Arg.Any<string>(), PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -264,6 +272,7 @@ public class PipelineGitServiceTests
 
         Assert.Equal(GitWriteOutcome.Failed, outcome);
         Assert.Equal("conflict", error);
+        await _commitRecorderMock.DidNotReceive().RecordCommitAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -273,7 +282,7 @@ public class PipelineGitServiceTests
         _cliMock.CommitFileChangesAsync(
                 Arg.Any<string>(), "main",
                 Arg.Any<IReadOnlyList<(string RelativePath, string Content)>>(),
-                Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), "admin", "admin@aetheus",
+                Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail,
                 Arg.Any<CancellationToken>())
             .Returns((true, "abc123", (string?)null));
 
@@ -290,7 +299,7 @@ public class PipelineGitServiceTests
                 files.Count == 1 && files[0].RelativePath == ".pipeline/new-name.yaml"),
             Arg.Is<IReadOnlyList<string>>(paths =>
                 paths.Count == 1 && paths[0] == ".pipeline/old-name.yaml"),
-            Arg.Any<string>(), "admin", "admin@aetheus", Arg.Any<CancellationToken>());
+            Arg.Any<string>(), PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -299,7 +308,7 @@ public class PipelineGitServiceTests
         SetupRepoWithDiskPath(1, "my-repo", "main");
         _cliMock.CommitFileChangesAsync(
                 Arg.Any<string>(), "main", Arg.Any<IReadOnlyList<(string, string)>>(),
-                Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), "admin", "admin@aetheus",
+                Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail,
                 Arg.Any<CancellationToken>())
             .Returns((true, "abc123", (string?)null));
 
@@ -311,7 +320,7 @@ public class PipelineGitServiceTests
             Arg.Any<string>(), "main", Arg.Is<IReadOnlyList<(string, string)>>(files => files.Count == 0),
             Arg.Is<IReadOnlyList<string>>(paths =>
                 paths.Count == 1 && paths[0] == ".pipeline/obsolete.yaml"),
-            Arg.Any<string>(), "admin", "admin@aetheus", Arg.Any<CancellationToken>());
+            Arg.Any<string>(), PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail, Arg.Any<CancellationToken>());
     }
 
     // --- CopyEnvironmentPipelinesToProjectAsync ---
@@ -350,12 +359,55 @@ public class PipelineGitServiceTests
             ]);
         _cliMock.CommitFilesAsync(
             Arg.Any<string>(), "main", Arg.Any<IReadOnlyList<(string, string)>>(),
-            Arg.Any<string>(), "admin", "admin@aetheus", Arg.Any<CancellationToken>())
+            Arg.Any<string>(), PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail, Arg.Any<CancellationToken>())
             .Returns((true, "abc123", (string?)null));
 
         var result = await _sut.CopyEnvironmentPipelinesToProjectAsync(5, "staging", 1, "admin", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result);
+        await _commitRecorderMock.Received(1).RecordCommitAsync(1, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R1_21_CopyByTheBackgroundHandler_IsSignedByAetheus_NotBySystem()
+    {
+        SetupRepoWithDiskPath(1, "my-repo", "main");
+        _pipelineRepoMock.GetPipelinesByEnvironmentAsync(5, Arg.Any<CancellationToken>())
+            .Returns([new Pipeline { Id = 1, Name = "build", YamlDefinition = "steps: []" }]);
+        _cliMock.CommitFilesAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<(string, string)>>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((true, "abc123", (string?)null));
+
+        await _sut.CopyEnvironmentPipelinesToProjectAsync(5, "staging", 1, "system", ct: TestContext.Current.CancellationToken);
+
+        await _cliMock.Received(1).CommitFilesAsync(
+            Arg.Any<string>(), "main", Arg.Any<IReadOnlyList<(string, string)>>(), Arg.Any<string>(),
+            PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R1_21_MoveToAnotherRepository_RecordsBothCommits()
+    {
+        SetupRepoWithDiskPath(1, "my-repo", "main");
+        _cliMock.CommitFileChangesAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<(string, string)>>(),
+                Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns((true, "abc123", (string?)null));
+
+        var (outcome, _) = await _sut.ApplyProjectPipelineChangeAsync(
+            new PipelineGitDefinitionLocation(1, "deploy", "main"),
+            new PipelineGitDefinitionLocation(1, "deploy", "develop"),
+            "name: deploy", "claude", ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(GitWriteOutcome.Committed, outcome);
+        // One commit on the new branch, one removal on the old: each one marks the repository written.
+        await _commitRecorderMock.Received(2).RecordCommitAsync(1, Arg.Any<CancellationToken>());
+        await _cliMock.Received(2).CommitFileChangesAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<(string, string)>>(),
+            Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), PipelineGitService.ServiceAuthorName, PipelineGitService.ServiceAuthorEmail,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -428,5 +480,24 @@ public class PipelineGitServiceTests
         var tempDir = Path.Combine(Path.GetTempPath(), $"pgs-test-{projectId}-{slug}");
         Directory.CreateDirectory(tempDir);
         _gitServiceMock.ResolveDiskPath(projectId, slug).Returns(tempDir);
+    }
+
+    [Fact]
+    public async Task R1_21_UserSave_IsAuthoredByAetheusWithTheNoReplyAddress_AndNamesTheRequester()
+    {
+        SetupRepoWithDiskPath(1, "my-repo", "main");
+        _senderResolverMock.ResolveAsync(Arg.Any<CancellationToken>())
+            .Returns(new EmailSenderResolution { NoReplyAddress = "no-reply@example.test" });
+        _cliMock.CommitFileAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((true, "abc123", (string?)null));
+
+        await _sut.WriteProjectPipelineYamlAsync(1, "deploy", "steps: []", "claude", ct: TestContext.Current.CancellationToken);
+
+        await _cliMock.Received(1).CommitFileAsync(
+            Arg.Any<string>(), "main", Arg.Any<string>(), "steps: []",
+            Arg.Is<string>(m => m.EndsWith("\n\nRequested-by: claude", StringComparison.Ordinal)),
+            "Aetheus", "no-reply@example.test", Arg.Any<CancellationToken>());
     }
 }

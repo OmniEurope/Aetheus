@@ -8,7 +8,7 @@
             var title = RunTitle(run);
             <a href="@RunHref(run.Id)"
                class="pipeline-run-dot pipeline-run-dot-@run.Status.ToString().ToLowerInvariant()"
-               title="@title" aria-label="@title" @onclick:stopPropagation="true"></a>
+               title="@title" aria-label="@title" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"></a>
         }
     </div>
 }

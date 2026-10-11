@@ -31,7 +31,7 @@
             <Template Context="env">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.None">
-                        <a href="/environments/@env.Id" class="pipeline-name-link">@env.Name</a>
+                        <a href="/environments/@env.Id" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@env.Name</a>
                         @if (!IsProjectScope && !string.IsNullOrEmpty(env.ProjectName))
                         {
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@env.ProjectName</OmniText>
@@ -63,7 +63,7 @@
         <OmniDataGridColumn TItem="EnvironmentDto" Title="" Width="60px" Sortable="false" TextAlign="OmniDataGridTextAlign.Center" Filterable="false" >
             <Template Context="env">
                 @* STD-BTN exception chosen by the user (recette R-438, 2026-09-28): the copy (duplicate) button is blue on every row. *@
-                <span @onclick:stopPropagation="true">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => DuplicateEnvironment(env))" Disabled="@(!_canWrite)" title="@L["Duplicate"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
                 </span>
             </Template>

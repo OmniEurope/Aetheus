@@ -111,3 +111,33 @@ NODE
   ! -name SHA256SUMS ! -name source-commit -print \
   | sort | while IFS= read -r file; do sha256sum "$file"; done > SHA256SUMS)
 test -s "$OUT/SHA256SUMS"
+
+# restore-artifacts refuses any artifact without .pipeline-artifacts/{source-commit,
+# delivery-contract.json,artifact-provenance.json} (D-04, bcdbfe577). The package set's Assemble stage
+# restores this one, so publish-observability-packages run 2670 died on "carries no
+# .pipeline-artifacts/source-commit". The Package stage publishes these three files beside the candidate.
+SEAL="$ROOT/.pipeline-artifacts"
+mkdir -p "$SEAL"
+rm -f "$SEAL/source-commit" "$SEAL/artifact-provenance.json" "$SEAL/delivery-contract.json"
+printf '%s\n' "$COMMIT" > "$SEAL/source-commit"
+node - "$KIND" "$VERSION" "$COMMIT" "$OUT" "$SEAL" <<'NODE'
+const fs = require("node:fs");
+const crypto = require("node:crypto");
+const [kind, version, commit, candidate, seal] = process.argv.slice(2);
+const sha256 = path => crypto.createHash("sha256").update(fs.readFileSync(path)).digest("hex");
+const files = fs.readdirSync(candidate).sort()
+  .map(name => ({ path: `.package-candidate/${kind}/${name}`, sha256: sha256(`${candidate}/${name}`) }));
+fs.writeFileSync(`${seal}/artifact-provenance.json`,
+  `${JSON.stringify({ schemaVersion: 1, sourceCommit: commit, files })}\n`);
+fs.writeFileSync(`${seal}/delivery-contract.json`, `${JSON.stringify({
+  schemaVersion: 1,
+  adapter: "observability-package",
+  packageKind: kind,
+  packageVersion: version,
+  sourceSha: commit,
+  artifactProvenanceSha256: sha256(`${seal}/artifact-provenance.json`)
+})}\n`);
+NODE
+test -s "$SEAL/source-commit"
+test -s "$SEAL/artifact-provenance.json"
+test -s "$SEAL/delivery-contract.json"

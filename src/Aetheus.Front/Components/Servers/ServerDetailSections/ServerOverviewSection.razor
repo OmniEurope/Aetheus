@@ -53,7 +53,7 @@
                 @if (ShowAgentUpdateButton)
                 {
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UpdateAgentAsync" Busy="@(_agentUpdateBusy || agentUpdate.InProgress)" title="@L["UpdateAgent"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Update"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UpdateAgentAsync" Disabled="@AgentOffline" Busy="@(_agentUpdateBusy || agentUpdate.InProgress)" title="@L["UpdateAgent"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Update"]</span></OmniButton>
                     </OmniStack>
                 }
                 @* Recette R2-111: from the confirmation until the agent reports the new version, or the failure and its reason. *@
@@ -84,7 +84,7 @@
             <OmniIcon Name="OmniIconName.Heartbeat" Class="essential-icon" />
             <div class="essential-text">
                 <span class="essential-label">@L["LastHeartbeat"]</span>
-                <span class="essential-value">@Server.LastHeartbeat.ToString("g")</span>
+                <span class="essential-value">@(Server.LastHeartbeat == default ? "-" : Server.LastHeartbeat.ToString("g"))</span>
             </div>
         </div>
         <div class="essential-item">
@@ -120,6 +120,11 @@
             <OmniProgressBar Value="@Server.CpuPercent" Maximum="100" ShowValue="false"
                 Class="@($"metric-bar metric-bar-thin {MetricThresholdHelper.BarClass(Server.CpuPercent)}")" />
         }
+        else if (MetricsLoadCompleted)
+        {
+            @* SITE-FUNC-METRICS-001: the load is over and the agent never reported this metric. *@
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-m-0">@L["Unavailable"]</OmniText>
+        }
         else
         {
             <AetheusLoader Size="OmniControlSize.Small" />
@@ -133,6 +138,11 @@
             <OmniProgressBar Value="@Server.MemoryUsedMb" Maximum="@Math.Max(1, Server.MemoryTotalMb)" ShowValue="false"
                 Class="@($"metric-bar metric-bar-thin {MetricThresholdHelper.BarClass(MetricThresholdHelper.Percent(Server.MemoryUsedMb, Server.MemoryTotalMb))}")" />
         }
+        else if (MetricsLoadCompleted)
+        {
+            @* SITE-FUNC-METRICS-001: the load is over and the agent never reported this metric. *@
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-m-0">@L["Unavailable"]</OmniText>
+        }
         else
         {
             <AetheusLoader Size="OmniControlSize.Small" />
@@ -145,6 +155,11 @@
             <OmniHeading Level="OmniHeadingLevel.H5" Class="metric-value">@(Server.DiskUsedGb.ToString("F1")) / @(Server.DiskTotalGb.ToString("F1")) GB</OmniHeading>
             <OmniProgressBar Value="@Server.DiskUsedGb" Maximum="@Math.Max(1, Server.DiskTotalGb)" ShowValue="false"
                 Class="@($"metric-bar metric-bar-thin {MetricThresholdHelper.BarClass(MetricThresholdHelper.Percent(Server.DiskUsedGb, Server.DiskTotalGb))}")" />
+        }
+        else if (MetricsLoadCompleted)
+        {
+            @* SITE-FUNC-METRICS-001: the load is over and the agent never reported this metric. *@
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-m-0">@L["Unavailable"]</OmniText>
         }
         else
         {
@@ -164,12 +179,12 @@
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Class="omni-u-mb-md">
         <OmniIcon Name="OmniIconName.HardDrive" Class="omni-u-text-muted" />
         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 flex-1">@L["StorageDiagnostics"]</OmniText>
-        @if (Server.StorageDiagnostics.CollectedAtUtc != default)
+        @if (StorageCollected)
         {
             <OmniBadge Fill="OmniFill.Solid" Tone="@(Server.StorageDiagnostics.DryRun ? OmniTone.Warning : OmniTone.Success)">@(Server.StorageDiagnostics.DryRun ? L["DryRun"] : L["CleanupApplyMode"])</OmniBadge>
         }
     </OmniStack>
-    @if (Server.StorageDiagnostics.CollectedAtUtc == default && Metrics.Count == 0)
+    @if (!StorageCollected && Metrics.Count == 0)
     {
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-m-0">@L["StorageDiagnosticsUnavailable"]</OmniText>
     }
@@ -200,11 +215,12 @@
             </div>
             <div>
                 <span class="essential-label">@L["AgentAndNuGet"]</span>
-                <span class="essential-value">@FormatBytes(Server.StorageDiagnostics.AgentWorkDirectoryBytes + Server.StorageDiagnostics.AgentInstallDirectoryBytes + Server.StorageDiagnostics.NuGetCacheBytes)</span>
+                @* SITE-FUNC-STORAGE-DATE-001: without a collection the sizes are unknown, not zero. *@
+                <span class="essential-value">@(StorageCollected ? FormatBytes(Server.StorageDiagnostics.AgentWorkDirectoryBytes + Server.StorageDiagnostics.AgentInstallDirectoryBytes + Server.StorageDiagnostics.NuGetCacheBytes) : L["Unavailable"])</span>
             </div>
         </div>
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-mt-md omni-u-mb-0">
-            @string.Format(L["StorageDiagnosticsCollectedAt"], Server.StorageDiagnostics.CollectedAtUtc.ToLocalTime().ToString("g"))
+            @string.Format(L["StorageDiagnosticsCollectedAt"], StorageCollected ? Server.StorageDiagnostics.CollectedAtUtc.ToLocalTime().ToString("g") : L["Never"])
         </OmniText>
     }
 </OmniCard>

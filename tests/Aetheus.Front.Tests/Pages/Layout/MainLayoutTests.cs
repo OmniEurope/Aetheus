@@ -109,6 +109,18 @@ public class MainLayoutTests : BunitContext
     }
 
     [Fact]
+    public async Task OnLogout_TellsTheServerSoItForgetsTheMailboxPasswords()
+    {
+        // Recette R1-37: the server is told while the token is still held.
+        var cut = Render<MainLayout>();
+
+        await cut.InvokeAsync(async () => await cut.Instance.OnLogout());
+
+        Assert.Contains(_handler.Requests, request =>
+            request.Method == "POST" && request.Url.EndsWith("api/auth/logout", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task NavigateToHelp_NavigatesToHelpRoute()
     {
         var cut = Render<MainLayout>();

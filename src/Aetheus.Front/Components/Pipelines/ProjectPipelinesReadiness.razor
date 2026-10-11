@@ -1,0 +1,19 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-28: on the project's pipelines page, what is not configured and would make a run fail,
+   each with its fix. Nothing is drawn when nothing is found or the verdict could not be read. *@
+@if (_readiness is { Checks.Count: > 0 } readiness)
+{
+    <section class="project-pipelines-readiness" data-testid="project-pipelines-readiness">
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniHeading Level="OmniHeadingLevel.H5">@L[readiness.HasBlocking ? "ProjectPipelinesNotReady" : "ProjectPipelinesToVerify"]</OmniHeading>
+            <PipelineReadinessChecks Checks="@readiness.Checks" ProjectId="@ProjectId"
+                                     ReturnUrl="@ReturnUrl" OnChanged="@LoadAsync" />
+            @if (readiness.RepositoryInspected && !string.IsNullOrWhiteSpace(readiness.InspectedBranch))
+            {
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
+                    @string.Format(L["PipelineSetupReadinessCheckedOn"], readiness.InspectedBranch)
+                </OmniText>
+            }
+        </OmniStack>
+    </section>
+}

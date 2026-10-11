@@ -42,6 +42,16 @@ internal sealed class GitRepositoryGrids
     public Func<string, string> PrStatusText(IStringLocalizer localizer) =>
         _prStatusText ??= GridFilterText.ForEnum<PullRequestStatus>(localizer);
 
+    private Func<string, string>? _protectionLevelText;
+    private List<OmniOption<BranchProtectionLevel>>? _protectionLevels;
+
+    /// <summary>Decision D13: the protection level filter texts and the options of the level cell.</summary>
+    public Func<string, string> ProtectionLevelText(IStringLocalizer localizer) =>
+        _protectionLevelText ??= GridFilterText.ForEnum<BranchProtectionLevel>(localizer);
+
+    public IReadOnlyList<OmniOption<BranchProtectionLevel>> ProtectionLevels(IStringLocalizer localizer) =>
+        _protectionLevels ??= BranchProtectionLevelOptions.Build(localizer);
+
     /// <summary>Loads the values the Author filters offer, kept only while the page still shows that repository.</summary>
     public async Task LoadValuesAsync(GitApi git, int repoId, Func<int> currentRepoId)
     {

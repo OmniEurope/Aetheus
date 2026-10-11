@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Git;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -333,5 +334,22 @@ public class GitRepositoriesRenderTests : BunitContext
             .ToList();
         permissions.SetPermissions(writeAll, isAdmin: false);
         Assert.False((bool)PageType.GetField("_canWrite", Priv)!.GetValue(cut.Instance)!);
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetPaginatedJsonResponse("api/git/repos", new List<GitLightRepoDto>
+        {
+            new() { Id = 1, Name = "repo-1", ProjectId = 1, ProjectName = "MyProject", CloneUrl = "https://example.org/repo-1.git", DefaultBranch = "main" }
+        });
+
+        var cut = Render<GitRepositories>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The repository and project links, then the row buttons.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);
     }
 }

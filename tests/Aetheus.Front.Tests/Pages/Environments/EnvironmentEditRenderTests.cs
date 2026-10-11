@@ -154,6 +154,21 @@ public class EnvironmentEditRenderTests : BunitContext
         Assert.DoesNotContain("Advance a branch", cut.Markup, StringComparison.Ordinal);
     }
 
+    /// <summary>Recette R1-24: the approval instructions field says what it is for, and the field is
+    /// described by that explanation for assistive technologies.</summary>
+    [Fact]
+    public void R1_24_ApprovalInstructions_ExplainWhoReadsThem()
+    {
+        SetupStubs();
+
+        var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => cut.FindAll("textarea#ApprovalInstructions").Count == 1, TimeSpan.FromSeconds(2));
+
+        Assert.Contains("ApprovalInstructionsHelp", cut.Find("#ApprovalInstructionsField-description").TextContent, StringComparison.Ordinal);
+        Assert.Equal("ApprovalInstructionsField-description",
+            cut.Find("textarea#ApprovalInstructions").GetAttribute("aria-describedby"));
+    }
+
     [Fact]
     public void Renders_NewEnvironment_WithProjectIdQuery()
     {

@@ -100,15 +100,4 @@ public class OwnershipValidationAuditTests
 
         Assert.True(isValid, "Should accept when exactly one owner is set");
     }
-
-    [Fact]
-    public void FormerAttributeName_RemainsACompatibilityAlias()
-    {
-        var sharedAssembly = typeof(Aetheus.Shared.Components.Shared.AtMostOneOwnerAttribute).Assembly;
-        var formerType = sharedAssembly.GetType("Aetheus.Shared.Components.Shared.ExactlyOneOwnerAttribute");
-
-        Assert.NotNull(formerType);
-        Assert.True(formerType.IsSubclassOf(typeof(Aetheus.Shared.Components.Shared.AtMostOneOwnerAttribute)));
-        Assert.NotNull(formerType.GetCustomAttributes(typeof(ObsoleteAttribute), inherit: false).SingleOrDefault());
-    }
 }

@@ -39,7 +39,7 @@ public sealed class PipelinePortRegistryGuardTests : IDisposable
             new PortRegistryRepository(_db), _clock, NullLogger<PortRegistryService>.Instance);
         _dispatch.ResolveServerForTargetAsync(
                 Arg.Any<PipelineStageDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(server);
         _sut = new PipelinePortRegistryGuard(
             _dispatch, _registry, NullLogger<PipelinePortRegistryGuard>.Instance);

@@ -21,6 +21,9 @@ public partial class ChangePasswordRequired
     // FP3K: explicit sign-out for the forced-change screen (the user is otherwise trapped here).
     private async Task LogoutAsync()
     {
+        // R1-37: while the token is still held, so the server forgets the mailbox passwords it keeps for us.
+        // (After a password change the server already did, and the rotated stamp refuses this token.)
+        await Api.Auth.NotifyLogoutAsync();
         await StopRealtimeAndLogoutAsync();
         Nav.NavigateTo("/login");
     }

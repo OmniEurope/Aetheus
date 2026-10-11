@@ -23,11 +23,11 @@ else
             <OmniDropDown aria-label="@L["Project"]" TValue="string" Id="docker-bulk-project" Options="@BulkProjectOptions"
                 AllowEmpty="true" Placeholder="@L["Project"]" @bind-Value="_bulkProject" />
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ProjectBulkActionAsync(SelectedBulkProject!, DockerContainerAction.Start))"
-                title="@L["StartAll"]" Disabled="@(SelectedBulkProject is null)"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniButton>
+                title="@L["StartAll"]" Disabled="@(AgentOffline || SelectedBulkProject is null)"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniButton>
             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ProjectBulkActionAsync(SelectedBulkProject!, DockerContainerAction.Stop))"
-                title="@L["StopAll"]" Disabled="@(SelectedBulkProject is null)"><OmniIcon Name="OmniIconName.Stop" /> <span>@L["StopAll"]</span></OmniButton>
+                title="@L["StopAll"]" Disabled="@(AgentOffline || SelectedBulkProject is null)"><OmniIcon Name="OmniIconName.Stop" /> <span>@L["StopAll"]</span></OmniButton>
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ProjectBulkActionAsync(SelectedBulkProject!, DockerContainerAction.Restart))"
-                title="@L["RestartAll"]" Disabled="@(SelectedBulkProject is null)"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniButton>
+                title="@L["RestartAll"]" Disabled="@(AgentOffline || SelectedBulkProject is null)"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniButton>
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenProjectZoom(SelectedBulkProject!))" title="@L["ZoomProject"]" Disabled="@(SelectedBulkProject is null)"><OmniIcon Name="OmniIconName.MagnifyingGlassPlus" /> <span>@L["ZoomProject"]</span></OmniButton>
         </OmniStack>
     }
@@ -69,26 +69,26 @@ else
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Class="docker-row-actions">
                     @if (c.State == "running")
                     {
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DockerActionAsync(c.ContainerId, DockerContainerAction.Stop))"
+                        <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => DockerActionAsync(c.ContainerId, DockerContainerAction.Stop))"
                             title="@L["Stop"]" Class="@((_dockerActionTarget == c.ContainerId) ? "btn-busy" : null)" Busy="@((_dockerActionTarget == c.ContainerId))" Label="@L["Stop"]"><OmniIcon Name="OmniIconName.Stop" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => DockerActionAsync(c.ContainerId, DockerContainerAction.Restart))"
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => DockerActionAsync(c.ContainerId, DockerContainerAction.Restart))"
                             title="@L["Restart"]" Class="@((_dockerActionTarget == c.ContainerId) ? "btn-busy" : null)" Busy="@((_dockerActionTarget == c.ContainerId))" Label="@L["Restart"]"><OmniIcon Name="OmniIconName.Refresh" /></OmniButton>
                     }
                     else
                     {
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => DockerActionAsync(c.ContainerId, DockerContainerAction.Start))"
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => DockerActionAsync(c.ContainerId, DockerContainerAction.Start))"
                             title="@L["Start"]" Class="@((_dockerActionTarget == c.ContainerId) ? "btn-busy" : null)" Busy="@((_dockerActionTarget == c.ContainerId))" Label="@L["Start"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ConfirmRemoveContainerAsync(c.ContainerId, c.Name))"
+                        <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => ConfirmRemoveContainerAsync(c.ContainerId, c.Name))"
                             title="@L["Delete"]" Class="@((_dockerActionTarget == c.ContainerId) ? "btn-busy" : null)" Busy="@((_dockerActionTarget == c.ContainerId))" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                     }
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ToggleLogsAsync(c.ContainerId))" title="@L["ViewLogs"]" Label="@L["ViewLogs"]"><OmniIcon Name="OmniIconName.Document" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenResourceLimitsDialog(c.ContainerId))" title="@L["ResourceLimits"]" Label="@L["ResourceLimits"]"><OmniIcon Name="OmniIconName.Sliders" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => RequestInspectAsync(c.ContainerId))" title="@L["DockerInspect"]" Label="@L["DockerInspect"]"><OmniIcon Name="OmniIconName.Info" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => ToggleLogsAsync(c.ContainerId))" title="@L["ViewLogs"]" Label="@L["ViewLogs"]"><OmniIcon Name="OmniIconName.Document" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => OpenResourceLimitsDialog(c.ContainerId))" title="@L["ResourceLimits"]" Label="@L["ResourceLimits"]"><OmniIcon Name="OmniIconName.Sliders" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => RequestInspectAsync(c.ContainerId))" title="@L["DockerInspect"]" Label="@L["DockerInspect"]"><OmniIcon Name="OmniIconName.Info" /></OmniButton>
                     @if (c.State == "running")
                     {
                         @* Eight actions crowd a row; the three "open a panel" actions of a running container
                            go behind "…". *@
-                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniOverflowMenu Label="@L["MoreActions"]" Disabled="@AgentOffline">
                             @if (CanAdmin)
                             {
                                 <OmniMenuItem OnClick="@(() => OpenShell(c.ContainerId, c.Name))"><Icon><OmniIcon Name="OmniIconName.TerminalWindow" /></Icon><ChildContent>@L["DockerShell"]</ChildContent></OmniMenuItem>
@@ -158,7 +158,7 @@ else
                 <div @onkeydown="OnShellKeyDown">
                     <OmniTextBox aria-label="@L["EnterCommand"]" @bind-Value="_shellCommand" Placeholder="@L["EnterCommand"]" Class="docker-shell-input" />
                 </div>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SendShellCommandAsync" Disabled="@string.IsNullOrWhiteSpace(_shellCommand)" title="@L["Send"]"><OmniIcon Name="OmniIconName.PaperPlaneRight" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SendShellCommandAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_shellCommand))" title="@L["Send"]"><OmniIcon Name="OmniIconName.PaperPlaneRight" /></OmniButton>
             </OmniStack>
         </OmniStack>
     </OmniCard>
@@ -197,7 +197,7 @@ else
             <div class="flex-spacer"></div>
             @if (_browsePath != "/")
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@BrowseParentAsync" title="@L["MoveUp"]"><OmniIcon Name="OmniIconName.Upgrade" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@AgentOffline" OnClick="@BrowseParentAsync" title="@L["MoveUp"]"><OmniIcon Name="OmniIconName.Upgrade" /></OmniButton>
             }
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _browseContainerId = null; _browseContent = null; })" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
         </OmniStack>

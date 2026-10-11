@@ -36,7 +36,11 @@ public partial class TeamspeakOperationDialog
 
     // R-511: OmniDialog listens to the keyboard, so every key press re-renders the dialog and hands it the
     // same parameters again. Copying the model there wiped what had just been typed: it is copied once.
-    protected override void OnInitialized() => _model = Model.Clone();
+    protected override void OnInitialized()
+    {
+        _model = Model.Clone();
+        _model.L = L;
+    }
 
     protected override void OnParametersSet()
     {
@@ -51,7 +55,20 @@ public enum TeamspeakDialogMode { SnapshotDeploy, Setup, Kick, Move, GracefulRes
 
 public sealed class TeamspeakDialogModel : IValidatableObject
 {
+    private IStringLocalizer? _localizer;
+
     public TeamspeakDialogMode Mode { get; set; }
+
+    /// <summary>
+    /// Recette R1-5: the texts of the validation messages, set by the dialog. OE shows an
+    /// <see cref="IValidatableObject"/> message as it is, so a key returned here reached the user raw; a model
+    /// validated without a localizer fails loudly instead of answering keys.
+    /// </summary>
+    internal IStringLocalizer L
+    {
+        get => _localizer ?? throw new InvalidOperationException($"{nameof(TeamspeakDialogModel)}.{nameof(L)} must be set before the model is validated.");
+        set => _localizer = value;
+    }
     public string ExpectedConfirmation { get; set; } = string.Empty;
     public int ClientId { get; set; }
     public int ChannelId { get; set; }
@@ -78,14 +95,14 @@ public sealed class TeamspeakDialogModel : IValidatableObject
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (Mode == TeamspeakDialogMode.Setup && string.IsNullOrWhiteSpace(InstallPath))
-            yield return new ValidationResult("Required", [nameof(InstallPath)]);
+            yield return new ValidationResult(L["Required"], [nameof(InstallPath)]);
         if (Mode is TeamspeakDialogMode.Poke or TeamspeakDialogMode.Message && string.IsNullOrWhiteSpace(Message))
-            yield return new ValidationResult("Required", [nameof(Message)]);
+            yield return new ValidationResult(L["Required"], [nameof(Message)]);
         if (Mode is TeamspeakDialogMode.CreateChannel or TeamspeakDialogMode.EditChannel && string.IsNullOrWhiteSpace(Name))
-            yield return new ValidationResult("Required", [nameof(Name)]);
+            yield return new ValidationResult(L["Required"], [nameof(Name)]);
         if (Mode == TeamspeakDialogMode.SnapshotDeploy && string.IsNullOrWhiteSpace(SnapshotBlob))
-            yield return new ValidationResult("Required", [nameof(SnapshotBlob)]);
+            yield return new ValidationResult(L["Required"], [nameof(SnapshotBlob)]);
         if (Mode == TeamspeakDialogMode.SnapshotDeploy && !string.Equals(Confirmation, ExpectedConfirmation, StringComparison.Ordinal))
-            yield return new ValidationResult("InvalidConfirmation", [nameof(Confirmation)]);
+            yield return new ValidationResult(L["SnapshotConfirmationMismatch"], [nameof(Confirmation)]);
     }
 }

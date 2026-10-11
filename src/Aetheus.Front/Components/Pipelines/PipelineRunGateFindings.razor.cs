@@ -33,8 +33,8 @@ public partial class PipelineRunGateFindings : IDisposable
     /// says so and gives the analysis letter beside it.</summary>
     [Parameter] public AnalysisGrade? RunGrade { get; set; }
 
-    /// <summary>The tests the seal held the candidate back for, in its own words.</summary>
-    [Parameter] public IReadOnlyList<string> BlockingTests { get; set; } = [];
+    /// <summary>The tests the seal held the candidate back for, each traced to its producing step when known.</summary>
+    [Parameter] public IReadOnlyList<PipelineRunAssuranceVerdict.BlockingTest> BlockingTests { get; set; } = [];
 
     private AetheusDataGrid<AnalysisFindingDto>? _grid;
     private IReadOnlyList<AnalysisFindingDto> _rows = [];
@@ -58,6 +58,27 @@ public partial class PipelineRunGateFindings : IDisposable
     private int ListedCount => _showDecided ? Gate.FindingCount + Gate.DecidedFindingCount : Gate.FindingCount;
 
     private IReadOnlyList<int> EffectiveRunIds => RunIds.Count > 0 ? RunIds : [Gate.PipelineRunId];
+
+    /// <summary>Recette R2-138: "quality.architecture.cycles: architecture.cycles.type = 40 (> 0)". A
+    /// finding target reads as its rule; the fingerprint after the colon says nothing to a reader.</summary>
+    internal static string ViolationText(AnalysisRunGateViolationDto violation)
+    {
+        var target = violation.TargetKey ?? violation.TargetKind;
+        if (string.Equals(violation.TargetKind, "finding", StringComparison.OrdinalIgnoreCase)
+            && target.IndexOf(':', StringComparison.Ordinal) is > 0 and var colon)
+            target = target[..colon];
+        var symbol = violation.Operator switch
+        {
+            "GreaterThan" => ">",
+            "GreaterThanOrEqual" => "≥",
+            "LessThan" => "<",
+            "LessThanOrEqual" => "≤",
+            "Equal" or "Equals" => "=",
+            _ => violation.Operator
+        };
+        var threshold = string.IsNullOrWhiteSpace(violation.Threshold) ? string.Empty : $" ({symbol} {violation.Threshold})";
+        return $"{violation.PolicyKey}: {target} = {violation.ObservedValue ?? "-"}{threshold}";
+    }
 
     private async Task ShowDecidedChangedAsync()
     {

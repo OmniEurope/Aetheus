@@ -35,6 +35,7 @@ internal sealed class PipelineReadyStageServerSelector(
         int? organizationId,
         bool stageHasDeploy,
         int? affinityServerId,
+        int? projectId,
         CancellationToken ct)
     {
         var effectiveStage = dispatchServers.ResolveEffectiveStageTarget(stageDef, resolvedVars);
@@ -44,7 +45,7 @@ internal sealed class PipelineReadyStageServerSelector(
         {
             configuredTargets = await repo.FindCandidateTargetServerIdsAsync(
                 effectiveStage.Pool, effectiveStage.Environment, effectiveStage.Agent,
-                OsTypeHelper.Parse(effectiveStage.Os), organizationId, false, ct).ConfigureAwait(false);
+                OsTypeHelper.Parse(effectiveStage.Os), organizationId, false, projectId, ct).ConfigureAwait(false);
             if (configuredTargets.Contains(affinityServerId.Value))
             {
                 server = await repo.FindOnlineServerByIdAsync(
@@ -54,13 +55,13 @@ internal sealed class PipelineReadyStageServerSelector(
             }
         }
         server ??= await dispatchServers.ResolveServerForTargetAsync(
-            stageDef, resolvedVars, organizationId, stageHasDeploy, ct).ConfigureAwait(false);
+            stageDef, resolvedVars, organizationId, stageHasDeploy, projectId, ct).ConfigureAwait(false);
         if (server is not null)
             return new(server, false, null);
 
         configuredTargets ??= await repo.FindCandidateTargetServerIdsAsync(
             effectiveStage.Pool, effectiveStage.Environment, effectiveStage.Agent,
-            OsTypeHelper.Parse(effectiveStage.Os), organizationId, stageHasDeploy, ct).ConfigureAwait(false);
+            OsTypeHelper.Parse(effectiveStage.Os), organizationId, stageHasDeploy, projectId, ct).ConfigureAwait(false);
         if (configuredTargets.Count > 0)
         {
             logger.LogWarning(

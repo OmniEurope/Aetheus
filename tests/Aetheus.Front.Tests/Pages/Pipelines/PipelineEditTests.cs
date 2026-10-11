@@ -929,4 +929,62 @@ public class PipelineEditTests : BunitContext
         Assert.Single(vaultNames);
         Assert.Equal(2, serverNames.Count);
     }
+
+    // SITE-FUNC-AUTOCOMPLETE-001: the suggestion lookups run from OnAfterRenderAsync; a network
+    // failure there replaced the whole form with the error boundary instead of only losing hints.
+    [Fact]
+    public void SuggestionNetworkFailure_KeepsTheForm()
+    {
+        SetupNewPipelineMocks();
+        _handler.SetAsyncJsonResponse<List<string>>(HttpMethod.Get, "api/vaults/names",
+            _ => throw new HttpRequestException("network error"));
+
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests,
+            request => request.Url.Contains("api/vaults/names", StringComparison.Ordinal)));
+        cut.Render();
+
+        Assert.NotEmpty(cut.FindComponents<MonacoEditor>());
+    }
+
+    // SITE-FUNC-SELF-SAVE-001: the hub announces the page's own save, often while the save is still in
+    // flight; the stored pipeline equal to what this page sent is not a change made elsewhere.
+    [Theory]
+    [InlineData("edited here", false)]
+    [InlineData("edited by someone else", true)]
+    public async Task DefinitionChangedDuringTheSave_ShowsTheBannerOnlyForARemoteChange(string storedDescription, bool expectBanner)
+    {
+        SetupEditPipelineMocks();
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("/pipelines/5?tab=edit");
+        _handler.SetJsonResponse("api/variable-libraries/names", new List<string>());
+        _handler.SetJsonResponse("api/vaults/names", new List<string>());
+        _handler.SetJsonResponse("api/servers/names", new List<string>());
+        _handler.SetJsonResponse("api/variable-libraries", new PaginatedResult<VariableLibraryDto> { Items = [], TotalCount = 0 });
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        const BindingFlags priv = BindingFlags.NonPublic | BindingFlags.Instance;
+        ((PipelineModel)typeof(PipelineEdit).GetField("_model", priv)!.GetValue(cut.Instance)!).Description = "edited here";
+        PipelineDto Stored(string description) => new()
+        {
+            Id = 5,
+            Name = "Deploy Prod",
+            Description = description,
+            YamlDefinition = "name: deploy\ntrigger: manual\nstages: []",
+            SourceBranch = "main",
+            TriggerType = PipelineTriggerType.Manual
+        };
+        var saveResponse = new TaskCompletionSource<PipelineDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Put, "api/pipelines/5", _ => saveResponse.Task);
+        _handler.SetJsonResponse("api/pipelines/5", Stored(storedDescription));
+
+        var save = cut.InvokeAsync(() => cut.FindComponent<MonacoEditor>().Instance.OnSave.InvokeAsync());
+        await cut.InvokeAsync(() => Services.GetRequiredService<OmniDialogService>().Close(new PipelineSaveDecision("main")));
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request => request.Method == "PUT"));
+        var onChanged = typeof(PipelineEdit).GetMethod("OnDefinitionChangedAsync", priv)!;
+        await cut.InvokeAsync(() => (Task)onChanged.Invoke(cut.Instance, [])!);
+        saveResponse.SetResult(Stored("edited here"));
+        await save;
+
+        Assert.Equal(expectBanner, cut.Markup.Contains("pipeline-changed-elsewhere", StringComparison.Ordinal));
+    }
 }

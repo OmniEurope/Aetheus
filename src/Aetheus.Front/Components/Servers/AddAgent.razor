@@ -4,7 +4,7 @@
 <PageTitle>@L["AddAgent"] - Aetheus</PageTitle>
 
 <div class="add-agent-page">
-    <OmniPageHeader Title="@L["AddAgent"]" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+    <OmniPageHeader Title="@L["AddAgent"]" ShowBack="true" BackHref="@LocalReturnUrl.Validated(ReturnUrl)" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("computer")" /></Icon>
     </OmniPageHeader>
 

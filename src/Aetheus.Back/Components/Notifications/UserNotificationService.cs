@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services.Email;
 
 namespace Aetheus.Back.Components.Notifications;
 
@@ -9,9 +10,11 @@ public sealed class UserNotificationService(
     IResourceAuthorizationService authorization,
     TimeProvider timeProvider,
     Aetheus.Back.Services.IUserChangeNotifier? changeNotifier = null,
-    ILogger<UserNotificationService>? logger = null) : IUserNotificationService
+    ILogger<UserNotificationService>? logger = null,
+    INotificationEmailer? emailer = null) : IUserNotificationService
 {
     private const int SubjectMaxLength = 300;
+    private const int ErrorMessageMaxLength = 2000;
 
     public async Task<PaginatedResult<NotificationDeliveryDto>> GetDeliveriesAsync(
         int userId, UserNotificationPageRequest request, CancellationToken ct = default)
@@ -183,11 +186,12 @@ public sealed class UserNotificationService(
             EventType = eventType,
             Subject = boundedSubject,
             PayloadJson = jsonPayload,
-            // Recorded for the administrator like a project event: no transport exists for it.
+            // Until the e-mail below says otherwise: recorded for the administrator, nothing sent.
             Status = NotificationDeliveryStatus.NotConfigured,
             ErrorMessage = null,
             SentAt = null
         }).ToList();
+        await EmailDeliveriesAsync(deliveries, [.. administrators.Select(administrator => administrator.Email)], ct).ConfigureAwait(false);
         await repo.AddDeliveriesAsync(deliveries, ct).ConfigureAwait(false);
         await PushChangedAsync([.. deliveries.Select(delivery => delivery.RecipientUserId)], ct).ConfigureAwait(false);
         return deliveries.Count;
@@ -209,6 +213,7 @@ public sealed class UserNotificationService(
             projectId.Value, eventType, descriptor.DefaultEnabled, ct).ConfigureAwait(false);
         var subject = BuildSubject(eventType, projectName);
         var deliveries = new List<NotificationDelivery>(candidates.Count);
+        var addresses = new List<string?>(candidates.Count);
         foreach (var candidate in candidates)
         {
             // A subscriber who lost access to the project must not keep learning about it.
@@ -223,20 +228,54 @@ public sealed class UserNotificationService(
                 EventType = eventType,
                 Subject = subject,
                 PayloadJson = jsonPayload,
-                // No mail transport exists: the notification is recorded for the user, nothing is sent.
+                // Until the e-mail below says otherwise: recorded for the user, nothing sent.
                 Status = NotificationDeliveryStatus.NotConfigured,
                 ErrorMessage = null,
                 SentAt = null
             });
+            addresses.Add(candidate.Email);
         }
 
         if (deliveries.Count > 0)
         {
+            await EmailDeliveriesAsync(deliveries, addresses, ct).ConfigureAwait(false);
             await repo.AddDeliveriesAsync(deliveries, ct).ConfigureAwait(false);
             await PushChangedAsync([.. deliveries.Select(delivery => delivery.RecipientUserId)], ct).ConfigureAwait(false);
         }
         return deliveries.Count;
     }
+
+    /// <summary>
+    /// Recette R1-16: every notification also leaves by e-mail to the recipient's account address, and
+    /// its row records the real outcome: Sent once the SMTP server accepted it, Failed with the server's
+    /// text, NotConfigured with the reason when no sender or no address exists.
+    /// </summary>
+    private async Task EmailDeliveriesAsync(
+        IReadOnlyList<NotificationDelivery> deliveries, IReadOnlyList<string?> addresses, CancellationToken ct)
+    {
+        if (emailer is null || deliveries.Count == 0) return;
+        var emails = deliveries
+            .Select((delivery, index) => new NotificationEmail(addresses[index], delivery.Subject, delivery.EventType, delivery.PayloadJson))
+            .ToList();
+        var results = await emailer.SendAsync(emails, ct).ConfigureAwait(false);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        for (var i = 0; i < deliveries.Count; i++)
+        {
+            var delivery = deliveries[i];
+            var result = results[i];
+            delivery.Status = result.Status switch
+            {
+                EmailSendStatus.Sent => NotificationDeliveryStatus.Sent,
+                EmailSendStatus.Failed => NotificationDeliveryStatus.Failed,
+                _ => NotificationDeliveryStatus.NotConfigured
+            };
+            delivery.SentAt = result.Status == EmailSendStatus.Sent ? now : null;
+            delivery.ErrorMessage = result.Status == EmailSendStatus.Sent ? null : Bound(result.Message);
+        }
+    }
+
+    private static string Bound(string message) =>
+        message.Length <= ErrorMessageMaxLength ? message : message[..ErrorMessageMaxLength];
 
     /// <summary>
     /// Recette R-182: tells the recipients' open tabs that their notifications changed. Best effort:

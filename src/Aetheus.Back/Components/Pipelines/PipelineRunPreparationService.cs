@@ -97,7 +97,8 @@ public sealed class PipelineRunPreparationService(
         var definition = resolution.Definition;
         var effectiveStages = YamlParsingHelper.FlattenJobs(definition);
         ValidatePreparedDefinition(definition, effectiveStages);
-        var targetIds = await parameterResolver.ResolveCandidateTargetServerIdsAsync(definition, organizationId, ct).ConfigureAwait(false);
+        var targetIds = await parameterResolver.ResolveCandidateTargetServerIdsAsync(
+            definition, organizationId, effectiveProjectId, ct).ConfigureAwait(false);
         var preparation = await ApplyWorkspaceSourceAsync(new PipelineRunPreparation
         {
             PipelineId = id,

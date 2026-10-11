@@ -128,4 +128,9 @@ cleanup
 SKIPPED="$(grep -o 'notExecuted="[0-9]*"' "$TRX" | head -n 1 | tr -dc '0-9')"
 echo "E2E suite $RUN_LABEL produced an executed-test proof against $BACK with findings status $STATUS, ${SKIPPED:-0} test(s) skipped."
 grep -o '<UnitTestResult [^>]*outcome="NotExecuted"[^>]*>' "$TRX" | grep -o 'testName="[^"]*"' | sed 's/^/  skipped: /' || true
+# The failed names, for the gate script to publish beside its status.
+if [ "$STATUS" != 0 ]; then
+  "$NODE" "$WORKSPACE/deploy/scripts/list-failed-tests.mjs" record "$TRX" "$RESULTS_DIR/failed-tests.txt" \
+    || echo "The failed test names could not be read from $TRX." >&2
+fi
 [ "$STATUS" = 0 ] || exit 10

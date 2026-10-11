@@ -7,7 +7,6 @@ public partial class ServerCronSection : ServerActionSectionBase
 {
     [Inject] private ApiClient Api { get; set; } = default!;
 
-    [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
     private string _jobSearch = string.Empty;
@@ -47,6 +46,8 @@ public partial class ServerCronSection : ServerActionSectionBase
 
     private async Task OpenCreateDialog()
     {
+        // SITE-OFFLINE-001: refused before the user fills a job the agent cannot receive.
+        if (BlockedByOfflineAgent()) return;
         var result = await Dialog.OpenAsync<CronJobDialog>(
             L["NewCronJob"],
             new Dictionary<string, object?>
@@ -64,6 +65,7 @@ public partial class ServerCronSection : ServerActionSectionBase
 
     private async Task OpenEditDialog(CronJobDto job)
     {
+        if (BlockedByOfflineAgent()) return;
         var result = await Dialog.OpenAsync<CronJobDialog>(
             L["EditCronJob"],
             new Dictionary<string, object?>
@@ -87,6 +89,7 @@ public partial class ServerCronSection : ServerActionSectionBase
             return;
         }
 
+        if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
         var success = await Api.ServerTools.SaveCronJobAsync(ServerId, request);
         if (success)
@@ -98,6 +101,7 @@ public partial class ServerCronSection : ServerActionSectionBase
 
     private async Task DeleteJobAsync(CronJobDto job)
     {
+        if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
         var success = await Api.ServerTools.DeleteCronJobAsync(ServerId, new CronJobDeleteRequest { Id = job.Id, User = job.User });
         if (success)

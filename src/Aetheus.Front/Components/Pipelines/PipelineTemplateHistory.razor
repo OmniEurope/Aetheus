@@ -28,7 +28,7 @@ else
         </EmptyTemplate>
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="PipelineTemplateVersionSummaryDto" Property="Version" Title="@L["Version"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
-                <Template Context="version">v@version.Version</Template>
+                <Template Context="version">v@(version.Version)</Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="ChangelogEntry" Title="@L["Changelog"]" Filterable="true" />
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Width="12rem" Filterable="true" />

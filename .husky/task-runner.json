@@ -47,6 +47,16 @@
          ]
       },
       {
+         "name": "quality-precheck",
+         "group": "pre-push",
+         "command": "pwsh",
+         "args": [
+            "-NoProfile",
+            "-File",
+            "scripts/check-quality-before-push.ps1"
+         ]
+      },
+      {
          "name": "test-backend",
          "group": "pre-push",
          "command": "dotnet",

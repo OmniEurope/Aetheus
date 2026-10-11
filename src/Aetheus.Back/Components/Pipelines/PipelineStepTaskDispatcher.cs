@@ -23,7 +23,7 @@ public interface IPipelineStepTaskDispatcher
     Task<bool> CreateTasksForStageAsync(
         int runId, Server server, List<PipelineStepRun> stageSteps, PipelineStageDefinition stageDef,
         Dictionary<string, string> resolvedVars, List<string> completedStages, bool previousStageFailed,
-        HashSet<string> secretKeys, int? organizationId,
+        HashSet<string> secretKeys, int? organizationId, int? projectId,
         IPipelineChildRunLauncher launcher, CancellationToken ct);
 }
 
@@ -72,7 +72,7 @@ public sealed class PipelineStepTaskDispatcher(
     public async Task<bool> CreateTasksForStageAsync(
         int runId, Server server, List<PipelineStepRun> stageSteps, PipelineStageDefinition stageDef,
         Dictionary<string, string> resolvedVars, List<string> completedStages, bool previousStageFailed,
-        HashSet<string> secretKeys, int? organizationId,
+        HashSet<string> secretKeys, int? organizationId, int? projectId,
         IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         var stageIsContainer = stageDef.Isolation?.IsContainer == true;
@@ -86,7 +86,7 @@ public sealed class PipelineStepTaskDispatcher(
             var legVars = ResolveLegVariables(stageVars, legGroup.Key, matrixLegs);
             var legSteps = legGroup.ToList();
             var resolution = await ResolveAndValidateLegAsync(
-                runId, stageDef, legGroup.Key, legVars, server, stageIsContainer, organizationId, ct)
+                runId, stageDef, legGroup.Key, legVars, server, stageIsContainer, organizationId, projectId, ct)
                 .ConfigureAwait(false);
             if (resolution.Error is not null)
             {
@@ -144,10 +144,11 @@ public sealed class PipelineStepTaskDispatcher(
         Server server,
         bool stageIsContainer,
         int? organizationId,
+        int? projectId,
         CancellationToken ct)
     {
         var legServer = await ResolveMatrixLegServerAsync(
-            stageDef, legVars, server, stageIsContainer, organizationId, ct).ConfigureAwait(false);
+            stageDef, legVars, server, stageIsContainer, organizationId, projectId, ct).ConfigureAwait(false);
         if (legServer is null)
             return MatrixLegResolution.Failed(
                 $"Stage '{stageDef.Name}' matrix leg '{matrixLeg}': no online runner available for os '{legVars.GetValueOrDefault("os")}'.");
@@ -373,7 +374,7 @@ public sealed class PipelineStepTaskDispatcher(
                 return StepDispatchResult.Handled;
             case "trigger":
                 await triggerSteps.CreateTriggerStepAsync(
-                    runId, stepRun, stepDef, legVars, launcher, ct).ConfigureAwait(false);
+                    runId, stepRun, stepDef, legVars, secretKeys, launcher, ct).ConfigureAwait(false);
                 return StepDispatchResult.Handled;
             case "advance-branch":
                 await branchAdvanceSteps.ExecuteAsync(runId, stepRun, stepDef, legVars, ct).ConfigureAwait(false);
@@ -501,26 +502,38 @@ public sealed class PipelineStepTaskDispatcher(
         Dictionary<string, string> legVars, PipelineStageDefinition stageDef, int? organizationId,
         CancellationToken ct)
     {
-        if (organizationId is null || string.IsNullOrWhiteSpace(stepDef.Profile))
-        {
-            await finalizer.FailRunWithUnmatchedStagesAsync(
-                runId, [$"Step '{stepDef.Name}': AI runner profile or organization is missing."],
-                [stepRun], ct).ConfigureAwait(false);
-            return StepDispatchResult.RunFinalized;
-        }
-
         var inlinePrompt = SubstituteVariables(stepDef.Prompt ?? string.Empty, legVars);
         var preamble = stepDef.Gate
             ? "Return a report ending with exactly one line: VERDICT: PASS or VERDICT: FAIL.\n\n"
             : string.Empty;
-        var spec = await aiTaskService.BuildPipelineExecutionAsync(
-            stepDef.Profile, organizationId.Value, preamble + inlinePrompt, stepDef.Gate, runId,
-            legVars.GetValueOrDefault("WORKSPACE", string.Empty), ct).ConfigureAwait(false);
+        var spec = organizationId is null || string.IsNullOrWhiteSpace(stepDef.Profile)
+            ? null
+            : await aiTaskService.BuildPipelineExecutionAsync(
+                stepDef.Profile, organizationId.Value, preamble + inlinePrompt, stepDef.Gate, runId,
+                legVars.GetValueOrDefault("WORKSPACE", string.Empty), ct).ConfigureAwait(false);
+        if (spec is null)
+        {
+            var reason = organizationId is null || string.IsNullOrWhiteSpace(stepDef.Profile)
+                ? $"Step '{stepDef.Name}': AI runner profile or organization is missing."
+                : $"Step '{stepDef.Name}': AI runner profile '{stepDef.Profile}' was not found in the pipeline's organization.";
+            // An advisory step informs and never decides: its own setup failing is recorded on the step,
+            // and the run carries on as if it had not been there.
+            if (stepDef.Advisory)
+            {
+                stepRun.ServerId = legServer.Id;
+                MarkSystemStepFailed(stepRun, TaskFailureCodes.InfrastructureMismatch,
+                    $"Advisory step not run: {reason}", timeProvider.GetUtcNow().UtcDateTime);
+                return StepDispatchResult.Handled;
+            }
+            await finalizer.FailRunWithUnmatchedStagesAsync(runId, [reason], [stepRun], ct).ConfigureAwait(false);
+            return StepDispatchResult.RunFinalized;
+        }
         if (!string.IsNullOrWhiteSpace(stepDef.PromptFile))
             spec.EnvironmentVariables["AETHEUS_AI_PROMPT_FILE"] = stepDef.PromptFile;
         if (stepDef.ContextPaths.Count > 0)
             spec.EnvironmentVariables["AETHEUS_AI_CONTEXT_PATHS_JSON"] =
                 JsonSerializer.Serialize(stepDef.ContextPaths);
+        AddAiPublicationVariables(spec.EnvironmentVariables, runId, stageDef.Name, stepDef);
 
         stepRun.ServerId = legServer.Id;
         var task = new ServerTask
@@ -542,6 +555,19 @@ public sealed class PipelineStepTaskDispatcher(
         return StepDispatchResult.Handled;
     }
 
+    /// <summary>What the agent needs to publish an AI step's findings and honour its advisory and
+    /// diff-capture switches. Internal to the executor: AETHEUS_* never reaches the CLI.</summary>
+    internal static void AddAiPublicationVariables(
+        Dictionary<string, string> environment, int runId, string stageName, PipelineStepDefinition stepDef)
+    {
+        if (stepDef.Advisory) environment["AETHEUS_AI_ADVISORY"] = "true";
+        if (stepDef.CaptureDiff == false) environment["AETHEUS_AI_CAPTURE_DIFF"] = "false";
+        if (string.IsNullOrWhiteSpace(stepDef.FindingsSarif)) return;
+        environment["AETHEUS_AI_FINDINGS_SARIF"] = stepDef.FindingsSarif;
+        environment["AETHEUS_RUN_ID"] = runId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        environment["AETHEUS_STAGE_NAME"] = stageName;
+    }
+
     // S-FEAT-21: pick the runner for a matrix leg. An `os` matrix axis targets an OS-appropriate
     // agent so a single definition fans out across platforms (cross-OS build matrix). Every other
     // case reuses the stage's already isolation-checked server, so behavior is unchanged without an
@@ -549,7 +575,7 @@ public sealed class PipelineStepTaskDispatcher(
     // F-EXEC-1 candidate set the pre-run Server.Admin gate authorized.
     private async Task<Server?> ResolveMatrixLegServerAsync(
         PipelineStageDefinition stageDef, Dictionary<string, string> legVars, Server stageServer,
-        bool stageIsContainer, int? organizationId, CancellationToken ct)
+        bool stageIsContainer, int? organizationId, int? projectId, CancellationToken ct)
     {
         // Container stages run every leg on the single Docker-capable runner already vetted upstream.
         if (stageIsContainer) return stageServer;
@@ -564,6 +590,6 @@ public sealed class PipelineStepTaskDispatcher(
         if (stageIsWindows == (requested == OsType.Windows)) return stageServer;
 
         return await dispatchServers.ResolveServerForTargetAsync(
-            stageDef with { Os = legOs }, legVars, organizationId, false, ct).ConfigureAwait(false);
+            stageDef with { Os = legOs }, legVars, organizationId, false, projectId, ct).ConfigureAwait(false);
     }
 }

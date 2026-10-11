@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using OmniEurope.Blazor.Components;
@@ -296,4 +297,24 @@ public class PipelineDependencyGridTests : BunitContext
             .Add(component => component.RunPipeline, (_, _) => Task.CompletedTask)
             .Add(component => component.SetFavorite, (_, _) => Task.CompletedTask)
             .Add(component => component.CanWrite, true));
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        // The name link, the favourite button, the run split button and the run history dots
+        // (PipelineRunHistory) all sit in the clickable row.
+        var cut = RenderGrid(new PipelineDependencyDto
+        {
+            Id = 5,
+            Name = "ci",
+            ProjectId = 8,
+            RecentRuns = [new PipelineRunSummaryDto { Id = 15, Status = Aetheus.Shared.Components.Pipelines.PipelineStatus.Success }]
+        });
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        Assert.NotEmpty(cut.FindAll(".pipeline-run-history a.pipeline-run-dot"));
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 4);
+    }
 }

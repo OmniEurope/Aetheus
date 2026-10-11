@@ -11,6 +11,12 @@ public partial class ServerConfigSection
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
+    // SITE-OFFLINE-001: a deploy queues agent tasks; the server comes from the loader the server detail
+    // layout cascades to every section.
+    [CascadingParameter(Name = "ServerLoader")] public ServerDetailLoader? Loader { get; set; }
+
+    private bool AgentOffline => Loader?.Server is { } server && AgentOfflineGuard.IsOffline(server);
+
     private string _configYaml = string.Empty;
     private bool _configExporting;
     private bool _configImportVisible;
@@ -58,6 +64,7 @@ public partial class ServerConfigSection
     private async Task DeployConfigAsync()
     {
         if (string.IsNullOrWhiteSpace(_configImportYaml)) return;
+        if (Loader?.Server is { } server && AgentOfflineGuard.Blocks(server, Toast)) return;
         _configDeploying = true;
         var result = await Api.Servers.DeployServerConfigAsync(ServerId, _configImportYaml);
         if (result is not null)

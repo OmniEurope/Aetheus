@@ -30,7 +30,7 @@
     </OmniColumn>
 </OmniRow>
 
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
+<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center"
              Justify="OmniJustification.Between" Class="omni-u-mb-md" Gap="OmniSpacing.Large">
     <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="OnSearchChangedAsync" />
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))" Disabled="@(!CanCreate)" title="@(!CanCreate ? L["InsufficientPermissions"] : "")"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>

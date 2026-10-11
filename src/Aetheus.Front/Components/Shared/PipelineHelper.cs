@@ -16,6 +16,9 @@ internal static class PipelineHelper
         // R-14: the deployment did not happen and the previous version serves again: a warning, not
         // the red of a run that left something broken. The label, not the colour, tells it from Partial.
         PipelineStatus.RolledBack => OmniTone.Warning,
+        // Recette R2-146 (user's choice, as a trial): a refused result is a warning, not the red of a
+        // technical failure.
+        PipelineStatus.Rejected => OmniTone.Warning,
         PipelineStatus.Cancelled => OmniTone.Info,
         _ => OmniTone.Neutral
     };

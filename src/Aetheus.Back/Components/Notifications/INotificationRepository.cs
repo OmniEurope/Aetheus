@@ -22,5 +22,11 @@ public interface INotificationRepository
     Task<NotificationRule?> FindRuleAsync(int id, CancellationToken ct = default);
     Task AddRuleAsync(NotificationRule rule, CancellationToken ct = default);
     Task RemoveRuleAsync(NotificationRule rule, CancellationToken ct = default);
+    /// <summary>R1-16: the account address of the user, or null when the account has none.</summary>
+    Task<string?> GetUserEmailAsync(int userId, CancellationToken ct = default);
+
+    /// <summary>R1-16: the addresses of the active administrators that have one.</summary>
+    Task<List<string>> GetActiveAdministratorEmailsAsync(CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }

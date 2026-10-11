@@ -24,4 +24,6 @@ else
 fi
 printf '%s\n' "$STATUS" > "$WORKSPACE/.qa-previous-smoke-gate-status"
 echo "##aetheus[setvariable name=QA_PREVIOUS_SMOKE_GATE_STATUS]$STATUS"
+[ "$STATUS" = 0 ] || sh deploy/scripts/publish-failed-tests.sh QA_PREVIOUS_SMOKE_FAILED_TESTS \
+  "$WORKSPACE/.qa-test-results/previous-smoke/deployed/failed-tests.txt"
 echo "Previous smoke findings status: $STATUS."

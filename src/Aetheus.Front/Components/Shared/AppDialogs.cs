@@ -32,7 +32,9 @@ public sealed class AppDialogs(OmniOverlayService overlay, IStringLocalizer<AppS
 
             Draggable = options.Draggable,
             Resizable = options.Resizable,
-            Intent = options.Intent
+            Intent = options.Intent,
+            // Recette R1-35: no field takes the focus when a dialog opens; the first Tab reaches it.
+            InitialFocus = OmniDialogInitialFocus.Panel
         });
     }
 

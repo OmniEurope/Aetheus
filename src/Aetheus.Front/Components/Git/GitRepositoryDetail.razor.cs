@@ -520,10 +520,10 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     {
         if (await Actions.DeleteProtectionRuleAsync(Id, rule)) await ReloadProtectionRulesAsync();
     }
-    private async Task UpdateProtectionRule(BranchProtectionRuleDto rule, bool? preventDeletion = null, bool? preventForcePush = null, bool? requirePr = null)
+    private async Task UpdateProtectionRule(BranchProtectionRuleDto rule, bool? preventDeletion = null, bool? preventForcePush = null, BranchProtectionLevel? protectionLevel = null)
     {
         if (await Actions.UpdateProtectionRuleAsync(
-            Id, rule, preventDeletion, preventForcePush, requirePr))
+            Id, rule, preventDeletion, preventForcePush, protectionLevel))
             await ReloadProtectionRulesAsync();
     }
     private bool IsBranchProtected(string branchName)

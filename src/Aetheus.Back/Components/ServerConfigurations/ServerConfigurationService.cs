@@ -11,12 +11,12 @@ namespace Aetheus.Back.Components.ServerConfigurations;
 public partial class ServerConfigurationService(IServerConfigurationRepository repo, TimeProvider timeProvider, ITaskService taskService) : IServerConfigurationService
 {
     // Persist a queued task AND push the "TaskQueued" SignalR event so the top-bar tracker shows it
-    // live (and can later flip it Running/Completed). This repo's AddTaskAsync carries no CancellationToken.
-    private async Task QueueTaskAsync(ServerTask task)
-    {
-        await repo.AddTaskAsync(task).ConfigureAwait(false);
-        await taskService.NotifyTaskQueuedAsync(task).ConfigureAwait(false);
-    }
+    // live (and can later flip it Running/Completed), through TaskQueuePersistence so an offline agent is
+    // refused before anything is persisted (SITE-OFFLINE-001). This repo's AddTaskAsync carries no
+    // CancellationToken.
+    private Task QueueTaskAsync(ServerTask task)
+        => TaskQueuePersistence.PersistAndNotifyAsync(
+            (queued, _) => repo.AddTaskAsync(queued), taskService, task, CancellationToken.None);
 
     // Hardening (Critical #2): every YAML field that ends up in a shell command is validated
     // against one of these strict allow-list regexes before deployment. Anything that doesn't

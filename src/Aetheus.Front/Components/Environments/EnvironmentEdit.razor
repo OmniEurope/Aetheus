@@ -4,7 +4,7 @@
 
 <PageTitle>@(_isNew ? L["NewEnvironment"] : _detail?.Name ?? L["Environment"]) - Aetheus</PageTitle>
 
-<OmniPageHeader Title="@(_isNew ? L["NewEnvironment"] : _detail?.Name ?? "")" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+<OmniPageHeader Title="@(_isNew ? L["NewEnvironment"] : _detail?.Name ?? "")" ShowBack="true" BackHref="@LocalReturnUrl.Validated(ReturnUrl)" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("layers")" /></Icon>
     <Badges>
         @if (!_isNew && _detail is not null)
@@ -94,10 +94,10 @@ else
                     @if (_model.RequireApproval)
                     {
                         <OmniFormField For="oe-pages-environments-environmentedit-numeric-1"><LabelContent>@L["ApprovalTimeoutMinutes"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.ApprovalTimeoutMinutes" Minimum="1" Maximum="10080" Id="oe-pages-environments-environmentedit-numeric-1" /></ChildContent></OmniFormField>
-                        <OmniFormField Label="@L["ApprovalInstructions"]" For="ApprovalInstructions">
+                        <OmniFormField Label="@L["ApprovalInstructions"]" Description="@L["ApprovalInstructionsHelp"]" Id="ApprovalInstructionsField" For="ApprovalInstructions">
                             <OmniTextArea @bind-Value="_model.ApprovalInstructions"
 
-                                Id="ApprovalInstructions" Rows="2" />
+                                Id="ApprovalInstructions" Rows="2" AriaDescribedBy="ApprovalInstructionsField-description" />
                         </OmniFormField>
                     }
                     <OmniSwitch @bind-Value="_model.DastEnabled">@L["DastEnabled"]</OmniSwitch>

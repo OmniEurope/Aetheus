@@ -121,4 +121,36 @@ public sealed class AnalysisPortfolioTests : BunitContext
                 && request.Url.Contains("api/analysis/portfolio?page=1&pageSize=25", StringComparison.Ordinal));
         });
     }
+
+    /// <summary>
+    /// SITE-FUNC-HOME-CAPABILITY-001: the row opens the run; the project link (and the run link) must
+    /// keep their click and key, or the project link lands on the run.
+    /// </summary>
+    [Fact]
+    public void RowLinks_DoNotLetTheirClickOrKeyReachTheRow()
+    {
+        _handler.SetPaginatedJsonResponse("api/projects", Array.Empty<ProjectDto>());
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto>());
+        _handler.SetPaginatedJsonResponse("api/analysis/portfolio",
+        [
+            new AnalysisPortfolioRowDto
+            {
+                AnalysisReportId = 42,
+                PipelineRunId = 714,
+                ProjectId = 7,
+                ProjectName = "Atlas",
+                OrganizationName = "Aetheus",
+                ScannerName = "SonarQube",
+                Category = AnalysisCategory.CodeQuality,
+                CompletedAt = new DateTime(2026, 8, 11, 9, 0, 0, DateTimeKind.Utc)
+            }
+        ]);
+
+        var cut = Render<AnalysisPortfolio>();
+
+        var projectLink = cut.WaitForElement("tr a[href='projects/7/quality']");
+        Aetheus.Front.Tests.TestDoubles.RowEventIsolation.AssertRowDoesNotReceive(projectLink, "onclick", "onkeydown");
+        Aetheus.Front.Tests.TestDoubles.RowEventIsolation.AssertRowDoesNotReceive(
+            cut.Find("tr a[href='pipelines/runs/714']"), "onclick", "onkeydown");
+    }
 }

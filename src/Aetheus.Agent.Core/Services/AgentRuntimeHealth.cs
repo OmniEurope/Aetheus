@@ -42,6 +42,17 @@ public sealed class AgentRuntimeHealth(TimeProvider timeProvider)
     /// <summary>Completes when a beat has been asked for; consumes the request.</summary>
     internal Task WaitForHeartbeatRequestAsync(CancellationToken ct) => _heartbeatRequested.WaitAsync(ct);
 
+    // Recette R1-8: a mail operation has just changed the mail stack (certificate, OpenDKIM, domains,
+    // accounts...). The heartbeat drops its cached mail inventory before the next beat, instead of
+    // reporting the old one for up to SlowInventoryTtl.
+    private int _mailInventoryStale;
+
+    /// <summary>Marks the cached mail inventory as outdated; the next beat collects it again.</summary>
+    public void InvalidateMailInventory() => Interlocked.Exchange(ref _mailInventoryStale, 1);
+
+    /// <summary>True once per <see cref="InvalidateMailInventory"/>; consumes the mark.</summary>
+    internal bool ConsumeMailInventoryInvalidation() => Interlocked.Exchange(ref _mailInventoryStale, 0) == 1;
+
     public void BeginTask() => Interlocked.Increment(ref _activeTaskCount);
 
     public void EndTask() => Interlocked.Decrement(ref _activeTaskCount);

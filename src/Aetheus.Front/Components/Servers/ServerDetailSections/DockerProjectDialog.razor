@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
+<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0"><strong>@(string.IsNullOrEmpty(Project) ? L["NoProject"] : Project)</strong></OmniHeading>
     <div class="flex-spacer"></div>
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CloseWithAction(DockerContainerAction.Start))" title="@L["StartAll"]"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniButton>

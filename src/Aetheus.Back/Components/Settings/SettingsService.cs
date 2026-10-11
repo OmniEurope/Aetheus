@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services.Email;
 
 namespace Aetheus.Back.Components.Settings;
 
@@ -32,10 +33,17 @@ public class SettingsService(ISettingsRepository repo, IEncryptionService encryp
         ["Retention:LogDays"] = "30"
     };
 
+    internal const string DailyRecapRowPrefix = "DailyRecap:";
+
     public async Task<List<AppSettingDto>> GetSettingsAsync(CancellationToken ct = default)
     {
         var settings = await repo.GetAllSettingsAsync(ct).ConfigureAwait(false);
-        var result = settings.Select(s => new AppSettingDto { Key = s.Key, Value = s.Value }).ToList();
+        // R1-16: the e-mail sender has its own tab and endpoint; its rows are not free-form settings.
+        // The daily recap neither (DailyRecapSettingKeys.Prefix, spelled here so Settings does not depend on that module).
+        var result = settings
+            .Where(s => !s.Key.StartsWith(EmailSenderSettingKeys.Prefix, StringComparison.Ordinal)
+                && !s.Key.StartsWith(DailyRecapRowPrefix, StringComparison.Ordinal))
+            .Select(s => new AppSettingDto { Key = s.Key, Value = s.Value }).ToList();
         var present = result.Select(s => s.Key).ToHashSet(StringComparer.Ordinal);
         foreach (var (key, def) in DefaultSettingValues)
         {

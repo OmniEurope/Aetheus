@@ -75,6 +75,25 @@ public sealed class PipelineTemplatePagesTests : BunitContext
         Assert.DoesNotContain("rz-dialog", cut.Markup, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void HistoryPage_RendersVersionNumberInsteadOfLiteralExpression()
+    {
+        // SITE-FUNC-TEMPLATE-001: `v@version.Version` was parsed as an e-mail address.
+        _handler.SetJsonResponse("api/pipelines/templates/7", new PipelineTemplateDto { Id = 7, Name = "ci", Version = 1 });
+        _handler.SetJsonResponse("api/pipelines/templates/7/versions", new PaginatedResult<PipelineTemplateVersionSummaryDto>
+        {
+            Items = [new PipelineTemplateVersionSummaryDto { Version = 4, ChangelogEntry = "fourth" }],
+            TotalCount = 1,
+            Page = 1,
+            PageSize = 10
+        });
+        var cut = Render<PipelineTemplateHistory>(parameters => parameters.Add(component => component.TemplateId, 7));
+        cut.WaitForAssertion(() => Assert.Contains("fourth", cut.Markup, StringComparison.Ordinal));
+
+        Assert.Contains(">v4<", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("v@version", cut.Markup, StringComparison.Ordinal);
+    }
+
     private void MockPipeline(int id) => _handler.SetJsonResponse($"api/pipelines/{id}", new PipelineDto
     {
         Id = id,

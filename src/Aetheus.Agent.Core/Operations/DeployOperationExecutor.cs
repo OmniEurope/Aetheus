@@ -240,18 +240,21 @@ public sealed class DeployOperationExecutor(
         int timeoutSeconds, int healthTimeoutSeconds, string? healthUrl,
         Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
     {
-        if (!await FlipCurrentAsync(appDir, currentLink, appRoot, onOutput, ct).ConfigureAwait(false))
-            return false;
-        await onOutput($"current → {appRoot}", TaskLogLevel.Info).ConfigureAwait(false);
-
         bool healthy;
         try
         {
+            // AGC-008: the flip is inside the compensated section. `mv -T` may have renamed `current`
+            // when a cancellation kills it and throws; that exit must roll back too. A flip that reports
+            // its own failure renamed nothing (the rename is atomic), so it returns without one.
+            if (!await FlipCurrentAsync(appDir, currentLink, appRoot, onOutput, ct).ConfigureAwait(false))
+                return false;
+            await onOutput($"current → {appRoot}", TaskLogLevel.Info).ConfigureAwait(false);
             healthy = await RestartAndHealthCheckAsync(app, timeoutSeconds, healthTimeoutSeconds, healthUrl, onOutput, ct)
                 .ConfigureAwait(false);
         }
         catch
         {
+            if (StillPointsAt(currentLink, previousTarget)) throw;
             await onOutput("Deploy interrupted after current was switched; rolling back.", TaskLogLevel.Error).ConfigureAwait(false);
             await RollbackBinaryAsync(app, appDir, currentLink, previousTarget, timeoutSeconds, healthTimeoutSeconds, healthUrl, onOutput)
                 .ConfigureAwait(false);
@@ -261,6 +264,22 @@ public sealed class DeployOperationExecutor(
         await RollbackBinaryAsync(app, appDir, currentLink, previousTarget, timeoutSeconds, healthTimeoutSeconds, healthUrl, onOutput)
             .ConfigureAwait(false);
         return false;
+    }
+
+    // An exit before the rename took effect leaves the previous release in place: nothing to roll back,
+    // and restarting it would be an outage of its own. Anything else (renamed, unreadable) is compensated.
+    private static bool StillPointsAt(string currentLink, string? previousTarget)
+    {
+        if (previousTarget is null) return false;
+        try
+        {
+            return string.Equals(
+                DeployReleaseFileSystem.ReadLinkTarget(currentLink), previousTarget, StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return false;
+        }
     }
 
     private static CancellationTokenSource CreateCompensationBudget(int timeoutSeconds, int healthTimeoutSeconds) =>
@@ -435,36 +454,44 @@ public sealed class DeployOperationExecutor(
             await onOutput("No docker image tarball (*.tar/*.tar.gz) found in artifact", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(1, false);
         }
-        foreach (var tar in tars)
-        {
-            await onOutput($"docker load -i {Path.GetFileName(tar)}…", TaskLogLevel.Info).ConfigureAwait(false);
-            var load = await shell.RunExecAsync("docker", ["load", "-i", tar], ct, TimeSpan.FromSeconds(timeoutSeconds)).ConfigureAwait(false);
-            if (load.ExitCode != 0)
-            {
-                await onOutput($"docker load failed: {load.StdErr}", TaskLogLevel.Error).ConfigureAwait(false);
-                return new ExecutorResult(1, false);
-            }
-        }
-
-        // ADR-021 phase 2: pass the backend-computed OTEL env to the stack via --env-file (compose
-        // substitutes ${VAR} and exposes them to services referencing env_file/environment).
-        var envFile = WriteAppEnvFile(releaseDir, appEnv);
-        var upArgs = new List<string> { "compose", "-p", project, "-f", composePath };
-        if (envFile is not null)
-            upArgs.AddRange(["--env-file", envFile]);
-        upArgs.AddRange(["up", "-d", "--wait"]);
-
-        // --wait makes compose block until containers are running/healthy; its exit code is the health gate.
-        await onOutput($"docker compose up -d --wait ({composeRel})…", TaskLogLevel.Info).ConfigureAwait(false);
+        // AGC-008: from the first `docker load` on, the compose tags may name images no health gate has
+        // accepted, and the next recreate of the stack would start them. Every exit from here that is
+        // not a healthy `up` (a failed or cancelled load, the env file, `up` itself) restores them.
+        var compensate = false;
         ShellExecResult up;
         try
         {
+            foreach (var tar in tars)
+            {
+                await onOutput($"docker load -i {Path.GetFileName(tar)}…", TaskLogLevel.Info).ConfigureAwait(false);
+                compensate = true;
+                var load = await shell.RunExecAsync("docker", ["load", "-i", tar], ct, TimeSpan.FromSeconds(timeoutSeconds)).ConfigureAwait(false);
+                if (load.ExitCode != 0)
+                {
+                    await onOutput($"docker load failed: {load.StdErr}", TaskLogLevel.Error).ConfigureAwait(false);
+                    compensate = false;
+                    await RollbackContainerAsync(project, composePath, previousImages, timeoutSeconds, onOutput).ConfigureAwait(false);
+                    return new ExecutorResult(1, false);
+                }
+            }
+
+            // ADR-021 phase 2: pass the backend-computed OTEL env to the stack via --env-file (compose
+            // substitutes ${VAR} and exposes them to services referencing env_file/environment).
+            var envFile = WriteAppEnvFile(releaseDir, appEnv);
+            var upArgs = new List<string> { "compose", "-p", project, "-f", composePath };
+            if (envFile is not null)
+                upArgs.AddRange(["--env-file", envFile]);
+            upArgs.AddRange(["up", "-d", "--wait"]);
+
+            // --wait makes compose block until containers are running/healthy; its exit code is the health gate.
+            await onOutput($"docker compose up -d --wait ({composeRel})…", TaskLogLevel.Info).ConfigureAwait(false);
             up = await shell.RunExecAsync("docker", [.. upArgs], ct,
                 TimeSpan.FromSeconds(timeoutSeconds)).ConfigureAwait(false);
+            compensate = false;
         }
-        catch
+        catch when (compensate)
         {
-            await onOutput("Deploy interrupted while the stack was being recreated; rolling back.", TaskLogLevel.Error).ConfigureAwait(false);
+            await onOutput("Deploy interrupted after the new images were loaded; rolling back.", TaskLogLevel.Error).ConfigureAwait(false);
             await RollbackContainerAsync(project, composePath, previousImages, timeoutSeconds, onOutput).ConfigureAwait(false);
             throw;
         }

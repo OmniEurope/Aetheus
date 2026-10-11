@@ -14,10 +14,16 @@ public class EnvironmentServiceDuplicateLinkTests
     private readonly IEnvironmentRepository _repo = Substitute.For<IEnvironmentRepository>();
     private readonly IAuditService _audit = Substitute.For<IAuditService>();
     private readonly IEntityChangeNotifier _notifier = Substitute.For<IEntityChangeNotifier>();
+    private readonly Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher _events =
+        Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>();
     private readonly EnvironmentService _sut;
 
-    public EnvironmentServiceDuplicateLinkTests() =>
-        _sut = new EnvironmentService(_repo, _audit, _notifier, Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>());
+    public EnvironmentServiceDuplicateLinkTests()
+    {
+        var encryption = Substitute.For<IEncryptionService>();
+        encryption.EncryptValue(Arg.Any<string>()).Returns(call => $"enc({call.Arg<string>()})");
+        _sut = new EnvironmentService(_repo, _audit, _notifier, _events, encryption);
+    }
 
     private static Environment EmptyEnv(string name, int projectId = 1, int id = 0) => new()
     {
@@ -56,6 +62,22 @@ public class EnvironmentServiceDuplicateLinkTests
         Assert.NotNull(result);
         Assert.Equal("prod (copy)", result.Name);
         await _repo.Received(1).AddEnvironmentAsync(Arg.Is<Environment>(e => e.Name == "prod (copy)"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R1_23_Duplicate_DoesNotCopyTheSourceDescription()
+    {
+        var source = EmptyEnv("prod");
+        source.Description = "Production - auto-deploy Aetheus";
+        _repo.GetEnvironmentForDuplicationAsync(1, Arg.Any<CancellationToken>()).Returns(source);
+        _repo.NameExistsInProjectAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
+        _repo.GetEnvironmentWithServersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(EmptyEnv("prod (copy)"));
+
+        await _sut.DuplicateEnvironmentAsync(1, null, ct: TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).AddEnvironmentAsync(
+            Arg.Is<Environment>(e => e.Description == string.Empty), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -122,5 +144,35 @@ public class EnvironmentServiceDuplicateLinkTests
         Assert.True(await _sut.UnlinkProjectServerAsync(1, 5, ct: TestContext.Current.CancellationToken));
         await _repo.Received(1).RemoveLinkAsync(1, 5, Arg.Any<CancellationToken>());
         await _audit.Received(1).LogAsync("UnlinkedProjectServer", "Environment", 1, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R1_29_Duplicate_CopiesNamesNotValues_AndWritesThePipelinesToTheProject()
+    {
+        var source = EmptyEnv("prod", projectId: 4);
+        source.Libraries = [new VariableLibrary { Name = "runtime", Description = "prod hosts",
+            Entries = [new VariableLibraryEntry { Key = "HOST", Value = "prod.example.org" }] }];
+        source.Vaults = [new Vault { Name = "deploy",
+            Secrets = [new VaultSecret { Key = "DB_PASSWORD", EncryptedValue = "source-cipher" }] }];
+        source.Pipelines = [new Pipeline { Name = "release", YamlDefinition = "name: release" }];
+        Environment? added = null;
+        _repo.GetEnvironmentForDuplicationAsync(1, Arg.Any<CancellationToken>()).Returns(source);
+        _repo.NameExistsInProjectAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
+        _repo.When(repository => repository.AddEnvironmentAsync(Arg.Any<Environment>(), Arg.Any<CancellationToken>()))
+            .Do(call => added = call.Arg<Environment>());
+        _repo.GetEnvironmentWithServersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(_ => added!);
+
+        await _sut.DuplicateEnvironmentAsync(1, 9, ct: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(added);
+        var entry = Assert.Single(Assert.Single(added.Libraries).Entries);
+        Assert.Equal(("HOST", string.Empty), (entry.Key, entry.Value));
+        Assert.DoesNotContain("prod hosts", added.Libraries[0].Description, StringComparison.Ordinal);
+        var secret = Assert.Single(Assert.Single(added.Vaults).Secrets);
+        Assert.Equal("DB_PASSWORD", secret.Key);
+        Assert.NotEqual("source-cipher", secret.EncryptedValue);
+        Assert.Equal("enc()", secret.EncryptedValue);
+        _events.Received(1).Publish(Arg.Is<EnvironmentLinkedToProjectEvent>(e =>
+            e.EnvironmentName == "prod (copy)" && e.ProjectId == 9));
     }
 }

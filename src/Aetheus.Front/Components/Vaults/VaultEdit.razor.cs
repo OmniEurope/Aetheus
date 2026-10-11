@@ -28,6 +28,10 @@ public partial class VaultEdit
     [SupplyParameterFromQuery] public int? EnvironmentId { get; set; }
     [SupplyParameterFromQuery] public int? ProjectServerId { get; set; }
 
+    /// <summary>Recette R1-26: the page that sent the user here to check what it created (the pipeline
+    /// setup wizard's summary); Back returns to it when it is local.</summary>
+    [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
+
     private VaultDetailDto? _detail;
     private VaultModel _model = new();
     private List<ProjectDto> _projects = [];

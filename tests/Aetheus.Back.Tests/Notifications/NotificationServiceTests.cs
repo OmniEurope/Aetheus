@@ -2,6 +2,7 @@
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services.Email;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -14,6 +15,7 @@ public class NotificationServiceTests
     private readonly IHttpClientFactory _httpFactory = Substitute.For<IHttpClientFactory>();
     private readonly Aetheus.Back.Services.IEncryptionService _encryption =
         Substitute.For<Aetheus.Back.Services.IEncryptionService>();
+    private readonly INotificationEmailer _emailer = Substitute.For<INotificationEmailer>();
     private readonly NotificationService _sut;
 
     public NotificationServiceTests()
@@ -27,7 +29,8 @@ public class NotificationServiceTests
             Substitute.For<ILogger<NotificationService>>(),
             _encryption,
             TimeProvider.System,
-            Substitute.For<IUserNotificationService>());
+            Substitute.For<IUserNotificationService>(),
+            _emailer);
     }
 
     [Fact]
@@ -52,19 +55,54 @@ public class NotificationServiceTests
     public async Task TestChannelAsync_NotFound_ReturnsNull()
     {
         _repo.FindChannelAsync(99, Arg.Any<CancellationToken>()).Returns((NotificationChannel?)null);
-        Assert.Null(await _sut.TestChannelAsync(99, ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _sut.TestChannelAsync(99, null, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task TestChannelAsync_EmailChannel_ReturnsNotConfigured_NeverSent()
+    public async Task TestChannelAsync_EmailChannel_SendsToTheRequester_AndReportsSent()
     {
         _repo.FindChannelAsync(1, Arg.Any<CancellationToken>())
             .Returns(new NotificationChannel { Id = 1, Name = "mail", Type = NotificationChannelType.Email, ConfigurationJson = "{}" });
+        _repo.GetUserEmailAsync(42, Arg.Any<CancellationToken>()).Returns("admin@example.org");
+        _emailer.SendChannelTestAsync("admin@example.org", "mail", Arg.Any<CancellationToken>())
+            .Returns(EmailSendResult.Sent("no-reply@example.org"));
 
-        var result = await _sut.TestChannelAsync(1, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.TestChannelAsync(1, 42, ct: TestContext.Current.CancellationToken);
 
-        Assert.NotNull(result);
+        Assert.Equal(NotificationTestStatus.Sent, result!.Status);
+        Assert.Contains("admin@example.org", result.Message, StringComparison.Ordinal);
+        Assert.Contains("no-reply@example.org", result.Message, StringComparison.Ordinal);
+        await _audit.Received(1).LogAsync("Tested", "NotificationChannel", 1, "mail", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TestChannelAsync_EmailChannel_SmtpRefusal_IsReportedVerbatim()
+    {
+        _repo.FindChannelAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new NotificationChannel { Id = 1, Name = "mail", Type = NotificationChannelType.Email, ConfigurationJson = "{}" });
+        _repo.GetUserEmailAsync(42, Arg.Any<CancellationToken>()).Returns("admin@example.org");
+        _emailer.SendChannelTestAsync("admin@example.org", "mail", Arg.Any<CancellationToken>())
+            .Returns(EmailSendResult.Failed("535: 5.7.8 Error: authentication failed"));
+
+        var result = await _sut.TestChannelAsync(1, 42, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(NotificationTestStatus.Failed, result!.Status);
+        Assert.Equal("535: 5.7.8 Error: authentication failed", result.Message);
+    }
+
+    [Fact]
+    public async Task TestChannelAsync_EmailChannel_NoSender_ReportsNotConfigured_NeverSent()
+    {
+        _repo.FindChannelAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new NotificationChannel { Id = 1, Name = "mail", Type = NotificationChannelType.Email, ConfigurationJson = "{}" });
+        _emailer.SendChannelTestAsync(Arg.Any<string?>(), "mail", Arg.Any<CancellationToken>())
+            .Returns(EmailSendResult.NotConfigured("No e-mail sender."));
+
+        var result = await _sut.TestChannelAsync(1, null, ct: TestContext.Current.CancellationToken);
+
         Assert.Equal(NotificationTestStatus.NotConfigured, result!.Status);
+        Assert.Equal("No e-mail sender.", result.Message);
+        await _audit.DidNotReceive().LogAsync("Tested", Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -73,7 +111,7 @@ public class NotificationServiceTests
         _repo.FindChannelAsync(1, Arg.Any<CancellationToken>())
             .Returns(new NotificationChannel { Id = 1, Name = "wh", Type = NotificationChannelType.Webhook, ConfigurationJson = "{}" });
 
-        var result = await _sut.TestChannelAsync(1, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.TestChannelAsync(1, null, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(NotificationTestStatus.NotConfigured, result!.Status);
     }
@@ -86,7 +124,7 @@ public class NotificationServiceTests
             .Returns(new NotificationChannel { Id = 1, Name = "slack", Type = NotificationChannelType.Slack, ConfigurationJson = "{\"webhookUrl\":\"https://93.184.216.34/hook\"}" });
         _httpFactory.CreateClient("webhooks").Returns(new HttpClient(new OkHandler()));
 
-        var result = await _sut.TestChannelAsync(1, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.TestChannelAsync(1, null, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(NotificationTestStatus.Sent, result!.Status);
     }
@@ -126,7 +164,7 @@ public class NotificationServiceTests
         var handler = new StatusHandler((System.Net.HttpStatusCode)status);
         _httpFactory.CreateClient("webhooks").Returns(new HttpClient(handler));
 
-        var result = await _sut.TestChannelAsync(1, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.TestChannelAsync(1, null, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, handler.Calls);
         Assert.Equal(NotificationTestStatus.Failed, result!.Status);

@@ -43,7 +43,7 @@ public sealed class PipelineRunPreflightServiceTests
     private void ConfiguredTargets(params int[] ids)
         => _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(ids.ToList());
 
     private static PipelineYamlDefinition Definition(params PipelineStageDefinition[] stages)

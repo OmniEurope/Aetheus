@@ -88,7 +88,7 @@ public sealed class ServerRetirementLifecycleTests
         Assert.Null(await resolver.FindOnlineServerByAgentAsync(Hostname, ct: Ct));
         Assert.Null(await resolver.FindOnlineServerByAgentAsync("prod", ct: Ct));
         Assert.Null(await resolver.FindOnlineServerInPoolAsync(PoolName, ct: Ct));
-        Assert.Null(await resolver.FindOnlineServerInEnvironmentAsync(EnvironmentName, ct: Ct));
+        Assert.Null(await resolver.FindOnlineServerInEnvironmentAsync(EnvironmentName, projectId: null, ct: Ct));
         Assert.Null(await resolver.FindOnlineServerByIdAsync(ServerId, ct: Ct));
         Assert.Equal(OtherServerId, (await resolver.FindOnlineServerByAgentAsync("default", ct: Ct))?.Id);
     }

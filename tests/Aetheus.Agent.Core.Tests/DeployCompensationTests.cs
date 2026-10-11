@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Agent.Core.Configuration;
+using Aetheus.Agent.Core.Executors;
 using Aetheus.Agent.Core.Operations;
 using Aetheus.Agent.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,6 +44,86 @@ public sealed class DeployCompensationTests : IDisposable
         Assert.Equal(2, shell.Calls.Count(call => call.FileName == "sudo"));
         Assert.False(shell.Calls.Last(call => call.FileName == "sudo").TokenCancelled);
         Assert.Contains(output, line => line.Contains("rolling back", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// AGC-008, first window: the flip itself. <c>mv -T</c> may have renamed <c>current</c> when the
+    /// cancellation reaches the runner, which kills it and throws. That exit used to leave the flip
+    /// before the compensated section, so <c>current</c> could name a release no health gate ever saw.
+    /// </summary>
+    [Fact]
+    public async Task CancellationDuringTheFlip_RepointsCurrentToThePreviousRelease()
+    {
+        using var taskCts = new CancellationTokenSource();
+        var shell = new ScriptedShell((call, index) =>
+        {
+            if (call.FileName == "mv" && index == 0)
+            {
+                // The rename went through, then the task was cancelled before the runner returned.
+                taskCts.Cancel();
+                throw new OperationCanceledException(taskCts.Token);
+            }
+            return call.FileName == "sudo" ? 1 : 0;
+        });
+        var appDir = Path.Combine(_root, "app");
+        var previous = Path.Combine(appDir, "releases", "41");
+        var output = new List<string>();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreateExecutor(shell).ActivateReleaseAsync(
+            "app", appDir, Path.Combine(appDir, "current"), Path.Combine(appDir, "releases", "42"), previous,
+            60, 0, null, (message, _) => { output.Add(message); return Task.CompletedTask; }, taskCts.Token));
+
+        var rollbackLink = Assert.Single(shell.Calls, call => call.FileName == "ln" && call.Args.Contains(previous));
+        Assert.False(rollbackLink.TokenCancelled);
+        Assert.Contains(output, line => line.Contains("rolling back", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// AGC-008, second window: <c>docker load</c> moves the compose tags onto the new images before
+    /// <c>up</c>. A load that fails (or is cancelled) after that left the tags on images no health gate
+    /// accepted, so the next recreate of the stack would start them. The previous tags are restored.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AFailedImageLoad_RestoresThePreviousTags(bool cancelled)
+    {
+        var releaseDir = Directory.CreateDirectory(Path.Combine(_root, "release")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(releaseDir, "compose.yml"), "services: {}\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(releaseDir, "a.tar"), "tar", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(releaseDir, "b.tar"), "tar", TestContext.Current.CancellationToken);
+        using var taskCts = new CancellationTokenSource();
+        var loads = 0;
+        var shell = new ScriptedShell((call, _) =>
+        {
+            if (call.Args is ["load", ..] && ++loads == 2)
+            {
+                if (!cancelled) return 1;
+                taskCts.Cancel();
+                throw new OperationCanceledException(taskCts.Token);
+            }
+            return 0;
+        }, stdOut: call => call.Args switch
+        {
+            ["info", ..] => "27.0.0",
+            [.., "config", "--images"] => "registry.local/app:stable\n",
+            ["image", "inspect", ..] => "sha256:previous",
+            _ => string.Empty,
+        });
+        var output = new List<string>();
+
+        Task<ExecutorResult> Deploy() => CreateExecutor(shell).DeployContainerAsync(
+            "app", releaseDir, "compose.yml", new Dictionary<string, string>(), 60,
+            (message, _) => { output.Add(message); return Task.CompletedTask; },
+            taskCts.Token);
+
+        if (cancelled)
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(Deploy);
+        else
+            Assert.Equal(1, (await Deploy()).ExitCode);
+
+        var retag = Assert.Single(shell.Calls, call => call.Args is ["tag", "sha256:previous", "registry.local/app:stable"]);
+        Assert.False(retag.TokenCancelled);
     }
 
     [Fact]

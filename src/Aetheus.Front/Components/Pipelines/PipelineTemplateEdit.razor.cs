@@ -122,7 +122,10 @@ public partial class PipelineTemplateEdit
 
     private void Cancel() => Nav.NavigateTo("/templates");
     private void ViewHistory() => Nav.NavigateTo($"/templates/{Id}/versions");
-    private void UseTemplate() => Nav.NavigateTo($"/pipelines/setup?templateId={Id}");
+    private void UseTemplate()
+    {
+        if (_template is not null) Nav.NavigateTo(PipelineTemplateUseRoute.For(_template.Id, _template.Name));
+    }
 
     private sealed class TemplateFormModel
     {

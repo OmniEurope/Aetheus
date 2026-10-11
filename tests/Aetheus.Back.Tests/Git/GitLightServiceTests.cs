@@ -713,7 +713,7 @@ public class GitLightServiceTests
             Pattern = "release/*",
             PreventDeletion = true,
             PreventForcePush = false,
-            RequirePullRequest = true
+            ProtectionLevel = BranchProtectionLevel.ProtectedExceptPipelines
         }, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal("release/*", result.Pattern);

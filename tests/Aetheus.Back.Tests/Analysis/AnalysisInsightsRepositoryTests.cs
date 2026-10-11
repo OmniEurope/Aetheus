@@ -350,6 +350,27 @@ public sealed class AnalysisInsightsRepositoryTests : IDisposable
         Assert.Equal(NowUtc, finding.ResolvedAt);
     }
 
+    [Theory]
+    [InlineData(AnalysisFindingStatus.Accepted)]
+    [InlineData(AnalysisFindingStatus.FalsePositive)]
+    [InlineData(AnalysisFindingStatus.Mitigated)]
+    public async Task MarkMissingFindingsFixedAsync_FixesADecidedFindingToo(AnalysisFindingStatus decided)
+    {
+        // Recette R2-135: fixed wins over any decision; an accepted finding the scan no longer sees used
+        // to stay "accepted" in the lists for ever.
+        await SeedOpenFindingAsync();
+        var seeded = await _db.AnalysisFindings.FirstAsync(Ct);
+        seeded.Status = decided;
+        await SaveAsync();
+        _db.ChangeTracker.Clear();
+
+        await _repository.MarkMissingFindingsFixedAsync(
+            10, "trivy", AnalysisCategory.Sast, "main", [], NowUtc, Ct);
+        _db.ChangeTracker.Clear();
+
+        Assert.Equal(AnalysisFindingStatus.Fixed, (await _db.AnalysisFindings.AsNoTracking().FirstAsync(Ct)).Status);
+    }
+
     [Fact]
     public async Task MarkMissingFindingsFixedAsync_LeavesAFindingTheCurrentScanStillObservesOpen()
     {

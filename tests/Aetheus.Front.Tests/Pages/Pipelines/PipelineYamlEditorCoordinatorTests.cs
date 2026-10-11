@@ -4,6 +4,8 @@ using System.Text.Json;
 using Aetheus.Front.Components.Pipelines;
 using Aetheus.Front.Resources;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
@@ -16,7 +18,7 @@ public sealed class PipelineYamlEditorCoordinatorTests
         var handler = new SuggestionHandler();
         var api = new ApiClient(new HttpClient(handler) { BaseAddress = new Uri("http://test/") });
         var localizer = Substitute.For<IStringLocalizer<AppStrings>>();
-        var sut = new PipelineYamlEditorCoordinator(api, localizer);
+        var sut = new PipelineYamlEditorCoordinator(api, localizer, NullLogger.Instance);
 
         await sut.LoadSuggestionsAsync(7, null);
 
@@ -29,8 +31,29 @@ public sealed class PipelineYamlEditorCoordinatorTests
             && !uri.Contains("suggestion-keys", StringComparison.Ordinal));
     }
 
+    // SITE-FUNC-AUTOCOMPLETE-001: a network failure on one suggestion lookup threw out of
+    // OnAfterRenderAsync and replaced the whole pipeline form with the error boundary.
+    [Fact]
+    public async Task LoadSuggestionsAsync_NetworkFailure_ReturnsNoSuggestionsAndLogs()
+    {
+        var handler = new SuggestionHandler { FailingSegment = "api/vaults/names" };
+        var api = new ApiClient(new HttpClient(handler) { BaseAddress = new Uri("http://test/") });
+        var logger = Substitute.For<ILogger>();
+        var sut = new PipelineYamlEditorCoordinator(api, Substitute.For<IStringLocalizer<AppStrings>>(), logger);
+
+        var (serverNames, libraryNames, vaultNames) = await sut.LoadSuggestionsAsync(7, null);
+
+        Assert.Empty(serverNames);
+        Assert.Empty(libraryNames);
+        Assert.Empty(vaultNames);
+        logger.Received(1).Log(LogLevel.Warning, Arg.Any<EventId>(), Arg.Any<object>(),
+            Arg.Any<HttpRequestException>(), Arg.Any<Func<object, Exception?, string>>());
+    }
+
     private sealed class SuggestionHandler : HttpMessageHandler
     {
+        public string? FailingSegment { get; init; }
+
         public List<string> Requests { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(
@@ -38,6 +61,8 @@ public sealed class PipelineYamlEditorCoordinatorTests
         {
             var uri = request.RequestUri?.ToString() ?? string.Empty;
             Requests.Add(uri);
+            if (FailingSegment is not null && uri.Contains(FailingSegment, StringComparison.Ordinal))
+                throw new HttpRequestException("network error");
             object payload = uri.Contains("suggestion-keys", StringComparison.Ordinal)
                 ? uri.Contains("page=2", StringComparison.Ordinal)
                     ? new PaginatedResult<string>

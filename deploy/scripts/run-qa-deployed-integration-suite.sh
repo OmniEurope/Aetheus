@@ -64,5 +64,7 @@ if [ "$PROBE_STATUS" = 0 ]; then
   echo "Deployed QA integration $RESULT_LABEL passed 5/5 probes against the migrated stack."
 else
   echo "Deployed QA integration $RESULT_LABEL recorded failed application probes." >&2
+  # No TRX here: the probes are named as one failed entry, for the gate script to publish.
+  printf '%s\n' "Deployed QA probes ($RESULT_LABEL)" > "$RESULTS_DIR/failed-tests.txt"
   exit 10
 fi

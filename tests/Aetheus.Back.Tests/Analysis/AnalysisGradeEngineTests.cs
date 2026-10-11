@@ -169,6 +169,54 @@ public sealed class AnalysisGradeEngineTests
         Assert.Equal(AnalysisGrade.A, result.Grade);
     }
 
+    [Theory]
+    [InlineData(0, 0, 0, 0, 0, AnalysisGrade.A)]
+    [InlineData(0, 1, 0, 0, 0, AnalysisGrade.B)]
+    [InlineData(0, 0, 1, 6, 0, AnalysisGrade.C)]
+    [InlineData(0, 0, 0, 5, 0, AnalysisGrade.B)]
+    [InlineData(0, 0, 0, 16, 0, AnalysisGrade.D)]
+    [InlineData(0, 0, 0, 0, 31, AnalysisGrade.E)]
+    [InlineData(1, 0, 0, 0, 0, AnalysisGrade.F)]
+    public void Evaluate_CountedFindingScore_GradesTheNumberOfOpenFindings(
+        int critical, int high, int medium, int low, int info, AnalysisGrade expected)
+    {
+        // Recette R1-4: no weighting, every open finding counts one; a critical one still gives F.
+        var report = FindingsReport(
+            Enumerable.Repeat(AnalysisSeverity.Critical, critical)
+                .Concat(Enumerable.Repeat(AnalysisSeverity.High, high))
+                .Concat(Enumerable.Repeat(AnalysisSeverity.Medium, medium))
+                .Concat(Enumerable.Repeat(AnalysisSeverity.Low, low))
+                .Concat(Enumerable.Repeat(AnalysisSeverity.Info, info))
+                .Select(severity => (severity, AnalysisFindingStatus.Open))
+                .ToArray());
+
+        var result = AnalysisGradeEngine.Evaluate(report, Context(CountedYaml), EvaluatedAt);
+        var measure = WeightedMeasure(result);
+
+        Assert.Equal(expected, measure.Grade);
+        Assert.True(measure.CountedFindingScore);
+        Assert.False(measure.WeightedFindingScore);
+        Assert.Equal(critical + high + medium + low + info, measure.ObservedValue);
+    }
+
+    [Fact]
+    public void Aggregate_CountedFindingScore_AddsTheNumbersOfTheRunReports()
+    {
+        // Run 2653: 1 medium and 6 low findings over two reports grade 7, not the weighted 9.
+        var first = AnalysisGradeEngine.Evaluate(
+            FindingsReport("a", [(AnalysisSeverity.Medium, AnalysisFindingStatus.Open)]),
+            Context(CountedYaml), EvaluatedAt);
+        var second = AnalysisGradeEngine.Evaluate(
+            FindingsReport("b", Enumerable.Repeat((AnalysisSeverity.Low, AnalysisFindingStatus.Open), 6).ToArray()),
+            Context(CountedYaml), EvaluatedAt);
+
+        var summary = AnalysisGradeEngine.Aggregate([first.SnapshotJson, second.SnapshotJson]);
+        var measure = summary!.Domains.Single(domain => domain.Domain == AnalysisGradeDomain.Security).Measures.Single();
+
+        Assert.Equal(7, measure.ObservedValue);
+        Assert.Equal(AnalysisGrade.C, measure.Grade);
+    }
+
     [Fact]
     public void Aggregate_WeightedFindingScore_AddsTheCountsOfTheRunReports()
     {
@@ -441,6 +489,28 @@ public sealed class AnalysisGradeEngineTests
                     - key: grade.security.findings
                       domain: security
                       finding_score: weighted
+                      direction: lower-is-better
+                      a: 0
+                      b: 5
+                      c: 15
+                      d: 30
+        """;
+
+    private const string CountedYaml = """
+        stages:
+          - name: Security
+            steps:
+              - name: Grade
+                type: analysis-gate
+                analysis_scope: security
+                analysis_grading:
+                  version: 1
+                  minimum_grade: F
+                  required_domains: [security]
+                  rules:
+                    - key: grade.security.findings
+                      domain: security
+                      finding_score: count
                       direction: lower-is-better
                       a: 0
                       b: 5

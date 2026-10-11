@@ -90,8 +90,10 @@ public interface IPipelineRepository
     Task<Server?> FindOnlineServerInPoolAsync(string poolName, OsType requiredOs = OsType.Unknown, CancellationToken ct = default);
     Task<Server?> FindOnlineServerInPoolInOrganizationAsync(string poolName, OsType requiredOs, int organizationId, CancellationToken ct = default);
 
-    Task<Server?> FindOnlineServerInEnvironmentAsync(string environmentName, OsType requiredOs = OsType.Unknown, CancellationToken ct = default);
-    Task<Server?> FindOnlineServerInEnvironmentInOrganizationAsync(string environmentName, OsType requiredOs, int organizationId, CancellationToken ct = default);
+    /// <summary>Neighbour of BACK-018: the environment is read in <paramref name="projectId"/> (its own,
+    /// then a shared one), never another project's homonym; the same for every environment selector below.</summary>
+    Task<Server?> FindOnlineServerInEnvironmentAsync(string environmentName, int? projectId, OsType requiredOs = OsType.Unknown, CancellationToken ct = default);
+    Task<Server?> FindOnlineServerInEnvironmentInOrganizationAsync(string environmentName, OsType requiredOs, int organizationId, int? projectId, CancellationToken ct = default);
 
     /// <summary>Any online pipeline-runner, scoped to <paramref name="organizationId"/> when given.
     /// Always-runnable fallback when a stage's specific selector matches nothing.</summary>
@@ -104,10 +106,10 @@ public interface IPipelineRepository
     Task<bool> HasRunnerWithDockerAsync(int? organizationId, CancellationToken ct = default);
     /// <summary>Cross-agent deploy targeting (fail-closed): pool > environment > agent precedence over
     /// DeploymentTargetAvailable servers only, with a deploy-capable org fallback. Never a plain runner.</summary>
-    Task<Server?> FindOnlineDeployTargetAsync(string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, CancellationToken ct = default);
+    Task<Server?> FindOnlineDeployTargetAsync(string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, int? projectId, CancellationToken ct = default);
     /// <summary>Returns every server that the stage resolver can select, using the same selector,
     /// organization, OS and deploy-capability rules as execution.</summary>
-    Task<List<int>> FindCandidateTargetServerIdsAsync(string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, bool deploymentStage, CancellationToken ct = default);
+    Task<List<int>> FindCandidateTargetServerIdsAsync(string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, bool deploymentStage, int? projectId, CancellationToken ct = default);
     Task<Server?> FindOnlineServerByIdAsync(int serverId, OsType requiredOs = OsType.Unknown, CancellationToken ct = default);
     Task<Server?> FindServerByIdAsync(int serverId, CancellationToken ct = default);
     Task<int?> GetRunAffinityServerIdAsync(int runId, CancellationToken ct = default);
@@ -155,7 +157,7 @@ public interface IPipelineRepository
 
     Task<List<int>> FindServerIdsInPoolAsync(string poolName, CancellationToken ct = default);
 
-    Task<List<int>> FindServerIdsInEnvironmentAsync(string environmentName, CancellationToken ct = default);
+    Task<List<int>> FindServerIdsInEnvironmentAsync(string environmentName, int? projectId, CancellationToken ct = default);
 
     /// <summary>Tracks a server task on the change tracker. Caller must invoke <see cref="SaveChangesAsync"/> to flush.</summary>
     void TrackTask(ServerTask task);
@@ -196,6 +198,12 @@ public interface IPipelineRepository
     Task<List<StepOutputProjection>> GetSuccessfulStepOutputsAsync(int runId, CancellationToken ct = default);
 
     Task<PipelineRun?> GetPipelineRunWithPipelineAsync(int runId, CancellationToken ct = default);
+
+    /// <summary>Recette R1-2: whether any step of these stages started at all, whatever its outcome.</summary>
+    Task<bool> DidAnyStepStartInStagesAsync(int runId, IReadOnlyCollection<string> stageNames, CancellationToken ct = default);
+
+    /// <summary>Recette R1-3: the pipeline's most recent run, tracked (a repeated refusal updates it).</summary>
+    Task<PipelineRun?> GetLatestRunTrackedAsync(int pipelineId, CancellationToken ct = default);
 
     /// <summary>Resolves each supplied run to the root run and pipeline that started its trigger lineage.</summary>
     Task<Dictionary<int, PipelineRunRootReference>> GetRootRunReferencesAsync(
@@ -256,10 +264,11 @@ public interface IPipelineRepository
     Task<bool> HasFailedArtifactCollectionAsync(int runId, CancellationToken ct = default);
 
     /// <summary>
-    /// True when a step failed but carried <c>continue_on_error</c>, so the run was allowed to finish.
-    /// PLAN-003 D13 turns that case into <see cref="PipelineStatus.Partial"/> instead of a plain success.
+    /// The steps that failed but carried <c>continue_on_error</c>, so the run was allowed to finish.
+    /// PLAN-003 D13 turns that case into <see cref="PipelineStatus.Partial"/> instead of a plain success,
+    /// unless every one of them is an advisory AI step, which the scheduler recognises by name.
     /// </summary>
-    Task<bool> HasAnyContinuableFailedStepInRunAsync(int runId, CancellationToken ct = default);
+    Task<List<PipelineStepRun>> GetContinuableFailedStepsInRunAsync(int runId, CancellationToken ct = default);
 
     /// <summary>
     /// True when the named stages ran - at least one step - and every one of their steps succeeded.

@@ -85,6 +85,19 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
                     || s.Status == TaskExecutionStatus.Timeout
                     || s.Status == TaskExecutionStatus.Cancelled))
             .ToListAsync(ct).ConfigureAwait(false);
+
+        // A stage whose artifacts could not be collected succeeded, so nothing above reopens it, and its
+        // failed collection kept every retry from ending Success. It is replayed with the retry: the
+        // artifact exists only once the stage has produced it again, the run's cleanup having taken the
+        // workspace it was to be collected from.
+        var uncollectedStages = await PipelineRunStatusRepository
+            .GetStagesWithFailedCollectionAsync(db, runId, ct).ConfigureAwait(false);
+        if (uncollectedStages.Count > 0)
+            failedSteps.AddRange(await db.PipelineStepRuns
+                .Where(s => s.PipelineRunId == runId
+                    && uncollectedStages.Contains(s.StageName)
+                    && s.Status == TaskExecutionStatus.Success)
+                .ToListAsync(ct).ConfigureAwait(false));
         if (failedSteps.Count == 0) return 0;
 
         // A retry re-enters a workspace the agent may no longer have. `checkout: true` stopped cloning

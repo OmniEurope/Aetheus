@@ -49,9 +49,12 @@ public sealed class AppThemeScopeTests : BunitContext
         var element = cut.Find("#app-theme-scope");
         Assert.Equal("light", element.GetAttribute("data-omni-theme"));
         Assert.Equal("compact", element.GetAttribute("data-omni-density"));
-        // The document root carries the same mode, for the boot splash and the rules keyed on the dark half.
-        Assert.Contains(JSInterop.Invocations, call => call.Identifier == "Aetheus.setOmniTheme" && Equals(call.Arguments[0], "light"));
-        Assert.Contains(JSInterop.Invocations, call => call.Identifier == "Aetheus.followThemeScope" && Equals(call.Arguments[0], "app-theme-scope"));
+        // Recette R2-112: the scope carries the resolved mode; nothing is copied on the document root.
+        Assert.Equal("light", element.GetAttribute("data-omni-theme-resolved"));
+        Assert.DoesNotContain(JSInterop.Invocations, call => call.Identifier == "Aetheus.setOmniTheme");
+        // Recette R2-112: OE keeps the boot snapshot itself, under the key omni-boot.js reads in index.html.
+        Assert.Equal("aetheus:theme", cut.FindComponent<OmniThemeScope>().Instance.SnapshotKey);
+        Assert.DoesNotContain(JSInterop.Invocations, call => call.Identifier == "Aetheus.followThemeScope");
     }
 
     /// <summary>Nothing stored: the scope paints OE's shipped look in dark mode, the application's default.</summary>

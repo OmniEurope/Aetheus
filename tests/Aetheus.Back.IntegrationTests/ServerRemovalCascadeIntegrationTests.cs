@@ -58,7 +58,6 @@ public sealed class ServerRemovalCascadeIntegrationTests(PostgresFixture fixture
             {
                 VaultSecretId = secret.Id,
                 Key = "k",
-                EncryptedValue = "enc",
                 Version = 1
             });
             await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);

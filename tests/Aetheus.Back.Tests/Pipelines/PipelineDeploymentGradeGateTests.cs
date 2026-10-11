@@ -62,7 +62,7 @@ public class PipelineDeploymentGradeGateTests
 
         await h.SystemTasks.DidNotReceive().CreateSystemTasksAsync(
             Arg.Any<int>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
-            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>());
         await h.Finalizer.Received(1).FailRunWithUnmatchedStagesAsync(
             RunId, Arg.Any<List<string>>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<CancellationToken>());
     }
@@ -222,7 +222,7 @@ public class PipelineDeploymentGradeGateTests
             Repo.GetApprovalsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
             Repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns([]);
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns([]);
             var pipeline = new Pipeline { Id = 77, Name = "aetheus-deploy-prod", ProjectId = ProjectId };
             Repo.GetPipelineRunWithPipelineAsync(RunId, Arg.Any<CancellationToken>())
                 .Returns(new PipelineRun { Id = RunId, PipelineId = pipeline.Id, Pipeline = pipeline, Status = PipelineStatus.Running });
@@ -241,7 +241,7 @@ public class PipelineDeploymentGradeGateTests
                 .Returns(true);
             SystemTasks.CreateSystemTasksAsync(
                 Arg.Any<int>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
-                Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>())
+                Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>())
                 .Returns(true);
             Finalizer.IsRunActiveAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
             Finalizer.When(f => f.MarkStepsAs(Arg.Any<List<PipelineStepRun>>(), Arg.Any<TaskExecutionStatus>()))

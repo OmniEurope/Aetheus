@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using OmniEurope.Blazor.Components;
 using ServersPage = Aetheus.Front.Components.Servers.Servers;
@@ -311,6 +312,33 @@ public class ServersTemplateCoverageTests : BunitContext
         Assert.Contains(cut.FindComponents<OmniIcon>(), icon => icon.Instance.Name == OmniIconName.Lock);
     }
 
+    /// <summary>
+    /// SITE-FUNC-HOME-CAPABILITY-001: the row opens the server overview, so a tag (which filters the list),
+    /// the "+N" overflow and the row's action buttons must keep their click and key from reaching it.
+    /// </summary>
+    [Fact]
+    public async Task InnerControls_DoNotLetTheirClickOrKeyReachTheRow()
+    {
+        _handler.SetJsonResponse("api/servers", new PaginatedResult<ServerDto>
+        {
+            Items = [MakeServer(5, ServerType.Normal, ServerStatus.Online,
+                tags: ["prod", "web", "eu-west", "monitoring"])],
+            TotalCount = 1
+        });
+
+        var cut = Render<ServersPage>();
+        await LoadServers(cut);
+        cut.WaitForState(() => cut.Markup.Contains("server-5"), TimeSpan.FromSeconds(2));
+
+        var controls = cut.FindAll("button.tag-filter-button").Cast<AngleSharp.Dom.IElement>()
+            .Append(cut.Find(".tag-more-details summary"))
+            .Concat(cut.FindAll("button[title='ContactAgent'], button[title='RetireServer']"))
+            .ToList();
+        Assert.Equal(6, controls.Count);
+        foreach (var control in controls)
+            Aetheus.Front.Tests.TestDoubles.RowEventIsolation.AssertRowDoesNotReceive(control, "onclick", "onkeydown");
+    }
+
     /// <summary>Recette R-211: a tag clicked in a row becomes the Tags column's own filter, sent to the API.</summary>
     [Fact]
     public async Task FilterByTag_SetsTheTagsColumnFilter()
@@ -365,5 +393,23 @@ public class ServersTemplateCoverageTests : BunitContext
         Assert.Contains("server-10", cut.Markup);
         Assert.Contains("server-11", cut.Markup);
         Assert.Contains("server-12", cut.Markup);
+    }
+
+    [Fact]
+    public async Task RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/servers", new PaginatedResult<ServerDto>
+        {
+            Items = [MakeServer(1, ServerType.Normal, ServerStatus.Online)],
+            TotalCount = 1
+        });
+
+        var cut = Render<ServersPage>();
+        await LoadServers(cut);
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }
 }

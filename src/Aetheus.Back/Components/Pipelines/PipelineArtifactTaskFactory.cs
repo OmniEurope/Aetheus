@@ -197,6 +197,9 @@ public sealed class PipelineArtifactTaskFactory(
         };
         if (!string.IsNullOrWhiteSpace(targetDirectory))
             restoreVars["AETHEUS_RESTORE_TARGET_DIR"] = targetDirectory;
+        // Only the explicit opt-out travels: an absent variable is the agent's fail-closed default.
+        if (PipelineDeployedBaseline.IsOptedOut(stepDefinition.DeployedBaseline))
+            restoreVars[PipelineDeployedBaseline.EnvironmentVariable] = PipelineDeployedBaseline.None;
 
         // The selector is substituted exactly as ResolveSelector substitutes it, so a templated
         // `artifact_source_selector: "$(VAR)"` that resolved the artifact as latest-successful is also

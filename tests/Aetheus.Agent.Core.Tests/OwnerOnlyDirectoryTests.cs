@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Agent.Core.Executors;
+using Aetheus.Tests.Shared;
 
 namespace Aetheus.Agent.Core.Tests;
 
 public sealed class OwnerOnlyDirectoryTests
 {
-    [Fact]
+    [PlatformFact("linux")]
     public void TrySet_ReportsExpectedFilesystemFailure()
     {
-        if (OperatingSystem.IsWindows())
-            return;
-
         Exception? reported = null;
         string? reportedDirectory = null;
 
@@ -27,12 +25,9 @@ public sealed class OwnerOnlyDirectoryTests
         Assert.Equal("/restricted/workspace", reportedDirectory);
     }
 
-    [Fact]
+    [PlatformFact("linux")]
     public void TrySet_DoesNotHideUnexpectedFailure()
     {
-        if (OperatingSystem.IsWindows())
-            return;
-
         Assert.Throws<InvalidOperationException>(() => OwnerOnlyDirectory.TrySet(
             "/restricted/workspace",
             static (_, _) => { },

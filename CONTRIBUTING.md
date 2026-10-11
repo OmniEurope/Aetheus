@@ -34,7 +34,7 @@ Run through this checklist:
 - [ ] `.\launch-windows.ps1 -ta` (Windows) or `./launch-linux.sh -ta` (Linux) -- unit,
       PostgreSQL integration, and Playwright E2E tests green with their required dependencies.
 - [ ] `.\launch-windows.ps1 -c` (Windows) or `./launch-linux.sh -c` (Linux) -- product
-      coverage report passes the 75% gate.
+      coverage report passes the 80.1% gate (see docs/contracts/testing.md).
 - [ ] Architecture Guard Tests pass (migration drift, file size, controller auth).
 - [ ] New `.cs` / `.razor` files have the SPDX header:
       `// SPDX-License-Identifier: EUPL-1.2`

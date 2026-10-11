@@ -5,7 +5,6 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 {
     [Inject] private ApiClient Api { get; set; } = default!;
 
-    [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
     private string _moduleSearch = string.Empty;
@@ -102,6 +101,8 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 
     private async Task FetchLogsAsync()
     {
+        // SITE-OFFLINE-001: reading the logs queues an agent task too.
+        if (BlockedByOfflineAgent()) return;
         _logLoading = true;
         _logContent = null;
         try
@@ -128,6 +129,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 
     private async Task OpenConfigEditorAsync(string siteName)
     {
+        if (BlockedByOfflineAgent()) return;
         var model = new ApacheConfigEditorModel { SiteName = siteName, Loading = true };
         _configEditor = model;
 
@@ -196,6 +198,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 
     private async Task SaveConfigAsync(ApacheVHostSaveRequest request)
     {
+        if (BlockedByOfflineAgent()) return;
         try
         {
             var success = await Api.ServerTools.SaveApacheVHostConfigAsync(ServerId, request);
@@ -240,8 +243,16 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
             _followTimer = new System.Threading.Timer(
                 async _ => await InvokeAsync(async () =>
                 {
-                    if (!_logLoading)
+                    // SITE-OFFLINE-001: an agent that went offline ends the follow instead of a refusal every 5 s.
+                    if (AgentOffline)
+                    {
+                        StopFollow();
+                        StateHasChanged();
+                    }
+                    else if (!_logLoading)
+                    {
                         await FetchLogsAsync();
+                    }
                 }),
                 null,
                 TimeSpan.FromSeconds(5),

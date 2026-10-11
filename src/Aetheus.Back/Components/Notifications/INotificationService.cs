@@ -10,7 +10,8 @@ public interface INotificationService
     Task<NotificationChannelDto> CreateChannelAsync(CreateNotificationChannelRequest request, CancellationToken ct = default);
     Task<NotificationChannelDto?> UpdateChannelAsync(int id, UpdateNotificationChannelRequest request, CancellationToken ct = default);
     Task<bool> DeleteChannelAsync(int id, CancellationToken ct = default);
-    Task<NotificationTestResultDto?> TestChannelAsync(int id, CancellationToken ct = default);
+    /// <summary>Sends a real test message; an E-mail channel writes to <paramref name="requestingUserId"/>'s account address.</summary>
+    Task<NotificationTestResultDto?> TestChannelAsync(int id, int? requestingUserId, CancellationToken ct = default);
     Task<PaginatedResult<NotificationRuleDto>> GetRulesAsync(
         PaginationRequest request, CancellationToken ct = default);
 

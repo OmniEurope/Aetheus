@@ -31,10 +31,10 @@
                 Class="pipeline-run-id-actions-column" HeaderClass="pipeline-run-id-actions-column" Filterable="true">
                 <Template Context="run">
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                        <a href="@RunHref(run)" @onclick:stopPropagation="true">#@run.RunId</a>
+                        <a href="@RunHref(run)" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">#@run.RunId</a>
                         @if (CanCancel(run))
                         {
-                            <span @onclick:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => CancelRunAsync(run))" Disabled="@(_cancelling == run.RunId)" title="@L["CancelRun"]" Label="@L["CancelRun"]"><OmniIcon Name="OmniIconName.Prohibit" /></OmniButton></span>
+                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => CancelRunAsync(run))" Disabled="@(_cancelling == run.RunId)" title="@L["CancelRun"]" Label="@L["CancelRun"]"><OmniIcon Name="OmniIconName.Prohibit" /></OmniButton></span>
                         }
                     </OmniStack>
                 </Template>
@@ -43,7 +43,7 @@
                 Visible="@ShowPipelineColumn"
                 Class="pipeline-run-name-column" HeaderClass="pipeline-run-name-column" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true">
                 <Template Context="run">
-                    <a href="@PipelineHref(run)" class="pipeline-name-link" @onclick:stopPropagation="true">@run.PipelineName</a>
+                    <a href="@PipelineHref(run)" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@run.PipelineName</a>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineRunTableItem" Property="Status" Title="@L["Status"]" Width="10rem"
@@ -69,11 +69,20 @@
                     {
                         <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                             <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineHelper.GetRunBadge(run.Status)">@L.Localize(run.Status)</OmniBadge>
+                            @if (run.LaunchRefused)
+                            {
+                                @* Recette R2-146: a refused automated launch has its own badge, apart from "Rejeté". *@
+                                <OmniBadge Fill="OmniFill.Outline" Tone="OmniTone.Neutral" Class="pipeline-launch-refused-badge" title="@L["RunLaunchRefusedTitle"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent>@L["RunLaunchRefused"]</ChildContent></OmniBadge>
+                            }
                             @if (run.GateGrade.HasValue)
                             {
                                 @* The gate letter only appears when a gate actually graded the run; an
                                    ungraded run shows nothing rather than a misleading placeholder. *@
-                                <GradeBadge Value="@run.GateGrade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge" />
+                                @* Recette R2-147: the letter opens the Gate tab, where an F gives its cause. *@
+                                <a href="@Aetheus.Front.Components.Pipelines.PipelineRunPresentation.GateHref(run.RunId, run.ProjectId, ServerId)" class="pipeline-gate-grade-link" title="@L["GateGrade"]"
+                                   @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                    <GradeBadge Value="@run.GateGrade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge" />
+                                </a>
                             }
                         </OmniStack>
                     }
@@ -104,7 +113,7 @@
                     }
                     else if (BranchHref(run) is { Length: > 0 } branchHref)
                     {
-                        <a href="@branchHref" @onclick:stopPropagation="true" class="pipeline-run-ref-link">
+                        <a href="@branchHref" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true" class="pipeline-run-ref-link">
                             @run.BranchName
                         </a>
                     }

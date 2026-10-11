@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Pipelines;
+using Aetheus.Back.Services;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Environment = Aetheus.Back.Data.Entities.Environment;
@@ -49,8 +50,11 @@ public sealed class PipelineSetupReadinessServiceTests
 
     private readonly IPipelineRequirementsChecker _requirements = Substitute.For<IPipelineRequirementsChecker>();
 
+    private readonly IGitLightRepository _gitRepositories = Substitute.For<IGitLightRepository>();
+    private readonly IPipelineTemplateResolver _resolver = Substitute.For<IPipelineTemplateResolver>();
+
     private PipelineSetupReadinessService BuildSut() => new(
-        _templates, _repo, _git, _requirements,
+        _templates, _repo, _git, _gitRepositories, _resolver, _requirements,
         Substitute.For<ILogger<PipelineSetupReadinessService>>());
 
     private void Template(int id, string name, string yaml)
@@ -64,7 +68,7 @@ public sealed class PipelineSetupReadinessServiceTests
     private void Runners(params int[] ids)
         => _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(ids.ToList());
 
     private void Repository(bool empty = false, string branch = "main")
@@ -166,11 +170,11 @@ public sealed class PipelineSetupReadinessServiceTests
         // A build runner exists; the deployment-capable query is the one that comes back empty.
         _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), false, Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), false, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(new List<int> { 11 });
         _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), true, Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), true, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(new List<int>());
         Repository();
         AdapterDirectory("deploy-prod.sh");
@@ -289,4 +293,113 @@ public sealed class PipelineSetupReadinessServiceTests
 
         Assert.Empty(readiness.Checks);
     }
+
+    /// <summary>Recette R1-32: a project whose source is an external address has a repository; Aetheus
+    /// cannot read it, so the files are announced as not checkable, never as missing nor "no repository".</summary>
+    [Fact]
+    public async Task ExternalAddressWithoutAReadableCopy_IsNotNoRepository_ButFilesThatCannotBeChecked()
+    {
+        Template(1, "application-ci", CiTemplate);
+        Runners(11);
+        _git.GetRepositoriesAsync(7, Arg.Any<CancellationToken>()).Returns(new List<GitLightRepoDto>());
+        _gitRepositories.GetProjectRepositorySourceAsync(7, Arg.Any<CancellationToken>())
+            .Returns(new ProjectRepositorySource("https://github.com/acme/perf.git", null));
+
+        var readiness = await RunAsync("application-ci");
+
+        var check = Assert.Single(readiness.Checks);
+        Assert.Equal(PipelineSetupReadinessKind.ExternalRepositoryNotInspected, check.Kind);
+        Assert.Equal(PipelineSetupReadinessSeverity.Warning, check.Severity);
+        Assert.Equal([".pipeline/scripts/ci.sh"], check.Items);
+        Assert.False(readiness.HasBlocking);
+        Assert.False(readiness.RepositoryInspected);
+    }
+
+    [Fact]
+    public async Task ExternalSourceWhoseMirrorHoldsNoCommit_IsNotCalledAnEmptyBranch()
+    {
+        Template(1, "application-ci", CiTemplate);
+        Runners(11);
+        Repository(empty: true, branch: "main");
+        _gitRepositories.GetProjectRepositorySourceAsync(7, Arg.Any<CancellationToken>())
+            .Returns(new ProjectRepositorySource("http://localhost/git/7/perf.git", 5));
+
+        var readiness = await RunAsync("application-ci");
+
+        Assert.Equal(PipelineSetupReadinessKind.ExternalRepositoryNotInspected, Assert.Single(readiness.Checks).Kind);
+        Assert.False(readiness.HasBlocking);
+    }
+
+    [Fact]
+    public async Task ExternalSourceWithASynchronizedMirror_IsReadLikeAnInternalRepository()
+    {
+        Template(1, "application-ci", CiTemplate);
+        Runners(11);
+        Repository();
+        AdapterDirectory("quality.sh");
+        _gitRepositories.GetProjectRepositorySourceAsync(7, Arg.Any<CancellationToken>())
+            .Returns(new ProjectRepositorySource("http://localhost/git/7/app.git", 5));
+
+        var readiness = await RunAsync("application-ci");
+
+        Assert.Equal(PipelineSetupReadinessKind.MissingAdapterScripts, Assert.Single(readiness.Checks).Kind);
+        Assert.True(readiness.RepositoryInspected);
+    }
+
+    [Fact]
+    public async Task AnExternalRepositoryAttachedBesideTheProjectsOwn_IsNotWhereItsAdaptersAreLookedFor()
+    {
+        Template(1, "application-ci", CiTemplate);
+        Runners(11);
+        _git.GetRepositoriesAsync(7, Arg.Any<CancellationToken>()).Returns(new List<GitLightRepoDto>
+        {
+            new() { Id = 9, ProjectId = 7, Name = "lib", DefaultBranch = "main", IsAdditionalSource = true }
+        });
+
+        var readiness = await RunAsync("application-ci");
+
+        Assert.Equal(PipelineSetupReadinessKind.NoRepository, Assert.Single(readiness.Checks).Kind);
+    }
+
+    /// <summary>Recette R1-28: the project's existing pipelines are read as a run reads them, their
+    /// template expanded, so a pipeline extending application-ci requires ci.sh.</summary>
+    [Fact]
+    public async Task ProjectReadiness_ExpandsEachPipelinesTemplate_AndReportsItsMissingAdapter()
+    {
+        const string pipelineYaml = "name: atlas-ci\nextends: application-ci@1\nstages: []\n";
+        _repo.GetPipelineDefinitionsForProjectAsync(7, Arg.Any<CancellationToken>())
+            .Returns([(21, "atlas-ci", pipelineYaml), (22, "atlas-deploy-prod", "name: atlas-deploy-prod\nextends: application-deploy-prod@1\nstages: []\n")]);
+        _repo.GetPipelineOrganizationIdAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(3);
+        _resolver.ResolveAsync(pipelineYaml, 3, null, Arg.Any<CancellationToken>())
+            .Returns(Resolution(CiTemplate));
+        _resolver.ResolveAsync(Arg.Is<string>(yaml => yaml.Contains("deploy-prod", StringComparison.Ordinal)), 3, null, Arg.Any<CancellationToken>())
+            .Returns(Resolution(DeployTemplate));
+        Runners(11);
+        Repository();
+        AdapterDirectory("deploy-prod.sh");
+
+        var all = await BuildSut().CheckProjectAsync(7, pipelineId: null, organizationId: 3, CancellationToken.None);
+        var deployOnly = await BuildSut().CheckProjectAsync(7, pipelineId: 22, organizationId: 3, CancellationToken.None);
+
+        var check = Assert.Single(all.Checks);
+        Assert.Equal(PipelineSetupReadinessKind.MissingAdapterScripts, check.Kind);
+        Assert.Equal([".pipeline/scripts/ci.sh"], check.Items);
+        // Narrowed to the deploy pipeline, whose adapter is present: nothing stops that run.
+        Assert.Empty(deployOnly.Checks);
+    }
+
+    [Fact]
+    public async Task ProjectReadiness_WithoutPipelines_ClaimsNothing()
+    {
+        _repo.GetPipelineDefinitionsForProjectAsync(7, Arg.Any<CancellationToken>())
+            .Returns(new List<(int, string, string)>());
+
+        var readiness = await BuildSut().CheckProjectAsync(7, pipelineId: null, organizationId: 3, CancellationToken.None);
+
+        Assert.Empty(readiness.Checks);
+        await _git.DidNotReceive().GetRepositoriesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    private static PipelineTemplateResolution Resolution(string yaml) => new(
+        YamlParsingHelper.ParseAndValidate(yaml, Substitute.For<ILogger>())!, yaml, null, null, null, false);
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Resources;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
@@ -28,6 +29,44 @@ public class PipelineRunsGridTests : BunitContext
         Assert.False(string.IsNullOrWhiteSpace(status.TextContent), cut.Markup);
         Assert.Empty(cut.FindAll(".aetheus-loader"));
         Assert.Empty(cut.FindAll("[role='progressbar']"));
+    }
+
+    [Fact]
+    public void R2_146_ARejectedRun_ReadsRejectedInWarning_AndARefusedLaunch_HasItsOwnBadge()
+    {
+        var items = new List<PipelineRunDto>
+        {
+            new() { Id = 1, PipelineId = 1, PipelineName = "candidate", Status = PipelineStatus.Rejected },
+            new() { Id = 2, PipelineId = 2, PipelineName = "nightly", Status = PipelineStatus.Failed,
+                Warnings = ["The automated launch (Scheduler) was refused: locked"] },
+            new() { Id = 3, PipelineId = 3, PipelineName = "ci", Status = PipelineStatus.Failed }
+        };
+        var cut = Render<PipelineRunsGrid>(parameters => parameters.Add(component => component.Items, items));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(cut.FindAll(".omni-badge"), badge => badge.TextContent.Contains("Enum_PipelineStatus_Rejected", StringComparison.Ordinal)
+                && badge.ClassList.Any(name => name.Contains("warning", StringComparison.OrdinalIgnoreCase)));
+            Assert.Single(cut.FindAll(".pipeline-launch-refused-badge"));
+        });
+    }
+
+    [Fact]
+    public void AGradedRun_ItsLetterOpensTheGateTab()
+    {
+        // Recette R2-147: an F says why on the Gate tab; the letter in the list leads there in one click.
+        var items = new List<PipelineRunDto>
+        {
+            new() { Id = 2634, PipelineId = 1, ProjectId = 1, PipelineName = "candidate", Status = PipelineStatus.Success, GateGrade = AnalysisGrade.F }
+        };
+        var cut = Render<PipelineRunsGrid>(parameters => parameters.Add(component => component.Items, items));
+
+        cut.WaitForAssertion(() =>
+        {
+            var link = cut.Find("a.pipeline-gate-grade-link");
+            Assert.Equal("/pipelines/runs/2634?projectId=1&tab=gate", link.GetAttribute("href"));
+            Assert.NotNull(link.QuerySelector(".grade-badge"));
+        });
     }
 
     /// <summary>
@@ -577,5 +616,31 @@ public class PipelineRunsGridTests : BunitContext
             Assert.Contains("grandchild", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("CollapseLinkedPipelineRuns", cut.Markup, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        var items = new List<PipelineRunDto>
+        {
+            new()
+            {
+                Id = 10,
+                PipelineId = 1,
+                PipelineName = "ci",
+                Status = PipelineStatus.Running,
+                BranchName = "main",
+                CommitHash = "0123456789abcdef0123456789abcdef01234567",
+                RepositoryUrl = "https://aetheus.test/git/1/aetheus.git",
+                Commits = [new CommitLinkDto { Id = 33, Sha = "0123456789abcdef0123456789abcdef01234567" }]
+            }
+        };
+        var cut = Render<PipelineRunsGrid>(parameters => parameters.Add(component => component.Items, items));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The run and pipeline links, the commit (ShortId) and the cancel button of a running run.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);
     }
 }

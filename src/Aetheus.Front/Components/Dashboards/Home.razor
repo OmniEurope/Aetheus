@@ -62,7 +62,7 @@ else
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="ServerDto" Property="Hostname" Title="@L["Hostname"]" MinWidth="11rem" Filterable="true" >
                         <Template Context="server">
-                            <span @onclick:stopPropagation="true">
+                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                 <OmniLink Href="@($"/servers/{server.Id}/overview")">@server.Hostname</OmniLink>
                             </span>
                         </Template>
@@ -90,6 +90,7 @@ else
                                 @if (server.PipelineRunnerEnabled == true)
                                 {
                                     <span class="clickable-cell" role="button" tabindex="0" title="@L["CapBuild"]" aria-label="@L["CapBuild"]"
+                                          @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"
                                           @onclick="@(() => NavToSection(server.Id, "pipelines"))" @onkeydown="@(e => OnCapKey(e, server.Id, "pipelines"))">
                                         <OmniIcon Name="OmniIconName.Wrench" Class="omni-u-text-accent" />
                                     </span>
@@ -97,6 +98,7 @@ else
                                 @if (server.DeploymentTargetAvailable == true)
                                 {
                                     <span class="clickable-cell" role="button" tabindex="0" title="@L["CapDeploy"]" aria-label="@L["CapDeploy"]"
+                                          @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"
                                           @onclick="@(() => NavToSection(server.Id, "apps"))" @onkeydown="@(e => OnCapKey(e, server.Id, "apps"))">
                                         <OmniIcon Name="OmniIconName.RocketLaunch" Class="omni-u-text-accent" />
                                     </span>
@@ -104,6 +106,7 @@ else
                                 @if (server.PackageManagementAvailable == true)
                                 {
                                     <span class="clickable-cell" role="button" tabindex="0" title="@L["CapManage"]" aria-label="@L["CapManage"]"
+                                          @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"
                                           @onclick="@(() => NavToSection(server.Id, "modules"))" @onkeydown="@(e => OnCapKey(e, server.Id, "modules"))">
                                         <OmniIcon Name="OmniIconName.Settings" Class="omni-u-text-accent" />
                                     </span>
@@ -176,7 +179,7 @@ else
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="ProjectDto" Property="Name" Title="@L["Name"]" MinWidth="6rem" Filterable="true" >
                         <Template Context="project">
-                            <span @onclick:stopPropagation="true">
+                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                 <OmniLink Href="@($"/projects/{project.Id}")">@project.Name</OmniLink>
                             </span>
                         </Template>

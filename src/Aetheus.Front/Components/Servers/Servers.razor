@@ -71,7 +71,7 @@
             <Template Context="server">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <span class="server-status-dot @(server.Status == ServerStatus.Online ? "server-status-online" : "server-status-offline")"></span>
-                    <NavLink href="@($"/servers/{server.Id}/overview")" class="server-name-link">@server.Name</NavLink>
+                    <NavLink href="@($"/servers/{server.Id}/overview")" class="server-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@server.Name</NavLink>
                     @if (!Permissions.CanWrite(ResourceType.Server, server.Id))
                     {
                         <OmniIcon Name="OmniIconName.Lock" Class="omni-u-text-muted icon-xs-app"
@@ -134,6 +134,8 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="ServerDto" Key="@ServerTagsColumn" ExportValue="@TagsExport" Title="@L["Tags"]" Width="220px" Sortable="false" Visible="@IsColumnVisible("Tags")" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Tags" FilterSearchable="true" >
             <Template Context="server">
+                @* SITE-FUNC-HOME-CAPABILITY-001: a tag filters the list; its click and key must not also open the row. *@
+                <div @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                 <OmniRow Gap="OmniSpacing.XSmall">
                     @{ var visibleTags = server.Tags.Take(3).ToList(); }
                     @foreach (var tag in visibleTags)
@@ -148,6 +150,7 @@
                         </details>
                     }
                 </OmniRow>
+                </div>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="ServerDto" Property="LastHeartbeat" Title="@L["LastHeartbeat"]" Width="170px" Visible="@IsColumnVisible("LastHeartbeat")" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" >
@@ -165,7 +168,7 @@
         <OmniDataGridColumn TItem="ServerDto" Title="" Width="120px" Sortable="false" Filterable="false" TextAlign="OmniDataGridTextAlign.Center">
             <Template Context="server">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Justify="OmniJustification.Center"
-                    @onclick:stopPropagation="true">
+                    @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnContactAgent(server))" title="@L["ContactAgent"]" Label="@L["ContactAgent"]"><OmniIcon Name="OmniIconName.CellTower" /></OmniButton>
                     @if (Permissions.CanWrite(ResourceType.Server, server.Id))
                     {

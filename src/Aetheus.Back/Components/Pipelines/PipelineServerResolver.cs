@@ -108,20 +108,42 @@ internal sealed class PipelineServerResolver(AppDbContext db)
             organizationId,
             ct).ConfigureAwait(false);
 
-    public async Task<Server?> FindOnlineServerInEnvironmentAsync(string environmentName, OsType requiredOs = OsType.Unknown, CancellationToken ct = default)
+    public async Task<Server?> FindOnlineServerInEnvironmentAsync(
+        string environmentName, int? projectId, OsType requiredOs = OsType.Unknown, CancellationToken ct = default)
         => await FindOnlineServerAsync(
-            db.EnvironmentServers.Where(item => item.Environment.Name == environmentName).Select(item => item.Server),
+            EnvironmentMembers(environmentName, projectId),
             requiredOs,
             organizationId: null,
             ct).ConfigureAwait(false);
 
     public async Task<Server?> FindOnlineServerInEnvironmentInOrganizationAsync(
-        string environmentName, OsType requiredOs, int organizationId, CancellationToken ct = default)
+        string environmentName, OsType requiredOs, int organizationId, int? projectId, CancellationToken ct = default)
         => await FindOnlineServerAsync(
-            db.EnvironmentServers.Where(item => item.Environment.Name == environmentName).Select(item => item.Server),
+            EnvironmentMembers(environmentName, projectId),
             requiredOs,
             organizationId,
             ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// Neighbour of BACK-018: the servers of the environment a stage of <paramref name="projectId"/> means
+    /// by <paramref name="environmentName"/>. A name is unique per project only, so it is the project's own
+    /// environment first, then a shared one (no project), never another project's homonym, which the
+    /// organization filter alone let through. The same rule the approval, check and lock gates read
+    /// (<see cref="IPipelineRepository.FindEnvironmentByNameAsync"/>); a null project sees shared ones only.
+    /// </summary>
+    private IQueryable<Server> EnvironmentMembers(string environmentName, int? projectId)
+    {
+        var environmentId = db.Environments
+            .Where(environment => environment.Name == environmentName
+                && (environment.ProjectId == null || environment.ProjectId == projectId))
+            .OrderBy(environment => environment.ProjectId == null)
+            .ThenBy(environment => environment.Id)
+            .Select(environment => environment.Id)
+            .Take(1);
+        return db.EnvironmentServers
+            .Where(item => environmentId.Contains(item.EnvironmentId))
+            .Select(item => item.Server);
+    }
 
     // Always-runnable fallback: any online pipeline-runner, scoped to the project's organization
     // when known. A project/environment pipeline must run regardless of whether a pool/environment/
@@ -189,7 +211,7 @@ internal sealed class PipelineServerResolver(AppDbContext db)
 
     public async Task<List<int>> FindCandidateTargetServerIdsAsync(
         string? pool, string? environment, string? agent, OsType requiredOs,
-        int? organizationId, bool deploymentStage, CancellationToken ct = default)
+        int? organizationId, bool deploymentStage, int? projectId, CancellationToken ct = default)
     {
         var hasAgentSelector = !string.IsNullOrEmpty(agent)
             && !agent.Equals("default", StringComparison.OrdinalIgnoreCase);
@@ -199,8 +221,9 @@ internal sealed class PipelineServerResolver(AppDbContext db)
             selectedIds = await FindPoolCandidateIdsAsync(
                 pool, requiredOs, organizationId, deploymentStage, ct).ConfigureAwait(false);
         else if (!string.IsNullOrEmpty(environment))
-            selectedIds = await FindEnvironmentCandidateIdsAsync(
-                environment, requiredOs, organizationId, deploymentStage, ct).ConfigureAwait(false);
+            selectedIds = await FindCandidateIdsAsync(
+                EnvironmentMembers(environment, projectId), requiredOs, organizationId, deploymentStage, ct)
+                .ConfigureAwait(false);
         else if (hasAgentSelector)
             selectedIds = await FindAgentCandidateIdsAsync(
                 agent!, requiredOs, organizationId, deploymentStage, ct).ConfigureAwait(false);
@@ -216,15 +239,6 @@ internal sealed class PipelineServerResolver(AppDbContext db)
         string pool, OsType requiredOs, int? organizationId, bool deploymentStage, CancellationToken ct)
         => await FindCandidateIdsAsync(
             db.AgentPoolServers.Where(item => item.AgentPool.Name == pool).Select(item => item.Server),
-            requiredOs,
-            organizationId,
-            deploymentStage,
-            ct).ConfigureAwait(false);
-
-    private async Task<List<int>> FindEnvironmentCandidateIdsAsync(
-        string environment, OsType requiredOs, int? organizationId, bool deploymentStage, CancellationToken ct)
-        => await FindCandidateIdsAsync(
-            db.EnvironmentServers.Where(item => item.Environment.Name == environment).Select(item => item.Server),
             requiredOs,
             organizationId,
             deploymentStage,
@@ -300,7 +314,8 @@ internal sealed class PipelineServerResolver(AppDbContext db)
     // deploy host need not be a CI/CD runner) and NEVER falls back to a plain pipeline runner. The
     // org-wide fallback is itself deploy-capable-only, so a deploy can never land on a non-deploy host.
     public async Task<Server?> FindOnlineDeployTargetAsync(
-        string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, CancellationToken ct = default)
+        string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId,
+        int? projectId, CancellationToken ct = default)
     {
         // An EXPLICIT selector that resolves to no deploy-capable host must FAIL (return null), never
         // fall back to "any deploy-capable host in the org" - otherwise a mistyped/unprovisioned
@@ -322,13 +337,10 @@ internal sealed class PipelineServerResolver(AppDbContext db)
                 .WhereAgentCan(AgentCapabilities.Deployment)
                 .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         else if (!string.IsNullOrEmpty(environment))
-            server = await db.EnvironmentServers
-                .Where(es => es.Environment.Name == environment
-                             && es.Server.Status == ServerStatus.Online
-                             && es.Server.DeploymentTargetAvailable)
-                .Where(es => organizationId == null || es.Server.OrganizationId == organizationId.Value)
-                .Where(es => requiredOs == OsType.Unknown || es.Server.OsType == requiredOs)
-                .Select(es => es.Server)
+            server = await EnvironmentMembers(environment, projectId)
+                .Where(s => s.Status == ServerStatus.Online && s.DeploymentTargetAvailable)
+                .Where(s => organizationId == null || s.OrganizationId == organizationId.Value)
+                .Where(s => requiredOs == OsType.Unknown || s.OsType == requiredOs)
                 .WhereAgentCan(AgentCapabilities.Deployment)
                 .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         else if (!string.IsNullOrEmpty(agent) && !agent.Equals("default", StringComparison.OrdinalIgnoreCase))
@@ -520,11 +532,11 @@ internal sealed class PipelineServerResolver(AppDbContext db)
     }
 
     // F-EXEC-1: all environment members, ANY status (authorization gate only).
-    public async Task<List<int>> FindServerIdsInEnvironmentAsync(string environmentName, CancellationToken ct = default)
+    public async Task<List<int>> FindServerIdsInEnvironmentAsync(
+        string environmentName, int? projectId, CancellationToken ct = default)
     {
-        return await db.EnvironmentServers
-            .Where(es => es.Environment.Name == environmentName)
-            .Select(es => es.ServerId)
+        return await EnvironmentMembers(environmentName, projectId)
+            .Select(server => server.Id)
             .Distinct()
             .ToListAsync(ct).ConfigureAwait(false);
     }

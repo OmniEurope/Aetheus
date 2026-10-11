@@ -10,6 +10,7 @@ public partial class VisualPipelineEditor : IAsyncDisposable
     [Inject] private YamlSerializationService YamlService { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
+    [Inject] private ILogger<VisualPipelineEditor> Logger { get; set; } = default!;
 
     [Parameter] public string YamlDefinition { get; set; } = string.Empty;
     [Parameter] public EventCallback<string> YamlDefinitionChanged { get; set; }
@@ -305,9 +306,19 @@ public partial class VisualPipelineEditor : IAsyncDisposable
             await Js.InvokeVoidAsync("visualPipeline.centerNode", _canvasId, $"vp-node-{_canvasId}-{stageId}");
     }
 
+    // The stage-template picker is an optional aid (SITE-FUNC-AUTOCOMPLETE-001): a network failure
+    // leaves it empty and is logged, it never escapes OnAfterRenderAsync and replaces the editor.
     private async Task LoadStageTemplatesAsync()
     {
-        _stageTemplates = await Api.PipelineTemplates.GetPipelineTemplatesAsync();
+        try
+        {
+            _stageTemplates = await Api.PipelineTemplates.GetPipelineTemplatesAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Logger.LogWarning(ex, "[VisualPipelineEditor] Stage templates could not be loaded");
+            _stageTemplates = [];
+        }
         _stageTemplateItems = _stageTemplates
             .Select((t, i) => new StageTemplateItem(t.Name, i))
             .ToList();

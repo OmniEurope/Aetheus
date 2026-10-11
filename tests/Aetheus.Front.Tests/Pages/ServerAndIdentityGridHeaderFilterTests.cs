@@ -3,6 +3,7 @@ using System.Reflection;
 using Aetheus.Front.Components.Servers;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
 using Aetheus.Front.Components.Users;
+using Aetheus.Front.Tests.TestDoubles;
 using Aetheus.Shared.Components.Organizations;
 using Bunit;
 using OrganizationsPage = Aetheus.Front.Components.Organizations.Organizations;
@@ -181,5 +182,24 @@ public sealed class ServerAndIdentityGridHeaderFilterTests : BunitContext
         await FilterAsync<OrganizationsPage, OrganizationDto>(cut, "Slug", "acme");
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, r => Sends(r, "api/organizations", "Slug", "acme")));
+    }
+
+    [Fact]
+    public void Users_RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/users/roles", new List<string> { "Admin" });
+        _handler.SetJsonResponse("api/users", new PaginatedResult<UserDto>
+        {
+            Items = [new UserDto { Id = 3, Username = "bob", Email = "bob@example.org", IsActive = true, Roles = ["Admin"] }],
+            TotalCount = 1
+        });
+
+        var cut = Render<UsersPage>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The user link and the edit button.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);
     }
 }

@@ -28,7 +28,7 @@ public sealed class GitBranchProtectionService(
             Pattern = request.Pattern,
             PreventDeletion = request.PreventDeletion,
             PreventForcePush = request.PreventForcePush,
-            RequirePullRequest = request.RequirePullRequest
+            ProtectionLevel = request.ProtectionLevel
         };
 
         await repository.AddBranchProtectionRuleAsync(rule, ct).ConfigureAwait(false);
@@ -48,7 +48,7 @@ public sealed class GitBranchProtectionService(
 
         rule.PreventDeletion = request.PreventDeletion;
         rule.PreventForcePush = request.PreventForcePush;
-        rule.RequirePullRequest = request.RequirePullRequest;
+        rule.ProtectionLevel = request.ProtectionLevel;
         await repository.SaveChangesAsync(ct).ConfigureAwait(false);
         await audit.LogAsync(
             "Updated", "BranchProtectionRule", ruleId, rule.Pattern, ct).ConfigureAwait(false);

@@ -35,6 +35,22 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
     public Task<PublicDemoInfoDto?> GetPublicDemoInfoAsync(CancellationToken ct = default)
         => GetJsonAsync<PublicDemoInfoDto>("api/auth/public-demo", ct);
 
+    /// <summary>
+    /// Recette R1-37: tells the server the user logs out, while the token is still held, so it forgets what it
+    /// keeps in memory for them (the typed mailbox passwords). Best effort: false when the server could not be
+    /// told, and the caller logs out anyway.
+    /// </summary>
+    public async Task<bool> NotifyLogoutAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return (await PostNoBodyAsync("api/auth/logout", ct).ConfigureAwait(false)).Success;
+        }
+        catch (HttpRequestException) { return false; }
+        catch (TaskCanceledException) { return false; }
+        catch (Polly.ExecutionRejectedException) { return false; }
+    }
+
     /// <summary>PLAN-005 lot 9 / D48: reports why the client ended a session (anonymous: the session is gone).</summary>
     public Task<ApiStatus> ReportSessionEndedAsync(SessionEndedReport report, CancellationToken ct = default)
         => PostJsonNoBodyAsync("api/auth/session-ended", report, ct);

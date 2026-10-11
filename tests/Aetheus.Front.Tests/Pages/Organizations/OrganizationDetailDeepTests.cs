@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Organizations;
+using Aetheus.Front.Tests.TestDoubles;
 using Aetheus.Shared.Components.Organizations;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
@@ -314,5 +315,21 @@ public class OrganizationDetailDeepTests : BunitContext
 
         var loading = (bool)PageType.GetField("_loading", Priv)!.GetValue(cut.Instance)!;
         Assert.False(loading);
+    }
+
+    [Fact]
+    public void MemberRowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        SetupForId(1);
+
+        var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForAssertion(() => Assert.Contains("Org-1", cut.Markup), TimeSpan.FromSeconds(3));
+        cut.FindAll("[role='tab']").First(tab => tab.TextContent.Contains("Members", StringComparison.Ordinal)).Click();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // Per member: the user link, the role list and the remove button.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);
     }
 }

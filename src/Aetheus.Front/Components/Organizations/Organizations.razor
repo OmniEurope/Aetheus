@@ -37,7 +37,7 @@
                 <OmniDataGridColumn TItem="OrganizationDto" Property="ProjectCount" Title="@L["Projects"]" Width="140px" Filterable="true" FilterOperator="OmniDataGridFilterOperator.Equals" />
                 <OmniDataGridColumn TItem="OrganizationDto" Title="@L["Actions"]" Width="110px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
                     <Template Context="org">
-                        <span @onclick:stopPropagation="true">
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenDetail(org))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnDelete(org))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                         </span>

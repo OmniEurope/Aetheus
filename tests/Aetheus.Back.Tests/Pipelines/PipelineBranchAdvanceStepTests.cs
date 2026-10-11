@@ -209,6 +209,23 @@ public class PipelineBranchAdvanceStepTests
     }
 
     [Fact]
+    public async Task D13_AStrictlyProtectedBranch_FailsTheStep_WithTheReason_AndNoTag()
+    {
+        GivenOutcome(GitBranchAdvanceOutcome.Protected,
+            detail: "Branch 'main' is strictly protected: only a merged pull request moves it, pipelines included.");
+
+        await ExecuteAsync(tag: "v$(APP_VERSION)", appVersion: "1.3.15");
+
+        Assert.Equal(TaskExecutionStatus.Failed, _stepRun.Status);
+        Assert.Contains("'main' was not advanced to 111111111111", _stepRun.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("strictly protected", _stepRun.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("Protected except pipelines", _stepRun.FailureReason, StringComparison.Ordinal);
+        await _advance.DidNotReceiveWithAnyArgs().TryCreateTagAsync(default, default!, default!, TestContext.Current.CancellationToken);
+        await _audit.DidNotReceive().LogAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AMissingRelease_FailsTheStep_WithoutTouchingGit()
     {
         _pipelines.FindBranchAdvanceReleaseAsync(ProjectId, Version, Arg.Any<CancellationToken>()).Returns((BranchAdvanceRelease?)null);

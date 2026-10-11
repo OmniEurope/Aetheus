@@ -16,8 +16,9 @@ public sealed record PipelineAnalysisGradeRuleDefinition
     public string? Metric { get; init; }
     public string? Category { get; init; }
     public string? Severity { get; init; }
-    /// <summary><c>weighted</c>: the rule grades the weighted score of the open findings
-    /// (<see cref="AnalysisFindingScore"/>) instead of a metric or one severity's count.</summary>
+    /// <summary><c>count</c> or <c>weighted</c>: the rule grades the number, or the severity-weighted
+    /// score, of the open findings (<see cref="AnalysisFindingScore"/>) instead of a metric or one
+    /// severity's count.</summary>
     public string? FindingScore { get; init; }
     public bool NewFindingsOnly { get; init; }
     public bool Required { get; init; } = true;

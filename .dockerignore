@@ -22,3 +22,12 @@
 .env
 .env.*
 !.env.example
+
+# Recette R1-1: local-only trees a developer checkout grows (worktrees, coverage and tool scratch,
+# recette evidence). The pipeline's own context stays under 81 MB (CI #2641, #2647); the 8.59 GB once
+# reported was not reproduced there, so these only keep a local build context small.
+/.worktrees
+/.cov-*
+/.tmp-*
+/.playwright-mcp
+/docs/runbooks/recette-pieces-temporaires

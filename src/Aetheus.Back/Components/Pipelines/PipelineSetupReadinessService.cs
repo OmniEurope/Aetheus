@@ -9,6 +9,8 @@ public sealed partial class PipelineSetupReadinessService(
     IPipelineTemplateService templates,
     IPipelineRepository pipelines,
     IGitLightService git,
+    IGitLightRepository gitRepositories,
+    IPipelineTemplateResolver templateResolver,
     IPipelineRequirementsChecker requirements,
     ILogger<PipelineSetupReadinessService> logger) : IPipelineSetupReadinessService
 {
@@ -30,6 +32,64 @@ public sealed partial class PipelineSetupReadinessService(
         ArgumentNullException.ThrowIfNull(templateNames);
 
         var definitions = await LoadSelectedDefinitionsAsync(templateNames, ct).ConfigureAwait(false);
+        return await CheckDefinitionsAsync(definitions, projectId, organizationId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<int?> FindPipelineProjectIdAsync(int pipelineId, CancellationToken ct = default) =>
+        await pipelines.FindPipelineAsync(pipelineId, ct).ConfigureAwait(false) is { } pipeline
+            ? await pipelines.GetPipelineProjectIdAsync(pipeline, ct).ConfigureAwait(false)
+            : null;
+
+    public async Task<PipelineSetupReadinessDto> CheckProjectAsync(
+        int projectId,
+        int? pipelineId,
+        int? organizationId,
+        CancellationToken ct = default)
+    {
+        var definitions = new List<PipelineYamlDefinition>();
+        int? owningOrganizationId = null;
+        foreach (var (id, _, yaml) in await pipelines.GetPipelineDefinitionsForProjectAsync(projectId, ct).ConfigureAwait(false))
+        {
+            if (pipelineId is { } only && id != only) continue;
+            owningOrganizationId ??= await pipelines.GetPipelineOrganizationIdAsync(id, ct).ConfigureAwait(false);
+            if (await ResolveDefinitionAsync(yaml, owningOrganizationId, ct).ConfigureAwait(false) is { } definition)
+                definitions.Add(definition);
+        }
+
+        // No pipeline, nothing a run could need: an empty verdict rather than a "no repository" for a
+        // project that has not asked for anything yet.
+        if (definitions.Count == 0) return new PipelineSetupReadinessDto();
+        return await CheckDefinitionsAsync(definitions, projectId, organizationId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The pipeline as a run would read it: its <c>extends:</c> template expanded through the same
+    /// resolver the launch uses, so the adapters a template invokes count for the pipeline that extends
+    /// it. A template that cannot be resolved falls back to the pipeline's own YAML.
+    /// </summary>
+    private async Task<PipelineYamlDefinition?> ResolveDefinitionAsync(string yaml, int? organizationId, CancellationToken ct)
+    {
+        if (organizationId is { } organization)
+        {
+            try
+            {
+                return (await templateResolver.ResolveAsync(yaml, organization, parameters: null, ct).ConfigureAwait(false)).Definition;
+            }
+            catch (BadRequestException exception)
+            {
+                logger.LogDebug(exception, "Project readiness could not resolve a pipeline template; reading the pipeline's own YAML.");
+            }
+        }
+
+        return YamlParsingHelper.ParseAndValidate(yaml, logger);
+    }
+
+    private async Task<PipelineSetupReadinessDto> CheckDefinitionsAsync(
+        List<PipelineYamlDefinition> definitions,
+        int projectId,
+        int? organizationId,
+        CancellationToken ct)
+    {
         var stages = definitions.SelectMany(YamlParsingHelper.FlattenJobs).ToList();
         var checks = new List<PipelineSetupReadinessCheckDto>();
 
@@ -143,8 +203,9 @@ public sealed partial class PipelineSetupReadinessService(
     {
         if (stages.Count == 0) return;
 
+        // No selector: the question is the organization's whole fleet, no environment to scope.
         var anyRunner = await pipelines.FindCandidateTargetServerIdsAsync(
-            null, null, null, OsType.Unknown, organizationId, false, ct).ConfigureAwait(false);
+            null, null, null, OsType.Unknown, organizationId, false, projectId: null, ct).ConfigureAwait(false);
         if (anyRunner.Count == 0)
         {
             checks.Add(new PipelineSetupReadinessCheckDto
@@ -161,7 +222,7 @@ public sealed partial class PipelineSetupReadinessService(
         if (deployStages.Count == 0) return;
 
         var deployRunners = await pipelines.FindCandidateTargetServerIdsAsync(
-            null, null, null, OsType.Unknown, organizationId, true, ct).ConfigureAwait(false);
+            null, null, null, OsType.Unknown, organizationId, true, projectId: null, ct).ConfigureAwait(false);
         if (deployRunners.Count == 0)
             checks.Add(new PipelineSetupReadinessCheckDto
             {
@@ -223,17 +284,27 @@ public sealed partial class PipelineSetupReadinessService(
         List<PipelineSetupReadinessCheckDto> checks,
         CancellationToken ct)
     {
-        var required = stages
-            .SelectMany(stage => stage.Steps)
-            .SelectMany(step => AdapterScriptPattern.Matches(step.Shell).Select(match => match.Value))
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(path => path, StringComparer.Ordinal)
-            .ToList();
+        var required = RequiredAdapterScripts(stages);
 
-        var repositories = await git.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false);
+        // An external repository attached BESIDE the project's own is a source some pipelines name, not
+        // where the project's adapters live; the project's own repository (internal, or the mirror of
+        // its external source) is the one read.
+        var repositories = (await git.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false))
+            .Where(item => !item.IsAdditionalSource)
+            .ToList();
         var repository = repositories.Find(item => !item.IsEmpty) ?? repositories.FirstOrDefault();
+        var source = await gitRepositories.GetProjectRepositorySourceAsync(projectId, ct).ConfigureAwait(false);
         if (repository is null)
         {
+            // Recette R1-32: a project whose source is an external address has a repository, Aetheus
+            // just cannot read it. Saying "no repository" there was false; saying the files are missing
+            // would be too. What is true: they could not be checked, and here is what to check.
+            if (source is { HasSource: true })
+            {
+                ReportExternalNotInspected(stages, checks);
+                return (false, null);
+            }
+
             checks.Add(new PipelineSetupReadinessCheckDto
             {
                 Kind = PipelineSetupReadinessKind.NoRepository,
@@ -243,6 +314,14 @@ public sealed partial class PipelineSetupReadinessService(
         }
 
         var branch = string.IsNullOrWhiteSpace(repository.DefaultBranch) ? "main" : repository.DefaultBranch;
+        if (repository.IsEmpty && source?.GitConnectionId is not null)
+        {
+            // The mirror of an external source that holds no commit yet has not been synchronized: the
+            // external repository may well carry the files, Aetheus has not fetched them.
+            ReportExternalNotInspected(stages, checks);
+            return (false, branch);
+        }
+
         if (repository.IsEmpty)
         {
             checks.Add(new PipelineSetupReadinessCheckDto
@@ -263,6 +342,31 @@ public sealed partial class PipelineSetupReadinessService(
             checks);
 
         return (true, branch);
+    }
+
+    private static List<string> RequiredAdapterScripts(IEnumerable<PipelineStageDefinition> stages) =>
+        stages
+            .SelectMany(stage => stage.Steps)
+            .SelectMany(step => AdapterScriptPattern.Matches(step.Shell).Select(match => match.Value))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>
+    /// A warning naming the repository files the selected pipelines need, when the repository is
+    /// external and unreadable from here. Nothing is reported when the pipelines need no such file.
+    /// </summary>
+    private static void ReportExternalNotInspected(
+        List<PipelineStageDefinition> stages, List<PipelineSetupReadinessCheckDto> checks)
+    {
+        var needed = RequiredAdapterScripts(stages).Concat(RequiredScannerFiles(stages)).ToList();
+        if (needed.Count == 0) return;
+        checks.Add(new PipelineSetupReadinessCheckDto
+        {
+            Kind = PipelineSetupReadinessKind.ExternalRepositoryNotInspected,
+            Severity = PipelineSetupReadinessSeverity.Warning,
+            Items = needed
+        });
     }
 
     private static void AddMissing(

@@ -232,7 +232,7 @@ public sealed class PipelineSourceBlockTests
                 CommitHash = DefinitionCommit
             });
         parameterResolver.ResolveCandidateTargetServerIdsAsync(
-                Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+                Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([]);
         var sut = new PipelineRunPreparationService(
             repo, pipelineGit, new PipelineTemplateResolver(repo), parameterResolver,

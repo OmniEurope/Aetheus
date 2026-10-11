@@ -252,7 +252,8 @@ public sealed class RecetteR2RunPageTests : BunitContext
             .NavigateTo("/analysis/findings/10?tab=decisions");
 
         var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 10));
-        var revert = cut.WaitForElement("button.analysis-decision-revert", TimeSpan.FromSeconds(3));
+        // Recette R2-133: reopening is one of the decision tiles.
+        var revert = cut.WaitForElement(".analysis-decision-choices .analysis-decision-reopen button.analysis-decision-revert", TimeSpan.FromSeconds(3));
         await cut.InvokeAsync(() => revert.Click());
 
         Assert.Contains(_handler.Requests, request => request.Method == "DELETE"
@@ -329,6 +330,36 @@ public sealed class RecetteR2RunPageTests : BunitContext
         Assert.Contains(expected, banner.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain(other, banner.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("ApprovalRequiredTitle", cut.Markup, StringComparison.Ordinal);
+    }
+
+    // ---------- R1-24: the approver reads the environment's approval instructions ----------
+
+    [Fact]
+    public async Task R1_24_TheApprover_SeesTheEnvironmentApprovalInstructions_BesideTheDecision()
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/40/approvals", new List<PipelineApprovalDto>
+        {
+            new()
+            {
+                Id = 33, PipelineRunId = 40, StageName = "deploy", Scope = ApprovalScope.Environment,
+                EnvironmentId = 3, EnvironmentName = "prod", Status = ApprovalStatus.Pending,
+                EnvironmentInstructions = "Check the QA results before approving."
+            }
+        });
+        var controller = new PipelineRunApprovalController(
+            Services.GetRequiredService<ApiClient>(), Services.GetRequiredService<NotifyHelper>(), () => Task.CompletedTask);
+        await controller.LoadAsync(
+            new PipelineRunDto { Id = 40, Status = PipelineStatus.WaitingForApproval },
+            Xunit.TestContext.Current.CancellationToken);
+
+        var cut = Render<PipelineRunApprovalPanel>(parameters => parameters.Add(component => component.Approval, controller));
+
+        var instructions = cut.Find(".run-approval-banner .approval-instructions");
+        Assert.Contains("ApprovalInstructionsForApprover", instructions.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Check the QA results before approving.", instructions.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Approve", cut.Find(".run-approval-banner").TextContent, StringComparison.Ordinal);
+        // The instructions travel with the approval: the approver needs no read access to the environment.
+        Assert.DoesNotContain(_handler.Requests, request => request.Url.Contains("api/environments/3", StringComparison.Ordinal));
     }
 
     [Fact]

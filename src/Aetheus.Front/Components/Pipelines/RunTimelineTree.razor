@@ -82,6 +82,12 @@
                 <div class="@stepClass" @onclick="() => OnSelectStep.InvokeAsync(step)" role="button" tabindex="0" title="@label" @onkeydown="@(async e => { if (e.Key == "Enter" || e.Key == " ") await OnSelectStep.InvokeAsync(step); })">
                     <StepStatusBadge Step="@step" Class="run-status-badge" />
                     <span class="@nameClass">@label</span>
+                    @* Candidate 2634: a suite whose tests failed publishes a gate status of 1 and stays
+                       green, so the step that made the candidate F read as a plain success. *@
+                    @if (PipelineRunGateProducer.HasGateFindings(step))
+                    {
+                        <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal" Class="run-tl-gate-findings" title="@L["StepGateFindingsHint"]">@L["StepGateFindings"]</OmniBadge>
+                    }
                     @* A one-step stage renders no header. It used to carry a "skipped" chip here beside a
                        badge reading "Annulé"; since R-246 the badge itself reads "Skipped", with its icon
                        and the condition as tooltip, so the chip would only repeat it. *@

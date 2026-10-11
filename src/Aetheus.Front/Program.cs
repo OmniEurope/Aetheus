@@ -93,6 +93,7 @@ builder.Services.AddScoped<Aetheus.Front.Components.Shared.ConfirmHelper>();
 builder.Services.AddScoped<Aetheus.Front.Components.Shared.PipelineRunGate>();
 builder.Services.AddScoped<Aetheus.Front.Components.Shared.PipelineRunDialogCoordinator>();
 builder.Services.AddScoped<Aetheus.Front.Components.Shared.PipelineImportState>();
+builder.Services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineSetupProvisionState>();
 builder.Services.AddSingleton<Aetheus.Front.Components.Shared.ActiveOrganizationService>();
 // Item #7: singleton (per Blazor WASM circuit = per browser session) so the hub stays alive
 // across page navigations and every page sees the same in-flight task list.

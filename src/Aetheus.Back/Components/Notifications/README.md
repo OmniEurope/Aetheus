@@ -29,3 +29,7 @@ qui écrit une notification pour chaque administrateur actif : c'est le cas de l
 ## Limites
 
 Les contrôleurs restent minces et délèguent aux services. Les échanges inter-modules passent par les interfaces publiques et les DTOs de `Aetheus.Shared`; aucun autre module ne doit accéder directement aux détails de persistance de ce dossier.
+
+## Envoi par e-mail (recette R1-16)
+
+Chaque notification d'un utilisateur part aussi par e-mail vers l'adresse de son compte (`NotificationEmailer`, au-dessus de `Services/Email/IEmailSender`) ; la ligne de livraison garde le vrai résultat : `Sent`, `Failed` avec le texte SMTP, ou `NotConfigured` avec la raison. Un canal E-mail n'a pas de liste d'adresses : ses règles partent vers les administrateurs actifs, et son test écrit à l'administrateur qui le lance. L'expéditeur est celui des paramètres de la plateforme (onglet E-mail) : par défaut la boîte `no-reply` du domaine de messagerie géré, sinon un serveur SMTP personnalisé.

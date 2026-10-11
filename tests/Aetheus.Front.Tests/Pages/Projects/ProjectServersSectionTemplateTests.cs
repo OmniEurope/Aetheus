@@ -21,12 +21,23 @@ public class ProjectServersSectionTemplateTests : BunitContext
     [Fact]
     public void Renders_HeaderAndResolvesLoading()
     {
-        // The empty-servers response resolves in the harness, so the section leaves the loading
-        // state: the header is present and the circular spinner is gone once data has loaded.
+        // FRONTTEST-004: the servers page is held back, so the section is seen loading (the product
+        // loader, no empty state), then leaves that state once the empty page has arrived.
+        var answer = new TaskCompletionSource<PaginatedResult<ProjectServerDto>>();
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/projects/1/servers", _ => answer.Task);
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
-        Assert.Contains("Servers", cut.Markup);
-        Assert.DoesNotContain("rz-progressbar-circular", cut.Markup);
+        Assert.NotEmpty(cut.FindComponents<AetheusLoader>());
+        Assert.DoesNotContain("NoProjectServers", cut.Markup);
+
+        answer.SetResult(new PaginatedResult<ProjectServerDto> { Items = [], TotalCount = 0 });
+
+        // One settled render carries all three, so the asserts never read a half-updated markup.
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindComponents<AetheusLoader>());
+            Assert.Contains("Servers", cut.Markup);
+            Assert.Contains("NoProjectServers", cut.Markup);
+        });
     }
 
     [Fact]

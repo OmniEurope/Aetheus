@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Projects.ProjectDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -403,6 +404,16 @@ public class ProjectOverviewSectionTests : BunitContext
             Assert.Contains("https://git.example/portfolio.git", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("main", cut.Markup, StringComparison.Ordinal);
         });
+
+        // Recette R1-27: the clone address sits in OE's read-only copyable field (it scrolls inside
+        // itself instead of widening the card), with the Copy button welded to it, and is no longer a
+        // nowrap link that overflowed its cell.
+        var cloneUrl = cut.Find("input#project-overview-clone-url");
+        Assert.Equal("https://git.example/portfolio.git", cloneUrl.GetAttribute("value"));
+        Assert.True(cloneUrl.HasAttribute("readonly"));
+        Assert.Equal("RepositoryUrl", cloneUrl.GetAttribute("aria-label"));
+        Assert.NotNull(cut.Find(".overview-clone-url.omni-text-box-field--copy button"));
+        Assert.Empty(cut.FindAll("a.pipeline-name-link[href='https://git.example/portfolio.git']"));
     }
 
     [Fact]
@@ -481,7 +492,8 @@ public class ProjectOverviewSectionTests : BunitContext
             }));
 
         var link = cut.Find(".overview-info-card a.project-grade-run-link");
-        Assert.Equal("/pipelines/runs/2478?projectId=2", link.GetAttribute("href"));
+        // Recette R2-147: the grade opens the run on its Gate tab, where an F gives its cause.
+        Assert.Equal("/pipelines/runs/2478?projectId=2&tab=gate", link.GetAttribute("href"));
         Assert.Equal("ProjectGradeLatestCandidate", link.GetAttribute("title"));
         Assert.Empty(cut.FindAll(".overview-info-card a[href='/projects/2/quality']"));
     }
@@ -518,5 +530,29 @@ public class ProjectOverviewSectionTests : BunitContext
         var pipelineRow = rows.ToList().FindIndex(row => row.TextContent.Contains("CreatePipeline", StringComparison.Ordinal));
         var libraryRow = rows.ToList().FindIndex(row => row.TextContent.Contains("CreateVariableLibrary", StringComparison.Ordinal));
         Assert.True(pipelineRow >= 0 && libraryRow > pipelineRow, $"pipeline row {pipelineRow}, library row {libraryRow}");
+    }
+
+    [Fact]
+    public void RecentCommitRowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=1", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=1&sortDescending=False",
+            new List<GitLightRepoDto> { new() { Id = 3, ProjectId = 1, Name = "web", DefaultBranch = "main" } });
+        _handler.SetJsonResponse("api/git/repos/3/commits", new PaginatedResult<GitLightCommitDto>
+        {
+            Items = [new() { Sha = "abcdef123456", ShortSha = "abcdef1", Message = "Improve overview", AuthorName = "Alice", AuthorDate = new DateTime(2026, 1, 2, 9, 0, 0) }],
+            TotalCount = 1
+        });
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+        _handler.SetPaginatedJsonResponse("api/git/repos/3/tree", new List<GitLightTreeEntryDto>());
+
+        var cut = Render<ProjectOverviewSection>(p =>
+            p.Add(x => x.Project, new ProjectDetailDto { Id = 1, Name = "Web", DefaultBranch = "main" }));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }
 }

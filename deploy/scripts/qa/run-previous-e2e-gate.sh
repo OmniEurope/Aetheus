@@ -42,4 +42,6 @@ else
 fi
 printf '%s\n' "$STATUS" > "$WORKSPACE/.qa-previous-e2e-gate-status"
 echo "##aetheus[setvariable name=QA_PREVIOUS_E2E_GATE_STATUS]$STATUS"
+[ "$STATUS" = 0 ] || sh deploy/scripts/publish-failed-tests.sh QA_PREVIOUS_E2E_FAILED_TESTS \
+  "$WORKSPACE/.qa-test-results/qa-${BUILD_BUILDID}-previous/e2e/failed-tests.txt"
 echo "Previous E2E findings status: $STATUS."

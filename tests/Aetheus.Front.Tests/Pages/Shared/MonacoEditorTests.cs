@@ -218,4 +218,17 @@ public class MonacoEditorTests : BunitContext
 
         Assert.Contains(JSInterop.Invocations, i => i.Identifier == "monacoInterop.updateSuggestions");
     }
+
+    // SITE-FUNC-MONACO-DISPOSE-001: leaving the page after the JS runtime is gone threw out of DisposeAsync.
+    [Fact]
+    public async Task DisposeAsync_ToleratesADisconnectedJsRuntime()
+    {
+        JSInterop.SetupVoid("monacoInterop.dispose", _ => true)
+            .SetException(new Microsoft.JSInterop.JSDisconnectedException("gone"));
+        var cut = Render<MonacoEditor>(p => p.Add(x => x.Value, "content"));
+
+        var error = await Record.ExceptionAsync(() => cut.Instance.DisposeAsync().AsTask());
+
+        Assert.Null(error);
+    }
 }

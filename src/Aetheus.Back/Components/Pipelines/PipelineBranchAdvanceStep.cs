@@ -20,7 +20,8 @@ namespace Aetheus.Back.Components.Pipelines;
 /// the step. A diverged branch succeeds too, with a run warning: the deployment before it worked, and
 /// the branch is a follower of it, not a gate (recette R2-105). Every other outcome (no release, no
 /// repository holding the commit, a refused ref update) fails the step with the reason, because a
-/// branch that silently stays behind is the defect this replaces.
+/// branch that silently stays behind is the defect this replaces. Decision D13: a branch a protection
+/// rule marks StrictlyProtected fails the step too; ProtectedExceptPipelines and NotProtected let it run.
 /// </summary>
 public sealed class PipelineBranchAdvanceStep(
     IPipelineRepository pipelines,
@@ -92,6 +93,15 @@ public sealed class PipelineBranchAdvanceStep(
                         runId, [$"Advance branch step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
                     return reason;
                 }
+            case GitBranchAdvanceOutcome.Protected:
+                // Decision D13: a strictly protected branch is never moved by a pipeline. The step fails
+                // rather than warns: the pipeline asks for a move the repository forbids.
+                await FailAsync(runId, stepRun,
+                    $"'{target.Branch}' was not advanced to {Short(commit)} (release {release.Version}): "
+                    + $"{result.Detail ?? "the branch is strictly protected."} "
+                    + "Merge a pull request, or set the rule to 'Protected except pipelines'.",
+                    ct).ConfigureAwait(false);
+                return null;
             case GitBranchAdvanceOutcome.CommitNotFound:
                 await FailAsync(runId, stepRun,
                     $"no internal repository of the project holds commit {commit} of release {release.Version}.",

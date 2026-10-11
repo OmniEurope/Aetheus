@@ -29,6 +29,12 @@ public interface IAuthService
     Task BumpSecurityStampAsync(int userId, CancellationToken ct = default);
     Task<LoginResponse?> RenewTokenAsync(int userId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Recette R1-37: the signed-in user logs out. Announces the end of their session in-process so the
+    /// modules holding per-user state in memory drop it now (the typed mailbox passwords); revokes no token.
+    /// </summary>
+    Task LogoutAsync(int userId, CancellationToken ct = default);
+
     // --- Refresh Token Rotation (F-012) ---
     Task<LoginResponse?> RefreshTokenAsync(string refreshToken, CancellationToken ct = default);
 

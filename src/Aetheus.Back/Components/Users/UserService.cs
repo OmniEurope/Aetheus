@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Security.Claims;
+using Aetheus.Back.Components.Users.Events;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.Users;
 
-public class UserService(IUserRepository repo, IHttpContextAccessor httpContextAccessor, IAuditService audit, IResourceAuthorizationService authz, IMemoryCache cache, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier) : IUserService
+public class UserService(IUserRepository repo, IHttpContextAccessor httpContextAccessor, IAuditService audit, IResourceAuthorizationService authz, IMemoryCache cache, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IDomainEventDispatcher domainEvents) : IUserService
 {
     public async Task<PaginatedResult<UserDto>> GetUsersAsync(PaginationRequest request, CancellationToken ct = default)
     {
@@ -104,6 +106,8 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         if (roleChange.HasChanged || deactivating) RotateSecurityStamp(user);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         await PublishUserUpdateAsync(user, roleChange.HasChanged, deactivating, ct).ConfigureAwait(false);
+        if (deactivating)
+            await EndSessionAsync(user.Id, UserSessionEndReasons.Deactivated, ct).ConfigureAwait(false);
         return MapToDto(user);
     }
 
@@ -199,8 +203,14 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         await repo.RemoveUserAsync(user, ct).ConfigureAwait(false);
         await audit.LogAsync("Deleted", "User", id, name, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(AdminEntities.User, id, EntityChangeOps.Deleted, ct).ConfigureAwait(false);
+        await EndSessionAsync(id, UserSessionEndReasons.Deleted, ct).ConfigureAwait(false);
         return true;
     }
+
+    // Recette R1-37: tells the modules holding per-user state in memory (the typed mailbox passwords)
+    // that this user's session is over. In-process and awaited, so it is done when the request returns.
+    private Task EndSessionAsync(int userId, string reason, CancellationToken ct) =>
+        domainEvents.DispatchAsync(new UserSessionEndedEvent(userId, reason), ct);
 
     public async Task<bool> ChangePasswordAsync(int id, ChangeUserPasswordRequest request, CancellationToken ct = default)
     {
@@ -257,6 +267,10 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
             "User", user.Id,
             revokedTokens > 0 ? $"{user.Username}; {revokedTokens} personal access token(s) revoked" : user.Username,
             ct).ConfigureAwait(false);
+        // The client signs out right after a self-service change, with a token the rotated stamp already
+        // refuses: its logout call cannot reach the server, so the session end is announced here.
+        if (isSelf)
+            await EndSessionAsync(user.Id, UserSessionEndReasons.PasswordChanged, ct).ConfigureAwait(false);
         return true;
     }
 

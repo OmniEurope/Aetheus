@@ -118,6 +118,12 @@ public sealed class PipelineRepository(
     public Task<PipelineRun?> GetRunDetailAsync(int runId, CancellationToken ct = default)
         => _runDetail.GetRunDetailAsync(runId, ct);
 
+    public Task<bool> DidAnyStepStartInStagesAsync(int runId, IReadOnlyCollection<string> stageNames, CancellationToken ct = default)
+        => _runDetail.DidAnyStepStartInStagesAsync(runId, stageNames, ct);
+
+    public Task<PipelineRun?> GetLatestRunTrackedAsync(int pipelineId, CancellationToken ct = default)
+        => _runDetail.GetLatestRunTrackedAsync(pipelineId, ct);
+
     public Task<PipelineRunResultSummaries> GetRunResultSummariesAsync(PipelineRun run, CancellationToken ct = default)
         => _runDetail.GetRunResultSummariesAsync(run, ct);
 
@@ -198,8 +204,8 @@ public sealed class PipelineRepository(
     public Task<bool> HasFailedArtifactCollectionAsync(int runId, CancellationToken ct = default)
         => _core.HasFailedArtifactCollectionAsync(runId, ct);
 
-    public Task<bool> HasAnyContinuableFailedStepInRunAsync(int runId, CancellationToken ct = default)
-        => _core.HasAnyContinuableFailedStepInRunAsync(runId, ct);
+    public Task<List<PipelineStepRun>> GetContinuableFailedStepsInRunAsync(int runId, CancellationToken ct = default)
+        => _core.GetContinuableFailedStepsInRunAsync(runId, ct);
 
     public Task<bool> HasAnySucceededStepInRunAsync(int runId, CancellationToken ct = default)
         => _core.HasAnySucceededStepInRunAsync(runId, ct);
@@ -393,11 +399,11 @@ public sealed class PipelineRepository(
     public Task<Server?> FindOnlineServerInPoolInOrganizationAsync(string poolName, OsType requiredOs, int organizationId, CancellationToken ct = default)
         => _resolver.FindOnlineServerInPoolInOrganizationAsync(poolName, requiredOs, organizationId, ct);
 
-    public Task<Server?> FindOnlineServerInEnvironmentAsync(string environmentName, OsType requiredOs = OsType.Unknown, CancellationToken ct = default)
-        => _resolver.FindOnlineServerInEnvironmentAsync(environmentName, requiredOs, ct);
+    public Task<Server?> FindOnlineServerInEnvironmentAsync(string environmentName, int? projectId, OsType requiredOs = OsType.Unknown, CancellationToken ct = default)
+        => _resolver.FindOnlineServerInEnvironmentAsync(environmentName, projectId, requiredOs, ct);
 
-    public Task<Server?> FindOnlineServerInEnvironmentInOrganizationAsync(string environmentName, OsType requiredOs, int organizationId, CancellationToken ct = default)
-        => _resolver.FindOnlineServerInEnvironmentInOrganizationAsync(environmentName, requiredOs, organizationId, ct);
+    public Task<Server?> FindOnlineServerInEnvironmentInOrganizationAsync(string environmentName, OsType requiredOs, int organizationId, int? projectId, CancellationToken ct = default)
+        => _resolver.FindOnlineServerInEnvironmentInOrganizationAsync(environmentName, requiredOs, organizationId, projectId, ct);
 
     public Task<Server?> FindAnyOnlineRunnerAsync(int? organizationId, OsType requiredOs = OsType.Unknown, CancellationToken ct = default)
         => _resolver.FindAnyOnlineRunnerAsync(organizationId, requiredOs, ct);
@@ -405,11 +411,11 @@ public sealed class PipelineRepository(
     public Task<bool> HasRunnerWithDockerAsync(int? organizationId, CancellationToken ct = default)
         => _resolver.HasRunnerWithDockerAsync(organizationId, ct);
 
-    public Task<Server?> FindOnlineDeployTargetAsync(string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, CancellationToken ct = default)
-        => _resolver.FindOnlineDeployTargetAsync(pool, environment, agent, requiredOs, organizationId, ct);
+    public Task<Server?> FindOnlineDeployTargetAsync(string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, int? projectId, CancellationToken ct = default)
+        => _resolver.FindOnlineDeployTargetAsync(pool, environment, agent, requiredOs, organizationId, projectId, ct);
 
-    public Task<List<int>> FindCandidateTargetServerIdsAsync(string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, bool deploymentStage, CancellationToken ct = default)
-        => _resolver.FindCandidateTargetServerIdsAsync(pool, environment, agent, requiredOs, organizationId, deploymentStage, ct);
+    public Task<List<int>> FindCandidateTargetServerIdsAsync(string? pool, string? environment, string? agent, OsType requiredOs, int? organizationId, bool deploymentStage, int? projectId, CancellationToken ct = default)
+        => _resolver.FindCandidateTargetServerIdsAsync(pool, environment, agent, requiredOs, organizationId, deploymentStage, projectId, ct);
 
     public Task<Server?> FindOnlineServerByIdAsync(int serverId, OsType requiredOs = OsType.Unknown, CancellationToken ct = default)
         => _resolver.FindOnlineServerByIdAsync(serverId, requiredOs, ct);
@@ -462,8 +468,8 @@ public sealed class PipelineRepository(
     public Task<List<int>> FindServerIdsInPoolAsync(string poolName, CancellationToken ct = default)
         => _resolver.FindServerIdsInPoolAsync(poolName, ct);
 
-    public Task<List<int>> FindServerIdsInEnvironmentAsync(string environmentName, CancellationToken ct = default)
-        => _resolver.FindServerIdsInEnvironmentAsync(environmentName, ct);
+    public Task<List<int>> FindServerIdsInEnvironmentAsync(string environmentName, int? projectId, CancellationToken ct = default)
+        => _resolver.FindServerIdsInEnvironmentAsync(environmentName, projectId, ct);
 
     // --- Coverage / code-quality ---
     public Task<bool> HasAnyRunningStepInRunAsync(int runId, CancellationToken ct = default)

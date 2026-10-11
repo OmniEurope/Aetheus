@@ -26,7 +26,7 @@ internal static class GitLightCollectionPager
         .Text("pattern", x => x.Pattern)
         .Boolean("preventDeletion", x => x.PreventDeletion)
         .Boolean("preventForcePush", x => x.PreventForcePush)
-        .Boolean("requirePullRequest", x => x.RequirePullRequest);
+        .Enum("protectionLevel", x => x.ProtectionLevel);
 
     public static PaginatedResult<GitLightBranchDto> Branches(
         IEnumerable<GitLightBranchDto> source, PaginationRequest request) =>

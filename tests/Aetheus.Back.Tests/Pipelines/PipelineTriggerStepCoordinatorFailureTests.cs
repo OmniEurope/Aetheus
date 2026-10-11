@@ -37,6 +37,10 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
 
     private const int ParentRunId = 1118;
     private const int ProjectId = 13;
+    private static readonly HashSet<string> NoSecrets = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The parent's secret keys: a vault entry and an alias BACK-022 classified with it.</summary>
+    private static readonly HashSet<string> Secrets = new(StringComparer.OrdinalIgnoreCase) { "VAULT_DB_PASSWORD", "DB_ALIAS" };
 
     public PipelineTriggerStepCoordinatorFailureTests()
     {
@@ -114,7 +118,7 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
         // Not Assert.ThrowsAsync's opposite by accident: an unhandled exception here unwinds the
         // whole scheduling pass, which is precisely the wedge this test exists to prevent.
         var exception = await Record.ExceptionAsync(() => _sut.CreateTriggerStepAsync(
-            ParentRunId, step, Definition(), [], _launcher, CancellationToken.None));
+            ParentRunId, step, Definition(), [], NoSecrets, _launcher, CancellationToken.None));
         Assert.Null(exception);
 
         Assert.Equal(TaskExecutionStatus.Failed, step.Status);
@@ -141,7 +145,7 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
         var step = Step();
 
         await _sut.CreateTriggerStepAsync(
-            ParentRunId, step, Definition(), [], _launcher, CancellationToken.None);
+            ParentRunId, step, Definition(), [], NoSecrets, _launcher, CancellationToken.None);
 
         Assert.Equal(TaskExecutionStatus.Running, step.Status);
         Assert.Equal(1119, step.TriggeredRunId);
@@ -173,7 +177,7 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
         definition.Parameters["runner"] = "b";
         var step = Step();
 
-        await _sut.CreateTriggerStepAsync(ParentRunId, step, definition, [], _launcher, CancellationToken.None);
+        await _sut.CreateTriggerStepAsync(ParentRunId, step, definition, [], NoSecrets, _launcher, CancellationToken.None);
 
         Assert.Equal(TaskExecutionStatus.Failed, step.Status);
         Assert.Contains("lacks Server.Admin", step.FailureReason);
@@ -201,13 +205,80 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
         var definition = Definition();
         definition.Parameters["runner"] = "b";
 
-        await _sut.CreateTriggerStepAsync(ParentRunId, Step(), definition, [], _launcher, CancellationToken.None);
+        await _sut.CreateTriggerStepAsync(ParentRunId, Step(), definition, [], NoSecrets, _launcher, CancellationToken.None);
 
         await _authz.Received().HasPermissionAsync("admin", ResourceType.Server, 42, Permission.Admin, Arg.Any<CancellationToken>());
         await _launcher.Received(1).TriggerPreparedRunAsync(
             Arg.Is<PipelineRunPreparation>(prepared => ReferenceEquals(prepared, resolved)),
             Arg.Any<Dictionary<string, string>>(), Arg.Any<Dictionary<string, string>?>(),
             Arg.Any<CancellationToken>(), Arg.Any<string>());
+    }
+
+    /// <summary>
+    /// Neighbour of BACK-022: the child run persists the variables and parameters it is handed
+    /// (AdditionalVariablesJson, ParametersJson). A secret, or an alias of one, substituted into them
+    /// was written there in clear. It travels as its reference instead, which the child resolves from
+    /// its own vault and classifies as a secret (or refuses at launch when it cannot provide it).
+    /// </summary>
+    [Fact]
+    public async Task ASecretPassedToTheChild_TravelsAsItsReference_NeverAsItsValue()
+    {
+        Dictionary<string, string>? childVariables = null;
+        Dictionary<string, string>? childParameters = null;
+        _launcher.TriggerPreparedRunAsync(
+                Arg.Any<PipelineRunPreparation>(),
+                Arg.Do<Dictionary<string, string>>(variables => childVariables = variables),
+                Arg.Do<Dictionary<string, string>?>(parameters => childParameters = parameters),
+                Arg.Any<CancellationToken>(), Arg.Any<string>())
+            .Returns(new PipelineRunDto { Id = 1119 });
+        var definition = Definition();
+        definition.Variables["DB_PASSWORD"] = "$(VAULT_DB_PASSWORD)";
+        definition.Variables["CONNECTION"] = "Host=db;Password=$(DB_ALIAS)";
+        definition.Variables["PLAIN"] = "$(PUBLIC_VALUE)";
+        definition.Parameters["token"] = "$(VAULT_DB_PASSWORD:-none)";
+        var legVariables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["VAULT_DB_PASSWORD"] = "s3cr3t-value",
+            ["DB_ALIAS"] = "s3cr3t-value",
+            ["PUBLIC_VALUE"] = "visible",
+        };
+
+        await _sut.CreateTriggerStepAsync(
+            ParentRunId, Step(), definition, legVariables, Secrets, _launcher, CancellationToken.None);
+
+        Assert.NotNull(childVariables);
+        Assert.NotNull(childParameters);
+        Assert.DoesNotContain(childVariables.Values, value => value.Contains("s3cr3t-value", StringComparison.Ordinal));
+        Assert.DoesNotContain(childParameters.Values, value => value.Contains("s3cr3t-value", StringComparison.Ordinal));
+        Assert.Equal("$(VAULT_DB_PASSWORD)", childVariables["DB_PASSWORD"]);
+        Assert.Equal("Host=db;Password=$(DB_ALIAS)", childVariables["CONNECTION"]);
+        Assert.Equal("$(VAULT_DB_PASSWORD:-none)", childParameters["token"]);
+        Assert.Equal("visible", childVariables["PLAIN"]);
+    }
+
+    /// <summary>A secret passed under its own name would reach the child as the literal reference and
+    /// replace the child's own vault value with it: it is not forwarded, the child reads its vault.</summary>
+    [Fact]
+    public async Task ASecretPassedUnderItsOwnName_IsLeftToTheChildsVault()
+    {
+        Dictionary<string, string>? childVariables = null;
+        _launcher.TriggerPreparedRunAsync(
+                Arg.Any<PipelineRunPreparation>(),
+                Arg.Do<Dictionary<string, string>>(variables => childVariables = variables),
+                Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string>())
+            .Returns(new PipelineRunDto { Id = 1119 });
+        var definition = Definition();
+        definition.Variables["VAULT_DB_PASSWORD"] = "$(VAULT_DB_PASSWORD)";
+        var legVariables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["VAULT_DB_PASSWORD"] = "s3cr3t-value",
+        };
+
+        await _sut.CreateTriggerStepAsync(
+            ParentRunId, Step(), definition, legVariables, Secrets, _launcher, CancellationToken.None);
+
+        Assert.NotNull(childVariables);
+        Assert.False(childVariables.ContainsKey("VAULT_DB_PASSWORD"));
     }
 
     [Fact]

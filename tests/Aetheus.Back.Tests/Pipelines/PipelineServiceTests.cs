@@ -1670,6 +1670,110 @@ public class PipelineServiceTests
         Assert.Contains(result.Errors, error => error.Contains("allow_missing", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("previous-deployed", "none")]
+    [InlineData("current-deployed", "none")]
+    [InlineData("previous-deployed", "required")]
+    [InlineData("current-deployed", "NONE")]
+    public void ValidateYamlStrict_RestoreArtifactsDeployedBaseline_AcceptsKnownValueOnDeployedSelector(
+        string selector, string value)
+    {
+        var yaml = $$"""
+            name: rollback-qa
+            trigger: manual
+            stages:
+              - name: restore
+                agent: linux
+                steps:
+                  - name: restore previous agent contract
+                    type: restore-artifacts
+                    release: {{selector}}
+                    artifact: AgentRelease-artifacts
+                    target_directory: .nminus1
+                    allow_missing: true
+                    deployed_baseline: {{value}}
+            """;
+
+        var result = _sut.ValidateYamlStrict(yaml);
+
+        Assert.True(result.IsValid, string.Join(System.Environment.NewLine, result.Errors));
+    }
+
+    [Fact]
+    public void ValidateYamlStrict_RestoreArtifactsDeployedBaseline_RejectsUnknownValue()
+    {
+        var yaml = """
+            name: rollback-qa
+            trigger: manual
+            stages:
+              - name: restore
+                agent: linux
+                steps:
+                  - name: restore previous agent contract
+                    type: restore-artifacts
+                    release: previous-deployed
+                    artifact: AgentRelease-artifacts
+                    deployed_baseline: optional
+            """;
+
+        var result = _sut.ValidateYamlStrict(yaml);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("deployed_baseline must be 'required' or 'none'", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("release: latest-published")]
+    [InlineData("release: previous-published")]
+    [InlineData("release: 1.0.42")]
+    [InlineData("release: $(RELEASE)")]
+    [InlineData("artifact_source_pipeline: aetheus-ci")]
+    public void ValidateYamlStrict_RestoreArtifactsDeployedBaseline_RejectsNonDeployedSource(string sourceLine)
+    {
+        var yaml = $$"""
+            name: rollback-qa
+            trigger: manual
+            stages:
+              - name: restore
+                agent: linux
+                steps:
+                  - name: restore agent contract
+                    type: restore-artifacts
+                    {{sourceLine}}
+                    artifact: AgentRelease-artifacts
+                    deployed_baseline: none
+            """;
+
+        var result = _sut.ValidateYamlStrict(yaml);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("deployed_baseline requires release: previous-deployed or current-deployed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ValidateYamlStrict_DeployedBaselineOnAnotherStepType_IsRejected()
+    {
+        var yaml = """
+            name: build
+            trigger: manual
+            stages:
+              - name: build
+                agent: linux
+                steps:
+                  - name: compile
+                    shell: echo build
+                    deployed_baseline: none
+            """;
+
+        var result = _sut.ValidateYamlStrict(yaml);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error =>
+            error.Contains("deployed_baseline is only valid on a restore-artifacts step", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ValidateYamlStrict_LatestCandidateTemplate_IsValid()
     {

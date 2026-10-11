@@ -78,8 +78,12 @@ public partial class ServerDockerSection : IAsyncDisposable
         _composeTab?.HandleTaskOutput(taskName, output);
     }
 
+    // SITE-OFFLINE-001: a prune is an agent task.
+    private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
+
     private async Task OpenPruneDialogAsync()
     {
+        if (AgentOfflineGuard.Blocks(Server, Toast)) return;
         var result = await Dialog.OpenAsync<DockerPruneDialog>(
             L["DockerPruneDialog"].Value,
             options: new OmniDialogOptions { Width = "32rem", AutoFocusFirstElement = false });

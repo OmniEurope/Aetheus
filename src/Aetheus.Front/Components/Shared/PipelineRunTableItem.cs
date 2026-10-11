@@ -25,10 +25,17 @@ public sealed record PipelineRunTableItem
     /// <summary>Recette R-373: the internal repository the run built, when the backend resolved it.</summary>
     public int? RepositoryId { get; init; }
     public AnalysisGrade? GateGrade { get; init; }
+
+    /// <summary>Recette R2-146 (merged S-UX-M3VZ8): a failed run that only records a refused automated
+    /// launch (R-522), told apart in the list from a run that ran and failed, and from a Rejected one.</summary>
+    public bool LaunchRefused { get; init; }
     public bool CancellationRequested { get; init; }
     public DateTime LatestStartedAt { get; init; }
     public IReadOnlyList<int> TriggeredRunIds { get; init; } = [];
     public IReadOnlyList<PipelineRunTableItem> LinkedRuns { get; init; } = [];
+
+    /// <summary>The start of the warning PipelineRefusedLaunchRecorder.BuildReason writes.</summary>
+    internal const string LaunchRefusedPrefix = "The automated launch (";
 
     public static PipelineRunTableItem FromRun(PipelineRunDto run) => new()
     {
@@ -50,6 +57,8 @@ public sealed record PipelineRunTableItem
         RepositoryUrl = run.RepositoryUrl,
         RepositoryId = run.RepositoryId,
         GateGrade = run.GateGrade,
+        LaunchRefused = run.Status == PipelineStatus.Failed
+            && run.Warnings.Any(warning => warning.StartsWith(LaunchRefusedPrefix, StringComparison.Ordinal)),
         CancellationRequested = run.CancellationRequested,
         LatestStartedAt = run.StartedAt,
         TriggeredRunIds = run.Steps

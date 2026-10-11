@@ -23,11 +23,18 @@ public class DashboardsTests : BunitContext
     [Fact]
     public void Renders_Loading_Initially()
     {
-        _handler.SetJsonResponse("api/dashboards", new List<DashboardDto>());
+        // FRONTTEST-004: the answer is held back, so the product loader is observed while the list is
+        // pending, then replaced by the empty state once the empty list has arrived.
+        var answer = new TaskCompletionSource<List<DashboardDto>>();
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/dashboards", _ => answer.Task);
         var cut = Render<Dashboards>();
-        // Eventually finishes loading
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
-        Assert.DoesNotContain("rz-progressbar", cut.Markup);
+        Assert.Single(cut.FindComponents<AetheusLoader>());
+        Assert.DoesNotContain("NoRecords", cut.Markup);
+
+        answer.SetResult([]);
+
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindComponents<AetheusLoader>()));
+        Assert.Contains("NoRecords", cut.Markup);
     }
 
     [Fact]

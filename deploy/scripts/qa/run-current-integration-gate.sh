@@ -23,4 +23,6 @@ sh deploy/scripts/run-qa-deployed-integration-suite.sh \
 case "$TEST_EXIT" in 0) ;; 10) STATUS=1 ;; *) exit "$TEST_EXIT" ;; esac
 printf '%s\n' "$STATUS" > "$WORKSPACE/.qa-current-integration-gate-status"
 echo "##aetheus[setvariable name=QA_CURRENT_INTEGRATION_GATE_STATUS]$STATUS"
+[ "$STATUS" = 0 ] || sh deploy/scripts/publish-failed-tests.sh QA_CURRENT_INTEGRATION_FAILED_TESTS \
+  "$WORKSPACE/.qa-test-results/current/failed-tests.txt" "$WORKSPACE/.qa-test-results/current/deployed/failed-tests.txt"
 echo "Current integration findings status: $STATUS."

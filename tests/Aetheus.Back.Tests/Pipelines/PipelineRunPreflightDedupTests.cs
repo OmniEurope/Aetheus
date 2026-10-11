@@ -40,7 +40,7 @@ public sealed class PipelineRunPreflightDedupTests
     private void ConfiguredTargets(params int[] ids)
         => _repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(ids.ToList());
 
     private static PipelineYamlDefinition Definition(params PipelineStageDefinition[] stages)
@@ -86,7 +86,7 @@ public sealed class PipelineRunPreflightDedupTests
         Assert.Empty(problems);
         await _repo.Received(1).FindCandidateTargetServerIdsAsync(
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-            Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public sealed class PipelineRunPreflightDedupTests
 
         await _repo.Received(2).FindCandidateTargetServerIdsAsync(
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-            Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -34,7 +34,7 @@ else
                         <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                             @if (s.Type == ProjectServerType.AgentServer && s.ServerId.HasValue)
                             {
-                                <a href="/servers/@s.ServerId/overview" @onclick:stopPropagation="true">@s.DisplayName</a>
+                                <a href="/servers/@s.ServerId/overview" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@s.DisplayName</a>
                             }
                             else
                             {
@@ -64,7 +64,7 @@ else
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="ProjectServerDto" Title="" Width="100px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
                     <Template Context="s">
-                        <span @onclick:stopPropagation="true">
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenEditDialogAsync(s))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteServerAsync(s))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                         </span>

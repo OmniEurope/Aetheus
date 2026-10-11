@@ -44,11 +44,10 @@ public class PipelineRunApprovalControllerTests : BunitContext
     [Fact]
     public async Task LoadAsync_PendingApproval_ExposesItWithoutFlaggingAnythingMissing()
     {
-        _handler.SetJsonResponse("api/pipelines/runs/1/approvals", new List<PipelineApprovalDto> { Pending() });
-        _handler.SetJsonResponse("api/environments/3", new EnvironmentDto
+        // Recette R1-24: the instructions come with the approval; no environment read is needed.
+        _handler.SetJsonResponse("api/pipelines/runs/1/approvals", new List<PipelineApprovalDto>
         {
-            Id = 3,
-            ApprovalInstructions = "check the changelog"
+            Pending() with { EnvironmentInstructions = "check the changelog" }
         });
         var sut = Sut();
 
@@ -68,9 +67,8 @@ public class PipelineRunApprovalControllerTests : BunitContext
     {
         _handler.SetJsonResponse("api/pipelines/runs/1/approvals", new List<PipelineApprovalDto>
         {
-            new() { Id = 7, PipelineRunId = 1, StageName = "deploy", Scope = ApprovalScope.Pipeline, EnvironmentId = 3, Status = ApprovalStatus.Pending }
+            new() { Id = 7, PipelineRunId = 1, StageName = "deploy", Scope = ApprovalScope.Pipeline, EnvironmentId = 3, EnvironmentInstructions = "check the changelog", Status = ApprovalStatus.Pending }
         });
-        _handler.SetJsonResponse("api/environments/3", new EnvironmentDto { Id = 3, ApprovalInstructions = "check the changelog" });
         var sut = Sut();
 
         await sut.LoadAsync(Waiting(), Xunit.TestContext.Current.CancellationToken);
@@ -81,7 +79,7 @@ public class PipelineRunApprovalControllerTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/1/approvals", new List<PipelineApprovalDto>
         {
             new() { Id = 7, PipelineRunId = 1, StageName = "deploy", Scope = ApprovalScope.Pipeline, EnvironmentId = 3, Status = ApprovalStatus.Approved },
-            new() { Id = 8, PipelineRunId = 1, StageName = "deploy", Scope = ApprovalScope.Environment, EnvironmentId = 3, Status = ApprovalStatus.Pending }
+            new() { Id = 8, PipelineRunId = 1, StageName = "deploy", Scope = ApprovalScope.Environment, EnvironmentId = 3, EnvironmentInstructions = "check the changelog", Status = ApprovalStatus.Pending }
         });
 
         await sut.LoadAsync(Waiting(), Xunit.TestContext.Current.CancellationToken);

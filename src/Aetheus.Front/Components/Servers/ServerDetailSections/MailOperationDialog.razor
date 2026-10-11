@@ -9,6 +9,11 @@
                 @* R-516: each record in OE's code block (its name, the copy button, then the value). *@
                 <OmniCodeBlock Code="@record.Value" Title="@record.Label" Wrap="true" />
             }
+            @if (DkimUnavailableReason is { } reason)
+            {
+                @* SITE-OFFLINE-001: the key is read from the server; without it no DKIM value is shown as if it were one. *@
+                <OmniAlert Severity="OmniSeverity.Warning" Title="@DkimRecordLabel" Class="mail-dkim-unavailable">@reason</OmniAlert>
+            }
         </OmniStack>
     }
     <DialogFooter CancelText="@L["Close"]" OnCancel="@(() => Dialog.Close())" />
@@ -25,8 +30,22 @@ else
             }
             else if (Mode == MailDialogMode.AddAccount)
             {
-                <OmniFormField Label="@L["Email"]" For="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-3"><OmniTextBox Id="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-3" @bind-Value="_model.Email" Placeholder="user@example.com" /></OmniFormField><ValidationMessage For="@(() => _model.Email)" />
-                <OmniFormField Label="@L["Password"]" For="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-4"><OmniPassword Id="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-4" @bind-Value="_model.Password" /></OmniFormField><ValidationMessage For="@(() => _model.Password)" />
+                @* Recette R1-15: the name before the @ is enough, completed with the domain shown (or picked) after the field. *@
+                <OmniFormField Label="@L["Email"]" Description="@L["MailAccountAddressHelp"]" For="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-3" Class="mail-account-address">
+                    <ChildContent><OmniTextBox Id="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-3" @bind-Value="_model.Email" Placeholder="contact" /></ChildContent>
+                    <EndContent>
+                        @if (AccountDomainOptions.Count > 1)
+                        {
+                            <OmniDropDown TValue="string" Options="@AccountDomainOptions" @bind-Value="_model.Domain" Label="@L["MailAccountDomain"]" Class="mail-account-domain" />
+                        }
+                        else if (AccountDomainOptions.Count == 1)
+                        {
+                            <OmniText Tone="OmniTextTone.Muted" Class="mail-account-domain">@AccountDomainOptions[0].Text</OmniText>
+                        }
+                    </EndContent>
+                </OmniFormField><ValidationMessage For="@(() => _model.Email)" />
+                @* Recette R1-5: the password rule in plain words, before the user meets it as an error. *@
+                <OmniFormField Label="@L["Password"]" Description="@string.Format(L["MailPasswordRule"], PasswordPolicy.MinimumLength, PasswordPolicy.MaximumLength)" For="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-4"><OmniPassword Id="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-4" @bind-Value="_model.Password" /></OmniFormField><ValidationMessage For="@(() => _model.Password)" />
                 <OmniFormField For="oe-pages-servers-serverdetailsections-mailoperationdialog-numeric-1"><LabelContent>@($"{L["Quota"]} (MB)")</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.QuotaMb" Minimum="10" Maximum="102400" Id="oe-pages-servers-serverdetailsections-mailoperationdialog-numeric-1" /></ChildContent></OmniFormField>
             }
             else if (Mode == MailDialogMode.AddAlias)
@@ -45,7 +64,7 @@ else
             else if (Mode == MailDialogMode.RequestCertificate)
             {
                 <OmniAlert Severity="OmniSeverity.Info">@string.Format(L["MailCertificateHint"], _model.Hostname)</OmniAlert>
-                <OmniFormField Label="@L["MailAcmeEmail"]" Help="@L["MailAcmeEmailHelp"]" For="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-16"><OmniTextBox Id="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-16" @bind-Value="_model.Email" Placeholder="admin@example.com" /></OmniFormField><ValidationMessage For="@(() => _model.Email)" />
+                <OmniFormField Label="@L["MailAcmeEmail"]" Description="@L["MailAcmeEmailHelp"]" For="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-16"><OmniTextBox Id="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-16" @bind-Value="_model.Email" Placeholder="admin@example.com" /></OmniFormField><ValidationMessage For="@(() => _model.Email)" />
             }
             else if (Mode == MailDialogMode.SpamThresholds)
             {

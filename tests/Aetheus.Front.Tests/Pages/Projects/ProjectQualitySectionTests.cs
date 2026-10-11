@@ -106,13 +106,13 @@ public class ProjectQualitySectionTests : BunitContext
         Assert.NotEmpty(cut.FindAll(".grade-badge.analysis-grade-letter"));
         Assert.Contains("AnalysisDuplicatedCode", cut.Markup);
         Assert.DoesNotContain(">grade.duplication<", cut.Markup);
-        // Recette R-373: eight characters, the full hash on hover.
-        var commit = cut.FindAll(".analysis-grade-meta").Single(meta => meta.TextContent.StartsWith("Commit", StringComparison.Ordinal));
-        Assert.Equal("Commit: aaaaaaaa", commit.TextContent.Trim());
-        // Recette R-430: through ShortId, which carries the full hash on hover.
-        Assert.Equal(new string('a', 40), commit.QuerySelector(".short-id")!.GetAttribute("title"));
-        Assert.Contains("AnalysisFreshness", cut.Markup);
-        Assert.Contains("2025", cut.Markup);
+        // Recettes R-373 and R2-143: the commit is a tile with its eight first characters.
+        var commit = cut.FindAll(".analysis-grade-meta-tiles .omni-stat-tile")
+            .Single(tile => tile.QuerySelector(".omni-stat-tile__label")!.TextContent.Trim() == "Commit");
+        Assert.Equal("aaaaaaaa", commit.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim());
+        // Recettes R2-139 and R2-141: no limiting-domain sentence, no required/complete/freshness line.
+        Assert.DoesNotContain("AnalysisLimitingDomain", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("AnalysisFreshness", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -507,9 +507,16 @@ public class ProjectQualitySectionTests : BunitContext
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 8));
 
-        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll("a"), link => link.GetAttribute("href") == "/git-repositories/commits/41"));
-        Assert.Contains(cut.FindAll("a"), link => link.GetAttribute("href") == "/pipelines/runs/2464" && link.TextContent.Contains("#2464", StringComparison.Ordinal));
-        Assert.Contains(cut.FindAll("a"), link => link.GetAttribute("href") == "/releases/12" && link.TextContent.Contains("1.4.2", StringComparison.Ordinal));
+        // Recette R2-143: each figure is a tile that opens its page (R-430's links kept).
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        cut.WaitForAssertion(() => Assert.Equal(4, cut.FindAll(".analysis-grade-meta-tiles .omni-stat-tile").Count));
+        foreach (var (value, target) in new[] { ("773f2080", "/git-repositories/commits/41"), ("#2464", "/pipelines/runs/2464"), ("1.4.2", "/releases/12") })
+        {
+            cut.FindAll(".analysis-grade-meta-tiles .omni-stat-tile")
+                .Single(tile => tile.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim() == value)
+                .Click();
+            Assert.EndsWith(target, navigation.Uri, StringComparison.Ordinal);
+        }
     }
 
     private static AnalysisFindingDto Finding(int id, string title) => new()

@@ -16,11 +16,14 @@ public interface IPipelineDispatchServerResolver
     /// Resolves the server for a stage, honouring a run-scoped local deployment target when one is set.
     /// Returns <c>null</c> when no server satisfies the stage's selectors.
     /// </summary>
+    /// <param name="projectId">The run's project: an <c>environment:</c> selector is read in it (own, then
+    /// shared), never in another project's homonym (neighbour of BACK-018).</param>
     Task<Server?> ResolveServerForTargetAsync(
         PipelineStageDefinition stageDef,
         IReadOnlyDictionary<string, string> resolvedVars,
         int? organizationId,
         bool deploymentStage,
+        int? projectId,
         CancellationToken ct);
 
     /// <summary>
@@ -80,14 +83,14 @@ public sealed class PipelineDispatchServerResolver(IPipelineRepository repo) : I
 
     public async Task<Server?> ResolveServerForTargetAsync(
         PipelineStageDefinition stageDef, IReadOnlyDictionary<string, string> resolvedVars,
-        int? organizationId, bool deploymentStage, CancellationToken ct)
+        int? organizationId, bool deploymentStage, int? projectId, CancellationToken ct)
     {
         var effectiveStage = ResolveEffectiveStageTarget(stageDef, resolvedVars);
         return deploymentStage
             ? await repo.FindOnlineDeployTargetAsync(
                 effectiveStage.Pool, effectiveStage.Environment, effectiveStage.Agent,
-                OsTypeHelper.Parse(effectiveStage.Os), organizationId, ct).ConfigureAwait(false)
-            : await ResolveServerAsync(effectiveStage, organizationId, ct).ConfigureAwait(false);
+                OsTypeHelper.Parse(effectiveStage.Os), organizationId, projectId, ct).ConfigureAwait(false)
+            : await ResolveServerAsync(effectiveStage, organizationId, projectId, ct).ConfigureAwait(false);
     }
 
     // The two reason builders describe the same selector precedence; saying it once keeps them honest.
@@ -99,7 +102,8 @@ public sealed class PipelineDispatchServerResolver(IPipelineRepository repo) : I
 
     // P-04 / P-01: Server resolution - pool > environment > agent name. Explicit selectors are
     // fail-closed; only stages with no selector may use an organization-scoped runner fallback.
-    private async Task<Server?> ResolveServerAsync(PipelineStageDefinition stageDef, int? organizationId, CancellationToken ct)
+    private async Task<Server?> ResolveServerAsync(
+        PipelineStageDefinition stageDef, int? organizationId, int? projectId, CancellationToken ct)
     {
         var requiredOs = OsTypeHelper.Parse(stageDef.Os);
         Server? server = null;
@@ -110,8 +114,8 @@ public sealed class PipelineDispatchServerResolver(IPipelineRepository repo) : I
                 : await repo.FindOnlineServerInPoolAsync(stageDef.Pool, requiredOs, ct).ConfigureAwait(false);
         else if (!string.IsNullOrEmpty(stageDef.Environment))
             server = organizationId is { } environmentOrg
-                ? await repo.FindOnlineServerInEnvironmentInOrganizationAsync(stageDef.Environment, requiredOs, environmentOrg, ct).ConfigureAwait(false)
-                : await repo.FindOnlineServerInEnvironmentAsync(stageDef.Environment, requiredOs, ct).ConfigureAwait(false);
+                ? await repo.FindOnlineServerInEnvironmentInOrganizationAsync(stageDef.Environment, requiredOs, environmentOrg, projectId, ct).ConfigureAwait(false)
+                : await repo.FindOnlineServerInEnvironmentAsync(stageDef.Environment, projectId, requiredOs, ct).ConfigureAwait(false);
         else if (!string.IsNullOrEmpty(stageDef.Agent) && !stageDef.Agent.Equals("default", StringComparison.OrdinalIgnoreCase))
             server = organizationId is { } agentOrg
                 ? await repo.FindOnlineServerByAgentInOrganizationAsync(stageDef.Agent, requiredOs, agentOrg, ct).ConfigureAwait(false)

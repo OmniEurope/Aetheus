@@ -57,7 +57,7 @@
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AlertRuleDto" Title="@L["Threshold"]" ExportValue="@ThresholdExport" Width="140px" Filterable="false" >
                 <Template Context="alert">
-                    @alert.Operator @alert.Threshold%
+                    @alert.Operator @AlertThresholdUnit.Format(alert.Metric, alert.Threshold)
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AlertRuleDto" Property="SustainedSeconds" Title="@L["SustainedSeconds"]" Width="140px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />

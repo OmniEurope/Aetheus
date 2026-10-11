@@ -76,7 +76,7 @@ public sealed class PipelinePortRegistryGuard(
 
         var policy = ParseObservedPortPolicy(definition.ObservedPortPolicy);
         var claims = await ResolveClaimsAsync(
-            definition, resolvedVariables, organizationId, ct).ConfigureAwait(false);
+            definition, resolvedVariables, organizationId, projectId, ct).ConfigureAwait(false);
 
         var blocking = new List<string>();
         var warnings = new List<string>();
@@ -146,7 +146,7 @@ public sealed class PipelinePortRegistryGuard(
         if (ownerKey is null) return;
 
         var claims = await ResolveClaimsAsync(
-            definition, resolvedVariables, organizationId, ct).ConfigureAwait(false);
+            definition, resolvedVariables, organizationId, projectId, ct).ConfigureAwait(false);
         foreach (var claim in claims)
         {
             await portRegistry
@@ -179,6 +179,7 @@ public sealed class PipelinePortRegistryGuard(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         int? organizationId,
+        int? projectId,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -197,7 +198,7 @@ public sealed class PipelinePortRegistryGuard(
             if (ports.Count == 0) continue;
 
             var server = await dispatchServers.ResolveServerForTargetAsync(
-                stage, resolvedVariables, organizationId, deploymentStage: true, ct).ConfigureAwait(false);
+                stage, resolvedVariables, organizationId, deploymentStage: true, projectId, ct).ConfigureAwait(false);
             // An unresolved server is the runner-configuration preflight's problem, not this one;
             // refusing here too would report the same fault twice under a misleading heading.
             if (server is null) continue;

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 
+using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Services;
 
 namespace Aetheus.Back.Components.Mail;
@@ -32,15 +33,18 @@ public sealed class MailDnsRefreshService(
         var domains = await repo.GetTrackedDomainsDueForDnsCheckAsync(now - RecheckAfter, DomainsPerPass, ct).ConfigureAwait(false);
         if (domains.Count == 0) return 0;
 
-        var hostnames = new Dictionary<int, string?>();
+        var servers = scope.ServiceProvider.GetRequiredService<IServerRepository>();
+        var mailServers = new Dictionary<int, (string? Hostname, string? Address)>();
         foreach (var domain in domains)
         {
-            if (!hostnames.TryGetValue(domain.ServerId, out var hostname))
+            if (!mailServers.TryGetValue(domain.ServerId, out var mailServer))
             {
-                hostname = (await repo.GetStateAsync(domain.ServerId, ct).ConfigureAwait(false))?.Hostname;
-                hostnames[domain.ServerId] = hostname;
+                // Recette R1-10: SPF is checked against the address of the server the domain is hosted on.
+                mailServer = ((await repo.GetStateAsync(domain.ServerId, ct).ConfigureAwait(false))?.Hostname,
+                    (await servers.FindServerAsync(domain.ServerId, ct).ConfigureAwait(false))?.IpAddress);
+                mailServers[domain.ServerId] = mailServer;
             }
-            await verifier.VerifyAsync(domain, hostname, ct).ConfigureAwait(false);
+            await verifier.VerifyAsync(domain, mailServer.Hostname, mailServer.Address, ct).ConfigureAwait(false);
         }
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         logger.LogInformation("Mail DNS refresh verified {Count} domains", domains.Count);

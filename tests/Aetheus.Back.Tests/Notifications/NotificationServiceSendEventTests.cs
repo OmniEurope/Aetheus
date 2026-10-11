@@ -2,6 +2,7 @@
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services.Email;
 using NSubstitute;
 
 namespace Aetheus.Back.Tests;
@@ -13,6 +14,7 @@ public class NotificationServiceSendEventTests
     private readonly IHttpClientFactory _httpFactory = Substitute.For<IHttpClientFactory>();
     private readonly Aetheus.Back.Services.IEncryptionService _encryption =
         Substitute.For<Aetheus.Back.Services.IEncryptionService>();
+    private readonly INotificationEmailer _emailer = Substitute.For<INotificationEmailer>();
     private readonly NotificationService _sut;
 
     public NotificationServiceSendEventTests()
@@ -26,7 +28,8 @@ public class NotificationServiceSendEventTests
             Substitute.For<Microsoft.Extensions.Logging.ILogger<NotificationService>>(),
             _encryption,
             TimeProvider.System,
-            Substitute.For<IUserNotificationService>());
+            Substitute.For<IUserNotificationService>(),
+            _emailer);
     }
 
     [Fact]
@@ -41,7 +44,7 @@ public class NotificationServiceSendEventTests
     }
 
     [Fact]
-    public async Task SendEventAsync_EmailChannel_LogsOnly()
+    public async Task SendEventAsync_EmailChannel_MailsTheActiveAdministrators()
     {
         var channel = new NotificationChannel
         {
@@ -60,10 +63,34 @@ public class NotificationServiceSendEventTests
         };
         _repo.GetRulesForEventAsync("test", Arg.Any<CancellationToken>())
             .Returns([rule]);
+        _repo.GetActiveAdministratorEmailsAsync(Arg.Any<CancellationToken>())
+            .Returns(["admin@example.org", "ops@example.org"]);
+        _emailer.SendAsync(Arg.Any<IReadOnlyList<NotificationEmail>>(), Arg.Any<CancellationToken>())
+            .Returns([EmailSendResult.Sent("no-reply@example.org"), EmailSendResult.Failed("550 5.1.1 mailbox unavailable")]);
 
         await _sut.SendEventAsync("test", new { }, ct: TestContext.Current.CancellationToken);
 
         _httpFactory.DidNotReceive().CreateClient(Arg.Any<string>());
+        await _emailer.Received(1).SendAsync(
+            Arg.Is<IReadOnlyList<NotificationEmail>>(emails =>
+                emails.Count == 2
+                && emails[0].To == "admin@example.org"
+                && emails[1].To == "ops@example.org"
+                && emails.All(email => email.EventType == "test")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SendEventAsync_EmailChannel_NoAdministratorAddress_SendsNothing()
+    {
+        var channel = new NotificationChannel { Id = 1, Name = "email", Type = NotificationChannelType.Email, Rules = [] };
+        _repo.GetRulesForEventAsync("test", Arg.Any<CancellationToken>())
+            .Returns([new NotificationRule { Id = 1, EventType = "test", Channel = channel, NotificationChannelId = 1 }]);
+        _repo.GetActiveAdministratorEmailsAsync(Arg.Any<CancellationToken>()).Returns(new List<string>());
+
+        await _sut.SendEventAsync("test", new { }, ct: TestContext.Current.CancellationToken);
+
+        await _emailer.DidNotReceive().SendAsync(Arg.Any<IReadOnlyList<NotificationEmail>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -103,7 +130,8 @@ public class NotificationServiceSendEventTests
             Substitute.For<Microsoft.Extensions.Logging.ILogger<NotificationService>>(),
             _encryption,
             TimeProvider.System,
-            Substitute.For<IUserNotificationService>());
+            Substitute.For<IUserNotificationService>(),
+            Substitute.For<INotificationEmailer>());
 
         await service.SendEventAsync(
             "deploy",

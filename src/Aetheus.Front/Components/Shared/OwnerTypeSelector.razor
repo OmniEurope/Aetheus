@@ -18,12 +18,14 @@
 
     @if (_kind is OwnerKind.Project or OwnerKind.Environment or OwnerKind.ProjectServer)
     {
+        @* SITE-FUNC-OWNER-001: the context project of an environment or server owner is _selectedProjectId;
+           ProjectId is only the Project owner and stays null for the two scoped kinds. *@
         <OmniFormField For="owner-project">
             <LabelContent>@L["Project"]</LabelContent>
             <ChildContent>
             <OmniDropDown TValue="int?" Id="owner-project" Options="@ProjectOptions"
-                          Value="@ProjectId" ValueChanged="@(value => OnProjectChanged(value))"
-                          ValueExpression="@(() => ProjectId)" AllowEmpty="true"
+                          Value="@_selectedProjectId" ValueChanged="@(value => OnProjectChanged(value))"
+                          ValueExpression="@(() => _selectedProjectId)" AllowEmpty="true"
                           Placeholder="@L["SelectProject"]" />
             </ChildContent>
         </OmniFormField>

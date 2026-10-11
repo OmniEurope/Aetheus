@@ -18,6 +18,26 @@ public sealed record PipelineRunResultSummaries(
 /// <summary>Run detail loading, extracted from <see cref="PipelineCoreRepository"/> (file-size budget).</summary>
 internal sealed class PipelineRunDetailRepository(AppDbContext db)
 {
+    /// <summary>Recette R1-2: whether any step of these stages started at all (whatever its outcome).</summary>
+    public async Task<bool> DidAnyStepStartInStagesAsync(int runId, IReadOnlyCollection<string> stageNames, CancellationToken ct = default)
+    {
+        return await db.PipelineStepRuns
+            .AsNoTracking()
+            .AnyAsync(step => step.PipelineRunId == runId
+                && stageNames.Contains(step.StageName)
+                && step.StartedAt != null, ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Recette R1-3: the pipeline's most recent run, tracked, so a repeated refusal updates it.</summary>
+    public async Task<PipelineRun?> GetLatestRunTrackedAsync(int pipelineId, CancellationToken ct = default)
+    {
+        return await db.PipelineRuns
+            .Where(run => run.PipelineId == pipelineId)
+            .OrderByDescending(run => run.Id)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+    }
+
     public async Task<PipelineRun?> GetRunDetailAsync(int runId, CancellationToken ct = default)
     {
         return await db.PipelineRuns

@@ -135,7 +135,7 @@ public class NotificationsControllerTests
     [Fact]
     public async Task TestChannel_Found_ReturnsOk()
     {
-        _serviceMock.TestChannelAsync(1, Arg.Any<CancellationToken>())
+        _serviceMock.TestChannelAsync(1, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(new NotificationTestResultDto { Status = NotificationTestStatus.Sent });
 
         var result = await _sut.TestChannel(1, TestContext.Current.CancellationToken);
@@ -146,7 +146,7 @@ public class NotificationsControllerTests
     [Fact]
     public async Task TestChannel_NotFound_ReturnsNotFound()
     {
-        _serviceMock.TestChannelAsync(999, Arg.Any<CancellationToken>()).Returns((NotificationTestResultDto?)null);
+        _serviceMock.TestChannelAsync(999, Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns((NotificationTestResultDto?)null);
 
         var result = await _sut.TestChannel(999, TestContext.Current.CancellationToken);
 

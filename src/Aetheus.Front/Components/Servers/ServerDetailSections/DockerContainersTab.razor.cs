@@ -38,6 +38,11 @@ public partial class DockerContainersTab
     /// <summary>False until the parent's first inventory load lands; drives the skeleton rows.</summary>
     [Parameter] public bool InitialLoaded { get; set; }
 
+    // SITE-OFFLINE-001: every action of this tab, the read panels included (logs, inspect, env, files),
+    // queues a task only the agent can claim; the parent says the agent is offline, the actions wait.
+    private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
+    private bool BlockedByOfflineAgent() => AgentOfflineGuard.Blocks(Server, Toast);
+
     private string _containerSearch = string.Empty;
 
     // Recette R-227: each heartbeat brings a new container list; containers that were not there read bold.
@@ -139,6 +144,7 @@ public partial class DockerContainersTab
 
     private async Task DockerActionAsync(string containerId, DockerContainerAction action)
     {
+        if (BlockedByOfflineAgent()) return;
         _dockerActionTarget = containerId;
         var request = new DockerActionRequest { ContainerId = containerId, Action = action };
         var success = await Api.ServerTools.ExecuteDockerActionAsync(ServerId, request);
@@ -160,6 +166,7 @@ public partial class DockerContainersTab
 
     private async Task ProjectBulkActionAsync(string project, DockerContainerAction action)
     {
+        if (BlockedByOfflineAgent()) return;
         var targets = ContainersForProject(project);
         if (targets.Count == 0) return;
 
@@ -191,6 +198,7 @@ public partial class DockerContainersTab
 
     private async Task ConfirmRemoveContainerAsync(string containerId, string name)
     {
+        if (BlockedByOfflineAgent()) return;
         var confirmed = await Dialog.Confirm(
             string.Format(L["RemoveContainerConfirm"].Value, name),
             L["RemoveContainer"].Value,
@@ -208,6 +216,7 @@ public partial class DockerContainersTab
             return;
         }
 
+        if (BlockedByOfflineAgent()) return;
         _logsContainerId = containerId;
         _logsContent = null;
         var request = new DockerContainerLogsRequest { ContainerId = containerId, Tail = 100 };
@@ -216,6 +225,7 @@ public partial class DockerContainersTab
 
     private async Task OpenResourceLimitsDialog(string containerId)
     {
+        if (BlockedByOfflineAgent()) return;
         var container = Server.Docker.Containers.FirstOrDefault(c => c.ContainerId == containerId);
         var result = await Dialog.OpenAsync<DockerResourceLimitsDialog>(
             L["ResourceLimits"].Value,
@@ -300,6 +310,7 @@ public partial class DockerContainersTab
             return;
         }
 
+        if (BlockedByOfflineAgent()) return;
         _inspectContainerId = containerId;
         _inspectContent = null;
         var success = await Api.ServerTools.InspectContainerAsync(ServerId, containerId);
@@ -327,6 +338,7 @@ public partial class DockerContainersTab
 
     private async Task SendShellCommandAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         if (string.IsNullOrWhiteSpace(_shellCommand) || _shellContainerId is null) return;
         _shellOutput += $"$ {_shellCommand}\n";
         var request = new DockerExecRequest { ContainerId = _shellContainerId, Command = _shellCommand };
@@ -357,6 +369,7 @@ public partial class DockerContainersTab
             return;
         }
 
+        if (BlockedByOfflineAgent()) return;
         _envContainerId = containerId;
         _envContainerName = name;
         _envContent = null;
@@ -413,6 +426,7 @@ public partial class DockerContainersTab
             return;
         }
 
+        if (BlockedByOfflineAgent()) return;
         _browseContainerId = containerId;
         _browseContainerName = name;
         _browsePath = "/";
@@ -422,6 +436,7 @@ public partial class DockerContainersTab
 
     private async Task BrowsePathAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         _browseContent = null;
         var request = new DockerBrowseRequest { ContainerId = _browseContainerId!, Path = _browsePath };
         var success = await Api.ServerTools.ListContainerFilesAsync(ServerId, request);

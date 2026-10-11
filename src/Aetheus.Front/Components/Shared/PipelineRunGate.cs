@@ -64,7 +64,7 @@ public sealed class PipelineRunGate(
                     $"• {s.StageName}: {s.ServerName}" + (s.Reason is not null ? $" ({s.Reason})" : "")));
                 toast.Notify(OmniSeverity.Info, "PreflightResolved", info);
             }
-            return true;
+            return await ConfirmReadinessAsync(pipelineId);
         }
 
         // A plain Confirm repeated one full sentence per unresolved stage, so an eleven-stage pipeline
@@ -79,6 +79,41 @@ public sealed class PipelineRunGate(
                 // docs/contracts/ui-patterns.md: the title must be announced before the first control.
                 AutoFocusFirstElement = false
             });
-        return confirmed is true;
+        return confirmed is true && await ConfirmReadinessAsync(pipelineId);
+    }
+
+    /// <summary>
+    /// Recette R1-28: what is not configured and would make this run fail (an adapter script or the
+    /// scanner configuration absent from the repository, a missing environment, a library or vault a
+    /// template requires), named in one confirmation. It never blocks: the user may run anyway. Runner
+    /// findings are left to the agent preflight above, which already asked about them. A verdict that
+    /// cannot be read asks nothing.
+    /// </summary>
+    private async Task<bool> ConfirmReadinessAsync(int pipelineId)
+    {
+        PipelineSetupReadinessDto? readiness;
+        try
+        {
+            readiness = await api.Pipelines.GetPipelineReadinessAsync(pipelineId);
+        }
+        catch (HttpRequestException)
+        {
+            return true;
+        }
+
+        var missing = (readiness?.Checks ?? [])
+            .Where(check => check.Severity == PipelineSetupReadinessSeverity.Blocking
+                && check.Kind is not (PipelineSetupReadinessKind.NoRunnerConfigured or PipelineSetupReadinessKind.NoDeployRunnerConfigured))
+            .Select(check => check.Items.Count > 0
+                ? $"{localizer[PipelineReadinessText.TitleKey(check.Kind)].Value} : {string.Join(", ", check.Items)}"
+                : localizer[PipelineReadinessText.TitleKey(check.Kind)].Value)
+            .ToList();
+        if (missing.Count == 0) return true;
+
+        var confirmed = await dialog.Confirm(
+            string.Format(localizer["PipelineRunNotReadyConfirm"].Value, string.Join(" ; ", missing)),
+            localizer["PipelineRunNotReadyTitle"].Value,
+            new OmniConfirmOptions { OkButtonText = localizer["RunAnyway"].Value, CancelButtonText = localizer["GoBack"].Value });
+        return confirmed == true;
     }
 }

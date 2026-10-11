@@ -37,21 +37,27 @@ else
                             {
                                 <OmniText Element="OmniTextElement.Span">@L["AnalysisGradeIncomplete"]</OmniText>
                             }
+                        </div>
+                        @* Recette R2-143 (replaces the R-174 strip): commit, date, latest analysis run and
+                           latest release as aligned tiles; R-430's links are kept, each tile opens its page.
+                           Recette R2-139: no "limiting domain" sentence, the breakdown bolds it. *@
+                        <div class="analysis-grade-meta-tiles">
+                            @if (GradeCommitHref is { } commitHref)
+                            {
+                                <OmniStatTile Value="@ShortHash(_summary.Grade?.CommitHash)" Label="@L["Commit"]" OnClick="@(() => Navigation.NavigateTo(commitHref))" />
+                            }
                             else
                             {
-                                <OmniText Element="OmniTextElement.Span">@L["AnalysisLimitingDomain"]: @AnalysisGradeBreakdown.DomainLabel(L, _summary.Grade.LimitingDomain)</OmniText>
+                                <OmniStatTile Value="@(ShortHash(_summary.Grade?.CommitHash) ?? L["NotAvailable"])" Label="@L["Commit"]" />
                             }
-                            @* Recette R-430: the commit leads to its page, and the latest analysis run
-                               and the latest release are one click away. *@
-                            <span class="analysis-grade-meta">@L["Commit"]: @if (string.IsNullOrWhiteSpace(_summary.Grade?.CommitHash)) { @L["NotAvailable"] } else { <ShortId Value="@_summary.Grade.CommitHash" Href="@GradeCommitHref" Copyable="false" /> }</span>
-                            <span class="analysis-grade-meta">@L["Date"]: @(_summary.Grade?.EvaluatedAt?.ToString("g") ?? L["NotAvailable"])</span>
+                            <OmniStatTile Value="@(_summary.Grade?.EvaluatedAt?.ToString("g") ?? L["NotAvailable"])" Label="@L["Date"]" />
                             @if (_summary.LastAnalysisRunId is { } lastRunId)
                             {
-                                <span class="analysis-grade-meta">@L["LastRun"]: <OmniLink Href="@($"/pipelines/runs/{lastRunId}")">@($"#{lastRunId}")</OmniLink></span>
+                                <OmniStatTile Value="@($"#{lastRunId}")" Label="@L["LastRun"]" OnClick="@(() => Navigation.NavigateTo($"/pipelines/runs/{lastRunId}"))" />
                             }
                             @if (_summary.LatestReleaseId is { } latestReleaseId)
                             {
-                                <span class="analysis-grade-meta">@L["LatestRelease"]: <ShortId Value="@_summary.LatestReleaseVersion" Href="@($"/releases/{latestReleaseId}")" Copyable="false" /></span>
+                                <OmniStatTile Value="@_summary.LatestReleaseVersion" Label="@L["LatestRelease"]" OnClick="@(() => Navigation.NavigateTo($"/releases/{latestReleaseId}"))" />
                             }
                         </div>
                     </div>

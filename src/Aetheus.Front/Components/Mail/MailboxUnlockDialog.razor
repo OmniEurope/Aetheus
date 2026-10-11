@@ -1,0 +1,16 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-17: the mailbox password, typed to unlock the integrated mailbox. Checked by the server's
+   own login before Aetheus holds it, in memory only. No field takes the focus on open. *@
+<OmniTemplateForm TModel="MailboxUnlockModel" Model="@_model" OnValidSubmit="@UnlockAsync">
+    <OmniDataAnnotationsValidator Localizer="@L" />
+    <OmniStack Gap="OmniSpacing.Medium">
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailboxUnlockExplain"]</OmniText>
+        <OmniFormField Label="@L["Password"]" For="mailbox-unlock-password" Error="@_error">
+            <OmniPassword Id="mailbox-unlock-password" @bind-Value="_model.Password" />
+        </OmniFormField>
+        <ValidationMessage For="@(() => _model.Password)" />
+    </OmniStack>
+    <DialogFooter OnCancel="@(() => Dialog.Close())">
+        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /> <span>@L["MailboxUnlock"]</span></OmniButton>
+    </DialogFooter>
+</OmniTemplateForm>

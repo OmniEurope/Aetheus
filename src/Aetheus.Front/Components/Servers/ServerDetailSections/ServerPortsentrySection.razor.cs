@@ -8,6 +8,15 @@ public partial class ServerPortsentrySection
     [Parameter] public PortsentryDataDto Ps { get; set; } = new();
     [Parameter] public EventCallback OnRefreshRequested { get; set; }
 
+    // SITE-OFFLINE-001: the host page passes the PortSentry data only; the server (and its agent's
+    // presence) comes from the loader the server detail layout cascades to every section. The whitelist
+    // is stored by the backend alone and stays editable; every other action queues an agent task.
+    [CascadingParameter(Name = "ServerLoader")] public ServerDetailLoader? Loader { get; set; }
+
+    private ServerDetailDto? AgentServer => Loader?.Server;
+    private bool AgentOffline => AgentServer is { } server && AgentOfflineGuard.IsOffline(server);
+    private bool BlockedByOfflineAgent() => AgentServer is { } server && AgentOfflineGuard.Blocks(server, Toast);
+
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -159,6 +168,7 @@ public partial class ServerPortsentrySection
 
     private async Task ExecuteActionAsync(PortsentryAction action)
     {
+        if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
         try
         {
@@ -183,6 +193,7 @@ public partial class ServerPortsentrySection
 
     private async Task SetupAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var request = new PortsentrySetupRequest
         {
             Mode = _setupMode,
@@ -201,6 +212,7 @@ public partial class ServerPortsentrySection
 
     private async Task OpenSetupDialogAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var result = await Dialog.OpenAsync<ServerSetupDialog>(
             L["PortsentrySetup"].Value,
             new Dictionary<string, object?>
@@ -218,6 +230,7 @@ public partial class ServerPortsentrySection
 
     private async Task GetLogsAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var success = await Api.Security.GetPortsentryLogsAsync(ServerId, new PortsentryLogRequest());
         if (success)
             Toast.Success("TaskCreated");
@@ -225,6 +238,7 @@ public partial class ServerPortsentrySection
 
     private async Task UnblockIpAsync(string ip)
     {
+        if (BlockedByOfflineAgent()) return;
         var confirmed = await Dialog.Confirm(
             L["UnblockConfirm"].Value,
             L["Unblock"].Value,

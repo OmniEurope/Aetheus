@@ -38,7 +38,7 @@ public class PipelineRunPreparationExternalGitTests
         gitCli.ReadPipelineYamlAsync(url, commit, pipeline.Name, Arg.Any<CancellationToken>())
             .Returns(externalDefinition ? pipeline.YamlDefinition.Replace("dotnet build", "dotnet test", StringComparison.Ordinal) : null);
         parameterResolver.ResolveCandidateTargetServerIdsAsync(
-            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([]);
         var sut = new PipelineRunPreparationService(
             repo, pipelineGit, new PipelineTemplateResolver(repo), parameterResolver, gitCli,

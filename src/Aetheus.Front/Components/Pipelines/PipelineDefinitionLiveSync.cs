@@ -52,6 +52,23 @@ internal sealed class PipelineDefinitionLiveSync(HubConnectionFactory hubFactory
             || model.EnvironmentId != saved.EnvironmentId
             || model.ProjectServerId != saved.ProjectServerId);
 
+    /// <summary>
+    /// SITE-FUNC-SELF-SAVE-001: the hub announces this client's own save too, often before the save's
+    /// HTTP response has replaced the page's copy, so the form still looked unsaved and the page called
+    /// its own change "changed elsewhere". The change is this client's when the stored pipeline is
+    /// exactly what <paramref name="sent"/> (the last update this page submitted) asked for; any other
+    /// stored content is a genuine remote change.
+    /// </summary>
+    public static bool IsOwnSave(UpdatePipelineRequest? sent, PipelineDto? stored) =>
+        sent is not null && stored is not null
+        && sent.Name == stored.Name
+        && (sent.Description ?? string.Empty) == (stored.Description ?? string.Empty)
+        && sent.YamlDefinition == stored.YamlDefinition
+        && (sent.SourceBranch?.Trim() ?? string.Empty) == (stored.SourceBranch ?? string.Empty)
+        && sent.ProjectId == stored.ProjectId
+        && sent.EnvironmentId == stored.EnvironmentId
+        && sent.ProjectServerId == stored.ProjectServerId;
+
     public async ValueTask DisposeAsync()
     {
         if (_hub is not null)

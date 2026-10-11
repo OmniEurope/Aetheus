@@ -67,6 +67,35 @@ public class PipelineApprovalServiceTests
     }
 
     [Fact]
+    public async Task R1_24_GetApprovalsAsync_CarriesTheEnvironmentInstructions_OnlyOnAnEnvironmentApproval()
+    {
+        var environment = new Aetheus.Back.Data.Entities.Environment
+        {
+            Id = 3,
+            Name = "prod",
+            ApprovalInstructions = "Check the QA results before approving."
+        };
+        _repoMock.GetApprovalsAsync(1, Arg.Any<CancellationToken>())
+            .Returns([
+                new PipelineApproval
+                {
+                    Id = 1, PipelineRunId = 1, StageName = "deploy", Scope = ApprovalScope.Pipeline,
+                    EnvironmentId = 3, Environment = environment, Status = ApprovalStatus.Approved
+                },
+                new PipelineApproval
+                {
+                    Id = 2, PipelineRunId = 1, StageName = "deploy", Scope = ApprovalScope.Environment,
+                    EnvironmentId = 3, Environment = environment, Status = ApprovalStatus.Pending
+                }
+            ]);
+
+        var result = await _sut.GetApprovalsAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.Null(result[0].EnvironmentInstructions);
+        Assert.Equal("Check the QA results before approving.", result[1].EnvironmentInstructions);
+    }
+
+    [Fact]
     public async Task DecideApprovalAsync_InvalidDecision_IsRefusedWithItsReason()
     {
         var refusal = await Assert.ThrowsAsync<BadRequestException>(() => _sut.DecideApprovalAsync(1, new ApprovalDecisionRequest

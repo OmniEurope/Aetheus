@@ -115,6 +115,16 @@ public class GitLightRepository(AppDbContext db) : IGitLightRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<ProjectRepositorySource?> GetProjectRepositorySourceAsync(int projectId, CancellationToken ct = default)
+    {
+        return await db.Projects
+            .AsNoTracking()
+            .Where(p => p.Id == projectId)
+            .Select(p => new ProjectRepositorySource(p.RepositoryUrl, p.GitConnectionId))
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
+
     public async Task<string?> GetProjectDefaultBranchAsync(int projectId, CancellationToken ct = default)
     {
         return await db.Projects
@@ -165,6 +175,36 @@ public class GitLightRepository(AppDbContext db) : IGitLightRepository
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<int?> MarkCommittedAsync(int id, DateTime committedAt, CancellationToken ct = default)
+    {
+        var projectId = await db.GitInternalRepos.AsNoTracking()
+            .Where(repository => repository.Id == id)
+            .Select(repository => (int?)repository.ProjectId)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (projectId is null) return null;
+
+        if (db.Database.IsRelational())
+        {
+            // A single UPDATE of this row: the caller's own pending changes (a pipeline being saved or
+            // rolled back) are neither flushed early nor re-tried by this write.
+            await db.GitInternalRepos
+                .Where(repository => repository.Id == id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(repository => repository.IsEmpty, false)
+                    .SetProperty(repository => repository.LastPushAt, (DateTime?)committedAt)
+                    .SetProperty(repository => repository.UpdatedAt, committedAt), ct)
+                .ConfigureAwait(false);
+            return projectId;
+        }
+
+        var stored = await db.GitInternalRepos.FirstAsync(repository => repository.Id == id, ct).ConfigureAwait(false);
+        stored.IsEmpty = false;
+        stored.LastPushAt = committedAt;
+        stored.UpdatedAt = committedAt;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return projectId;
     }
 
     // ── Branch Protection ────────────────────────────────────────────

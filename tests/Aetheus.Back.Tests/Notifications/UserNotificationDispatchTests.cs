@@ -34,6 +34,7 @@ public sealed class UserNotificationDispatchTests : IDisposable
         _authz.HasPermissionAsync(Arg.Any<string>(), ResourceType.Project, ProjectId, Permission.Read, Arg.Any<CancellationToken>())
             .Returns(true);
         _channelRepo.GetRulesForEventAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([]);
+        _channelRepo.GetActiveAdministratorEmailsAsync(Arg.Any<CancellationToken>()).Returns(new List<string>());
         var users = new UserNotificationService(new UserNotificationRepository(_db), _authz, time);
         _sut = new NotificationService(
             _channelRepo,
@@ -43,7 +44,8 @@ public sealed class UserNotificationDispatchTests : IDisposable
             Substitute.For<ILogger<NotificationService>>(),
             Substitute.For<IEncryptionService>(),
             time,
-            users);
+            users,
+            Substitute.For<INotificationEmailer>());
         Seed();
     }
 
@@ -128,7 +130,7 @@ public sealed class UserNotificationDispatchTests : IDisposable
     }
 
     [Fact]
-    public async Task EmailRule_StillOnlyLogs_AndUserRowsAreWrittenAlongside()
+    public async Task EmailRule_DoesNotStopTheUserRows_WhichStayUnsentWithoutTransport()
     {
         var channel = new NotificationChannel { Id = 7, Name = "mail", Type = NotificationChannelType.Email };
         _channelRepo.GetRulesForEventAsync(NotificationEventTypes.PipelineFailed, Arg.Any<CancellationToken>())

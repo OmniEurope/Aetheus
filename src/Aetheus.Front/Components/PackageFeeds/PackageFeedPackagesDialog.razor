@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md">
+<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md">
         <OmniTextBox aria-label="@L["PackageName"]" @bind-Value="_newPackage" Placeholder="@L["PackageName"]" Class="omni-u-grow" />
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newPackage)" Class="@(_adding ? "btn-busy" : null)" Busy="@(_adding)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@SyncAsync" Class="@(_syncing ? "btn-busy" : null)" Busy="@(_syncing)"><OmniIcon Name="OmniIconName.Sync" /> <span>@L["SyncNow"]</span></OmniButton>

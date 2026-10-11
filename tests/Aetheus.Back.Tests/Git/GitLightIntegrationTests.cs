@@ -70,7 +70,7 @@ public class GitLightIntegrationTests
             Pattern = "main",
             PreventDeletion = true,
             PreventForcePush = true,
-            RequirePullRequest = false
+            ProtectionLevel = BranchProtectionLevel.NotProtected
         };
 
         var result = await _service.CreateBranchProtectionRuleAsync(1, request, ct: TestContext.Current.CancellationToken);
@@ -79,7 +79,7 @@ public class GitLightIntegrationTests
         Assert.Equal("main", result.Pattern);
         Assert.True(result.PreventDeletion);
         Assert.True(result.PreventForcePush);
-        Assert.False(result.RequirePullRequest);
+        Assert.Equal(BranchProtectionLevel.NotProtected, result.ProtectionLevel);
         await _auditMock.Received(1).LogAsync("Created", "BranchProtectionRule",
             Arg.Any<int?>(), Arg.Any<string?>(), TestContext.Current.CancellationToken);
     }
@@ -313,13 +313,15 @@ public class GitLightIntegrationTests
             {
                 PreventDeletion = false,
                 PreventForcePush = true,
-                RequirePullRequest = true
+                ProtectionLevel = BranchProtectionLevel.StrictlyProtected
             }, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.False(result.PreventDeletion);
         Assert.True(result.PreventForcePush);
-        Assert.True(result.RequirePullRequest);
+        Assert.Equal(BranchProtectionLevel.StrictlyProtected, result.ProtectionLevel);
+        // D13 expand step: the column the previous colour enforces follows the level.
+        Assert.True(rule.RequirePullRequest);
     }
 
     [Fact]

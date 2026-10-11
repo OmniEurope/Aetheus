@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Runtime.InteropServices;
 using Aetheus.Agent.Core.Collectors;
 using Aetheus.Agent.Core.Configuration;
 using Aetheus.Agent.Core.Operations;
+using Aetheus.Tests.Shared;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -70,13 +70,11 @@ public class TeamspeakGracefulRestartOperationExecutorTests
         }
     }
 
-    [Fact]
+    // The restart step shells to systemctl, so the op is Linux-only. On Windows CI it must reject
+    // up-front (the gm/kick/restart sequence itself is validated on the Linux VPS-sim).
+    [PlatformFact("windows")]
     public async Task GracefulRestart_OnNonLinux_ReturnsNotSupported()
     {
-        // The restart step shells to systemctl, so the op is Linux-only. On Windows CI it must reject
-        // up-front (the gm/kick/restart sequence itself is validated on the Linux VPS-sim).
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return;
-
         var env = new Dictionary<string, string> { [TeamspeakSetupEnv.RuntimeQueryPort] = "10011" };
         var messages = new List<string>();
         var result = await Build().ExecuteAsync(
@@ -88,11 +86,9 @@ public class TeamspeakGracefulRestartOperationExecutorTests
         Assert.Contains(messages, m => m.Contains("only supported on Linux", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
+    [PlatformFact("linux")]
     public async Task GracefulRestart_OnLinux_MissingQueryPort_ReturnsFailure()
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return;
-
         var messages = new List<string>();
         var result = await Build().ExecuteAsync(
             OperationKind.TeamspeakGracefulRestart, "-", NoEnv, 90,

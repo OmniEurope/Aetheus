@@ -59,6 +59,8 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     // /api/variable-libraries literal above does not prove ITS [Authorize] is wired.
     [InlineData("/api/variable-libraries/1/ports/servers")]
     [InlineData("/api/settings")]
+    [InlineData("/api/settings/daily-recap")]
+    [InlineData("/api/settings/daily-recap/preview")]
     [InlineData("/api/environments")]
     [InlineData("/api/git/repos")]
     [InlineData("/api/git/connections")]
@@ -95,6 +97,9 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/servers/1/docker/containers")]
     [InlineData("/api/servers/1/apache")]
     [InlineData("/api/servers/1/mail")]
+    [InlineData("/api/servers/1/mail/client-settings")]
+    [InlineData("/api/servers/1/mail/accounts/1/mailbox")]
+    [InlineData("/api/servers/1/mail/accounts/1/mailbox/messages/1")]
     [InlineData("/api/servers/1/module-links")]
     [InlineData("/api/servers/1/portsentry")]
     [InlineData("/api/servers/1/rkhunter")]
@@ -141,6 +146,13 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("DELETE", "/api/vaults/1")]
     [InlineData("PUT", "/api/projects/1/data-retention")]
     [InlineData("POST", "/api/data-storage/reclaim")]
+    [InlineData("POST", "/api/mail/no-reply-sender")]
+    [InlineData("PUT", "/api/settings/daily-recap")]
+    [InlineData("POST", "/api/settings/daily-recap/send-now")]
+    [InlineData("POST", "/api/servers/1/mail/accounts/1/mailbox/unlock")]
+    [InlineData("POST", "/api/servers/1/mail/accounts/1/mailbox/send")]
+    [InlineData("PUT", "/api/servers/1/mail/accounts/1/mailbox/messages/1/read")]
+    [InlineData("DELETE", "/api/servers/1/mail/accounts/1/mailbox/messages/1")]
     public async Task ProtectedMutationEndpoint_Anonymous_Returns401(string method, string route)
     {
         using var client = fixture.CreateAnonymousClient();

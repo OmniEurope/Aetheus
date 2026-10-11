@@ -149,6 +149,22 @@ public class AuthController(
         return Ok(result);
     }
 
+    /// <summary>
+    /// Recette R1-37: the client says the user logged out, before it drops its tokens. The server forgets
+    /// what it holds in memory for that user (the typed mailbox passwords); it revokes no token. A
+    /// principal without a numeric user id (the bootstrap admin) holds nothing of the kind.
+    /// </summary>
+    [EnableRateLimiting("auth-token")]
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Logout(CancellationToken ct)
+    {
+        var nameId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(nameId, out var userId))
+            await authService.LogoutAsync(userId, ct);
+        return NoContent();
+    }
+
     // --- Refresh Token Rotation (F-012) ---
 
     [AllowAnonymous]

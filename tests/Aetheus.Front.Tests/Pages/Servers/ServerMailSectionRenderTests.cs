@@ -111,7 +111,7 @@ public class ServerMailSectionRenderTests : BunitContext
     [Fact]
     public void MailDialogModel_ValidDomain_HasNoValidationError()
     {
-        var model = new MailDialogModel { Mode = MailDialogMode.AddDomain, Domain = "example.com" };
+        var model = new MailDialogModel { Mode = MailDialogMode.AddDomain, Domain = "example.com", L = new BunitTestHelper.StubLocalizer() };
         var errors = new List<ValidationResult>();
 
         Assert.True(Validator.TryValidateObject(model, new ValidationContext(model), errors, true));
@@ -121,7 +121,7 @@ public class ServerMailSectionRenderTests : BunitContext
     [Fact]
     public void MailDialogModel_InvalidDomain_HasDomainValidationError()
     {
-        var model = new MailDialogModel { Mode = MailDialogMode.AddDomain, Domain = "not_a_domain!" };
+        var model = new MailDialogModel { Mode = MailDialogMode.AddDomain, Domain = "not_a_domain!", L = new BunitTestHelper.StubLocalizer() };
         var errors = new List<ValidationResult>();
 
         Assert.False(Validator.TryValidateObject(model, new ValidationContext(model), errors, true));
@@ -131,7 +131,7 @@ public class ServerMailSectionRenderTests : BunitContext
     [Fact]
     public void MailDialogModel_EmptyDomain_IsRequired()
     {
-        var model = new MailDialogModel { Mode = MailDialogMode.AddDomain, Domain = string.Empty };
+        var model = new MailDialogModel { Mode = MailDialogMode.AddDomain, Domain = string.Empty, L = new BunitTestHelper.StubLocalizer() };
         var errors = new List<ValidationResult>();
 
         Assert.False(Validator.TryValidateObject(model, new ValidationContext(model), errors, true));
@@ -143,7 +143,7 @@ public class ServerMailSectionRenderTests : BunitContext
     [Fact]
     public void MailDialogModel_ValidAccount_HasNoValidationError()
     {
-        var model = new MailDialogModel { Mode = MailDialogMode.AddAccount, Email = "user@example.com", Password = "strong-secret" };
+        var model = new MailDialogModel { Mode = MailDialogMode.AddAccount, Email = "user@example.com", Password = "strong-secret", L = new BunitTestHelper.StubLocalizer() };
         var errors = new List<ValidationResult>();
 
         Assert.True(Validator.TryValidateObject(model, new ValidationContext(model), errors, true));
@@ -153,7 +153,7 @@ public class ServerMailSectionRenderTests : BunitContext
     [Fact]
     public void MailDialogModel_InvalidEmail_HasEmailValidationError()
     {
-        var model = new MailDialogModel { Mode = MailDialogMode.AddAccount, Email = "not-an-email", Password = "strong-secret" };
+        var model = new MailDialogModel { Mode = MailDialogMode.AddAccount, Email = "not-an-email", Password = "strong-secret", L = new BunitTestHelper.StubLocalizer() };
         var errors = new List<ValidationResult>();
 
         Assert.False(Validator.TryValidateObject(model, new ValidationContext(model), errors, true));
@@ -167,7 +167,8 @@ public class ServerMailSectionRenderTests : BunitContext
         {
             Mode = MailDialogMode.AddAccount,
             Email = "user@example.com",
-            Password = new string('x', PasswordPolicy.MinimumLength - 1)
+            Password = new string('x', PasswordPolicy.MinimumLength - 1),
+            L = new BunitTestHelper.StubLocalizer()
         };
 
         var errors = model.Validate(new ValidationContext(model)).ToList();

@@ -50,6 +50,11 @@ public class UrlSyncedTabsTests : BunitContext
     {
         var c = new UrlSyncedTabs();
         typeof(UrlSyncedTabs).GetProperty(nameof(UrlSyncedTabs.Slugs))!.SetValue(c, Slugs);
+        // The injected services the component reads outside a render (SITE-FUNC-NAVIGATION-001 logging).
+        typeof(UrlSyncedTabs).GetProperty("Nav", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(c, new RecordingNavigationManager("http://localhost/", "http://localhost/pipelines/runs/8"));
+        typeof(UrlSyncedTabs).GetProperty("Logger", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(c, Microsoft.Extensions.Logging.Abstractions.NullLogger<UrlSyncedTabs>.Instance);
         return c;
     }
 

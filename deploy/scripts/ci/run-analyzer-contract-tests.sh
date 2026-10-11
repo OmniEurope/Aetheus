@@ -29,4 +29,5 @@ NODE="$(sh deploy/scripts/ensure-node-runtime.sh)"
 ANALYZER_STATUS="$("$NODE" deploy/scripts/classify-dotnet-test-result.mjs \
   "$RAW_TEST_EXIT" "$WORKSPACE/coverage/analyzers/analyzers.trx" -)"
 echo "##aetheus[setvariable name=ANALYZER_TEST_GATE_STATUS]$ANALYZER_STATUS"
+[ "$ANALYZER_STATUS" = 0 ] || sh deploy/scripts/publish-failed-tests.sh ANALYZER_TEST_FAILED_TESTS "$WORKSPACE/coverage/analyzers/analyzers.trx"
 echo "Analyzer test findings status: $ANALYZER_STATUS. Valid TRX evidence recorded."

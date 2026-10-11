@@ -41,6 +41,18 @@ function disposeMonacoFrame(elementId) {
     frame.remove();
 }
 
+// SITE-FUNC-MONACO-DISPOSE-001: teardown runs when the page is leaving, after Blazor may already have
+// removed the frame from the DOM (its contentWindow is then null) or after an earlier dispose. Releasing
+// an editor that is gone is a no-op, never "Monaco editor is not ready"; the frame is always forgotten.
+function releaseMonacoFrame(elementId, method) {
+    const interop = monacoFrames.get(elementId)?.contentWindow?.monacoInterop;
+    try {
+        interop?.[method]?.('monaco-root');
+    } finally {
+        disposeMonacoFrame(elementId);
+    }
+}
+
 function eachMonacoFrame(callback) {
     for (const frame of monacoFrames.values()) {
         const interop = frame.contentWindow?.monacoInterop;
@@ -87,8 +99,7 @@ window.monacoInterop = {
     },
 
     dispose: function (elementId) {
-        getMonacoFrame(elementId).dispose('monaco-root');
-        disposeMonacoFrame(elementId);
+        releaseMonacoFrame(elementId, 'dispose');
     },
 
     initDiffEditor: async function (elementId, originalContent, modifiedContent, isDark) {
@@ -101,8 +112,7 @@ window.monacoInterop = {
     },
 
     disposeDiffEditor: function (elementId) {
-        getMonacoFrame(elementId).disposeDiffEditor('monaco-root');
-        disposeMonacoFrame(elementId);
+        releaseMonacoFrame(elementId, 'disposeDiffEditor');
     },
 
     initReadOnly: async function (elementId, content, language, isDark, lineNumber) {
@@ -111,7 +121,6 @@ window.monacoInterop = {
     },
 
     disposeEditor: function (elementId) {
-        getMonacoFrame(elementId).disposeEditor('monaco-root');
-        disposeMonacoFrame(elementId);
+        releaseMonacoFrame(elementId, 'disposeEditor');
     }
 };

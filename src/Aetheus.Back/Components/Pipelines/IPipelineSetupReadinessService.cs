@@ -20,4 +20,19 @@ public interface IPipelineSetupReadinessService
         IReadOnlyList<string> templateNames,
         int? organizationId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Recette R1-28: the same checks for the pipelines the project already has (each read as a run
+    /// would, its <c>extends:</c> template expanded), or for only <paramref name="pipelineId"/> when
+    /// given. An empty verdict when the project has no such pipeline.
+    /// </summary>
+    /// <summary>The project a pipeline belongs to (directly, or through its environment or project
+    /// server); null when the pipeline does not exist or has no project.</summary>
+    Task<int?> FindPipelineProjectIdAsync(int pipelineId, CancellationToken ct = default);
+
+    Task<PipelineSetupReadinessDto> CheckProjectAsync(
+        int projectId,
+        int? pipelineId,
+        int? organizationId,
+        CancellationToken ct = default);
 }

@@ -68,7 +68,7 @@ public sealed class PipelineAdvisoryPreflightBuilder(
         foreach (var stage in YamlParsingHelper.FlattenJobs(definition))
         {
             var server = await dispatchServers.ResolveServerForTargetAsync(
-                stage, resolvedVariables, organizationId, dispatchServers.StageHasDeployStep(stage), ct)
+                stage, resolvedVariables, organizationId, dispatchServers.StageHasDeployStep(stage), projectId, ct)
                 .ConfigureAwait(false);
             var (kind, label) = PipelineRunHelpers.DescribeTarget(stage);
             stages.Add(new PreflightStageDto

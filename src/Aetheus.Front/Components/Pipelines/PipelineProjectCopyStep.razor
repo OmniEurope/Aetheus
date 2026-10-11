@@ -1,0 +1,146 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@{
+    RenderFragment<PipelineCopyStatus> StatusBadge = status =>
+        @<OmniBadge Tone="@StatusTone(status)" Fill="OmniFill.Tonal" data-testid="pipeline-copy-status">@L.Localize(status)</OmniBadge>;
+    RenderFragment<PipelineCopyItemDto> Issues = item =>
+        @<OmniStack Gap="OmniSpacing.XSmall">
+            @foreach (var issue in item.Issues)
+            {
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="pipeline-copy-issue">@L.Localize(issue.Kind) <code>@issue.Detail</code></OmniText>
+            }
+        </OmniStack>;
+    RenderFragment<(PipelineProjectCopyPlanDto Plan, bool Created)> ResourcesOf = args =>
+        @<OmniStack Gap="OmniSpacing.Small" data-testid="pipeline-copy-resources">
+            @foreach (var (titleKey, resources) in new[] { ("PipelineCopyLibraries", args.Plan.Libraries), ("PipelineCopyVaults", args.Plan.Vaults) })
+            {
+                @if (resources.Count > 0)
+                {
+                    <strong>@L[titleKey]</strong>
+                    @foreach (var resource in resources)
+                    {
+                        <OmniStack Gap="OmniSpacing.XSmall" data-testid="pipeline-copy-resource">
+                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                                <span>@resource.NewName</span>
+                                @if (resource.AlreadyExists)
+                                {
+                                    <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Tonal">@L["PipelineCopyResourceKept"]</OmniBadge>
+                                }
+                                else
+                                {
+                                    <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal">@L[args.Created ? "PipelineCopyResourceValuesEmpty" : "PipelineCopyResourceValuesToFill"]</OmniBadge>
+                                }
+                            </OmniStack>
+                            @if (!resource.AlreadyExists && resource.Keys.Count > 0)
+                            {
+                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" data-testid="pipeline-copy-resource-keys">@L["PipelineCopyResourceKeys"] <code>@string.Join(", ", resource.Keys)</code></OmniText>
+                            }
+                        </OmniStack>
+                    }
+                }
+            }
+        </OmniStack>;
+}
+@if (Step == 0)
+{
+    <OmniStack Gap="OmniSpacing.Large" Class="pipeline-setup-step">
+        <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelineCopyProjectsTitle"]</OmniHeading>
+        <OmniFormField Label="@L["PipelineCopyTargetProject"]" Class="omni-u-w-100" For="pipeline-copy-target">
+            <OmniDropDown Id="pipeline-copy-target" TValue="int?" Options="@(Flow.Projects.ToOptions(item => (int?)item.Id, item => item.Name))"
+                          Value="@Flow.TargetProjectId" ValueChanged="@((int? id) => Flow.SetTargetProject(id))"
+                          ValueExpression="@(() => Flow.TargetProjectId)" Class="omni-u-w-100" />
+        </OmniFormField>
+        <OmniFormField Label="@L["PipelinePrefix"]" Description="@L["PipelinePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-prefix">
+            <OmniTextBox Id="pipeline-copy-prefix" Value="@Flow.Prefix" ValueChanged="@((string value) => Flow.SetPrefix(value))"
+                         ValueExpression="@(() => Flow.Prefix)" Class="omni-u-w-100" />
+        </OmniFormField>
+        <OmniFormField Label="@L["PipelineCopySourceProject"]" Class="omni-u-w-100" For="pipeline-copy-source">
+            <OmniDropDown Id="pipeline-copy-source" TValue="int?" Options="@(Flow.SourceProjects.ToOptions(item => (int?)item.Id, item => item.Name))"
+                          Value="@Flow.SourceProjectId" ValueChanged="@((int? id) => Flow.SetSourceProject(id))"
+                          ValueExpression="@(() => Flow.SourceProjectId)" Class="omni-u-w-100" />
+        </OmniFormField>
+        <OmniFormField Label="@L["PipelineCopySourcePrefix"]" Description="@L["PipelineCopySourcePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-source-prefix">
+            <OmniTextBox Id="pipeline-copy-source-prefix" Value="@Flow.SourcePrefix" ValueChanged="@((string value) => Flow.SetSourcePrefix(value))"
+                         ValueExpression="@(() => Flow.SourcePrefix)" Class="omni-u-w-100" />
+        </OmniFormField>
+        <OmniAlert Severity="OmniSeverity.Info" data-testid="pipeline-copy-rule">@L["PipelineCopyValuesRule"]</OmniAlert>
+    </OmniStack>
+}
+else if (Step == 1)
+{
+    <OmniStack Gap="OmniSpacing.Medium" Class="pipeline-setup-step">
+        <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelineCopyPipelinesTitle"]</OmniHeading>
+        @if (Flow.PlanLoading)
+        {
+            <AetheusLoader Size="OmniControlSize.Small" />
+        }
+        else if (Flow.PlanFailed || Flow.Plan is null)
+        {
+            <OmniAlert Severity="OmniSeverity.Danger">@L["PipelineCopyPlanFailed"]</OmniAlert>
+        }
+        else if (Flow.Plan.Pipelines.Count == 0)
+        {
+            <OmniAlert Severity="OmniSeverity.Info">@L["PipelineCopyNoPipeline"]</OmniAlert>
+        }
+        else
+        {
+            @foreach (var item in Flow.Plan.Pipelines)
+            {
+                var selected = Flow.Selected.Contains(item.SourcePipelineId);
+                <OmniStack Gap="OmniSpacing.XSmall" data-testid="pipeline-copy-item">
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                        <OmniCheckBox TValue="bool" Value="@selected" ValueExpression="@(() => selected)"
+                                      Disabled="@(item.Status == PipelineCopyStatus.NotCopied)"
+                                      ValueChanged="@((bool value) => Flow.Toggle(item.SourcePipelineId, value))">
+                            <strong>@item.NewName</strong> <span class="omni-u-text-muted">@string.Format(L["PipelineCopyFrom"], item.SourceName)</span>
+                        </OmniCheckBox>
+                        @StatusBadge(item.Status)
+                    </OmniStack>
+                    @Issues(item)
+                </OmniStack>
+            }
+            @ResourcesOf((Flow.Plan, false))
+        }
+    </OmniStack>
+}
+else if (Flow.Result is { } result)
+{
+    <OmniStack Gap="OmniSpacing.Medium" Class="pipeline-setup-step" data-testid="pipeline-copy-result">
+        <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelineCopyResultTitle"]</OmniHeading>
+        @foreach (var item in result.Plan.Pipelines)
+        {
+            <OmniStack Gap="OmniSpacing.XSmall" data-testid="pipeline-copy-result-item">
+                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                    <strong>@item.NewName</strong>
+                    @StatusBadge(item.CreatedPipelineId is null ? PipelineCopyStatus.NotCopied : item.Status)
+                </OmniStack>
+                @Issues(item)
+            </OmniStack>
+        }
+        @ResourcesOf((result.Plan, true))
+        @if (Flow.TargetProjectId is { } targetId)
+        {
+            <PipelineSetupReadinessPanel ProjectId="@targetId" Readiness="@result.Readiness" Loading="@Flow.ReadinessLoading"
+                                         OnChanged="@OnReadinessChanged" />
+        }
+    </OmniStack>
+}
+else
+{
+    <OmniStack Gap="OmniSpacing.Medium" Class="pipeline-setup-step">
+        <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelinesToCreate"]</OmniHeading>
+        <OmniAlert Severity="OmniSeverity.Info">
+            @string.Format(L["PipelineCopySummary"], Flow.SourceProject?.Name, Flow.TargetProject?.Name, Flow.SelectedPipelines.Count)
+        </OmniAlert>
+        <div class="pipeline-setup-summary">
+            @foreach (var item in Flow.SelectedPipelines)
+            {
+                <div><OmniIcon Name="OmniIconName.Graph" /><strong>@item.NewName</strong><span>@item.SourceName</span></div>
+            }
+        </div>
+        <OmniAlert Severity="OmniSeverity.Warning">@L["PipelineCopyValuesRule"]</OmniAlert>
+        @if (Flow.CopyError is { } error)
+        {
+            <OmniAlert Severity="OmniSeverity.Danger" data-testid="pipeline-copy-error">@error</OmniAlert>
+        }
+    </OmniStack>
+}

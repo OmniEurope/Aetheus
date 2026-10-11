@@ -409,4 +409,21 @@ public class VisualPipelineEditorTests : BunitContext
         var canRedo = (bool)typeof(VisualPipelineEditor).GetProperty("CanRedo", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
         Assert.False(canRedo);
     }
+
+    // SITE-FUNC-AUTOCOMPLETE-001: the stage-template picker loads from OnAfterRenderAsync; a network
+    // failure there escaped the render cycle and took the editor down.
+    [Fact]
+    public void StageTemplateNetworkFailure_KeepsTheEditor()
+    {
+        _handler.SetAsyncJsonResponse<List<PipelineTemplateSummaryDto>>(HttpMethod.Get, "api/pipelines/templates",
+            _ => throw new HttpRequestException("network error"));
+
+        var cut = RenderEditor(ValidYaml);
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests,
+            request => request.Url.Contains("api/pipelines/templates", StringComparison.Ordinal)));
+
+        cut.Render();
+
+        Assert.Contains("build", cut.Markup, StringComparison.Ordinal);
+    }
 }

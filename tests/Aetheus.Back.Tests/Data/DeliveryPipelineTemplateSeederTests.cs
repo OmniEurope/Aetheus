@@ -95,6 +95,8 @@ public sealed class DeliveryPipelineTemplateSeederTests
         // A fresh database has nothing to renumber; the reset is marked done all the same.
         Assert.True(await db.AppSettings.AnyAsync(setting => setting.Key == DeliveryTemplateVersionReset.MarkerKey,
             TestContext.Current.CancellationToken));
+        Assert.True(await db.AppSettings.AnyAsync(setting => setting.Key == DeliveryTemplateVersionReset.FirstResetMarkerKey,
+            TestContext.Current.CancellationToken));
         // "Revenir à N-1" is its own template: nothing is built or migrated on the way back.
         var revert = Assert.Single(templates, template => template.Name == "host-bluegreen-revert");
         Assert.Contains("type: bluegreen-revert", Assert.Single(revert.Versions).YamlContent, StringComparison.Ordinal);
@@ -174,7 +176,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
             .Where(resource => resource.StartsWith("generic/", StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal(13, genericResources.Length);
+        Assert.Equal(14, genericResources.Length);
         foreach (var resource in genericResources)
         {
             var yaml = DeliveryPipelineTemplateSeeder.ReadResource(resource);
@@ -203,7 +205,8 @@ public sealed class DeliveryPipelineTemplateSeederTests
         [
             "generic/application-nightly.yaml",
             "generic/application-security.yaml",
-            "generic/application-security-history.yaml"
+            "generic/application-security-history.yaml",
+            "generic/application-security-external.yaml"
         ];
         Assert.All(genericResources.Where(resource => !adapterFree.Contains(resource)),
             resource => Assert.Contains(".pipeline/scripts/",
@@ -243,6 +246,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
     [InlineData("generic/application-quality.yaml", "quality")]
     [InlineData("generic/application-security.yaml", "security")]
     [InlineData("generic/application-security-history.yaml", "security")]
+    [InlineData("generic/application-security-external.yaml", "security")]
     public void GenericAnalysisTemplates_GradeAfterTheirProducersWithAcceptedRules(string resource, string scope)
     {
         var definition = Shipped(resource);
@@ -256,6 +260,31 @@ public sealed class DeliveryPipelineTemplateSeederTests
         Assert.NotEmpty(gate.AnalysisGrading.RequiredDomains);
         Assert.Contains(stages.SelectMany(stage => stage.Steps), step => step.Type == "scanner");
         Assert.Empty(PipelineAnalysisGateOrderingValidator.Validate(stages));
+    }
+
+    /// <summary>
+    /// Recette R1-33: the template the setup wizard gives an external repository is published like the
+    /// other security template, and needs nothing in that repository: only platform scanners, none of
+    /// which the readiness check finds a repository file for (application-security, with its Gitleaks
+    /// configuration, is the control that the check does find one).
+    /// </summary>
+    [Fact]
+    public void ExternalSecurityTemplate_IsPublished_AndNeedsNoFileInTheRepository()
+    {
+        var (_, category, resources) = DeliveryPipelineTemplateSeeder.Definitions["application-security-external"];
+        Assert.Equal("Security", category);
+        Assert.Equal(["generic/application-security-external.yaml"], resources);
+
+        var stages = YamlParsingHelper.FlattenJobs(Shipped("generic/application-security-external.yaml"));
+        var steps = stages.SelectMany(stage => stage.Steps).ToList();
+
+        Assert.All(steps, step => Assert.Contains(step.Type, new[] { "scanner", "analysis-gate" }));
+        Assert.Equal(
+            ["opengrep", "trivy-dependencies", "trivy-iac"],
+            steps.Where(step => step.Type == "scanner").Select(step => step.Scanner!).Order());
+        Assert.Empty(PipelineSetupReadinessService.RequiredScannerFiles(stages));
+        Assert.Equal([".gitleaks.toml"], PipelineSetupReadinessService.RequiredScannerFiles(
+            YamlParsingHelper.FlattenJobs(Shipped("generic/application-security.yaml"))));
     }
 
     /// <summary>Recette R2-121: the candidate a wizard creates releases the artifact the generic CI

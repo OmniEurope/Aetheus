@@ -23,5 +23,15 @@ public enum PipelineStatus
     /// happen and nothing is left broken, which Failed did not say. Not a success: it triggers no
     /// `on_success` chain, and a retry is refused like on any other finished deployment attempt.
     /// </summary>
-    RolledBack = 7
+    RolledBack = 7,
+
+    /// <summary>
+    /// Recette R2-146 (decided 2026-10-08, "Rejeté" in Warning, as a trial): every step ran, but a
+    /// required control failed (build, tests, a critical flaw, quality or critical QA), so the result is
+    /// refused: today, a candidate whose assurance seal published <c>CANDIDATE_DEPLOYABLE=false</c>. It
+    /// tells a refused result from a success and from a technical failure (Failed). Not a success: it
+    /// triggers no <c>on_success</c> chain, so a refused candidate no longer launches a deployment the
+    /// production pipeline would refuse anyway.
+    /// </summary>
+    Rejected = 8
 }

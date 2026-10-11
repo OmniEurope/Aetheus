@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Projects.ProjectDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Projects;
@@ -75,5 +76,36 @@ public class ProjectArtifactsSectionTests : BunitContext
             request.Url.Contains("api/artifacts/project/1", StringComparison.Ordinal)
             && request.Url.Contains("sortBy=Name", StringComparison.Ordinal)
             && request.Url.Contains("sortDescending=true", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/artifacts/project/1", new PaginatedResult<PipelineArtifactDto>
+        {
+            Items =
+            [
+                new PipelineArtifactDto
+                {
+                    Id = 1,
+                    Name = "nuget-package",
+                    ProjectId = 1,
+                    PipelineName = "CI",
+                    PipelineRunId = 4,
+                    SizeBytes = 1024,
+                    RetentionPolicy = ArtifactRetentionPolicy.Build,
+                    CreatedAt = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)
+                }
+            ],
+            TotalCount = 1
+        });
+
+        var cut = Render<ProjectArtifactsSection>(p => p.Add(c => c.ProjectId, 1));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The download button, the artifact link and the run link.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);
     }
 }

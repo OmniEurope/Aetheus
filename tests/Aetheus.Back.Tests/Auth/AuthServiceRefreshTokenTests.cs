@@ -15,6 +15,8 @@ namespace Aetheus.Back.Tests.Auth;
 public class AuthServiceRefreshTokenTests
 {
     private readonly IAuthRepository _repo = Substitute.For<IAuthRepository>();
+    private readonly Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher _domainEvents =
+        Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>();
     private readonly AuthService _sut;
 
     public AuthServiceRefreshTokenTests()
@@ -31,7 +33,7 @@ public class AuthServiceRefreshTokenTests
             new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" },
             Substitute.For<IMemoryCache>(), Substitute.For<IOrganizationService>(),
             Substitute.For<ITotpService>(), TimeProvider.System,
-            Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), Substitute.For<ILogger<AuthService>>());
+            Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), _domainEvents, Substitute.For<ILogger<AuthService>>());
 
         // The revoke is a compare-and-set (R-072): by default this request is the one that wins it.
         _repo.RevokeRefreshTokenAsync(Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -119,6 +121,10 @@ public class AuthServiceRefreshTokenTests
 
         Assert.Null(result);
         await _repo.Received(1).RevokeAllUserRefreshTokensAsync(5, Arg.Any<CancellationToken>());
+        // R1-37: the revoked chain also ends what the modules hold in memory for that user.
+        await _domainEvents.Received(1).DispatchAsync(
+            new Aetheus.Back.Components.Users.Events.UserSessionEndedEvent(5, Aetheus.Back.Components.Users.Events.UserSessionEndReasons.RefreshReplay),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -164,6 +170,8 @@ public class AuthServiceRefreshTokenTests
         // The replacement minted by the loser (Id 0 under the mock) is revoked, never handed out.
         await _repo.Received(1).RevokeRefreshTokenAsync(0, null, Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().RevokeAllUserRefreshTokensAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _domainEvents.DidNotReceive().DispatchAsync(
+            Arg.Any<Aetheus.Back.Components.Users.Events.UserSessionEndedEvent>(), Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().DeleteExpiredRefreshTokensAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
@@ -212,5 +220,16 @@ public class AuthServiceRefreshTokenTests
         var success = await _sut.RefreshTokenWithReasonAsync("x", ct);
         Assert.NotNull(success.Response);
         Assert.Null(success.RejectionCode);
+    }
+
+    /// <summary>Recette R1-37: an explicit logout announces the end of the user's session in-process.</summary>
+    [Fact]
+    public async Task Logout_AnnouncesTheEndOfTheUsersSession()
+    {
+        await _sut.LogoutAsync(42, TestContext.Current.CancellationToken);
+
+        await _domainEvents.Received(1).DispatchAsync(
+            new Aetheus.Back.Components.Users.Events.UserSessionEndedEvent(42, Aetheus.Back.Components.Users.Events.UserSessionEndReasons.Logout),
+            Arg.Any<CancellationToken>());
     }
 }

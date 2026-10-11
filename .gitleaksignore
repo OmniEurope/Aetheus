@@ -7,6 +7,11 @@ docs/adr/ADR-008-aes256-gcm-encryption.md:generic-api-key:32
 src/Aetheus.Back/Services/EncryptionService.cs:generic-api-key:71
 src/Aetheus.Back/Services/EncryptionService.cs:generic-api-key:76
 
+# The character set the no-reply password generator draws from (recette R1-16), not a credential:
+# the generated password itself is only ever held in memory and in the encrypted secret store.
+# Finding #1244, candidate run 2672 graded B on it alone.
+src/Aetheus.Back/Components/Mail/MailNoReplySenderService.cs:generic-api-key:22
+
 # Scanner conformance fixture intentionally contains a synthetic GitHub-shaped token.
 scripts/run-scanner-campaign.ps1:github-pat:431
 
@@ -31,6 +36,7 @@ tests/Aetheus.WebAnalytics.Tests/AudienceMeasurementPageTests.cs:generic-api-key
 3d64bd6d457826c4e920e9c6ee2c3019bbab39d8:tests/Aetheus.WebAnalytics.Tests/AetheusWebAnalyticsEndpointTests.cs:generic-api-key:127
 3d64bd6d457826c4e920e9c6ee2c3019bbab39d8:tests/Aetheus.WebAnalytics.Tests/AnalyticsPrivacyTests.cs:generic-api-key:142
 3d64bd6d457826c4e920e9c6ee2c3019bbab39d8:tests/Aetheus.WebAnalytics.Tests/AudienceMeasurementPageTests.cs:generic-api-key:31
+978433d5d461fcc9634a1c9066d9a2fca58eb5ab:src/Aetheus.Back/Components/Mail/MailNoReplySenderService.cs:generic-api-key:22
 49c9e02a129e67fc81f98fc5ee60b5bdc66900b4:docs/adr/ADR-008-aes256-gcm-encryption.md:generic-api-key:32
 7be4d29ebfc1efa28a0173469dfb26ea86423f9a:CHANGELOG.md:generic-api-key:25
 7be4d29ebfc1efa28a0173469dfb26ea86423f9a:tests/Prometheus.Back.Tests/Webhooks/WebhookSecretReencryptionTests.cs:generic-api-key:79

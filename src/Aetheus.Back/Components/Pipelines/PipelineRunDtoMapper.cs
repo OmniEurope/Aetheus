@@ -20,7 +20,28 @@ public static class PipelineRunDtoMapper
     // names stay so the run grids of this module keep reading the same row.
     public static readonly Expression<Func<PipelineRun, PipelineRunDto>> RunListProjection = PipelineRunListRows.Projection;
 
-    public static PipelineRunDto MapRunToDto(PipelineRun r) => MapRunToDto(r, StageDepths(r));
+    public static PipelineRunDto MapRunToDto(PipelineRun r)
+    {
+        var definition = ParseSnapshot(r);
+        return MapRunToDto(
+            r,
+            definition is null ? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) : StageDepths(definition),
+            definition is null ? [] : PipelineRunScheduler.AdvisoryStepKeys(definition));
+    }
+
+    /// <summary>The run's own definition snapshot, null when missing or unparseable.</summary>
+    private static PipelineYamlDefinition? ParseSnapshot(PipelineRun run)
+    {
+        if (string.IsNullOrWhiteSpace(run.YamlSnapshot)) return null;
+        try
+        {
+            return YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(run.YamlSnapshot);
+        }
+        catch (YamlDotNet.Core.YamlException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Depth of every stage in the run's own definition snapshot: 0 for a stage that waits for
@@ -33,21 +54,9 @@ public static class PipelineRunDtoMapper
     /// actually executed. A snapshot that is missing or unparseable yields no depths at all rather
     /// than a plausible-looking wrong order.
     /// </summary>
-    private static Dictionary<string, int> StageDepths(PipelineRun run)
+    private static Dictionary<string, int> StageDepths(PipelineYamlDefinition definition)
     {
         var depths = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(run.YamlSnapshot)) return depths;
-        PipelineYamlDefinition? definition;
-        try
-        {
-            definition = YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(run.YamlSnapshot);
-        }
-        catch (YamlDotNet.Core.YamlException)
-        {
-            return depths;
-        }
-        if (definition is null) return depths;
-
         var stages = YamlParsingHelper.FlattenJobs(definition).ToList();
         var byName = stages
             .GroupBy(stage => stage.Name, StringComparer.OrdinalIgnoreCase)
@@ -92,71 +101,73 @@ public static class PipelineRunDtoMapper
             ? value
             : null;
 
-    private static PipelineRunDto MapRunToDto(PipelineRun r, Dictionary<string, int> stageDepths) => new()
-    {
-        Id = r.Id,
-        PipelineId = r.PipelineId,
-        ProjectId = r.Pipeline?.ProjectId,
-        PipelineName = r.Pipeline?.Name ?? string.Empty,
-        Status = r.Status,
-        CancellationRequested = HasCancellationRequest(r.AdditionalVariablesJson),
-        CancelledBy = CancellationNote(r.AdditionalVariablesJson, PipelineRunService.CancelledByVariable),
-        CancellationReason = CancellationNote(r.AdditionalVariablesJson, PipelineRunService.CancellationReasonVariable),
-        // See RunListProjection: a terminal run never reports a current wait.
-        WaitingReason = IsWaitable(r.Status) ? r.WaitingReason : null,
-        WaitingSince = IsWaitable(r.Status) ? r.WaitingSince : null,
-        PreflightChecks = DeserializePreflight(r.PreflightJson),
-        StartedAt = r.StartedAt,
-        CompletedAt = r.CompletedAt,
-        BranchName = r.BranchName,
-        CommitHash = r.CommitHash,
-        RepositoryUrl = r.RepositoryUrl,
-        ProjectName = r.Pipeline?.Project?.Name,
-        YamlSnapshot = r.YamlSnapshot,
-        ResolvedVariables = DeserializeResolvedVariables(r.ResolvedVariablesJson),
-        Parameters = DeserializeResolvedVariables(r.ParametersJson),
-        Warnings = DeserializeWarnings(r.WarningsJson),
-        // Same worst-letter-wins rule as RunListProjection (see there); the detail path loads the
-        // evaluations in full so this is a plain in-memory Max, no extra query. Max on an empty
-        // nullable-enum sequence returns null (LINQ contract), so no evaluation -> ungraded, not A.
-        GateGrade = r.AnalysisEvaluations
+    private static PipelineRunDto MapRunToDto(
+        PipelineRun r, Dictionary<string, int> stageDepths, HashSet<string> advisoryKeys) => new()
+        {
+            Id = r.Id,
+            PipelineId = r.PipelineId,
+            ProjectId = r.Pipeline?.ProjectId,
+            PipelineName = r.Pipeline?.Name ?? string.Empty,
+            Status = r.Status,
+            CancellationRequested = HasCancellationRequest(r.AdditionalVariablesJson),
+            CancelledBy = CancellationNote(r.AdditionalVariablesJson, PipelineRunService.CancelledByVariable),
+            CancellationReason = CancellationNote(r.AdditionalVariablesJson, PipelineRunService.CancellationReasonVariable),
+            // See RunListProjection: a terminal run never reports a current wait.
+            WaitingReason = IsWaitable(r.Status) ? r.WaitingReason : null,
+            WaitingSince = IsWaitable(r.Status) ? r.WaitingSince : null,
+            PreflightChecks = DeserializePreflight(r.PreflightJson),
+            StartedAt = r.StartedAt,
+            CompletedAt = r.CompletedAt,
+            BranchName = r.BranchName,
+            CommitHash = r.CommitHash,
+            RepositoryUrl = r.RepositoryUrl,
+            ProjectName = r.Pipeline?.Project?.Name,
+            YamlSnapshot = r.YamlSnapshot,
+            ResolvedVariables = DeserializeResolvedVariables(r.ResolvedVariablesJson),
+            Parameters = DeserializeResolvedVariables(r.ParametersJson),
+            Warnings = DeserializeWarnings(r.WarningsJson),
+            // Same worst-letter-wins rule as RunListProjection (see there); the detail path loads the
+            // evaluations in full so this is a plain in-memory Max, no extra query. Max on an empty
+            // nullable-enum sequence returns null (LINQ contract), so no evaluation -> ungraded, not A.
+            GateGrade = r.AnalysisEvaluations
             .Where(evaluation => evaluation.Grade != null)
             .Max(evaluation => evaluation.Grade),
-        Steps = r.StepRuns.Select(s => new PipelineStepRunDto
-        {
-            Id = s.Id,
-            StepName = s.StepName,
-            StageName = s.StageName,
-            Status = s.Status,
-            ServerId = s.ServerId,
-            ServerName = s.Server?.Name,
-            ServerOs = s.Server?.OsDescription,
-            StartedAt = s.StartedAt,
-            CompletedAt = s.CompletedAt,
-            ExitCode = s.ExitCode,
-            FailureCode = s.Task?.FailureCode ?? s.FailureCode,
-            FailureReason = s.Task?.FailureReason ?? s.FailureReason,
-            OutputVariables = DeserializeResolvedVariables(s.OutputVariablesJson),
-            RetryCount = s.RetryCount,
-            ContinueOnError = s.ContinueOnError,
-            MatrixLeg = s.MatrixLeg,
-            TaskId = s.TaskId,
-            IsSystem = s.IsSystem,
-            GroupName = s.GroupName,
-            StageDepth = stageDepths.TryGetValue(s.StageName, out var depth) ? depth : null,
-            SkippedCondition = s.SkippedCondition,
-            SkippedConditionVariables = DeserializeResolvedVariables(s.SkippedConditionVariablesJson),
-            SkippedReason = s.SkippedReason,
-            // Command is masked in GetRunAsync (async secret-masking) before reaching the client.
-            Command = s.Task?.Command,
-            IsContainerIsolated = !string.IsNullOrEmpty(s.Task?.ContainerImage)
-                || !string.IsNullOrEmpty(s.Task?.ContainerToolchain),
-            TriggeredRunId = s.TriggeredRunId
-        }).ToList()
-        // Recette R-484: tests, coverage, lint, metrics and artifacts are not mapped from loaded rows;
-        // PipelineRunReader fills them from database-computed summaries (GetRunResultSummariesAsync,
-        // GetTestResultSummaryAsync).
-    };
+            Steps = r.StepRuns.Select(s => new PipelineStepRunDto
+            {
+                Id = s.Id,
+                StepName = s.StepName,
+                StageName = s.StageName,
+                Status = s.Status,
+                ServerId = s.ServerId,
+                ServerName = s.Server?.Name,
+                ServerOs = s.Server?.OsDescription,
+                StartedAt = s.StartedAt,
+                CompletedAt = s.CompletedAt,
+                ExitCode = s.ExitCode,
+                FailureCode = s.Task?.FailureCode ?? s.FailureCode,
+                FailureReason = s.Task?.FailureReason ?? s.FailureReason,
+                OutputVariables = DeserializeResolvedVariables(s.OutputVariablesJson),
+                RetryCount = s.RetryCount,
+                ContinueOnError = s.ContinueOnError,
+                IsAdvisory = PipelineRunScheduler.IsAdvisory(advisoryKeys, s.StageName, s.StepName, s.MatrixLeg),
+                MatrixLeg = s.MatrixLeg,
+                TaskId = s.TaskId,
+                IsSystem = s.IsSystem,
+                GroupName = s.GroupName,
+                StageDepth = stageDepths.TryGetValue(s.StageName, out var depth) ? depth : null,
+                SkippedCondition = s.SkippedCondition,
+                SkippedConditionVariables = DeserializeResolvedVariables(s.SkippedConditionVariablesJson),
+                SkippedReason = s.SkippedReason,
+                // Command is masked in GetRunAsync (async secret-masking) before reaching the client.
+                Command = s.Task?.Command,
+                IsContainerIsolated = !string.IsNullOrEmpty(s.Task?.ContainerImage)
+                    || !string.IsNullOrEmpty(s.Task?.ContainerToolchain),
+                TriggeredRunId = s.TriggeredRunId
+            }).ToList()
+            // Recette R-484: tests, coverage, lint, metrics and artifacts are not mapped from loaded rows;
+            // PipelineRunReader fills them from database-computed summaries (GetRunResultSummariesAsync,
+            // GetTestResultSummaryAsync).
+        };
 
     public static PipelineRunDto HydrateListWarnings(PipelineRunDto run) => PipelineRunListRows.HydrateWarnings(run);
 }

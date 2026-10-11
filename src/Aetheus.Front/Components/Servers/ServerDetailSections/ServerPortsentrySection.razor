@@ -1,5 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-
+@if (AgentServer is { } agentServer)
+{
+    <AgentOfflineNotice Server="@agentServer" />
+}
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
@@ -21,16 +24,16 @@
 
     @if (!Ps.IsInstalled)
     {
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["PortsentrySetup"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["PortsentrySetup"]</span></OmniButton>
     }
     else
     {
-        <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["PortSentry"]" Disabled="@_actionRunning" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Restart))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
+        <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["PortSentry"]" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Restart))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(PortsentryAction.Start))">@L["Start"]</OmniMenuItem>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(PortsentryAction.Stop))">@L["Stop"]</OmniMenuItem>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(PortsentryAction.Restart))">@L["Restart"]</OmniMenuItem>
         </ChildContent></OmniSplitButton>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GetLogsAsync"><OmniIcon Name="OmniIconName.Document" /> <span>@L["ViewLogs"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@GetLogsAsync"><OmniIcon Name="OmniIconName.Document" /> <span>@L["ViewLogs"]</span></OmniButton>
     }
 </OmniRow>
 
@@ -53,13 +56,14 @@
                             <OmniDataGridColumn TItem="PortsentryBlockedIpDto" Property="Protocol" Title="@L["Protocol"]" Width="100px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_protocolValues" />
                             <OmniDataGridColumn TItem="PortsentryBlockedIpDto" Property="BlockedAt" Title="@L["BlockedAt"]" Width="180px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" >
                                 <Template Context="b">
-                                    @b.BlockedAt.ToString("g")
+                                    @* SITE-FUNC-PORTSENTRY-001: the agent sends DateTime.MinValue when the blocked file carries no date. *@
+                                    @(b.BlockedAt == default ? "-" : b.BlockedAt.ToString("g"))
                                 </Template>
                             </OmniDataGridColumn>
                             <OmniDataGridColumn TItem="PortsentryBlockedIpDto" Property="Reason" Title="@L["Reason"]" Filterable="true" />
                             <OmniDataGridColumn TItem="PortsentryBlockedIpDto" Title="" Width="80px" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
                                 <Template Context="b">
-                                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => UnblockIpAsync(b.IpAddress))" title="@L["Unblock"]"><OmniIcon Name="OmniIconName.LockOpen" /></OmniButton>
+                                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => UnblockIpAsync(b.IpAddress))" title="@L["Unblock"]"><OmniIcon Name="OmniIconName.LockOpen" /></OmniButton>
                                 </Template>
                             </OmniDataGridColumn>
                     </Columns>

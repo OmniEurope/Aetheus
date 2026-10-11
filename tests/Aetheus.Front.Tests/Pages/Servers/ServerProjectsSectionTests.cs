@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -60,5 +61,22 @@ public class ServerProjectsSectionTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains("second-project", cut.Markup));
         Assert.DoesNotContain("first-project", cut.Markup);
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/servers/1/projects", new PaginatedResult<ProjectDto>
+        {
+            Items = [new() { Id = 7, Name = "MyProject", Status = ProjectStatus.Active }],
+            TotalCount = 1
+        });
+
+        var cut = Render<ServerProjectsSection>(p => p.Add(x => x.ServerId, 1));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }
 }

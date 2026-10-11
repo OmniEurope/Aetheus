@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
 
 namespace Aetheus.Front.Components.Analysis;
 
@@ -11,20 +12,27 @@ public partial class AnalysisGradeBreakdown
     /// <summary>The grade to break down; null renders nothing.</summary>
     [Parameter] public AnalysisGradeSummaryDto? Grade { get; set; }
 
+    /// <summary>Recette R2-139: the run's letter came from the assurance seal because of blocking tests,
+    /// so the code-and-tests domain limits it too, whatever its analysis letter.</summary>
+    [Parameter] public bool SealBlockedByTests { get; set; }
+
     /// <summary>The project's latest average CRAP score, shown (advisory) under code quality.</summary>
     [Parameter] public double? CrapScore { get; set; }
-
-    /// <summary>Name the domain that sets the grade above the domains (a run's tab has no headline that
-    /// already says it).</summary>
-    [Parameter] public bool ShowLimitingDomain { get; set; }
 
     // Recette R-176: a domain with neither a measure nor a CRAP score is a compact line, not a card.
     private static bool HasDetails(DomainView domain) => domain.Measures.Count > 0 || domain.CrapScore.HasValue;
 
-    private string DomainState(DomainView domain) =>
-        $"{(domain.Required ? L["AnalysisRequired"] : L["AnalysisAdvisory"])}"
-        + $" · {(domain.Completeness == AnalysisGradeCompleteness.Complete ? L["Complete"] : L["Incomplete"])}"
-        + $" · {L["AnalysisFreshness"]}: {domain.EvaluatedAt?.ToString("g") ?? L["NotAvailable"]}";
+    // Recette R2-139: every domain whose letter is the overall one sets the grade, several when they tie;
+    // nothing limits an A, and an incomplete grade has no limiting domain yet.
+    private bool IsLimiting(DomainView domain) =>
+        (SealBlockedByTests && domain.CodeAndTests)
+        || (Grade is { OverallGrade: > AnalysisGrade.A, Completeness: AnalysisGradeCompleteness.Complete }
+            && domain.Grade == Grade.OverallGrade);
+
+    // The distance to the next letter is in the unit of the value shown: a weighted finding score shows
+    // the number of findings (recette R1-4), so its distance, in weighted points, would not match it.
+    private static bool ShowDistance(AnalysisGradeMeasureDto measure) =>
+        measure.DistanceToNextGrade.HasValue && measure.NextGrade.HasValue && !measure.WeightedFindingScore;
 
     private IReadOnlyList<DomainView> Domains
     {
@@ -50,11 +58,16 @@ public partial class AnalysisGradeBreakdown
                         .Select(domain => domain.EvaluatedAt)
                         .Min(),
                     codeAndTests.SelectMany(domain => domain.Measures).ToArray(),
-                    CrapScore));
+                    CrapScore,
+                    CodeAndTests: true));
             }
 
             AddDomain(result, source, AnalysisGradeDomain.Architecture);
-            AddDomain(result, source, AnalysisGradeDomain.Performance);
+            // Recette R2-142: runtime performance shows only once a measure of it was really observed;
+            // no project measures it yet, and an empty "Incomplete" line only says that.
+            if (source.Any(domain => domain.Domain == AnalysisGradeDomain.Performance
+                    && domain.Measures.Any(measure => measure.Observed)))
+                AddDomain(result, source, AnalysisGradeDomain.Performance);
             return result;
         }
     }
@@ -74,7 +87,8 @@ public partial class AnalysisGradeBreakdown
         "grade.security.critical" => L["AnalysisCriticalVulnerabilities"],
         "grade.security.high" => L["AnalysisHighVulnerabilities"],
         "grade.security.medium" => L["AnalysisMediumVulnerabilities"],
-        "grade.security.findings" => L["AnalysisOpenFindingsScore"],
+        // Recettes R2-140 and R1-4: the open findings, as a number, in the security and the quality gates.
+        "grade.security.findings" or "grade.quality.findings" => L["AnalysisOpenFindingCount"],
         "grade.coverage.line" => L["AnalysisTestedLines"],
         "grade.coverage.branch" => L["AnalysisTestedBranches"],
         "grade.complexity.maximum" => L["AnalysisMaximumComplexity"],
@@ -88,22 +102,12 @@ public partial class AnalysisGradeBreakdown
     private static string MeasureText(AnalysisGradeMeasureDto measure)
     {
         if (!measure.ObservedValue.HasValue) return "-";
+        // Recette R1-4: a finding score shows the number of open findings, the number the list shows.
+        if (measure.FindingCounts is { } counts) return AnalysisFindingScore.Total(counts).ToString(CultureInfo.CurrentCulture);
         var value = measure.ObservedValue.Value.ToString("0.##");
         if (string.Equals(measure.Unit, "percent", StringComparison.OrdinalIgnoreCase)) return $"{value} %";
         return string.IsNullOrWhiteSpace(measure.Unit) ? value : $"{value} {measure.Unit}";
     }
-
-    // "Critical 0 · High 1 (×10) · Medium 2 (×3) · Low 0 (×1) · Info 1 (×0.5)": the score is the sum of
-    // the weighted counts, and any critical finding gives F whatever the score.
-    private string FindingCountsText(AnalysisGradeFindingCountsDto counts) => string.Join(" · ",
-        $"{L.Localize(AnalysisSeverity.Critical)} {counts.Critical}",
-        WeightedCount(AnalysisSeverity.High, counts.High, AnalysisFindingScore.HighWeight),
-        WeightedCount(AnalysisSeverity.Medium, counts.Medium, AnalysisFindingScore.MediumWeight),
-        WeightedCount(AnalysisSeverity.Low, counts.Low, AnalysisFindingScore.LowWeight),
-        WeightedCount(AnalysisSeverity.Info, counts.Info, AnalysisFindingScore.InfoWeight));
-
-    private string WeightedCount(AnalysisSeverity severity, int count, double weight) =>
-        $"{L.Localize(severity)} {count} (×{weight:0.##})";
 
     private void AddDomain(
         ICollection<DomainView> target,
@@ -128,5 +132,6 @@ public partial class AnalysisGradeBreakdown
         AnalysisGradeCompleteness Completeness,
         DateTime? EvaluatedAt,
         IReadOnlyList<AnalysisGradeMeasureDto> Measures,
-        double? CrapScore);
+        double? CrapScore,
+        bool CodeAndTests = false);
 }

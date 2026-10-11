@@ -66,7 +66,7 @@ public class PipelineStageDispatchOutputExpansionTests
         repo.GetApprovalsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         repo.FindCandidateTargetServerIdsAsync(
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-            Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns([]);
+            Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns([]);
         repo.FindEnvironmentByNameAsync("prod", Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(new Aetheus.Back.Data.Entities.Environment
             {

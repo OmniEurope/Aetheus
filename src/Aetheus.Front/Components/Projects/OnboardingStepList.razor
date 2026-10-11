@@ -48,7 +48,7 @@
                                  && !string.IsNullOrWhiteSpace(step.Href)
                                  && !string.IsNullOrWhiteSpace(step.ActionLabel))
                             {
-                                <a href="@step.Href" class="onboarding-step-link" @onclick:stopPropagation="true">
+                                <a href="@step.Href" class="onboarding-step-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                     <OmniIcon Name="@(step.State == OnboardingStepState.Done ? OmniIconName.OpenExternal : OmniIconName.ArrowRight)" />
                                     <span>@step.ActionLabel</span>
                                 </a>

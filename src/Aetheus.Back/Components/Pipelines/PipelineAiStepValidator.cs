@@ -12,7 +12,14 @@ internal static class PipelineAiStepValidator
         PipelineStepDefinition step,
         string context)
     {
-        if (!string.Equals(step.Type, "ai", StringComparison.OrdinalIgnoreCase)) return;
+        if (!string.Equals(step.Type, "ai", StringComparison.OrdinalIgnoreCase))
+        {
+            // advisory exists to keep an opinion from deciding anything; on a step that produces
+            // evidence or deploys it would hide a real failure, so it stays an AI-only key.
+            if (step.Advisory || step.FindingsSarif is not null || step.CaptureDiff is not null)
+                errors.Add($"Step '{step.Name}' in {context}: advisory, findings_sarif and capture_diff are only valid on an ai step.");
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(step.Profile))
             errors.Add($"AI step '{step.Name}' in {context} must select a profile.");
@@ -23,6 +30,10 @@ internal static class PipelineAiStepValidator
         if (step.ContextPaths.Count > 32
             || step.ContextPaths.Any(path => !IsSafeWorkspaceRelativePath(path)))
             errors.Add($"AI step '{step.Name}' in {context} has invalid context_paths.");
+        if (step.FindingsSarif is not null && !IsSafeWorkspaceRelativePath(step.FindingsSarif))
+            errors.Add($"AI step '{step.Name}' in {context} has an unsafe findings_sarif.");
+        if (step.Advisory && step.Gate)
+            errors.Add($"AI step '{step.Name}' in {context} cannot be both advisory and a gate: an advisory verdict blocks nothing.");
     }
 
     private static bool IsSafeWorkspaceRelativePath(string value)

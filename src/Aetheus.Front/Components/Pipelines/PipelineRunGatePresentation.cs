@@ -8,7 +8,10 @@ internal static class PipelineRunGatePresentation
     {
         AnalysisGateStatus.Passed => OmniTone.Success,
         AnalysisGateStatus.Warning => OmniTone.Warning,
-        AnalysisGateStatus.Blocked or AnalysisGateStatus.Error => OmniTone.Danger,
+        // Recette R2-146: a gate a required control blocked reads "Rejeté" in warning; red stays for a
+        // gate in error (a report missing, a technical failure).
+        AnalysisGateStatus.Blocked => OmniTone.Warning,
+        AnalysisGateStatus.Error => OmniTone.Danger,
         _ => OmniTone.Neutral
     };
 

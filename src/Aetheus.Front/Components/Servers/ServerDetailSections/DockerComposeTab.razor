@@ -19,10 +19,10 @@
         <OmniDataGridColumn TItem="DockerComposeStackDto" Title="@L["Actions"]" MinWidth="28rem" Sortable="false" Filterable="false">
             <Template Context="s">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Up))" title="@L["Start"]" Label="@L["Start"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Down))" title="@L["Stop"]" Label="@L["Stop"]"><OmniIcon Name="OmniIconName.Stop" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Restart))" title="@L["Restart"]" Label="@L["Restart"]"><OmniIcon Name="OmniIconName.Refresh" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenComposeEditorAsync(s.Name))" title="@L["EditCompose"]" Label="@L["EditCompose"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Up))" title="@L["Start"]" Label="@L["Start"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Down))" title="@L["Stop"]" Label="@L["Stop"]"><OmniIcon Name="OmniIconName.Stop" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Restart))" title="@L["Restart"]" Label="@L["Restart"]"><OmniIcon Name="OmniIconName.Refresh" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => OpenComposeEditorAsync(s.Name))" title="@L["EditCompose"]" Label="@L["EditCompose"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                 </OmniStack>
             </Template>
         </OmniDataGridColumn>
@@ -52,7 +52,7 @@
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseComposeEditor"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
                     @if (CanAdmin)
                     {
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveComposeFileAsync" Disabled="@string.IsNullOrWhiteSpace(_composeEditorContent)" Class="@(_composeDeploying ? "btn-busy" : null)" Busy="@(_composeDeploying)"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["Deploy"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveComposeFileAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_composeEditorContent))" Class="@(_composeDeploying ? "btn-busy" : null)" Busy="@(_composeDeploying)"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["Deploy"]</span></OmniButton>
                     }
                 </OmniStack>
             }

@@ -15,6 +15,20 @@ public partial class PipelineSetupWizard
     [SupplyParameterFromQuery] public int? ProjectId { get; set; }
     [SupplyParameterFromQuery] public int? TemplateId { get; set; }
 
+    // Recette R1-19: the summary with its choices travels in its own address (prefix, chosen options,
+    // step), so a page opened from it to fix something comes back to the same summary. Nothing here is
+    // sensitive: a pipeline name prefix and option names.
+    [SupplyParameterFromQuery(Name = "prefix")] public string? PrefixQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "options")] public string? OptionsQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "step")] public string? StepQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "architecture")] public string? ArchitectureQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "sameProject")] public string? SameProjectQuery { get; set; }
+
+    [Inject] private PipelineSetupProvisionState ProvisionState { get; set; } = default!;
+
+    private const string SummaryStepSlug = "summary";
+    private int _initialStep;
+
     private readonly List<ProjectDto> _projects = [];
     private readonly List<PipelineTemplateSummaryDto> _templates = [];
     private List<WizardStep> _steps = [];
@@ -23,6 +37,14 @@ public partial class PipelineSetupWizard
     private bool _saving;
     private int? _selectedProjectId;
     private string _prefix = string.Empty;
+
+    /// <summary>Recette R1-18 / R1-31: asked first, nothing chosen in advance (a default once gave a
+    /// one-project Blazor Server application a separate frontend).</summary>
+    private PipelineArchitecture? _architecture;
+    /// <summary>Recette R1-31 decision: for an application, is the interface served by the server project?
+    /// Yes, no, or not answered yet; no default answer.</summary>
+    private bool? _sameProject;
+    private PipelineSetupStack _stack = PipelineSetupStack.DotNet;
     private bool _frontend = true;
     private bool _backend = true;
     private bool _database;
@@ -38,6 +60,7 @@ public partial class PipelineSetupWizard
     private bool _fastDeploy;
     private bool _rollback = true;
     private bool _packages;
+    private bool _externalSecurity = true;
 
     /// <summary>Index of the summary step, where the readiness check runs.</summary>
     private const int SummaryStep = 3;
@@ -45,40 +68,58 @@ public partial class PipelineSetupWizard
     private bool _readinessLoading;
     private string? _readinessSignature;
 
+    /// <summary>Recette R1-29: start from an existing project instead of the templates.</summary>
+    private bool _copyMode;
+
+    private IReadOnlyList<OmniOption<bool>> StartOptions =>
+    [
+        new OmniOption<bool>(false, L["PipelineSetupStartTemplates"].Value),
+        new OmniOption<bool>(true, L["PipelineSetupStartExistingProject"].Value)
+    ];
+
+    private void OnModeChanged(bool copyMode) => _copyMode = copyMode;
+
     private string BackHref => _selectedProjectId is { } id ? $"/projects/{id}/pipelines" : "/pipelines";
     private ProjectDto? SelectedProject => _projects.FirstOrDefault(project => project.Id == _selectedProjectId);
     private bool CanAdvance => !_saving && _currentStep switch
     {
         0 => _selectedProjectId.HasValue && !string.IsNullOrWhiteSpace(_prefix),
-        1 => _frontend || _backend || _database,
+        1 => PipelineSetupArchitecture.IsComplete(_architecture, _sameProject, _frontend, _backend),
         2 => SelectedRoles.Count > 0,
-        _ => true
+        _ => _selectedProjectId is not { } projectId || ProvisionState.AllChecked(projectId)
     };
+
+    /// <summary>An option counts only when it is chosen AND the type proposes it: a choice made under
+    /// another type and hidden since creates nothing and writes nothing.</summary>
+    private bool On(string capability, bool value) =>
+        value && PipelineSetupArchitecture.Proposes(_architecture, capability);
 
     private IReadOnlyList<PipelineRole> SelectedRoles
     {
         get
         {
             var roles = new List<PipelineRole>();
-            var requiresCi = _ci || _quality || _security || _qa || _qaExtended || _securityHistory
-                || _candidate || _nightly;
+            var requiresCi = On("ci", _ci) || On("quality", _quality) || On("security", _security)
+                || On("qa", _qa) || On("qa-extended", _qaExtended) || On("security-history", _securityHistory)
+                || On("candidate", _candidate) || On("nightly", _nightly);
             Add(requiresCi, "ci", "application-ci");
-            Add(_quality, "quality", "application-quality");
-            Add(_security, "security", "application-security");
-            Add(_qa, "qa", "application-qa");
-            Add(_securityHistory, "security-history", "application-security-history");
-            Add(_qaExtended, "qa-extended", "application-qa-extended");
-            Add(_candidate || _nightly, "candidate", "application-candidate");
-            Add(_nightly, "nightly", "application-nightly");
-            Add(_production, "deploy-prod", "application-deploy-prod");
-            Add(_fastDeploy, "release-fast", "application-release-fast");
-            if (_packages)
+            Add(On("quality", _quality), "quality", "application-quality");
+            Add(On("security", _security), "security", "application-security");
+            Add(On("qa", _qa), "qa", "application-qa");
+            Add(On("security-history", _securityHistory), "security-history", "application-security-history");
+            Add(On("qa-extended", _qaExtended), "qa-extended", "application-qa-extended");
+            Add(On("candidate", _candidate) || On("nightly", _nightly), "candidate", "application-candidate");
+            Add(On("nightly", _nightly), "nightly", "application-nightly");
+            Add(On("production", _production), "deploy-prod", "application-deploy-prod");
+            Add(On("fast-deploy", _fastDeploy), "release-fast", "application-release-fast");
+            if (On("packages", _packages))
             {
                 Add(true, "package-telemetry", "package-telemetry");
-                Add(true, "package-web-analytics-dotnet", "package-web-analytics-dotnet");
+                Add(true, _stack.AnalyticsPackageTemplate, _stack.AnalyticsPackageTemplate);
                 Add(true, "package-web-analytics-browser", "package-web-analytics-browser");
                 Add(true, "publish-observability-packages", "publish-observability-packages");
             }
+            Add(On("external-security", _externalSecurity), "security", "application-security-external");
             return roles;
 
             void Add(bool enabled, string suffix, string templateName)
@@ -102,7 +143,9 @@ public partial class PipelineSetupWizard
             _templates.AddRange(await templatesTask);
             _selectedProjectId = ProjectId;
             SetPrefixFromProject();
-            if (TemplateId is { } templateId)
+            if (OptionsQuery is not null)
+                RestoreChoices();
+            else if (TemplateId is { } templateId)
                 SelectOnlyRequestedTemplate(templateId);
         }
         catch (HttpRequestException)
@@ -111,14 +154,90 @@ public partial class PipelineSetupWizard
         }
         RefreshSteps();
         _loading = false;
+        if (_initialStep == SummaryStep) await LoadReadinessAsync();
     }
+
+    /// <summary>The wizard's options, by the name they carry in the summary's address.</summary>
+    private (string Name, Func<bool> Get, Action<bool> Set)[] Choices =>
+    [
+        ("frontend", () => _frontend, value => _frontend = value),
+        ("backend", () => _backend, value => _backend = value),
+        ("database", () => _database, value => _database = value),
+        ("ci", () => _ci, value => _ci = value),
+        ("quality", () => _quality, value => _quality = value),
+        ("security", () => _security, value => _security = value),
+        ("qa", () => _qa, value => _qa = value),
+        ("qa-extended", () => _qaExtended, value => _qaExtended = value),
+        ("security-history", () => _securityHistory, value => _securityHistory = value),
+        ("candidate", () => _candidate, value => _candidate = value),
+        ("nightly", () => _nightly, value => _nightly = value),
+        ("production", () => _production, value => _production = value),
+        ("fast-deploy", () => _fastDeploy, value => _fastDeploy = value),
+        ("rollback", () => _rollback, value => _rollback = value),
+        ("packages", () => _packages, value => _packages = value),
+        ("external-security", () => _externalSecurity, value => _externalSecurity = value)
+    ];
+
+    /// <summary>
+    /// Recette R1-19: the address of this summary with the user's choices. The pages the summary opens
+    /// to fix something come back to it, and it replaces the wizard's own entry in the history, so the
+    /// browser's Back lands on the same summary too.
+    /// </summary>
+    private string? SummaryUrl => _selectedProjectId is { } projectId
+        ? $"/pipelines/setup?projectId={projectId}&prefix={Uri.EscapeDataString(_prefix)}"
+            + $"&options={Uri.EscapeDataString(string.Join(",", Choices.Where(choice => choice.Get() && InAddress(choice.Name)).Select(choice => choice.Name)))}"
+            + (_architecture is { } architecture ? $"&architecture={PipelineSetupArchitecture.Slug(architecture)}" : string.Empty)
+            + (_architecture == PipelineArchitecture.Application && _sameProject is { } same ? $"&sameProject={(same ? "yes" : "no")}" : string.Empty)
+            + $"&step={SummaryStepSlug}"
+        : null;
+
+    /// <summary>The address names the parts of an application and what the type proposes, not an
+    /// option the type hides.</summary>
+    private bool InAddress(string name) =>
+        name is "frontend" or "backend" or "database" || PipelineSetupArchitecture.Proposes(_architecture, name);
+
+    /// <summary>Takes back the choices the summary's address carries; an option it does not name is off.
+    /// The summary is reopened only for a project and a selection that can reach it.</summary>
+    private void RestoreChoices()
+    {
+        var chosen = OptionsQuery!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var choice in Choices)
+            choice.Set(chosen.Contains(choice.Name));
+        if (!string.IsNullOrWhiteSpace(PrefixQuery))
+            _prefix = PrefixQuery.Trim();
+        // An address written before the type existed named the parts only: those were the separate
+        // frontend and backend options, so it reopens as an application whose interface is not served by
+        // the server project, with the same pipelines.
+        var legacy = ArchitectureQuery is null && (_frontend || _backend || _database);
+        _architecture = PipelineSetupArchitecture.FromSlug(ArchitectureQuery)
+            ?? (legacy ? PipelineArchitecture.Application : null);
+        _sameProject = legacy ? false : ParseSameProject(SameProjectQuery);
+        if (CanReopenSummary())
+        {
+            _initialStep = SummaryStep;
+            _currentStep = SummaryStep;
+        }
+    }
+
+    private static bool? ParseSameProject(string? value) => value?.ToLowerInvariant() switch
+    {
+        "yes" => true,
+        "no" => false,
+        _ => null
+    };
+
+    private bool CanReopenSummary() =>
+        string.Equals(StepQuery, SummaryStepSlug, StringComparison.OrdinalIgnoreCase)
+        && SelectedProject is not null && !string.IsNullOrWhiteSpace(_prefix)
+        && PipelineSetupArchitecture.IsComplete(_architecture, _sameProject, _frontend, _backend) && SelectedRoles.Count > 0;
 
     private void RefreshSteps()
     {
         _steps =
         [
             new() { Title = L["Project"], Content = RenderStep(0) },
-            new() { Title = L["ApplicationArchitecture"], Content = RenderStep(1) },
+            new() { Title = L["PipelineArchitectureTitle"], Content = RenderStep(1) },
             new() { Title = L["WizardStepCapabilities"], Content = RenderStep(2) },
             new() { Title = L["WizardStepSummary"], Content = RenderStep(3) }
         ];
@@ -172,8 +291,20 @@ public partial class PipelineSetupWizard
             .Select(role => new PipelineSetupSummaryItem(PipelineName(role), role.TemplateName)).ToArray());
         builder.AddAttribute(143, nameof(PipelineSetupWizardStep.Readiness), _readiness);
         builder.AddAttribute(144, nameof(PipelineSetupWizardStep.ReadinessLoading), _readinessLoading);
-        builder.AddAttribute(145, nameof(PipelineSetupWizardStep.OnRequirementsProvisioned),
+        builder.AddAttribute(145, nameof(PipelineSetupWizardStep.OnReadinessChanged),
             EventCallback.Factory.Create(this, RecheckReadinessAsync));
+        builder.AddAttribute(146, nameof(PipelineSetupWizardStep.ReturnUrl), SummaryUrl);
+        builder.AddAttribute(170, nameof(PipelineSetupWizardStep.Architecture), _architecture);
+        builder.AddAttribute(171, nameof(PipelineSetupWizardStep.ArchitectureChanged),
+            EventCallback.Factory.Create<PipelineArchitecture?>(this, OnArchitectureChanged));
+        builder.AddAttribute(172, nameof(PipelineSetupWizardStep.Stack), _stack.Key);
+        builder.AddAttribute(173, nameof(PipelineSetupWizardStep.StackChanged),
+            EventCallback.Factory.Create<string>(this, key => Update(key, next => _stack = PipelineSetupStack.Find(next) ?? _stack)));
+        builder.AddAttribute(174, nameof(PipelineSetupWizardStep.SameProject), _sameProject);
+        builder.AddAttribute(175, nameof(PipelineSetupWizardStep.SameProjectChanged),
+            EventCallback.Factory.Create<bool?>(this, value => Update(value, next => _sameProject = next)));
+        AddToggle(builder, 176, nameof(PipelineSetupWizardStep.ExternalSecurity), _externalSecurity,
+            nameof(PipelineSetupWizardStep.ExternalSecurityChanged), value => _externalSecurity = value);
         builder.CloseComponent();
     };
 
@@ -196,12 +327,31 @@ public partial class PipelineSetupWizard
         RefreshSteps();
     }
 
-    private string ArchitectureSummary => string.Join(" · ", new[]
+    /// <summary>A package type is what the package pipelines exist for: choosing it turns them on.</summary>
+    private void OnArchitectureChanged(PipelineArchitecture? architecture)
     {
-        _frontend ? L["Frontend"].Value : null,
-        _backend ? L["Backend"].Value : null,
-        _database ? L["Database"].Value : null
-    }.Where(value => value is not null));
+        _architecture = architecture;
+        if (architecture == PipelineArchitecture.Package)
+            _packages = true;
+        RefreshSteps();
+    }
+
+    private string ArchitectureSummary
+    {
+        get
+        {
+            if (_architecture is not { } architecture) return string.Empty;
+            var parts = PipelineSetupArchitecture.Parts(_architecture, _sameProject, _frontend, _backend, _database);
+            return string.Join(" · ", new[]
+            {
+                L[PipelineSetupArchitecture.LabelKeys(architecture).Title].Value,
+                architecture == PipelineArchitecture.Application && _sameProject == true ? L["PipelineSameProjectSummary"].Value : null,
+                parts.Frontend ? L["Frontend"].Value : null,
+                _sameProject == false && parts.Backend ? L["Backend"].Value : null,
+                parts.Database ? L["Database"].Value : null
+            }.Where(value => value is not null));
+        }
+    }
 
     private void OnProjectChanged(int? projectId)
     {
@@ -232,13 +382,23 @@ public partial class PipelineSetupWizard
         _fastDeploy = name is "application-release-fast" or "application-light";
         _packages = name.StartsWith("package-", StringComparison.Ordinal)
             || name == "publish-observability-packages";
+        // A package or external template says what is built; an application template does not say which kind of
+        // application, so the type stays to be asked.
+        _externalSecurity = name == "application-security-external";
+        if (_packages)
+            _architecture = PipelineArchitecture.Package;
+        else if (_externalSecurity)
+            _architecture = PipelineArchitecture.External;
     }
 
     private async Task OnStepChanged(int step)
     {
         _currentStep = step;
         RefreshSteps();
-        if (step == SummaryStep) await LoadReadinessAsync();
+        if (step != SummaryStep) return;
+        if (SummaryUrl is { } summaryUrl)
+            Nav.NavigateTo(summaryUrl, replace: true);
+        await LoadReadinessAsync();
     }
 
     /// <summary>
@@ -311,6 +471,7 @@ public partial class PipelineSetupWizard
                 created.Add(outcome.Value!);
             }
             Toast.Success(string.Format(L["PipelinesCreated"], created.Count));
+            ProvisionState.Clear(projectId);
             Nav.NavigateTo($"/projects/{projectId}/pipelines");
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException)
@@ -326,21 +487,24 @@ public partial class PipelineSetupWizard
         }
     }
 
-    private string BuildYaml(PipelineRole role, PipelineTemplateSummaryDto template) => $"""
+    private string BuildYaml(PipelineRole role, PipelineTemplateSummaryDto template)
+    {
+        var parts = PipelineSetupArchitecture.Parts(_architecture, _sameProject, _frontend, _backend, _database);
+        return $"""
         name: {PipelineName(role)}
         extends: {template.Name}@{template.Version}
         trigger: manual
         variables:
           APPLICATION_PREFIX: "{_prefix}"
-          APPLICATION_HAS_FRONTEND: "{_frontend.ToString().ToLowerInvariant()}"
-          APPLICATION_HAS_BACKEND: "{_backend.ToString().ToLowerInvariant()}"
-          APPLICATION_HAS_DATABASE: "{_database.ToString().ToLowerInvariant()}"
-          APPLICATION_ROLLBACK_ENABLED: "{_rollback.ToString().ToLowerInvariant()}"
-          APPLICATION_QUALITY_ENABLED: "{_quality.ToString().ToLowerInvariant()}"
-          APPLICATION_SECURITY_ENABLED: "{_security.ToString().ToLowerInvariant()}"
-          APPLICATION_QA_ENABLED: "{_qa.ToString().ToLowerInvariant()}"
-          APPLICATION_QA_EXTENDED_ENABLED: "{_qaExtended.ToString().ToLowerInvariant()}"
-          APPLICATION_SECURITY_HISTORY_ENABLED: "{_securityHistory.ToString().ToLowerInvariant()}"
+          APPLICATION_HAS_FRONTEND: "{Flag(parts.Frontend)}"
+          APPLICATION_HAS_BACKEND: "{Flag(parts.Backend)}"
+          APPLICATION_HAS_DATABASE: "{Flag(parts.Database)}"
+          APPLICATION_ROLLBACK_ENABLED: "{Flag(On("rollback", _rollback))}"
+          APPLICATION_QUALITY_ENABLED: "{Flag(On("quality", _quality))}"
+          APPLICATION_SECURITY_ENABLED: "{Flag(On("security", _security))}"
+          APPLICATION_QA_ENABLED: "{Flag(On("qa", _qa))}"
+          APPLICATION_QA_EXTENDED_ENABLED: "{Flag(On("qa-extended", _qaExtended))}"
+          APPLICATION_SECURITY_HISTORY_ENABLED: "{Flag(On("security-history", _securityHistory))}"
           APPLICATION_CI_PIPELINE: "{_prefix}-ci"
           APPLICATION_QUALITY_PIPELINE: "{_prefix}-quality"
           APPLICATION_SECURITY_PIPELINE: "{_prefix}-security"
@@ -350,10 +514,13 @@ public partial class PipelineSetupWizard
           APPLICATION_CANDIDATE_PIPELINE: "{_prefix}-candidate"
           APPLICATION_DEPLOY_PIPELINE: "{_prefix}-deploy-prod"
           APPLICATION_PACKAGE_TELEMETRY_PIPELINE: "{_prefix}-package-telemetry"
-          APPLICATION_PACKAGE_DOTNET_ANALYTICS_PIPELINE: "{_prefix}-package-web-analytics-dotnet"
+          APPLICATION_PACKAGE_DOTNET_ANALYTICS_PIPELINE: "{_prefix}-{_stack.AnalyticsPackageTemplate}"
           APPLICATION_PACKAGE_BROWSER_ANALYTICS_PIPELINE: "{_prefix}-package-web-analytics-browser"
         stages: []
         """;
+
+        static string Flag(bool value) => value ? "true" : "false";
+    }
 
     /// <summary>
     /// Recette R2-121: the template the backend will resolve for this project, so the pinned version
@@ -368,7 +535,7 @@ public partial class PipelineSetupWizard
     private string PipelineName(PipelineRole role) => $"{_prefix}-{role.Suffix}";
     private void GoBack() => Nav.NavigateTo(BackHref);
 
-    private static string Slug(string value)
+    internal static string Slug(string value)
     {
         var slug = new string(value.Trim().ToLowerInvariant()
             .Select(character => char.IsLetterOrDigit(character) ? character : '-')

@@ -342,7 +342,11 @@ internal static class PipelineDefinitionValidator
         string context)
     {
         if (!string.Equals(step.Type, "restore-artifacts", StringComparison.OrdinalIgnoreCase))
+        {
+            if (step.DeployedBaseline is not null)
+                errors.Add($"Step '{step.Name}' in {context} deployed_baseline is only valid on a restore-artifacts step.");
             return;
+        }
         var hasReleaseSource = !string.IsNullOrWhiteSpace(step.Release);
         if (hasReleaseSource && !string.IsNullOrWhiteSpace(step.ArtifactSourcePipeline))
             errors.Add($"Step '{step.Name}' in {context} cannot combine 'release' with 'artifact_source_pipeline'.");
@@ -357,7 +361,31 @@ internal static class PipelineDefinitionValidator
             && string.IsNullOrWhiteSpace(step.ArtifactSourcePipeline)
             && !BootstrapReleaseSelectors.Contains(step.Release?.Trim() ?? string.Empty))
             errors.Add($"Step '{step.Name}' in {context} allow_missing requires artifact_source_pipeline or release: latest-published, previous-published, previous-deployed, or current-deployed.");
+        ValidateDeployedBaseline(errors, step, context);
     }
+
+    /// <summary>The deployed-baseline export only exists for the two deployed selectors, so the key is
+    /// refused anywhere else rather than ignored: written elsewhere it would read as a switch that
+    /// does nothing. An unknown value is refused too, never mapped to the default.</summary>
+    private static void ValidateDeployedBaseline(
+        ICollection<string> errors,
+        PipelineStepDefinition step,
+        string context)
+    {
+        if (step.DeployedBaseline is null) return;
+        if (!PipelineDeployedBaseline.IsValid(step.DeployedBaseline) || string.IsNullOrWhiteSpace(step.DeployedBaseline))
+            errors.Add(
+                $"Step '{step.Name}' in {context} deployed_baseline must be "
+                + $"'{PipelineDeployedBaseline.Required}' or '{PipelineDeployedBaseline.None}'.");
+        if (!DeployedReleaseSelectors.Contains(step.Release?.Trim() ?? string.Empty))
+            errors.Add(
+                $"Step '{step.Name}' in {context} deployed_baseline requires release: previous-deployed or current-deployed.");
+    }
+
+    private static readonly HashSet<string> DeployedReleaseSelectors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "previous-deployed", "current-deployed"
+    };
 
     /// <summary>Release selectors that may legitimately resolve to nothing, so `allow_missing` on
     /// them is a bootstrap and not a way to hide a broken reference.</summary>

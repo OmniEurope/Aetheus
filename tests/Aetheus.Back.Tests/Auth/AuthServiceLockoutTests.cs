@@ -54,7 +54,7 @@ public class AuthServiceLockoutTests
             _time,
             Substitute.For<IHttpContextAccessor>(),
             Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(),
-            Substitute.For<ILogger<AuthService>>());
+            Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(), Substitute.For<ILogger<AuthService>>());
     }
 
     private User MakeUser(int failedCount = 0, DateTime? lockoutEnd = null) => new()

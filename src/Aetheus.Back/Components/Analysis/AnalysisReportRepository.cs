@@ -119,7 +119,9 @@ internal sealed class AnalysisReportRepository(AppDbContext db)
         CancellationToken ct)
     {
         if (fingerprints.Count == 0) return [];
+        // The decisions come along: a fixed finding that comes back takes its standing decision again.
         return await db.AnalysisFindings
+            .Include(finding => finding.Decisions)
             .Where(finding => finding.ProjectId == projectId
                 && fingerprints.Contains(finding.Fingerprint))
             .ToDictionaryAsync(finding => finding.Fingerprint, StringComparer.Ordinal, ct)

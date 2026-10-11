@@ -103,9 +103,9 @@ internal static class ProcessRunner
 
     private static async Task KillTreeAsync(Process process, ILogger logger)
     {
-        try { process.Kill(entireProcessTree: true); }
-        catch (InvalidOperationException) { return; /* already exited */ }
-        catch (NotSupportedException) { /* not supported on platform */ }
+        // Runs in the finally of RunAsync: a refusal (EPERM on a sudo child) is logged, never thrown over
+        // the task's real outcome.
+        if (!ProcessTreeTerminator.Kill(process, logger)) return;
 
         using var wait = new CancellationTokenSource(KillWait);
         try

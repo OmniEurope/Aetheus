@@ -1260,7 +1260,62 @@ public class PollingServiceTests
             Arg.Any<CancellationToken>());
         // Recette R-508: a finished service action asks for a heartbeat, so the page sees the new state.
         Assert.True(health.WaitForHeartbeatRequestAsync(TestContext.Current.CancellationToken).IsCompletedSuccessfully);
+        // A service action does not touch the cached mail inventory.
+        Assert.False(health.ConsumeMailInventoryInvalidation());
     }
+
+    [Theory]
+    [InlineData(OperationKind.MailInstallCertificate, 0)]
+    [InlineData(OperationKind.MailServiceControl, 0)]
+    [InlineData(OperationKind.MailAddDomain, 1)]
+    [InlineData(OperationKind.MailAddAccount, 0)]
+    public async Task R1_8_ACompletedMailOperation_InvalidatesTheMailInventory_AndAsksForAHeartbeat(OperationKind operation, int exitCode)
+    {
+        var operationExecutorMock = Substitute.For<IOperationExecutor>();
+        operationExecutorMock.CanHandle(operation).Returns(true);
+        operationExecutorMock.ExecuteAsync(
+                operation, "mail.example.com",
+                Arg.Any<IReadOnlyDictionary<string, string>>(), 30,
+                Arg.Any<Func<string, TaskLogLevel, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ExecutorResult(exitCode, false));
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<PendingTaskDto>
+            {
+                new()
+                {
+                    Id = 103,
+                    Name = "mail",
+                    Command = "mail.example.com",
+                    Operation = operation,
+                    Executor = ExecutorType.Shell,
+                    EnvironmentVariables = new Dictionary<string, string>(),
+                    TimeoutSeconds = 30
+                }
+            });
+
+        var health = new AgentRuntimeHealth(TimeProvider.System);
+        await PollAndDrainAsync(CreateService([operationExecutorMock], runtimeHealth: health));
+
+        await _apiClientMock.Received(1).CompleteTaskAsync(103, Arg.Any<TaskResultDto>(), Arg.Any<CancellationToken>());
+        Assert.True(health.ConsumeMailInventoryInvalidation());
+        Assert.True(health.WaitForHeartbeatRequestAsync(TestContext.Current.CancellationToken).IsCompletedSuccessfully);
+    }
+
+    [Theory]
+    [InlineData(OperationKind.MailViewQueue, false)]
+    [InlineData(OperationKind.MailGetLogs, false)]
+    [InlineData(OperationKind.MailTestConfig, false)]
+    [InlineData(OperationKind.MailQuotaReport, false)]
+    [InlineData(OperationKind.MailOutboundProbe, false)]
+    [InlineData(OperationKind.ServiceRestart, false)]
+    [InlineData(OperationKind.MailInstallCertificate, true)]
+    [InlineData(OperationKind.MailDkimRotate, true)]
+    [InlineData(OperationKind.MailRestartPostfix, true)]
+    [InlineData(OperationKind.MailSendTest, true)]
+    [InlineData(OperationKind.MailPurge, true)]
+    public void R1_8_OnlyTheMailOperationsThatChangeTheStack_InvalidateItsInventory(OperationKind operation, bool invalidates) =>
+        Assert.Equal(invalidates, PollingService.ChangesMailInventory(operation));
 
     [Fact]
     public async Task PollOnceAsync_ExecutorThrows_ReportsFailedAndContinues()
@@ -1422,5 +1477,38 @@ public class PollingServiceTests
         await service.ReconcileRunningTasksAsync(TestContext.Current.CancellationToken);
 
         Assert.False(cts.IsCancellationRequested);
+    }
+
+    // Recette R1-42: while a self-update is tracked the agent is about to exit, so it claims nothing.
+    [Fact]
+    public async Task PollOnceAsync_WhileASelfUpdateIsTracked_AsksForNoSlot()
+    {
+        var service = CreateService();
+        using var cts = new CancellationTokenSource();
+        service._runningTasks[42] = new PollingService.TrackedTask(new TaskCompletionSource().Task, cts, IsSelfUpdate: true);
+        _apiClientMock.GetTaskStatusesAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, string> { [42] = nameof(TaskExecutionStatus.Running) });
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<PendingTaskDto>());
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+
+        await _apiClientMock.Received(1).GetPendingTasksAsync(1, 0, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PollOnceAsync_WhileAnOrdinaryTaskIsTracked_StillAsksForTheFreeSlots()
+    {
+        var service = CreateService();
+        using var cts = new CancellationTokenSource();
+        service._runningTasks[42] = new PollingService.TrackedTask(new TaskCompletionSource().Task, cts);
+        _apiClientMock.GetTaskStatusesAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, string> { [42] = nameof(TaskExecutionStatus.Running) });
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<PendingTaskDto>());
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+
+        await _apiClientMock.Received(1).GetPendingTasksAsync(1, _options.Value.MaxConcurrentTasks - 1, Arg.Any<CancellationToken>());
     }
 }

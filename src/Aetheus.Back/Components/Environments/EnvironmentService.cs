@@ -9,7 +9,8 @@ public class EnvironmentService(
     IEnvironmentRepository repo,
     IAuditService audit,
     IEntityChangeNotifier notifier,
-    IDomainEventDispatcher domainEvents) : IEnvironmentService
+    IDomainEventDispatcher domainEvents,
+    IEncryptionService encryption) : IEnvironmentService
 {
     public async Task<PaginatedResult<EnvironmentDto>> GetEnvironmentsAsync(int? projectId, PaginationRequest request, List<int>? accessibleIds = null, CancellationToken ct = default)
     {
@@ -57,14 +58,17 @@ public class EnvironmentService(
             Servers = request.ServerIds.Select(sid => new EnvironmentServer { ServerId = sid }).ToList(),
             Checks = source?.Checks.Select(CloneCheck).ToList() ?? [],
             LinkedProjectServers = source?.LinkedProjectServers.Select(CloneProjectServerLink).ToList() ?? [],
-            Libraries = source?.Libraries.Select(CloneLibrary).ToList() ?? [],
-            Vaults = source?.Vaults.Select(CloneVault).ToList() ?? [],
+            Libraries = source?.Libraries.Select(library => CloneLibrary(library, source.Name)).ToList() ?? [],
+            Vaults = source?.Vaults.Select(vault => CloneVault(vault, source.Name)).ToList() ?? [],
             Pipelines = source?.Pipelines.Select(ClonePipeline).ToList() ?? []
         };
 
         await repo.AddEnvironmentAsync(env, ct).ConfigureAwait(false);
         await audit.LogAsync("Created", "Environment", env.Id, env.Name, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.Environment, env.Id, EntityChangeOps.Created, ct).ConfigureAwait(false);
+        // Recette R1-29: an environment created by copy brings its pipelines; they are written into the
+        // project's repository the same way as when an environment is linked on update.
+        PublishCopiedPipelines(env);
 
         var result = await repo.GetEnvironmentWithServersAsync(env.Id, ct).ConfigureAwait(false);
         return MapToDto(result!);
@@ -139,7 +143,8 @@ public class EnvironmentService(
         var clone = new Environment
         {
             Name = name,
-            Description = source.Description,
+            // Recette R1-23: a description names the environment it was written for, never its copy.
+            Description = string.Empty,
             Type = source.Type,
             ProjectId = projectId,
             RequireApproval = source.RequireApproval,
@@ -152,14 +157,15 @@ public class EnvironmentService(
             Servers = source.Servers.Select(es => new Data.Entities.EnvironmentServer { ServerId = es.ServerId }).ToList(),
             Checks = source.Checks.Select(CloneCheck).ToList(),
             LinkedProjectServers = source.LinkedProjectServers.Select(CloneProjectServerLink).ToList(),
-            Libraries = source.Libraries.Select(CloneLibrary).ToList(),
-            Vaults = source.Vaults.Select(CloneVault).ToList(),
+            Libraries = source.Libraries.Select(library => CloneLibrary(library, source.Name)).ToList(),
+            Vaults = source.Vaults.Select(vault => CloneVault(vault, source.Name)).ToList(),
             Pipelines = source.Pipelines.Select(ClonePipeline).ToList()
         };
 
         await repo.AddEnvironmentAsync(clone, ct).ConfigureAwait(false);
         await audit.LogAsync("Duplicated", "Environment", clone.Id, $"{clone.Name} (from {source.Name})", ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.Environment, clone.Id, EntityChangeOps.Created, ct).ConfigureAwait(false);
+        PublishCopiedPipelines(clone);
 
         var result = await repo.GetEnvironmentWithServersAsync(clone.Id, ct).ConfigureAwait(false);
         return MapToDto(result!);
@@ -177,28 +183,50 @@ public class EnvironmentService(
     private static Data.Entities.EnvironmentProjectServer CloneProjectServerLink(
         Data.Entities.EnvironmentProjectServer link) => new() { ProjectServerId = link.ProjectServerId };
 
-    private static Data.Entities.VariableLibrary CloneLibrary(Data.Entities.VariableLibrary library) => new()
+    /// <summary>
+    /// Recette R1-29: the pipelines a copy brings are written into the linked project's repository by
+    /// <c>EnvironmentPipelinesCopyHandler</c>, in the background, as on update. Nothing to write
+    /// without a project or without pipelines.
+    /// </summary>
+    private void PublishCopiedPipelines(Environment env)
+    {
+        if (env.ProjectId is { } projectId && env.Pipelines.Count > 0)
+            domainEvents.Publish(new EnvironmentLinkedToProjectEvent(env.Id, env.Name, projectId));
+    }
+
+    /// <summary>
+    /// Recette R1-29 decision: a copy takes the structure, never the values. The library keeps the
+    /// names of its variables with empty values and its description says they are to fill in: a value
+    /// copied from another environment (a host, a port, a connection string) would give the copy a
+    /// working-looking configuration pointing at somebody else's machine.
+    /// </summary>
+    private static Data.Entities.VariableLibrary CloneLibrary(Data.Entities.VariableLibrary library, string sourceName) => new()
     {
         Name = library.Name,
-        Description = library.Description,
+        Description = ValuesToFillDescription(sourceName),
         Entries = library.Entries.Select(entry => new Data.Entities.VariableLibraryEntry
         {
             Key = entry.Key,
-            Value = entry.Value
+            Value = string.Empty
         }).ToList()
     };
 
-    private static Data.Entities.Vault CloneVault(Data.Entities.Vault vault) => new()
+    /// <summary>Same rule for a vault: the secret names, each holding an encrypted empty value (an empty
+    /// ciphertext could not be decrypted at launch), never the source's secrets.</summary>
+    private Data.Entities.Vault CloneVault(Data.Entities.Vault vault, string sourceName) => new()
     {
         Name = vault.Name,
-        Description = vault.Description,
+        Description = ValuesToFillDescription(sourceName),
         Secrets = vault.Secrets.Select(secret => new Data.Entities.VaultSecret
         {
             Key = secret.Key,
-            EncryptedValue = secret.EncryptedValue,
-            ExpiresAt = secret.ExpiresAt
+            EncryptedValue = encryption.EncryptValue(string.Empty)
         }).ToList()
     };
+
+    // English: backend-generated strings follow the product default language (F-036).
+    internal static string ValuesToFillDescription(string sourceName) =>
+        $"Copied from environment '{sourceName}': names only, the values are empty. Fill them in.";
 
     private static Data.Entities.Pipeline ClonePipeline(Data.Entities.Pipeline pipeline) => new()
     {

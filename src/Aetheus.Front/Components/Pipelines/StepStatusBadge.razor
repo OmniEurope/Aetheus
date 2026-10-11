@@ -4,8 +4,16 @@
     pipeline was told to continue past is the same red, outlined, with a tooltip saying it did not
     block. Six places used to build this badge themselves, and one of them showed that case orange.
     R-246: a step skipped by its condition reads "Skipped" with its own icon, never "Cancelled".
+    An advisory AI step carries a second, neutral "Advisory" badge whatever its status: its failure
+    stays visible but is not the run's problem.
 *@
 <OmniBadge Tone="@BadgeVariant" Fill="@BadgeFill" Icon="@StatusIcon"
            title="@PipelineRunFormatting.StepStatusTitle(Step, L)" Class="@Class">
     @PipelineRunFormatting.StepStatusText(Step, L)
 </OmniBadge>
+@if (Step.IsAdvisory)
+{
+    <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Outline" title="@L["StepAdvisoryHint"].Value" Class="@Class">
+        @L["StepAdvisory"]
+    </OmniBadge>
+}

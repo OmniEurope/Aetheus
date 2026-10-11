@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics;
 using System.Text;
+using Aetheus.Agent.Core.Operations;
 using Microsoft.Extensions.Logging;
 
 namespace Aetheus.Agent.Core.Services;
@@ -48,7 +49,7 @@ public sealed class DefaultShellRunner(ILogger<DefaultShellRunner> logger) : ISh
         return await RunForOutputAsync(psi, stdin, ct, timeout).ConfigureAwait(false);
     }
 
-    private static async Task<string> RunForOutputAsync(
+    private async Task<string> RunForOutputAsync(
         ProcessStartInfo psi,
         string? standardInput,
         CancellationToken ct,
@@ -230,17 +231,8 @@ public sealed class DefaultShellRunner(ILogger<DefaultShellRunner> logger) : ISh
     private readonly record struct CapturedOutput(string Value, bool Truncated);
 
     // A cancelled/timed-out run must not orphan the child: a stuck docker/systemctl/tar
-    // would otherwise outlive `using process` and accumulate on the host.
-    private static void KillTree(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            // Process exited between the check and the kill - nothing left to clean up.
-        }
-    }
+    // would otherwise outlive `using process` and accumulate on the host. A tree it may not kill whole
+    // (EPERM on a `sudo -n` child, reported as an AggregateException) is logged, never thrown over the
+    // cancellation being propagated.
+    private void KillTree(Process process) => ProcessTreeTerminator.Kill(process, logger);
 }

@@ -14,6 +14,10 @@ namespace Aetheus.Back.Components.Pipelines;
 /// subscribers of the project are told.
 /// </summary>
 /// <remarks>
+/// Recette R1-3: the same refusal again, with no other run in between, does not add a run: the last
+/// refused run counts it (a second warning: how many times, and when last), its completion moves to the
+/// latest refusal, the audit records each one and the subscribers are told only the first time, so a
+/// frequent schedule refused for one reason leaves one visible failure instead of one per passage.
 /// Inside a caller's transaction nothing is recorded: the caller's rollback would erase the run after
 /// its events had already gone out, and the caller records the refusal once its transaction is over
 /// (the webhook does). Once the run is saved, the audit line, the live event and the notification are
@@ -44,6 +48,21 @@ public sealed class PipelineRefusedLaunchRecorder(
         ArgumentNullException.ThrowIfNull(pipeline);
         if (transaction?.InTransaction == true) return;
         var now = timeProvider.GetUtcNow().UtcDateTime;
+        var refusal = BuildReason(triggerSource, reason);
+        if (await repo.GetLatestRunTrackedAsync(pipeline.Id, ct).ConfigureAwait(false) is { } latest
+            && RepeatsRefusal(latest, refusal))
+        {
+            var repeats = RepeatCount(latest) + 1;
+            latest.CompletedAt = now;
+            latest.WarningsJson = JsonSerializer.Serialize(new[] { refusal, BuildRepeat(repeats, now) });
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            await TellAsync(latest.Id, "audit", () => audit.LogAsync(
+                "LaunchRefused", "PipelineRun", latest.Id, $"{pipeline.Name} | {triggerSource} | {reason} | repeat {repeats}", ct)).ConfigureAwait(false);
+            await TellAsync(latest.Id, "live event", () => pipelineHub.Clients
+                .Groups(HubGroups.PipelineRunUpdates(latest.Id, pipeline.Id))
+                .SendAsync("PipelineRunCompleted", latest.Id, PipelineStatus.Failed, ct)).ConfigureAwait(false);
+            return;
+        }
         var run = new PipelineRun
         {
             PipelineId = pipeline.Id,
@@ -54,7 +73,7 @@ public sealed class PipelineRefusedLaunchRecorder(
             BranchName = preparation?.BranchName ?? NamedBranch(additionalVariables),
             CommitHash = preparation?.CommitHash ?? PipelineRunService.ResolveSourceCommit(additionalVariables),
             RepositoryUrl = preparation?.RepositoryUrl,
-            WarningsJson = JsonSerializer.Serialize(new[] { BuildReason(triggerSource, reason) })
+            WarningsJson = JsonSerializer.Serialize(new[] { refusal })
         };
         // A refused launch takes a build number like any run: numbers never repeat, and are not gapless.
         run.BuildNumber = await repo.ReserveNextBuildNumberAsync(pipeline.Id, ct).ConfigureAwait(false);
@@ -90,6 +109,39 @@ public sealed class PipelineRefusedLaunchRecorder(
         => PipelineRunService.ResolveRunBranch(additionalVariables) is { } branch && PipelineBranchValidator.IsValid(branch)
             ? branch
             : null;
+
+    // The run is a refused launch carrying exactly this refusal (first warning), possibly already repeated.
+    private static bool RepeatsRefusal(PipelineRun run, string refusal)
+    {
+        if (run.Status != PipelineStatus.Failed || string.IsNullOrEmpty(run.WarningsJson)) return false;
+        try
+        {
+            var warnings = JsonSerializer.Deserialize<string[]>(run.WarningsJson);
+            return warnings is { Length: >= 1 and <= 2 }
+                && string.Equals(warnings[0], refusal, StringComparison.Ordinal)
+                && (warnings.Length == 1 || warnings[1].StartsWith(RepeatPrefix, StringComparison.Ordinal));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static int RepeatCount(PipelineRun run)
+    {
+        var warnings = JsonSerializer.Deserialize<string[]>(run.WarningsJson!)!;
+        if (warnings.Length < 2) return 1;
+        var digits = warnings[1][RepeatPrefix.Length..].TakeWhile(char.IsAsciiDigit).ToArray();
+        return int.TryParse(digits, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var count)
+            ? count
+            : 1;
+    }
+
+    private const string RepeatPrefix = "Refused ";
+
+    /// <summary>The second warning of a repeated refusal: "Refused 3 times, last at 2026-10-09T05:00:00Z".</summary>
+    internal static string BuildRepeat(int count, DateTime last)
+        => $"{RepeatPrefix}{count.ToString(System.Globalization.CultureInfo.InvariantCulture)} times, last at {last.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture)}";
 
     /// <summary>The reason a refused run carries, as the run page shows it.</summary>
     internal static string BuildReason(string triggerSource, string reason)

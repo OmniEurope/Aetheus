@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
+using System.Net;
 using System.Text.RegularExpressions;
 
 namespace Aetheus.Agent.Core.Collectors;
@@ -18,8 +20,20 @@ public sealed partial class PortsentryCollector(
     ];
 
     private const string ConfigPath = "/etc/portsentry/portsentry.conf";
-    private const string BlockedTcpPath = "/etc/portsentry/portsentry.blocked.atcp";
-    private const string BlockedUdpPath = "/etc/portsentry/portsentry.blocked.audp";
+    private const string DebianDefaultsPath = "/etc/default/portsentry";
+
+    /// <summary>
+    /// <c>BLOCKED_FILE</c> of the Debian/Ubuntu package's <c>portsentry.conf</c>, used when the config names none.
+    /// PortSentry 1.2 appends the detection mode to it: <c>portsentry.blocked.tcp</c>, <c>.atcp</c>, <c>.stcp</c>,
+    /// <c>.udp</c>, <c>.audp</c>, <c>.sudp</c>, one file per running mode.
+    /// </summary>
+    internal const string DefaultBlockedFileBase = "/var/lib/portsentry/portsentry.blocked";
+
+    private static readonly (string Suffix, string Protocol)[] BlockedFileModes =
+    [
+        ("tcp", "TCP"), ("atcp", "TCP"), ("stcp", "TCP"),
+        ("udp", "UDP"), ("audp", "UDP"), ("sudp", "UDP")
+    ];
 
     public async Task<PortsentryDataDto> CollectAsync(CancellationToken ct = default)
     {
@@ -99,24 +113,28 @@ public sealed partial class PortsentryCollector(
         }
     }
 
-    private string ReadConfigLines()
+    private string ReadConfigLines() => ReadText(ConfigPath);
+
+    private string ReadText(string path)
     {
         try
         {
-            return (fileExists ?? File.Exists)(ConfigPath)
-                ? (readAllText ?? File.ReadAllText)(ConfigPath)
+            return (fileExists ?? File.Exists)(path)
+                ? (readAllText ?? File.ReadAllText)(path)
                 : string.Empty;
         }
         catch (Exception ex)
         {
-            Logger.LogDebug(ex, "Failed to read {Path}", ConfigPath);
+            Logger.LogDebug(ex, "Failed to read {Path}", path);
             return string.Empty;
         }
     }
 
     private string GetMode()
     {
-        var relevant = ReadConfigLines()
+        // The Debian package's portsentry-setup writes TCP_MODE to /etc/default/portsentry, which the init
+        // script passes to the daemon; portsentry.conf only carries it on hand-made installs.
+        var relevant = (ReadText(DebianDefaultsPath) + "\n" + ReadConfigLines())
             .Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Where(l => l.TrimStart().StartsWith("TCP_MODE", StringComparison.Ordinal)
                      || l.TrimStart().StartsWith("BLOCK_TCP", StringComparison.Ordinal));
@@ -151,8 +169,9 @@ public sealed partial class PortsentryCollector(
         var result = new List<PortsentryBlockedIpDto>();
         try
         {
-            await ParseBlockedFileAsync(BlockedTcpPath, "TCP", result, ct).ConfigureAwait(false);
-            await ParseBlockedFileAsync(BlockedUdpPath, "UDP", result, ct).ConfigureAwait(false);
+            var blockedFileBase = BlockedFileBase(ReadConfigLines());
+            foreach (var (suffix, protocol) in BlockedFileModes)
+                await ParseBlockedFileAsync($"{blockedFileBase}.{suffix}", protocol, result, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -178,25 +197,72 @@ public sealed partial class PortsentryCollector(
 
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith('#'))
-                continue;
-
-            var parts = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            var ip = parts.Length > 0 ? parts[0].Trim() : trimmed;
-
-            if (!IpAddressRegex().IsMatch(ip))
-                continue;
-
-            result.Add(new PortsentryBlockedIpDto
-            {
-                IpAddress = ip,
-                Protocol = protocol,
-                Reason = "Blocked by PortSentry"
-            });
+            if (ParseBlockedLine(line, protocol) is { } blocked)
+                result.Add(blocked);
         }
     }
 
-    [GeneratedRegex(@"^(\d{1,3}\.){3}\d{1,3}$|^[0-9a-fA-F:]+$")]
-    private static partial Regex IpAddressRegex();
+    /// <summary>The <c>BLOCKED_FILE</c> the config sets (quoted or not), else the Debian package's default.</summary>
+    internal static string BlockedFileBase(string config)
+    {
+        foreach (var line in config.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = line.Trim();
+            if (!trimmed.StartsWith("BLOCKED_FILE=", StringComparison.Ordinal)) continue;
+            var value = trimmed["BLOCKED_FILE=".Length..].Trim().Trim('"');
+            if (value.Length > 0) return value;
+        }
+        return DefaultBlockedFileBase;
+    }
+
+    /// <summary>
+    /// One line of a PortSentry 1.2 blocked (or history) file, as its <c>WriteBlocked</c> writes it:
+    /// <c>&lt;epoch&gt; - &lt;MM/DD/YYYY HH:MM:SS&gt; Host: &lt;resolved name&gt;/&lt;ip&gt; Port: &lt;port&gt; &lt;TCP|UDP&gt; Blocked</c>
+    /// (the name is the IP itself when <c>RESOLVE_HOST</c> is off). <see cref="PortsentryBlockedIpDto.BlockedAt"/> is
+    /// the epoch (UTC), else the local date of this host, and stays <see cref="DateTime.MinValue"/> ("unknown")
+    /// only for a line that carries no date, such as a bare IP. Null for a comment or an unreadable line.
+    /// </summary>
+    internal static PortsentryBlockedIpDto? ParseBlockedLine(string line, string fileProtocol)
+    {
+        var trimmed = line.Trim();
+        if (trimmed.Length == 0 || trimmed.StartsWith('#'))
+            return null;
+
+        var match = BlockedLineRegex().Match(trimmed);
+        if (!match.Success)
+        {
+            // Not a PortSentry line; a bare address is still a blocked host, with no known date.
+            return IPAddress.TryParse(trimmed, out _) && !trimmed.Contains('/', StringComparison.Ordinal)
+                ? new PortsentryBlockedIpDto { IpAddress = trimmed, Protocol = fileProtocol, Reason = "Blocked by PortSentry" }
+                : null;
+        }
+
+        var host = match.Groups["host"].Value;
+        var ip = host[(host.LastIndexOf('/') + 1)..];
+        if (!IPAddress.TryParse(ip, out _))
+            return null;
+
+        var protocol = match.Groups["proto"].Value.ToUpperInvariant();
+        return new PortsentryBlockedIpDto
+        {
+            IpAddress = ip,
+            Protocol = protocol is "TCP" or "UDP" ? protocol : fileProtocol,
+            BlockedAt = BlockedAt(match.Groups["epoch"].Value, match.Groups["date"].Value),
+            Reason = $"Blocked by PortSentry (port {match.Groups["port"].Value})"
+        };
+    }
+
+    private static DateTime BlockedAt(string epoch, string date)
+    {
+        if (long.TryParse(epoch, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds)
+            && seconds > 0 && seconds <= DateTimeOffset.MaxValue.ToUnixTimeSeconds())
+            return DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+        // The agent runs on the host that wrote the line, so its local time zone is the line's.
+        return DateTime.TryParseExact(date, "MM/dd/yyyy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var local)
+            ? local.ToUniversalTime()
+            : DateTime.MinValue;
+    }
+
+    [GeneratedRegex(@"^(?:(?<epoch>\d+)\s+-\s+)?(?:(?<date>\d{2}/\d{2}/\d{4}\s\d{2}:\d{2}:\d{2})\s+)?Host:\s+(?<host>\S+)\s+Port:\s+(?<port>\d+)\s+(?<proto>[A-Za-z]+)\s+Blocked", RegexOptions.CultureInvariant)]
+    private static partial Regex BlockedLineRegex();
 }

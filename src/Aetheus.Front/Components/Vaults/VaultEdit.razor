@@ -7,7 +7,7 @@
 
 @* Recette R-288: no secret-count badge; R-287 (as R-284): Edit and Delete of the vault live in the ⋮ menu.
    Recette R-275: no header body at all, an empty one showed a phone toggle that opened nothing. *@
-<OmniPageHeader Title="@(_isNew ? L["NewVault"] : _detail?.Name ?? "")" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+<OmniPageHeader Title="@(_isNew ? L["NewVault"] : _detail?.Name ?? "")" ShowBack="true" BackHref="@LocalReturnUrl.Validated(ReturnUrl)" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock")" /></Icon>
 </OmniPageHeader>
 

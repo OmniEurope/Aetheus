@@ -53,7 +53,14 @@ public sealed class ListCacheSessionCallerTests : BunitContext
         _handler.SetJsonResponse(HttpMethod.Get, "api/appmonitoring/summary", new AppMonitoringSummaryDto());
         BunitTestHelper.SetOnboardingWizardResponses(_handler);
         var dashboard = new TaskCompletionSource<DashboardOverviewDto>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _handler.SetAsyncJsonResponse(HttpMethod.Get, "monitoring/dashboard", _ => dashboard.Task);
+        // Only the request issued before the sign-out answers with the previous account's data. A reload
+        // that starts after it (permissions or realtime events, timing-dependent under a loaded test run)
+        // is a new account's request: answering it with the same 4242 made this test fail 1 run in 6.
+        var dashboardRequests = 0;
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "monitoring/dashboard", _ =>
+            Interlocked.Increment(ref dashboardRequests) == 1
+                ? dashboard.Task
+                : Task.FromResult(new DashboardOverviewDto { TotalServers = 7, Servers = [], RecentRuns = [] }));
         var cache = Services.GetRequiredService<ListCacheService>();
         var cut = Render<Home>();
 

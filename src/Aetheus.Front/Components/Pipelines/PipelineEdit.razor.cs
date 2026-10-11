@@ -32,6 +32,7 @@ public partial class PipelineEdit : IAsyncDisposable
     private PipelineDto? _pipeline;
     private PipelineDefinitionLiveSync? _definitionSync;
     private bool _changedElsewhere;
+    private UpdatePipelineRequest? _lastSubmitted;
     private PipelineSourceDto? _source;
     private List<string> _sourceBranches = [];
     private PipelineModel _model = new();
@@ -88,7 +89,7 @@ public partial class PipelineEdit : IAsyncDisposable
     private bool HasLegacyTemplateReference =>
         PipelineTemplateReferenceHelper.Parse(_model.YamlDefinition) is { Version: null };
     private PipelineTemplateEditorCoordinator TemplateEditor => new(Api);
-    private PipelineYamlEditorCoordinator YamlEditor => new(Api, L);
+    private PipelineYamlEditorCoordinator YamlEditor => new(Api, L, Logger);
 
     protected override void OnInitialized()
     {
@@ -381,7 +382,8 @@ public partial class PipelineEdit : IAsyncDisposable
             }
             else
             {
-                var outcome = await Api.Pipelines.UpdatePipelineAsync(Id!.Value, _model.ToUpdateRequest());
+                _lastSubmitted = _model.ToUpdateRequest();
+                var outcome = await Api.Pipelines.UpdatePipelineAsync(Id!.Value, _lastSubmitted);
                 HandleSaveOutcome(outcome, "PipelineSaved", "Saved", updated =>
                 {
                     _pipeline = updated;
@@ -571,13 +573,18 @@ public partial class PipelineEdit : IAsyncDisposable
             InvokeAsync);
         await _liveRuns.StartAsync();
         // Changed elsewhere: reloaded when nothing is being edited, otherwise a banner (never overwritten).
-        _definitionSync = new PipelineDefinitionLiveSync(HubFactory, Id.Value, () => InvokeAsync(async () =>
-        {
-            if (PipelineDefinitionLiveSync.HasUnsavedChanges(_model, _pipeline, _savedSourceBranch)) _changedElsewhere = true;
-            else await OnRefresh();
-            StateHasChanged();
-        }));
+        _definitionSync = new PipelineDefinitionLiveSync(HubFactory, Id.Value, () => InvokeAsync(OnDefinitionChangedAsync));
         await _definitionSync.StartAsync();
+    }
+
+    // SITE-FUNC-SELF-SAVE-001: with unsaved edits, the stored pipeline decides; the page's own save
+    // raises no banner, any other stored content does.
+    private async Task OnDefinitionChangedAsync()
+    {
+        if (!PipelineDefinitionLiveSync.HasUnsavedChanges(_model, _pipeline, _savedSourceBranch)) await OnRefresh();
+        else if (!PipelineDefinitionLiveSync.IsOwnSave(_lastSubmitted, await Api.Pipelines.GetPipelineAsync(Id!.Value)))
+            _changedElsewhere = true;
+        StateHasChanged();
     }
 
     private Task OnPipelineRunStarted(int runId, int pipelineId) => pipelineId == Id

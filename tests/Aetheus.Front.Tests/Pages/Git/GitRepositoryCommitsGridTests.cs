@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -141,5 +142,16 @@ public class GitRepositoryCommitsGridTests : BunitContext
             Assert.Contains("omni-button--primary", merge.ClassName, StringComparison.Ordinal);
             Assert.Contains("omni-button--danger", cut.FindAll("button[title='Close']").Single().ClassName, StringComparison.Ordinal);
         }, TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
+    public void CommitRowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        var cut = RenderPage();
+        cut.WaitForAssertion(() => Assert.Contains("feat: add login", cut.Markup), TimeSpan.FromSeconds(3));
+
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
+using Aetheus.Front.Tests.TestDoubles;
 using Aetheus.Shared.Components.Organizations;
 using Bunit;
 using OrganizationsPage = Aetheus.Front.Components.Organizations.Organizations;
@@ -42,7 +43,8 @@ public class OrganizationsListTests : BunitContext
         _handler.SetJsonResponse("api/organizations", data);
 
         var cut = Render<OrganizationsPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("ProgressBarCircular"), TimeSpan.FromSeconds(2));
+        // FRONTTEST-004: the grid says it is empty only once the load has settled.
+        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup), TimeSpan.FromSeconds(2));
         Assert.Contains("Organizations", cut.Markup);
     }
 
@@ -67,5 +69,22 @@ public class OrganizationsListTests : BunitContext
             && request.Url.Contains("pageSize=25", StringComparison.Ordinal)
             && request.Url.Contains("sortBy=Slug", StringComparison.Ordinal)
             && request.Url.Contains("sortDescending=true", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/organizations", new PaginatedResult<OrganizationDto>
+        {
+            Items = [new OrganizationDto(1, "Acme", "acme", "Acme Corp", 5, 3, DateTime.UtcNow, DateTime.UtcNow)],
+            TotalCount = 1
+        });
+
+        var cut = Render<OrganizationsPage>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);
     }
 }

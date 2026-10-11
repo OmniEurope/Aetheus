@@ -78,7 +78,7 @@ else
                         <Columns>
                             <OmniDataGridColumn Frozen="true" TItem="GitLightCommitDto" Property="ShortSha" Title="@L["Commit"]" Width="100px" Sortable="false" Filterable="false" >
                                 <Template Context="c">
-                                    <a href="@($"/git-repositories/{Id}/commits/{c.Sha}")" class="omni-link" @onclick:stopPropagation="true"><code>@c.ShortSha</code></a>
+                                    <a href="@($"/git-repositories/{Id}/commits/{c.Sha}")" class="omni-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><code>@c.ShortSha</code></a>
                                 </Template>
                             </OmniDataGridColumn>
                             <OmniDataGridColumn TItem="GitLightCommitDto" Property="Message" Title="@L["Message"]" Width="auto" Sortable="false" Filterable="true" FilterOperators="@GitRepositoryGrids.MessageOperators" DefaultFilterValue="@CommitSearch" />
@@ -362,10 +362,16 @@ else
                                     aria-label="@($"{L["PreventForcePush"]}: {r.Pattern}")" />
                             </Template>
                         </OmniDataGridColumn>
-                        @* Recette R2-042 (2026-10-02, user decision): "require a pull request" is set aside. Nothing
-                           ever enforced it (neither the pre-receive hook nor the advance-branch step), so offering
-                           it promised a protection that did not exist. The column, the DTO field and the update
-                           path stay in the code; refusing deletion and force-push stays active. *@
+                        @* Decision D13 (BACK-013): who may move the branch. Enforced by the smart HTTP push guard
+                           (direct pushes) and the advance-branch step (pipelines); it replaces the set-aside
+                           "require a pull request" switch of recette R2-042. *@
+                        <OmniDataGridColumn TItem="BranchProtectionRuleDto" Property="ProtectionLevel" Title="@L["BranchProtectionLevel"]" Width="240px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@_grids.ProtectionLevelText(L)" >
+                            <Template Context="r">
+                                <OmniDropDown TValue="BranchProtectionLevel" Value="@r.ProtectionLevel" ValueChanged="@((BranchProtectionLevel v) => UpdateProtectionRule(r, protectionLevel: v))"
+                                    ValueExpression="@(() => r.ProtectionLevel)" Options="@_grids.ProtectionLevels(L)" Disabled="@(!_canWrite)"
+                                    Label="@($"{L["BranchProtectionLevel"]}: {r.Pattern}")" />
+                            </Template>
+                        </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="BranchProtectionRuleDto" Title="" Width="80px" Sortable="false" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
                             <Template Context="r">
                                 <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteProtectionRule(r))" Disabled="@(!_canWrite)" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>

@@ -212,6 +212,22 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The reconnect work of the server group: re-join, then re-read the persisted agent update, even
+    /// when the re-join failed (the read is plain HTTP and still brings the verdict).
+    /// </summary>
+    internal async Task RejoinAndReloadAgentUpdateAsync(Func<Task> rejoin, int id, CancellationToken ct)
+    {
+        try
+        {
+            await rejoin().ConfigureAwait(false);
+        }
+        finally
+        {
+            await ReloadAgentUpdateAsync(id, ct).ConfigureAwait(false);
+        }
+    }
+
     internal static ServerDetailDto KeepNewerServices(ServerDetailDto current, ServerDetailDto fetched, bool heartbeatDuringFetch) =>
         heartbeatDuringFetch || current.Services.SequenceEqual(fetched.Services)
             ? fetched with { Services = current.Services }
@@ -296,8 +312,10 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         hub.On<int, int>("AgentUpdateFailed", (serverId, _) => ReloadAgentUpdate(serverId, id, ct));
 
         // Group membership is per-connection and lost on auto-reconnect - re-join so server
-        // updates/heartbeats keep flowing (the next heartbeat re-syncs the metrics).
-        hub.RejoinOnReconnect(() => hub.InvokeAsync("JoinServerGroup", id));
+        // updates/heartbeats keep flowing (the next heartbeat re-syncs the metrics). Recette R1-42:
+        // SignalR replays nothing, so an agent-update verdict sent while the tab slept is re-read too,
+        // inside the reconnect catch-up the "synchronising" indicator waits for.
+        hub.RejoinOnReconnect(() => RejoinAndReloadAgentUpdateAsync(() => hub.InvokeAsync("JoinServerGroup", id), id, ct));
         try
         {
             await hub.StartAsync(ct).ConfigureAwait(false);

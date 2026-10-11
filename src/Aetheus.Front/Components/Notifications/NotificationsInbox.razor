@@ -66,7 +66,7 @@
             <Template Context="row">
                 @if (row.ReadAt is null)
                 {
-                    <span @onclick:stopPropagation="true">
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => MarkReadAsync(row))"
                                 title="@L["NotificationsMarkRead"]" Label="@L["NotificationsMarkRead"]" Class="notifications-mark-read">
                         <OmniIcon Name="OmniIconName.Check" />

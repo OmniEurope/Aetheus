@@ -21,35 +21,8 @@
         }
         else
         {
-            @foreach (var check in Readiness.Checks)
-            {
-                <OmniAlert Severity="@(check.Severity == PipelineSetupReadinessSeverity.Blocking ? OmniSeverity.Warning : OmniSeverity.Info)"
-                             data-testid="setup-readiness-check">
-                    <OmniStack Gap="OmniSpacing.Small">
-                        <strong>@L[TitleKey(check.Kind)]</strong>
-                        <span>@L[HintKey(check.Kind)]</span>
-                        @if (check.Items.Count > 0)
-                        {
-                            <ul class="pipeline-setup-readiness-items">
-                                @foreach (var item in check.Items)
-                                {
-                                    <li>
-                                        <code>@item</code>
-                                        @if (ItemRole(check.Kind, item) is { } role)
-                                        {
-                                            <span data-testid="setup-readiness-item-role"> : @role</span>
-                                        }
-                                    </li>
-                                }
-                            </ul>
-                        }
-                        @if (RemediationHref(check.Kind) is { } href)
-                        {
-                            <OmniLink Href="@href"><OmniIcon Name="OmniIconName.ArrowRight" /> @L[RemediationKey(check.Kind)]</OmniLink>
-                        }
-                    </OmniStack>
-                </OmniAlert>
-            }
+            <PipelineReadinessChecks Checks="@Readiness.Checks" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl"
+                                     ProvisionOffered="true" OnChanged="@OnChanged" />
         }
 
         @* PLAN-003 lot 30 / D22: the two findings a click can fix get their fix here. *@
@@ -69,33 +42,42 @@
                 @_provisionError
             </OmniAlert>
         }
-        @if (_provisioned is not null && (_provisioned.Libraries.Count > 0 || _provisioned.Vaults.Count > 0))
+        @* Recette R1-26: each created library or vault stays listed as created, and is checked only
+           once the user has opened it. *@
+        @if (Provisioned.Count > 0)
         {
-            <OmniAlert Severity="OmniSeverity.Success"
+            <OmniAlert Severity="@(AllChecked ? OmniSeverity.Success : OmniSeverity.Info)"
                          Class="omni-u-mt-sm" data-testid="setup-provisioned">
-                <OmniStack Gap="OmniSpacing.XSmall">
+                <OmniStack Gap="OmniSpacing.Small">
                     <strong>@L["PipelineSetupProvisioned"]</strong>
-                    @foreach (var library in _provisioned.Libraries)
+                    @foreach (var element in Provisioned)
                     {
-                        <span>
-                            <a href="@($"/variable-libraries/{library.Id}")">@library.Name</a>
-                            · @string.Format(L["PipelineSetupProvisionedKeys"], library.Keys.Count)
-                            @if (library.KeysCopiedFrom is null)
+                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true"
+                                   data-testid="setup-provisioned-item">
+                            @if (element.Checked)
                             {
-                                <text> · @L["PipelineSetupProvisionedEmpty"]</text>
+                                <OmniBadge Tone="OmniTone.Success" data-testid="setup-provisioned-checked"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent>@L["PipelineSetupProvisionedChecked"]</ChildContent></OmniBadge>
                             }
-                        </span>
+                            else
+                            {
+                                <OmniBadge Tone="OmniTone.Info" data-testid="setup-provisioned-created">@L["PipelineSetupProvisionedCreated"]</OmniBadge>
+                            }
+                            <strong>@L[element.Kind == ProvisionedKind.Library ? "VariableLibrary" : "Vault"] @element.Name</strong>
+                            <span>@string.Format(L["PipelineSetupProvisionedKeys"], element.KeyCount)</span>
+                            @if (!element.KeysCopied)
+                            {
+                                <span>@L["PipelineSetupProvisionedEmpty"]</span>
+                            }
+                            <OmniLink Href="@CheckHref(element)" OnClick="@(() => MarkChecked(element))"
+                                      data-testid="setup-provisioned-open"><OmniIcon Name="OmniIconName.ArrowRight" /> @L["PipelineSetupProvisionedOpen"]</OmniLink>
+                        </OmniStack>
                     }
-                    @foreach (var vault in _provisioned.Vaults)
+                    @if (!AllChecked)
                     {
-                        <span>
-                            <a href="@($"/vaults/{vault.Id}")">@vault.Name</a>
-                            · @string.Format(L["PipelineSetupProvisionedKeys"], vault.Keys.Count)
-                            @if (vault.KeysCopiedFrom is null)
-                            {
-                                <text> · @L["PipelineSetupProvisionedEmpty"]</text>
-                            }
-                        </span>
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"
+                                  data-testid="setup-provisioned-pending">
+                            @L["PipelineSetupProvisionedCheckFirst"]
+                        </OmniText>
                     }
                 </OmniStack>
             </OmniAlert>

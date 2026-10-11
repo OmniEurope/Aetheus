@@ -89,7 +89,7 @@ public class OrganizationDetailTests : BunitContext
         _handler.SetResponse("api/organizations/1", System.Net.HttpStatusCode.InternalServerError);
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 1));
         cut.WaitForAssertion(() => Assert.Contains("LoadFailed", cut.Markup));
-        Assert.DoesNotContain("rz-progressbar-circular", cut.Markup, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(cut.FindComponents<AetheusLoader>());
         _handler.SetJsonResponse("api/organizations/1", new OrganizationDetailDto(
             1, "Recovered", "recovered", "", DateTime.UtcNow, DateTime.UtcNow, [], []));
         _handler.SetJsonResponse("api/users", new PaginatedResult<UserDto>());

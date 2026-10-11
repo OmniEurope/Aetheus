@@ -23,7 +23,7 @@ const trx = (outcome, passed, failed) => `<?xml version="1.0" encoding="utf-8"?>
 function setUp(outcome) {
   const root = mkdtempSync(join(tmpdir(), "aetheus-analyzers-"));
   const unix = path => path.replace(/\\/g, "/");
-  for (const file of ["ci/run-analyzer-contract-tests.sh", "classify-dotnet-test-result.mjs"]) {
+  for (const file of ["ci/run-analyzer-contract-tests.sh", "classify-dotnet-test-result.mjs", "publish-failed-tests.sh", "list-failed-tests.mjs"]) {
     cpSync(resolve("deploy/scripts", file), join(root, "deploy/scripts", file));
   }
   const dotnet = join(root, "bin", "dotnet");

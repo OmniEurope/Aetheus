@@ -42,7 +42,7 @@ else
                 <OmniTabsItem Key="permissions" Title="@L["Permissions"]">
                     <OmniCard Class="iam-detail-card">
                     <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["PermissionMatrix"]</OmniText>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["BulkPermissions"]:</OmniText>
                         <OmniDropDown aria-label="@L["PermissionLevel"]" TValue="Permission?" Options="@_permissionLevels"
                             @bind-Value="_bulkPermission" Placeholder="@L["PermissionLevel"]" Class="bulk-perm-select" Disabled="@_savingPermissions" />
@@ -93,7 +93,7 @@ else
                     }
                     else
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.End" Gap="OmniSpacing.Small" Class="omni-u-mb-md omni-u-mt-sm">
+                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.End" Gap="OmniSpacing.Small" Class="omni-u-mb-md omni-u-mt-sm">
                             <OmniFormField Label="@L["User"]" For="oe-formfield-pages-users-roleedit-1">
                                 <OmniAutocomplete Id="oe-formfield-pages-users-roleedit-1" TValue="int?" Search="SearchAvailableUsersAsync"
                                     @bind-Value="_selectedUserId" FormatValue="FormatAvailableUser"
@@ -113,7 +113,7 @@ else
                                 <Columns>
                                     <OmniDataGridColumn Frozen="true" TItem="RoleUserDto" Title="@L["Username"]" Property="Username" Filterable="true" >
                                         <Template Context="u">
-                                            <span @onclick:stopPropagation="true"><OmniLink Href="@($"/users/{u.UserId}")">@u.Username</OmniLink></span>
+                                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/users/{u.UserId}")">@u.Username</OmniLink></span>
                                         </Template>
                                     </OmniDataGridColumn>
                                     <OmniDataGridColumn TItem="RoleUserDto" Property="Email" Title="@L["Email"]" Filterable="true" />
@@ -124,7 +124,7 @@ else
                                     </OmniDataGridColumn>
                                     <OmniDataGridColumn TItem="RoleUserDto" Title="@L["Actions"]" Width="80px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
                                         <Template Context="u">
-                        <span @onclick:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveUser(u))" title="@L["Remove"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton></span>
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveUser(u))" title="@L["Remove"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton></span>
                                         </Template>
                                     </OmniDataGridColumn>
                                 </Columns>

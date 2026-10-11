@@ -79,11 +79,11 @@ public class PipelineRunWaitingReasonTests
             .Returns(callInfo => callInfo.Arg<PipelineStageDefinition>());
         harness.Servers.ResolveServerForTargetAsync(
                 Arg.Any<PipelineStageDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns((Server?)null);
         harness.Repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns([7]);
 
         await Dispatch(harness, stage, Pending("Build images"));
@@ -139,13 +139,13 @@ public class PipelineRunWaitingReasonTests
             .Returns(callInfo => callInfo.Arg<PipelineStageDefinition>());
         harness.Servers.ResolveServerForTargetAsync(
                 Arg.Any<PipelineStageDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(server);
         harness.Dispatcher.CreateTasksForStageAsync(
                 Arg.Any<int>(), Arg.Any<Server>(), Arg.Any<List<PipelineStepRun>>(),
                 Arg.Any<PipelineStageDefinition>(), Arg.Any<Dictionary<string, string>>(),
                 Arg.Any<List<string>>(), Arg.Any<bool>(), Arg.Any<HashSet<string>>(),
-                Arg.Any<int?>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>())
+                Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         // The step is Assigned after dispatch, which is what tells the planner a task was created.

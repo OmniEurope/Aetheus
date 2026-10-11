@@ -23,6 +23,10 @@ public enum GitBranchAdvanceOutcome
     /// purpose, the branch is left where it is.</summary>
     NotFastForward,
 
+    /// <summary>Decision D13: a rule marks the branch StrictlyProtected, so no pipeline moves it, only a
+    /// merged pull request. Nothing was read or written; the reason is in <see cref="GitBranchAdvanceResult.Detail"/>.</summary>
+    Protected,
+
     /// <summary>No internal repository of the project contains that commit (an external-only project,
     /// or a commit that never reached this instance).</summary>
     CommitNotFound,
@@ -122,6 +126,13 @@ public sealed class GitBranchAdvanceService(
             var (containsCode, _, _) = await git.RunGitAsync(
                 diskPath, ["cat-file", "-e", $"{targetSha}^{{commit}}"], ct, ignoreExitCode: true).ConfigureAwait(false);
             if (containsCode != 0) continue;
+
+            // Decision D13: the protection of the repository that would be written decides, before any read
+            // of the branch, so a strictly protected branch fails the step even when it is already there.
+            var rules = await lightRepo.GetBranchProtectionRulesAsync(repo.Id, ct).ConfigureAwait(false);
+            var refusal = GitBranchWritePolicy.RefusalReason(branch, rules, GitBranchWriter.PipelineAdvance);
+            if (refusal is not null)
+                return new GitBranchAdvanceResult(GitBranchAdvanceOutcome.Protected, repo.Slug, Detail: refusal);
 
             return await AdvanceInRepositoryAsync(diskPath, repo.Slug, branch, targetSha, ct).ConfigureAwait(false);
         }

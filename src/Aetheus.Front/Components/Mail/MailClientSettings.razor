@@ -1,0 +1,20 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-17: the settings of an external mail client. The ports are the ones the installed mail
+   stack listens on (IMAPS 993, submission 587), the host the one the backend resolves. *@
+<OmniStack Gap="OmniSpacing.Small" Class="mail-client-settings">
+    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailClientHelpIntro"]</OmniText>
+    @if (_failed)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
+    }
+    else if (_settings is not null)
+    {
+        <OmniDescriptionList Columns="2">
+            <OmniDescriptionItem Label="@L["MailClientServer"]">@(string.IsNullOrWhiteSpace(_settings.Host) ? L["MailClientNoHost"] : _settings.Host)</OmniDescriptionItem>
+            <OmniDescriptionItem Label="@L["Username"]">@(string.IsNullOrWhiteSpace(Email) ? L["MailClientUsernameValue"] : Email)</OmniDescriptionItem>
+            <OmniDescriptionItem Label="@L["MailClientImap"]">@_settings.ImapPort</OmniDescriptionItem>
+            <OmniDescriptionItem Label="@L["MailClientSmtp"]">@_settings.SubmissionPort</OmniDescriptionItem>
+            <OmniDescriptionItem Label="@L["Password"]">@L["MailClientPasswordValue"]</OmniDescriptionItem>
+        </OmniDescriptionList>
+    }
+</OmniStack>

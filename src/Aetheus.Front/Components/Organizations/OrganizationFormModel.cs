@@ -10,7 +10,7 @@ internal sealed class OrganizationFormModel
 
     [Required, StringLength(100, MinimumLength = 2)]
     [RegularExpression("^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
-        ErrorMessage = "Slug must be lowercase alphanumeric with optional hyphens.")]
+        ErrorMessage = "SlugFormatError")]
     public string Slug { get; set; } = string.Empty;
 
     [StringLength(500)]

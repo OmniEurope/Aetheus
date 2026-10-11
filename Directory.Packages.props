@@ -57,11 +57,15 @@
     <PackageVersion Include="Grpc.Tools" Version="2.84.0" />
     <PackageVersion Include="Cronos" Version="0.13.0" />
     <PackageVersion Include="DnsClient" Version="1.8.0" />
+    <!-- R1-16: SMTP client of the platform e-mail sender (MIT, depends on MimeKit, MIT). -->
+    <PackageVersion Include="MailKit" Version="4.17.0" />
+    <!-- R1-17: server-side sanitizer of the HTML of the messages read in the mailbox (MIT, AngleSharp, MIT); same version OE already brings to the front. -->
+    <PackageVersion Include="HtmlSanitizer" Version="9.2.1039" />
     <PackageVersion Include="Markdig" Version="1.4.0" />
     <PackageVersion Include="Otp.NET" Version="1.4.1" />
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
-    <PackageVersion Include="OmniEurope.Blazor" Version="1.6.0" />
+    <PackageVersion Include="OmniEurope.Blazor" Version="1.7.0" />
     <PackageVersion Include="OmniEurope.Performance" Version="1.1.0" />
   </ItemGroup>
 

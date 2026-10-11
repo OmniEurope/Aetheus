@@ -147,4 +147,26 @@ public sealed class MailPrerequisitesTests
         Assert.True(domain.HasSpf && domain.HasDmarc);
         Assert.Null(domain.DnsCheckedAt);
     }
+
+    [Fact]
+    public async Task R1_10_R1_14_TheStatusList_ChecksSpfAgainstTheServerAddress_AndCarriesTheMxTimeToLive()
+    {
+        var domain = new MailDomain { Id = 3, ServerId = ServerId, Name = "example.com", DkimSelector = "mail", IsActive = true };
+        _inventory.GetStateAsync(ServerId, Arg.Any<CancellationToken>()).Returns(new MailState { ServerId = ServerId, Hostname = Host });
+        _mailRepo.GetDomainsAsync(ServerId, Arg.Any<CancellationToken>()).Returns([domain]);
+        _dns.MxAsync("example.com", Arg.Any<CancellationToken>()).Returns(["mx1.ovh.net"]);
+        _dns.MxTimeToLiveAsync("example.com", Arg.Any<CancellationToken>()).Returns(86000);
+        _dns.TxtAsync("example.com", Arg.Any<CancellationToken>()).Returns(["v=spf1 include:mx.ovh.com ~all"]);
+        _dns.TxtAsync("mx.ovh.com", Arg.Any<CancellationToken>()).Returns(["v=spf1 ip4:178.32.228.0/24 ~all"]);
+        _dns.TxtAsync("mail._domainkey.example.com", Arg.Any<CancellationToken>()).Returns([]);
+        _dns.TxtAsync("_dmarc.example.com", Arg.Any<CancellationToken>()).Returns([]);
+
+        var result = await _diagnostics.GetAsync(ServerId, Ct);
+
+        var spf = result.Items.Single(i => i.Key == "spf:example.com");
+        Assert.Equal((MailCheckVerdict.Mismatch, "server-not-authorized", "v=spf1 mx a include:mx.ovh.com ~all"),
+            (spf.Verdict, spf.Detail, spf.RecordValue));
+        var mx = result.Items.Single(i => i.Key == "mx:example.com");
+        Assert.Equal((MailCheckVerdict.Mismatch, 86000), (mx.Verdict, mx.TimeToLiveSeconds));
+    }
 }

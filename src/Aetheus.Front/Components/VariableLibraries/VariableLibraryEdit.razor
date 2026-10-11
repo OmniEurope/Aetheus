@@ -6,7 +6,7 @@
 
 @* Recette R-288: no entry-count badge; R-284: Edit and Delete of the library live in the ⋮ menu.
    Recette R-275: no header body at all, an empty one showed a phone toggle that opened nothing. *@
-<OmniPageHeader Title="@(_isNew ? L["NewVariableLibrary"] : _detail?.Name ?? "")" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+<OmniPageHeader Title="@(_isNew ? L["NewVariableLibrary"] : _detail?.Name ?? "")" ShowBack="true" BackHref="@LocalReturnUrl.Validated(ReturnUrl)" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("data_object")" /></Icon>
 </OmniPageHeader>
 

@@ -36,7 +36,7 @@
                 <OmniDataGridColumn Frozen="true" TItem="UserDto" Property="Username" Title="@L["Username"]" MinWidth="170px" Filterable="true" >
                     <Template Context="user">
                         <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XLarge" Align="OmniAlignment.Center">
-                            <a href="/users/@user.Id" class="server-name-link" @onclick:stopPropagation="true">@user.Username</a>
+                            <a href="/users/@user.Id" class="server-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@user.Username</a>
                         </OmniStack>
                     </Template>
                 </OmniDataGridColumn>
@@ -53,7 +53,7 @@
                                 <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral"
                                     title="@string.Join(", ", user.Roles.Skip(3))">@($"+{user.Roles.Count - 3}")</OmniBadge>
                             }
-                            <span @onclick:stopPropagation="true">
+                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/users/{user.Id}"))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                             </span>
                         </OmniRow>

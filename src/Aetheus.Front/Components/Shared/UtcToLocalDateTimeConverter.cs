@@ -10,12 +10,22 @@ namespace Aetheus.Front.Components.Shared;
 /// LOCAL timezone, so DataGrid / ToString("g") show correct local clock time
 /// without each call site having to remember ToLocalTime(). Inverse on write:
 /// Local values are sent as UTC so round-trips stay UTC-canonical on the wire.
+/// <see cref="DateTime.MinValue"/> and <see cref="DateTime.MaxValue"/> are sentinels
+/// ("never", "no limit"), not instants: they cross the converter unshifted in both
+/// directions, so a <c>== default</c> guard on a deserialized DTO keeps working.
 /// </summary>
 internal sealed class UtcToLocalDateTimeConverter : JsonConverter<DateTime>
 {
-    public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        ToLocal(reader.GetDateTime());
+
+    public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(ToUtc(value));
+
+    /// <summary>Wire value to browser-local time; the MinValue/MaxValue sentinels are kept as is.</summary>
+    internal static DateTime ToLocal(DateTime dt)
     {
-        var dt = reader.GetDateTime();
+        if (IsSentinel(dt)) return dt;
         return dt.Kind switch
         {
             DateTimeKind.Utc => dt.ToLocalTime(),
@@ -25,11 +35,15 @@ internal sealed class UtcToLocalDateTimeConverter : JsonConverter<DateTime>
         };
     }
 
-    public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+    /// <summary>Front value to UTC for the wire; the MinValue/MaxValue sentinels are sent unshifted as UTC.</summary>
+    internal static DateTime ToUtc(DateTime value)
     {
-        var utc = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
-        writer.WriteStringValue(utc);
+        if (IsSentinel(value)) return DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        return value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
     }
+
+    // DateTime equality compares ticks only, so the Kind carried by the wire value does not matter.
+    private static bool IsSentinel(DateTime value) => value == DateTime.MinValue || value == DateTime.MaxValue;
 }
 
 internal sealed class NullableUtcToLocalDateTimeConverter : JsonConverter<DateTime?>
@@ -37,19 +51,12 @@ internal sealed class NullableUtcToLocalDateTimeConverter : JsonConverter<DateTi
     public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.Null) return null;
-        var dt = reader.GetDateTime();
-        return dt.Kind switch
-        {
-            DateTimeKind.Utc => dt.ToLocalTime(),
-            DateTimeKind.Unspecified => DateTime.SpecifyKind(dt, DateTimeKind.Utc).ToLocalTime(),
-            _ => dt
-        };
+        return UtcToLocalDateTimeConverter.ToLocal(reader.GetDateTime());
     }
 
     public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions options)
     {
         if (value is null) { writer.WriteNullValue(); return; }
-        var utc = value.Value.Kind == DateTimeKind.Utc ? value.Value : value.Value.ToUniversalTime();
-        writer.WriteStringValue(utc);
+        writer.WriteStringValue(UtcToLocalDateTimeConverter.ToUtc(value.Value));
     }
 }

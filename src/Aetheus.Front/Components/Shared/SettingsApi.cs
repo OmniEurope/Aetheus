@@ -81,6 +81,32 @@ public sealed class SettingsApi(HttpClient http) : ApiClientBase(http)
     }
 
 
+    /// <summary>Recette R1-16: the platform e-mail sender (default no-reply account or custom SMTP server).</summary>
+    public Task<EmailSenderSettingsDto?> GetEmailSenderAsync(CancellationToken ct = default) =>
+        GetJsonAsync<EmailSenderSettingsDto>("api/settings/email-sender", ct);
+
+    public Task<ApiOutcome<EmailSenderSettingsDto, ApiError>> UpdateEmailSenderAsync(
+        UpdateEmailSenderSettingsRequest request, CancellationToken ct = default) =>
+        PutForOutcomeAsync<EmailSenderSettingsDto, ApiError>("api/settings/email-sender", request, ct);
+
+    /// <summary>Creates the no-reply mailbox, or gives it a new password, kept in the secret store.</summary>
+    public Task<ApiOutcome<EmailSenderSettingsDto, ApiError>> PrepareNoReplySenderAsync(CancellationToken ct = default) =>
+        PostForOutcomeAsync<EmailSenderSettingsDto, ApiError>("api/mail/no-reply-sender", null, ct);
+
+    /// <summary>The daily recap e-mail: settings, preview of yesterday's recap, and a send to the caller now.</summary>
+    public Task<DailyRecapSettingsDto?> GetDailyRecapAsync(CancellationToken ct = default) =>
+        GetJsonAsync<DailyRecapSettingsDto>("api/settings/daily-recap", ct);
+
+    public Task<ApiOutcome<DailyRecapSettingsDto, ApiError>> UpdateDailyRecapAsync(
+        UpdateDailyRecapSettingsRequest request, CancellationToken ct = default) =>
+        PutForOutcomeAsync<DailyRecapSettingsDto, ApiError>("api/settings/daily-recap", request, ct);
+
+    public Task<DailyRecapPreviewDto?> GetDailyRecapPreviewAsync(CancellationToken ct = default) =>
+        GetJsonAsync<DailyRecapPreviewDto>("api/settings/daily-recap/preview", ct);
+
+    public Task<ApiOutcome<DailyRecapSendResultDto, ApiError>> SendDailyRecapNowAsync(CancellationToken ct = default) =>
+        PostForOutcomeAsync<DailyRecapSendResultDto, ApiError>("api/settings/daily-recap/send-now", null, ct);
+
     public async Task<List<SecretDto>> GetSecretsAsync()
     {
         return await Http.GetFromJsonAsync<List<SecretDto>>("api/settings/secrets", JsonOptions.Web) ?? [];

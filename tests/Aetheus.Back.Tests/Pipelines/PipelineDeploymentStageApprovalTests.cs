@@ -58,7 +58,7 @@ public class PipelineDeploymentStageApprovalTests
         await h.StepDispatcher.DidNotReceive().CreateTasksForStageAsync(
             Arg.Any<int>(), Arg.Any<Server>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<PipelineStageDefinition>(),
             Arg.Any<Dictionary<string, string>>(), Arg.Any<List<string>>(), Arg.Any<bool>(), Arg.Any<HashSet<string>>(),
-            Arg.Any<int?>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>());
+            Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class PipelineDeploymentStageApprovalTests
         await h.StepDispatcher.DidNotReceive().CreateTasksForStageAsync(
             Arg.Any<int>(), Arg.Any<Server>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<PipelineStageDefinition>(),
             Arg.Any<Dictionary<string, string>>(), Arg.Any<List<string>>(), Arg.Any<bool>(), Arg.Any<HashSet<string>>(),
-            Arg.Any<int?>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>());
+            Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -229,7 +229,7 @@ public class PipelineDeploymentStageApprovalTests
             Repo.GetApprovalsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(approvals);
             Repo.FindCandidateTargetServerIdsAsync(
                 Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
-                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns([]);
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns([]);
             Repo.FindEnvironmentByNameAsync("prod", Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(new Aetheus.Back.Data.Entities.Environment
                 {
@@ -257,7 +257,7 @@ public class PipelineDeploymentStageApprovalTests
             // A runner is online: without the gate, the deployment stage WOULD be dispatched.
             servers.ResolveServerForTargetAsync(
                     Arg.Any<PipelineStageDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>(),
-                    Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                    Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
                 .Returns(new Server { Id = 5, Name = "prod-host", DeploymentTargetAvailable = true });
             servers.CheckDeploymentPolicy(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<Server>()).Returns((string?)null);
 

@@ -70,7 +70,7 @@ public sealed class ServiceConnectionEditDialogBehaviorTests : BunitContext
         var cut = Render<ServiceConnectionEditDialog>(p => p.Add(x => x.ConnectionId, 8));
 
         Assert.Contains("Credentials", cut.Markup, StringComparison.Ordinal);
-        Assert.DoesNotContain("rz-progressbar-circular", cut.Markup, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(cut.FindComponents<AetheusLoader>());
     }
 
     [Fact]

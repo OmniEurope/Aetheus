@@ -5,10 +5,12 @@
    density); it wraps the overlay host too, so dialogs and notifications take the same look as the pages.
    The OmniEurope.Blazor host (ADR-046) draws the dialogs and notifications raised by the shared services
    over whichever layout is on screen. PLAN-008 lot 11: each toast counts its time down, and a burst piles
-   up behind a count while an error stays apart, readable in full (verification OE-16, section D). *@
+   up behind a count while an error stays apart, readable in full (verification OE-16, section D).
+   Recette R2-112: the scope keeps a snapshot of what it painted under ThemeSnapshotKey, which OE's
+   omni-boot.js (index.html) replays on the document before Blazor starts, for the boot splash. *@
 <OmniThemeScope Id="@ThemeScopeId" Appearance="@Appearance.Appearance" Preset="@Appearance.Preset"
                 Palette="@Appearance.Palette" Font="@Appearance.Font" Density="@Appearance.Density"
-                BackdropMotion="@Appearance.BackdropMotion">
+                BackdropMotion="@Appearance.BackdropMotion" SnapshotKey="@ThemeSnapshotKey">
     <OmniComponentsHost OverlayService="@Overlays" Notifications="@NotificationOptions">
         <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Aetheus.Front.Components.Shared.NotFound)">
             <Found Context="routeData">

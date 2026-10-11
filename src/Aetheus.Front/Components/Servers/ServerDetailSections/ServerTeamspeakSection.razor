@@ -1,5 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
+<AgentOfflineNotice Server="@Server" />
+
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
     <OmniBadge Fill="OmniFill.Solid" Tone="@(Ts.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Ts.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
@@ -25,7 +27,7 @@
 
     @if (!Ts.IsInstalled)
     {
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["TeamspeakSetup"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["TeamspeakSetup"]</span></OmniButton>
     }
     else
     {
@@ -34,17 +36,17 @@
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(TeamspeakAction.Stop))">@L["Stop"]</OmniMenuItem>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(TeamspeakAction.Restart))">@L["Restart"]</OmniMenuItem>
         </ChildContent></OmniSplitButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OpenEditServerDialogAsync"><OmniIcon Name="OmniIconName.Settings" /> <span>@L["EditServer"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OpenMessageDialogAsync" title="@L["SendMessage"]"><OmniIcon Name="OmniIconName.Chat" /> <span>@L["Send"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@OpenEditServerDialogAsync"><OmniIcon Name="OmniIconName.Settings" /> <span>@L["EditServer"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@OpenMessageDialogAsync" title="@L["SendMessage"]"><OmniIcon Name="OmniIconName.Chat" /> <span>@L["Send"]</span></OmniButton>
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => CopyToClipboardAsync($"serveradmin / QueryPort: {Ts.QueryPort}"))"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["CopyCredentials"]</span></OmniButton>
         @* Item #9 tier-2: ops buttons (results land in the task tracker). *@
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OpenGracefulRestartDialogAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["GracefulRestart"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@FetchServerInfoAsync"><OmniIcon Name="OmniIconName.ChartBarHorizontal" /> <span>@L["TeamspeakStats"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CreateSnapshotAsync" title="@L["SnapshotCreate"]"><OmniIcon Name="OmniIconName.CloudArrowDown" /> <span>@L["Snapshot"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OpenSnapshotDeployDialogAsync"><OmniIcon Name="OmniIconName.CloudArrowUp" /> <span>@L["SnapshotDeploy"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ListServerGroupsAsync" title="@L["TeamspeakServerGroups"]"><OmniIcon Name="OmniIconName.Users" /> <span>@L["Groups"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ListTokensAsync"><OmniIcon Name="OmniIconName.Key" /> <span>@L["TeamspeakTokens"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ListComplaintsAsync"><OmniIcon Name="OmniIconName.Warning" /> <span>@L["TeamspeakComplaints"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@OpenGracefulRestartDialogAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["GracefulRestart"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@FetchServerInfoAsync"><OmniIcon Name="OmniIconName.ChartBarHorizontal" /> <span>@L["TeamspeakStats"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@CreateSnapshotAsync" title="@L["SnapshotCreate"]"><OmniIcon Name="OmniIconName.CloudArrowDown" /> <span>@L["Snapshot"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@OpenSnapshotDeployDialogAsync"><OmniIcon Name="OmniIconName.CloudArrowUp" /> <span>@L["SnapshotDeploy"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@ListServerGroupsAsync" title="@L["TeamspeakServerGroups"]"><OmniIcon Name="OmniIconName.Users" /> <span>@L["Groups"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@ListTokensAsync"><OmniIcon Name="OmniIconName.Key" /> <span>@L["TeamspeakTokens"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@ListComplaintsAsync"><OmniIcon Name="OmniIconName.Warning" /> <span>@L["TeamspeakComplaints"]</span></OmniButton>
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => CopyToClipboardAsync(BuildConnectionLink(Server.Hostname, Ts.VoicePort)))" title="@BuildConnectionLink(Server.Hostname, Ts.VoicePort)"><OmniIcon Name="OmniIconName.Link" /> <span>@L["Connect"]</span></OmniButton>
     }
 </OmniRow>
@@ -72,11 +74,11 @@
                         <OmniDataGridColumn TItem="TeamspeakClientDto" Property="Platform" Title="@L["Platform"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_platformValues" FilterSearchable="true" />
                         <OmniDataGridColumn TItem="TeamspeakClientDto" Title="" Width="220px" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
                             <Template Context="c">
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => FetchClientInfoAsync(c))" title="@L["ClientInfo"]"><OmniIcon Name="OmniIconName.Info" /></OmniButton>
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowMoveDialog(c))" title="@L["Move"]"><OmniIcon Name="OmniIconName.Swap" /></OmniButton>
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowPokeDialog(c))" title="@L["Poke"]"><OmniIcon Name="OmniIconName.Megaphone" /></OmniButton>
-                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowKickDialog(c))" title="@L["Kick"]"><OmniIcon Name="OmniIconName.SignOut" /></OmniButton>
-                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowBanDialog(c))" title="@L["Ban"]"><OmniIcon Name="OmniIconName.Prohibit" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => FetchClientInfoAsync(c))" title="@L["ClientInfo"]"><OmniIcon Name="OmniIconName.Info" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowMoveDialog(c))" title="@L["Move"]"><OmniIcon Name="OmniIconName.Swap" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowPokeDialog(c))" title="@L["Poke"]"><OmniIcon Name="OmniIconName.Megaphone" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowKickDialog(c))" title="@L["Kick"]"><OmniIcon Name="OmniIconName.SignOut" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowBanDialog(c))" title="@L["Ban"]"><OmniIcon Name="OmniIconName.Prohibit" /></OmniButton>
                             </Template>
                         </OmniDataGridColumn>
                     </Columns>
@@ -88,7 +90,7 @@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                     <CountBadge Value="@_data.ChannelsCount" Variant="OmniTone.Accent" />
                     <div class="blade-content-spacer"></div>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateChannelDialogAsync" title="@L["CreateChannel"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+                    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateChannelDialogAsync" title="@L["CreateChannel"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_channelsGrid" Data="@_data.Channels" Count="@_data.ChannelsCount" TItem="TeamspeakChannelDto"
                     LoadData="@LoadChannelsDataAsync" ExportRead="@(args => _data.ReadChannelsExportAsync(args))" ExportName="@L["Channels"]" IsLoading="@_data.ChannelsLoading" PageSize="25"
@@ -123,8 +125,8 @@
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="TeamspeakChannelDto" Title="" Width="120px" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
                             <Template Context="ch">
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowEditChannelDialog(ch))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDeleteChannelConfirm(ch))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowEditChannelDialog(ch))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDeleteChannelConfirm(ch))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                             </Template>
                         </OmniDataGridColumn>
                     </Columns>
@@ -199,7 +201,7 @@
                             <OmniDataGridColumn TItem="TeamspeakBanDto" Property="Reason" Title="@L["BanReason"]" Width="200px" Filterable="true" />
                             <OmniDataGridColumn TItem="TeamspeakBanDto" Title="" Width="80px" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
                                 <Template Context="ban">
-                                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => UnbanInlineAsync(ban.BanId))" title="@L["Unban"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => UnbanInlineAsync(ban.BanId))" title="@L["Unban"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                                 </Template>
                             </OmniDataGridColumn>
                         </Columns>
@@ -210,7 +212,7 @@
             <OmniTabsItem Key="logs" Title="@L["Logs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("article"))" /></Icon><ChildContent>
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                     <OmniNumeric aria-label="@L["Lines"]" TValue="int" @bind-Value="_logLines" Minimum="1" Maximum="5000" Class="w-rem-7-5" />
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadLogsAsync" title="@L["LoadLogs"]"><OmniIcon Name="OmniIconName.Search" /> <span>@L["Load"]</span></OmniButton>
+                    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@LoadLogsAsync" title="@L["LoadLogs"]"><OmniIcon Name="OmniIconName.Search" /> <span>@L["Load"]</span></OmniButton>
                 </OmniStack>
             </ChildContent></OmniTabsItem>
 

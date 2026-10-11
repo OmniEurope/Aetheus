@@ -74,7 +74,7 @@ public class AuthServiceTests
                 TimeProvider.System,
                 Substitute.For<IHttpContextAccessor>(),
                 Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(),
-                Substitute.For<ILogger<AuthService>>());
+                Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(), Substitute.For<ILogger<AuthService>>());
 
         _enrollment = new ServerEnrollmentService(_repo, _config, _audit, hubContext, Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), jwtOptions, TimeProvider.System);
     }

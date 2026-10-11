@@ -271,5 +271,50 @@ public sealed class DockerBuildContextAuditTests
             definition.Contains("Dockerfile.vpssim", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("Dockerfile.agent", "", "Aetheus.Agent.Linux")]
+    [InlineData("Dockerfile.vpssim", "src/", "Aetheus.Agent.Linux")]
+    public void AgentDockerfiles_CopyEveryProjectTheAgentReferences(
+        string dockerfileName, string targetPrefix, string entryProject)
+    {
+        var root = FindRepoRoot();
+        var dockerfile = File.ReadAllText(Path.Combine(root, "deploy", "docker", dockerfileName));
+
+        // The closure is read from the csproj files, not listed here: Aetheus.Analyzers once went
+        // missing from these images because a hand-written list did not follow a new reference
+        // (audit STATIC-001). A project absent from the context either breaks the restore or, when
+        // only its csproj is present, compiles an empty analyzer and silently drops PRM/SEC rules.
+        foreach (var project in ProjectReferenceClosure(root, entryProject))
+        {
+            Assert.Contains(
+                $"COPY src/{project}/{project}.csproj {targetPrefix}{project}/", dockerfile, StringComparison.Ordinal);
+            Assert.Contains(
+                $"COPY src/{project}/ {targetPrefix}{project}/", dockerfile, StringComparison.Ordinal);
+        }
+    }
+
+    private static SortedSet<string> ProjectReferenceClosure(string root, string entryProject)
+    {
+        var closure = new SortedSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<string>([entryProject]);
+        while (pending.TryPop(out var project))
+        {
+            if (!closure.Add(project))
+            {
+                continue;
+            }
+
+            var csproj = File.ReadAllText(Path.Combine(root, "src", project, $"{project}.csproj"));
+            foreach (System.Text.RegularExpressions.Match reference in System.Text.RegularExpressions.Regex.Matches(
+                         csproj, @"<ProjectReference\s+Include=""\.\.\\(?<name>[^\\""]+)\\"))
+            {
+                pending.Push(reference.Groups["name"].Value);
+            }
+        }
+
+        Assert.Contains("Aetheus.Analyzers", closure);
+        return closure;
+    }
+
     private static string FindRepoRoot() => Aetheus.Back.Tests.Architecture.RepositoryScan.Root;
 }

@@ -15,8 +15,57 @@ namespace Aetheus.Back.Components.Pipelines;
 public class PipelineSetupController(
     IPipelineSetupReadinessService setupReadiness,
     IPipelineRequirementsProvisioner provisioner,
+    IPipelineProjectCopyService projectCopy,
+    IPipelineOwnerAuthorization ownerAuthz,
     IResourceAuthorizationService authz) : ControllerBase
 {
+    /// <summary>
+    /// Recette R1-29: what copying a project's pipelines into another project would do. Read on the
+    /// source project, and the rights the creation itself needs on the target (Pipeline/Write and
+    /// ownership of the target project). Only the source pipelines, libraries and vaults the caller can
+    /// read are considered, and only names leave this endpoint, never a value.
+    /// </summary>
+    [HttpPost("copy-plan")]
+    public async Task<ActionResult<PipelineProjectCopyPlanDto>> PlanProjectCopy(
+        [FromBody] PipelineProjectCopyRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!await CanCopyAsync(request, requireResourceWrite: false, ct))
+            return Forbid();
+
+        return Ok(await projectCopy.PlanAsync(request,
+            await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Pipeline, Permission.Read, ct),
+            await authz.GetAccessibleResourceIdsAsync(User, ResourceType.VariableLibrary, Permission.Read, ct),
+            await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Vault, Permission.Read, ct), ct));
+    }
+
+    /// <summary>
+    /// Recette R1-29: makes the copies, with the structure of the libraries and vaults they use (names
+    /// only, values empty), so the rights to create libraries and vaults are needed too.
+    /// </summary>
+    [HttpPost("copy")]
+    public async Task<ActionResult<PipelineProjectCopyResultDto>> CopyProject(
+        [FromBody] PipelineProjectCopyRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!await CanCopyAsync(request, requireResourceWrite: true, ct))
+            return Forbid();
+
+        return Ok(await projectCopy.CopyAsync(request, await ResolveOrganizationIdAsync(ct),
+            await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Pipeline, Permission.Read, ct),
+            await authz.GetAccessibleResourceIdsAsync(User, ResourceType.VariableLibrary, Permission.Read, ct),
+            await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Vault, Permission.Read, ct), ct));
+    }
+
+    private async Task<bool> CanCopyAsync(PipelineProjectCopyRequest request, bool requireResourceWrite, CancellationToken ct) =>
+        await authz.HasPermissionAsync(User, ResourceType.Project, request.SourceProjectId, Permission.Read, ct)
+        && await authz.HasPermissionAsync(User, ResourceType.Project, request.TargetProjectId, Permission.Write, ct)
+        && await authz.HasPermissionAsync(User, ResourceType.Pipeline, null, Permission.Write, ct)
+        && await ownerAuthz.CanOwnAsync(User, request.TargetProjectId, null, null, ct)
+        && (!requireResourceWrite
+            || (await authz.HasPermissionAsync(User, ResourceType.VariableLibrary, null, Permission.Write, ct)
+                && await authz.HasPermissionAsync(User, ResourceType.Vault, null, Permission.Write, ct)));
+
     /// <summary>
     /// What would stop the pipelines the wizard is about to create from running. Gated on WRITE
     /// access to the project - the same permission the creation itself needs - so it cannot be used
@@ -34,6 +83,42 @@ public class PipelineSetupController(
 
         return Ok(await setupReadiness.CheckAsync(
             request.ProjectId, request.TemplateNames, organizationId, ct));
+    }
+
+    /// <summary>
+    /// Recette R1-28: what would stop the project's existing pipelines from running, shown on its
+    /// pipelines page. Read access to the project suffices: it reports on that project's own pipelines
+    /// and repository, which a reader can already open, and on runners only within the caller's own
+    /// organization (an administrator, the whole fleet), as the wizard's check does.
+    /// </summary>
+    [HttpGet("project-readiness")]
+    public async Task<ActionResult<PipelineSetupReadinessDto>> CheckProjectReadiness(
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, int.MaxValue)] int projectId, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Read, ct))
+            return Forbid();
+
+        return Ok(await setupReadiness.CheckProjectAsync(
+            projectId, pipelineId: null, await ResolveOrganizationIdAsync(ct), ct));
+    }
+
+    /// <summary>
+    /// Recette R1-28: the same verdict for one pipeline, asked just before it is launched. Gated on
+    /// read access to the pipeline and to its project; a pipeline with no project gets an empty verdict.
+    /// </summary>
+    [HttpGet("pipeline-readiness")]
+    public async Task<ActionResult<PipelineSetupReadinessDto>> CheckPipelineReadiness(
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, int.MaxValue)] int pipelineId, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId, Permission.Read, ct))
+            return Forbid();
+        if (await setupReadiness.FindPipelineProjectIdAsync(pipelineId, ct) is not { } projectId)
+            return Ok(new PipelineSetupReadinessDto());
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Read, ct))
+            return Forbid();
+
+        return Ok(await setupReadiness.CheckProjectAsync(
+            projectId, pipelineId, await ResolveOrganizationIdAsync(ct), ct));
     }
 
     /// <summary>

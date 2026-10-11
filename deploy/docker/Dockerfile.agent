@@ -17,11 +17,13 @@ COPY scanner-manifest.json /scanner-manifest.json
 COPY .aetheus/security-rules/opengrep/aetheus-security.yml /.aetheus/security-rules/opengrep/aetheus-security.yml
 
 COPY src/Aetheus.Shared/Aetheus.Shared.csproj Aetheus.Shared/
+COPY src/Aetheus.Analyzers/Aetheus.Analyzers.csproj Aetheus.Analyzers/
 COPY src/Aetheus.Agent.Core/Aetheus.Agent.Core.csproj Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj Aetheus.Agent.Linux/
 RUN dotnet restore Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj
 
 COPY src/Aetheus.Shared/ Aetheus.Shared/
+COPY src/Aetheus.Analyzers/ Aetheus.Analyzers/
 COPY src/Aetheus.Agent.Core/ Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/ Aetheus.Agent.Linux/
 COPY deploy/scripts/zap-active-automation.sh /deploy/scripts/zap-active-automation.sh

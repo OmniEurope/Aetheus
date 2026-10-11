@@ -3,6 +3,7 @@ using Aetheus.Front.Components.Servers.ServerDetailSections;
 using Aetheus.Front.Tests.TestDoubles;
 using AngleSharp.Dom;
 using Bunit;
+using Bunit.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -23,8 +24,11 @@ public sealed class ServerMailReinstallTests : BunitContext
         _dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
     }
 
-    private static IElement? Button<T>(IRenderedComponent<T> cut, string label) where T : Microsoft.AspNetCore.Components.IComponent =>
-        cut.FindAll("button").FirstOrDefault(b => b.TextContent.Contains(label, StringComparison.Ordinal));
+    private IRenderedComponent<ContainerFragment>? _host;
+
+    /// <summary>Recette R1-12: the Réinstaller button is drawn in the page header.</summary>
+    private IElement? HeaderButton(string label) =>
+        _host!.FindAll("[data-outlet=\"pipelines-header-actions\"] button").FirstOrDefault(b => b.TextContent.Contains(label, StringComparison.Ordinal));
 
     private static MailDataDto Stack(bool installed = true, bool managed = true, int helperVersion = 3) => new()
     {
@@ -34,11 +38,55 @@ public sealed class ServerMailReinstallTests : BunitContext
         Hostname = "mx.sonytumen.com"
     };
 
-    private IRenderedComponent<ServerMailReinstall> RenderReinstall(MailDataDto mail, bool canManage = true) =>
-        Render<ServerMailReinstall>(p => p
-            .Add(x => x.ServerId, 10)
-            .Add(x => x.Mail, mail)
-            .Add(x => x.CanManage, canManage));
+    private IRenderedComponent<ServerMailReinstall> RenderReinstall(MailDataDto mail, bool canManage = true)
+    {
+        _host = this.RenderWithOutlets<ServerMailReinstall>(new Dictionary<string, object?>
+        {
+            [nameof(ServerMailReinstall.Server)] = ServerTestData.MakeMailServer(),
+            [nameof(ServerMailReinstall.ServerId)] = 10,
+            [nameof(ServerMailReinstall.Mail)] = mail,
+            [nameof(ServerMailReinstall.CanManage)] = canManage
+        }, PipelinesList.HeaderActionsSection);
+        return _host.FindComponent<ServerMailReinstall>();
+    }
+
+    [Fact]
+    public void R1_12_Reinstall_IsInThePageHeader_WithTheMailActionsMenuOutletBesideIt()
+    {
+        var cut = RenderReinstall(Stack());
+
+        Assert.Empty(cut.FindAll(".mail-reinstall-button"));
+        var header = _host!.Find("[data-outlet=\"pipelines-header-actions\"]");
+        Assert.Contains("omni-button--danger", header.QuerySelector(".mail-reinstall-button")!.ClassName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R1_12_OnTheMailPage_TheHeaderHoldsReinstall_ThenTheMailActionsMenu()
+    {
+        _handler.SetJsonResponse("api/servers/10/mail/domains", new PaginatedResult<MailDomainDto>
+        {
+            Items = [new() { Id = 1, Name = "sonytumen.com" }],
+            TotalCount = 1
+        });
+        _handler.SetJsonResponse("api/servers/10/mail/accounts", new PaginatedResult<MailAccountDto>());
+        _handler.SetJsonResponse("api/servers/10/mail/aliases", new PaginatedResult<MailAliasDto>());
+        _handler.SetJsonResponse("api/servers/10/mail/diagnostics", new MailDiagnosticsDto());
+        var server = ServerTestData.MakeMailServer() with { MailSetupAvailable = true };
+        _host = this.RenderWithOutlets<ServerMailSection>(new Dictionary<string, object?>
+        {
+            [nameof(ServerMailSection.Server)] = server,
+            [nameof(ServerMailSection.ServerId)] = 10
+        }, PipelinesList.HeaderActionsSection);
+
+        _host.WaitForAssertion(() => Assert.Single(_host.FindAll("[data-outlet=\"pipelines-header-actions\"] .mail-actions-menu")), TimeSpan.FromSeconds(3));
+        var header = _host.Find("[data-outlet=\"pipelines-header-actions\"]");
+        var reinstall = header.QuerySelector(".mail-reinstall-button")!;
+        Assert.Contains("omni-button--danger", reinstall.ClassName, StringComparison.Ordinal);
+        // Réinstaller first, the "..." menu right after it.
+        Assert.Contains("mail-actions-menu", reinstall.NextElementSibling!.ClassName, StringComparison.Ordinal);
+        // The card keeps no copy of either.
+        Assert.Empty(_host.FindAll(".mail-status .mail-reinstall-button, .mail-status .mail-actions-menu"));
+    }
 
     private int Posts(string path) =>
         _handler.Requests.Count(r => r.Method == "POST" && r.Url.EndsWith(path, StringComparison.Ordinal));
@@ -96,7 +144,7 @@ public sealed class ServerMailReinstallTests : BunitContext
     {
         var cut = RenderReinstall(Stack(installed, managed));
 
-        var button = Button(cut, "MailReinstall");
+        var button = HeaderButton("MailReinstall");
         Assert.NotNull(button);
         Assert.False(button!.HasAttribute("disabled"));
         Assert.Contains("omni-button--danger", button.ClassName, StringComparison.Ordinal);
@@ -107,7 +155,7 @@ public sealed class ServerMailReinstallTests : BunitContext
     {
         var cut = RenderReinstall(Stack(installed: false, managed: false));
 
-        Assert.Null(Button(cut, "MailReinstall"));
+        Assert.Null(HeaderButton("MailReinstall"));
     }
 
     [Fact]
@@ -115,7 +163,7 @@ public sealed class ServerMailReinstallTests : BunitContext
     {
         var cut = RenderReinstall(Stack(helperVersion: 2));
 
-        Assert.True(Button(cut, "MailReinstall")!.HasAttribute("disabled"));
+        Assert.True(HeaderButton("MailReinstall")!.HasAttribute("disabled"));
     }
 
     [Fact]
@@ -135,15 +183,18 @@ public sealed class ServerMailReinstallTests : BunitContext
         _dialog.OpenResult = "sonytumen.com";
         var cut = RenderReinstall(Stack());
 
-        Button(cut, "MailReinstall")!.Click();
-        Button(cut, "MailReinstall")!.Click();
+        HeaderButton("MailReinstall")!.Click();
+        // A second click finds the button busy, or already replaced by the banner (R2-126).
+        HeaderButton("MailReinstall")?.Click();
 
         cut.WaitForAssertion(() => Assert.Equal(1, Posts("mail/purge")), TimeSpan.FromSeconds(3));
         Assert.Equal(1, _dialog.OpenCount);
         Assert.Equal("sonytumen.com", (string?)_dialog.LastParameters![nameof(MailReinstallDialog.Word)]);
         Assert.Contains("\"confirmation\":\"sonytumen.com\"", _handler.RequestDetails.Last(r => r.Url.EndsWith("mail/purge", StringComparison.Ordinal)).Body, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("true", Button(cut, "MailReinstall")!.GetAttribute("aria-busy"));
-        Assert.Contains("MailReinstallRunning", cut.Markup, StringComparison.Ordinal);
+        // Recette R2-126: while the stack is erased, one banner and no button.
+        Assert.Null(HeaderButton("MailReinstall"));
+        Assert.Contains("MailReinstallRunning", cut.Find(".mail-reinstall-running").TextContent, StringComparison.Ordinal);
+        Assert.Single(cut.FindAll(".mail-reinstall-running .mail-reinstall-running__indicator"));
 
         var section = cut.Instance;
         await cut.InvokeAsync(() => section.HandleTaskCompletedAsync(
@@ -158,7 +209,8 @@ public sealed class ServerMailReinstallTests : BunitContext
         Assert.Equal(
             new ServerMailReinstall.ReinstallOutcome(false, TaskExecutionStatus.Failed, "Failed to disable unit: Access denied"),
             section.Outcome);
-        Assert.Null(Button(cut, "MailReinstall")!.GetAttribute("aria-busy"));
+        Assert.Null(HeaderButton("MailReinstall")!.GetAttribute("aria-busy"));
+        Assert.Empty(cut.FindAll(".mail-reinstall-running"));
     }
 
     [Fact]
@@ -167,9 +219,9 @@ public sealed class ServerMailReinstallTests : BunitContext
         _handler.SetJsonResponse("api/servers/10/mail/domains", new PaginatedResult<MailDomainDto>());
         _handler.SetJsonResponse(HttpMethod.Post, "api/servers/10/mail/purge", new MailTaskQueuedDto { TaskId = 78 });
         _dialog.OpenResult = "mx.sonytumen.com";
-        var cut = Render<ServerMailReinstall>(p => p.Add(x => x.ServerId, 10).Add(x => x.Mail, Stack()).Add(x => x.CanManage, true));
+        var cut = RenderReinstall(Stack());
 
-        cut.FindAll("button").First(b => b.TextContent.Contains("MailReinstall", StringComparison.Ordinal)).Click();
+        HeaderButton("MailReinstall")!.Click();
         cut.WaitForAssertion(() => Assert.Equal(1, Posts("mail/purge")), TimeSpan.FromSeconds(3));
         // No domain known: the host name is the word to type.
         Assert.Equal("mx.sonytumen.com", (string?)_dialog.LastParameters![nameof(MailReinstallDialog.Word)]);
@@ -179,7 +231,7 @@ public sealed class ServerMailReinstallTests : BunitContext
         // The next heartbeat reports no stack: the button goes, the outcome stays.
         cut.Render(p => p.Add(x => x.Mail, Stack(installed: false, managed: false)));
 
-        Assert.Empty(cut.FindAll("button"));
+        Assert.Empty(_host!.FindAll("button"));
         Assert.Contains("MailReinstallSucceeded", cut.Find(".mail-reinstall-outcome").TextContent, StringComparison.Ordinal);
     }
 

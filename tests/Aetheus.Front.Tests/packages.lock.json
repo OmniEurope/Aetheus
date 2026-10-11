@@ -99,15 +99,6 @@
           "System.Diagnostics.EventLog": "6.0.0"
         }
       },
-      "HtmlSanitizer": {
-        "type": "Transitive",
-        "resolved": "9.2.1039",
-        "contentHash": "PKxy1hYknAij8YlHCC2a9GSqzUd4bh3IvY+abJBvOH1FKcZpbyafEHtdFcXQBt12Y7hNPkNEOP6Qa7uKNSs/yA==",
-        "dependencies": {
-          "AngleSharp": "1.7.2",
-          "AngleSharp.Css": "1.0.2"
-        }
-      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -670,7 +661,7 @@
           "Microsoft.Extensions.Http": "[10.0.12, )",
           "Microsoft.Extensions.Http.Resilience": "[10.10.0, )",
           "Microsoft.Extensions.Localization": "[10.0.12, )",
-          "OmniEurope.Blazor": "[1.6.0, )",
+          "OmniEurope.Blazor": "[1.7.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
       },
@@ -682,6 +673,16 @@
         "requested": "[0.13.0, )",
         "resolved": "0.13.0",
         "contentHash": "Nkve+Yi0+ol3ntSBRHeW0ka9cJQ8vndSUvvkXqF9LVqwpoqWueyxu/HS275r98RDOmF7/mzRnZW5XXUBXob+TA=="
+      },
+      "HtmlSanitizer": {
+        "type": "CentralTransitive",
+        "requested": "[9.2.1039, )",
+        "resolved": "9.2.1039",
+        "contentHash": "PKxy1hYknAij8YlHCC2a9GSqzUd4bh3IvY+abJBvOH1FKcZpbyafEHtdFcXQBt12Y7hNPkNEOP6Qa7uKNSs/yA==",
+        "dependencies": {
+          "AngleSharp": "1.7.2",
+          "AngleSharp.Css": "1.0.2"
+        }
       },
       "Markdig": {
         "type": "CentralTransitive",
@@ -811,9 +812,9 @@
       },
       "OmniEurope.Blazor": {
         "type": "CentralTransitive",
-        "requested": "[1.6.0, )",
-        "resolved": "1.6.0",
-        "contentHash": "yyVmuuXuR64PVQWlbl9ThIhMSCxxhGHlpI9clUGWerccV+VeStC+PPnqkKKy499MkveOz52oTHmIj6E9QrHv5Q==",
+        "requested": "[1.7.0, )",
+        "resolved": "1.7.0",
+        "contentHash": "DmEYxV4tZx+bAFuXIjX8RERavpO4clYIIhioBy1ug1IHHzqNH/KYHu/jsVRIiL9RpHHh2zNoXLVW/DIfyOI2rA==",
         "dependencies": {
           "HtmlSanitizer": "9.2.1039",
           "Microsoft.AspNetCore.Components.Web": "10.0.12",

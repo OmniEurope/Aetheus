@@ -9,7 +9,6 @@ public partial class ProjectFormDialog
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
-    [Inject] private IJSRuntime Js { get; set; } = default!;
 
     /// <summary>Existing project to edit; null opens the dialog in create mode.</summary>
     [Parameter] public ProjectDetailDto? Project { get; set; }
@@ -34,15 +33,6 @@ public partial class ProjectFormDialog
         if (Project is not null)
         {
             _model = ProjectFormModel.From(Project);
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            try { await Js.InvokeVoidAsync("Aetheus.focusById", "project-form-name"); }
-            catch { /* best effort */ }
         }
     }
 

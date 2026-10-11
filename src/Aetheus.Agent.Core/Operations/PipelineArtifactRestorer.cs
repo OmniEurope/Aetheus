@@ -53,6 +53,7 @@ internal static class PipelineArtifactRestorer
         envVars.TryGetValue("AETHEUS_RESTORE_TARGET_DIR", out var targetDirectory);
         envVars.TryGetValue("AETHEUS_RESTORE_RELEASE_SELECTOR", out var releaseSelector);
         envVars.TryGetValue("AETHEUS_RESTORE_EXPECTED_SOURCE_COMMIT", out var expectedSourceCommit);
+        envVars.TryGetValue(PipelineDeployedBaseline.EnvironmentVariable, out var deployedBaseline);
         var artifactIdValid = int.TryParse(artifactIdText, out var artifactId) && artifactId > 0;
         var runIdValid = int.TryParse(runIdText, out var runId) && runId > 0;
         var valid = artifactIdValid
@@ -65,7 +66,8 @@ internal static class PipelineArtifactRestorer
             : 0;
         request = new ArtifactRestoreRequest(
             artifactId, runId, expectedSha256 ?? string.Empty, expectedSize,
-            workingDir ?? string.Empty, targetDirectory, releaseSelector, expectedSourceCommit);
+            workingDir ?? string.Empty, targetDirectory, releaseSelector, expectedSourceCommit,
+            PipelineDeployedBaseline.IsOptedOut(deployedBaseline));
         return valid;
     }
 
@@ -119,6 +121,21 @@ internal static class PipelineArtifactRestorer
             return new ExecutorResult(1, false);
         }
 
+        // The deployed baseline too: read from this archive's own contract before extraction, never from
+        // a delivery-contract.json an earlier restore left in the workspace.
+        // A step may opt out explicitly (deployed_baseline: none) for an artifact that legitimately
+        // ships without a contract; anything else, an absent variable included, stays fail-closed.
+        var isDeployedSelector = IsDeployedReleaseSelector(request.ReleaseSelector);
+        var baselineOptedOut = isDeployedSelector && request.DeployedBaselineOptedOut;
+        var baseline = isDeployedSelector && !baselineOptedOut
+            ? ReadDeployedBaseline(archive, request.ReleaseSelector!)
+            : null;
+        if (baselineOptedOut)
+            await onOutput(
+                "Deployed baseline export not requested by this step (deployed_baseline: none); "
+                + "no DELIVERY_BASELINE variable is exported from this artifact.",
+                TaskLogLevel.Info).ConfigureAwait(false);
+
         var extraction = Stopwatch.StartNew();
         DeployLayout.ExtractSafely(archive, restoreDirectory);
         extraction.Stop();
@@ -129,9 +146,8 @@ internal static class PipelineArtifactRestorer
         await EmitRestoreMetricsAsync(
             onOutput, downloadDuration, hash, extraction.Elapsed, requiredBytes).ConfigureAwait(false);
         await onOutput($"Restored {archive.Entries.Count} artifact entries into {restoreDirectory}", TaskLogLevel.Info).ConfigureAwait(false);
-        if (IsDeployedReleaseSelector(request.ReleaseSelector))
-            await ExportDeployedBaselineAsync(
-                restoreDirectory, request.ReleaseSelector!, onOutput, ct).ConfigureAwait(false);
+        if (baseline is not null)
+            await ExportDeployedBaselineAsync(baseline, onOutput).ConfigureAwait(false);
         return new ExecutorResult(0, false);
     }
 
@@ -225,22 +241,32 @@ internal static class PipelineArtifactRestorer
         string WorkingDirectory,
         string? TargetDirectory,
         string? ReleaseSelector,
-        string? ExpectedSourceCommit);
+        string? ExpectedSourceCommit,
+        bool DeployedBaselineOptedOut);
 
     private sealed record ArtifactHashResult(string Sha256, TimeSpan Duration, long Bytes);
 
-    private static async Task ExportDeployedBaselineAsync(
-        string restoreDirectory,
-        string releaseSelector,
-        Func<string, TaskLogLevel, Task> onOutput,
-        CancellationToken ct)
-    {
-        var contractPath = Path.Combine(restoreDirectory, ".pipeline-artifacts", "delivery-contract.json");
-        if (!File.Exists(contractPath))
-            throw new InvalidDataException(
-                $"The {releaseSelector} artifact does not contain .pipeline-artifacts/delivery-contract.json.");
+    private sealed record DeployedBaseline(string CandidateVersion, string SourceSha, string ContractSha256);
 
-        var bytes = await File.ReadAllBytesAsync(contractPath, ct).ConfigureAwait(false);
+    /// <summary>A delivery contract is a few hundred bytes; past this it is not one.</summary>
+    private const long MaxDeliveryContractBytes = 1024 * 1024;
+
+    private static DeployedBaseline ReadDeployedBaseline(ZipArchive archive, string releaseSelector)
+    {
+        var entry = FindProvenanceEntry(archive, "delivery-contract.json")
+            ?? throw new InvalidDataException(
+                $"The {releaseSelector} artifact does not contain .pipeline-artifacts/delivery-contract.json.");
+        if (entry.Length is <= 0 or > MaxDeliveryContractBytes)
+            throw new InvalidDataException(
+                $"The {releaseSelector} delivery contract is empty or implausibly large.");
+
+        byte[] bytes;
+        using (var stream = entry.Open())
+        using (var buffer = new MemoryStream((int)entry.Length))
+        {
+            stream.CopyTo(buffer);
+            bytes = buffer.ToArray();
+        }
         using var document = JsonDocument.Parse(bytes);
         if (document.RootElement.ValueKind != JsonValueKind.Object
             || !document.RootElement.TryGetProperty("candidateVersion", out var candidateVersionElement)
@@ -264,18 +290,25 @@ internal static class PipelineArtifactRestorer
                 $"The {releaseSelector} delivery contract has no valid candidateVersion or sourceSha.");
         }
 
-        var contractSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        return new DeployedBaseline(
+            candidateVersion, sourceSha.ToLowerInvariant(),
+            Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+    }
+
+    private static async Task ExportDeployedBaselineAsync(
+        DeployedBaseline baseline, Func<string, TaskLogLevel, Task> onOutput)
+    {
         await onOutput(
             "##aetheus[setvariable name=DELIVERY_BASELINE_BOOTSTRAP]false",
             TaskLogLevel.Info).ConfigureAwait(false);
         await onOutput(
-            $"##aetheus[setvariable name=DELIVERY_BASELINE_CANDIDATE_VERSION]{candidateVersion}",
+            $"##aetheus[setvariable name=DELIVERY_BASELINE_CANDIDATE_VERSION]{baseline.CandidateVersion}",
             TaskLogLevel.Info).ConfigureAwait(false);
         await onOutput(
-            $"##aetheus[setvariable name=DELIVERY_BASELINE_SOURCE_SHA]{sourceSha.ToLowerInvariant()}",
+            $"##aetheus[setvariable name=DELIVERY_BASELINE_SOURCE_SHA]{baseline.SourceSha}",
             TaskLogLevel.Info).ConfigureAwait(false);
         await onOutput(
-            $"##aetheus[setvariable name=DELIVERY_BASELINE_CONTRACT_SHA256]{contractSha256}",
+            $"##aetheus[setvariable name=DELIVERY_BASELINE_CONTRACT_SHA256]{baseline.ContractSha256}",
             TaskLogLevel.Info).ConfigureAwait(false);
     }
 

@@ -25,4 +25,6 @@ E2E_PREVIOUS_PAYLOAD_ONLY=false sh deploy/scripts/run-qa-e2e-suite.sh "$WORKSPAC
 case "$STATUS" in 0) ;; 10) STATUS=1 ;; *) exit "$STATUS" ;; esac
 printf '%s\n' "$STATUS" > "$WORKSPACE/.qa-current-e2e-gate-status"
 echo "##aetheus[setvariable name=QA_CURRENT_E2E_GATE_STATUS]$STATUS"
+[ "$STATUS" = 0 ] || sh deploy/scripts/publish-failed-tests.sh QA_CURRENT_E2E_FAILED_TESTS \
+  "$WORKSPACE/.qa-test-results/qa-${BUILD_BUILDID}-current/e2e/failed-tests.txt"
 echo "Current E2E findings status: $STATUS."

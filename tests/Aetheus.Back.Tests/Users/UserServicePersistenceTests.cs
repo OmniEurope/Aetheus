@@ -30,7 +30,8 @@ public sealed class UserServicePersistenceTests : IDisposable
             new MemoryCache(new MemoryCacheOptions()),
             TimeProvider.System,
             Substitute.For<IAdminChangeNotifier>(),
-            Substitute.For<IUserChangeNotifier>());
+            Substitute.For<IUserChangeNotifier>(),
+            Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>());
     }
 
     [Fact]

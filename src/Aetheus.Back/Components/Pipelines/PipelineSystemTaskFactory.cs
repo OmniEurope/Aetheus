@@ -18,7 +18,8 @@ public interface IPipelineSystemTaskFactory
     /// offline affinity runner - in both cases the caller must not treat the stage as dispatched.</returns>
     Task<bool> CreateSystemTasksAsync(
         int runId, List<PipelineStepRun> systemSteps, Dictionary<string, string> resolvedVars,
-        PipelineYamlDefinition definition, int? organizationId, List<string> completedStages, CancellationToken ct);
+        PipelineYamlDefinition definition, int? organizationId, int? projectId, List<string> completedStages,
+        CancellationToken ct);
 
     /// <summary>Dispatches the pending System:Cleanup stage of a run, if it has one left.</summary>
     /// <returns><c>true</c> when cleanup is now running or durably queued, so the caller must stop.</returns>
@@ -47,7 +48,8 @@ public sealed class PipelineSystemTaskFactory(
 {
     public async Task<bool> CreateSystemTasksAsync(
         int runId, List<PipelineStepRun> systemSteps, Dictionary<string, string> resolvedVars,
-        PipelineYamlDefinition definition, int? organizationId, List<string> completedStages, CancellationToken ct)
+        PipelineYamlDefinition definition, int? organizationId, int? projectId, List<string> completedStages,
+        CancellationToken ct)
     {
         var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
         if (run?.Pipeline is null) return false;
@@ -78,7 +80,7 @@ public sealed class PipelineSystemTaskFactory(
         {
             var firstStageDef = YamlParsingHelper.FlattenJobs(definition).FirstOrDefault();
             server = firstStageDef is not null
-                ? await dispatchServers.ResolveServerForTargetAsync(firstStageDef, resolvedVars, organizationId, false, ct).ConfigureAwait(false)
+                ? await dispatchServers.ResolveServerForTargetAsync(firstStageDef, resolvedVars, organizationId, false, projectId, ct).ConfigureAwait(false)
                 : await repo.FindAnyOnlineRunnerAsync(organizationId, ct: ct).ConfigureAwait(false);
         }
         if (server is null) return false;
@@ -251,7 +253,7 @@ public sealed class PipelineSystemTaskFactory(
         if (definition is null) return false;
 
         var resolvedVars = await variableResolver.ResolveFullVariablesForRunAsync(run, definition, ct).ConfigureAwait(false);
-        if (await CreateSystemTasksAsync(runId, cleanupSteps, resolvedVars, definition, null, [], ct).ConfigureAwait(false))
+        if (await CreateSystemTasksAsync(runId, cleanupSteps, resolvedVars, definition, null, null, [], ct).ConfigureAwait(false))
             return true;
 
         if (!await finalizer.IsRunActiveAsync(runId, ct).ConfigureAwait(false)) return false;

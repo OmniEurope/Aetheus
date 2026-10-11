@@ -72,6 +72,24 @@ public sealed record PipelineStepDefinition
     /// <summary>Workspace-relative paths explicitly highlighted to the AI runner.</summary>
     public List<string> ContextPaths { get; init; } = [];
 
+    /// <summary>type: ai only. An advisory step informs and never decides: its failure, including a
+    /// profile that does not exist or a CLI that is missing, marks the step failed with its reason and
+    /// changes nothing else. Dependents still run and the run's status is computed as if the step had
+    /// not failed, so it cannot turn a run Partial nor stop an <c>on_success</c> chain. Incompatible
+    /// with <see cref="Gate"/>, a verdict nobody may act on. Maps to YAML <c>advisory</c>.</summary>
+    public bool Advisory { get; init; }
+
+    /// <summary>type: ai only. Workspace-relative SARIF 2.1.0 file the CLI writes its findings to. The
+    /// agent publishes it as an analysis report (scanner <c>ai-review</c>, code quality) after the CLI
+    /// exits. Missing or rejected on an advisory step is a warning; otherwise it fails the step. Maps to
+    /// YAML <c>findings_sarif</c>.</summary>
+    public string? FindingsSarif { get; init; }
+
+    /// <summary>type: ai only. <c>false</c> skips the capture of the workspace diff after the run, for a
+    /// read-only review in a shared workspace whose untracked files (restored artifacts) are not the
+    /// AI's work. Unset keeps the capture. Maps to YAML <c>capture_diff</c>.</summary>
+    public bool? CaptureDiff { get; init; }
+
     /// <summary>DAST target for a scanner that requires one. It must be an absolute HTTP(S) URL and is
     /// accepted only together with a non-production target classification.</summary>
     public string? TargetUrl { get; init; }
@@ -190,6 +208,15 @@ public sealed record PipelineStepDefinition
     /// contract-release bootstrap. Imported/tag-only release metadata does not disable this bootstrap.
     /// It never suppresses an invalid selector or a failed artifact download.</summary>
     public bool AllowMissing { get; init; }
+
+    /// <summary>Whether a <c>type: restore-artifacts</c> step with <c>release: previous-deployed</c> or
+    /// <c>release: current-deployed</c> must read the deployed baseline (the archive's own
+    /// <c>.pipeline-artifacts/delivery-contract.json</c>) and export it as <c>DELIVERY_BASELINE_*</c>.
+    /// <see cref="PipelineDeployedBaseline.Required"/> (the default, also when absent) fails the restore
+    /// when the archive carries no valid contract. <see cref="PipelineDeployedBaseline.None"/> is the
+    /// explicit opt-out for an artifact that legitimately ships without a contract (the agent release
+    /// archive): the restore still verifies the SHA-256 and unpacks, but exports no baseline.</summary>
+    public string? DeployedBaseline { get; init; }
 
     /// <summary>Existing release to deploy (scenario 3): a release id, a version string, or the literal
     /// <c>"latest"</c> to resolve the newest release of the run's project, or

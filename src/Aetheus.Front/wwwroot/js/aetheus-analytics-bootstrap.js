@@ -21,10 +21,10 @@ const topLevelSegments = new Set([
 ]);
 
 const staticNestedSegments = new Set([
-  "add-agent", "ai-profiles", "ai-tasks", "apache", "api-reference", "apps", "artifacts", "audit",
+  "accounts", "add-agent", "ai-profiles", "ai-tasks", "apache", "api-reference", "apps", "artifacts", "audit",
   "backups", "board", "branches", "certbot", "change-password", "commits", "configuration",
   "cron", "dashboards", "docker", "edit", "environments", "external-repo", "extract",
-  "findings", "firewall", "fleet", "libraries", "logs", "mail", "modules", "monitoring",
+  "findings", "firewall", "fleet", "libraries", "logs", "mail", "mailbox", "modules", "monitoring",
   "new", "notifications", "organizations", "overview", "package-feeds", "package-registry",
   "performance", "pipelines", "plugins", "ports", "portsentry", "projects", "promote",
   "properties", "quality", "releases", "rkhunter", "roles", "runs", "servers", "services",

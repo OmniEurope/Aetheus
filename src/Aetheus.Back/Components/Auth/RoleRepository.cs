@@ -220,11 +220,12 @@ public class RoleRepository(AppDbContext db) : IRoleRepository
         int roleId, string? search, int page, int pageSize, string? sortBy, bool sortDescending,
         CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null)
     {
-        var query = db.UserRoles
+        // SITE-FUNC-ROLE-001: filtered, searched and sorted on the User entity, projected to the
+        // positional RoleUserDto only after paging: Npgsql cannot translate a predicate or an
+        // ordering on the members of a constructor projection.
+        var query = db.Users
             .AsNoTracking()
-            .Where(userRole => userRole.RoleId == roleId)
-            .Select(userRole => new RoleUserDto(
-                userRole.User.Id, userRole.User.Username, userRole.User.Email, userRole.User.IsActive));
+            .Where(user => user.UserRoles.Any(userRole => userRole.RoleId == roleId));
         // Recette R-210: the header filters, before PageUsersAsync counts the page.
         query = RoleListQuery.UserColumns.ApplyFilters(query, filters);
         return PageUsersAsync(query, search, page, pageSize, sortBy, sortDescending, ct);
@@ -236,13 +237,12 @@ public class RoleRepository(AppDbContext db) : IRoleRepository
     {
         var query = db.Users
             .AsNoTracking()
-            .Where(user => !user.UserRoles.Any(userRole => userRole.RoleId == roleId))
-            .Select(user => new RoleUserDto(user.Id, user.Username, user.Email, user.IsActive));
+            .Where(user => !user.UserRoles.Any(userRole => userRole.RoleId == roleId));
         return PageUsersAsync(query, search, page, pageSize, sortBy, sortDescending, ct);
     }
 
     private static async Task<(List<RoleUserDto> Items, int Total)> PageUsersAsync(
-        IQueryable<RoleUserDto> query, string? search, int page, int pageSize,
+        IQueryable<User> query, string? search, int page, int pageSize,
         string? sortBy, bool sortDescending, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(search))
@@ -260,10 +260,15 @@ public class RoleRepository(AppDbContext db) : IRoleRepository
             ("email", true) => query.OrderByDescending(user => user.Email).ThenBy(user => user.Username),
             ("isactive", false) => query.OrderBy(user => user.IsActive).ThenBy(user => user.Username),
             ("isactive", true) => query.OrderByDescending(user => user.IsActive).ThenBy(user => user.Username),
-            (_, true) => query.OrderByDescending(user => user.Username).ThenBy(user => user.UserId),
-            _ => query.OrderBy(user => user.Username).ThenBy(user => user.UserId)
+            (_, true) => query.OrderByDescending(user => user.Username).ThenBy(user => user.Id),
+            _ => query.OrderBy(user => user.Username).ThenBy(user => user.Id)
         };
-        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct).ConfigureAwait(false);
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(user => new RoleUserDto(user.Id, user.Username, user.Email, user.IsActive))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
         return (items, total);
     }
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Git;
+using Aetheus.Back.Services.Email;
 
 namespace Aetheus.Back.Components.Pipelines;
 
@@ -9,9 +10,29 @@ public sealed class PipelineGitService(
     IGitLightService gitService,
     IGitLightCliService cli,
     IPipelineRepository pipelineRepo,
+    IGitCommitRecorder commitRecorder,
+    IEmailSenderConfigurationResolver senderResolver,
     ILogger<PipelineGitService> logger) : IPipelineGitService
 {
     private const string PipelineDir = ".pipeline";
+
+    // Recette R1-21: the application writes the pipeline files, so every commit is authored by Aetheus
+    // with the address it sends mail from (the no-reply sender, else the custom SMTP sender), never by the
+    // acting login. The account that asked for the change stays in a "Requested-by" trailer.
+    internal const string ServiceAuthorName = "Aetheus";
+    internal const string ServiceAuthorEmail = "aetheus@aetheus.local";
+
+    private static bool IsServiceActor(string? actor) =>
+        string.IsNullOrWhiteSpace(actor) || string.Equals(actor, "system", StringComparison.OrdinalIgnoreCase);
+
+    internal static string RequestedBy(string? actor) => IsServiceActor(actor) ? string.Empty : $"\n\nRequested-by: {actor}";
+
+    private async Task<string> AuthorEmailAsync(CancellationToken ct)
+    {
+        var resolution = await senderResolver.ResolveAsync(ct).ConfigureAwait(false);
+        var address = resolution.Configuration?.FromAddress ?? resolution.NoReplyAddress;
+        return string.IsNullOrWhiteSpace(address) ? ServiceAuthorEmail : address;
+    }
 
     public async Task<string?> ReadProjectPipelineYamlAsync(
         int projectId, string pipelineName, CancellationToken ct = default,
@@ -196,8 +217,9 @@ public sealed class PipelineGitService(
         var relPath = $"{PipelineDir}/{PipelineGitPathPolicy.Slugify(pipelineName)}.yaml";
         var (ok, _, error) = await cli.CommitFileAsync(
             diskPath, branch, relPath, yaml,
-            $"chore(pipeline): update {pipelineName} via Aetheus",
-            actor, $"{actor}@aetheus", ct).ConfigureAwait(false);
+            $"chore(pipeline): update {pipelineName} via Aetheus" + RequestedBy(actor),
+            ServiceAuthorName, await AuthorEmailAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+        await RecordIfCommittedAsync(repo.Id, ok, ct).ConfigureAwait(false);
         if (!ok) logger.LogWarning("Failed to write pipeline '{Name}' to {Repo}: {Error}", pipelineName, repo.Slug, error);
         return (ok ? GitWriteOutcome.Committed : GitWriteOutcome.Failed, error);
     }
@@ -245,8 +267,9 @@ public sealed class PipelineGitService(
         var (ok, _, error) = await cli.CommitFileChangesAsync(
             newTarget.DiskPath, newTarget.Branch,
             [(newTarget.RelativePath, nextYaml)], deletions,
-            $"chore(pipeline): update {next.PipelineName} via Aetheus",
-            actor, $"{actor}@aetheus", ct).ConfigureAwait(false);
+            $"chore(pipeline): update {next.PipelineName} via Aetheus" + RequestedBy(actor),
+            ServiceAuthorName, await AuthorEmailAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+        await RecordIfCommittedAsync(newTarget.RepositoryId, ok, ct).ConfigureAwait(false);
         return (ok ? GitWriteOutcome.Committed : GitWriteOutcome.Failed, error);
     }
 
@@ -264,8 +287,9 @@ public sealed class PipelineGitService(
             var (written, _, writeError) = await cli.CommitFileChangesAsync(
                 newTarget.DiskPath, newTarget.Branch,
                 [(newTarget.RelativePath, nextYaml!)], [],
-                $"chore(pipeline): add {next!.PipelineName} via Aetheus",
-                actor, $"{actor}@aetheus", ct).ConfigureAwait(false);
+                $"chore(pipeline): add {next!.PipelineName} via Aetheus" + RequestedBy(actor),
+                ServiceAuthorName, await AuthorEmailAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+            await RecordIfCommittedAsync(newTarget.RepositoryId, written, ct).ConfigureAwait(false);
             if (!written) return (GitWriteOutcome.Failed, writeError);
         }
 
@@ -273,16 +297,18 @@ public sealed class PipelineGitService(
         {
             var (deleted, _, deleteError) = await cli.CommitFileChangesAsync(
                 oldTarget.DiskPath, oldTarget.Branch, [], [oldTarget.RelativePath],
-                $"chore(pipeline): remove {previous!.PipelineName} via Aetheus",
-                actor, $"{actor}@aetheus", ct).ConfigureAwait(false);
+                $"chore(pipeline): remove {previous!.PipelineName} via Aetheus" + RequestedBy(actor),
+                ServiceAuthorName, await AuthorEmailAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+            await RecordIfCommittedAsync(oldTarget.RepositoryId, deleted, ct).ConfigureAwait(false);
             if (!deleted)
             {
                 if (newTarget is not null)
                 {
                     var (rolledBack, _, rollbackError) = await cli.CommitFileChangesAsync(
                         newTarget.DiskPath, newTarget.Branch, [], [newTarget.RelativePath],
-                        $"revert(pipeline): roll back {next!.PipelineName} move",
-                        actor, $"{actor}@aetheus", ct).ConfigureAwait(false);
+                        $"revert(pipeline): roll back {next!.PipelineName} move" + RequestedBy(actor),
+                        ServiceAuthorName, await AuthorEmailAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+                    await RecordIfCommittedAsync(newTarget.RepositoryId, rolledBack, ct).ConfigureAwait(false);
                     if (!rolledBack)
                         return (GitWriteOutcome.Failed,
                             $"{deleteError}; destination rollback also failed: {rollbackError}");
@@ -307,10 +333,15 @@ public sealed class PipelineGitService(
             ? string.IsNullOrWhiteSpace(repo.DefaultBranch) ? "main" : repo.DefaultBranch
             : location.SourceBranch;
         return (new PipelineWriteTarget(
-            diskPath, branch, $"{PipelineDir}/{PipelineGitPathPolicy.Slugify(location.PipelineName)}.yaml"), null);
+            repo.Id, diskPath, branch, $"{PipelineDir}/{PipelineGitPathPolicy.Slugify(location.PipelineName)}.yaml"), null);
     }
 
-    private sealed record PipelineWriteTarget(string DiskPath, string Branch, string RelativePath);
+    private sealed record PipelineWriteTarget(int RepositoryId, string DiskPath, string Branch, string RelativePath);
+
+    private async Task RecordIfCommittedAsync(int repositoryId, bool committed, CancellationToken ct)
+    {
+        if (committed) await commitRecorder.RecordCommitAsync(repositoryId, ct).ConfigureAwait(false);
+    }
 
     public async Task<int> CopyEnvironmentPipelinesToProjectAsync(
         int environmentId, string environmentName, int projectId, string actor, CancellationToken ct = default)
@@ -334,8 +365,9 @@ public sealed class PipelineGitService(
 
         var (ok, _, error) = await cli.CommitFilesAsync(
             diskPath, branch, files,
-            $"chore(pipeline): copy {files.Count} pipeline(s) from environment '{environmentName}' via Aetheus",
-            actor, $"{actor}@aetheus", ct).ConfigureAwait(false);
+            $"chore(pipeline): copy {files.Count} pipeline(s) from environment '{environmentName}' via Aetheus" + RequestedBy(actor),
+            ServiceAuthorName, await AuthorEmailAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+        await RecordIfCommittedAsync(repo.Id, ok, ct).ConfigureAwait(false);
         if (!ok)
         {
             logger.LogWarning("Failed to copy env '{Env}' pipelines to project {ProjectId}: {Error}", environmentName, projectId, error);

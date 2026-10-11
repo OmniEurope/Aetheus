@@ -41,6 +41,26 @@ public sealed class AppDialogsTests : BunitContext
         Assert.Equal("Edit server", _host.Find(".omni-dialog__title").TextContent);
     }
 
+    [Fact]
+    public void OpenAsync_PutsTheFocusOnThePanel_NotOnAField()
+    {
+        _ = _dialogs.OpenAsync<Probe>("Edit server", ProbeParameters("web-01", 3));
+
+        _host.WaitForAssertion(() => Assert.Single(_host.FindComponents<OmniDialog>()));
+        Assert.Equal(OmniDialogInitialFocus.Panel, _host.FindComponent<OmniDialog>().Instance.InitialFocus);
+    }
+
+    [Fact]
+    public void Alert_PutsTheFocusOnThePanel()
+    {
+        var service = new OmniDialogService(_dialogs, Services.GetRequiredService<OmniOverlayService>());
+
+        _ = service.Alert("The export is ready.", "Export");
+
+        _host.WaitForAssertion(() => Assert.Single(_host.FindComponents<OmniDialog>()));
+        Assert.Equal(OmniDialogInitialFocus.Panel, _host.FindComponent<OmniDialog>().Instance.InitialFocus);
+    }
+
     [Theory]
     [InlineData(null, "aetheus-dialog--default")]
     [InlineData(AppDialogWidth.Default, "aetheus-dialog--default")]

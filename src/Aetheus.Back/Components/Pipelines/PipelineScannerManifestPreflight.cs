@@ -24,6 +24,7 @@ public interface IPipelineScannerManifestPreflight
         string? upstreamPipeline,
         string? upstreamTemplate,
         int? organizationId,
+        int? projectId,
         CancellationToken ct);
 }
 
@@ -45,6 +46,7 @@ public sealed class PipelineScannerManifestPreflight(
         string? upstreamPipeline,
         string? upstreamTemplate,
         int? organizationId,
+        int? projectId,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -64,7 +66,7 @@ public sealed class PipelineScannerManifestPreflight(
         foreach (var stage in scannerStages)
         {
             var candidates = await FindCandidatesAsync(
-                stage, resolvedVariables, organizationId, candidatesBySelector, ct).ConfigureAwait(false);
+                stage, resolvedVariables, organizationId, projectId, candidatesBySelector, ct).ConfigureAwait(false);
             // No configured runner at all is the runner check's refusal, not this one's.
             if (candidates.Count == 0) continue;
             var facts = await repo.GetRunnerFactsAsync(candidates, ct).ConfigureAwait(false);
@@ -89,6 +91,7 @@ public sealed class PipelineScannerManifestPreflight(
         PipelineStageDefinition stage,
         IReadOnlyDictionary<string, string> resolvedVariables,
         int? organizationId,
+        int? projectId,
         Dictionary<string, IReadOnlyCollection<int>> cache,
         CancellationToken ct)
     {
@@ -97,11 +100,11 @@ public sealed class PipelineScannerManifestPreflight(
         var key = string.Join(
             "|",
             effective.Pool, effective.Environment, effective.Agent, effective.Os,
-            organizationId?.ToString(CultureInfo.InvariantCulture), deploymentStage);
+            organizationId?.ToString(CultureInfo.InvariantCulture), projectId?.ToString(CultureInfo.InvariantCulture), deploymentStage);
         if (cache.TryGetValue(key, out var cached)) return cached;
         var ids = await repo.FindCandidateTargetServerIdsAsync(
             effective.Pool, effective.Environment, effective.Agent,
-            OsTypeHelper.Parse(effective.Os), organizationId, deploymentStage, ct).ConfigureAwait(false);
+            OsTypeHelper.Parse(effective.Os), organizationId, deploymentStage, projectId, ct).ConfigureAwait(false);
         cache[key] = ids;
         return ids;
     }

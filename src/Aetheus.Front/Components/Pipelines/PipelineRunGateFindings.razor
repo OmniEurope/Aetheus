@@ -20,23 +20,26 @@
     {
         <OmniAlert Severity="OmniSeverity.Warning" Title="@L["GateSealedGradeTitle"]" Class="omni-u-mb-md">
             <div>@string.Format(L["GateSealedGradeDetail"], Gate.Grade?.OverallGrade?.ToString() ?? "-")</div>
-            @if (BlockingTests.Count > 0)
-            {
-                <div class="omni-u-mt-xs">@L["CandidateBlockingTests"]: <strong>@string.Join(", ", BlockingTests)</strong></div>
-            }
+            <PipelineRunBlockingTests Tests="BlockingTests" />
         </OmniAlert>
     }
     @* Recette R2-052: what the letter is made of. A B over "0 findings" came from a measure (coverage,
        duplication, complexity, a cycle) the tab did not show. *@
-    <AnalysisGradeBreakdown Grade="@Gate.Grade" ShowLimitingDomain="true" />
+    <AnalysisGradeBreakdown Grade="@Gate.Grade"
+                            SealBlockedByTests="@(PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade) && BlockingTests.Count > 0)" />
     <div class="analysis-run-gate-toolbar omni-u-mb-md">
         @* The OE key-figure tile: value over its label, the label wraps, so a narrow column keeps
            both inside the tile (a side-by-side nowrap pair spilled out of it at 375 px). *@
+        @* Recette R2-137: findings and new findings only; a report is an analysis result, not a finding,
+           so its count left the tiles. Recette R2-138: the rule alerts tile shows only when the list
+           below names each alert it counts. *@
         <div class="analysis-run-gate-metrics">
             <OmniStatTile Value="@($"{Gate.FindingCount}")" Label="@L["AnalysisGateFindings"]" />
             <OmniStatTile Value="@($"{Gate.NewFindingCount}")" Label="@L["AnalysisGateNewFindings"]" />
-            <OmniStatTile Value="@($"{Gate.ReportCount}")" Label="@L["AnalysisReports"]" />
-            <OmniStatTile Value="@($"{Gate.Violations.Count}")" Label="@L["AnalysisGateViolations"]" />
+            @if (Gate.Violations.Count > 0)
+            {
+                <OmniStatTile Value="@($"{Gate.Violations.Count}")" Label="@L["AnalysisGateViolations"]" />
+            }
         </div>
         <div class="analysis-run-gate-actions">
             @if (ProjectId is { } projectId)
@@ -46,6 +49,19 @@
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ExportAllAiPromptAsync" Disabled="@(ListedCount == 0)" Busy="@_exporting" title="@L["AnalysisExportAllAiPrompt"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["AnalysisExport"]</span></OmniButton>
         </div>
     </div>
+    @* Recette R2-138: an alert is a policy rule a measure crossed (dependency cycles, complex methods, a
+       new medium finding), not a finding: the tile counted them and nothing on the page named them. *@
+    @if (Gate.Violations.Count > 0)
+    {
+        <OmniDataList TItem="AnalysisRunGateViolationDto" Items="@Gate.Violations" Class="analysis-run-gate-violations omni-u-mb-md">
+            <ItemTemplate Context="violation">
+                <div class="analysis-run-gate-violation">
+                    <OmniBadge Tone="@(violation.Outcome == "Block" ? OmniTone.Danger : OmniTone.Warning)">@L[violation.Outcome == "Block" ? "AnalysisGateViolationBlock" : "AnalysisGateViolationWarn"]</OmniBadge>
+                    <span>@ViolationText(violation)</span>
+                </div>
+            </ItemTemplate>
+        </OmniDataList>
+    }
     @* R-527: the findings already decided on are hidden until asked for; the switch says how many. *@
     @if (Gate.DecidedFindingCount > 0)
     {

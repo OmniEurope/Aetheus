@@ -71,7 +71,12 @@ public partial class ServerMailSetupAssistant
     internal bool ReverseDnsOk => ReverseDns?.Verdict == MailCheckVerdict.Ok;
     internal bool OutboundOk => _outbound?.IsOk == true;
     internal bool PrerequisitesOk => ARecordOk && ReverseDnsOk && OutboundOk;
-    internal bool CanConfigure => PrerequisitesOk && Server.MailSetupAvailable && !SetupBusy;
+    internal bool CanConfigure => PrerequisitesOk && Server.MailSetupAvailable && !AgentOffline && !SetupBusy;
+
+    // SITE-OFFLINE-001: the outbound probe and the setup are agent tasks, refused (409) while the agent is offline.
+    private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
+
+    private string ProbeTitle => AgentOffline ? L["AgentOfflineActionBlocked"].Value : L["MailCheckPrerequisite"].Value;
 
     private bool AgentCanProbe => Server.AgentCapabilities.Contains(AgentCapabilities.MailOutboundProbe, StringComparer.Ordinal);
 
@@ -115,16 +120,24 @@ public partial class ServerMailSetupAssistant
         [StepConfigure] = [nameof(MailDialogModel.Email), nameof(MailDialogModel.Password)]
     };
 
+    // Recette R1-5: the model writes its messages through the page's localizer.
+    protected override void OnInitialized() => _model.L = L;
+
     internal IReadOnlyList<string> StepErrors(int step)
     {
         if (!StepMembers.TryGetValue(step, out var members)) return [];
-        var results = new List<ValidationResult>();
-        Validator.TryValidateObject(_model, new ValidationContext(_model), results, validateAllProperties: true);
-        results.AddRange(_model.Validate(new ValidationContext(_model)));
-        return [.. results
+        // The length limits are read from the attributes and written in the user's language: the framework's
+        // own message is English whatever the culture.
+        var tooLong = members
+            .Select(member => typeof(MailDialogModel).GetProperty(member)!)
+            .Select(property => (Property: property, Limit: property.GetCustomAttributes(typeof(StringLengthAttribute), true)
+                .Cast<StringLengthAttribute>().FirstOrDefault()))
+            .Where(item => item.Limit is not null && (item.Property.GetValue(_model) as string)?.Length > item.Limit.MaximumLength)
+            .Select(item => L["Validation_MaxLength", L[item.Property.Name].Value, item.Limit!.MaximumLength].Value);
+        var rules = _model.Validate(new ValidationContext(_model))
             .Where(result => result.MemberNames.Any(members.Contains))
-            .Select(result => L[result.ErrorMessage ?? "Required"].Value)
-            .Distinct(StringComparer.Ordinal)];
+            .Select(result => result.ErrorMessage ?? L["Required"].Value);
+        return [.. tooLong.Concat(rules).Distinct(StringComparer.Ordinal)];
     }
 
     private Task<bool> ValidateStepAsync(int step)
@@ -159,7 +172,7 @@ public partial class ServerMailSetupAssistant
 
     private async Task ProbeOutboundAsync()
     {
-        if (_probeTaskId is not null || _probeQueuing || !AgentCanProbe) return;
+        if (_probeTaskId is not null || _probeQueuing || !AgentCanProbe || AgentOfflineGuard.Blocks(Server, Toast)) return;
         _probeQueuing = true;
         _outbound = null;
         try
@@ -202,7 +215,7 @@ public partial class ServerMailSetupAssistant
 
     private async Task ConfigureAsync()
     {
-        if (SetupBusy || !CanConfigure) return;
+        if (SetupBusy || AgentOfflineGuard.Blocks(Server, Toast) || !CanConfigure) return;
         _setupStarting = true;
         _setupFailure = null;
         try

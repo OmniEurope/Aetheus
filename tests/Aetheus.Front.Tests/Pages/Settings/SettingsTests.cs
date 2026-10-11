@@ -64,7 +64,8 @@ public class SettingsTests : BunitContext
             .ToList();
         Assert.Contains("aetheus_theme", keys);
         Assert.Contains("aetheus_lang", keys);
-        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "Aetheus.setOmniTheme" && Equals(i.Arguments[0], "light"));
+        // Recette R2-112: the mode is no longer copied on the document root; the scope carries it.
+        Assert.DoesNotContain(JSInterop.Invocations, i => i.Identifier == "Aetheus.setOmniTheme");
     }
 
     /// <summary>Recette R-448: the settings page reuses OE's appearance settings, every row bound to

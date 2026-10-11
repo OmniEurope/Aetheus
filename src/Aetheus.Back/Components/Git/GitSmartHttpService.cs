@@ -176,18 +176,17 @@ public class GitSmartHttpService(
     /// the configured <see cref="GitLightOptions.RepositoriesPath"/> root. Returns <c>null</c>
     /// when the resolved path escapes the root (defense against path-traversal slugs).
     /// </summary>
-    // RequirePullRequest: a branch it protects only moves through the platform's own paths, the merge
-    // of a pull request and the advance-branch pipeline step, which write the ref in the repository
-    // directly and never come through this transport. A push that would create or move such a branch
-    // is refused; a deletion stays governed by PreventDeletion, enforced by the pre-receive hook.
+    // Decision D13: a branch whose rule is ProtectedExceptPipelines or StrictlyProtected only moves
+    // through the platform's own paths, the merge of a pull request and (below strict) the
+    // advance-branch pipeline step, which write the ref in the repository directly and never come
+    // through this transport. A push that would create or move such a branch is refused; a deletion
+    // stays governed by PreventDeletion, enforced by the pre-receive hook.
     private async Task EnsureNoDirectPushToPullRequestBranchAsync(
         int projectId, string slug, byte[] prelude, CancellationToken ct)
     {
         var repository = await lightRepo.FindBySlugAsync(projectId, slug, ct).ConfigureAwait(false);
         if (repository is null) return;
-        var rules = (await lightRepo.GetBranchProtectionRulesAsync(repository.Id, ct).ConfigureAwait(false))
-            .Where(rule => rule.RequirePullRequest)
-            .ToList();
+        var rules = await lightRepo.GetBranchProtectionRulesAsync(repository.Id, ct).ConfigureAwait(false);
         if (rules.Count == 0) return;
 
         foreach (var command in GitReceivePackRefParser.ParseCommands(prelude))
@@ -196,10 +195,9 @@ public class GitSmartHttpService(
                 || !command.Reference.StartsWith("refs/heads/", StringComparison.Ordinal))
                 continue;
             var branch = command.Reference["refs/heads/".Length..];
-            if (rules.Any(rule => GitBranchPatternMatcher.Matches(branch, rule.Pattern)))
-                throw new BadHttpRequestException(
-                    $"Branch '{branch}' requires a pull request: direct pushes are refused.",
-                    StatusCodes.Status403Forbidden);
+            var refusal = GitBranchWritePolicy.RefusalReason(branch, rules, GitBranchWriter.HumanPush);
+            if (refusal is not null)
+                throw new BadHttpRequestException(refusal, StatusCodes.Status403Forbidden);
         }
     }
 

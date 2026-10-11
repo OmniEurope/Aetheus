@@ -11,6 +11,7 @@ using Aetheus.Back.Configuration;
 using Aetheus.Back.Extensions;
 using Aetheus.Back.Hubs;
 using Aetheus.Back.Middleware;
+using Aetheus.Back.Services.Email;
 using Aetheus.Telemetry;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -276,6 +277,7 @@ builder.Services.AddSingleton<IAdminChangeNotifier, AdminChangeNotifier>();
 builder.Services.AddSingleton<IUserChangeNotifier, UserChangeNotifier>();
 builder.Services.AddScoped<IGitCliService, GitCliService>();
 builder.Services.AddScoped<IDbTransactionScope, DbTransactionScope>();
+builder.Services.AddEmailSending();
 
 // Background services configuration (timeouts, intervals).
 builder.Services.Configure<BackgroundServicesOptions>(

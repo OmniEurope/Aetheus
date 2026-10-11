@@ -34,7 +34,7 @@
         <OmniDataGridColumn Frozen="true" TItem="VariableLibraryDto" Property="Name" Title="@L["Name"]" MinWidth="10rem" Filterable="true" >
             <Template Context="lib">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                    <a href="/variable-libraries/@lib.Id" class="pipeline-name-link">@lib.Name</a>
+                    <a href="/variable-libraries/@lib.Id" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@lib.Name</a>
                 </OmniStack>
             </Template>
         </OmniDataGridColumn>

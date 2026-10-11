@@ -108,7 +108,7 @@
                 <Template Context="entry">
                     @if (!string.IsNullOrWhiteSpace(entry.CorrelationId))
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true">
+                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <span class="correlation-id-text">@entry.CorrelationId</span>
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnCopyCorrelationIdAsync(entry.CorrelationId!))" title="@L["CopyCorrelationId"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
                         </OmniStack>
@@ -118,7 +118,7 @@
             <OmniDataGridColumn TItem="SystemLogEntryDto" Title="" Width="5.75rem"
                                 Sortable="false" TextAlign="OmniDataGridTextAlign.Center">
                 <Template Context="entry">
-                    <span @onclick:stopPropagation="true">
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                         <OmniButton Variant="@(string.IsNullOrWhiteSpace(entry.Exception) ? OmniButtonVariant.Ghost : OmniButtonVariant.Danger)" OnClick="@(() => ShowMessageDialogAsync(entry))" title="@L["ViewMessage"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnCopyMessageAsync(entry.Message))" title="@L["CopyMessage"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
                     </span>

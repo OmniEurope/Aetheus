@@ -36,7 +36,8 @@ public class UserServiceCacheInvalidationOrderTests
             new MemoryCache(new MemoryCacheOptions()),
             TimeProvider.System,
             _notifier,
-            _userNotifier);
+            _userNotifier,
+            Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>());
     }
 
     [Fact]

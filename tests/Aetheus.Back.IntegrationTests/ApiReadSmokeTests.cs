@@ -60,6 +60,7 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/variable-libraries")]
     [InlineData("/api/variable-libraries/names")]
     [InlineData("/api/settings")]
+    [InlineData("/api/settings/daily-recap")]
     [InlineData("/api/environments")]
     [InlineData("/api/git/repos")]
     [InlineData("/api/git/connections")]

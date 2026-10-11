@@ -64,13 +64,13 @@ else
             <OmniDataGridColumn Frozen="true" TItem="GitLightRepoDto" Property="Name" Title="@L["Name"]" Width="auto" Filterable="true" >
                 <Template Context="r">
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                        <a href="@($"git-repositories/{r.Id}?projectId={r.ProjectId}")" class="pipeline-name-link" @onclick:stopPropagation="true">@r.Name</a>
+                        <a href="@($"git-repositories/{r.Id}?projectId={r.ProjectId}")" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@r.Name</a>
                     </OmniStack>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="GitLightRepoDto" Property="ProjectName" Title="@L["Project"]" Width="180px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_projectNames" FilterSearchable="true" >
                 <Template Context="r">
-                    <a href="@($"projects/{r.ProjectId}")" class="pipeline-name-link" @onclick:stopPropagation="true">@r.ProjectName</a>
+                    <a href="@($"projects/{r.ProjectId}")" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@r.ProjectName</a>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="GitLightRepoDto" Property="Description" Title="@L["Description"]" Width="auto" Filterable="true" />
@@ -95,7 +95,7 @@ else
             <OmniDataGridColumn TItem="GitLightRepoDto" Property="LastPushAt" Title="@L["LastPush"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             <OmniDataGridColumn TItem="GitLightRepoDto" Title="@L["Actions"]" MinWidth="14rem" Sortable="false" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
                 <Template Context="r">
-                    <span @onclick:stopPropagation="true">
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                         @* R2-037 (2026-10-01): Ouvrir is the row's main action, blue by the user's choice (R-533). *@
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo($"git-repositories/{r.Id}?projectId={r.ProjectId}"))" title="@L["View"]" Label="@L["View"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRepo(r))" Disabled="@(!_canWrite)" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>

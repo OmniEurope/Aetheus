@@ -12,6 +12,7 @@ Authentication and authorization: JWT login, refresh-token rotation, agent regis
 | `/api/auth/register` | POST | Anonymous | Agent server registration |
 | `/api/auth/renew` | POST | User | Renew JWT before expiry |
 | `/api/auth/token/refresh` | POST | Anonymous | Refresh-token rotation |
+| `/api/auth/logout` | POST | User (rate-limited `auth-token`) | The client logs out: the server forgets what it holds in memory for the user (the typed mailbox passwords, R1-37); revokes no token |
 | `/api/auth/session-ended` | POST | Anonymous (rate-limited `auth-token`) | Client reports why it ended a session (known reason code + correlation id); one log line, Information for normal ends, Warning for `refresh_replay` and `refresh_rejected` (R2-018) |
 | `/api/auth/external-login` | POST | Trusted gateway | External provider login; requires the shared `X-Aetheus-External-Auth` gateway secret |
 | `/api/auth/registration-tokens` | GET | Admin | List registration tokens |

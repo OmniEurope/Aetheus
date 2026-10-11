@@ -37,6 +37,9 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
 
         _repos.GetByProjectAsync(ProjectId, Arg.Any<CancellationToken>())
             .Returns([new GitInternalRepo { Id = 1, ProjectId = ProjectId, Slug = Slug, Name = "Aetheus" }]);
+        // D13: no protection rule, so the advance is decided by git alone (the level tests live in
+        // GitPullRequestPushGuardTests and GitBranchWritePolicyTests).
+        _repos.GetBranchProtectionRulesAsync(1, Arg.Any<CancellationToken>()).Returns(new List<BranchProtectionRule>());
 
         _sut = new GitBranchAdvanceService(
             _repos,

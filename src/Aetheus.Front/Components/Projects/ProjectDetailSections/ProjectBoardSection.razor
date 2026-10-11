@@ -1,9 +1,9 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inherits ProjectWritableSectionBase
 
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-md" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-md" Gap="OmniSpacing.Large">
     @* The breadcrumb leaf already reads "Board" - no need to repeat it as a section title. *@
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
+    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
         <OmniDropDown aria-label="@L["Assignee"]" TValue="string" Options="@(Assignees.ToOptions(item => (string)item, item => item))" @bind-Value="_assigneeFilter" AllowEmpty="true"
             Placeholder="@L["Assignee"]" @bind-Value:after="StateHasChanged" Class="kanban-filter" />
         <OmniDropDown aria-label="@L["Tags"]" TValue="string" Options="@(Tags.ToOptions(item => (string)item, item => item))" @bind-Value="_tagFilter" AllowEmpty="true"

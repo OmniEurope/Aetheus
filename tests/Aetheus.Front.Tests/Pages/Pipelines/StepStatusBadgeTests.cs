@@ -92,6 +92,43 @@ public sealed class StepStatusBadgeTests : BunitContext
         Assert.Null(badge.GetAttribute("title"));
     }
 
+    [Theory]
+    [InlineData(TaskExecutionStatus.Success)]
+    [InlineData(TaskExecutionStatus.Failed)]
+    public void AnAdvisoryStep_CarriesTheAdvisoryBadge_WhateverItsStatus(TaskExecutionStatus status)
+    {
+        var badges = RenderFor(new PipelineStepRunDto { Status = status, ContinueOnError = true, IsAdvisory = true })
+            .FindAll(".omni-badge");
+
+        Assert.Equal(2, badges.Count);
+        Assert.Equal("StepAdvisory", badges[1].TextContent.Trim());
+        Assert.Equal("StepAdvisoryHint", badges[1].GetAttribute("title"));
+    }
+
+    [Fact]
+    public void AFailedAdvisoryStep_StaysRedOutlined_AndExplainsItIsAdvisory()
+    {
+        var badge = RenderFor(new PipelineStepRunDto
+        {
+            Status = TaskExecutionStatus.Failed,
+            ContinueOnError = true,
+            IsAdvisory = true
+        }).Find(".omni-badge");
+
+        Assert.Contains("omni-badge--danger", badge.ClassName, StringComparison.Ordinal);
+        Assert.Contains("omni-badge--outline", badge.ClassName, StringComparison.Ordinal);
+        Assert.Equal("StepAdvisoryHint", badge.GetAttribute("title"));
+    }
+
+    [Fact]
+    public void ANormalStep_HasNoAdvisoryBadge()
+    {
+        var cut = RenderFor(new PipelineStepRunDto { Status = TaskExecutionStatus.Failed, ContinueOnError = true });
+
+        Assert.Single(cut.FindAll(".omni-badge"));
+        Assert.DoesNotContain("StepAdvisory", cut.Markup, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AnOrdinarySuccess_StaysGreen()
     {

@@ -4,7 +4,7 @@
 @using Microsoft.JSInterop
 @using Aetheus.Front.Resources
 
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
+<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
     <OmniLabel For="docker-project-filter">@L["Project"]</OmniLabel>
     <OmniDropDown Id="docker-project-filter" TValue="string" name="docker-project-filter" Options="@(_projectOptions.ToOptions(item => (string)item, item => item))" @bind-Value="_selectedProject"
         @bind-Value:after="RebuildAndLoad" AllowEmpty="true" Placeholder="@L["AllProjects"]" Class="docker-graph-filter-dropdown" />

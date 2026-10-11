@@ -1,0 +1,48 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-17: a new message, a reply, a reply to all or a forward. The dialog sends it itself and
+   stays open when the server refuses it, so nothing typed is lost. No field takes the focus on open. *@
+<OmniTemplateForm TModel="MailboxComposeModel" Model="@_model" OnValidSubmit="@SendAsync">
+    <OmniDataAnnotationsValidator Localizer="@L" />
+    <OmniStack Gap="OmniSpacing.Small">
+        <OmniFormField Label="@L["MailboxFrom"]" For="mailbox-compose-from">
+            <OmniTextBox Id="mailbox-compose-from" Value="@From" ValueExpression="@(() => From)" ReadOnly="true" />
+        </OmniFormField>
+        <OmniFormField Label="@L["MailboxTo"]" Description="@L["MailboxAddressesHint"]" For="mailbox-compose-to" Error="@_recipientError">
+            <OmniTextBox Id="mailbox-compose-to" @bind-Value="_model.To" Autocomplete="off" />
+        </OmniFormField>
+        <ValidationMessage For="@(() => _model.To)" />
+        <OmniFormField Label="@L["MailboxCc"]" For="mailbox-compose-cc">
+            <OmniTextBox Id="mailbox-compose-cc" @bind-Value="_model.Cc" Autocomplete="off" />
+        </OmniFormField>
+        <OmniFormField Label="@L["MailboxBcc"]" For="mailbox-compose-bcc">
+            <OmniTextBox Id="mailbox-compose-bcc" @bind-Value="_model.Bcc" Autocomplete="off" />
+        </OmniFormField>
+        <OmniFormField Label="@L["MailboxSubject"]" For="mailbox-compose-subject">
+            <OmniTextBox Id="mailbox-compose-subject" @bind-Value="_model.Subject" />
+        </OmniFormField>
+        <ValidationMessage For="@(() => _model.Subject)" />
+        <OmniFormField Label="@L["MailboxBody"]" For="mailbox-compose-body">
+            <OmniTextArea Id="mailbox-compose-body" @bind-Value="_model.Body" Rows="12" />
+        </OmniFormField>
+        <ValidationMessage For="@(() => _model.Body)" />
+        <OmniFormField Label="@L["MailboxAttachments"]" Description="@AttachmentsHint" For="mailbox-compose-attachments">
+            <OmniUpload Id="mailbox-compose-attachments"
+                        Multiple="true"
+                        MaximumFiles="@MailboxLimits.MaxAttachmentCount"
+                        MaximumFileSize="@MailboxLimits.MaxAttachmentBytes"
+                        Files="@AttachedFiles"
+                        FilesChanged="@OnAttachedFilesChanged"
+                        Upload="@ReadAttachmentsAsync"
+                        Disabled="@_busy" />
+        </OmniFormField>
+        @if (ForwardedAttachments.Count > 0)
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="mailbox-forwarded">
+                @string.Format(L["MailboxForwardedAttachments"], string.Join(", ", ForwardedAttachments.Select(attachment => attachment.FileName)))
+            </OmniText>
+        }
+    </OmniStack>
+    <DialogFooter OnCancel="@(() => Dialog.Close())">
+        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><OmniIcon Name="@MaterialIconMap.Resolve("send")" /> <span>@L["MailboxSend"]</span></OmniButton>
+    </DialogFooter>
+</OmniTemplateForm>

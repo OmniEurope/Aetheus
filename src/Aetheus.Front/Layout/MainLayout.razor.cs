@@ -345,6 +345,8 @@ public partial class MainLayout : IAsyncDisposable
         // reconnect race during logout and per-user state leaking into a same-runtime re-login.
         await RealtimeSession.StopAsync();
         ResetConnectionLostState();
+        // R1-37: while the token is still held, so the server forgets the mailbox passwords it keeps for us.
+        await Api.Auth.NotifyLogoutAsync();
         await Auth.LogoutAsync();
         Nav.NavigateTo("/login");
     }

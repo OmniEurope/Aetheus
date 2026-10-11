@@ -32,7 +32,7 @@ public sealed class PollingService(
 
     private readonly ConcurrentDictionary<OperationKind, IOperationExecutor?> _operationExecutorCache = new();
 
-    internal sealed record TrackedTask(Task Execution, CancellationTokenSource Cts);
+    internal sealed record TrackedTask(Task Execution, CancellationTokenSource Cts, bool IsSelfUpdate = false);
 
     private static readonly HashSet<string> TerminalStatuses =
         [nameof(TaskExecutionStatus.Success), nameof(TaskExecutionStatus.Failed),
@@ -119,7 +119,11 @@ public sealed class PollingService(
         await ReplayDeploymentBuildRefusalsAsync(stoppingToken).ConfigureAwait(false);
         await ReconcileRunningTasksAsync(stoppingToken).ConfigureAwait(false);
 
-        var freeSlots = Math.Max(0, _options.MaxConcurrentTasks - _runningTasks.Count);
+        // Recette R1-42: while a self-update runs the process is about to be replaced, so it asks for
+        // nothing else; a task claimed now would be cut by the exit and end as a timeout.
+        var freeSlots = _runningTasks.Values.Any(tracked => tracked.IsSelfUpdate)
+            ? 0
+            : Math.Max(0, _options.MaxConcurrentTasks - _runningTasks.Count);
         var tasks = await apiClient.GetPendingTasksAsync(agentState.ServerId!.Value, freeSlots, stoppingToken).ConfigureAwait(false);
         runtimeHealth.MarkPollingSuccess();
 
@@ -167,7 +171,7 @@ public sealed class PollingService(
             // entry whose disposed CTS then throws on every reconciliation pass.
             var registered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var executionTask = TrackTaskAsync(task, cts, registered.Task);
-            _runningTasks.TryAdd(task.Id, new TrackedTask(executionTask, cts));
+            _runningTasks.TryAdd(task.Id, new TrackedTask(executionTask, cts, task.Operation == OperationKind.AgentSelfUpdate));
             MarkTaskActivity();
             registered.SetResult();
         }
@@ -313,6 +317,14 @@ public sealed class PollingService(
         OperationKind.ServiceStart or OperationKind.ServiceStop or OperationKind.ServiceRestart or
         OperationKind.ServiceEnable or OperationKind.ServiceInstall or OperationKind.ServiceUninstall;
 
+    /// <summary>Recette R1-8: every mail operation that can change what the mail inventory reports (services,
+    /// certificate, OpenDKIM, domains, accounts, aliases, queue, spam filter, setup, purge). The read-only ones
+    /// (queue view, logs, configuration check, quota report, outbound probe) leave it as it is.</summary>
+    internal static bool ChangesMailInventory(OperationKind operation) =>
+        operation.ToString().StartsWith("Mail", StringComparison.Ordinal) && operation is not
+            (OperationKind.MailViewQueue or OperationKind.MailGetLogs or OperationKind.MailTestConfig
+            or OperationKind.MailQuotaReport or OperationKind.MailOutboundProbe);
+
     private async Task ExecuteOperationAsync(PendingTaskDto task, CancellationToken ct)
     {
         // Transition the claimed task before resolving the local handler. Older agents may not know
@@ -364,6 +376,12 @@ public sealed class PollingService(
             // Recette R-508: whatever the outcome, the host's services may have changed.
             if (ChangesHostServices(task.Operation))
                 runtimeHealth.RequestHeartbeat();
+            // Recette R1-8: the same for the mail stack, whose inventory the heartbeat also caches.
+            if (ChangesMailInventory(task.Operation))
+            {
+                runtimeHealth.InvalidateMailInventory();
+                runtimeHealth.RequestHeartbeat();
+            }
         }
         finally
         {

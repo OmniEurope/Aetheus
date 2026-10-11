@@ -132,7 +132,7 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         {
             var outcome = await Api.Analysis.CreateAnalysisFindingDecisionAsync(Id, new CreateAnalysisFindingDecisionRequest
             {
-                Status = _decision.Status,
+                Status = _decision.Status!.Value,
                 Reason = _decision.Reason,
                 ExpiresAt = _decision.ExpiresAt
             });
@@ -140,6 +140,7 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
             {
                 Toast.Success("Saved", "AnalysisDecisionSaved");
                 await LoadAsync();
+                _decision.Status = null;
                 _decision.Reason = string.Empty;
                 _decision.ExpiresAt = null;
             }
@@ -298,7 +299,8 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
 
     private sealed class DecisionFormModel
     {
-        public AnalysisFindingStatus Status { get; set; } = AnalysisFindingStatus.Accepted;
+        // Recette R2-134: nothing is chosen until the reviewer picks an outcome.
+        [Required(ErrorMessage = "AnalysisDecisionOutcomeRequired")] public AnalysisFindingStatus? Status { get; set; }
         [Required, StringLength(2000, MinimumLength = 10)] public string Reason { get; set; } = string.Empty;
         public DateTime? ExpiresAt { get; set; }
     }

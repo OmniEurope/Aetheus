@@ -1,9 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+<AgentOfflineNotice Server="@Server" />
 <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md docker-toolbar" Gap="OmniSpacing.Small">
     <div class="blade-content-spacer"></div>
     @if (CanAdmin)
     {
-        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OpenPruneDialogAsync" Class="@(_pruning ? "btn-busy" : null)" Busy="@(_pruning)"><OmniIcon Name="OmniIconName.Broom" /> <span>@L["DockerPrune"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OpenPruneDialogAsync" Disabled="@AgentOffline" Class="@(_pruning ? "btn-busy" : null)" Busy="@(_pruning)"><OmniIcon Name="OmniIconName.Broom" /> <span>@L["DockerPrune"]</span></OmniButton>
     }
     @* R-181: no Refresh button and no 10-second polling toggle. The inventory (Server.Docker) is rewritten from every agent heartbeat
        pushed on the servers hub (ServerDetailLoader), so the tabs follow the host by themselves. *@

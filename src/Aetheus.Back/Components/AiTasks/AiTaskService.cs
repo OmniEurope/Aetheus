@@ -243,13 +243,13 @@ public sealed partial class AiTaskService(
         return task;
     }
 
-    public async Task<AiExecutionSpec> BuildPipelineExecutionAsync(
+    public async Task<AiExecutionSpec?> BuildPipelineExecutionAsync(
         string profileName, int organizationId, string prompt, bool gate,
         int pipelineRunId, string workingDirectory, CancellationToken ct)
     {
         var profile = await repo.FindProfileByNameAsync(profileName, organizationId, ct)
-            .ConfigureAwait(false)
-            ?? throw new BadRequestException($"AI runner profile '{profileName}' was not found.");
+            .ConfigureAwait(false);
+        if (profile is null) return null;
         return await BuildExecutionSpecAsync(
             profile, prompt, gate, pipelineRunId, null, workingDirectory, ct).ConfigureAwait(false);
     }

@@ -163,10 +163,8 @@ else
                     <OmniCard Class="analysis-decision-card">
                         <div class="analysis-decision-heading">
                             <span class="analysis-decision-icon"><OmniIcon Name="OmniIconName.Gavel" /></span>
-                            <div>
-                                <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["AnalysisDecision"]</OmniHeading>
-                                <OmniText Element="OmniTextElement.Paragraph" Class="analysis-decision-help">@L["AnalysisDecisionHelp"]</OmniText>
-                            </div>
+                            @* Recette R2-130: no arbitration instruction under the title. *@
+                            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["AnalysisDecision"]</OmniHeading>
                         </div>
                         <div class="analysis-decision-form"><OmniTemplateForm TModel="DecisionFormModel" Model="@_decision" OnValidSubmit="@SaveDecisionAsync">
                             <OmniDataAnnotationsValidator Localizer="@L" />
@@ -182,34 +180,39 @@ else
                                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@DecisionStatusDescription(status)</OmniText>
                                             </div>
                                         }
+                                        @* Recette R2-133: going back on a decision is one of the choices, a secondary
+                                           action apart from saving; it reopens the finding at once, after confirmation. *@
+                                        @if (HasRevertibleDecision)
+                                        {
+                                            <div class="analysis-decision-choice analysis-decision-reopen">
+                                                <OmniButton Variant="OmniButtonVariant.Secondary" Busy="@_reverting" OnClick="@RevertDecisionAsync" ButtonType="OmniButtonType.Button" Class="analysis-decision-revert" title="@L["AnalysisRevertDecision"]"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /> <span>@L["AnalysisReopenFindingButton"]</span></OmniButton>
+                                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["AnalysisDecisionReopenDescription"]</OmniText>
+                                            </div>
+                                        }
                                     </div>
+                                    <ValidationMessage For="@(() => _decision.Status)" />
                                 </section>
                                 <section class="analysis-decision-details">
                                     <div>
                                         <OmniFormField Label="@L["Reason"]" For="DecisionReason">
                                             <OmniTextArea Id="DecisionReason" @bind-Value="_decision.Reason" Rows="5" Placeholder="@L["AnalysisDecisionReasonPlaceholder"]" />
                                         </OmniFormField>
-                                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="analysis-decision-field-hint omni-u-m-0">@L["AnalysisDecisionReasonHint"]</OmniText>
                                         <ValidationMessage For="@(() => _decision.Reason)" />
                                     </div>
                                     <div>
                                         <OmniFormField Label="@L["ExpiresAt"]" For="oe-formfield-pages-analysis-analysisfindingdetail-2">
                                     <OmniDateTimePicker Id="oe-formfield-pages-analysis-analysisfindingdetail-2" @bind-Value="_decision.ExpiresAt" />
                                         </OmniFormField>
-                                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="analysis-decision-field-hint omni-u-m-0">@L["AnalysisDecisionExpirationHint"]</OmniText>
                                     </div>
                                 </section>
                             </div>
                             <div class="analysis-decision-actions">
+                                @* Recette R2-134: the finding's own status, never the choice not yet saved (an
+                                   "Accepted" preselected by default read as an accepted finding with no history). *@
                                 <div class="analysis-decision-selected">
-                                    <span>@L["AnalysisDecisionSelected"]</span>
-                                    <strong>@DecisionStatusText(_decision.Status)</strong>
+                                    <span>@L["AnalysisDecisionCurrentStatus"]</span>
+                                    <strong>@(_finding is null ? string.Empty : DecisionStatusText(_finding.Status))</strong>
                                 </div>
-                                @* Recette R2-027: the decision in force can be reverted, the finding is open again. *@
-                                @if (HasRevertibleDecision)
-                                {
-                                    <OmniButton Variant="OmniButtonVariant.Secondary" Busy="@_reverting" OnClick="@RevertDecisionAsync" Class="analysis-decision-revert" title="@L["AnalysisRevertDecision"]"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /> <span>@L["AnalysisReopenFindingButton"]</span></OmniButton>
-                                }
                                 <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@_saving" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Save" /> <span>@L["AnalysisSaveDecision"]</span></OmniButton>
                             </div>
                         </OmniTemplateForm></div>

@@ -22,7 +22,6 @@ public sealed class VaultRepositoryPurgeTests : IDisposable
             {
                 VaultSecretId = 7,
                 Key = "key",
-                EncryptedValue = $"value-{version}",
                 Version = version,
                 ChangedAt = now.AddDays(-40 - version),
                 ChangeType = ChangeType.Updated

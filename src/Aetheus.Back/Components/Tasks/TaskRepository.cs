@@ -154,6 +154,16 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
         if (!fencingToken.HasValue)
             return [];
 
+        // Recette R1-42: while the agent replaces itself nothing else is handed to it. The swap ends
+        // with the process exiting, so a task claimed meanwhile is cancelled without a completion and
+        // later reported as a timeout. The other work stays Pending for the new agent.
+        var selfUpdateInFlight = await db.Tasks.AnyAsync(t => t.ServerId == serverId
+            && t.Operation == OperationKind.AgentSelfUpdate
+            && (t.Status == TaskExecutionStatus.Assigned || t.Status == TaskExecutionStatus.Running), ct)
+            .ConfigureAwait(false);
+        if (selfUpdateInFlight)
+            return [];
+
         // Claim Pending work only. An Assigned task may already be executing locally even if its
         // StartTask RPC has not reached the backend yet; redispatching it risks duplicate side effects.
         // TaskTimeoutService handles a claim that genuinely never starts.

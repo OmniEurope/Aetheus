@@ -18,8 +18,14 @@ public static class PipelineRunAssuranceVerdict
 
     /// <param name="Grade">The sealed grade letter, when the seal published one.</param>
     /// <param name="Deployable">Null when the run carries no verdict at all (not a candidate).</param>
-    /// <param name="BlockingTests">The tests that hold the package back, in the seal's own words.</param>
-    public sealed record Verdict(string? Grade, bool? Deployable, IReadOnlyList<string> BlockingTests);
+    /// <param name="BlockingTests">The tests that hold the package back, each with the step it came from when known.</param>
+    public sealed record Verdict(string? Grade, bool? Deployable, IReadOnlyList<BlockingTest> BlockingTests);
+
+    /// <summary>One entry of <c>CANDIDATE_BLOCKING_TESTS</c> ("currentIntegration=Failed").</summary>
+    /// <param name="Text">The entry in the seal's own words, shown as is when no producer is known.</param>
+    /// <param name="Key">The seal's test key ("currentIntegration").</param>
+    /// <param name="Producer">The step that published the non-zero status, null when none was found.</param>
+    public sealed record BlockingTest(string Text, string Key, PipelineRunGateProducer.Producer? Producer);
 
     /// <summary>Null when this run published no verdict: most runs are not candidates.</summary>
     public static Verdict? Read(PipelineRunDto? run, IReadOnlyDictionary<int, PipelineRunDto>? children = null)
@@ -41,8 +47,21 @@ public static class PipelineRunAssuranceVerdict
         bool? deployable = hasDeployable && bool.TryParse(deployableRaw, out var parsed) ? parsed : null;
         var blocking = variables.TryGetValue(BlockingVariable, out var blockingRaw)
             ? blockingRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(entry => Resolve(entry, run, children))
+                .ToList()
             : [];
 
         return new Verdict(hasGrade ? grade : null, deployable, blocking);
+    }
+
+    // "currentIntegration=Failed" -> the step that set QA_CURRENT_INTEGRATION_GATE_STATUS non-zero.
+    private static BlockingTest Resolve(string entry, PipelineRunDto run, IReadOnlyDictionary<int, PipelineRunDto>? children)
+    {
+        var separator = entry.IndexOf('=', StringComparison.Ordinal);
+        var key = (separator < 0 ? entry : entry[..separator]).Trim();
+        var producer = PipelineRunGateProducer.StatusVariableOf(key) is { } statusVariable
+            ? PipelineRunGateProducer.Find(statusVariable, run, children)
+            : null;
+        return new BlockingTest(entry, key, producer);
     }
 }

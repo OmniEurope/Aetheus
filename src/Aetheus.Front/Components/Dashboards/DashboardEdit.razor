@@ -75,7 +75,7 @@ else if (_dashboard is not null)
                         <OmniSwitch TValue="bool" Value="@widget.IsVisible" ValueExpression="@(() => widget.IsVisible)" ValueChanged="@(value => widget.IsVisible = value)">@L["Visible"]</OmniSwitch>
                     </OmniColumn>
                     <OmniColumn Span="12" SmallSpan="12">
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
+                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall">
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => MoveUp(widget))" Disabled="@(index == 0)"><OmniIcon Name="OmniIconName.Upgrade" /> <span>@L["MoveUp"]</span></OmniButton>
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => MoveDown(widget))" Disabled="@(index == _widgets.Count - 1)"><OmniIcon Name="OmniIconName.ArrowDown" /> <span>@L["MoveDown"]</span></OmniButton>
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ToggleConfig(widget))"><OmniIcon Name="OmniIconName.Settings" /> <span>@L["Settings"]</span></OmniButton>

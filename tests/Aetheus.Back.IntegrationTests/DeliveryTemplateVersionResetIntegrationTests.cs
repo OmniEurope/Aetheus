@@ -85,6 +85,8 @@ public sealed class DeliveryTemplateVersionResetIntegrationTests(PostgresFixture
         Assert.Equal(DeliveryPipelineTemplateSeeder.ReadResource("host-bluegreen-deploy-v1.yaml"), version.YamlContent);
         Assert.Equal(1, await verify.AppSettings.CountAsync(
             setting => setting.Key == DeliveryTemplateVersionReset.MarkerKey, TestContext.Current.CancellationToken));
+        Assert.Equal(1, await verify.AppSettings.CountAsync(
+            setting => setting.Key == DeliveryTemplateVersionReset.FirstResetMarkerKey, TestContext.Current.CancellationToken));
         var pipelineAfter = await verify.Pipelines.SingleAsync(item => item.Id == pipelineId, TestContext.Current.CancellationToken);
         Assert.Equal(1, pipelineAfter.TemplateReferenceVersion);
         Assert.Contains("extends: host-bluegreen-deploy@1", pipelineAfter.YamlDefinition, StringComparison.Ordinal);

@@ -146,7 +146,7 @@
 
 @if (CanWrite)
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
+    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
         <OmniStack Gap="OmniSpacing.XSmall">
             <OmniLabel For="analytics-threshold-metric">@L["Metric"]</OmniLabel>
             <OmniTextBox Id="analytics-threshold-metric" @bind-Value="_newThreshold.MetricName"

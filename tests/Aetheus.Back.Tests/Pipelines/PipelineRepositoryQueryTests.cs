@@ -340,18 +340,18 @@ public class PipelineRepositoryQueryTests : IDisposable
     }
 
     [Fact]
-    public async Task HasAnyContinuableFailedStepInRunAsync_SeesOnlyTheSwallowedFailures()
+    public async Task GetContinuableFailedStepsInRunAsync_SeesOnlyTheSwallowedFailures()
     {
         // PLAN-003 D13 reads the case the other query hides: the run finished green because the
         // failure was continuable, and that is exactly what makes it Partial rather than Success.
         Step(1, TaskExecutionStatus.Success);
-        Assert.False(await _repo.HasAnyContinuableFailedStepInRunAsync(1, ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await _repo.GetContinuableFailedStepsInRunAsync(1, ct: TestContext.Current.CancellationToken));
 
         Step(1, TaskExecutionStatus.Failed, continueOnError: false);
-        Assert.False(await _repo.HasAnyContinuableFailedStepInRunAsync(1, ct: TestContext.Current.CancellationToken));
+        Assert.Empty(await _repo.GetContinuableFailedStepsInRunAsync(1, ct: TestContext.Current.CancellationToken));
 
         Step(1, TaskExecutionStatus.Failed, continueOnError: true);
-        Assert.True(await _repo.HasAnyContinuableFailedStepInRunAsync(1, ct: TestContext.Current.CancellationToken));
+        Assert.Single(await _repo.GetContinuableFailedStepsInRunAsync(1, ct: TestContext.Current.CancellationToken));
     }
 
     /// <summary>R-14: the rollback stages count as having rolled back only when they ran and all of
@@ -626,7 +626,7 @@ public class PipelineRepositoryQueryTests : IDisposable
         _db.EnvironmentServers.Add(new EnvironmentServer { ServerId = 8, Environment = new Aetheus.Back.Data.Entities.Environment { Id = 1, Name = "staging" } });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var ids = await _repo.FindServerIdsInEnvironmentAsync("staging", ct: TestContext.Current.CancellationToken);
+        var ids = await _repo.FindServerIdsInEnvironmentAsync("staging", projectId: null, ct: TestContext.Current.CancellationToken);
 
         Assert.Contains(8, ids);
     }
@@ -658,6 +658,7 @@ public class PipelineRepositoryQueryTests : IDisposable
 
         var ids = await _repo.FindCandidateTargetServerIdsAsync(
             null, null, null, OsType.Unknown, 10, deploymentStage: false,
+            projectId: null,
             ct: TestContext.Current.CancellationToken);
 
         Assert.Equal([1], ids);
@@ -678,6 +679,7 @@ public class PipelineRepositoryQueryTests : IDisposable
 
         var ids = await _repo.FindCandidateTargetServerIdsAsync(
             null, null, "missing", OsType.Unknown, 10, deploymentStage: false,
+            projectId: null,
             ct: TestContext.Current.CancellationToken);
 
         Assert.Empty(ids);
@@ -697,7 +699,7 @@ public class PipelineRepositoryQueryTests : IDisposable
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var ids = await _repo.FindCandidateTargetServerIdsAsync(
-            null, "missing", null, OsType.Unknown, 10, deploymentStage: true, ct: TestContext.Current.CancellationToken);
+            null, "missing", null, OsType.Unknown, 10, deploymentStage: true, projectId: null, ct: TestContext.Current.CancellationToken);
 
         Assert.Empty(ids);
     }
@@ -744,7 +746,7 @@ public class PipelineRepositoryQueryTests : IDisposable
             new EnvironmentServer { Environment = environment, Server = owned });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var server = await _repo.FindOnlineDeployTargetAsync(null, "prod", null, OsType.Unknown, 10, ct: TestContext.Current.CancellationToken);
+        var server = await _repo.FindOnlineDeployTargetAsync(null, "prod", null, OsType.Unknown, 10, projectId: null, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(server);
         Assert.Equal(2, server.Id);

@@ -45,6 +45,9 @@ public sealed class TemplateVersionHistoryDialogTests : BunitContext
         cut.Render();
 
         Assert.Contains("page-two", cut.Markup);
+        // SITE-FUNC-TEMPLATE-001: `v@version.Version` was parsed as an e-mail address.
+        Assert.Contains(">v12<", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("v@version", cut.Markup, StringComparison.Ordinal);
         Assert.Contains(_handler.Requests, request => request.Url.Contains("page=2", StringComparison.Ordinal));
         Assert.Contains(_handler.Requests, request => request.Url.EndsWith("/versions/2", StringComparison.Ordinal));
         Assert.Contains(_handler.Requests, request => request.Url.EndsWith("/versions/3", StringComparison.Ordinal));

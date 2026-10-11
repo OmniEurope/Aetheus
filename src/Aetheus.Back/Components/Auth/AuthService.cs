@@ -2,7 +2,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Aetheus.Back.Components.Users.Events;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services.DomainEvents;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 
@@ -19,6 +21,7 @@ public class AuthService(
     TimeProvider timeProvider,
     IHttpContextAccessor httpContextAccessor,
     IAdminChangeNotifier adminNotifier,
+    IDomainEventDispatcher domainEvents,
     ILogger<AuthService> logger) : IAuthService
 {
     private const int MaxFailedAttempts = 5; // F-011
@@ -461,6 +464,9 @@ public class AuthService(
         return await GenerateTokenResponseWithRefreshAsync(claims, userId, rememberMe: false, ct).ConfigureAwait(false);
     }
 
+    public Task LogoutAsync(int userId, CancellationToken ct = default) =>
+        domainEvents.DispatchAsync(new UserSessionEndedEvent(userId, UserSessionEndReasons.Logout), ct);
+
     // --- Refresh Token Rotation (F-012) ---
 
     public async Task<LoginResponse?> RefreshTokenAsync(string refreshToken, CancellationToken ct = default) =>
@@ -522,6 +528,9 @@ public class AuthService(
             return new RefreshTokenOutcome(GenerateTokenResponse(BuildUserClaims(user, user.UserRoles.Select(ur => ur.Role.Name).ToList())), null);
         }
         await repo.RevokeAllUserRefreshTokensAsync(stored.UserId, ct).ConfigureAwait(false);
+        // R1-37: the whole chain is revoked as a possible theft; drop what is held in memory for the user too.
+        await domainEvents.DispatchAsync(
+            new UserSessionEndedEvent(stored.UserId, UserSessionEndReasons.RefreshReplay), ct).ConfigureAwait(false);
         return RefreshTokenOutcome.Rejected(RefreshRejectionCodes.Replay);
     }
 

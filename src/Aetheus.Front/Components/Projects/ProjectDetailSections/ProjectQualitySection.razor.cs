@@ -391,6 +391,9 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         ? $"/git-repositories/commits/{commitId}"
         : null;
 
+    private static string? ShortHash(string? hash) =>
+        string.IsNullOrWhiteSpace(hash) ? null : hash.Length > 8 ? hash[..8] : hash;
+
     private sealed record CoveragePoint(string Label, double LinePct, double BranchPct);
     private sealed record TestPoint(string Label, int Passed, int Failed);
     private sealed record ComplexityPoint(string Label, double Crap, double AvgCc);

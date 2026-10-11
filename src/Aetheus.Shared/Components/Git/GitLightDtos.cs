@@ -237,7 +237,7 @@ public sealed record BranchProtectionRuleDto
     public string Pattern { get; init; } = string.Empty;
     public bool PreventDeletion { get; init; }
     public bool PreventForcePush { get; init; }
-    public bool RequirePullRequest { get; init; }
+    public BranchProtectionLevel ProtectionLevel { get; init; }
     public DateTime CreatedAt { get; init; }
 }
 
@@ -249,14 +249,16 @@ public sealed record CreateBranchProtectionRuleRequest
 
     public bool PreventDeletion { get; init; } = true;
     public bool PreventForcePush { get; init; } = true;
-    public bool RequirePullRequest { get; init; }
+    [EnumDataType(typeof(BranchProtectionLevel))]
+    public BranchProtectionLevel ProtectionLevel { get; init; }
 }
 
 public sealed record UpdateBranchProtectionRuleRequest
 {
     public bool PreventDeletion { get; init; }
     public bool PreventForcePush { get; init; }
-    public bool RequirePullRequest { get; init; }
+    [EnumDataType(typeof(BranchProtectionLevel))]
+    public BranchProtectionLevel ProtectionLevel { get; init; }
 }
 
 // --- Blame ---

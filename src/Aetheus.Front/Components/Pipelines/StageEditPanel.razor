@@ -49,7 +49,7 @@
                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveVariable(key))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                 }
             </div>
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Class="omni-u-mt-sm">
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall" Class="omni-u-mt-sm">
                 <OmniTextBox aria-label="@L["Key"]" @bind-Value="_newVarKey" Placeholder="@L["Key"]" Class="text-input-flex" />
                 <OmniTextBox aria-label="@L["Value"]" @bind-Value="_newVarValue" Placeholder="@L["Value"]" Class="text-input-flex" />
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddVariable" Disabled="@string.IsNullOrWhiteSpace(_newVarKey)" title="@L["Add"]"><OmniIcon Name="OmniIconName.Add" /></OmniButton>

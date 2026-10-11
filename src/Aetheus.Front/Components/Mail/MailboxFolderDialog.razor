@@ -1,0 +1,12 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-17: the name of a new folder at the top of the mailbox. No field takes the focus on open. *@
+<OmniTemplateForm TModel="MailboxFolderModel" Model="@_model" OnValidSubmit="@Submit">
+    <OmniDataAnnotationsValidator Localizer="@L" />
+    <OmniFormField Label="@L["MailboxFolderName"]" Description="@L["MailboxFolderNameRule"]" For="mailbox-folder-name">
+        <OmniTextBox Id="mailbox-folder-name" @bind-Value="_model.Name" Autocomplete="off" />
+    </OmniFormField>
+    <ValidationMessage For="@(() => _model.Name)" />
+    <DialogFooter OnCancel="@(() => Dialog.Close())">
+        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+    </DialogFooter>
+</OmniTemplateForm>

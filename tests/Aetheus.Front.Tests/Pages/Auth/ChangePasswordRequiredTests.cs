@@ -135,5 +135,8 @@ public class ChangePasswordRequiredTests : BunitContext
         Assert.Null(auth.Token);
         Assert.Equal(1, factory.StopAllCount);
         Assert.EndsWith("/login", nav.Uri);
+        // Recette R1-37: the server is told, so it forgets the held mailbox passwords.
+        Assert.Contains(_handler.Requests, request =>
+            request.Method == "POST" && request.Url.EndsWith("api/auth/logout", StringComparison.Ordinal));
     }
 }

@@ -22,7 +22,7 @@
         <OmniDataGridColumn Frozen="true" TItem="ServerTaskDto" Property="Id" Title="#" Width="80px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
             <Template Context="task">
                 <a href="@($"/tasks/{task.Id}")" class="pipeline-name-link"
-                    @onclick:stopPropagation="true">@task.Id</a>
+                    @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@task.Id</a>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="ServerTaskDto" Property="Name" Title="@L["Name"]" MinWidth="10rem" Filterable="true" />
@@ -34,11 +34,11 @@
             <Template Context="task">
                 @if (task.PipelineRunId is { } pipelineRunId)
                 {
-                    <span @onclick:stopPropagation="true"><OmniLink Href="@($"/pipelines/runs/{pipelineRunId}")">@($"{L["PipelineRun"]} #{pipelineRunId}")</OmniLink></span>
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/pipelines/runs/{pipelineRunId}")">@($"{L["PipelineRun"]} #{pipelineRunId}")</OmniLink></span>
                 }
                 else
                 {
-                    <span @onclick:stopPropagation="true"><OmniLink Href="@($"/servers/{task.ServerId}/overview")">@($"{L["Server"]}: {GetSourceServerName(task)}")</OmniLink></span>
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/servers/{task.ServerId}/overview")">@($"{L["Server"]}: {GetSourceServerName(task)}")</OmniLink></span>
                 }
             </Template>
         </OmniDataGridColumn>

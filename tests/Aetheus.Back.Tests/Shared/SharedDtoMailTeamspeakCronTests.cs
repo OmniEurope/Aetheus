@@ -153,6 +153,14 @@ public class SharedDtoMailTeamspeakCronTests
     }
 
     [Fact]
+    public void RequestMailCertificateRequest_NoEmail_IsValid()
+    {
+        // Recette R1-6: the Let's Encrypt contact is optional; the certbot helper registers without one.
+        var req = new RequestMailCertificateRequest { Email = null };
+        Assert.Empty(ValidateModel(req));
+    }
+
+    [Fact]
     public void RequestMailCertificateRequest_EmptyEmail_Fails()
     {
         var req = new RequestMailCertificateRequest { Email = "" };

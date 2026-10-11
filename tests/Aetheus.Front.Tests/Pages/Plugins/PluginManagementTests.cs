@@ -16,10 +16,16 @@ public class PluginManagementTests : BunitContext
     [Fact]
     public void Renders_Loading_ThenGrid()
     {
-        _handler.SetPaginatedJsonResponse("api/plugins", new List<PluginRegistrationDto>());
+        // FRONTTEST-004: while the page is held loading, the grid shows no empty state; once the empty
+        // page has arrived, the loading ends and the empty text replaces it.
+        var answer = new TaskCompletionSource<PaginatedResult<PluginRegistrationDto>>();
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/plugins", _ => answer.Task);
         var cut = Render<PluginManagement>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
-        Assert.DoesNotContain("rz-progressbar-circular", cut.Markup);
+        Assert.DoesNotContain("NoRecords", cut.Markup);
+
+        answer.SetResult(new PaginatedResult<PluginRegistrationDto> { Items = [], TotalCount = 0 });
+
+        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup));
     }
 
     [Fact]
@@ -80,10 +86,12 @@ public class PluginManagementTests : BunitContext
     [Fact]
     public void Handles_HttpError_Gracefully()
     {
+        // FRONTTEST-004: a failed load ends the loading state (the grid falls back to its empty text)
+        // and never reports success.
         _handler.SetResponse("api/plugins", System.Net.HttpStatusCode.InternalServerError);
         var cut = Render<PluginManagement>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
-        Assert.DoesNotContain("rz-progressbar-circular", cut.Markup);
+        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup));
+        Assert.DoesNotContain("DockerScanner", cut.Markup);
     }
 
     [Theory]

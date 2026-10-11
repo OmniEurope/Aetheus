@@ -100,6 +100,27 @@ public class EnvironmentEditTests : BunitContext
         Assert.Contains("Type", cut.Markup);
     }
 
+    /// <summary>Recette R1-25: after "Create", the page the user came from (the pipeline setup wizard's
+    /// summary) is shown again, not the new environment; without a local return address, as before.</summary>
+    [Theory]
+    [InlineData("/pipelines/setup?projectId=1&step=summary", "http://localhost/pipelines/setup?projectId=1&step=summary")]
+    [InlineData("https://evil.example/x", "http://localhost/environments/9")]
+    [InlineData(null, "http://localhost/environments/9")]
+    public void Create_ReturnsToTheLocalReturnAddress(string? returnUrl, string expected)
+    {
+        SetupDefaultResponses();
+        _handler.SetJsonResponse(HttpMethod.Post, "api/environments", new EnvironmentDto { Id = 9, Name = "qa", ProjectId = 1, Servers = [] });
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("http://localhost/environments/new?projectId=1"
+            + (returnUrl is null ? string.Empty : "&returnUrl=" + Uri.EscapeDataString(returnUrl)));
+        var cut = Render<EnvironmentEdit>();
+
+        cut.Find("input#Name").Input("qa");
+        cut.Find("form").Submit();
+
+        cut.WaitForAssertion(() => Assert.Equal(expected, nav.Uri));
+    }
+
     [Fact]
     public void InputEvents_AreSentByTheCreateForm()
     {
@@ -242,7 +263,8 @@ public class EnvironmentEditTests : BunitContext
         await cut.InvokeAsync(() => sourceDropdown.Instance.ValueChanged.InvokeAsync(77));
 
         Assert.Equal("Reference staging", cut.Find("input#Name").GetAttribute("value"));
-        Assert.Equal("Reusable settings", cut.Find("textarea#Description").GetAttribute("value"));
+        // Recette R1-23: the source's description is not carried over to the new environment.
+        Assert.True(string.IsNullOrEmpty(cut.Find("textarea#Description").GetAttribute("value")));
         var projectDropdown = cut.FindComponents<OmniDropDown<int?>>()
             .Single(dropdown => dropdown.Instance.Placeholder == "NoProject");
         Assert.Equal(3, projectDropdown.Instance.Value);
@@ -259,5 +281,6 @@ public class EnvironmentEditTests : BunitContext
 
         Assert.Equal(77, request!.SourceEnvironmentId);
         Assert.Equal(3, request.ProjectId);
+        Assert.True(string.IsNullOrEmpty(request.Description));
     }
 }

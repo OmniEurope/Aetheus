@@ -32,6 +32,15 @@ public sealed class DnsClientMailResolver : IMailDnsResolver
             .ToList();
     }
 
+    /// <summary>DnsClient's <c>TimeToLive</c> is documented as the record's current TTL; the host resolver
+    /// already counts down the TTL of an answer it serves from its cache.</summary>
+    public async Task<int?> MxTimeToLiveAsync(string name, CancellationToken ct = default)
+    {
+        var response = await QueryAsync(name, QueryType.MX, ct).ConfigureAwait(false);
+        var records = response.Answers.MxRecords().ToList();
+        return records.Count == 0 ? null : records.Min(record => record.TimeToLive);
+    }
+
     public async Task<IReadOnlyList<string>> AddressesAsync(string host, CancellationToken ct = default)
     {
         var v4 = await QueryAsync(host, QueryType.A, ct).ConfigureAwait(false);

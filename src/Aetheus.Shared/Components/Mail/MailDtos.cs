@@ -211,6 +211,8 @@ public sealed record MailDnsRecordsDto
     public string DkimRecord { get; init; } = string.Empty;
     public string DkimSelector { get; init; } = string.Empty;
     public string DkimPublicKey { get; init; } = string.Empty;
+    /// <summary>Whether <see cref="DkimPublicKey"/> is known; when it is not, the DKIM record cannot be published yet.</summary>
+    public MailDkimKeyStatus DkimKeyStatus { get; init; }
     public string DmarcRecord { get; init; } = string.Empty;
     public string MxRecord { get; init; } = string.Empty;
 }

@@ -5,42 +5,34 @@
    duplication, complexity, a dependency cycle) with no finding behind it. Both pages now draw this. *@
 @if (Grade is not null)
 {
-    @if (ShowLimitingDomain && Grade.LimitingDomain is { } limiting && Grade.Completeness != AnalysisGradeCompleteness.Incomplete)
-    {
-        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-mb-sm analysis-grade-limiting">@L["AnalysisLimitingDomain"]: @DomainLabel(L, limiting)</OmniText>
-    }
     @* Recette R-176: two wide columns, one line per measure (label, value, grade); a domain with nothing
-       to show is a compact muted line after the cards. *@
+       to show is a compact muted line after the cards. Recette R2-139: no "limiting domain" sentence,
+       every domain that sets the grade has its title in bold instead. *@
     <div class="analysis-grade-domains">
         @foreach (var domain in Domains.Where(HasDetails))
         {
             <section class="analysis-grade-domain">
                 <div class="analysis-grade-domain-heading">
-                    <span>@domain.Label</span>
+                    <span class="@(IsLimiting(domain) ? "analysis-grade-domain-limiting" : null)">@domain.Label</span>
                     <GradeBadge Value="@domain.Grade" />
                 </div>
-                <div class="analysis-grade-domain-state">
-                    @DomainState(domain)
-                </div>
+                @if (domain.Completeness == AnalysisGradeCompleteness.Incomplete)
+                {
+                    <div class="analysis-grade-domain-state">@L["Incomplete"]</div>
+                }
                 @foreach (var measure in domain.Measures)
                 {
                     <div class="analysis-grade-measure">
-                        <span class="analysis-grade-measure-label" title="@($"{MeasureLabel(measure.Key)} ({measure.Key})")">@MeasureLabel(measure.Key)</span>
+                        <span class="analysis-grade-measure-label" title="@MeasureLabel(measure.Key)">@MeasureLabel(measure.Key)</span>
                         <span class="analysis-grade-value">@MeasureText(measure)</span>
                         <GradeBadge Value="@measure.Grade" />
-                        @if (measure.DistanceToNextGrade.HasValue && measure.NextGrade.HasValue)
+                        @if (ShowDistance(measure))
                         {
-                            <small class="analysis-grade-measure-hint">@L["AnalysisDistanceToGrade", measure.DistanceToNextGrade.Value.ToString("0.##"), measure.NextGrade]</small>
+                            <small class="analysis-grade-measure-hint">@L["AnalysisDistanceToGrade", measure.DistanceToNextGrade!.Value.ToString("0.##"), measure.NextGrade!]</small>
                         }
-                        @* Recette R2-119: a weighted score says what it is made of, the open findings by
-                           severity and the weight of each. *@
-                        @if (measure.FindingCounts is { } counts)
+                        @if (measure.FindingCounts is { Critical: > 0 })
                         {
-                            <small class="analysis-grade-measure-hint">@FindingCountsText(counts)</small>
-                            @if (counts.Critical > 0)
-                            {
-                                <small class="analysis-grade-measure-hint">@L["AnalysisCriticalFindingNotDeliverable"]</small>
-                            }
+                            <small class="analysis-grade-measure-hint">@L["AnalysisCriticalFindingNotDeliverable"]</small>
                         }
                     </div>
                 }
@@ -58,8 +50,8 @@
     @foreach (var domain in Domains.Where(domain => !HasDetails(domain)))
     {
         <div class="analysis-grade-domain-empty">
-            <span class="analysis-grade-measure-label">@domain.Label</span>
-            <span class="analysis-grade-domain-state">@DomainState(domain)</span>
+            <span class="analysis-grade-measure-label @(IsLimiting(domain) ? "analysis-grade-domain-limiting" : null)">@domain.Label</span>
+            <span class="analysis-grade-domain-state">@(domain.Completeness == AnalysisGradeCompleteness.Incomplete ? L["Incomplete"].Value : string.Empty)</span>
             <GradeBadge Value="@domain.Grade" />
         </div>
     }

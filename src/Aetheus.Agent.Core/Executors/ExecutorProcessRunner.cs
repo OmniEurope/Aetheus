@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.ComponentModel;
 using System.Diagnostics;
+using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Executors;
 
@@ -111,15 +112,9 @@ public sealed class ExecutorProcessRunner(
         var descendantRegistrations = descendants
             .Select(runtimeHealth.TrackProcess)
             .ToArray();
-        try
-        {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
-        {
-            logger.LogError(ex, "Failed to terminate process tree rooted at PID {ProcessId}", process.Id);
-        }
+        // A tree it may not kill whole (EPERM on a `sudo -n` child, an AggregateException) is logged and
+        // the root killed alone; the wait below still reports whether everything exited.
+        ProcessTreeTerminator.Kill(process, logger);
 
         try
         {

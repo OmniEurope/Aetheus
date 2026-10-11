@@ -65,10 +65,10 @@ public partial class Backups : IAsyncDisposable
 
         public bool Enabled { get; set; } = true;
 
-        [Range(1, int.MaxValue, ErrorMessage = "Select a project")]
+        [Range(1, int.MaxValue, ErrorMessage = "SelectProject")]
         public int ProjectId { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Select a server")]
+        [Range(1, int.MaxValue, ErrorMessage = "SelectServer")]
         public int ServerId { get; set; }
 
         public BackupDbEngine DbEngine { get; set; } = BackupDbEngine.Postgres;

@@ -20,7 +20,7 @@
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="MonitoredAppStatusDto" Property="Name" Title="@L["Name"]" MinWidth="9rem" Filterable="true">
             <Template Context="app">
-                <span @onclick:stopPropagation="true">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniLink Href="@AppHref(app)">@app.Name</OmniLink>
                 </span>
             </Template>

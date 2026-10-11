@@ -40,7 +40,13 @@ public enum PipelineSetupReadinessKind
     /// <summary>A platform scanner of a selected template reads its configuration from the repository
     /// and the branch does not carry it (Gitleaks and <c>.gitleaks.toml</c>). Items are paths from the
     /// repository root.</summary>
-    MissingScannerConfiguration
+    MissingScannerConfiguration,
+
+    /// <summary>Recette R1-32: the project's repository is external and Aetheus holds no readable copy
+    /// of it (a plain repository address, or a mirror not synchronized yet), so the files the templates
+    /// need cannot be checked from here. A warning, never "missing": nobody saw them absent. Items are
+    /// the paths to check in that repository.</summary>
+    ExternalRepositoryNotInspected
 }
 
 /// <summary>

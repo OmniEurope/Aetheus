@@ -1,7 +1,28 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R2-090: the mail page opens on its state, one list, each line green or red; the first red line
-   carries what fixes it; all green, a test message proves delivery end to end. The other tools stay
+@* Recette R2-090: the mail page opens on its state, one list, each line green or red; every red line
+   carries what fixes it (R1-9); all green, a test message proves delivery end to end. The other tools stay
    below, secondary. *@
+@using Microsoft.AspNetCore.Components.Sections
+@* Recette R1-13: while tasks of this page run, one banner at the top names them; it goes when the last ends. *@
+@if (_running.Count > 0)
+{
+    <MailTaskBanner Labels="@RunningLabels" Since="@RunningSince" />
+}
+@* Recette R1-12: the mail actions are a "..." menu in the page header, beside Réinstaller. *@
+@if (CanManage)
+{
+    <SectionContent SectionName="@ServerMailReinstall.HeaderMenuSection">
+        <OmniOverflowMenu Label="@L["MoreActions"]" Class="mail-actions-menu">
+            <OmniMenuItem OnClick="@RestartOpenDkimAsync" Disabled="@IsBusy(MailTaskKind.OpenDkim)"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["MailRestartOpenDkim"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@RunServerCheckAsync" Disabled="@IsBusy(MailTaskKind.ServerCheck)"><Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent>@L["MailRunServerCheck"]</ChildContent></OmniMenuItem>
+            @if (FirstRed is not null)
+            {
+                <OmniMenuItem OnClick="@SendTestAsync" Disabled="@IsBusy(MailTaskKind.DeliveryTest)"><Icon><OmniIcon Name="OmniIconName.PaperPlaneRight" /></Icon><ChildContent>@L["MailSendTest"]</ChildContent></OmniMenuItem>
+            }
+            <OmniMenuItem OnClick="@MeasureUsageAsync" Disabled="@IsBusy(MailTaskKind.Usage)"><Icon><OmniIcon Name="OmniIconName.ChartBarHorizontal" /></Icon><ChildContent>@L["MailMeasureUsage"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
+    </SectionContent>
+}
 <OmniCard Class="omni-u-mb-lg mail-status">
     <OmniStack Gap="OmniSpacing.Medium">
         <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
@@ -33,32 +54,36 @@
                 {
                     <MailCheckLine Label="@MailUiText.DiagnosticLabel(L, item.Key)" IsOk="@(item.Verdict == MailCheckVerdict.Ok)"
                                    Detail="@LineDetail(item)" />
-                    @if (ReferenceEquals(item, FirstRed))
+                    @if (item.Verdict != MailCheckVerdict.Ok)
                     {
-                        <MailStatusFix Item="@item" Hostname="@Mail.Hostname" CanManage="@CanManage" Busy="@_busy"
+                        <MailStatusFix Item="@item" Hostname="@Mail.Hostname" CanManage="@CanManage" StartServicesBusy="@IsBusy(MailTaskKind.StartServices)"
+                                       ObtainCertificateBusy="@IsBusy(MailTaskKind.ObtainCertificate)" InstallCertificateBusy="@IsBusy(MailTaskKind.InstallCertificate)"
                                        OnStartServices="@StartServicesAsync" OnObtainCertificate="@ObtainCertificateAsync"
                                        OnInstallCertificate="@InstallCertificateAsync" />
                     }
                 }
             </OmniStack>
+            @* Recette R1-11: the step-by-step help to publish the records, folded, once a mail domain is checked. *@
+            @if (HelpDomain is { } helpDomain)
+            {
+                <MailDnsHelp Domain="@helpDomain" />
+            }
             @if (FirstRed is null && StatusItems.Count > 0)
             {
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-status-all-green">
                     <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Success" Class="omni-u-m-0">@L["MailStatusAllGreen"]</OmniText>
                     @if (CanManage)
                     {
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SendTestAsync" Disabled="@(_deliveryTaskId is not null)"><OmniIcon Name="OmniIconName.PaperPlaneRight" /> <span>@L["MailSendTest"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SendTestAsync" Busy="@IsBusy(MailTaskKind.DeliveryTest)"><OmniIcon Name="OmniIconName.PaperPlaneRight" /> <span>@L["MailSendTest"]</span></OmniButton>
                     }
                 </OmniStack>
             }
         }
 
-        @if (_checkTaskId is not null || _deliveryTaskId is not null || _quotaTaskId is not null)
+        @* Recette R1-7: a failed action task (services, OpenDKIM, certificate) says so, with its last log line. *@
+        @if (_failure is not null)
         {
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                <AetheusLoader Size="OmniControlSize.Small" />
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailWaitingForTask"]</OmniText>
-            </OmniStack>
+            <OmniAlert Severity="OmniSeverity.Danger" Class="mail-task-failed">@_failure</OmniAlert>
         }
 
         @if (_delivery is not null)
@@ -84,25 +109,18 @@
         @if (CanManage)
         {
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-status-tools">
-                <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Postfix"]" Disabled="@_busy" OnClick="@(() => ServiceActionAsync("postfix", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
+                <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Postfix"]" Busy="@IsBusy(MailTaskKind.Postfix)" OnClick="@(() => ServiceActionAsync("postfix", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
                     <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "start"))"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniMenuItem>
                     <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "stop"))"><OmniIcon Name="@MaterialIconMap.Resolve("stop")" /> <span>@L["Stop"]</span></OmniMenuItem>
                     <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "restart"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniMenuItem>
                     <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "reload"))"><OmniIcon Name="@MaterialIconMap.Resolve("sync")" /> <span>@L["Reload"]</span></OmniMenuItem>
                 </ChildContent></OmniSplitButton>
-                <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Dovecot"]" Disabled="@_busy" OnClick="@(() => ServiceActionAsync("dovecot", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
+                <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Dovecot"]" Busy="@IsBusy(MailTaskKind.Dovecot)" OnClick="@(() => ServiceActionAsync("dovecot", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
                     <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "start"))"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniMenuItem>
                     <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "stop"))"><OmniIcon Name="@MaterialIconMap.Resolve("stop")" /> <span>@L["Stop"]</span></OmniMenuItem>
                     <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "restart"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniMenuItem>
                     <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "reload"))"><OmniIcon Name="@MaterialIconMap.Resolve("sync")" /> <span>@L["Reload"]</span></OmniMenuItem>
                 </ChildContent></OmniSplitButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RestartOpenDkimAsync" Disabled="@_busy"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["MailRestartOpenDkim"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RunServerCheckAsync" Disabled="@(_checkTaskId is not null)"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailRunServerCheck"]</span></OmniButton>
-                @if (FirstRed is not null)
-                {
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@SendTestAsync" Disabled="@(_deliveryTaskId is not null)"><OmniIcon Name="OmniIconName.PaperPlaneRight" /> <span>@L["MailSendTest"]</span></OmniButton>
-                }
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@MeasureUsageAsync" Disabled="@(_quotaTaskId is not null)"><OmniIcon Name="OmniIconName.ChartBarHorizontal" /> <span>@L["MailMeasureUsage"]</span></OmniButton>
             </OmniStack>
         }
 

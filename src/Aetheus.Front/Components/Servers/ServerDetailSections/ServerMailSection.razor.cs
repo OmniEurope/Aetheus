@@ -10,6 +10,7 @@ public partial class ServerMailSection
     [Inject] private IJSRuntime Js { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private ILogger<ServerMailSection> Logger { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
 
     [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter, EditorRequired] public int ServerId { get; set; }
@@ -17,6 +18,7 @@ public partial class ServerMailSection
     // Recette R2-089: the "installed but not configured" warning waits for the counts to be read.
     private bool _countsRead;
     private bool _countsReading;
+    private bool _countsFailed;
     private ServerMailReinstall? _reinstall;
 
     // Data
@@ -66,6 +68,12 @@ public partial class ServerMailSection
 
     private MailDataDto Mail => Server.Mail;
 
+    // SITE-OFFLINE-001: every write of this section queues a mail-manage task the agent alone can claim;
+    // while it is offline the actions are disabled (the child tabs hide theirs) and the handlers stop here.
+    private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
+    private bool CanManageTasks => Server.MailSetupAvailable && !AgentOffline;
+    private bool BlockedByOfflineAgent() => AgentOfflineGuard.Blocks(Server, Toast);
+
     // PLAN-005 child tabs that follow the output of the tasks they queue.
     private ServerMailQueueTab? _queueTab;
     private ServerMailLogsTab? _logsTab;
@@ -93,6 +101,7 @@ public partial class ServerMailSection
             _accountCount = 0;
             _aliasCount = 0;
             _countsRead = false;
+            _countsFailed = false;
             if (Mail.IsInstalled)
                 await ReloadDataAsync();
         }
@@ -106,6 +115,7 @@ public partial class ServerMailSection
     // The grids load only the tabs that are shown; the warning needs both counts whatever the tab.
     private async Task ReadCountsAsync()
     {
+        if (_countsReading) return;
         var serverId = ServerId;
         var generation = _loadGeneration;
         _countsReading = true;
@@ -118,11 +128,14 @@ public partial class ServerMailSection
             _domainCount = (await domains).TotalCount;
             _accountCount = (await accounts).TotalCount;
             _countsRead = true;
+            _countsFailed = false;
         }
         catch (HttpRequestException ex)
         {
-            // Nothing concluded: the loader stays and the next heartbeat reads the counts again.
+            // Nothing concluded: the failure is shown with a retry, and the next heartbeat reads the counts again.
             Logger.LogWarning(ex, "Mail counts read failed for server {ServerId}", serverId);
+            if (serverId == ServerId && generation == _loadGeneration)
+                _countsFailed = true;
         }
         finally
         {
@@ -281,6 +294,7 @@ public partial class ServerMailSection
 
     private async Task CreateDomainAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         try
         {
             var result = await Api.Mail.CreateMailDomainAsync(ServerId, new CreateMailDomainRequest
@@ -309,6 +323,7 @@ public partial class ServerMailSection
 
     private async Task OpenAddDomainDialogAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var result = await OpenMailDialogAsync(MailDialogMode.AddDomain, L["AddDomain"], new MailDialogModel { Domain = _newDomainName, DkimSelector = _newDkimSelector });
         if (result is null) return;
         _newDomainName = result.Domain;
@@ -318,6 +333,7 @@ public partial class ServerMailSection
 
     private async Task DeleteDomainAsync(int domainId)
     {
+        if (BlockedByOfflineAgent()) return;
         var success = await Api.Mail.DeleteMailDomainAsync(ServerId, domainId);
         if (success)
         {
@@ -332,6 +348,7 @@ public partial class ServerMailSection
 
     private async Task CreateAccountAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         try
         {
             var result = await Api.Mail.CreateMailAccountAsync(ServerId, new CreateMailAccountRequest
@@ -362,6 +379,7 @@ public partial class ServerMailSection
 
     private async Task OpenAddAccountDialogAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var result = await OpenMailDialogAsync(MailDialogMode.AddAccount, L["AddAccount"], new MailDialogModel { Email = _newAccountEmail, Password = _newAccountPassword, QuotaMb = _newAccountQuota });
         if (result is null) return;
         _newAccountEmail = result.Email;
@@ -370,8 +388,16 @@ public partial class ServerMailSection
         await CreateAccountAsync();
     }
 
+    // Recette R1-17: the integrated mailbox of one account, and the settings of an external client.
+    private void OpenMailbox(MailAccountDto account) => Nav.NavigateTo($"/servers/{ServerId}/mail/accounts/{account.Id}/mailbox");
+
+    private Task OpenMailClientHelpAsync() => Dialog.OpenAsync<Aetheus.Front.Components.Mail.MailClientSettingsHelp>(L["MailClientHelpTitle"],
+        new Dictionary<string, object?> { ["ServerId"] = ServerId, ["InDialog"] = true },
+        new OmniDialogOptions { Width = "40rem", AutoFocusFirstElement = false });
+
     private async Task DeleteAccountAsync(int accountId)
     {
+        if (BlockedByOfflineAgent()) return;
         var success = await Api.Mail.DeleteMailAccountAsync(ServerId, accountId);
         if (success)
         {
@@ -452,6 +478,7 @@ public partial class ServerMailSection
 
     private async Task CreateAliasAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var result = await Api.Mail.CreateMailAliasAsync(ServerId, _selectedAliasDomainId, new CreateMailAliasRequest
         {
             SourceEmail = _newAliasSource,
@@ -470,6 +497,7 @@ public partial class ServerMailSection
 
     private async Task OpenAddAliasDialogAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var result = await OpenMailDialogAsync(MailDialogMode.AddAlias, L["AddAlias"], new MailDialogModel
         {
             Source = _newAliasSource,
@@ -487,6 +515,7 @@ public partial class ServerMailSection
 
     private async Task DeleteAliasAsync(int aliasId)
     {
+        if (BlockedByOfflineAgent()) return;
         if (await Api.Mail.DeleteMailAliasAsync(ServerId, aliasId))
         {
             Toast.Success(L["AliasDeleted"]);
@@ -500,6 +529,7 @@ public partial class ServerMailSection
 
     private async Task ShowDkimRotation(MailDomainDto domain)
     {
+        if (BlockedByOfflineAgent()) return;
         _dkimRotationDomainId = domain.Id;
         _dkimRotationDomain = domain.Name;
         _dkimCurrentSelector = domain.DkimSelector;
@@ -517,6 +547,7 @@ public partial class ServerMailSection
 
     private async Task RotateDkimKeyAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var result = await Api.Mail.RotateMailDkimKeyAsync(ServerId, _dkimRotationDomainId, new DkimRotationRequest
         {
             NewSelector = _dkimNewSelector

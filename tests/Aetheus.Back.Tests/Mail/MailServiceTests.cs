@@ -586,6 +586,8 @@ public class MailServiceTests
     [Fact]
     public async Task GetDnsRecordsAsync_Found_ReturnsRecordsAndCreatesDkimTask()
     {
+        _serverRepo.FindServerAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Server { Name = "srv", Hostname = "h", MailSetupAvailable = true, Status = ServerStatus.Online });
         _repo.GetDomainAsync(1, 1, TestContext.Current.CancellationToken).Returns(
             new MailDomain { Id = 1, ServerId = 1, Name = "example.com", DkimSelector = "mail" });
 
@@ -602,6 +604,44 @@ public class MailServiceTests
             && t.Operation == Aetheus.Shared.Components.Tasks.OperationKind.MailDkimRead
             && t.Command == "example.com"
             && t.EnvironmentVariables.Contains("\"mail\"")), TestContext.Current.CancellationToken);
+        Assert.Equal(MailDkimKeyStatus.Reading, result.DkimKeyStatus);
+    }
+
+    [Fact]
+    public async Task GetDnsRecordsAsync_UnknownKey_AgentOffline_ReturnsTheComputedRecords_WithDkimUnavailable_AndQueuesNothing()
+    {
+        // SITE-OFFLINE-001: the queue refuses a task for an offline agent (409); reading the records must not fail.
+        _serverRepo.FindServerAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Server { Name = "srv", Hostname = "h", MailSetupAvailable = true, Status = ServerStatus.Offline });
+        _repo.GetDomainAsync(1, 1, TestContext.Current.CancellationToken).Returns(
+            new MailDomain { Id = 1, ServerId = 1, Name = "example.com", DkimSelector = "mail" });
+        _repo.GetStateAsync(1, TestContext.Current.CancellationToken).Returns(new MailState { ServerId = 1, Hostname = "mx.example.com" });
+
+        var result = await _sut.GetDnsRecordsAsync(1, 1, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(MailDkimKeyStatus.AgentOffline, result.DkimKeyStatus);
+        Assert.Empty(result.DkimPublicKey);
+        Assert.Equal("10 mx.example.com.", result.MxRecord);
+        Assert.Equal(MailDnsRecordFactory.SpfRecord, result.SpfRecord);
+        Assert.Equal("mail._domainkey.example.com", result.DkimRecord);
+        Assert.Contains("DMARC1", result.DmarcRecord);
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+        await _taskService.DidNotReceive().EnsureServerOnlineAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetDnsRecordsAsync_KnownKey_AgentOffline_ReturnsTheFullDkimRecord()
+    {
+        _serverRepo.FindServerAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Server { Name = "srv", Hostname = "h", Status = ServerStatus.Offline });
+        _repo.GetDomainAsync(1, 1, TestContext.Current.CancellationToken).Returns(
+            new MailDomain { Id = 1, ServerId = 1, Name = "example.com", DkimSelector = "mail", DkimPublicKey = "v=DKIM1; k=rsa; p=MIIB" });
+
+        var result = await _sut.GetDnsRecordsAsync(1, 1, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(MailDkimKeyStatus.Available, result.DkimKeyStatus);
+        Assert.Equal("v=DKIM1; k=rsa; p=MIIB", result.DkimPublicKey);
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 
     // --- DeleteAliasAsync ---

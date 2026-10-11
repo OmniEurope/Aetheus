@@ -18,7 +18,8 @@ public static class PipelineStatusFacts
         or PipelineStatus.Failed
         or PipelineStatus.Cancelled
         or PipelineStatus.Partial
-        or PipelineStatus.RolledBack;
+        or PipelineStatus.RolledBack
+        or PipelineStatus.Rejected;
 
     /// <summary>The same set as <see cref="IsTerminal"/>, as an array a database query can use
     /// (<c>Terminal.Contains(run.Status)</c> translates, a call to <c>IsTerminal()</c> does not).

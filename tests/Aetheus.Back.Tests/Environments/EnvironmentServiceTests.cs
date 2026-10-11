@@ -17,8 +17,10 @@ public class EnvironmentServiceTests
 
     public EnvironmentServiceTests()
     {
+        var encryption = Substitute.For<IEncryptionService>();
+        encryption.EncryptValue(Arg.Any<string>()).Returns(call => $"enc({call.Arg<string>()})");
         _sut = new EnvironmentService(_repo,
-            _audit, Substitute.For<IEntityChangeNotifier>(), _events);
+            _audit, Substitute.For<IEntityChangeNotifier>(), _events, encryption);
     }
 
     [Fact]
@@ -163,12 +165,42 @@ public class EnvironmentServiceTests
         Assert.NotSame(source.Checks[0], Assert.Single(added.Checks));
         Assert.Equal("readiness", added.Checks[0].Name);
         Assert.Equal(12, Assert.Single(added.LinkedProjectServers).ProjectServerId);
+        // Recette R1-29: the structure is copied (names), never the values.
         Assert.NotSame(source.Libraries[0], Assert.Single(added.Libraries));
-        Assert.Equal("eu", Assert.Single(added.Libraries[0].Entries).Value);
+        var entry = Assert.Single(added.Libraries[0].Entries);
+        Assert.Equal("REGION", entry.Key);
+        Assert.Equal(string.Empty, entry.Value);
+        Assert.Contains("Fill them in", added.Libraries[0].Description, StringComparison.Ordinal);
         Assert.NotSame(source.Vaults[0], Assert.Single(added.Vaults));
-        Assert.Equal("cipher", Assert.Single(added.Vaults[0].Secrets).EncryptedValue);
+        var secret = Assert.Single(added.Vaults[0].Secrets);
+        Assert.Equal("TOKEN", secret.Key);
+        Assert.Equal("enc()", secret.EncryptedValue);
+        Assert.Contains("Fill them in", added.Vaults[0].Description, StringComparison.Ordinal);
         Assert.NotSame(source.Pipelines[0], Assert.Single(added.Pipelines));
         Assert.Equal("steps: []", added.Pipelines[0].YamlDefinition);
+        // Recette R1-29: the copied pipelines are written into the project's repository, as on update.
+        _events.Received(1).Publish(Arg.Is<EnvironmentLinkedToProjectEvent>(e =>
+            e.EnvironmentName == "target" && e.ProjectId == 3));
+    }
+
+    [Fact]
+    public async Task R1_29_CreateEnvironmentAsync_WithoutCopy_PublishesNothing()
+    {
+        Environment? added = null;
+        _repo.When(repository => repository.AddEnvironmentAsync(
+                Arg.Any<Environment>(), Arg.Any<CancellationToken>()))
+            .Do(call => added = call.Arg<Environment>());
+        _repo.GetEnvironmentWithServersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => added!);
+
+        await _sut.CreateEnvironmentAsync(new CreateEnvironmentRequest
+        {
+            Name = "fresh",
+            ProjectId = 3,
+            ServerIds = []
+        }, ct: TestContext.Current.CancellationToken);
+
+        _events.DidNotReceive().Publish(Arg.Any<EnvironmentLinkedToProjectEvent>());
     }
 
     [Fact]

@@ -243,7 +243,7 @@
     margin-bottom: 1rem;
 }
 
-/* The letter, then one reading line: title, limiting domain, commit, date. */
+/* The letter, then its title; the commit, date and links are tiles beside it (R2-143). */
 .analysis-grade-headline {
     display: flex;
     flex-wrap: wrap;
@@ -271,7 +271,6 @@
     line-height: 1;
 }
 
-.analysis-grade-meta,
 .analysis-grade-domain-state {
     color: var(--omni-color-text-muted);
     font-size: 0.8125rem;
@@ -369,13 +368,13 @@
     white-space: nowrap;
 }
 
-[data-omni-theme="dark"] .analysis-critical .omni-icon,
-[data-omni-theme="dark"] .analysis-critical .omni-text {
+[data-omni-theme-resolved="dark"] .analysis-critical .omni-icon,
+[data-omni-theme-resolved="dark"] .analysis-critical .omni-text {
     color: var(--omni-color-danger);
 }
 
-[data-omni-theme="dark"] .analysis-high .omni-icon,
-[data-omni-theme="dark"] .analysis-high .omni-text {
+[data-omni-theme-resolved="dark"] .analysis-high .omni-icon,
+[data-omni-theme-resolved="dark"] .analysis-high .omni-text {
     color: var(--omni-color-warning);
 }
 
@@ -402,7 +401,7 @@
 .analysis-run-gate-metrics {
     flex: 1 1 32rem;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.5rem;
 }
 
@@ -526,6 +525,9 @@
     font-family: var(--omni-font-family-monospace, monospace);
     font-size: 0.8125rem;
 }
+
+/* SITE-MOB-003 (same cause): the prompt source is a <pre>, which OE sets back to overflow-wrap: normal. */
+.omni-theme-scope .analysis-finding-prompt-source { overflow-wrap: anywhere; }
 
 @media (max-width: 39.99rem) {
     .analysis-grade-primary {
@@ -1409,6 +1411,10 @@ code {
     user-select: none;
     cursor: grab;
     display: block;
+    /* SITE-MOB-004: width 100% plus the border must stay inside the column, and the pan moves nodes
+       past the frame: they clip instead of widening the page. */
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .docker-graph-svg:active {
@@ -1907,6 +1913,14 @@ code {
     overflow-wrap: anywhere;
 }
 
+/* Recette R1-27: the clone address on the project overview, OE's copyable field filling its cell;
+   the field scrolls a long URL inside itself, so the card and the page never scroll sideways. */
+.overview-clone-url {
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+}
+
 @media (max-width: 39.99rem) {
     .project-card-grid {
         grid-template-columns: 1fr;
@@ -2068,6 +2082,18 @@ code {
     margin-top: 1rem;
 }
 
+/* Recette R1-18 / R1-31: the pipeline architecture types, side by side, then their detail below. */
+.pipeline-setup-architectures {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.pipeline-setup-detail {
+    margin-top: 1rem;
+}
+
 .pipeline-setup-option {
     display: grid;
     grid-template-columns: auto auto minmax(0, 1fr);
@@ -2137,6 +2163,11 @@ code {
     display: grid;
     gap: 0.2rem;
     overflow-wrap: anywhere;
+}
+
+/* Recette R1-28: what would make a run fail, above the project's pipelines. */
+.project-pipelines-readiness {
+    margin-bottom: 1rem;
 }
 
 .project-card-status {
@@ -4154,6 +4185,9 @@ a.pipeline-relation-card:hover {
 .api-ref-method-patch { background: var(--omni-color-warning); color: var(--omni-color-on-warning); }
 .api-ref-method-delete { background: var(--omni-color-danger); color: var(--omni-color-on-danger); }
 .api-ref-path { flex: 1 1 12rem; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 0.8125rem; min-width: 0; overflow-wrap: anywhere; }
+/* SITE-MOB-003: OE keeps code on its lines inside a theme scope (.omni-theme-scope :is(pre, code) { overflow-wrap: normal },
+   specificity 0,1,1), which beat the single class above: a long path ran out of its card on a phone. */
+.omni-theme-scope .api-ref-path { overflow-wrap: anywhere; }
 .api-ref-summary { flex: 1 1 100%; font-size: 0.8125rem; margin-left: 4.75rem; text-align: right; }
 
 .run-failed-step { padding: 0.375rem 0; }
@@ -4690,8 +4724,9 @@ a.pipeline-relation-card:hover {
     --aetheus-tile-title: color-mix(in srgb, var(--omni-color-text) 65%, #000000);
     --omni-scope-page: var(--aetheus-page-background);
 }
-[data-omni-theme="dark"],
-html[data-omni-theme="dark"] .omni-theme-scope {
+/* Recette R2-112: keyed on the mode OE resolved (data-omni-theme-resolved, carried by the theme scope,
+   and by the document root while omni-boot.js paints the boot splash), "system" included. */
+[data-omni-theme-resolved="dark"] {
     --aetheus-page-background: color-mix(in srgb, var(--omni-color-surface) 62%, #000000);
     --aetheus-tile-title: color-mix(in srgb, var(--omni-color-text) 60%, #ffffff);
 }
@@ -4701,7 +4736,7 @@ html[data-omni-theme="dark"] .omni-theme-scope {
    decision 2026-09-28): white ink on every filled button in dark mode, so the grey is the lightest one
    that keeps the package's white ink (--omni-color-on-deep) at 4.5:1 or more (4.7:1 at rest, 5.7:1
    hovered, 6.6:1 pressed), and about 3:1 at rest against the dark tiles. */
-[data-omni-theme="dark"] .omni-button--secondary {
+[data-omni-theme-resolved="dark"] .omni-button--secondary {
     --omni-button-fill: #6e6e74;
     --omni-button-fill-hover: #626268;
     --omni-button-fill-active: #58585e;
@@ -4914,10 +4949,12 @@ html[data-omni-theme="dark"] .omni-theme-scope {
     box-shadow: 0 0 0.75rem rgba(30, 136, 229, 0.3);
 }
 
+/* SITE-MOB-006: the badges and actions wrap under the name rather than squeezing it to nothing. */
 .vp-node-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.375rem;
+    gap: 0.25rem 0.375rem;
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--aetheus-tile-separator);
     border-radius: var(--aetheus-radius) var(--aetheus-radius) 0 0;
@@ -4941,7 +4978,8 @@ html[data-omni-theme="dark"] .omni-theme-scope {
 }
 
 .vp-node-header-title {
-    flex: 1;
+    flex: 1 1 5rem;
+    min-width: 5rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -5391,11 +5429,18 @@ html[data-omni-theme="dark"] .omni-theme-scope {
     margin-bottom: 0.75rem;
 }
 
+/* SITE-MOB-008: the two text columns may shrink below their content (a bare 1fr is minmax(auto, 1fr)),
+   and the boxes in them below OE's 12rem text-box minimum, so the grid never runs past a phone's panel. */
 .vp-var-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
     gap: 0.25rem;
     align-items: center;
+}
+
+.vp-var-grid > .omni-input.omni-text-box {
+    min-inline-size: 0;
+    max-inline-size: none;
 }
 
 @media (max-width: 39.99rem) {
@@ -5404,9 +5449,9 @@ html[data-omni-theme="dark"] .omni-theme-scope {
         min-height: 15rem;
     }
 
-    .vp-node {
-        width: 11rem;
-    }
+    /* SITE-MOB-006: no narrower node on a phone. Its 13.75rem is mirrored by the layout (visual-pipeline.js)
+       and the edges (VisualPipelineGeometry.NodeWidth); an 11rem node left the edges 44px off and no room
+       for the stage name. Fit to screen scales the whole graph instead. */
 }
 
 /* ---- Equal-height tiles — uniform height per row ----
@@ -6209,7 +6254,7 @@ textarea:focus-visible,
     width: 100%;
 }
 
-[data-omni-theme="dark"] .omni-button--ghost {
+[data-omni-theme-resolved="dark"] .omni-button--ghost {
     color: var(--omni-color-text);
 }
 
@@ -7424,6 +7469,11 @@ textarea.omni-text-box,
    one-column grid whose auto track grew to the width of the buttons' row, so the text and the buttons
    went past the banner; the track is held to the banner, long words break, the buttons wrap. */
 .run-approval-banner .omni-alert__body { grid-template-columns: minmax(0, 1fr); overflow-wrap: anywhere; }
+/* Recette R1-24: the environment's instructions keep the line breaks they were written with. */
+.run-approval-banner .approval-instructions { white-space: pre-line; }
+.run-approval-banner .approval-instructions-label { font-weight: 600; }
+/* Recette R1-34: where a pipeline definition is kept, one muted line with its icon. */
+.pipeline-definition-storage { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.375rem; }
 @media (max-width: 39.99rem) {
     /* Below phone width Approve and Reject show their icon alone (named by Label, explained by their
        tooltip); Comment keeps its text. Same square as the run logs' reduced buttons (R-425). */
@@ -8022,11 +8072,6 @@ textarea.omni-text-box,
     font-size: 1.4rem;
 }
 
-.analysis-decision-help {
-    margin-top: 0.2rem;
-    color: var(--omni-color-text-muted);
-}
-
 .analysis-decision-layout {
     display: grid;
     grid-template-columns: minmax(16rem, 0.9fr) minmax(20rem, 1.5fr);
@@ -8039,15 +8084,19 @@ textarea.omni-text-box,
     min-width: 0;
 }
 
+/* Recette R2-132: the choices share one pair of columns (subgrid), so every button has the width of
+   the widest one and every description starts on the same line, whatever the labels' lengths. */
 .analysis-decision-choices {
     display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
     gap: 0.625rem;
     margin-top: 0.75rem;
 }
 
 .analysis-decision-choice {
     display: grid;
-    grid-template-columns: minmax(8.5rem, 0.8fr) minmax(0, 1.2fr);
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
     align-items: center;
     gap: 0.75rem;
     min-height: 4rem;
@@ -8095,12 +8144,6 @@ textarea.omni-text-box,
 .analysis-decision-details .omni-text-area__input {
     min-height: 8rem;
     resize: vertical;
-}
-
-.analysis-decision-field-hint {
-    display: block;
-    margin-top: 0.375rem !important;
-    color: var(--omni-color-text-muted);
 }
 
 .analysis-decision-details .validation-message {
@@ -8265,7 +8308,7 @@ textarea.omni-text-box,
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .analysis-decision-choice {
+    .analysis-decision-choices {
         grid-template-columns: minmax(0, 1fr);
     }
 
@@ -9286,7 +9329,8 @@ a.short-id__text:hover {
 }
 
 /* Recette R2-080: what follows the mail setup, in the assistant; R2-083: what "Réinstaller la messagerie"
-   erases, listed the same way. */
+   erases, listed the same way; R1-11: the record kinds and steps of the mail DNS help too. */
+.mail-dns-help-list,
 .mail-after-setup,
 .mail-reinstall-erased {
     display: grid;
@@ -9304,6 +9348,27 @@ a.short-id__text:hover {
 .mail-check-detail {
     overflow-wrap: anywhere;
     min-width: 0;
+}
+
+/* Recette R1-15: the domain of a new account ("@example.com", or its picker) sits after the name field,
+   on the same line; the field takes the room left. */
+.mail-account-address .omni-form-field__control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.mail-account-address .omni-form-field__control > :first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.mail-account-domain {
+    flex: 0 1 auto;
+    max-width: 55%;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 /* Recette R2-090: the fix of the first red line sits under it, set in from the list. */
@@ -9338,4 +9403,128 @@ a.short-id__text:hover {
         clip-path: inset(50%);
         white-space: nowrap;
     }
+}
+
+/* Recette R2-139: every domain that sets the grade reads in bold, several when they tie. */
+.analysis-grade-domain-limiting {
+    font-weight: 700;
+}
+
+/* Recette R2-138: one line per rule alert, its outcome badge before what crossed the rule. */
+.analysis-run-gate-violation {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+}
+
+/* Recette R2-143: commit, date, latest run and latest release as aligned tiles beside the letter. */
+.analysis-grade-primary {
+    flex-wrap: wrap;
+}
+
+.analysis-grade-meta-tiles {
+    flex: 1 1 32rem;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+@media (max-width: 63.99rem) {
+    .analysis-grade-meta-tiles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Recette R2-126: the erase banner, one line: the small Aetheus loader, the text, the elapsed time. */
+.mail-reinstall-running__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mail-reinstall-running__elapsed {
+    color: var(--omni-color-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Recette R1-13: the banner of the mail page's running tasks, laid out as the reinstall one (R2-126). */
+.mail-task-running__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mail-task-running__elapsed {
+    color: var(--omni-color-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Daily recap settings: the section check boxes flow in columns, and the preview shows the e-mail on
+   its own light page (the recap is a light e-mail in every theme), scrolled inside a bounded box. */
+.daily-recap-sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: 0.5rem 1.5rem;
+    margin-top: 0.5rem;
+}
+
+.daily-recap-preview-frame {
+    max-height: 40rem;
+    overflow: auto;
+    border: var(--omni-border-width) solid var(--omni-color-border);
+    border-radius: var(--omni-radius);
+    background: #f3f4f6;
+}
+
+.daily-recap-new-recipient {
+    flex: 1 1 16rem;
+    min-width: 0;
+}
+
+.daily-recap-recipient {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+    border-bottom: var(--omni-border-width) solid var(--omni-color-border);
+}
+
+.daily-recap-recipient-address {
+    overflow-wrap: anywhere;
+}
+
+/* Recette R1-17: the integrated mailbox. A received HTML message is written for a light page, whatever
+   the theme: its sandboxed frame keeps a light surface of its own and scrolls inside its box. */
+.mailbox-html {
+    display: block;
+    width: 100%;
+    height: 60vh;
+    border: 0;
+    border-radius: var(--omni-radius-md, 0.5rem);
+    background: #ffffff;
+}
+
+.mailbox-text {
+    margin: 0;
+    max-height: 70vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: inherit;
+}
+
+.mailbox-folder {
+    justify-content: flex-start;
+}
+
+.mailbox-address,
+.mailbox-reader-subject {
+    overflow-wrap: anywhere;
 }

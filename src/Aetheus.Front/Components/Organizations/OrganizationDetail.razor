@@ -66,7 +66,7 @@ else
             <OmniTabsItem Key="members" Title="@L["Members"]">
                 <OmniCard Class="iam-detail-card">
                 <OmniStack Gap="OmniSpacing.Medium">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
                         <OmniFormField Label="@L["User"]" For="oe-formfield-pages-organizations-organizationdetail-1">
                             <OmniAutocomplete Id="oe-formfield-pages-organizations-organizationdetail-1" TValue="int?" Search="SearchUsersAsync"
                                 MinimumLength="0" @bind-Value="_newUserId" FormatValue="FormatUser" Placeholder="@L["SelectUser"]" />
@@ -82,19 +82,19 @@ else
                         <Columns>
                             <OmniDataGridColumn Frozen="true" TItem="OrganizationMemberDto" Property="Username" Title="@L["Username"]" Filterable="true">
                                 <Template Context="m">
-                                    <span @onclick:stopPropagation="true"><OmniLink Href="@($"/users/{m.UserId}")">@m.Username</OmniLink></span>
+                                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/users/{m.UserId}")">@m.Username</OmniLink></span>
                                 </Template>
                             </OmniDataGridColumn>
                             <OmniDataGridColumn TItem="OrganizationMemberDto" Property="Email" Title="@L["Email"]" Filterable="true" />
                             <OmniDataGridColumn TItem="OrganizationMemberDto" Property="Role" Title="@L["Role"]" Width="11.25rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@RoleText">
                                 <Template Context="m">
                                     <OmniDropDown aria-label="@L["Role"]" TValue="OrganizationRole" Value="@m.Role" ValueExpression="@(() => m.Role)" Options="@(_roleOptions.ToOptions(item => (OrganizationRole)item.Value, item => item.Text))"
-                                        ValueChanged="@(args => OnChangeMemberRole(m, (OrganizationRole)args!))" @onclick:stopPropagation="true" />
+                                        ValueChanged="@(args => OnChangeMemberRole(m, (OrganizationRole)args!))" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true" />
                                 </Template>
                             </OmniDataGridColumn>
                             <OmniDataGridColumn TItem="OrganizationMemberDto" Title="@L["Actions"]" MinWidth="9rem" Sortable="false">
                                 <Template Context="m">
-                                    <span @onclick:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveMember(m))" title="@L["Remove"]" Label="@L["Remove"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton></span>
+                                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveMember(m))" title="@L["Remove"]" Label="@L["Remove"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton></span>
                                 </Template>
                             </OmniDataGridColumn>
                         </Columns>

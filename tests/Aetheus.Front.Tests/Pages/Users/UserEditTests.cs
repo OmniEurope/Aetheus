@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -544,5 +545,26 @@ public class UserEditTests : BunitContext
             .GetField("_effectivePermissions", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
         Assert.NotNull(perms);
         Assert.Equal(3, perms!.Count);
+    }
+
+    [Fact]
+    public void OrganizationRowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        SetupMocks();
+        _handler.SetJsonResponse("api/organizations", new PaginatedResult<OrganizationDto>());
+        _handler.SetJsonResponse("api/users/1/organizations", new List<Aetheus.Shared.Components.Organizations.UserOrganizationDto>
+        {
+            new(4, 8, "Acme", "acme", OrganizationRole.Member)
+        });
+
+        var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[role='tab']")), TimeSpan.FromSeconds(3));
+        cut.FindAll("[role='tab']").First(tab => tab.TextContent.Trim() == "Organizations").Click();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The organization link, the role list and the remove button.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);
     }
 }

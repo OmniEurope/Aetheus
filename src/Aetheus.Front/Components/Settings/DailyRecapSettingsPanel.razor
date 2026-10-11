@@ -1,0 +1,121 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* The daily recap e-mail: on by default at 07:00, every section, to the active administrators. The
+   preview is the HTML the e-mail carries, drawn in a shadow root by layout.js (renderEmailPreview). *@
+
+@if (_loading)
+{
+    <AetheusLoader Size="OmniControlSize.Small" />
+}
+else if (_settings is null)
+{
+    <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
+}
+else
+{
+    <OmniSettingsSection Title="@L["DailyRecapTitle"]" Description="@L["DailyRecapDescription"]" Class="daily-recap-settings">
+        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium">
+            <OmniAlert Severity="@LastSeverity" Title="@L["DailyRecapLastTitle"]" Class="daily-recap-last">
+                <ChildContent>@LastText</ChildContent>
+            </OmniAlert>
+
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 daily-recap-next-recipients">@NextRecipientsText</OmniText>
+
+            <OmniTemplateForm TModel="EditModel" Model="@_model" OnValidSubmit="SaveAsync">
+                <OmniDataAnnotationsValidator Localizer="@L" />
+                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium">
+                    <OmniSwitch @bind-Value="_model.Enabled" Class="daily-recap-enabled">@L["DailyRecapEnabled"]</OmniSwitch>
+
+                    <OmniRow Gap="OmniSpacing.Large">
+                        <OmniColumn Span="12" MediumSpan="4">
+                            <OmniFormField Label="@L["DailyRecapSendTime"]" For="daily-recap-time" Required="true" Class="omni-u-w-100">
+                                <OmniTimePicker Id="daily-recap-time" @bind-Value="_model.SendTime" Step="TimeSpan.FromMinutes(5)" Class="omni-u-w-100" />
+                                <ValidationMessage For="@(() => _model.SendTime)" />
+                            </OmniFormField>
+                        </OmniColumn>
+                        <OmniColumn Span="12" MediumSpan="4">
+                            <OmniFormField Label="@L["DailyRecapTimeZone"]" For="daily-recap-zone" Required="true" Help="@L["DailyRecapTimeZoneHint"]" Class="omni-u-w-100">
+                                <OmniTextBox Id="daily-recap-zone" @bind-Value="_model.TimeZoneId" Autocomplete="off" Class="omni-u-w-100" />
+                                <ValidationMessage For="@(() => _model.TimeZoneId)" />
+                            </OmniFormField>
+                        </OmniColumn>
+                        <OmniColumn Span="12" MediumSpan="4">
+                            <OmniFormField Label="@L["DailyRecapLanguage"]" For="daily-recap-language" Class="omni-u-w-100">
+                                <OmniDropDown Id="daily-recap-language" @bind-Value="_model.Language" Options="@_languages" Class="omni-u-w-100" />
+                            </OmniFormField>
+                        </OmniColumn>
+                    </OmniRow>
+
+                    <div role="group" aria-labelledby="daily-recap-sections-label">
+                        <OmniText Element="OmniTextElement.Strong" Id="daily-recap-sections-label">@L["DailyRecapSections"]</OmniText>
+                        <div class="daily-recap-sections">
+                            @foreach (var section in _model.Sections)
+                            {
+                                <OmniCheckBox @bind-Value="section.Included" Class="daily-recap-section">@L.Localize(section.Section)</OmniCheckBox>
+                            }
+                        </div>
+                    </div>
+
+                    <OmniFormField Label="@L["DailyRecapRecipients"]" For="daily-recap-new-recipient" Required="true"
+                                   Description="@RecipientsHint" Error="@_recipientError" Class="omni-u-w-100 daily-recap-recipients">
+                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                            <OmniTextBox Id="daily-recap-new-recipient" Type="OmniTextBoxType.Email" @bind-Value="_model.NewRecipient"
+                                         Placeholder="@L["DailyRecapRecipientPlaceholder"]" Autocomplete="off" Class="daily-recap-new-recipient" />
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => AddRecipient())" Class="daily-recap-add-recipient">
+                                <OmniIcon Name="OmniIconName.Add" />
+                                <span>@L["DailyRecapAddRecipient"]</span>
+                            </OmniButton>
+                        </OmniStack>
+                    </OmniFormField>
+                    <OmniDataList TItem="string" Items="@_model.Recipients" Class="daily-recap-recipient-list">
+                        <ItemTemplate Context="address">
+                            <div class="daily-recap-recipient">
+                                <span class="daily-recap-recipient-address">@address</span>
+                                <OmniButton Variant="OmniButtonVariant.Danger" Size="OmniControlSize.Small" OnClick="@(() => RemoveRecipient(address))"
+                                            Class="daily-recap-remove-recipient" Label="@L["DailyRecapRemoveRecipient", address]" title="@L["DailyRecapRemoveRecipient", address]">
+                                    <OmniIcon Name="OmniIconName.Delete" />
+                                </OmniButton>
+                            </div>
+                        </ItemTemplate>
+                        <EmptyContent>
+                            <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted" Class="omni-u-m-0 daily-recap-recipients-empty">@L["DailyRecapRecipientsEmpty"]</OmniText>
+                        </EmptyContent>
+                    </OmniDataList>
+                    <ValidationMessage For="@(() => _model.Recipients)" />
+
+                    <div>
+                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_saving" Class="daily-recap-save">
+                            <OmniIcon Name="OmniIconName.Save" />
+                            <span>@L["Save"]</span>
+                        </OmniButton>
+                    </div>
+                </OmniStack>
+            </OmniTemplateForm>
+
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Wrap="true" Class="daily-recap-actions">
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="SendNowAsync" Busy="@_sending" Class="daily-recap-send-now" title="@SendNowHint">
+                    <OmniIcon Name="OmniIconName.PaperPlaneRight" />
+                    <span>@L["DailyRecapSendNow"]</span>
+                </OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="TogglePreviewAsync" Busy="@_previewLoading" Class="daily-recap-preview-toggle">
+                    <OmniIcon Name="@(_preview is null ? OmniIconName.Eye : OmniIconName.EyeSlash)" />
+                    <span>@(_preview is null ? L["DailyRecapShowPreview"] : L["DailyRecapHidePreview"])</span>
+                </OmniButton>
+            </OmniStack>
+
+            @if (_sendResult is { } result)
+            {
+                <OmniAlert Severity="@SendSeverity(result)" Title="@SendTitle(result)" Class="daily-recap-send-result">
+                    <ChildContent>@result.Message</ChildContent>
+                </OmniAlert>
+            }
+
+            @if (_preview is { } preview)
+            {
+                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Small" Class="daily-recap-preview">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 daily-recap-preview-subject">@L["DailyRecapPreviewTitle", preview.Subject]</OmniText>
+                    <div @ref="_previewHost" class="daily-recap-preview-frame"></div>
+                </OmniStack>
+            }
+        </OmniStack>
+    </OmniSettingsSection>
+}

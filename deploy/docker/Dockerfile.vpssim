@@ -29,10 +29,12 @@ COPY deploy/scripts/zap-active-automation.sh deploy/scripts/zap-active-automatio
 COPY deploy/scripts/publish-observability-package.sh deploy/scripts/publish-observability-package.sh
 COPY deploy/scripts/promote-observability-packages.sh deploy/scripts/promote-observability-packages.sh
 COPY src/Aetheus.Shared/Aetheus.Shared.csproj src/Aetheus.Shared/
+COPY src/Aetheus.Analyzers/Aetheus.Analyzers.csproj src/Aetheus.Analyzers/
 COPY src/Aetheus.Agent.Core/Aetheus.Agent.Core.csproj src/Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj src/Aetheus.Agent.Linux/
 RUN dotnet restore src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj -r linux-x64
 COPY src/Aetheus.Shared/ src/Aetheus.Shared/
+COPY src/Aetheus.Analyzers/ src/Aetheus.Analyzers/
 COPY src/Aetheus.Agent.Core/ src/Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/ src/Aetheus.Agent.Linux/
 COPY deploy/scripts/zap-active-automation.sh deploy/scripts/zap-active-automation.sh
@@ -163,8 +165,10 @@ RUN postconf -e "virtual_mailbox_domains = vpssim.local, test.local" \
 RUN install -d /etc/portsentry \
     && printf 'TCP_MODE="atcp"\nBLOCK_TCP="1"\nTCP_PORTS="1,11,79,111,540,1524,135,139,445,1433,3306,31337"\nUDP_PORTS="1,11,161,162,513,635,1024,31335"\n' \
         > /etc/portsentry/portsentry.conf \
-    && touch /etc/portsentry/portsentry.blocked.atcp /etc/portsentry/portsentry.blocked.audp \
-    && echo "203.0.113.66" >> /etc/portsentry/portsentry.blocked.atcp
+    && install -d /var/lib/portsentry \
+    && touch /var/lib/portsentry/portsentry.blocked.atcp /var/lib/portsentry/portsentry.blocked.audp \
+    && echo "1791460800 - 10/08/2026 12:00:00 Host: 203.0.113.66/203.0.113.66 Port: 1524 TCP Blocked" \
+        >> /var/lib/portsentry/portsentry.blocked.atcp
 
 # --- RkhunterCollector: initialise the file-properties database (fast). The
 #     actual scan that writes /var/log/rkhunter.log runs at first boot.

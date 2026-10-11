@@ -172,11 +172,19 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
 
 
     public async Task<PipelineSourceDto?> GetPipelineSourceAsync(int id, CancellationToken ct = default)
+        => (await LookUpPipelineSourceAsync(id, ct)).Source;
+
+    /// <summary>
+    /// Recette R1-34: the pipeline's Git source, telling "the backend answered that there is none" (the
+    /// definition is kept in Aetheus) apart from "it could not be read" (Loaded false), so the page
+    /// never claims a storage place it did not read.
+    /// </summary>
+    public async Task<(bool Loaded, PipelineSourceDto? Source)> LookUpPipelineSourceAsync(int id, CancellationToken ct = default)
     {
         var response = await Http.GetAsync($"api/pipelines/{id}/source", ct);
-        if (response.StatusCode == System.Net.HttpStatusCode.NoContent) return null;
-        if (!response.IsSuccessStatusCode) return null;
-        return await response.Content.ReadFromJsonAsync<PipelineSourceDto>(JsonOptions.Web, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NoContent) return (true, null);
+        if (!response.IsSuccessStatusCode) return (false, null);
+        return (true, await response.Content.ReadFromJsonAsync<PipelineSourceDto>(JsonOptions.Web, ct));
     }
 
 
@@ -192,6 +200,25 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
             "api/pipelines/setup/readiness",
             new PipelineSetupReadinessRequest { ProjectId = projectId, TemplateNames = [.. templateNames] },
             ct);
+
+    /// <summary>Recette R1-29: what copying a project's pipelines into another one would do (names only).</summary>
+    public Task<PipelineProjectCopyPlanDto?> PlanProjectCopyAsync(PipelineProjectCopyRequest request, CancellationToken ct = default)
+        => PostJsonAsync<PipelineProjectCopyRequest, PipelineProjectCopyPlanDto>("api/pipelines/setup/copy-plan", request, ct);
+
+    /// <summary>Recette R1-29: makes the copies; the error payload is kept so the wizard can show why it failed.</summary>
+    public Task<ApiOutcome<PipelineProjectCopyResultDto, ApiError>> CopyProjectPipelinesAsync(
+        PipelineProjectCopyRequest request, CancellationToken ct = default)
+        => PostForApiErrorOutcomeAsync<PipelineProjectCopyRequest, PipelineProjectCopyResultDto>("api/pipelines/setup/copy", request, ct);
+
+    /// <summary>Recette R1-28: what would stop the project's existing pipelines from running.</summary>
+    public Task<PipelineSetupReadinessDto?> GetProjectReadinessAsync(int projectId, CancellationToken ct = default)
+        => Http.GetFromJsonAsync<PipelineSetupReadinessDto>(
+            $"api/pipelines/setup/project-readiness?projectId={projectId}", JsonOptions.Web, ct);
+
+    /// <summary>Recette R1-28: the same verdict for one pipeline, asked before it is launched.</summary>
+    public Task<PipelineSetupReadinessDto?> GetPipelineReadinessAsync(int pipelineId, CancellationToken ct = default)
+        => Http.GetFromJsonAsync<PipelineSetupReadinessDto>(
+            $"api/pipelines/setup/pipeline-readiness?pipelineId={pipelineId}", JsonOptions.Web, ct);
 
     /// <summary>PLAN-003 lot 20 / D26: usual stage and step durations over the last successful runs of
     /// the pipeline that started before this run.</summary>

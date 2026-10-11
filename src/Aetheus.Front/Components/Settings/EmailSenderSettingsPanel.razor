@@ -1,0 +1,87 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-16: the platform e-mail sender. By default the no-reply mailbox of the mail domain Aetheus
+   manages, with nothing to fill in; a custom SMTP server replaces it when the switch is on. The
+   password is never shown back: the field stays empty and a saved one is kept until a new one is typed. *@
+
+@if (_loading)
+{
+    <AetheusLoader Size="OmniControlSize.Small" />
+}
+else if (_settings is null)
+{
+    <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
+}
+else
+{
+    <OmniSettingsSection Title="@L["EmailSenderTitle"]" Description="@L["EmailSenderDescription"]" Class="email-sender-settings">
+        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium">
+            <OmniAlert Severity="@EffectiveSeverity" Title="@EffectiveTitle" Class="email-sender-effective">
+                <ChildContent>@EffectiveText</ChildContent>
+            </OmniAlert>
+
+            @if (CanPrepare)
+            {
+                <div class="email-sender-prepare">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="PrepareAsync" Busy="@_preparing"
+                                Class="email-sender-prepare-button" title="@L["EmailSenderPrepareHint"]">
+                        <OmniIcon Name="OmniIconName.Key" />
+                        <span>@L["EmailSenderPrepare"]</span>
+                    </OmniButton>
+                </div>
+            }
+
+            <OmniTemplateForm TModel="EditModel" Model="@_model" OnValidSubmit="SaveAsync">
+                <OmniDataAnnotationsValidator Localizer="@L" />
+                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium">
+                    <OmniSwitch @bind-Value="_model.UseCustom" Class="email-sender-use-custom">@L["EmailSenderUseCustom"]</OmniSwitch>
+
+                    @if (_model.UseCustom)
+                    {
+                        <OmniRow Gap="OmniSpacing.Large">
+                            <OmniColumn Span="12" MediumSpan="8">
+                                <OmniFormField Label="@L["EmailSenderHost"]" For="email-sender-host" Required="true" Class="omni-u-w-100">
+                                    <OmniTextBox Id="email-sender-host" @bind-Value="_model.Host" Autocomplete="off" Class="omni-u-w-100" />
+                                    <ValidationMessage For="@(() => _model.Host)" />
+                                </OmniFormField>
+                            </OmniColumn>
+                            <OmniColumn Span="12" MediumSpan="4">
+                                <OmniFormField Label="@L["EmailSenderPort"]" For="email-sender-port" Class="omni-u-w-100">
+                                    <OmniNumeric TValue="int" Id="email-sender-port" @bind-Value="_model.Port" Minimum="1" Maximum="65535" Clamp="true" Class="omni-u-w-100" />
+                                </OmniFormField>
+                            </OmniColumn>
+                            <OmniColumn Span="12" MediumSpan="6">
+                                <OmniFormField Label="@L["EmailSenderTlsMode"]" For="email-sender-tls" Class="omni-u-w-100">
+                                    <OmniDropDown Id="email-sender-tls" @bind-Value="_model.TlsMode" Options="@_tlsModes" Class="omni-u-w-100" />
+                                </OmniFormField>
+                            </OmniColumn>
+                            <OmniColumn Span="12" MediumSpan="6">
+                                <OmniFormField Label="@L["EmailSenderFromAddress"]" For="email-sender-from" Required="true" Class="omni-u-w-100">
+                                    <OmniTextBox Id="email-sender-from" Type="OmniTextBoxType.Email" @bind-Value="_model.FromAddress" Autocomplete="off" Class="omni-u-w-100" />
+                                    <ValidationMessage For="@(() => _model.FromAddress)" />
+                                </OmniFormField>
+                            </OmniColumn>
+                            <OmniColumn Span="12" MediumSpan="6">
+                                <OmniFormField Label="@L["EmailSenderUsername"]" For="email-sender-username" Description="@L["EmailSenderUsernameHint"]" Class="omni-u-w-100">
+                                    <OmniTextBox Id="email-sender-username" @bind-Value="_model.Username" Autocomplete="off" Class="omni-u-w-100" />
+                                </OmniFormField>
+                            </OmniColumn>
+                            <OmniColumn Span="12" MediumSpan="6">
+                                <OmniFormField Label="@L["EmailSenderPassword"]" For="email-sender-password"
+                                               Description="@(_settings.HasPassword ? L["EmailSenderPasswordKept"] : L["EmailSenderPasswordHint"])" Class="omni-u-w-100">
+                                    <OmniPassword Id="email-sender-password" @bind-Value="_model.Password" IgnorePasswordManagers="true" Class="omni-u-w-100" />
+                                </OmniFormField>
+                            </OmniColumn>
+                        </OmniRow>
+                    }
+
+                    <div>
+                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_saving" Class="email-sender-save">
+                            <OmniIcon Name="OmniIconName.Save" />
+                            <span>@L["Save"]</span>
+                        </OmniButton>
+                    </div>
+                </OmniStack>
+            </OmniTemplateForm>
+        </OmniStack>
+    </OmniSettingsSection>
+}

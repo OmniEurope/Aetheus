@@ -11,7 +11,7 @@ public partial class PipelineRunHierarchy
         PipelineStatus.Success => OmniTone.Success,
         PipelineStatus.Failed => OmniTone.Danger,
         PipelineStatus.Running => OmniTone.Accent,
-        PipelineStatus.Partial or PipelineStatus.RolledBack => OmniTone.Warning,
+        PipelineStatus.Partial or PipelineStatus.RolledBack or PipelineStatus.Rejected => OmniTone.Warning,
         _ => OmniTone.Neutral
     };
 

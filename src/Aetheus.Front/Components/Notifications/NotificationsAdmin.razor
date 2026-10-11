@@ -8,9 +8,9 @@
 </OmniPageHeader>
 
 @* Channels: the transports a rule can target. *@
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["NotificationChannels"]</OmniHeading>
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_channelSearch" @bind-Value:after="ResetChannelSearchAsync" />
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenChannelDialogAsync(null))"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
     </OmniStack>
@@ -51,9 +51,9 @@
 </AetheusDataGrid>
 
 @* Rules: event type -> channel mappings. *@
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Rules"]</OmniHeading>
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_ruleSearch" @bind-Value:after="ResetRuleSearchAsync" />
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenRuleDialogAsync(null))" Disabled="@(_channelTotalCount == 0)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
     </OmniStack>

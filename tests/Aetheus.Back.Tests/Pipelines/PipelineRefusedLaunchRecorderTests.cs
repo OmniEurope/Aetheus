@@ -60,4 +60,46 @@ public sealed class PipelineRefusedLaunchRecorderTests
         await _notifications.Received(1).RecordProjectEventAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task R1_3_TheSameRefusalAgain_CountsOnTheLastRefusedRun_WithoutANewRun()
+    {
+        // A frequent schedule refused for one reason left one failed run per passage.
+        var refused = new PipelineRun
+        {
+            Id = 40,
+            PipelineId = 1,
+            Status = PipelineStatus.Failed,
+            WarningsJson = System.Text.Json.JsonSerializer.Serialize(new[] { PipelineRefusedLaunchRecorder.BuildReason("Scheduler", "locked") })
+        };
+        _repo.GetLatestRunTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(refused);
+
+        await Build().RecordAsync(_pipeline, null, "Scheduler", "locked", null, TestContext.Current.CancellationToken);
+        await Build().RecordAsync(_pipeline, null, "Scheduler", "locked", null, TestContext.Current.CancellationToken);
+
+        await _repo.DidNotReceive().AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
+        var warnings = System.Text.Json.JsonSerializer.Deserialize<string[]>(refused.WarningsJson!)!;
+        Assert.Equal(2, warnings.Length);
+        Assert.StartsWith("Refused 3 times, last at ", warnings[1], StringComparison.Ordinal);
+        Assert.NotNull(refused.CompletedAt);
+        // Each refusal stays audited (R-522); the subscribers were told the first time only.
+        await _audit.Received(2).LogAsync("LaunchRefused", "PipelineRun", 40, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _notifications.DidNotReceive().RecordProjectEventAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R1_3_ADifferentRefusal_OrARunInBetween_StillAddsARun()
+    {
+        _repo.GetLatestRunTrackedAsync(1, Arg.Any<CancellationToken>()).Returns(new PipelineRun
+        {
+            Id = 41,
+            PipelineId = 1,
+            Status = PipelineStatus.Failed,
+            WarningsJson = System.Text.Json.JsonSerializer.Serialize(new[] { PipelineRefusedLaunchRecorder.BuildReason("Scheduler", "locked") })
+        });
+
+        await Build().RecordAsync(_pipeline, null, "Scheduler", "another reason", null, TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
+    }
 }

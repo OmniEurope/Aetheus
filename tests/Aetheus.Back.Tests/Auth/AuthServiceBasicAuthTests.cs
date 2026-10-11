@@ -31,7 +31,7 @@ public class AuthServiceBasicAuthTests
             new JwtOptions { SigningKey = "aetheus-dev-key-minimum-32-bytes!!" },
             _cache, Substitute.For<IOrganizationService>(),
             Substitute.For<ITotpService>(), TimeProvider.System,
-            Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), Substitute.For<ILogger<AuthService>>());
+            Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(), Substitute.For<ILogger<AuthService>>());
     }
 
     private static User UserWithPassword(string password, int failedCount = 0, DateTime? lockoutEnd = null) =>

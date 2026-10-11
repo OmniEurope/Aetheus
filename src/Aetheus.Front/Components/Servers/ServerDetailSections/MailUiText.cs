@@ -28,6 +28,7 @@ public static class MailUiText
         ["multiple-records"] = "MailDetailMultipleRecords",
         ["permissive-all"] = "MailDetailPermissiveAll",
         ["no-sender-mechanism"] = "MailDetailNoSenderMechanism",
+        ["server-not-authorized"] = "MailDetailServerNotAuthorized",
         ["key-mismatch"] = "MailDetailKeyMismatch",
         ["key-not-compared"] = "MailDetailKeyNotCompared",
         ["self-signed"] = "MailDetailSelfSigned",

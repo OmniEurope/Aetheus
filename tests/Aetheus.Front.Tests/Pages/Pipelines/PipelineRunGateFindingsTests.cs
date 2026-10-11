@@ -2,6 +2,7 @@
 using Aetheus.Front.Components.Analysis;
 using Aetheus.Front.Components.Pipelines;
 using Aetheus.Front.Tests.Architecture;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +36,34 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
     }
 
     [Fact]
+    public void R2_138_EveryCountedRuleAlert_IsNamedUnderTheTiles()
+    {
+        // Nightly 2653 counted 4 violations and named none: cycles, complex methods, a new medium finding.
+        var gate = new AnalysisRunGateDto
+        {
+            PipelineRunId = 2653,
+            Violations =
+            [
+                new AnalysisRunGateViolationDto { PolicyKey = "quality.architecture.cycles", Outcome = "Warn", TargetKind = "metric", TargetKey = "architecture.cycles.type", ObservedValue = "40", Operator = "GreaterThan", Threshold = "0" },
+                new AnalysisRunGateViolationDto { PolicyKey = "system.quality.new-medium.code", Outcome = "Block", TargetKind = "finding", TargetKey = "no-control-regex:dfae5377", ObservedValue = "Medium", Operator = "GreaterThanOrEqual", Threshold = "Medium" }
+            ]
+        };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        var tile = cut.FindAll(".analysis-run-gate-metrics > .omni-stat-tile")
+            .Single(item => item.QuerySelector(".omni-stat-tile__label")!.TextContent.Trim() == "AnalysisGateViolations");
+        Assert.Equal("2", tile.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim());
+        var lines = cut.FindAll(".analysis-run-gate-violation").Select(line => line.TextContent.Trim()).ToList();
+        Assert.Equal(2, lines.Count);
+        Assert.Contains("quality.architecture.cycles: architecture.cycles.type = 40 (> 0)", lines[0], StringComparison.Ordinal);
+        Assert.Contains("AnalysisGateViolationWarn", lines[0], StringComparison.Ordinal);
+        Assert.Contains("system.quality.new-medium.code: no-control-regex = Medium (≥ Medium)", lines[1], StringComparison.Ordinal);
+        Assert.Contains("AnalysisGateViolationBlock", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void R2_052_AGradeWithoutFindings_SaysWhichMeasureMadeIt()
     {
         // Run 2491: a B over "0 findings". The B came from a metric measure, now listed with its value.
@@ -63,7 +92,9 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
 
         var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
 
-        Assert.Contains("AnalysisLimitingDomain: AnalysisCodeQualityAndTests", cut.Find(".analysis-grade-limiting").TextContent, StringComparison.Ordinal);
+        // Recette R2-139: no "limiting domain" sentence; the domain that sets the B has a bold title.
+        Assert.DoesNotContain("AnalysisLimitingDomain", cut.Markup, StringComparison.Ordinal);
+        Assert.Equal("AnalysisCodeQualityAndTests", cut.Find(".analysis-grade-domain-limiting").TextContent.Trim());
         var measure = Assert.Single(cut.FindAll(".analysis-grade-measure"));
         Assert.Contains("AnalysisTestedLines", measure.TextContent, StringComparison.Ordinal);
         Assert.Contains("72.4 %", measure.TextContent.Replace(',', '.'), StringComparison.Ordinal);
@@ -194,12 +225,13 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
             .Add(component => component.ProjectId, 7)
             .Add(component => component.ProjectName, "Aetheus"));
 
-        // The four gate figures are OE key-figure tiles (value over a wrapping label), in this order.
+        // The gate figures are OE key-figure tiles (value over a wrapping label), in this order. Recette
+        // R2-137: no report count; R2-138: no rule alerts tile when there is no alert to list.
         var tiles = cut.FindAll(".analysis-run-gate-metrics > .omni-stat-tile");
-        Assert.Equal(4, tiles.Count);
-        Assert.Equal(new[] { "2", "0", "0", "0" }, tiles.Select(tile => tile.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim()));
+        Assert.Equal(2, tiles.Count);
+        Assert.Equal(new[] { "2", "0" }, tiles.Select(tile => tile.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim()));
         Assert.Equal(
-            new[] { "AnalysisGateFindings", "AnalysisGateNewFindings", "AnalysisReports", "AnalysisGateViolations" },
+            new[] { "AnalysisGateFindings", "AnalysisGateNewFindings" },
             tiles.Select(tile => tile.QuerySelector(".omni-stat-tile__label")!.TextContent.Trim()));
         Assert.Contains("aetheus-grid-fullheight", cut.Find(".analysis-run-findings-grid").ClassList);
 
@@ -377,5 +409,26 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         Assert.Contains("idFrom=100", request, StringComparison.Ordinal);
         Assert.Contains("idNot=105", request, StringComparison.Ordinal);
         Assert.DoesNotContain("idTo=", request, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindingRowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        // The columns come from AnalysisFindingColumns, shared with the project quality page.
+        var gate = new AnalysisRunGateDto
+        {
+            PipelineRunId = 2472,
+            FindingCount = 1,
+            Findings = [new AnalysisRunGateFindingDto { FindingId = 1094, Title = "Open finding", Status = AnalysisFindingStatus.Open }]
+        };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The identifier link, the title link and the open button.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);
     }
 }

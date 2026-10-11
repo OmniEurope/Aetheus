@@ -35,7 +35,7 @@
         <OmniDataGridColumn Frozen="true" TItem="VaultDto" Property="Name" Title="@L["Name"]" MinWidth="10rem" Filterable="true" >
             <Template Context="vault">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                    <a href="/vaults/@vault.Id" class="pipeline-name-link">@vault.Name</a>
+                    <a href="/vaults/@vault.Id" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@vault.Name</a>
                     @if (!Permissions.CanWrite(ResourceType.Vault, vault.Id))
                     {
                         <OmniIcon Name="OmniIconName.Eye" Class="omni-u-text-muted icon-xs-app" title="@L["Read"]" />

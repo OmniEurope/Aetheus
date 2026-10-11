@@ -63,6 +63,37 @@ public class ServerPortsentryRkhunterTests : BunitContext
         Assert.Contains("v1.2", cut.Markup);
     }
 
+    // SITE-FUNC-PORTSENTRY-001: the agent sends DateTime.MinValue when the blocked file has no date; the row
+    // shows a dash, never "1/1/0001", and a real date stays shown.
+    [Fact]
+    public void Portsentry_BlockedRow_WithoutADate_ShowsADash()
+    {
+        var blockedAt = new DateTime(2026, 9, 1, 8, 30, 0, DateTimeKind.Utc);
+        _handler.SetJsonResponse("api/servers/7/portsentry/whitelist", new PaginatedResult<PortsentryWhitelistIpDto>());
+        _handler.SetJsonResponse("api/servers/7/portsentry/blocked", new PaginatedResult<PortsentryBlockedIpDto>
+        {
+            Items =
+            [
+                new() { IpAddress = "203.0.113.66", Protocol = "TCP", Reason = "Blocked by PortSentry" },
+                new() { IpAddress = "203.0.113.67", Protocol = "TCP", BlockedAt = blockedAt, Reason = "Blocked by PortSentry" }
+            ],
+            TotalCount = 2
+        });
+
+        var cut = Render<ServerPortsentrySection>(p => p
+            .Add(x => x.ServerId, 7)
+            .Add(x => x.Ps, new PortsentryDataDto { IsInstalled = true, IsRunning = true, BlockedCount = 2 }));
+
+        cut.WaitForAssertion(() =>
+        {
+            var undated = cut.FindAll("tr").Single(row => row.TextContent.Contains("203.0.113.66", StringComparison.Ordinal));
+            var dated = cut.FindAll("tr").Single(row => row.TextContent.Contains("203.0.113.67", StringComparison.Ordinal));
+            Assert.Contains(undated.QuerySelectorAll("td"), cell => cell.TextContent.Trim() == "-");
+            Assert.DoesNotContain("0001", undated.TextContent, StringComparison.Ordinal);
+            Assert.Contains(blockedAt.ToLocalTime().ToString("g"), dated.TextContent, StringComparison.Ordinal);
+        });
+    }
+
     [Fact]
     public void Portsentry_BlockedCountBadgeStyle_ForZeroShowsSuccess()
     {

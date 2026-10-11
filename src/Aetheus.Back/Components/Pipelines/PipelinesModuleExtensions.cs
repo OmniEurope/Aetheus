@@ -53,6 +53,7 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineRunPreflightService, PipelineRunPreflightService>();
         services.AddScoped<IPipelineSetupReadinessService, PipelineSetupReadinessService>();
         services.AddScoped<IPipelineRequirementsProvisioner, PipelineRequirementsProvisioner>();
+        services.AddScoped<IPipelineProjectCopyService, PipelineProjectCopyService>();
         services.AddScoped<IRunStageBaselineService, RunStageBaselineService>();
         services.AddScoped<IPipelinePortRegistryGuard, PipelinePortRegistryGuard>();
         services.AddScoped<IPipelineRunDefinitionParser, PipelineRunDefinitionParser>();

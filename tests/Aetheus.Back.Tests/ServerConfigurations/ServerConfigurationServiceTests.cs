@@ -3,6 +3,7 @@ using Aetheus.Back.Components.ServerConfigurations;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
@@ -539,6 +540,34 @@ public class ServerConfigurationServiceTests : IDisposable
         var task = await _db.Tasks.FirstAsync(t => t.ServerId == server.Id, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Contains("docker pull redis:7", task.Command);
         Assert.Equal(TaskExecutionStatus.Pending, task.Status);
+    }
+
+    [Fact]
+    public async Task DeployConfigurationAsync_OfflineAgent_IsRefused_AndQueuesNothing()
+    {
+        // SITE-OFFLINE-001: the deploy queues through TaskQueuePersistence, so the task service's
+        // offline refusal stops it before a task is persisted or the server metadata is saved.
+        var server = await SeedServerAsync(s => s.Status = ServerStatus.Offline);
+        var taskService = NSubstitute.Substitute.For<Aetheus.Back.Components.Tasks.ITaskService>();
+        taskService.EnsureServerOnlineAsync(server.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new Aetheus.Back.Exceptions.ConflictException("offline")));
+        var sut = new ServerConfigurationService(new ServerConfigurationRepository(_db), TimeProvider.System, taskService);
+        const string yaml = """
+            server:
+              name: renamed-server
+              type: Docker
+            docker:
+              images:
+                - redis:7
+            """;
+
+        await Assert.ThrowsAsync<Aetheus.Back.Exceptions.ConflictException>(() =>
+            sut.DeployConfigurationAsync(server.Id, yaml, ct: TestContext.Current.CancellationToken));
+
+        _db.ChangeTracker.Clear();
+        Assert.False(await _db.Tasks.AnyAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal("test-server", (await _db.Servers.SingleAsync(TestContext.Current.CancellationToken)).Name);
+        await taskService.DidNotReceiveWithAnyArgs().NotifyTaskQueuedAsync(default!, default, TestContext.Current.CancellationToken);
     }
 
     [Fact]

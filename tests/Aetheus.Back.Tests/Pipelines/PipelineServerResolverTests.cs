@@ -229,8 +229,10 @@ public sealed class PipelineServerResolverTests : IDisposable
         AddEnvironment(201, "production", projectId: 10, serverIds: 2);
         await SaveAsync();
 
-        Assert.Equal(1, (await _resolver.FindOnlineServerInEnvironmentAsync("staging", ct: Ct))!.Id);
-        Assert.Null(await _resolver.FindOnlineServerInEnvironmentAsync("absent", ct: Ct));
+        Assert.Equal(1, (await _resolver.FindOnlineServerInEnvironmentAsync("staging", projectId: 10, ct: Ct))!.Id);
+        // Neighbour of BACK-018: another project does not reach project 10's staging.
+        Assert.Null(await _resolver.FindOnlineServerInEnvironmentAsync("staging", projectId: 11, ct: Ct));
+        Assert.Null(await _resolver.FindOnlineServerInEnvironmentAsync("absent", projectId: null, ct: Ct));
     }
 
     [Fact]
@@ -242,7 +244,7 @@ public sealed class PipelineServerResolverTests : IDisposable
         await SaveAsync();
 
         Assert.Equal(2, (await _resolver.FindOnlineServerInEnvironmentInOrganizationAsync(
-            "staging", OsType.Unknown, 8, Ct))!.Id);
+            "staging", OsType.Unknown, 8, 10, Ct))!.Id);
     }
 
     [Fact]
@@ -254,9 +256,9 @@ public sealed class PipelineServerResolverTests : IDisposable
         await SaveAsync();
 
         Assert.Equal([1], await _resolver.FindServerIdsInPoolAsync("builders", Ct));
-        Assert.Equal([1], await _resolver.FindServerIdsInEnvironmentAsync("staging", Ct));
+        Assert.Equal([1], await _resolver.FindServerIdsInEnvironmentAsync("staging", 10, Ct));
         Assert.Empty(await _resolver.FindServerIdsInPoolAsync("absent", Ct));
-        Assert.Empty(await _resolver.FindServerIdsInEnvironmentAsync("absent", Ct));
+        Assert.Empty(await _resolver.FindServerIdsInEnvironmentAsync("absent", null, Ct));
     }
 
     // ---------- direct id and affinity ----------
@@ -309,7 +311,7 @@ public sealed class PipelineServerResolverTests : IDisposable
         await SaveAsync();
 
         var server = await _resolver.FindOnlineDeployTargetAsync(
-            null, null, null, OsType.Unknown, 7, Ct);
+            null, null, null, OsType.Unknown, 7, null, Ct);
 
         Assert.Equal(1, server!.Id);
     }
@@ -323,7 +325,7 @@ public sealed class PipelineServerResolverTests : IDisposable
         await SaveAsync();
 
         var server = await _resolver.FindOnlineDeployTargetAsync(
-            null, null, "default", OsType.Unknown, null, Ct);
+            null, null, "default", OsType.Unknown, null, null, Ct);
 
         Assert.Equal(2, server!.Id);
     }
@@ -339,11 +341,11 @@ public sealed class PipelineServerResolverTests : IDisposable
         await SaveAsync();
 
         Assert.Equal(1, (await _resolver.FindOnlineDeployTargetAsync(
-            "deployers", null, null, OsType.Unknown, null, Ct))!.Id);
+            "deployers", null, null, OsType.Unknown, null, null, Ct))!.Id);
         Assert.Equal(2, (await _resolver.FindOnlineDeployTargetAsync(
-            null, "staging", null, OsType.Unknown, null, Ct))!.Id);
+            null, "staging", null, OsType.Unknown, null, 10, Ct))!.Id);
         Assert.Equal(3, (await _resolver.FindOnlineDeployTargetAsync(
-            null, null, "named-host", OsType.Unknown, null, Ct))!.Id);
+            null, null, "named-host", OsType.Unknown, null, null, Ct))!.Id);
     }
 
     [Theory]
@@ -357,7 +359,7 @@ public sealed class PipelineServerResolverTests : IDisposable
         await SaveAsync();
 
         Assert.Null(await _resolver.FindOnlineDeployTargetAsync(
-            pool, environment, agent, OsType.Unknown, null, Ct));
+            pool, environment, agent, OsType.Unknown, null, null, Ct));
     }
 
     [Fact]
@@ -368,7 +370,7 @@ public sealed class PipelineServerResolverTests : IDisposable
         await SaveAsync();
 
         Assert.Null(await _resolver.FindOnlineDeployTargetAsync(
-            null, null, null, OsType.Unknown, null, Ct));
+            null, null, null, OsType.Unknown, null, null, Ct));
     }
 
     [Fact]

@@ -8,6 +8,7 @@ using Aetheus.Agent.Core.Configuration;
 using Aetheus.Agent.Core.Executors;
 using Aetheus.Agent.Core.Operations;
 using Aetheus.Agent.Core.Services;
+using Aetheus.Tests.Shared;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -410,11 +411,9 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
         Assert.True(process.ExitCode == 0, standardError);
     }
 
-    [Fact]
+    [PlatformFact("windows")]
     public async Task WindowsUpdater_ValidPayload_ReplacesBinariesAndPreservesConfiguration()
     {
-        if (!OperatingSystem.IsWindows()) return;
-
         var stagingRoot = Directory.CreateDirectory(Path.Combine(_workDir, "windows-update-success"));
         var sourceDir = Directory.CreateDirectory(Path.Combine(stagingRoot.FullName, "source"));
         var installDir = Directory.CreateDirectory(Path.Combine(_workDir, "windows-install-success"));
@@ -708,11 +707,9 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
         }
     }
 
-    [Fact]
+    [PlatformFact("windows")]
     public async Task WindowsUpdater_NoConfirmingHeartbeat_RestoresPreviousBinaries()
     {
-        if (!OperatingSystem.IsWindows()) return;
-
         var stagingRoot = Directory.CreateDirectory(Path.Combine(_workDir, "windows-update-timeout"));
         var sourceDir = Directory.CreateDirectory(Path.Combine(stagingRoot.FullName, "source"));
         var installDir = Directory.CreateDirectory(Path.Combine(_workDir, "windows-install-timeout"));
@@ -772,11 +769,9 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
         Assert.False(File.Exists(marker));
     }
 
-    [Fact]
+    [PlatformFact("windows")]
     public async Task WindowsUpdater_PartialCopyFailureRestoresPreviousBinaries()
     {
-        if (!OperatingSystem.IsWindows()) return;
-
         var stagingRoot = Directory.CreateDirectory(Path.Combine(_workDir, "windows-update-runtime"));
         var sourceDir = Directory.CreateDirectory(Path.Combine(stagingRoot.FullName, "source"));
         var installDir = Directory.CreateDirectory(Path.Combine(_workDir, "windows-install"));

@@ -8,6 +8,14 @@ public partial class ServerRkhunterSection : IAsyncDisposable
     [Parameter] public RkhunterDataDto Rk { get; set; } = new();
     [Parameter] public EventCallback OnRefreshRequested { get; set; }
 
+    // SITE-OFFLINE-001: the host page passes the RKHunter data only; the server (and its agent's
+    // presence) comes from the loader the server detail layout cascades to every section.
+    [CascadingParameter(Name = "ServerLoader")] public ServerDetailLoader? Loader { get; set; }
+
+    private ServerDetailDto? AgentServer => Loader?.Server;
+    private bool AgentOffline => AgentServer is { } server && AgentOfflineGuard.IsOffline(server);
+    private bool BlockedByOfflineAgent() => AgentServer is { } server && AgentOfflineGuard.Blocks(server, Toast);
+
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -65,6 +73,7 @@ public partial class ServerRkhunterSection : IAsyncDisposable
 
     private async Task ExecuteActionAsync(RkhunterAction action)
     {
+        if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
         var success = await Api.Security.ExecuteRkhunterActionAsync(ServerId, new RkhunterActionRequest { Action = action });
         _actionRunning = false;
@@ -79,6 +88,7 @@ public partial class ServerRkhunterSection : IAsyncDisposable
 
     private async Task SetupAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var request = new RkhunterSetupRequest
         {
             MailOnWarning = _setupMailOnWarning?.Trim() ?? string.Empty
@@ -95,6 +105,7 @@ public partial class ServerRkhunterSection : IAsyncDisposable
 
     private async Task OpenSetupDialogAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var result = await Dialog.OpenAsync<ServerSetupDialog>(
             L["RkhunterSetup"].Value,
             new Dictionary<string, object?>
@@ -110,6 +121,7 @@ public partial class ServerRkhunterSection : IAsyncDisposable
 
     private async Task GetLogsAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         var success = await Api.Security.GetRkhunterLogsAsync(ServerId, new RkhunterLogRequest());
         if (success)
             Toast.Success("TaskCreated");

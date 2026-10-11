@@ -26,6 +26,13 @@ public partial class DockerImagesTab
     [Parameter] public bool CanAdmin { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<DockerImageDto> Images { get; set; } = [];
 
+    // SITE-OFFLINE-001: every action of this tab queues a task only the agent can claim. The parent passes
+    // no server, so its agent's presence comes from the loader the server detail layout cascades.
+    [CascadingParameter(Name = "ServerLoader")] public ServerDetailLoader? Loader { get; set; }
+
+    private bool AgentOffline => Loader?.Server is { } server && AgentOfflineGuard.IsOffline(server);
+    private bool BlockedByOfflineAgent() => Loader?.Server is { } server && AgentOfflineGuard.Blocks(server, Toast);
+
     private string _imageSearch = string.Empty;
 
     // Recette R-227: each heartbeat brings a new image list; images that were not there read bold.
@@ -57,6 +64,7 @@ public partial class DockerImagesTab
 
     private async Task PullImageAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         if (string.IsNullOrWhiteSpace(_pullImageName)) return;
         _imagePulling = true;
         var request = new DockerPullImageRequest { Image = _pullImageName.Trim() };
@@ -75,6 +83,7 @@ public partial class DockerImagesTab
 
     private async Task ConfirmRemoveImageAsync(DockerImageDto image)
     {
+        if (BlockedByOfflineAgent()) return;
         var label = string.IsNullOrWhiteSpace(image.Repository)
             ? image.ImageId[..Math.Min(12, image.ImageId.Length)]
             : $"{image.Repository}:{image.Tag}";
@@ -88,6 +97,7 @@ public partial class DockerImagesTab
 
     private async Task RemoveImageAsync(string imageId)
     {
+        if (BlockedByOfflineAgent()) return;
         var success = await Api.ServerTools.RemoveDockerImageAsync(ServerId, imageId);
         if (success)
         {
@@ -101,6 +111,7 @@ public partial class DockerImagesTab
 
     private async Task BuildImageAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         if (string.IsNullOrWhiteSpace(_buildImageTag) || string.IsNullOrWhiteSpace(_buildDockerfileContent)) return;
         _buildingImage = true;
         var request = new DockerBuildRequest

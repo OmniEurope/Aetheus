@@ -9,6 +9,10 @@ public interface IMailDnsResolver
 {
     Task<IReadOnlyList<string>> TxtAsync(string name, CancellationToken ct = default);
     Task<IReadOnlyList<string>> MxAsync(string name, CancellationToken ct = default);
+
+    /// <summary>Recette R1-14: the remaining time-to-live, in seconds, of the MX answer the resolver gives for
+    /// <paramref name="name"/> (the shortest of its records), or null when there is no MX answer.</summary>
+    Task<int?> MxTimeToLiveAsync(string name, CancellationToken ct = default);
     Task<IReadOnlyList<string>> AddressesAsync(string host, CancellationToken ct = default);
     Task<IReadOnlyList<string>> PtrAsync(string address, CancellationToken ct = default);
 }

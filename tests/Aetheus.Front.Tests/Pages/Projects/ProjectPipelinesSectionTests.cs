@@ -18,6 +18,8 @@ public class ProjectPipelinesSectionTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         _handler.SetJsonResponse("api/pipelines/favorites", new PipelineFavoritesDto());
         _handler.SetJsonResponse("api/pipelines/fleet", new PaginatedResult<PipelineFleetItemDto>());
+        // Recette R1-34: the section says where the definitions are kept, from the project's repositories.
+        _handler.SetPaginatedJsonResponse("api/git/repos", Array.Empty<GitLightRepoDto>());
     }
 
     [Fact]

@@ -22,12 +22,21 @@ public interface IGitLightRepository
     Task<GitInternalRepo?> FindByIdWithProjectAsync(int id, CancellationToken ct = default);
     Task<GitInternalRepo?> FindBySlugAsync(int projectId, string slug, CancellationToken ct = default);
     Task<string?> GetProjectDefaultBranchAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>Recette R1-32: where the project's own source lives, read from the project itself: its
+    /// repository address and the external connection it is attached through. Null when the project
+    /// does not exist.</summary>
+    Task<ProjectRepositorySource?> GetProjectRepositorySourceAsync(int projectId, CancellationToken ct = default);
     Task<bool> ProjectExistsAsync(int projectId, CancellationToken ct = default);
     Task<List<GitInternalRepo>> GetAllAsync(CancellationToken ct = default);
     Task AddAsync(GitInternalRepo entity, CancellationToken ct = default);
     Task RemoveAsync(GitInternalRepo entity, CancellationToken ct = default);
     Task<int> GetNextPrNumberAsync(int gitConnectionId, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    /// <summary>Recette R1-21: marks the repository written by a commit of Aetheus (not empty, last
+    /// update stamped) in one write of that row alone. Returns its project id, null when it is gone.</summary>
+    Task<int?> MarkCommittedAsync(int id, DateTime committedAt, CancellationToken ct = default);
 
     // Branch Protection
     Task<List<BranchProtectionRule>> GetBranchProtectionRulesAsync(int repoId, CancellationToken ct = default);

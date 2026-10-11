@@ -62,6 +62,8 @@ public class MainLayoutRenderTests : BunitContext
 
         // Wire ApiClient
         var testHandler = new BunitTestHelper.TestHandler();
+        // Recette R1-37: the logout tells the server first.
+        testHandler.SetResponse(HttpMethod.Post, "api/auth/logout", System.Net.HttpStatusCode.NoContent);
         var apiHttp = new HttpClient(testHandler) { BaseAddress = new Uri("http://localhost/") };
         var api = new ApiClient(apiHttp);
         SetProperty(instance, "Api", api);

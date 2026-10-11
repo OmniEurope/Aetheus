@@ -151,7 +151,7 @@ public sealed class ServerAndIdentityGridColumnsTests : IDisposable
     }
 
     [Fact]
-    public void Roles_ListAndUsersColumns_Filter_OnTheProjectedRows()
+    public void Roles_ListColumns_FilterTheProjectedRows_AndUsersColumns_FilterTheUserEntity()
     {
         var roles = new[]
         {
@@ -160,13 +160,13 @@ public sealed class ServerAndIdentityGridColumnsTests : IDisposable
         }.AsQueryable();
         var members = new[]
         {
-            new RoleUserDto(1, "alice", "alice@example.test", true),
-            new RoleUserDto(2, "bob", null, false)
+            new User { Id = 1, Username = "alice", Email = "alice@example.test", IsActive = true },
+            new User { Id = 2, Username = "bob", Email = null, IsActive = false }
         }.AsQueryable();
 
         Assert.Equal([2], RoleListQuery.Columns.ApplyFilters(roles, [F("UserCount", GridFilterOperator.GreaterThan, "2")]).Select(r => r.Id));
         Assert.Equal([2], RoleListQuery.Columns.ApplyFilters(roles, [F("Description", GridFilterOperator.Contains, "read")]).Select(r => r.Id));
-        Assert.Equal([2], RoleListQuery.UserColumns.ApplyFilters(members, [F("IsActive", GridFilterOperator.Equals, bool.FalseString)]).Select(u => u.UserId));
+        Assert.Equal([2], RoleListQuery.UserColumns.ApplyFilters(members, [F("IsActive", GridFilterOperator.Equals, bool.FalseString)]).Select(u => u.Id));
     }
 
     [Fact]

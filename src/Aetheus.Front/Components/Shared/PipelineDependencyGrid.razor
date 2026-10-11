@@ -45,7 +45,7 @@
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="PipelineDependencyDto" Property="Name" Title="@L["Pipeline"]" MinWidth="11rem" Filterable="true">
             <Template Context="pipeline">
-                <a href="@PipelineHref(pipeline.Id)" class="pipeline-name-link" @onclick:stopPropagation="true">@pipeline.Name</a>
+                <a href="@PipelineHref(pipeline.Id)" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@pipeline.Name</a>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PipelineDependencyDto" Property="ProjectName" Title="@L["Project"]" Width="10rem" Filterable="true"
@@ -82,7 +82,7 @@
                     @if (fleetItem.TemplateId is { } templateId)
                     {
                         <a href="@($"/templates/{templateId}")" class="pipeline-template-link"
-                            title="@fleetItem.TemplateName" @onclick:stopPropagation="true">@fleetItem.TemplateName</a>
+                            title="@fleetItem.TemplateName" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@fleetItem.TemplateName</a>
                     }
                     else if (!string.IsNullOrWhiteSpace(fleetItem.TemplateName))
                     {
@@ -128,7 +128,7 @@
                    and the model update move into the row's "..." menu. The star is a ghost icon button
                    (R-410). Run is blue on every row: a STD-BTN exception chosen by the user (R-414,
                    2026-09-28), where the importance rule keeps a repeated row action discreet. *@
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End" Class="pipeline-row-actions" @onclick:stopPropagation="true">
+                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End" Class="pipeline-row-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => SetFavorite(pipeline.Id, !IsFavorite(pipeline.Id)))" Disabled="@PendingFavoritePipelineIds.Contains(pipeline.Id)" Class="@(IsFavorite(pipeline.Id) ? "pipeline-favorite-button active" : "pipeline-favorite-button")" title="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])" Label="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])"><OmniIcon Name="@MaterialIconMap.Resolve((IsFavorite(pipeline.Id) ? "star" : "star_border"))" /></OmniButton>
                     <OmniSplitButton Text="@L["Run"]" OnClick="@(() => RunPipeline(pipeline.Id, null))"
                         aria-label="@L["RunPipelineAction"]" title="@L["RunPipelineAction"]" Disabled="@(!CanWrite)" Variant="OmniButtonVariant.Primary"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>

@@ -96,7 +96,8 @@ public partial class PipelineTemplates : IAsyncDisposable
     private void CreateTemplate() => Nav.NavigateTo("/templates/new");
     private void EditTemplate(PipelineTemplateSummaryDto template) => Nav.NavigateTo($"/templates/{template.Id}");
     private void ViewHistory(PipelineTemplateSummaryDto template) => Nav.NavigateTo($"/templates/{template.Id}/versions");
-    private void UseTemplate(PipelineTemplateSummaryDto template) => Nav.NavigateTo($"/pipelines/setup?templateId={template.Id}");
+    private void UseTemplate(PipelineTemplateSummaryDto template) =>
+        Nav.NavigateTo(PipelineTemplateUseRoute.For(template.Id, template.Name));
 
     private async Task DeleteTemplateAsync(PipelineTemplateSummaryDto template)
     {

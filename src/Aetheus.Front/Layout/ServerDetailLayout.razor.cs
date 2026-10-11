@@ -136,6 +136,11 @@ public partial class ServerDetailLayout : IDisposable
         await new AgentUpdateRequester(Api, Dialog, Toast, L).RequestAsync(Loader.Server);
     }
 
+    // Recette R1-42: the progress card heard nothing for a while (an event lost while the tab slept);
+    // re-read the persisted request, whose status the card then applies.
+    private Task ReloadAgentUpdateAsync() =>
+        Loader.Server is null ? Task.CompletedTask : Loader.ReloadAgentUpdateAsync(Loader.Server.Id, CancellationToken.None);
+
     private async Task OnRetireServer()
     {
         if (Loader.Server is null || _deleteBusy) return;

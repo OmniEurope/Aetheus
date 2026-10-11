@@ -124,7 +124,7 @@ internal sealed class GitRepositoryDetailActions(
         BranchProtectionRuleDto rule,
         bool? preventDeletion,
         bool? preventForcePush,
-        bool? requirePullRequest)
+        BranchProtectionLevel? protectionLevel)
     {
         var result = await api.Git.UpdateGitBranchProtectionRuleAsync(
             repositoryId,
@@ -133,7 +133,7 @@ internal sealed class GitRepositoryDetailActions(
             {
                 PreventDeletion = preventDeletion ?? rule.PreventDeletion,
                 PreventForcePush = preventForcePush ?? rule.PreventForcePush,
-                RequirePullRequest = requirePullRequest ?? rule.RequirePullRequest
+                ProtectionLevel = protectionLevel ?? rule.ProtectionLevel
             });
         return result is not null;
     }

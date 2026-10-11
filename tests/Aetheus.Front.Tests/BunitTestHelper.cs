@@ -43,8 +43,13 @@ internal static class BunitTestHelper
 
         var handler = new TestHandler();
         handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto());
+        // Recette R1-37: every logout tells the server first; it answers 204.
+        handler.SetResponse(HttpMethod.Post, "api/auth/logout", HttpStatusCode.NoContent);
         // PLAN-003 lot 30: no pipeline requirement is unmet unless a test says otherwise.
         handler.SetJsonResponse("api/pipelines/setup/unmet", new List<UnmetRequirementDto>());
+        // Recette R1-28: nothing stops a project's or a pipeline's runs unless a test says otherwise.
+        handler.SetJsonResponse("api/pipelines/setup/project-readiness", new PipelineSetupReadinessDto());
+        handler.SetJsonResponse("api/pipelines/setup/pipeline-readiness", new PipelineSetupReadinessDto());
         // Recette R-295: external repositories are always on; no project has one unless a test says so.
         handler.SetResponse("api/external-repos/project/", System.Net.HttpStatusCode.NotFound);
         // PLAN-003 lot 20: a run with no successful predecessor has no usual durations.
@@ -132,6 +137,7 @@ internal static class BunitTestHelper
         ctx.Services.AddScoped<PipelineRunGate>();
         ctx.Services.AddScoped<PipelineRunDialogCoordinator>();
         ctx.Services.AddScoped<PipelineImportState>();
+        ctx.Services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineSetupProvisionState>();
         ctx.Services.AddSingleton(new HelpService(http));
 
         var httpFactoryMock = Substitute.For<IHttpClientFactory>();

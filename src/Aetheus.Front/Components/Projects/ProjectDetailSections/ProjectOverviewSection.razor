@@ -81,11 +81,12 @@ else
                                         @* Recette R2-051: the status and the grade were one space apart. *@
                                         <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="project-status-grade">
                                         <OmniBadge Fill="OmniFill.Solid" Tone="@(Project.Status == ProjectStatus.Active ? OmniTone.Success : OmniTone.Neutral)">@L[Project.Status.ToString()]</OmniBadge>
-                                        @* Recette R2-024: the grade of the latest candidate run, which it opens; the
+                                        @* Recette R2-024: the grade of the latest candidate run, which it opens on its Gate tab
+                                           (R2-147: the cause of an F, its blocking tests and their logs, in one click); the
                                            quality page when no run has been graded yet. *@
                                         @if (Project.LatestGateGradeRunId is { } gradeRunId)
                                         {
-                                            <a href="@($"/pipelines/runs/{gradeRunId}?projectId={Project.Id}")" class="project-grade-run-link"
+                                            <a href="@($"/pipelines/runs/{gradeRunId}?projectId={Project.Id}&tab=gate")" class="project-grade-run-link"
                                                 title="@string.Format(L["ProjectGradeLatestCandidate"], gradeRunId)">
                                                 <GradeBadge Value="@Project.LatestGateGrade" />
                                             </a>
@@ -150,16 +151,13 @@ else
                                     {
                                         <OmniDescriptionItem Label="@L["RepositoryUrl"]">
                                             <Icon><OmniIcon Name="OmniIconName.Link" /></Icon>
+                                            @* Recette R1-27: the clone address, read-only in OE's copyable field, so a long
+                                               URL stays inside the card (the field scrolls, the page does not) and the Copy
+                                               button welded to its end puts it on the clipboard. *@
                                             <ChildContent>
-                                                @if (RepositoryDisplayUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                                                {
-                                                    <a class="overview-break-anywhere pipeline-name-link" href="@RepositoryDisplayUrl"
-                                                       target="_blank" rel="noopener noreferrer">@RepositoryDisplayUrl</a>
-                                                }
-                                                else
-                                                {
-                                                    <span class="overview-break-anywhere">@RepositoryDisplayUrl</span>
-                                                }
+                                                <OmniTextBox Value="@RepositoryDisplayUrl" ReadOnly="true" Copyable="true"
+                                                             Id="project-overview-clone-url" ValueExpression="@(() => RepositoryDisplayUrl)"
+                                                             aria-label="@L["RepositoryUrl"]" Class="overview-clone-url" />
                                             </ChildContent>
                                         </OmniDescriptionItem>
                                     }
@@ -251,7 +249,7 @@ else
                                 <Columns>
                                     <OmniDataGridColumn Frozen="true" TItem="RecentCommitView" Property="ShortSha" Title="@L["Commit"]" Width="6rem" Filterable="true" >
                                         <Template Context="commit">
-                                            <a href="@CommitHref(commit)" title="@commit.RepositoryName" @onclick:stopPropagation="true">@commit.ShortSha</a>
+                                            <a href="@CommitHref(commit)" title="@commit.RepositoryName" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@commit.ShortSha</a>
                                         </Template>
                                     </OmniDataGridColumn>
                                     <OmniDataGridColumn TItem="RecentCommitView" Property="BranchName" Title="@L["Branch"]" Width="5.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />

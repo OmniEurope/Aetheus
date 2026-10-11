@@ -22,6 +22,8 @@ public sealed class ForcedPasswordChangeMiddleware(RequestDelegate next)
         ("POST", "/api/auth/renew"),
         ("POST", "/api/auth/token/refresh"),
         ("POST", "/api/auth/session-ended"),
+        // R1-37: logging out of the forced-change screen still forgets the held mailbox passwords.
+        ("POST", "/api/auth/logout"),
     ];
 
     public async Task InvokeAsync(HttpContext context)

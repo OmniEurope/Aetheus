@@ -55,7 +55,7 @@ else
                         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemovePipelineVar(key))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                     }
                 </div>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Class="omni-u-mt-sm">
+                <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall" Class="omni-u-mt-sm">
                     <OmniTextBox aria-label="@L["Key"]" @bind-Value="_newPipelineVarKey" Placeholder="@L["Key"]" Class="text-input-flex" />
                     <OmniTextBox aria-label="@L["Value"]" @bind-Value="_newPipelineVarValue" Placeholder="@L["Value"]" Class="text-input-flex" />
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddPipelineVar" Disabled="@string.IsNullOrWhiteSpace(_newPipelineVarKey)" title="@L["Add"]"><OmniIcon Name="OmniIconName.Add" /></OmniButton>

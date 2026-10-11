@@ -15,6 +15,9 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
     private bool _actionRunning;
+
+    // SITE-OFFLINE-001: every TeamSpeak operation is an agent task; disabled while the agent cannot claim one.
+    private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
     private TeamspeakDataCoordinator _data = default!;
     private TeamspeakOperationRunner _operations = default!;
     private AetheusDataGrid<TeamspeakClientDto>? _clientsGrid;
@@ -81,7 +84,7 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
     protected override void OnInitialized()
     {
         _data = new TeamspeakDataCoordinator(Api);
-        _operations = new TeamspeakOperationRunner(Toast);
+        _operations = new TeamspeakOperationRunner(Toast, () => AgentOfflineGuard.Blocks(Server, Toast));
         _gracefulRestartMessage = L["TeamspeakGracefulRestartMessage"];
     }
 

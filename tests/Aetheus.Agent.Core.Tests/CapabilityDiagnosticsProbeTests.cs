@@ -95,4 +95,62 @@ public class CapabilityDiagnosticsProbeTests
         Assert.Contains("present but unreadable", diagnostic);
         Assert.Contains(Path.GetFileName(unreadableFile), diagnostic);
     }
+
+    // DEP-019 / D12: the installer leaves a docker membership it did not add, so the agent says it.
+    private const string GroupDatabase = "root:x:0:\nadm:x:4:syslog\ndocker:x:998:aetheus-agent\n";
+
+    private static Func<string, CancellationToken, Task<string>> Files(string status, string groups) =>
+        (path, _) => Task.FromResult(path switch
+        {
+            "/proc/self/status" => status,
+            "/etc/group" => groups,
+            _ => throw new FileNotFoundException(path),
+        });
+
+    [Fact]
+    public async Task CollectAsync_ProcessCarriesDockerGroup_ReportsRootEquivalentPosture()
+    {
+        var shell = Substitute.For<IShellRunner>();
+        shell.RunExecAsync("sudo", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>())
+            .Returns(SudoOk());
+
+        var diagnostics = await CapabilityDiagnosticsProbe.CollectAsync(
+            shell, isWindows: false, sudoersFiles: [], TestContext.Current.CancellationToken,
+            readAllTextAsync: Files("Name:\tAetheus.Agent\nUid:\t997\t997\t997\t997\nGroups:\t4 997 998 \n", GroupDatabase));
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("agent account is in the docker group: root-equivalent (full access to the Docker socket)", diagnostic);
+    }
+
+    [Theory]
+    [InlineData("Groups:\t4 997\n", GroupDatabase)]
+    [InlineData("Groups:\t9980 99\n", GroupDatabase)]
+    [InlineData("Groups:\t998\n", "root:x:0:\n")]
+    public async Task CollectAsync_ProcessWithoutDockerGroup_ReportsNothing(string status, string groups)
+    {
+        var shell = Substitute.For<IShellRunner>();
+        shell.RunExecAsync("sudo", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>())
+            .Returns(SudoOk());
+
+        var diagnostics = await CapabilityDiagnosticsProbe.CollectAsync(
+            shell, isWindows: false, sudoersFiles: [], TestContext.Current.CancellationToken,
+            readAllTextAsync: Files(status, groups));
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task CollectAsync_ProcessStatusUnreadable_SaysThePostureIsUnknown()
+    {
+        var shell = Substitute.For<IShellRunner>();
+        shell.RunExecAsync("sudo", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>())
+            .Returns(SudoOk());
+
+        var diagnostics = await CapabilityDiagnosticsProbe.CollectAsync(
+            shell, isWindows: false, sudoersFiles: [], TestContext.Current.CancellationToken,
+            readAllTextAsync: (_, _) => Task.FromException<string>(new UnauthorizedAccessException("denied")));
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Contains("docker group posture could not be read", diagnostic);
+    }
 }

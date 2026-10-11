@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using OmniEurope.Blazor.Components;
@@ -214,9 +215,52 @@ public class HomeTests : BunitContext
         var cut = Render<Home>();
         var navigation = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
 
-        cut.WaitForElement($".clickable-cell[aria-label='{ariaLabel}']").Click();
+        var shortcut = cut.WaitForElement($".clickable-cell[aria-label='{ariaLabel}']");
+        // SITE-FUNC-HOME-CAPABILITY-001: the row opens the overview; in the browser its handler ran
+        // after the shortcut's and won, unless the shortcut stops the click and the key.
+        RowEventIsolation.AssertRowDoesNotReceive(shortcut, "onclick", "onkeydown");
+
+        shortcut.Click();
 
         Assert.EndsWith($"/servers/42/{section}", navigation.Uri, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("CapBuild", "pipelines", "Enter")]
+    [InlineData("CapDeploy", "apps", " ")]
+    [InlineData("CapManage", "modules", "Enter")]
+    public void CapabilityIcon_KeyboardActivation_NavigatesToMatchingServerSection_NotTheRow(
+        string ariaLabel,
+        string section,
+        string key)
+    {
+        RenderWithServer(new ServerDto
+        {
+            Id = 42,
+            Name = "srv",
+            Status = ServerStatus.Online,
+            PipelineRunnerEnabled = true,
+            DeploymentTargetAvailable = true,
+            PackageManagementAvailable = true
+        });
+        var cut = Render<Home>();
+        var navigation = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+
+        cut.WaitForElement($".clickable-cell[aria-label='{ariaLabel}']").KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = key });
+
+        Assert.EndsWith($"/servers/42/{section}", navigation.Uri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RowClick_StillOpensTheServerOverview()
+    {
+        RenderWithServer(new ServerDto { Id = 42, Name = "srv", Hostname = "srv", Status = ServerStatus.Online, PipelineRunnerEnabled = true });
+        var cut = Render<Home>();
+        var navigation = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+
+        cut.WaitForElement(".clickable-cell[aria-label='CapBuild']").Closest("tr")!.Click();
+
+        Assert.EndsWith("/servers/42/overview", navigation.Uri, StringComparison.Ordinal);
     }
 
     [Fact]

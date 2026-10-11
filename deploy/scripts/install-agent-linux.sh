@@ -52,6 +52,8 @@ LEGACY_PRODUCTION_ENV_FILE="$WORK_DIR/aetheus-prod/.env-prod"
 SERVICE_NAME="aetheus-agent"
 AGENT_POSTURE_VERSION="2"
 AGENT_POSTURE_VERSION_FILE="/etc/aetheus-agent-posture-version"
+# Root-owned record that THIS installer added the agent account to the docker group (decision D12).
+DOCKER_GROUP_MARKER_FILE="/etc/aetheus-agent-docker-group-added"
 AGENT_UPDATE_URL_FILE="/etc/aetheus-agent-update-url"
 AGENT_UPDATE_REQUEST_FILE="$WORK_DIR/.agent-posture-upgrade-request"
 AGENT_UPDATE_WORKER_PATH="/usr/local/lib/aetheus/agent-posture-upgrade"
@@ -739,9 +741,37 @@ install_agent_update_supervisor() {
 # DEP-019). Only the agent's own account is touched, and only when it is the dedicated system account
 # this installer creates (home $WORK_DIR, no login shell); any other account is reported, not changed.
 # The running agent keeps its old groups until it restarts, which every install and upgrade does.
+#
+# Decision D12 (DEP-019, option A): the installer records in $DOCKER_GROUP_MARKER_FILE that IT added
+# the membership. That marker is what authorizes a removal on any account; a membership it did not add
+# (the marker is absent) is never removed on a shared account, only reported, and the agent then shows
+# "in the docker group: root-equivalent" on the server page. The marker is root-owned under /etc, not
+# in the agent's own directories, so the agent account can neither erase nor forge it.
+docker_group_added_by_installer() {
+    [ -f "$DOCKER_GROUP_MARKER_FILE" ] && [ "$(cat "$DOCKER_GROUP_MARKER_FILE" 2>/dev/null)" = "$AGENT_USER" ]
+}
+
+record_docker_group_added() {
+    printf '%s\n' "$AGENT_USER" > "$DOCKER_GROUP_MARKER_FILE"
+    chown root:root "$DOCKER_GROUP_MARKER_FILE"
+    chmod 644 "$DOCKER_GROUP_MARKER_FILE"
+}
+
 revoke_docker_group() {
     is_explicit DOCKER || return 0
-    id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker || return 0
+    if ! id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+        rm -f "$DOCKER_GROUP_MARKER_FILE"
+        return 0
+    fi
+    if docker_group_added_by_installer; then
+        log_info "  Removing $AGENT_USER from the docker group (docker disabled; membership added by this installer)..."
+        if ! gpasswd -d "$AGENT_USER" docker >/dev/null; then
+            log_error "  Could not remove $AGENT_USER from the docker group: the agent keeps docker access."
+            return 1
+        fi
+        rm -f "$DOCKER_GROUP_MARKER_FILE"
+        return 0
+    fi
     _agent_entry="$(getent passwd "$AGENT_USER" 2>/dev/null || true)"
     _agent_home="$(printf '%s' "$_agent_entry" | cut -d: -f6)"
     _agent_shell="$(printf '%s' "$_agent_entry" | cut -d: -f7)"
@@ -749,8 +779,11 @@ revoke_docker_group() {
         /bin/false|/usr/sbin/nologin|/sbin/nologin|/usr/bin/false) _agent_dedicated=1 ;;
         *) _agent_dedicated=0 ;;
     esac
+    # No marker: the membership predates the marker or was not added by this installer. A dedicated
+    # account (the one this installer creates) is still cleaned, as an installer from before the marker
+    # added it; a shared account keeps it and the agent reports the root-equivalent posture.
     if [ "$_agent_home" != "$WORK_DIR" ] || [ "$_agent_dedicated" -ne 1 ]; then
-        log_warn "  $AGENT_USER is in the docker group but is not the dedicated agent account (home '$_agent_home', shell '$_agent_shell'): membership left as it is. DECISION REQUIRED: remove it by hand if that is intended."
+        log_warn "  $AGENT_USER is in the docker group, which this installer did not add, and is not the dedicated agent account (home '$_agent_home', shell '$_agent_shell'): membership left as it is (root-equivalent; the server page shows it). Remove it by hand if that is intended."
         return 0
     fi
     log_info "  Removing $AGENT_USER from the docker group (docker disabled)..."
@@ -774,10 +807,16 @@ ensure_docker_group() {
         return 0
     fi
     if id -nG "$AGENT_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+        # An existing marker is kept; a membership found without one was not added here and is never
+        # claimed, so a later --disable-docker or --purge cannot take it from a shared account.
         log_info "  $AGENT_USER already in docker group"
     else
         log_info "  Adding $AGENT_USER to docker group..."
-        usermod -aG docker "$AGENT_USER" || log_warn "  Failed to add to docker group (non-fatal)"
+        if usermod -aG docker "$AGENT_USER"; then
+            record_docker_group_added
+        else
+            log_warn "  Failed to add to docker group (non-fatal)"
+        fi
     fi
     # Container deploys (pipeline `type: deploy` with a compose file → `docker compose up -d --wait`)
     # need the Compose v2 plugin. The Ubuntu docker.io package has no compose plugin; Ubuntu ships it
@@ -2281,7 +2320,11 @@ if [ "$MODE" = "purge" ]; then
     fi
 
     if id "$AGENT_USER" >/dev/null 2>&1; then
-        gpasswd -d "$AGENT_USER" docker >/dev/null 2>&1 || true
+        # Only a membership this installer recorded is withdrawn (decision D12); one it did not add is
+        # not its to remove.
+        if docker_group_added_by_installer; then
+            gpasswd -d "$AGENT_USER" docker >/dev/null 2>&1 || true
+        fi
         gpasswd -d "$AGENT_USER" teamspeak >/dev/null 2>&1 || true
         log_info "Deleting user $AGENT_USER..."
         userdel "$AGENT_USER" 2>/dev/null || log_warn "userdel reported issues (non-fatal)"
@@ -2291,6 +2334,8 @@ if [ "$MODE" = "purge" ]; then
             groupdel "$AGENT_GROUP" 2>/dev/null || true
         fi
     fi
+
+    rm -f "$DOCKER_GROUP_MARKER_FILE"
 
     log_info ""
     log_info "Purge complete. The agent is fully removed from this system."

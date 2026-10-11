@@ -6,6 +6,7 @@ using System.Text.Json;
 using Aetheus.Back.Components.Notifications.Events;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services.DomainEvents;
+using Aetheus.Back.Services.Email;
 
 namespace Aetheus.Back.Components.Notifications;
 
@@ -19,7 +20,8 @@ public class NotificationService(
     ILogger<NotificationService> logger,
     IEncryptionService encryption,
     TimeProvider timeProvider,
-    IUserNotificationService userNotifications) : INotificationService
+    IUserNotificationService userNotifications,
+    INotificationEmailer emailer) : INotificationService
 {
     public async Task<PaginatedResult<NotificationChannelDto>> GetChannelsAsync(
         PaginationRequest request, CancellationToken ct = default)
@@ -111,20 +113,15 @@ public class NotificationService(
         };
     }
 
-    public async Task<NotificationTestResultDto?> TestChannelAsync(int id, CancellationToken ct = default)
+    public async Task<NotificationTestResultDto?> TestChannelAsync(int id, int? requestingUserId, CancellationToken ct = default)
     {
         var channel = await repo.FindChannelAsync(id, ct).ConfigureAwait(false);
         if (channel is null) return null;
 
-        // Email has no real transport (SMTP is a stub): report NotConfigured, never "Sent".
+        // R1-16: a real e-mail to the administrator who asked, through the platform sender; the status
+        // and the message are the SMTP outcome, the server's text verbatim on a failure.
         if (channel.Type == NotificationChannelType.Email)
-        {
-            return new NotificationTestResultDto
-            {
-                Status = NotificationTestStatus.NotConfigured,
-                Message = "Email delivery is not configured (no SMTP transport); nothing was sent."
-            };
-        }
+            return await TestEmailChannelAsync(channel, requestingUserId, ct).ConfigureAwait(false);
 
         var url = ExtractWebhookUrl(channel);
         if (string.IsNullOrWhiteSpace(url))
@@ -150,6 +147,50 @@ public class NotificationService(
                 ? $"The provider rejected the message (HTTP {(int)status})."
                 : "The provider could not be reached.";
             return new NotificationTestResultDto { Status = NotificationTestStatus.Failed, Message = message };
+        }
+    }
+
+    private async Task<NotificationTestResultDto> TestEmailChannelAsync(
+        NotificationChannel channel, int? requestingUserId, CancellationToken ct)
+    {
+        var to = requestingUserId is int userId
+            ? await repo.GetUserEmailAsync(userId, ct).ConfigureAwait(false)
+            : null;
+        var result = await emailer.SendChannelTestAsync(to, channel.Name, ct).ConfigureAwait(false);
+        if (result.Status == EmailSendStatus.Sent)
+            await audit.LogAsync("Tested", "NotificationChannel", channel.Id, channel.Name, ct).ConfigureAwait(false);
+        return new NotificationTestResultDto
+        {
+            Status = result.Status switch
+            {
+                EmailSendStatus.Sent => NotificationTestStatus.Sent,
+                EmailSendStatus.NotConfigured => NotificationTestStatus.NotConfigured,
+                _ => NotificationTestStatus.Failed
+            },
+            Message = result.Status == EmailSendStatus.Sent ? $"Test e-mail sent to {to}. {result.Message}" : result.Message
+        };
+    }
+
+    /// <summary>
+    /// R1-16: an E-mail channel has no address list of its own; it is an administrator channel, so its
+    /// rules reach the active administrators at their account address. Each failure is logged verbatim.
+    /// </summary>
+    private async Task SendEmailChannelAsync(NotificationChannel channel, string eventType, string jsonPayload, CancellationToken ct)
+    {
+        var addresses = await repo.GetActiveAdministratorEmailsAsync(ct).ConfigureAwait(false);
+        if (addresses.Count == 0)
+        {
+            logger.LogWarning("Email notification for {EventType} on channel {Channel}: no active administrator has an e-mail address", eventType, channel.Name);
+            return;
+        }
+
+        var emails = addresses.Select(address => new NotificationEmail(address, eventType, eventType, jsonPayload)).ToList();
+        var results = await emailer.SendAsync(emails, ct).ConfigureAwait(false);
+        for (var i = 0; i < results.Count; i++)
+        {
+            if (results[i].Status != EmailSendStatus.Sent)
+                logger.LogWarning("Email notification for {EventType} on channel {Channel} to {Recipient}: {Status} {Message}",
+                    eventType, channel.Name, emails[i].To, results[i].Status, results[i].Message);
         }
     }
 
@@ -261,7 +302,7 @@ public class NotificationService(
         switch (channel.Type)
         {
             case NotificationChannelType.Email:
-                logger.LogInformation("Email notification for {EventType} - channel {Channel} (SMTP not configured)", eventType, channel.Name);
+                await SendEmailChannelAsync(channel, eventType, jsonPayload, ct).ConfigureAwait(false);
                 break;
 
             case NotificationChannelType.Slack:

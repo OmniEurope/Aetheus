@@ -67,7 +67,7 @@
         </OmniColumn>
     </OmniRow>
 
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
         @if (!_isNew)
         {
             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnDelete" Disabled="@_saving"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>

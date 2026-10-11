@@ -198,4 +198,26 @@ public class ServerMailSectionTests : BunitContext
         Assert.Empty(cut.FindComponents<ServerMailStatusList>());
         Assert.Contains("MailInstalledNotConfigured", cut.Markup, StringComparison.Ordinal);
     }
+
+    // SITE-FUNC-METRICS-001: a failed count read was shown as a loader that never ended. It is now said, with a
+    // retry that reads the counts again.
+    [Fact]
+    public async Task CountsReadFailure_ShowsTheFailureWithARetry()
+    {
+        SetupMailApiResponses();
+        _handler.SetResponse("api/servers/10/mail/domains", System.Net.HttpStatusCode.InternalServerError);
+        var server = MakeMailServer();
+        var cut = Render<ServerMailSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".mail-counts-failed")));
+        Assert.Empty(cut.FindAll(".mail-counts-loading"));
+        Assert.Contains("LoadFailed", cut.Find(".mail-counts-failed").TextContent, StringComparison.Ordinal);
+
+        SetupMailApiResponses();
+        var retry = cut.FindAll(".mail-counts-failed button").Single(b => b.TextContent.Contains("Retry", StringComparison.Ordinal));
+        await cut.InvokeAsync(() => retry.Click());
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<ServerMailStatusList>()));
+        Assert.Empty(cut.FindAll(".mail-counts-failed"));
+    }
 }

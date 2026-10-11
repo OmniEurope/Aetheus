@@ -100,6 +100,10 @@ public class SettingsRenderTests : BunitContext
             .GetField("_selectedTabIndex", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(cut.Instance)!;
         Assert.Equal(4, index);
+        // SITE-FUNC-TEMPLATE-001 guard: `v@identifier` is parsed as an e-mail address; `v@_version` is not
+        // (an underscore after `@` starts code), and must keep rendering the version.
+        Assert.Contains("vdev", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("v@_version", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]

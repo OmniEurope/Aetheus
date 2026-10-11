@@ -92,7 +92,7 @@
        cancel-vs-close distinction without bloating the shared component with state options for
        this one dialog. The DialogFooter migration is
        complete for every dialog it fits; this one is intentionally left bespoke. *@
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
+    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
         @if (_state == ContactState.Running)
         {
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelAndCloseAsync"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>

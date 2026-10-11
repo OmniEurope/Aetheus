@@ -377,6 +377,49 @@ public class OwnerTypeSelectorTests : BunitContext
     private static OwnerTypeSelector.OwnerKind ReadKind(OwnerTypeSelector instance)
         => (OwnerTypeSelector.OwnerKind)typeof(OwnerTypeSelector).GetField("_kind", Priv)!.GetValue(instance)!;
 
+    // SITE-FUNC-OWNER-001: for an environment or server owner, ProjectId is null; the project dropdown must show
+    // the context project the environment or server belongs to, not the (empty) Project owner.
+    [Fact]
+    public void EnvironmentOwner_ProjectDropdown_ShowsTheEnvironmentsProject()
+    {
+        _handler.SetJsonResponse("api/environments/10", new EnvironmentDto { Id = 10, Name = "Staging", ProjectId = 2 });
+        SetupEnvStub(2);
+
+        var cut = Render<OwnerTypeSelector>(p => p
+            .Add(x => x.Projects, MakeProjects())
+            .Add(x => x.EnvironmentId, 10));
+
+        cut.WaitForAssertion(() => Assert.Equal(2, ProjectDropDown(cut).Instance.Value));
+    }
+
+    [Fact]
+    public void ServerOwner_ProjectDropdown_ShowsTheServersProject()
+    {
+        _handler.SetPaginatedJsonResponse("api/projects/1/servers", new List<ProjectServerDto>());
+        SetupProjectServersStub(2);
+
+        var cut = Render<OwnerTypeSelector>(p => p
+            .Add(x => x.Projects, MakeProjects())
+            .Add(x => x.ProjectServerId, 20));
+
+        cut.WaitForAssertion(() => Assert.Equal(2, ProjectDropDown(cut).Instance.Value));
+    }
+
+    [Fact]
+    public async Task ChoosingTheProjectOfAnEnvironmentOwner_KeepsItShown()
+    {
+        SetupEnvStub(1);
+        var cut = Render<OwnerTypeSelector>(p => p.Add(x => x.Projects, MakeProjects()));
+        await cut.InvokeAsync(() => cut.Find("input[value=Environment]").Change(true));
+
+        await cut.InvokeAsync(() => ProjectDropDown(cut).Instance.ValueChanged.InvokeAsync(1));
+
+        Assert.Equal(1, ProjectDropDown(cut).Instance.Value);
+    }
+
+    private static IRenderedComponent<OmniEurope.Blazor.Components.OmniDropDown<int?>> ProjectDropDown(IRenderedComponent<OwnerTypeSelector> cut)
+        => cut.FindComponents<OmniEurope.Blazor.Components.OmniDropDown<int?>>().Single(d => d.Instance.Id == "owner-project");
+
     private static int? ReadSelectedProjectId(OwnerTypeSelector instance)
         => (int?)typeof(OwnerTypeSelector).GetField("_selectedProjectId", Priv)!.GetValue(instance);
 }

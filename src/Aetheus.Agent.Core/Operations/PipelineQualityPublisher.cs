@@ -198,25 +198,14 @@ internal static class PipelineQualityPublisher
                 // The lint store is the code-quality view; accessibility findings live only as analysis.
                 if (category == AnalysisCategory.CodeQuality)
                     await apiClient.PublishLintAsync(runId, sarif, stageName, relativePath, ct).ConfigureAwait(false);
-                var artifactId = await AnalysisArtifactUploader.UploadFileAsync(
-                    apiClient, runId, "analysis-pipeline-sarif-lint", stageName,
-                    relativePath, file, ct).ConfigureAwait(false);
-                var analysis = await apiClient.PublishAnalysisReportAsync(runId, new PublishAnalysisReportRequest
-                {
-                    ScannerKey = "pipeline-sarif-lint",
-                    ScannerName = category == AnalysisCategory.CodeQuality ? "Pipeline SARIF Lint" : $"Pipeline SARIF {category}",
-                    ScannerVersion = "1",
-                    Category = category,
-                    Status = AnalysisReportStatus.Passed,
-                    Format = AnalysisReportFormat.Sarif,
-                    ReportContent = sarif,
-                    ReportPath = relativePath,
-                    PipelineArtifactId = artifactId,
-                    StageName = stageName,
-                    StepName = relativePath,
-                    StartedAt = startedAt,
-                    CompletedAt = timeProvider.GetUtcNow().UtcDateTime
-                }, ct).ConfigureAwait(false);
+                var analysis = await SarifAnalysisReportPublisher.PublishAsync(
+                    apiClient, timeProvider,
+                    new SarifAnalysisReportPublisher.Publication(
+                        runId, stageName, relativePath, file, "analysis-pipeline-sarif-lint",
+                        "pipeline-sarif-lint",
+                        category == AnalysisCategory.CodeQuality ? "Pipeline SARIF Lint" : $"Pipeline SARIF {category}",
+                        category, startedAt),
+                    sarif, ct).ConfigureAwait(false);
                 if (analysis is null)
                 {
                     await onOutput("Lint analysis publication returned no result.", TaskLogLevel.Error).ConfigureAwait(false);

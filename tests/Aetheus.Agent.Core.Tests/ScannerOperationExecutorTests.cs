@@ -4,6 +4,7 @@ using Aetheus.Agent.Core.Configuration;
 using Aetheus.Agent.Core.Executors;
 using Aetheus.Agent.Core.Operations;
 using Aetheus.Agent.Core.Services;
+using Aetheus.Tests.Shared;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -725,12 +726,10 @@ public sealed class ScannerOperationExecutorTests
         }
     }
 
-    [Fact]
+    // Linux is the production scanner platform and exercises the symlink contract in CI.
+    [PlatformFact("linux")]
     public void StageSourceTree_PreservesInternalSymlinkWithoutFollowingIt()
     {
-        if (OperatingSystem.IsWindows())
-            return; // Linux is the production scanner platform and exercises the symlink contract in CI.
-
         var root = Directory.CreateTempSubdirectory("aetheus-scanner-stage-").FullName;
         try
         {

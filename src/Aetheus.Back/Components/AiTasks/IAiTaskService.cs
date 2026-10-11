@@ -39,7 +39,9 @@ public interface IAiTaskService
         int id, UpdateAiTaskDefinitionRequest request, CancellationToken ct);
     Task<bool> DeleteDefinitionAsync(int id, CancellationToken ct);
     Task<ServerTask> RunNowAsync(int definitionId, string? eventPayload, CancellationToken ct);
-    Task<AiExecutionSpec> BuildPipelineExecutionAsync(
+    /// <summary>Null when no profile of that name exists in the organization: the pipeline decides what
+    /// that costs (a failed run, or a failed advisory step).</summary>
+    Task<AiExecutionSpec?> BuildPipelineExecutionAsync(
         string profileName, int organizationId, string prompt, bool gate,
         int pipelineRunId, string workingDirectory, CancellationToken ct);
 

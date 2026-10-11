@@ -16,7 +16,6 @@ public sealed class PipelineRunApprovalController(
     public string? EnvironmentInstructions { get; private set; }
     public string? Comments { get; set; }
     public bool Deciding { get; private set; }
-    private int? _instructionsApprovalId;
 
     /// <summary>
     /// The run says it waits for an approval, and there is none to make. Either the load failed or the
@@ -38,7 +37,6 @@ public sealed class PipelineRunApprovalController(
         {
             Pending = null;
             EnvironmentInstructions = null;
-            _instructionsApprovalId = null;
             WaitingWithoutApproval = false;
             LoadFailed = false;
             return;
@@ -50,13 +48,11 @@ public sealed class PipelineRunApprovalController(
             LoadFailed = false;
             // R-370: a run can wait on two approvals in turn (the pipeline's, then the environment's), so
             // the instructions follow the approval shown, and only an environment approval has any.
-            if (Pending?.Id != _instructionsApprovalId)
-            {
-                EnvironmentInstructions = Pending is { Scope: ApprovalScope.Environment, EnvironmentId: { } environmentId }
-                    ? (await api.Servers.GetEnvironmentAsync(environmentId, ct))?.ApprovalInstructions
-                    : null;
-                _instructionsApprovalId = Pending?.Id;
-            }
+            // Recette R1-24: they come with the approval itself, so an approver who cannot read the
+            // environment still sees them, without a second request for the environment.
+            EnvironmentInstructions = Pending is { Scope: ApprovalScope.Environment }
+                ? Pending.EnvironmentInstructions
+                : null;
         }
         catch (HttpRequestException)
         {
@@ -109,7 +105,6 @@ public sealed class PipelineRunApprovalController(
     {
         Pending = null;
         EnvironmentInstructions = null;
-        _instructionsApprovalId = null;
         Comments = null;
         Deciding = false;
     }

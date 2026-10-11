@@ -8,9 +8,17 @@ namespace Aetheus.Front.Components.Shared;
 /// source of truth: a user tab click pushes a history entry, and back/forward re-applies the tab via
 /// <see cref="SupplyParameterFromQueryAttribute"/> → <see cref="OnParametersSet"/>.
 /// </summary>
-public partial class UrlSyncedTabs : ComponentBase
+public partial class UrlSyncedTabs : ComponentBase, IDisposable
 {
     [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    // SITE-FUNC-NAVIGATION-001 (instrumented, not fixed): quick back/forward navigations on mobile threw
+    // InvalidOperation_EnumFailedVersion from SupplyParameterFromQueryValueProvider.OnLocationChanged, the
+    // framework enumerating its ?query subscribers while one of them (this component is one) was mounted
+    // or disposed. A bUnit run does not reproduce it (its renderer defers the re-render past the
+    // enumeration), so each URL-driven tab change and each disposal is logged with the URL, giving the
+    // order of events around the next occurrence.
+    [Inject] private ILogger<UrlSyncedTabs> Logger { get; set; } = default!;
 
     /// <summary>Ordered slugs of the tabs actually rendered, matching the <c>&lt;Tabs&gt;</c> order.
     /// The first slug is the default tab and uses a clean URL (no query parameter).</summary>
@@ -70,6 +78,9 @@ public partial class UrlSyncedTabs : ComponentBase
             target = !_tabInitialized && !IsKnownSlug(Tab) && SelectedIndex != 0
                 ? SelectedIndex
                 : IndexForSlug(Tab);
+            Logger.LogInformation(
+                "UrlSyncedTabs [{Slugs}] URL {Uri}: tab '{PreviousTab}' (index {PreviousIndex}) -> '{Tab}' (index {Index}), first pass {FirstPass}",
+                string.Join(",", Slugs), Nav.Uri, _lastTab, _index, Tab, target, !_tabInitialized);
             _lastTab = Tab;
             _tabInitialized = true;
         }
@@ -113,6 +124,14 @@ public partial class UrlSyncedTabs : ComponentBase
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("tab", slug));
         if (SelectedIndexChanged.HasDelegate) await SelectedIndexChanged.InvokeAsync(index);
         if (Change.HasDelegate) await Change.InvokeAsync(index);
+    }
+
+    public void Dispose()
+    {
+        Logger.LogInformation(
+            "UrlSyncedTabs [{Slugs}] disposed at URL {Uri} on tab '{Tab}' (index {Index})",
+            string.Join(",", Slugs), Nav.Uri, _lastTab, _index);
+        GC.SuppressFinalize(this);
     }
 
     private bool IsKnownSlug(string? slug) =>

@@ -2,6 +2,8 @@
 @inject GridExportContext ExportContext
 @inherits ServerActionSectionBase
 
+<AgentOfflineNotice Server="@Server" />
+
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
     <OmniBadge Fill="OmniFill.Solid" Tone="@(Certbot.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Certbot.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
@@ -16,11 +18,11 @@
     }
     <div class="blade-content-spacer"></div>
 
-    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowConfirm(L["CertbotNormalize"], L["ConfirmCertbotNormalize"], () => ExecuteActionAsync(CertbotAction.Normalize), L["CertbotNormalize"]))" Disabled="@(!Certbot.IsInstalled)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)" title="@L["CertbotNormalizeTitle"]"><OmniIcon Name="OmniIconName.Swap" /> <span>@L["CertbotNormalize"]</span></OmniButton>
-    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(CertbotAction.RenewalCheck))" Disabled="@(!Certbot.IsInstalled)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)" title="@L["CertbotRenewalCheckTitle"]"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["CertbotRenewalCheck"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowConfirm(L["CertbotNormalize"], L["ConfirmCertbotNormalize"], () => ExecuteActionAsync(CertbotAction.Normalize), L["CertbotNormalize"]))" Disabled="@(AgentOffline || !Certbot.IsInstalled)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)" title="@L["CertbotNormalizeTitle"]"><OmniIcon Name="OmniIconName.Swap" /> <span>@L["CertbotNormalize"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(CertbotAction.RenewalCheck))" Disabled="@(AgentOffline || !Certbot.IsInstalled)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)" title="@L["CertbotRenewalCheckTitle"]"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["CertbotRenewalCheck"]</span></OmniButton>
 
-    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowConfirm(L["RenewAllCerts"], L["ConfirmRenewAllCerts"], () => ExecuteActionAsync(CertbotAction.RenewAll), L["Renew"]))" Disabled="@(!Certbot.IsInstalled)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)" title="@L["RenewAll"]"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Renew"]</span></OmniButton>
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(!Certbot.IsInstalled || _actionRunning)" title="@L["NewCertificate"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowConfirm(L["RenewAllCerts"], L["ConfirmRenewAllCerts"], () => ExecuteActionAsync(CertbotAction.RenewAll), L["Renew"]))" Disabled="@(AgentOffline || !Certbot.IsInstalled)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)" title="@L["RenewAll"]"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Renew"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["NewCertificate"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
 </OmniRow>
 
 <UrlSyncedTabs Slugs="@(new[] { "certificates", "relations" })">
@@ -58,8 +60,8 @@
                     <OmniDataGridColumn TItem="CertbotCertificateDto" Title="@L["Actions"]" Width="15rem" Sortable="false">
                         <Template Context="c">
                             <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(CertbotAction.Renew, c.Name))" title="@L["Renew"]" Label="@L["Renew"]"><OmniIcon Name="OmniIconName.Refresh" /></OmniButton>
-                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["RevokeCert"], string.Format(L["ConfirmRevokeCert"], c.Name),
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(CertbotAction.Renew, c.Name))" title="@L["Renew"]" Label="@L["Renew"]"><OmniIcon Name="OmniIconName.Refresh" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["RevokeCert"], string.Format(L["ConfirmRevokeCert"], c.Name),
                                         () => ExecuteActionAsync(CertbotAction.RevokeAndDelete, c.Name), L["Revoke"].Value))" title="@L["Revoke"]" Label="@L["Revoke"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                             </OmniStack>
                         </Template>

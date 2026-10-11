@@ -125,6 +125,9 @@ public class DependencyCycleAuditTests
         ["Git"] = 4,
         ["PackageRegistry"] = 4,
         ["Servers"] = 4,
+        // The daily recap reads servers, backups, certificates and agent updates; nothing depends on it
+        // (Settings spells its key prefix as text). Approved by the user on 2026-10-10.
+        ["DailyRecap"] = 4,
 
         // L5 - services that act on machines and repositories.
         ["AiTasks"] = 5,

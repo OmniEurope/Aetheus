@@ -7,6 +7,7 @@ public static class SettingsModuleExtensions
     {
         services.AddScoped<ISettingsRepository, SettingsRepository>();
         services.AddScoped<ISettingsService, SettingsService>();
+        services.AddScoped<IEmailSenderSettingsService, EmailSenderSettingsService>();
         return services;
     }
 }

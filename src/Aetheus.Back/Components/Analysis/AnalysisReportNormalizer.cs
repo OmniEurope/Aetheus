@@ -89,6 +89,14 @@ internal static class AnalysisReportNormalizer
         }
     }
 
+    private static AnalysisFindingStatus? StandingDecisionStatus(AnalysisFinding finding, DateTime now) =>
+        finding.Decisions
+            .Where(decision => decision.RevokedAt == null && (decision.ExpiresAt == null || decision.ExpiresAt > now))
+            .OrderByDescending(decision => decision.CreatedAt)
+            .ThenByDescending(decision => decision.Id)
+            .Select(decision => (AnalysisFindingStatus?)decision.Status)
+            .FirstOrDefault();
+
     private static async Task AddFindingResultsAsync(
         IAnalysisRepository repository,
         AnalysisReport report,
@@ -136,7 +144,10 @@ internal static class AnalysisReportNormalizer
                 if (item.Severity > finding.Severity) finding.Severity = item.Severity;
                 if (finding.Status == AnalysisFindingStatus.Fixed)
                 {
-                    finding.Status = AnalysisFindingStatus.Open;
+                    // Recette R2-135: a fixed finding drops out of the active ones whatever was decided;
+                    // when it comes back, the decision still standing (not revoked, not expired) applies
+                    // again, otherwise it is open.
+                    finding.Status = StandingDecisionStatus(finding, now) ?? AnalysisFindingStatus.Open;
                     finding.ResolvedAt = null;
                 }
             }

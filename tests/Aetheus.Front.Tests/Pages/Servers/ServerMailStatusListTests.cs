@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Servers.ServerDetailSections;
 using Aetheus.Front.Tests.TestDoubles;
+using AngleSharp.Dom;
 using Bunit;
+using Bunit.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -56,12 +58,36 @@ public sealed class ServerMailStatusListTests : BunitContext
         DovecotVersion = "2.3.19"
     };
 
-    private IRenderedComponent<ServerMailStatusList> RenderList(MailDataDto? mail = null, bool canManage = true) =>
-        Render<ServerMailStatusList>(p => p
-            .Add(x => x.ServerId, 10)
-            .Add(x => x.Mail, mail ?? Mail())
-            .Add(x => x.CanManage, canManage)
-            .Add(x => x.DefaultSender, "admin@example.com"));
+    private IRenderedComponent<ContainerFragment>? _host;
+    private IRenderedComponent<ContainerFragment> Host => _host ?? throw new InvalidOperationException("Render the list first.");
+
+    /// <summary>Recette R1-12: the list is rendered next to the header outlet its "..." menu goes to.</summary>
+    private IRenderedComponent<ServerMailStatusList> RenderList(MailDataDto? mail = null, bool canManage = true)
+    {
+        _host = this.RenderWithOutlets<ServerMailStatusList>(new Dictionary<string, object?>
+        {
+            [nameof(ServerMailStatusList.ServerId)] = 10,
+            [nameof(ServerMailStatusList.Mail)] = mail ?? Mail(),
+            [nameof(ServerMailStatusList.CanManage)] = canManage,
+            [nameof(ServerMailStatusList.DefaultSender)] = "admin@example.com"
+        }, ServerMailReinstall.HeaderMenuSection);
+        return Host.FindComponent<ServerMailStatusList>();
+    }
+
+    /// <summary>Opens the header's "..." menu of mail actions and returns its items.</summary>
+    private IReadOnlyList<IElement> OpenMenu()
+    {
+        Host.Find(".mail-actions-menu .omni-overflow-menu__trigger").Click();
+        return Host.FindAll(".omni-overflow-menu__popup .omni-menu__item");
+    }
+
+    private void ChooseMenuItem(string key) =>
+        OpenMenu().First(item => item.TextContent.Contains(key, StringComparison.Ordinal)).Click();
+
+    private int DiagnosticsReads => _handler.Requests.Count(r => r.Url.Contains("mail/diagnostics", StringComparison.Ordinal));
+
+    private static IElement FixButton(IRenderedComponent<ServerMailStatusList> cut, string key) =>
+        cut.FindAll(".mail-status-fix button").First(b => b.TextContent.Contains(key, StringComparison.Ordinal));
 
     private void StubTaskOutput(int taskId, params string[] lines) =>
         _handler.SetJsonResponse($"api/logs/task/{taskId}",
@@ -86,7 +112,7 @@ public sealed class ServerMailStatusListTests : BunitContext
     }
 
     [Fact]
-    public void R2_090_OnlyTheFirstRedLine_ShowsItsFix_HereTheSpfRecordToCopy()
+    public void R1_9_EveryRedLine_ShowsItsFix_UnderItself_WithItsRecordToCopy()
     {
         StubWithRed(
             new MailDiagnosticItemDto
@@ -107,17 +133,43 @@ public sealed class ServerMailStatusListTests : BunitContext
             });
         var cut = RenderList();
 
-        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<MailStatusFix>()));
-        var fix = cut.FindComponent<MailStatusFix>();
-        Assert.Equal("spf:example.com", fix.Instance.Item.Key);
-        var code = fix.FindComponent<OmniCodeBlock>().Instance;
-        Assert.Equal(("TXT example.com", "v=spf1 mx a ~all"), (code.Title, code.Code));
-        Assert.Contains("MailFixTxt", fix.Markup, StringComparison.Ordinal);
-        Assert.DoesNotContain("v=DMARC1", cut.Markup, StringComparison.Ordinal);
-        // The fix sits right under its own line.
+        // Recette R1-9: not only the first red line; DMARC, after SPF, gets its card too.
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindComponents<MailStatusFix>().Count));
+        var fixes = cut.FindComponents<MailStatusFix>();
+        Assert.Equal(["spf:example.com", "dmarc:example.com"], fixes.Select(f => f.Instance.Item.Key).ToArray());
+        var spfCode = fixes[0].FindComponent<OmniCodeBlock>().Instance;
+        Assert.Equal(("TXT example.com", "v=spf1 mx a ~all"), (spfCode.Title, spfCode.Code));
+        Assert.Contains("MailFixTxt", fixes[0].Markup, StringComparison.Ordinal);
+        Assert.Contains("MailFixWhatSpf", fixes[0].Markup, StringComparison.Ordinal);
+        Assert.Contains("MailFixEffectSpf", fixes[0].Markup, StringComparison.Ordinal);
+        Assert.Equal("v=DMARC1; p=quarantine", fixes[1].FindComponent<OmniCodeBlock>().Instance.Code);
+        Assert.Contains("MailFixEffectDmarc", fixes[1].Markup, StringComparison.Ordinal);
+        // Each fix sits right under its own line.
         var lines = cut.FindAll(".mail-status-lines > *").ToList();
-        var fixIndex = lines.FindIndex(element => element.ClassList.Contains("mail-status-fix"));
-        Assert.Contains("MailDiagSpf", lines[fixIndex - 1].TextContent, StringComparison.Ordinal);
+        var fixIndexes = lines.Select((element, index) => (element, index))
+            .Where(pair => pair.element.ClassList.Contains("mail-status-fix")).Select(pair => pair.index).ToList();
+        Assert.Contains("MailDiagSpf", lines[fixIndexes[0] - 1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("MailDiagDmarc", lines[fixIndexes[1] - 1].TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R1_11_TheDnsHelp_IsOnThePage_Folded_ForTheCheckedDomain()
+    {
+        var cut = RenderList();
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<MailDnsHelp>()));
+        Assert.Equal("example.com", cut.FindComponent<MailDnsHelp>().Instance.Domain);
+        Assert.False(cut.Find(".mail-dns-help").HasAttribute("open"));
+    }
+
+    [Fact]
+    public void R1_11_WithoutMailDomain_NoDnsHelp()
+    {
+        StubDiagnostics(AllGreen.Where(item => !item.Key.Contains(':', StringComparison.Ordinal)));
+        var cut = RenderList();
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".mail-check-line")));
+        Assert.Empty(cut.FindComponents<MailDnsHelp>());
     }
 
     [Fact]
@@ -173,6 +225,22 @@ public sealed class ServerMailStatusListTests : BunitContext
     }
 
     [Fact]
+    public void R1_6_ABlankAcmeEmail_RequestsTheCertificateWithoutAContact()
+    {
+        _dialog.OpenResult = new MailDialogModel { Mode = MailDialogMode.RequestCertificate, Email = "   " };
+        _handler.SetJsonResponse(System.Net.Http.HttpMethod.Post, "api/servers/10/mail/certificate", new MailTaskQueuedDto { TaskId = 72 });
+        StubWithRed(new MailDiagnosticItemDto { Key = "tls", Verdict = MailCheckVerdict.Mismatch, Detail = "self-signed" });
+        var cut = RenderList();
+
+        cut.WaitForAssertion(() => Assert.Contains("MailDetailSelfSigned", cut.Markup, StringComparison.Ordinal));
+        cut.FindAll(".mail-status-fix button").First(b => b.TextContent.Contains("MailObtainCertificate", StringComparison.Ordinal)).Click();
+
+        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, r =>
+            r.Method == "POST" && r.Url.EndsWith("mail/certificate", StringComparison.Ordinal)
+            && r.Body!.Contains("\"email\":null", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void R2_090_AllGreen_OffersTheEndToEndTest_AsTheMainAction()
     {
         var cut = RenderList();
@@ -211,7 +279,7 @@ public sealed class ServerMailStatusListTests : BunitContext
         StubTaskOutput(41, "CHECK\tpostfix\tok\t", "CHECK\tport-587\tfail\tnot listening");
         var cut = RenderList();
 
-        cut.FindAll("button").First(b => b.TextContent.Contains("MailRunServerCheck", StringComparison.Ordinal)).Click();
+        ChooseMenuItem("MailRunServerCheck");
         cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, r =>
             r.Method == "POST" && r.Url.EndsWith("mail/action", StringComparison.Ordinal)
             && r.Body!.Contains($"\"action\":{(int)MailAction.TestConfig}", StringComparison.Ordinal)));
@@ -254,7 +322,7 @@ public sealed class ServerMailStatusListTests : BunitContext
         _handler.SetJsonResponse(System.Net.Http.HttpMethod.Post, "api/servers/10/mail/quota/ingest/43", 2);
         var cut = RenderList();
 
-        cut.FindAll("button").First(b => b.TextContent.Contains("MailMeasureUsage", StringComparison.Ordinal)).Click();
+        ChooseMenuItem("MailMeasureUsage");
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, r => r.Url.EndsWith("mail/quota/refresh", StringComparison.Ordinal)));
         await cut.InvokeAsync(() => cut.Instance.HandleTaskCompletedAsync(
             new TaskCompletedNotification { TaskId = 43, ServerId = 10, Status = TaskExecutionStatus.Success }));
@@ -281,5 +349,152 @@ public sealed class ServerMailStatusListTests : BunitContext
 
         Assert.Equal(afterHeartbeat + 1,
             _handler.Requests.Count(r => r.Url.Contains("mail/diagnostics", StringComparison.Ordinal)));
+    }
+
+    // ── Recette R1-7 / R1-8 / R1-13: every task the page queues is followed until it completes ──────
+
+    [Fact]
+    public async Task R1_7_ObtainTls_KeepsItsTaskId_StaysBusyUntilItCompletes_ThenTheStateIsReadAtOnce()
+    {
+        _dialog.OpenResult = new MailDialogModel { Mode = MailDialogMode.RequestCertificate, Email = "ops@example.com" };
+        _handler.SetJsonResponse(System.Net.Http.HttpMethod.Post, "api/servers/10/mail/certificate", new MailTaskQueuedDto { TaskId = 71 });
+        StubWithRed(new MailDiagnosticItemDto { Key = "tls", Verdict = MailCheckVerdict.Mismatch, Detail = "self-signed" });
+        var cut = RenderList();
+        cut.WaitForAssertion(() => Assert.Contains("MailDetailSelfSigned", cut.Markup, StringComparison.Ordinal));
+
+        FixButton(cut, "MailObtainCertificate").Click();
+
+        cut.WaitForAssertion(() => Assert.True(cut.Instance.RunningTasks.ContainsKey(71)));
+        Assert.Equal(ServerMailStatusList.MailTaskKind.ObtainCertificate, cut.Instance.RunningTasks[71].Kind);
+        // Busy, not disabled: the button keeps its look and refuses a second click.
+        Assert.Equal("true", FixButton(cut, "MailObtainCertificate").GetAttribute("aria-busy"));
+        Assert.False(FixButton(cut, "MailObtainCertificate").HasAttribute("disabled"));
+        Assert.True(FixButton(cut, "MailInstallCertificate").HasAttribute("disabled"));
+        FixButton(cut, "MailObtainCertificate").Click();
+        Assert.Equal(1, _handler.Requests.Count(r => r.Method == "POST" && r.Url.EndsWith("mail/certificate", StringComparison.Ordinal)));
+        // Recette R1-13: one banner at the top names the running task.
+        Assert.Contains("MailTaskRunning", Host.Find(".mail-task-running").TextContent, StringComparison.Ordinal);
+        Assert.Single(Host.FindAll(".mail-task-running .mail-task-running__indicator"));
+        Assert.DoesNotContain("MailWaitingForTask", Host.Markup, StringComparison.Ordinal);
+
+        // Another task's completion changes nothing.
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompletedAsync(new TaskCompletedNotification { TaskId = 9, ServerId = 10 }));
+        Assert.True(cut.Instance.RunningTasks.ContainsKey(71));
+
+        StubDiagnostics(AllGreen);
+        var readsBefore = DiagnosticsReads;
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompletedAsync(
+            new TaskCompletedNotification { TaskId = 71, ServerId = 10, Status = TaskExecutionStatus.Success }));
+
+        // R1-8: the state is read again at the completion, no heartbeat awaited.
+        Assert.Equal(readsBefore + 1, DiagnosticsReads);
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindComponents<MailStatusFix>()));
+        Assert.Empty(cut.Instance.RunningTasks);
+        Assert.Empty(Host.FindAll(".mail-task-running"));
+        Assert.Null(cut.Instance.Failure);
+    }
+
+    [Fact]
+    public async Task R1_7_AFailedInstallTls_ShowsItsOutcome_AndFreesItsButton()
+    {
+        _handler.SetJsonResponse(System.Net.Http.HttpMethod.Post, "api/servers/10/mail/certificate/install", new MailTaskQueuedDto { TaskId = 73 });
+        StubTaskOutput(73, "Installing", "postfix: certificate file not found");
+        StubWithRed(new MailDiagnosticItemDto { Key = "tls", Verdict = MailCheckVerdict.Mismatch, Detail = "self-signed" });
+        var cut = RenderList();
+        cut.WaitForAssertion(() => Assert.Contains("MailDetailSelfSigned", cut.Markup, StringComparison.Ordinal));
+
+        FixButton(cut, "MailInstallCertificate").Click();
+        cut.WaitForAssertion(() => Assert.Equal("true", FixButton(cut, "MailInstallCertificate").GetAttribute("aria-busy")));
+        Assert.True(cut.Instance.IsBusy(ServerMailStatusList.MailTaskKind.InstallCertificate));
+
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompletedAsync(
+            new TaskCompletedNotification { TaskId = 73, ServerId = 10, Status = TaskExecutionStatus.Failed }));
+
+        cut.WaitForAssertion(() => Assert.Contains("MailTaskFailed", cut.Find(".mail-task-failed").TextContent, StringComparison.Ordinal));
+        // The last log line is read for the message.
+        Assert.Contains(_handler.Requests, r => r.Url.EndsWith("api/logs/task/73", StringComparison.Ordinal));
+        Assert.Null(FixButton(cut, "MailInstallCertificate").GetAttribute("aria-busy"));
+        Assert.Empty(Host.FindAll(".mail-task-running"));
+    }
+
+    [Fact]
+    public async Task R1_7_OpenDkimRestart_FromTheMenu_IsFollowedLikeTheOtherTasks()
+    {
+        _handler.SetJsonResponse(System.Net.Http.HttpMethod.Post, "api/servers/10/mail/action", new MailTaskQueuedDto { TaskId = 60 });
+        var cut = RenderList();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".mail-status-all-green")));
+
+        ChooseMenuItem("MailRestartOpenDkim");
+
+        cut.WaitForAssertion(() => Assert.Equal(ServerMailStatusList.MailTaskKind.OpenDkim, cut.Instance.RunningTasks[60].Kind));
+        Assert.Contains("MailTaskRunning", Host.Find(".mail-task-running").TextContent, StringComparison.Ordinal);
+        var item = OpenMenu().First(i => i.TextContent.Contains("MailRestartOpenDkim", StringComparison.Ordinal));
+        Assert.True(item.HasAttribute("disabled") || item.GetAttribute("aria-disabled") == "true");
+
+        var readsBefore = DiagnosticsReads;
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompletedAsync(
+            new TaskCompletedNotification { TaskId = 60, ServerId = 10, Status = TaskExecutionStatus.Success }));
+
+        Assert.Equal(readsBefore + 1, DiagnosticsReads);
+        Assert.Empty(cut.Instance.RunningTasks);
+        Assert.Empty(Host.FindAll(".mail-task-running"));
+    }
+
+    [Fact]
+    public async Task R1_7_APostfixAction_KeepsItsSplitButtonBusyUntilTheTaskCompletes()
+    {
+        _handler.SetJsonResponse(System.Net.Http.HttpMethod.Post, "api/servers/10/mail/action", new MailTaskQueuedDto { TaskId = 61 });
+        var cut = RenderList();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".mail-status-all-green")));
+        var postfix = cut.FindComponents<OmniSplitButton>().Single(b => b.Instance.Text == "Postfix");
+
+        postfix.Find("button").Click();
+
+        cut.WaitForAssertion(() => Assert.True(postfix.Instance.Busy));
+        Assert.Equal(ServerMailStatusList.MailTaskKind.Postfix, cut.Instance.RunningTasks[61].Kind);
+        Assert.False(cut.FindComponents<OmniSplitButton>().Single(b => b.Instance.Text == "Dovecot").Instance.Busy);
+
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompletedAsync(
+            new TaskCompletedNotification { TaskId = 61, ServerId = 10, Status = TaskExecutionStatus.Success }));
+        Assert.False(postfix.Instance.Busy);
+    }
+
+    [Fact]
+    public void R1_13_NoTaskRunning_NoBannerAndNoWaitingIndicator()
+    {
+        var cut = RenderList();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".mail-status-all-green")));
+
+        Assert.Empty(Host.FindAll(".mail-task-running"));
+        Assert.DoesNotContain("MailWaitingForTask", Host.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R1_12_TheFourActions_AreTheHeaderMenu_PostfixAndDovecotStayInThePage()
+    {
+        StubWithRed(new MailDiagnosticItemDto { Key = "dkim:example.com", Verdict = MailCheckVerdict.Mismatch, Detail = "key-mismatch" });
+        var cut = RenderList();
+        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<MailStatusFix>()));
+
+        // The menu is sent to the header outlet, not drawn in the card.
+        Assert.Empty(cut.FindAll(".mail-status .mail-actions-menu"));
+        Assert.Single(Host.FindAll("[data-outlet=\"mail-header-menu\"] .mail-actions-menu"));
+        var trigger = Host.Find(".mail-actions-menu .omni-overflow-menu__trigger");
+        Assert.Equal("MoreActions", trigger.GetAttribute("aria-label"));
+        var items = OpenMenu().Select(i => i.TextContent.Trim()).ToList();
+        Assert.Equal(["MailRestartOpenDkim", "MailRunServerCheck", "MailSendTest", "MailMeasureUsage"], items);
+
+        var tools = cut.Find(".mail-status-tools");
+        foreach (var key in new[] { "MailRestartOpenDkim", "MailRunServerCheck", "MailSendTest", "MailMeasureUsage" })
+            Assert.DoesNotContain(key, tools.TextContent, StringComparison.Ordinal);
+        Assert.Equal(["Postfix", "Dovecot"], cut.FindComponents<OmniSplitButton>().Select(b => b.Instance.Text).ToArray());
+    }
+
+    [Fact]
+    public void R1_12_ReadOnlyUsers_GetNoMenu()
+    {
+        RenderList(canManage: false);
+
+        Assert.Empty(Host.FindAll(".mail-actions-menu"));
     }
 }

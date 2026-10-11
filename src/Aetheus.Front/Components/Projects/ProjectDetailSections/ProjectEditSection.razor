@@ -28,7 +28,7 @@ else
                     <OmniFormField For="oe-pages-projects-projectdetailsections-projecteditsection-4"><LabelContent>@L["DefaultBranch"]</LabelContent><ChildContent>
                         @if (_branchesLoaded)
                         {
-                            <OmniDropDown aria-label="@L["DefaultBranch"]" @bind-Value="_model.DefaultBranch" Options="@(_branches.ToOptions(item => item, item => item))" name="DefaultBranch"
+                            <OmniDropDown Id="oe-pages-projects-projectdetailsections-projecteditsection-4" Label="@L["DefaultBranch"]" @bind-Value="_model.DefaultBranch" Options="@(_branches.ToOptions(item => item, item => item))" name="DefaultBranch"
                                 AllowEmpty="false" Filterable="true" />
                         }
                         else

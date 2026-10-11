@@ -2,17 +2,21 @@
 namespace Aetheus.Shared.Components.Analysis;
 
 /// <summary>
-/// Recette R2-119 (decided 2026-10-05, "au mieux, souple"): the weighted score of the open findings a
-/// <c>finding_score: weighted</c> grading rule grades. Every open finding weighs by its severity (info
-/// 0.5, low 1, medium 3, high 10), so five low findings never weigh as much as one high finding; a
-/// critical finding has no weight because it alone makes the measure <see cref="AnalysisGrade.F"/>
-/// (not deliverable), whatever the score. A finding without a severity weighs as an info one: an open
-/// finding always costs the A.
+/// The score of the open findings a <c>finding_score</c> grading rule grades, one entry per distinct
+/// open finding. <c>count</c> (decided 2026-10-09, recette R1-4: "je veux pas de pondération, je montre
+/// le nombre") grades the plain number of open findings, the number the run's finding list shows.
+/// <c>weighted</c> (recette R2-119) weighs each finding by its severity (info 0.5, low 1, medium 3,
+/// high 10). In both, a critical finding has no weight because it alone makes the measure
+/// <see cref="AnalysisGrade.F"/> (not deliverable), whatever the score. A finding without a severity
+/// counts as an info one.
 /// </summary>
 public static class AnalysisFindingScore
 {
-    /// <summary>The <c>finding_score</c> value of a grading rule that grades this score.</summary>
+    /// <summary>The <c>finding_score</c> value of a rule that grades the severity-weighted score.</summary>
     public const string Weighted = "weighted";
+
+    /// <summary>The <c>finding_score</c> value of a rule that grades the number of open findings.</summary>
+    public const string Counted = "count";
 
     public const double InfoWeight = 0.5;
     public const double LowWeight = 1;
@@ -26,6 +30,13 @@ public static class AnalysisFindingScore
             + counts.Medium * MediumWeight
             + counts.Low * LowWeight
             + counts.Info * InfoWeight;
+    }
+
+    /// <summary>The number of open findings, every severity included.</summary>
+    public static int Total(AnalysisGradeFindingCountsDto counts)
+    {
+        ArgumentNullException.ThrowIfNull(counts);
+        return counts.Critical + counts.High + counts.Medium + counts.Low + counts.Info;
     }
 
     /// <summary>The counts of the given severities, one entry per distinct open finding.</summary>
@@ -57,4 +68,8 @@ public static class AnalysisFindingScore
             Info = list.Sum(item => item.Info)
         };
     }
+
+    /// <summary>The value a finding-score measure grades: the number of findings, or the weighted score.</summary>
+    public static double Value(AnalysisGradeFindingCountsDto counts, bool weighted) =>
+        weighted ? Score(counts) : Total(counts);
 }

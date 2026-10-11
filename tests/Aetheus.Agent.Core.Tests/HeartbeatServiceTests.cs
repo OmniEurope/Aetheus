@@ -238,6 +238,34 @@ public class HeartbeatServiceTests
     }
 
     [Fact]
+    public async Task R1_8_AnInvalidatedMailInventory_IsCollectedAgainBeforeItsTtl_AndTheBeatCarriesTheNewOne()
+    {
+        // The clock never advances: only the invalidation can explain a second mail collection.
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 9, 10, 0, 0, TimeSpan.Zero));
+        var health = new AgentRuntimeHealth(time);
+        _mailCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
+            .Returns(new MailDataDto { PostfixVersion = "before" }, new MailDataDto { PostfixVersion = "after" });
+        var sent = new List<string>();
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Do<ServerHeartbeatDto>(beat => sent.Add(beat.Mail?.PostfixVersion ?? "")), Arg.Any<CancellationToken>())
+            .Returns((ServerHeartbeatResponseDto?)null);
+        var service = CreateService(time, health);
+        var ct = TestContext.Current.CancellationToken;
+
+        await service.CollectAndSendHeartbeatAsync(ct);
+        await service.CollectAndSendHeartbeatAsync(ct);
+        await _mailCollectorMock.Received(1).CollectAsync(Arg.Any<CancellationToken>());
+
+        health.InvalidateMailInventory();
+        await service.CollectAndSendHeartbeatAsync(ct);
+
+        await _mailCollectorMock.Received(2).CollectAsync(Arg.Any<CancellationToken>());
+        Assert.Equal(["before", "before", "after"], sent);
+        // The mark is consumed: the next beat within the TTL uses the cache again.
+        await service.CollectAndSendHeartbeatAsync(ct);
+        await _mailCollectorMock.Received(2).CollectAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ApiFailure_RetriesOnNextTimeProviderTick()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 19, 12, 0, 0, TimeSpan.Zero));

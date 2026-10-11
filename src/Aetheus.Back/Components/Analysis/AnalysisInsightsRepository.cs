@@ -104,7 +104,9 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
         var candidates = await db.AnalysisFindings
             .Where(finding => finding.ProjectId == projectId
                 && finding.Category == category
-                && finding.Status == AnalysisFindingStatus.Open
+                // Recette R2-135: a finding the scanner no longer sees is fixed whatever was decided on
+                // it (accepted, false positive, mitigated); its decisions stay in its history.
+                && finding.Status != AnalysisFindingStatus.Fixed
                 && !observedFingerprints.Contains(finding.Fingerprint)
                 && finding.Occurrences.Any(occurrence => occurrence.ScannerKey == scannerKey
                     && occurrence.BranchName == branchName))

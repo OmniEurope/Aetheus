@@ -129,7 +129,8 @@ else
                                         @* R-497: the grade is the Quality tile's; the candidate verdict sits here, in
                                            short words (its full sentence is the tooltip). Deployable is tri-state: only
                                            a decided verdict is stated, so an undecided seal never reads as a refusal. *@
-                                        @if (AssuranceVerdict is { Deployable: not null } verdict)
+                                        @* Recette R2-146: a Rejected run already says the candidate was refused; the badge stays for a deployable one. *@
+                                        @if (AssuranceVerdict is { Deployable: not null } verdict && !(verdict.Deployable == false && _run.Status == PipelineStatus.Rejected))
                                         {
                                             <OmniBadge Fill="OmniFill.Solid" Tone="@(verdict.Deployable == true ? OmniTone.Success : OmniTone.Warning)" Class="run-candidate-verdict-badge"
                                                        title="@L[verdict.Deployable == true ? "CandidateDeployableTitle" : "CandidateNotDeployableTitle"]"><Icon><OmniIcon Name="@(verdict.Deployable == true ? OmniIconName.ShieldCheck : OmniIconName.Prohibit)" /></Icon><ChildContent>@L[verdict.Deployable == true ? "CandidateDeployableShort" : "CandidateNotDeployableShort"]</ChildContent></OmniBadge>

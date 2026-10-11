@@ -363,13 +363,13 @@ internal sealed class PipelineCoreRepository(
             .ConfigureAwait(false);
     }
 
-    public async Task<bool> HasAnyContinuableFailedStepInRunAsync(int runId, CancellationToken ct = default)
+    public async Task<List<PipelineStepRun>> GetContinuableFailedStepsInRunAsync(int runId, CancellationToken ct = default)
     {
-        return await db.PipelineStepRuns
+        return await db.PipelineStepRuns.AsNoTracking()
             .Where(s => s.PipelineRunId == runId
                 && (s.Status == TaskExecutionStatus.Failed || s.Status == TaskExecutionStatus.Timeout)
                 && s.ContinueOnError)
-            .AnyAsync(ct)
+            .ToListAsync(ct)
             .ConfigureAwait(false);
     }
 

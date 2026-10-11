@@ -69,4 +69,29 @@ public class MonacoDiffViewerTests : BunitContext
 
         Assert.Contains(JSInterop.Invocations, i => i.Identifier == "monacoInterop.disposeDiffEditor");
     }
+
+    // SITE-FUNC-MONACO-DISPOSE-001: disposing twice asked JS twice to release an editor already gone,
+    // and a JS runtime already gone threw out of DisposeAsync.
+    [Fact]
+    public async Task DisposeAsync_IsIdempotent()
+    {
+        var cut = Render<MonacoDiffViewer>(p => p.Add(x => x.OriginalValue, "a").Add(x => x.ModifiedValue, "b"));
+
+        await cut.Instance.DisposeAsync();
+        await cut.Instance.DisposeAsync();
+
+        Assert.Single(JSInterop.Invocations, i => i.Identifier == "monacoInterop.disposeDiffEditor");
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ToleratesADisconnectedJsRuntime()
+    {
+        JSInterop.SetupVoid("monacoInterop.disposeDiffEditor", _ => true)
+            .SetException(new Microsoft.JSInterop.JSDisconnectedException("gone"));
+        var cut = Render<MonacoDiffViewer>(p => p.Add(x => x.OriginalValue, "a").Add(x => x.ModifiedValue, "b"));
+
+        var error = await Record.ExceptionAsync(() => cut.Instance.DisposeAsync().AsTask());
+
+        Assert.Null(error);
+    }
 }

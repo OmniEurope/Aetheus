@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.ComponentModel;
 using System.Text;
-using System.Text.Json;
 
 namespace Aetheus.Agent.Core.Operations;
 
@@ -9,6 +8,7 @@ public sealed class AiRunOperationExecutor(
     IServerApiClient apiClient,
     IShellRunner shellRunner,
     IOptions<AetheusAgentOptions> options,
+    TimeProvider timeProvider,
     ILogger<AiRunOperationExecutor> logger) : IOperationExecutor
 {
     private readonly AetheusAgentOptions _options = options.Value;
@@ -34,7 +34,7 @@ public sealed class AiRunOperationExecutor(
     {
         if (kind != OperationKind.AiRun || !OperationTargetValidator.IsValid(kind, target))
             return new ExecutorResult(-1, false);
-        if (!TryReadConfiguration(envVars, out var configuration, out var error))
+        if (!AiRunConfiguration.TryRead(envVars, out var configuration, out var error))
         {
             await onOutput(error, TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
@@ -51,12 +51,13 @@ public sealed class AiRunOperationExecutor(
         var promptPath = Path.Combine(tempRoot, "prompt.md");
         var outputPath = Path.Combine(tempRoot, "report.md");
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var startedAt = timeProvider.GetUtcNow().UtcDateTime;
 
         try
         {
             return await ExecuteConfiguredAsync(
                 configuration, ownsWorkspace, workingDirectory, promptPath, outputPath,
-                timeoutSeconds, stopwatch, onOutput, cancellationToken).ConfigureAwait(false);
+                timeoutSeconds, new RunClock(stopwatch, startedAt), onOutput, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -71,10 +72,11 @@ public sealed class AiRunOperationExecutor(
         string promptPath,
         string outputPath,
         int timeoutSeconds,
-        System.Diagnostics.Stopwatch stopwatch,
+        RunClock clock,
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken ct)
     {
+        var stopwatch = clock.Stopwatch;
         var prepared = await PrepareRunAsync(
             configuration, ownsWorkspace, workingDirectory, promptPath, outputPath, ct).ConfigureAwait(false);
         var process = await RunProcessAsync(
@@ -84,7 +86,7 @@ public sealed class AiRunOperationExecutor(
                 configuration, process, prepared.BaseCommitSha, stopwatch, onOutput, ct).ConfigureAwait(false);
         return await PublishRunnerResultAsync(
             configuration, process.Result, outputPath, workingDirectory,
-            prepared.BaseCommitSha, stopwatch, onOutput, ct).ConfigureAwait(false);
+            prepared.BaseCommitSha, clock, onOutput, ct).ConfigureAwait(false);
     }
 
     private async Task<PreparedAiRun> PrepareRunAsync(
@@ -103,6 +105,7 @@ public sealed class AiRunOperationExecutor(
                     "AI source checkout cannot replace an existing pipeline workspace.");
             baseCommitSha = await CheckoutSourceAsync(configuration, workingDirectory, ct).ConfigureAwait(false);
         }
+        AiFindingsPublisher.DeleteStale(configuration, workingDirectory);
         var prompt = await BuildPromptAsync(configuration, workingDirectory, ct).ConfigureAwait(false);
         await File.WriteAllTextAsync(promptPath, prompt, Encoding.UTF8, ct).ConfigureAwait(false);
         var arguments = configuration.Arguments.Select(argument => argument switch
@@ -169,10 +172,11 @@ public sealed class AiRunOperationExecutor(
         string outputPath,
         string workingDirectory,
         string? baseCommitSha,
-        System.Diagnostics.Stopwatch stopwatch,
+        RunClock clock,
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken ct)
     {
+        var stopwatch = clock.Stopwatch;
         await ForwardOutputAsync(process.StdOut, TaskLogLevel.Info, onOutput).ConfigureAwait(false);
         await ForwardOutputAsync(process.StdErr, TaskLogLevel.Error, onOutput).ConfigureAwait(false);
         var outputFileExists = File.Exists(outputPath);
@@ -182,7 +186,11 @@ public sealed class AiRunOperationExecutor(
             ? await ReadBoundedFileAsync(outputPath, configuration.MaxOutputBytes, ct).ConfigureAwait(false)
             : process.StdOut;
         report = TruncateUtf8(report, configuration.MaxOutputBytes, ref truncated);
-        var diff = await CaptureDiffAsync(workingDirectory, configuration.MaxOutputBytes, ct).ConfigureAwait(false);
+        // capture_diff: false - a read-only review in the shared run workspace: its untracked files are
+        // the run's restored artifacts, not the AI's work.
+        var diff = configuration.CaptureDiff
+            ? await CaptureDiffAsync(workingDirectory, configuration.MaxOutputBytes, ct).ConfigureAwait(false)
+            : null;
         if (diff is not null)
             diff = TruncateUtf8(diff, configuration.MaxOutputBytes, ref truncated);
         stopwatch.Stop();
@@ -192,6 +200,9 @@ public sealed class AiRunOperationExecutor(
                         && (!configuration.Gate || verdict == AiVerdict.Pass);
         if (configuration.Gate && verdict != AiVerdict.Pass)
             await onOutput("AI gate failed: VERDICT: PASS is required.", TaskLogLevel.Error).ConfigureAwait(false);
+        succeeded &= await AiFindingsPublisher.PublishAsync(
+            apiClient, timeProvider, logger, configuration, workingDirectory, clock.StartedAt, onOutput, ct)
+            .ConfigureAwait(false);
         return await PublishAsync(
             configuration,
             string.IsNullOrWhiteSpace(report) ? "AI runner produced no report." : report,
@@ -210,6 +221,8 @@ public sealed class AiRunOperationExecutor(
             logger.LogWarning(ex, "Could not remove AI run temporary directory {Directory}", tempRoot);
         }
     }
+
+    private sealed record RunClock(System.Diagnostics.Stopwatch Stopwatch, DateTime StartedAt);
 
     private sealed record PreparedAiRun(IReadOnlyList<string> Arguments, string? BaseCommitSha);
 
@@ -412,118 +425,6 @@ public sealed class AiRunOperationExecutor(
             await onOutput(line, level).ConfigureAwait(false);
     }
 
-    private static bool TryReadConfiguration(
-        IReadOnlyDictionary<string, string> env,
-        out AiRunConfiguration configuration,
-        out string error)
-    {
-        configuration = default!;
-        error = "AI run configuration is incomplete.";
-        if (!TryReadRequiredConfiguration(env, out var required)) return false;
-        List<string>? arguments;
-        try
-        {
-            arguments = JsonSerializer.Deserialize<List<string>>(required.ArgumentsJson);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-        if (arguments is null || arguments.Count > 64) return false;
-        var contextPaths = ReadJsonList(env.GetValueOrDefault("AETHEUS_AI_CONTEXT_PATHS_JSON"));
-        if (!TryReadSourceRepository(
-                env, out var sourceRepositoryId, out var sourceRepositoryPath, out var sourceRef))
-            return false;
-        var runnerEnvironment = ReadRunnerEnvironment(env);
-        configuration = new AiRunConfiguration(
-            required.TaskId,
-            required.ProfileName,
-            required.Binary,
-            arguments,
-            required.Prompt,
-            env.GetValueOrDefault("AETHEUS_AI_PROMPT_FILE"),
-            contextPaths,
-            env.GetValueOrDefault("AETHEUS_AI_WORKING_DIR") ?? string.Empty,
-            string.Equals(env.GetValueOrDefault("AETHEUS_AI_GATE"), "true", StringComparison.OrdinalIgnoreCase),
-            string.Equals(env.GetValueOrDefault("AETHEUS_AI_SENDS_DATA_EXTERNALLY"), "true", StringComparison.OrdinalIgnoreCase),
-            Math.Clamp(required.MaxOutputBytes, 1024, 1_000_000),
-            runnerEnvironment,
-            sourceRepositoryId,
-            sourceRepositoryPath,
-            sourceRef,
-            env.GetValueOrDefault("GIT_USERNAME"),
-            env.GetValueOrDefault("GIT_PASSWORD"));
-        return true;
-    }
-
-    private static bool TryReadRequiredConfiguration(
-        IReadOnlyDictionary<string, string> env, out RequiredAiConfiguration configuration)
-    {
-        configuration = default!;
-        if (!env.TryGetValue("AETHEUS_TASK_ID", out var taskText)
-            || !int.TryParse(taskText, out var taskId)
-            || !env.TryGetValue("AETHEUS_AI_PROFILE_NAME", out var profileName)
-            || !env.TryGetValue("AETHEUS_AI_BINARY", out var binary)
-            || !env.TryGetValue("AETHEUS_AI_ARGS_JSON", out var argsJson)
-            || !env.TryGetValue("AETHEUS_AI_PROMPT", out var prompt)
-            || !env.TryGetValue("AETHEUS_AI_MAX_OUTPUT_BYTES", out var maxText)
-            || !int.TryParse(maxText, out var maxOutputBytes)) return false;
-        configuration = new RequiredAiConfiguration(
-            taskId, profileName, binary, argsJson, prompt, maxOutputBytes);
-        return true;
-    }
-
-    private static List<string> ReadJsonList(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return [];
-        try { return JsonSerializer.Deserialize<List<string>>(json) ?? []; }
-        catch (JsonException) { return []; }
-    }
-
-    private sealed record RequiredAiConfiguration(
-        int TaskId, string ProfileName, string Binary, string ArgumentsJson, string Prompt, int MaxOutputBytes);
-
-    private static bool TryReadSourceRepository(
-        IReadOnlyDictionary<string, string> env,
-        out int? sourceRepositoryId,
-        out string? sourceRepositoryPath,
-        out string? sourceRef)
-    {
-        sourceRepositoryId = null;
-        sourceRepositoryPath = null;
-        sourceRef = null;
-        var hasSourceRepositoryId = env.TryGetValue(
-            "AETHEUS_AI_SOURCE_REPOSITORY_ID",
-            out var sourceRepositoryText);
-        var hasSourceRepositoryPath = env.TryGetValue(
-            "AETHEUS_AI_SOURCE_REPOSITORY_PATH",
-            out sourceRepositoryPath);
-        if (hasSourceRepositoryId || hasSourceRepositoryPath)
-        {
-            if (!hasSourceRepositoryId
-                || !hasSourceRepositoryPath
-                || !int.TryParse(sourceRepositoryText, out var parsedSourceRepositoryId)
-                || parsedSourceRepositoryId <= 0
-                || string.IsNullOrWhiteSpace(sourceRepositoryPath)
-                || !sourceRepositoryPath.StartsWith("/git/", StringComparison.Ordinal)
-                || sourceRepositoryPath.Contains("..", StringComparison.Ordinal)
-                || string.IsNullOrWhiteSpace(env.GetValueOrDefault("GIT_USERNAME"))
-                || string.IsNullOrWhiteSpace(env.GetValueOrDefault("GIT_PASSWORD")))
-                return false;
-            sourceRepositoryId = parsedSourceRepositoryId;
-            sourceRef = env.GetValueOrDefault("AETHEUS_AI_SOURCE_REF");
-        }
-        return true;
-    }
-
-    private static Dictionary<string, string> ReadRunnerEnvironment(
-        IReadOnlyDictionary<string, string> env) =>
-        env.Where(variable =>
-                !variable.Key.StartsWith("AETHEUS_", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(variable.Key, "GIT_USERNAME", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(variable.Key, "GIT_PASSWORD", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(variable => variable.Key, variable => variable.Value, StringComparer.Ordinal);
-
     internal static AiVerdict ParseVerdict(string report)
     {
         var verdict = AiVerdict.None;
@@ -550,23 +451,4 @@ public sealed class AiRunOperationExecutor(
         && !Path.IsPathRooted(path)
         && !path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Any(segment => segment is "." or "..");
-
-    private sealed record AiRunConfiguration(
-        int ServerTaskId,
-        string ProfileName,
-        string Binary,
-        List<string> Arguments,
-        string Prompt,
-        string? PromptFile,
-        List<string> ContextPaths,
-        string WorkingDirectory,
-        bool Gate,
-        bool SendsDataExternally,
-        int MaxOutputBytes,
-        Dictionary<string, string> RunnerEnvironment,
-        int? SourceRepositoryId,
-        string? SourceRepositoryPath,
-        string? SourceRef,
-        string? GitUsername,
-        string? GitPassword);
 }

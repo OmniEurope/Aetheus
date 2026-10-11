@@ -67,7 +67,7 @@
             <Template Context="r">
                 @if (r.SourcePipelineId.HasValue && !string.IsNullOrWhiteSpace(r.SourcePipelineName))
                 {
-                    <a href="@PipelineHref(r)" class="pipeline-name-link" @onclick:stopPropagation="true">
+                    <a href="@PipelineHref(r)" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                         @r.SourcePipelineName
                     </a>
                 }
@@ -83,11 +83,11 @@
                    count that opens the release, which lists them. *@
                 @if (r.Artifacts.Count == 1)
                 {
-                    <a href="/artifacts/@r.Artifacts[0].Id" class="pipeline-name-link" @onclick:stopPropagation="true">@r.Artifacts[0].Name</a>
+                    <a href="/artifacts/@r.Artifacts[0].Id" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@r.Artifacts[0].Name</a>
                 }
                 else if (r.Artifacts.Count > 1)
                 {
-                    <a href="/releases/@r.Id" class="pipeline-name-link" @onclick:stopPropagation="true">@string.Format(L["ArtifactsCount"], r.Artifacts.Count)</a>
+                    <a href="/releases/@r.Id" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@string.Format(L["ArtifactsCount"], r.Artifacts.Count)</a>
                 }
             </Template>
         </OmniDataGridColumn>
@@ -95,7 +95,7 @@
         {
             <OmniDataGridColumn TItem="ReleaseDto" Title="" Width="200px" Sortable="false" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
                 <Template Context="r">
-                    <span @onclick:stopPropagation="true">
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     @if (r.Status == ReleaseStatus.Detected)
                     {
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => TriggerBuild(r))" Disabled="@(!_canWrite)" title="@L["TriggerBuild"]"><OmniIcon Name="OmniIconName.RocketLaunch" /></OmniButton>

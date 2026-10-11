@@ -114,7 +114,7 @@ public class VaultRepositoryTests : IDisposable
         var secret = new VaultSecret { VaultId = vault.Id, Key = "S1", EncryptedValue = "enc" };
         _db.VaultSecrets.Add(secret);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-        _db.VaultSecretVersions.Add(new VaultSecretVersion { VaultSecretId = secret.Id, Version = 1, EncryptedValue = "v1" });
+        _db.VaultSecretVersions.Add(new VaultSecretVersion { VaultSecretId = secret.Id, Version = 1 });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var result = await _repo.GetVaultDetailAsync(vault.Id, ct: TestContext.Current.CancellationToken);
@@ -237,7 +237,7 @@ public class VaultRepositoryTests : IDisposable
         _db.VaultSecrets.Add(secret);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        await _repo.AddSecretVersionAsync(new VaultSecretVersion { VaultSecretId = secret.Id, Version = 1, EncryptedValue = "v1" }, ct: TestContext.Current.CancellationToken);
+        await _repo.AddSecretVersionAsync(new VaultSecretVersion { VaultSecretId = secret.Id, Version = 1 }, ct: TestContext.Current.CancellationToken);
         Assert.Equal(1, await _db.VaultSecretVersions.CountAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -252,9 +252,9 @@ public class VaultRepositoryTests : IDisposable
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         _db.VaultSecretVersions.AddRange(
-            new VaultSecretVersion { VaultSecretId = secret.Id, Version = 1, EncryptedValue = "v1" },
-            new VaultSecretVersion { VaultSecretId = secret.Id, Version = 3, EncryptedValue = "v3" },
-            new VaultSecretVersion { VaultSecretId = secret.Id, Version = 2, EncryptedValue = "v2" }
+            new VaultSecretVersion { VaultSecretId = secret.Id, Version = 1 },
+            new VaultSecretVersion { VaultSecretId = secret.Id, Version = 3 },
+            new VaultSecretVersion { VaultSecretId = secret.Id, Version = 2 }
         );
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
@@ -273,7 +273,7 @@ public class VaultRepositoryTests : IDisposable
         _db.VaultSecrets.Add(secret);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        _db.VaultSecretVersions.Add(new VaultSecretVersion { VaultSecretId = secret.Id, Version = 3, EncryptedValue = "v" });
+        _db.VaultSecretVersions.Add(new VaultSecretVersion { VaultSecretId = secret.Id, Version = 3 });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var result = await _repo.GetNextVersionAsync(secret.Id, ct: TestContext.Current.CancellationToken);

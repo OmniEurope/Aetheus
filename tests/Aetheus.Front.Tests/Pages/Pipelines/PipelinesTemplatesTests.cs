@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Pipelines;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -91,6 +92,27 @@ public class PipelinesTemplatesTests : BunitContext
         Assert.Contains("title=\"VersionHistoryTitle\"", cut.Markup, StringComparison.Ordinal);
     }
 
+    // D9 / SITE-FUNC-TEMPLATE-USE-001: a user-made template opened the role wizard, which knows only
+    // the built-in role templates and left every role unchecked; it now opens the prefilled editor.
+    [Theory]
+    [InlineData(9, "QA", "/pipelines/new?templateId=9")]
+    [InlineData(1, "application-ci", "/pipelines/setup?templateId=1")]
+    public async Task TemplatesPage_UseOpensEditorForCustomTemplateAndWizardForRoleTemplate(
+        int id, string name, string expectedPath)
+    {
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>
+        {
+            new() { Id = id, Name = name, Category = "CI", Version = 1 }
+        });
+        var cut = Render<PipelineTemplates>();
+        cut.WaitForState(() => cut.Markup.Contains(name, StringComparison.Ordinal));
+
+        await cut.Find("button[title=\"UseTemplate\"]").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        Assert.EndsWith(expectedPath, nav.Uri, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TemplatesPage_LoadFailure_ShowsRetry()
     {
@@ -115,6 +137,27 @@ public class PipelinesTemplatesTests : BunitContext
         await cut.InvokeAsync(() => permissions.SetPermissions([], isAdmin: false));
 
         cut.WaitForAssertion(() => Assert.DoesNotContain("NewTemplate", cut.Markup, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TemplateEditPage_UseOnACustomTemplateOpensThePrefilledEditor()
+    {
+        _handler.SetJsonResponse("api/pipelines/templates/9", new PipelineTemplateDto
+        {
+            Id = 9,
+            Name = "QA",
+            Category = "CI",
+            Version = 2,
+            YamlContent = "name: qa\nstages: []"
+        });
+        var cut = Render<PipelineTemplateEdit>(parameters => parameters.Add(component => component.Id, 9));
+        cut.WaitForState(() => cut.Markup.Contains("UseTemplate", StringComparison.Ordinal));
+
+        await cut.FindAll("button").First(button => button.TextContent.Contains("UseTemplate", StringComparison.Ordinal))
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        Assert.EndsWith("/pipelines/new?templateId=9", nav.Uri, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -156,5 +199,22 @@ public class PipelinesTemplatesTests : BunitContext
         Assert.Equal("Reusable validation", request!.Name);
         Assert.Equal("Validation", request.Category);
         Assert.Contains("git status --short", request.YamlContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TemplatesPage_RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>
+        {
+            new() { Id = 4, Name = "dotnet-ci", Version = 2, PipelineCount = 3, UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc) }
+        });
+
+        var cut = Render<PipelineTemplates>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        // The template and usage links, then the row buttons.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);
     }
 }

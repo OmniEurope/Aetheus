@@ -12,7 +12,7 @@ public class SettingsControllerTests
 
     public SettingsControllerTests()
     {
-        _sut = new SettingsController(_serviceMock);
+        _sut = new SettingsController(_serviceMock, Substitute.For<IEmailSenderSettingsService>());
     }
 
     [Fact]

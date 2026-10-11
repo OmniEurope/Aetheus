@@ -98,10 +98,13 @@ public sealed record MailCertificateDto
 /// <summary>Requests a Let's Encrypt certificate for the mail hostname, then installs it for Postfix and Dovecot.</summary>
 public sealed record RequestMailCertificateRequest
 {
-    [Required]
+    /// <summary>
+    /// The Let's Encrypt account contact, which only receives expiry notices. Optional (recette R1-6): null
+    /// registers the account without an address, as the certbot helper already allows.
+    /// </summary>
     [EmailAddress]
     [StringLength(254)]
-    public string Email { get; init; } = string.Empty;
+    public string? Email { get; init; }
 }
 
 /// <summary>Sends one tagged test message through the server's MTA.</summary>
@@ -127,6 +130,10 @@ public sealed record MailDnsRecordCheckDto
     public List<string> Observed { get; init; } = [];
     public MailCheckVerdict Verdict { get; init; }
     public string Detail { get; init; } = string.Empty;
+
+    /// <summary>Recette R1-14: for an MX that still shows another host, the remaining time-to-live (seconds) of
+    /// the answer seen, as the resolver reported it; null when it was not reported.</summary>
+    public int? TimeToLiveSeconds { get; init; }
 }
 
 /// <summary>Result of the DNS verification of one mail domain.</summary>
@@ -182,6 +189,10 @@ public sealed record MailDiagnosticItemDto
 
     /// <summary>Expected value; empty when it is not known yet (a DKIM key the agent has not read).</summary>
     public string RecordValue { get; init; } = string.Empty;
+
+    /// <summary>Recette R1-14: on a red MX line, the remaining time-to-live (seconds) of the answer seen, as the
+    /// resolver reported it; null when it was not reported.</summary>
+    public int? TimeToLiveSeconds { get; init; }
 }
 
 /// <summary>Mail diagnostics computed from the last heartbeat and backend DNS lookups.</summary>

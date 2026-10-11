@@ -90,7 +90,11 @@
                     else
                     {
                         <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ProbeOutboundAsync" Busy="@(_probeQueuing || _probeTaskId is not null)" Class="mail-prereq-check"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailCheckPrerequisite"]</span></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ProbeOutboundAsync" Disabled="@AgentOffline" title="@ProbeTitle" Busy="@(_probeQueuing || _probeTaskId is not null)" Class="mail-prereq-check"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailCheckPrerequisite"]</span></OmniButton>
+                            @if (AgentOffline)
+                            {
+                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0 mail-setup-agent-offline">@L["AgentOfflineActionBlocked"]</OmniText>
+                            }
                             @if (_probeTaskId is not null)
                             {
                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailWaitingForTask"]</OmniText>
@@ -106,7 +110,7 @@
                     <OmniFormField Label="@L["AdminEmail"]" Help="@L["MailAdminEmailHelp"]" For="mail-setup-admin">
                         <OmniTextBox Id="mail-setup-admin" @bind-Value="_model.Email" Placeholder="admin@example.com" />
                     </OmniFormField>
-                    <OmniFormField Label="@L["AdminPassword"]" Help="@L["MailAdminPasswordHelp"]" For="mail-setup-password">
+                    <OmniFormField Label="@L["AdminPassword"]" Help="@L["MailAdminPasswordHelp"]" Description="@string.Format(L["MailPasswordRule"], PasswordPolicy.MinimumLength, PasswordPolicy.MaximumLength)" For="mail-setup-password">
                         <OmniPassword Id="mail-setup-password" @bind-Value="_model.Password" Autocomplete="new-password" />
                     </OmniFormField>
                     <OmniFormField Help="@L["MailQuotaHelp"]" For="mail-setup-quota"><LabelContent>@($"{L["Quota"]} (MB)")</LabelContent><ChildContent>
@@ -120,6 +124,10 @@
                         <MailCheckLine Label="@L["MailDiagReverseDns"]" IsOk="@(ReverseDns is null ? null : ReverseDnsOk)" />
                         <MailCheckLine Label="@L["MailDiagOutbound"]" IsOk="@_outbound?.IsOk" />
                     </OmniStack>
+                    @if (AgentOffline)
+                    {
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0 mail-setup-agent-offline">@L["AgentOfflineActionBlocked"]</OmniText>
+                    }
                     @if (!PrerequisitesOk)
                     {
                         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0 mail-configure-blocked">@L["MailConfigureNeedsPrerequisites"]</OmniText>

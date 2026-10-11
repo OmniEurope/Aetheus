@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using OmniEurope.Blazor.Components;
 
@@ -74,5 +75,20 @@ public sealed class PageFedGridLoadingBarTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains("shop", cut.Markup, StringComparison.Ordinal));
         Assert.Single(cut.FindAll(Bar));
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        var apps = new List<MonitoredAppStatusDto>
+        {
+            new() { Id = 1, Name = "shop", ProjectId = 1, CurrentStatus = AppHealthStatus.Up }
+        };
+        var cut = Render<MonitoredAppsStatusGrid>(parameters => parameters.Add(p => p.Applications, apps));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }
 }

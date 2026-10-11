@@ -1,0 +1,50 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R1-11: a practical, step-by-step help to publish the mail records at the DNS provider of the
+   domain, folded by default under the status list. OVH is the worked example; the values to copy are the
+   ones each red line shows. *@
+<OmniFieldset Collapsible="true" Expanded="false" Class="mail-dns-help">
+    <Legend>@L["MailHelpTitle"]</Legend>
+    <ChildContent>
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@L["MailHelpRecordsTitle"]</OmniHeading>
+            <ul class="mail-dns-help-list">
+                <li>@L["MailFixWhatMx"]</li>
+                <li>@L["MailFixWhatSpf"]</li>
+                <li>@L["MailFixWhatDkim"]</li>
+                <li>@L["MailFixWhatDmarc"]</li>
+            </ul>
+
+            <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@L["MailHelpOrderTitle"]</OmniHeading>
+            <ol class="mail-dns-help-list">
+                <li>@L["MailHelpOrderA"]</li>
+                <li>@L["MailHelpOrderPtr"]</li>
+                <li>@L["MailHelpOrderTls"]</li>
+                <li>@L["MailHelpOrderDkimSpf"]</li>
+                <li>@Format("MailHelpOrderDmarc")</li>
+                <li>@L["MailHelpOrderMx"]</li>
+            </ol>
+
+            <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@L["MailHelpValuesTitle"]</OmniHeading>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailHelpValues"]</OmniText>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Format("MailHelpValuesName")</OmniText>
+
+            <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@L["MailHelpOvhTitle"]</OmniHeading>
+            <ol class="mail-dns-help-list">
+                <li>@L["MailHelpOvhOpen"]</li>
+                <li>@L["MailHelpOvhFilter"]</li>
+                <li>@L["MailHelpOvhDelete"]</li>
+                <li>@L["MailHelpOvhAdd"]</li>
+                <li>@Format("MailHelpOvhRua")</li>
+            </ol>
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailHelpOtherProviders"]</OmniText>
+
+            <OmniAlert Severity="OmniSeverity.Warning" Title="@L["MailHelpMxWarningTitle"]" Class="mail-dns-help-mx-warning">@L["MailHelpMxWarning"]</OmniAlert>
+
+            <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@L["MailHelpPostmasterTitle"]</OmniHeading>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Format("MailHelpPostmaster")</OmniText>
+
+            <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@L["MailHelpDelayTitle"]</OmniHeading>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailHelpDelay"]</OmniText>
+        </OmniStack>
+    </ChildContent>
+</OmniFieldset>

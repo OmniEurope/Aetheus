@@ -23,6 +23,13 @@ public partial class DockerComposeTab
     [Parameter] public bool CanAdmin { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<DockerComposeStackDto> Stacks { get; set; } = [];
 
+    // SITE-OFFLINE-001: every action of this tab queues a task only the agent can claim. The parent passes
+    // no server, so its agent's presence comes from the loader the server detail layout cascades.
+    [CascadingParameter(Name = "ServerLoader")] public ServerDetailLoader? Loader { get; set; }
+
+    private bool AgentOffline => Loader?.Server is { } server && AgentOfflineGuard.IsOffline(server);
+    private bool BlockedByOfflineAgent() => Loader?.Server is { } server && AgentOfflineGuard.Blocks(server, Toast);
+
     private string _composeSearch = string.Empty;
 
     // Recette R-227: each heartbeat brings a new stack list; stacks that were not there read bold.
@@ -66,6 +73,7 @@ public partial class DockerComposeTab
 
     private async Task ComposeActionAsync(string stackName, DockerComposeAction action)
     {
+        if (BlockedByOfflineAgent()) return;
         var request = new DockerComposeActionRequest { StackName = stackName, Action = action };
         var success = await Api.ServerTools.ExecuteComposeActionAsync(ServerId, request);
         if (success)
@@ -80,6 +88,7 @@ public partial class DockerComposeTab
 
     private async Task OpenComposeEditorAsync(string stackName)
     {
+        if (BlockedByOfflineAgent()) return;
         _composeEditorStack = stackName;
         _composeEditorContent = string.Empty;
         _composeEditorVisible = true;
@@ -101,6 +110,7 @@ public partial class DockerComposeTab
 
     private async Task SaveComposeFileAsync()
     {
+        if (BlockedByOfflineAgent()) return;
         if (string.IsNullOrWhiteSpace(_composeEditorContent)) return;
         _composeDeploying = true;
         var request = new DockerComposeFileSaveRequest

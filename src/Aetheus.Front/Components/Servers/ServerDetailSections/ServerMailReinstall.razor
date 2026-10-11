@@ -1,22 +1,31 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@using Microsoft.AspNetCore.Components.Sections
 @* "Réinstaller la messagerie" (recette R2-083 / R2-088): offered whenever a mail stack is on the host,
-   half-configured included; the outcome of the purge stays on the page once the stack is gone. *@
-@if (StackDetected || Running || _outcome is not null)
+   half-configured included; the outcome of the purge stays on the page once the stack is gone.
+   Recette R1-12: the button sits in the page header, the mail actions' "..." menu (HeaderMenuSection,
+   filled by the status list) beside it; the page below it no longer gives it a line of its own. *@
+<SectionContent SectionName="@PipelinesList.HeaderActionsSection">
+    @if (StackDetected && _taskId is null)
+    {
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@PurgeAsync" Busy="@Running" Disabled="@(!CanPurge)" Class="mail-reinstall-button" title="@(DisabledReason ?? L["MailReinstall"].Value)"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["MailReinstallAction"]</span></OmniButton>
+        <SectionOutlet SectionName="@HeaderMenuSection" />
+    }
+</SectionContent>
+@if (_taskId is not null || _outcome is not null)
 {
     <OmniStack Gap="OmniSpacing.Small" Class="omni-u-mb-lg mail-reinstall">
-        @if (StackDetected)
-        {
-            <OmniRow Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                <div class="blade-content-spacer"></div>
-                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@PurgeAsync" Busy="@Running" Disabled="@(!CanPurge)" title="@(DisabledReason ?? L["MailReinstall"].Value)"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["MailReinstallAction"]</span></OmniButton>
-            </OmniRow>
-        }
+        @* Recette R2-126 (decided 2026-10-05): while the stack is erased the page holds one banner at its
+           top (inline indicator, text, elapsed time); the button, the service actions and the state list
+           wait for the end, and the outcome replaces the banner in the same place. *@
         @if (_taskId is not null)
         {
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                <AetheusLoader Size="OmniControlSize.Small" />
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailReinstallRunning"]</OmniText>
-            </OmniStack>
+            <OmniAlert Severity="OmniSeverity.Info" Class="mail-reinstall-running">
+                <div class="mail-reinstall-running__line">
+                    <AetheusLoader Size="OmniControlSize.Small" Class="mail-reinstall-running__indicator" />
+                    <span>@L["MailReinstallRunning"]</span>
+                    <span class="mail-reinstall-running__elapsed">@Elapsed</span>
+                </div>
+            </OmniAlert>
         }
         @if (_outcome is { } outcome)
         {

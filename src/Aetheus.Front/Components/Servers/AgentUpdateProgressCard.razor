@@ -24,7 +24,7 @@
             </OmniStack>
             @* D11: a bar only where there is a percentage to show. While the agent is offline there
                is none, so it is the loader that says "we are waiting", like everywhere else. *@
-            @if (_phase == AgentUpdatePhase.AgentOffline)
+            @if (_phase == AgentUpdatePhase.AgentOffline || _checking)
             {
                 <AetheusLoader Size="OmniControlSize.Small" />
             }

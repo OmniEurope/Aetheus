@@ -2367,6 +2367,9 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<bool>("PreventForcePush")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("ProtectionLevel")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("RequirePullRequest")
                         .HasColumnType("boolean");
 
@@ -7132,10 +7135,6 @@ namespace Aetheus.Back.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ChangedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EncryptedValue")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("Key")

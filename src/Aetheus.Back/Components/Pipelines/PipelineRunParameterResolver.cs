@@ -18,8 +18,10 @@ public interface IPipelineRunParameterResolver
         CancellationToken ct = default);
 
     /// <summary>The distinct servers that could host any stage of <paramref name="definition"/>.</summary>
+    /// <param name="projectId">The run's project, in which an <c>environment:</c> selector is read, exactly as
+    /// dispatch reads it (neighbour of BACK-018).</param>
     Task<IReadOnlyCollection<int>> ResolveCandidateTargetServerIdsAsync(
-        PipelineYamlDefinition definition, int? organizationId, CancellationToken ct);
+        PipelineYamlDefinition definition, int? organizationId, int? projectId, CancellationToken ct);
 }
 
 /// <summary>
@@ -50,7 +52,7 @@ public sealed class PipelineRunParameterResolver(
             preparation.YamlSnapshot, organizationId, effectiveParameters, ct).ConfigureAwait(false);
         var effectiveStages = YamlParsingHelper.FlattenJobs(resolution.Definition);
         var targetIds = await ResolveCandidateTargetServerIdsAsync(
-            resolution.Definition, organizationId, ct).ConfigureAwait(false);
+            resolution.Definition, organizationId, preparation.EffectiveProjectId, ct).ConfigureAwait(false);
         return preparation with
         {
             YamlSnapshot = resolution.Yaml,
@@ -61,7 +63,7 @@ public sealed class PipelineRunParameterResolver(
     }
 
     public async Task<IReadOnlyCollection<int>> ResolveCandidateTargetServerIdsAsync(
-        PipelineYamlDefinition definition, int? organizationId, CancellationToken ct)
+        PipelineYamlDefinition definition, int? organizationId, int? projectId, CancellationToken ct)
     {
         var ids = new HashSet<int>();
         foreach (var stage in YamlParsingHelper.FlattenJobs(definition))
@@ -72,7 +74,7 @@ public sealed class PipelineRunParameterResolver(
             var unresolved = IsUnresolved(stage.Pool) || IsUnresolved(stage.Environment) || IsUnresolved(stage.Agent);
             var candidates = await repo.FindCandidateTargetServerIdsAsync(
                 unresolved ? null : stage.Pool, unresolved ? null : stage.Environment, unresolved ? null : stage.Agent,
-                OsTypeHelper.Parse(stage.Os), organizationId, dispatchServers.StageHasDeployStep(stage), ct)
+                OsTypeHelper.Parse(stage.Os), organizationId, dispatchServers.StageHasDeployStep(stage), projectId, ct)
                 .ConfigureAwait(false);
             ids.UnionWith(candidates);
         }

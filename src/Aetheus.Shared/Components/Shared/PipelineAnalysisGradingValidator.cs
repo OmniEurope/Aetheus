@@ -98,14 +98,19 @@ public static class PipelineAnalysisGradingValidator
         if (targets != 1)
             errors.Add($"analysis grading rule '{label}' must target exactly one metric, finding severity or finding score.");
         if (string.IsNullOrWhiteSpace(rule.FindingScore)) return;
-        if (!IsWeightedFindingScore(rule))
-            errors.Add($"analysis grading rule '{label}' finding_score must be '{AnalysisFindingScore.Weighted}'.");
+        if (!IsFindingScore(rule))
+            errors.Add($"analysis grading rule '{label}' finding_score must be '{AnalysisFindingScore.Counted}' or '{AnalysisFindingScore.Weighted}'.");
         if (TryParseDirection(rule.Direction, out var direction) && direction != AnalysisMetricDirection.LowerIsBetter)
             errors.Add($"analysis grading rule '{label}' finding score must be graded lower-is-better.");
     }
 
     public static bool IsWeightedFindingScore(PipelineAnalysisGradeRuleDefinition rule) =>
         string.Equals(rule.FindingScore?.Trim(), AnalysisFindingScore.Weighted, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>True for a rule grading its open findings, counted (<c>count</c>) or weighted.</summary>
+    public static bool IsFindingScore(PipelineAnalysisGradeRuleDefinition rule) =>
+        IsWeightedFindingScore(rule)
+        || string.Equals(rule.FindingScore?.Trim(), AnalysisFindingScore.Counted, StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateRuleCategory(
         string? scope,
@@ -148,15 +153,15 @@ public static class PipelineAnalysisGradingValidator
         string label,
         ICollection<string> errors)
     {
-        // A weighted finding score may leave E open: above D is E, and only a critical finding gives F
-        // (recette R2-119). Every other rule needs its five thresholds.
-        var weighted = IsWeightedFindingScore(rule);
-        var values = weighted && !rule.E.HasValue
+        // A finding score, counted or weighted, may leave E open: above D is E, and only a critical
+        // finding gives F (recette R2-119). Every other rule needs its five thresholds.
+        var findingScore = IsFindingScore(rule);
+        var values = findingScore && !rule.E.HasValue
             ? new[] { rule.A, rule.B, rule.C, rule.D }
             : new[] { rule.A, rule.B, rule.C, rule.D, rule.E };
         if (values.Any(value => !value.HasValue || !double.IsFinite(value.Value)))
         {
-            errors.Add(weighted
+            errors.Add(findingScore
                 ? $"analysis grading rule '{label}' must define finite A, B, C and D thresholds (E is optional)."
                 : $"analysis grading rule '{label}' must define finite A, B, C, D and E thresholds.");
             return;

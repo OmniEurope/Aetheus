@@ -102,4 +102,30 @@ public class ManageableServiceGridTests : BunitContext
         var open = cut.Find("button[aria-label='OpenModule: docker']");
         Assert.Contains("omni-button--primary", open.ClassList);
     }
+
+    /// <summary>
+    /// SITE-FUNC-HOME-CAPABILITY-001: on the module grid the row opens the service's module, so every
+    /// control of the row (checkbox, buttons, task link) must keep its click and key to itself.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public void RowControls_DoNotLetTheirClickOrKeyReachTheRow(bool installed, bool showModuleLink)
+    {
+        var service = Svc("docker", running: false);
+        var cut = Render<ManageableServiceGrid>(parameters => parameters
+            .Add(grid => grid.Services, [service])
+            .Add(grid => grid.Installed, installed)
+            .Add(grid => grid.ShowModuleLink, showModuleLink)
+            .Add(grid => grid.CanManagePackages, true)
+            .Add(grid => grid.ServerOnline, true)
+            .Add(grid => grid.ServerId, 1)
+            .Add(grid => grid.ActionStateOf, _ => new ServiceActionState(9, "Start", ServiceActionPhase.Succeeded)));
+
+        var controls = cut.FindAll("tbody tr button, tbody tr input, tbody tr a").ToList();
+        Assert.NotEmpty(controls);
+        foreach (var control in controls)
+            Aetheus.Front.Tests.TestDoubles.RowEventIsolation.AssertRowDoesNotReceive(control, "onclick", "onkeydown");
+    }
 }

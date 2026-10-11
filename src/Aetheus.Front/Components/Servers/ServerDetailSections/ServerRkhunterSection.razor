@@ -1,6 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 
+@if (AgentServer is { } agentServer)
+{
+    <AgentOfflineNotice Server="@agentServer" />
+}
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
@@ -26,16 +30,16 @@
 
     @if (!Rk.IsInstalled)
     {
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["RkhunterSetup"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["RkhunterSetup"]</span></OmniButton>
     }
     else
     {
-        <OmniSplitButton Text="@L["Scan"]" title="@L["RunScan"]" Disabled="@_actionRunning" OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>
+        <OmniSplitButton Text="@L["Scan"]" title="@L["RunScan"]" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))">@L["RunScan"]</OmniMenuItem>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateDatabase))">@L["UpdateDatabase"]</OmniMenuItem>
             <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateProperties))">@L["UpdateProperties"]</OmniMenuItem>
         </ChildContent></OmniSplitButton>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GetLogsAsync"><OmniIcon Name="OmniIconName.Document" /> <span>@L["ViewLogs"]</span></OmniButton>
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@GetLogsAsync"><OmniIcon Name="OmniIconName.Document" /> <span>@L["ViewLogs"]</span></OmniButton>
     }
 </OmniRow>
 

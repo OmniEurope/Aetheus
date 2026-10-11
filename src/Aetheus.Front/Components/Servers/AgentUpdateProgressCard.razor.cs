@@ -12,7 +12,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
-    [Inject] private ClientErrorReporter ErrorReporter { get; set; } = default!;
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
     [Parameter, EditorRequired] public HubConnection? Hub { get; set; }
@@ -22,6 +21,16 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     /// <summary>Invoked from the Retry button shown in the Failed state (S-DES-17). Wired by the
     /// parent to its UpdateAgent action so a failed self-update can be relaunched in place.</summary>
     [Parameter] public EventCallback OnRetry { get; set; }
+    /// <summary>Recette R1-42: invoked when no news of the update arrived in time, so the parent re-reads
+    /// the persisted request instead of the card concluding a failure the server never stated.</summary>
+    [Parameter] public EventCallback OnStale { get; set; }
+
+    /// <summary>The backend's confirmation window after handoff (<c>AgentUpdateRepository</c>), plus a
+    /// margin for its coordinator to record the verdict.</summary>
+    internal static readonly TimeSpan HandoffWindow = TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(15);
+
+    /// <summary>How often the card asks again while the update stays silent.</summary>
+    internal const int RecheckSeconds = 60;
 
     private AgentUpdatePhase? _phase;
     private int _percent;
@@ -29,6 +38,8 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     private DateTime _showDoneUntil = DateTime.MinValue;
     private bool _fadingOut;
     private int? _requestId;
+    private AgentUpdateRequestStatus? _requestStatus;
+    private bool _checking;
 
     // Registered handlers - kept so we can detach them in DisposeAsync to avoid leaks if the
     // hub connection survives this component (it always does - the connection is owned by
@@ -59,6 +70,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
             _phase = AgentUpdatePhase.Queued;
             _percent = 0;
             _message = null;
+            _checking = false;
             StartStaleTimer(120);
             _ = InvokeAsync(StateHasChanged);
         });
@@ -74,10 +86,11 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
             _phase = dto.Phase;
             _percent = dto.Percent;
             _message = dto.Message;
+            _checking = false;
             if (dto.Phase is AgentUpdatePhase.Failed or AgentUpdatePhase.Done)
                 CancelStaleTimer();
             else
-                StartStaleTimer(90);
+                StartStaleTimer(StaleSecondsFor(dto.Phase));
             _ = InvokeAsync(StateHasChanged);
         });
 
@@ -105,6 +118,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
             if (serverId != ServerId) return;
             _requestId = requestId;
             CancelStaleTimer();
+            _checking = false;
             _phase = AgentUpdatePhase.Failed;
             _percent = 0;
             _message = Request?.FailureDiagnostic ?? L["AgentUpdateFailed"];
@@ -116,6 +130,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     {
         _requestId = requestId;
         CancelStaleTimer();
+        _checking = false;
         _phase = AgentUpdatePhase.Done;
         _percent = 100;
         _message = !string.IsNullOrEmpty(targetVersion)
@@ -146,35 +161,79 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     {
     }
 
+    /// <summary>
+    /// Applies the persisted request. A new request is shown as it stands. For the request already
+    /// followed, recette R1-42: a status change read again (after a reconnect or a silent stretch) is
+    /// applied too, because a hub event lost while the tab slept is never replayed; a persisted
+    /// confirmation ends the card on Done whatever it showed, a persisted failure on Failed, and an
+    /// in-progress status only moves the card forward.
+    /// </summary>
     private void ApplyPersistedRequest()
     {
-        if (Request is null || Request.RequestId == _requestId) return;
+        if (Request is null) return;
+        var followed = Request.RequestId == _requestId;
+        if (followed && Request.Status == _requestStatus) return;
         _requestId = Request.RequestId;
-        _message = Request.FailureDiagnostic;
-        (_phase, _percent) = Request.Status switch
+        _requestStatus = Request.Status;
+        var (phase, percent) = MapStatus(Request.Status);
+
+        if (!followed)
         {
-            AgentUpdateRequestStatus.WaitingForIdle => (AgentUpdatePhase.Queued, 0),
-            AgentUpdateRequestStatus.Queued => (AgentUpdatePhase.Queued, 0),
-            AgentUpdateRequestStatus.Downloading => (AgentUpdatePhase.Downloading, 20),
-            AgentUpdateRequestStatus.Staging => (AgentUpdatePhase.Extracting, 60),
-            AgentUpdateRequestStatus.Handoff => (AgentUpdatePhase.AgentOffline, 95),
-            AgentUpdateRequestStatus.Confirmed => (AgentUpdatePhase.Done, 100),
-            AgentUpdateRequestStatus.Failed => (AgentUpdatePhase.Failed, 0),
-            _ => ((AgentUpdatePhase?)null, 0)
-        };
-        if (Request.Status == AgentUpdateRequestStatus.WaitingForIdle)
+            _phase = phase;
+            _percent = percent;
+            _message = PersistedMessage(Request);
+            _checking = false;
+            return;
+        }
+
+        switch (Request.Status)
         {
-            _message = string.Format(
-                L["AgentUpdateWaitingForTasks"],
-                Request.BlockingTaskCount);
+            case AgentUpdateRequestStatus.Confirmed:
+                if (_phase != AgentUpdatePhase.Done)
+                    HandleConfirmed(Request.RequestId, Request.TargetVersion);
+                return;
+            case AgentUpdateRequestStatus.Failed:
+                CancelStaleTimer();
+                _checking = false;
+                _phase = AgentUpdatePhase.Failed;
+                _percent = 0;
+                _message = Request.FailureDiagnostic ?? L["AgentUpdateFailed"];
+                return;
+            default:
+                if (phase is null || _phase is AgentUpdatePhase.Done or AgentUpdatePhase.Failed
+                    || (_phase is { } current && phase <= current))
+                    return;
+                _phase = phase;
+                _percent = percent;
+                _message = PersistedMessage(Request);
+                _checking = false;
+                return;
         }
     }
+
+    private static (AgentUpdatePhase? Phase, int Percent) MapStatus(AgentUpdateRequestStatus status) => status switch
+    {
+        AgentUpdateRequestStatus.WaitingForIdle => (AgentUpdatePhase.Queued, 0),
+        AgentUpdateRequestStatus.Queued => (AgentUpdatePhase.Queued, 0),
+        AgentUpdateRequestStatus.Downloading => (AgentUpdatePhase.Downloading, 20),
+        AgentUpdateRequestStatus.Staging => (AgentUpdatePhase.Extracting, 60),
+        AgentUpdateRequestStatus.Handoff => (AgentUpdatePhase.AgentOffline, 95),
+        AgentUpdateRequestStatus.Confirmed => (AgentUpdatePhase.Done, 100),
+        AgentUpdateRequestStatus.Failed => (AgentUpdatePhase.Failed, 0),
+        _ => (null, 0)
+    };
+
+    private string? PersistedMessage(AgentUpdateRequestSummaryDto request) =>
+        request.Status == AgentUpdateRequestStatus.WaitingForIdle
+            ? string.Format(L["AgentUpdateWaitingForTasks"], request.BlockingTaskCount)
+            : request.FailureDiagnostic;
 
     // S-DES-17: relaunch a failed self-update. Clear the card first so the parent's trigger drives
     // a fresh Queued→… cycle through the existing hub events.
     private async Task RetryAsync()
     {
         CancelStaleTimer();
+        _checking = false;
         _phase = null;
         _percent = 0;
         _message = null;
@@ -229,25 +288,46 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
         _ => OmniTone.Accent
     };
 
+    /// <summary>
+    /// How long the card waits for news before it re-reads the request. Once the updater is launched
+    /// the agent is expected to be silent while it restarts, so the wait follows the backend's
+    /// confirmation window from the handoff instead of a fixed 90 s.
+    /// </summary>
+    internal int StaleSecondsFor(AgentUpdatePhase phase)
+    {
+        if (phase is not (AgentUpdatePhase.LaunchingUpdater or AgentUpdatePhase.AgentOffline))
+            return 90;
+        var deadline = Request is { HandoffAt: { } handoffAt } request && request.RequestId == _requestId
+            ? handoffAt + HandoffWindow
+            : DateTime.Now + HandoffWindow;
+        return Math.Max(5, (int)Math.Ceiling((deadline - DateTime.Now).TotalSeconds));
+    }
+
+    /// <summary>
+    /// Recette R1-42: silence is not a failure. The verdict belongs to the server, which fails an
+    /// expired request itself and says so (<c>AgentUpdateFailed</c>); a confirmation sent while the tab
+    /// slept is simply lost. So the card shows that it is checking, asks its parent to re-read the
+    /// persisted request, and asks again later while nothing settles.
+    /// </summary>
+    internal void OnStaleTimerElapsed()
+    {
+        if (_phase is AgentUpdatePhase.Done or AgentUpdatePhase.Failed or null)
+            return;
+        _checking = true;
+        _message = L["AgentUpdateCheckingHint"];
+        StartStaleTimer(RecheckSeconds);
+        _ = InvokeAsync(async () =>
+        {
+            StateHasChanged();
+            await OnStale.InvokeAsync();
+        });
+    }
+
     private void StartStaleTimer(int seconds)
     {
         _staleTimer?.Dispose();
-        _staleTimer = new System.Threading.Timer(_ =>
-        {
-            if (_phase is AgentUpdatePhase.Done or AgentUpdatePhase.Failed or null)
-                return;
-            _phase = AgentUpdatePhase.Failed;
-            _percent = 0;
-            _message = L["AgentUpdateTimeoutHint"];
-            if (_requestId is { } requestId)
-            {
-                ErrorReporter.Report(
-                    LogCorrelationIds.AgentUpdate(requestId),
-                    L["AgentUpdateFailed"],
-                    _message);
-            }
-            _ = InvokeAsync(StateHasChanged);
-        }, null, TimeSpan.FromSeconds(seconds), Timeout.InfiniteTimeSpan);
+        _staleTimer = new System.Threading.Timer(
+            _ => OnStaleTimerElapsed(), null, TimeSpan.FromSeconds(seconds), Timeout.InfiniteTimeSpan);
     }
 
     private void CancelStaleTimer()

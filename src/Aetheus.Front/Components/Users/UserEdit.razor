@@ -139,7 +139,7 @@ else
                 }
                 else
                 {
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.End" Gap="OmniSpacing.Small" Class="omni-u-mb-md omni-u-mt-sm">
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.End" Gap="OmniSpacing.Small" Class="omni-u-mb-md omni-u-mt-sm">
                         <OmniFormField Label="@L["Organization"]" For="oe-formfield-pages-users-useredit-1">
                             <OmniDropDown Id="oe-formfield-pages-users-useredit-1" TValue="int?" Options="@(_availableOrgs.ToOptions(item => (int?)item.Id, item => item.Name))"
                                 @bind-Value="_selectedOrgId" Filterable="true" AllowEmpty="true" Placeholder="@L["SelectOrganization"]" />
@@ -160,19 +160,19 @@ else
                             <Columns>
                                 <OmniDataGridColumn Frozen="true" TItem="UserOrganizationDto" Property="Name" Title="@L["Organization"]" Filterable="true">
                                     <Template Context="o">
-                                        <span @onclick:stopPropagation="true"><OmniLink Href="@($"/admin/organizations/{o.OrganizationId}")">@o.Name</OmniLink></span>
+                                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/admin/organizations/{o.OrganizationId}")">@o.Name</OmniLink></span>
                                     </Template>
                                 </OmniDataGridColumn>
                                 <OmniDataGridColumn TItem="UserOrganizationDto" Property="Slug" Title="@L["Slug"]" Filterable="true" />
                                 <OmniDataGridColumn TItem="UserOrganizationDto" Property="Role" Title="@L["Role"]" Width="11.25rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@OrgRoleText">
                                     <Template Context="o">
                                         <OmniDropDown aria-label="@L["Role"]" TValue="OrganizationRole" Value="@o.Role" ValueExpression="@(() => o.Role)" Options="@(_orgRoleOptions.ToOptions(item => (OrganizationRole)item.Value, item => item.Text))"
-                                            ValueChanged="@(args => OnChangeOrgRole(o, (OrganizationRole)args!))" @onclick:stopPropagation="true" />
+                                            ValueChanged="@(args => OnChangeOrgRole(o, (OrganizationRole)args!))" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true" />
                                     </Template>
                                 </OmniDataGridColumn>
                                 <OmniDataGridColumn TItem="UserOrganizationDto" Title="@L["Actions"]" Width="5rem" TextAlign="OmniDataGridTextAlign.Center" Sortable="false">
                                     <Template Context="o">
-                                        <span @onclick:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveOrg(o))" title="@L["Remove"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton></span>
+                                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveOrg(o))" title="@L["Remove"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton></span>
                                     </Template>
                                 </OmniDataGridColumn>
                             </Columns>
@@ -190,7 +190,7 @@ else
                         OnValidSubmit="@((EditContext context) => OnChangePassword((PasswordChangeModel)context.Model))"
                         OnInvalidSubmit="@OnInvalidPasswordSubmit">
                     <OmniDataAnnotationsValidator Localizer="@L" />
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
                         <OmniFormField For="oe-pages-users-useredit-8"><LabelContent>@L["NewPassword"]</LabelContent><ChildContent>
                             <OmniPassword @bind-Value="_passwordChange.NewPassword" Id="oe-pages-users-useredit-8" />
                             <ValidationMessage For="@(() => _passwordChange.NewPassword)" />

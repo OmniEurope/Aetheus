@@ -16,7 +16,8 @@
                   : string.Format(L["ApprovalRequiredDetail"], Approval.Pending.StageName, Approval.Pending.EnvironmentName))</div>
         @if (!string.IsNullOrWhiteSpace(Approval.EnvironmentInstructions))
         {
-            <div class="omni-u-mt-sm">@Approval.EnvironmentInstructions</div>
+            @* Recette R1-24: the environment's approval instructions, named as such for the approver. *@
+            <div class="omni-u-mt-sm approval-instructions"><span class="approval-instructions-label">@L["ApprovalInstructionsForApprover"]</span> @Approval.EnvironmentInstructions</div>
         }
         @* Recette R2-021: a newer Aetheus was deployed than the one this page runs. The approval that
            confirms a production switch is answered from the new version, after checking it works:

@@ -212,4 +212,32 @@ public sealed class GitRepositoryDetailActionsTests : BunitContext
         Assert.Equal(typeof(GitBranchProtectionDialog), _dialog.LastComponent);
         Assert.Equal(1, _dialog.LastParameters!["RepoId"]);
     }
+
+    [Fact]
+    public async Task D13_ChangingTheProtectionLevel_PutsTheLevel_AndKeepsTheOtherSwitches()
+    {
+        _handler.SetJsonResponse("api/git/repos/1/branch-protection/5",
+            new BranchProtectionRuleDto { Id = 5, Pattern = "main", ProtectionLevel = BranchProtectionLevel.StrictlyProtected });
+        var rule = new BranchProtectionRuleDto
+        {
+            Id = 5,
+            Pattern = "main",
+            PreventDeletion = true,
+            PreventForcePush = false,
+            ProtectionLevel = BranchProtectionLevel.ProtectedExceptPipelines
+        };
+
+        var updated = await Build().UpdateProtectionRuleAsync(
+            1, rule, preventDeletion: null, preventForcePush: null, protectionLevel: BranchProtectionLevel.StrictlyProtected);
+
+        Assert.True(updated);
+        var put = Assert.Single(_handler.RequestDetails, r => r.Method == "PUT");
+        var sent = System.Text.Json.JsonSerializer.Deserialize<UpdateBranchProtectionRuleRequest>(put.Body!, BodyJson)!;
+        Assert.Equal(BranchProtectionLevel.StrictlyProtected, sent.ProtectionLevel);
+        Assert.True(sent.PreventDeletion);
+        Assert.False(sent.PreventForcePush);
+    }
+
+    private static readonly System.Text.Json.JsonSerializerOptions BodyJson =
+        new(System.Text.Json.JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 }

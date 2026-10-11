@@ -187,7 +187,8 @@ public class MainLayoutTemplateBranchTests : BunitContext
         Assert.Equal(OmniAppearance.Light, Services.GetRequiredService<Aetheus.Front.Components.Settings.SiteAppearanceState>().Appearance);
         Assert.Contains(JSInterop.Invocations, i => i.Identifier == "localStorage.setItem"
             && Equals(i.Arguments[0], StorageKeys.Theme) && Equals(i.Arguments[1], "light"));
-        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "Aetheus.setOmniTheme" && Equals(i.Arguments[0], "light"));
+        // Recette R2-112: the mode is no longer copied on the document root; the scope carries it.
+        Assert.DoesNotContain(JSInterop.Invocations, i => i.Identifier == "Aetheus.setOmniTheme");
         cut.WaitForAssertion(() => Assert.Equal("true", cut.FindAll(".omni-app-menu__mode")[0].GetAttribute("aria-checked")));
     }
 

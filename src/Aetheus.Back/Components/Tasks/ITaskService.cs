@@ -13,6 +13,14 @@ public interface ITaskService
     Task<ServerTaskDto> CreateOperationAsync(CreateOperationRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// Throws a <see cref="ConflictException"/> when the target server is known and its agent is not
+    /// online: a task queued for it would sit Pending with nobody to claim it. CreateTask/CreateOperation
+    /// apply it themselves; <see cref="TaskQueuePersistence"/> applies it for the module services that
+    /// persist through their own repository (SITE-OFFLINE-001).
+    /// </summary>
+    Task EnsureServerOnlineAsync(int serverId, CancellationToken ct = default);
+
+    /// <summary>
     /// Pushes a "TaskQueued" SignalR event for a task that was persisted OUTSIDE the CreateTask/
     /// CreateOperation paths (e.g. the service-management collaborator queues service-action and
     /// package install/uninstall tasks straight through the repository). Without this the top-bar

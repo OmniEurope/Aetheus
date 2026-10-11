@@ -31,11 +31,13 @@ public partial class MonacoDiffViewer : IAsyncDisposable
         }
     }
 
+    // SITE-FUNC-MONACO-DISPOSE-001: idempotent, and the JS side releases an editor that is already
+    // gone as a no-op; a JS runtime that is itself gone has no editor left to release either.
     public async ValueTask DisposeAsync()
     {
-        if (_initialized)
-        {
-            await Js.InvokeVoidAsync("monacoInterop.disposeDiffEditor", ElementId);
-        }
+        if (!_initialized) return;
+        _initialized = false;
+        try { await Js.InvokeVoidAsync("monacoInterop.disposeDiffEditor", ElementId); }
+        catch (JSDisconnectedException) { /* the JS runtime is gone, and the editor with it: nothing left to release */ }
     }
 }

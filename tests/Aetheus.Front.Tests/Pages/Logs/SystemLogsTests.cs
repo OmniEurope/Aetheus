@@ -2,6 +2,7 @@
 using System.Net;
 using System.Reflection;
 using Aetheus.Front.Components.Logs;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -115,5 +116,22 @@ public class SystemLogsTests : BunitContext
 
         cut.WaitForState(() => _handler.Requests.Any(request =>
             request.Url.Contains("search=agent-update-42", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void RowControls_DoNotReachTheRow()
+    {
+        // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
+        // Enter/Space, or the row click runs after its own and wins the navigation.
+        _handler.SetJsonResponse(EntriesUrl, new PaginatedResult<SystemLogEntryDto>
+        {
+            TotalCount = 1,
+            Items = [new SystemLogEntryDto(1, DateTime.UtcNow, "Error", "Aetheus.Back", "boom", "System.Exception: boom", null)]
+        });
+
+        var cut = Render<SystemLogs>();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);
     }
 }

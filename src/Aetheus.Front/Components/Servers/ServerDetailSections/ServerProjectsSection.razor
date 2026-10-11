@@ -7,7 +7,7 @@
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="ProjectDto" Property="Name" Title="@L["Name"]" Filterable="true" >
                 <Template Context="p">
-                    <a href="/projects/@p.Id/overview" @onclick:stopPropagation="true">@p.Name</a>
+                    <a href="/projects/@p.Id/overview" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@p.Name</a>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="ProjectDto" Property="Status" Title="@L["Status"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >

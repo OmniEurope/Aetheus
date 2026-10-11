@@ -653,4 +653,73 @@ public class TaskRepositoryStatusTests : IDisposable
 
         Assert.Equal([2, 4], stale.Select(task => task.Id).Order());
     }
+
+    // Recette R1-42: the agent exits at the end of its self-update, so nothing else is handed to it
+    // while that update is claimed or running; the work stays Pending for the new agent.
+    [Theory]
+    [InlineData(TaskExecutionStatus.Assigned)]
+    [InlineData(TaskExecutionStatus.Running)]
+    public async Task ClaimPendingTasksAsync_WhileASelfUpdateIsInFlight_ClaimsNothing(TaskExecutionStatus updateStatus)
+    {
+        SeedServerWithPendingWorkAndUpdate(updateStatus);
+
+        var claimed = await _repo.ClaimPendingTasksAsync(
+            1,
+            take: 2,
+            agentSessionId: "11111111111111111111111111111111",
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Empty(claimed);
+        Assert.Equal(
+            TaskExecutionStatus.Pending,
+            (await _db.Tasks.FindAsync([1], TestContext.Current.CancellationToken))!.Status);
+    }
+
+    [Fact]
+    public async Task ClaimPendingTasksAsync_OnceTheSelfUpdateIsOver_ClaimsThePendingWork()
+    {
+        SeedServerWithPendingWorkAndUpdate(TaskExecutionStatus.Success);
+
+        var claimed = await _repo.ClaimPendingTasksAsync(
+            1,
+            take: 2,
+            agentSessionId: "11111111111111111111111111111111",
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, Assert.Single(claimed).Id);
+    }
+
+    private void SeedServerWithPendingWorkAndUpdate(TaskExecutionStatus updateStatus)
+    {
+        _db.Servers.Add(new Server
+        {
+            Id = 1,
+            Name = "srv1",
+            Hostname = "s1",
+            Status = ServerStatus.Online,
+            AgentProtocolVersion = AgentProtocol.CurrentVersion,
+            AgentCapabilitiesJson = $"[\"{AgentCapabilities.ShellExecution}\"]"
+        });
+        _db.Tasks.AddRange(
+            new ServerTask
+            {
+                Id = 1,
+                ServerId = 1,
+                Name = "normal work",
+                Command = "echo",
+                Status = TaskExecutionStatus.Pending,
+                CreatedAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new ServerTask
+            {
+                Id = 2,
+                ServerId = 1,
+                Name = "agent update",
+                Command = string.Empty,
+                Operation = OperationKind.AgentSelfUpdate,
+                Status = updateStatus,
+                CreatedAt = new DateTime(2026, 10, 1, 0, 1, 0, DateTimeKind.Utc)
+            });
+        _db.SaveChanges();
+    }
 }

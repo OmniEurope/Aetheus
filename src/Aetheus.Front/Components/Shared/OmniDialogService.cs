@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Globalization;
+using Microsoft.AspNetCore.Components.Web;
 using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Components.Shared;
@@ -47,12 +48,14 @@ public class OmniDialogService(AppDialogs dialogs, OmniOverlayService overlay)
         {
             // Recette R-406: every dialog carries an intention; a message to read is the accent one.
             Intent = OmniTone.Accent,
+            // Recette R1-35: nothing looks selected when the message opens.
+            InitialFocus = OmniDialogInitialFocus.Panel,
             Footer = builder =>
             {
                 builder.OpenComponent<OmniButton>(0);
                 builder.AddComponentParameter(1, nameof(OmniButton.Variant), OmniButtonVariant.Secondary);
                 builder.AddComponentParameter(2, nameof(OmniButton.OnClick),
-                    EventCallback.Factory.Create(this, () => overlay.CloseDialog(true)));
+                    EventCallback.Factory.Create<MouseEventArgs>(this, () => overlay.CloseDialog(true)));
                 builder.AddComponentParameter(3, nameof(OmniButton.ChildContent),
                     (RenderFragment)(content => content.AddContent(0, options?.OkButtonText ?? "OK")));
                 builder.CloseComponent();
@@ -129,6 +132,12 @@ public sealed record OmniDialogOptions
     public string? Width { get; init; }
     public string? Height { get; init; }
     public bool CloseDialogOnOverlayClick { get; init; }
+    /// <summary>
+    /// Recette R1-35: not forwarded. Since OmniEurope.Blazor 1.7.0 every dialog opened through
+    /// <see cref="AppDialogs"/> or <see cref="OmniDialogService.Alert"/> puts the focus on its panel
+    /// (<c>OmniDialogInitialFocus.Panel</c>), so no field is ever selected on opening.
+    /// Kept so the existing calls compile; setting it changes nothing.
+    /// </summary>
     public bool AutoFocusFirstElement { get; init; }
     public bool CloseDialogOnEsc { get; init; } = true;
     public bool ShowClose { get; init; } = true;

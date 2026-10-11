@@ -158,6 +158,33 @@ public class ProjectEditSectionTests : BunitContext
         });
     }
 
+    // SITE-A11Y-005: the filterable branch picker was announced as "Select": its label named an id no control
+    // carried and the aria-label attribute never reached the input. The combobox input must carry the id the
+    // label names and the field name as its accessible name.
+    [Fact]
+    public void DefaultBranchPicker_IsNamedByItsLabel()
+    {
+        var project = new ProjectDetailDto { Id = 8, Name = "Named", DefaultBranch = "develop", Tags = [] };
+        _handler.SetPaginatedJsonResponse<GitLightRepoDto>(
+            HttpMethod.Get,
+            "api/git/repos?page=1&pageSize=100&projectId=8",
+            [new GitLightRepoDto { Id = 13, ProjectId = 8, Name = "repo", DefaultBranch = "main" }]);
+        _handler.SetPaginatedJsonResponse(
+            "api/git/repos/13/branches",
+            new[] { new GitLightBranchDto { Name = "main", IsDefault = true }, new GitLightBranchDto { Name = "develop" } });
+
+        var cut = Render<ProjectEditSection>(parameters => parameters.Add(component => component.Project, project));
+
+        cut.WaitForAssertion(() =>
+        {
+            var input = cut.Find("input[role=combobox]");
+            const string id = "oe-pages-projects-projectdetailsections-projecteditsection-4";
+            Assert.Equal(id, input.GetAttribute("id"));
+            Assert.Equal("DefaultBranch", input.GetAttribute("aria-label"));
+            Assert.Contains("DefaultBranch", cut.Find($"label[for={id}]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
     [Fact]
     public void MultipleInternalRepositories_DoNotChooseAnArbitraryBranchSource()
     {

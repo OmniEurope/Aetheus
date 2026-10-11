@@ -71,9 +71,9 @@ public sealed class PipelineRunFinalizer(
         await domainEvents.DispatchAsync(new PipelineRunCompletedEvent(pipelineRunId, status), ct).ConfigureAwait(false);
         secretMasking.EvictCache(pipelineRunId);
 
-        // Partial and RolledBack are completions like Failed: the page has to stop showing a running
-        // run. Only the status carried in the message differs, so the client paints its own colour.
-        if (status is PipelineStatus.Failed or PipelineStatus.Partial or PipelineStatus.RolledBack)
+        // Partial, RolledBack and Rejected are completions like Failed: the page has to stop showing a
+        // running run. Only the status carried in the message differs, so the client paints its own colour.
+        if (status is PipelineStatus.Failed or PipelineStatus.Partial or PipelineStatus.RolledBack or PipelineStatus.Rejected)
         {
             var pipelineId = await repo.GetPipelineIdForRunAsync(pipelineRunId, ct).ConfigureAwait(false);
             var groups = HubGroups.PipelineRunUpdates(pipelineRunId, pipelineId);

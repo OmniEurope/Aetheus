@@ -29,8 +29,8 @@ public sealed record PipelineSetupReadinessDto
     public List<PipelineSetupReadinessCheckDto> Checks { get; init; } = [];
 
     /// <summary>
-    /// False when the repository side could not be read at all (no internal repository, or the branch
-    /// does not exist). The caller must then say the file checks were skipped instead of implying the
+    /// False when the repository side could not be read at all (no internal repository, an external
+    /// repository Aetheus holds no readable copy of, or the branch does not exist). The caller must then say the file checks were skipped instead of implying the
     /// files are there.
     /// </summary>
     public bool RepositoryInspected { get; init; }

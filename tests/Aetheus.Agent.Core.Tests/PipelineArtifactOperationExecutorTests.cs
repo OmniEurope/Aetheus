@@ -269,6 +269,168 @@ public class PipelineArtifactOperationExecutorTests
         }
     }
 
+    /// <summary>
+    /// Run 2691: the agent release archive legitimately ships without a delivery contract, so its
+    /// restore opts out explicitly (deployed_baseline: none). The archive is still verified and
+    /// unpacked, nothing is exported, and the opt-out is said in the log.
+    /// </summary>
+    [Theory]
+    [InlineData("previous-deployed", "none")]
+    [InlineData("current-deployed", "NONE")]
+    public async Task RestoreArtifacts_DeployedSelectorOptedOut_RestoresWithoutContractAndExportsNothing(
+        string selector, string optOutValue)
+    {
+        var workDir = Directory.CreateTempSubdirectory("prm-baseline-optout-").FullName;
+        try
+        {
+            var bytes = new MemoryStream();
+            using (var archive = new ZipArchive(bytes, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var entry = archive.CreateEntry("payload.txt");
+                await using var writer = new StreamWriter(entry.Open());
+                await writer.WriteAsync("payload");
+            }
+            bytes.Position = 0;
+            var api = Substitute.For<IServerApiClient>();
+            api.DownloadArtifactAsync(91, 42, Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<Stream?>(bytes));
+            var output = new List<string>();
+
+            var result = await NewExecutor(api).ExecuteAsync(
+                OperationKind.PipelineRestoreArtifacts,
+                target: "AgentRelease-artifacts",
+                envVars: new Dictionary<string, string>
+                {
+                    ["AETHEUS_RESTORE_ARTIFACT_ID"] = "91",
+                    ["AETHEUS_RESTORE_RUN_ID"] = "42",
+                    ["AETHEUS_RESTORE_ARTIFACT_SHA256"] = Sha256(bytes),
+                    ["AETHEUS_WORKING_DIR"] = workDir,
+                    ["AETHEUS_RESTORE_RELEASE_SELECTOR"] = selector,
+                    [PipelineDeployedBaseline.EnvironmentVariable] = optOutValue
+                },
+                timeoutSeconds: 60,
+                onOutput: (message, _) => { output.Add(message); return Task.CompletedTask; },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(File.Exists(Path.Combine(workDir, "payload.txt")));
+            Assert.Contains(output, message =>
+                message.Contains("Deployed baseline export not requested by this step", StringComparison.Ordinal));
+            Assert.DoesNotContain(output, message => message.Contains("##aetheus[setvariable name=DELIVERY_BASELINE", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(workDir, recursive: true);
+        }
+    }
+
+    /// <summary>An opt-out variable with any other value is not an opt-out: the restore stays
+    /// fail-closed exactly as without the variable.</summary>
+    [Fact]
+    public async Task RestoreArtifacts_DeployedSelectorWithUnknownBaselineValue_StaysFailClosed()
+    {
+        var workDir = Directory.CreateTempSubdirectory("prm-baseline-unknown-").FullName;
+        try
+        {
+            var bytes = new MemoryStream();
+            using (var archive = new ZipArchive(bytes, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var entry = archive.CreateEntry("payload.txt");
+                await using var writer = new StreamWriter(entry.Open());
+                await writer.WriteAsync("payload");
+            }
+            bytes.Position = 0;
+            var api = Substitute.For<IServerApiClient>();
+            api.DownloadArtifactAsync(91, 42, Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<Stream?>(bytes));
+            var output = new List<string>();
+
+            var result = await NewExecutor(api).ExecuteAsync(
+                OperationKind.PipelineRestoreArtifacts,
+                target: "AgentRelease-artifacts",
+                envVars: new Dictionary<string, string>
+                {
+                    ["AETHEUS_RESTORE_ARTIFACT_ID"] = "91",
+                    ["AETHEUS_RESTORE_RUN_ID"] = "42",
+                    ["AETHEUS_RESTORE_ARTIFACT_SHA256"] = Sha256(bytes),
+                    ["AETHEUS_WORKING_DIR"] = workDir,
+                    ["AETHEUS_RESTORE_RELEASE_SELECTOR"] = "previous-deployed",
+                    [PipelineDeployedBaseline.EnvironmentVariable] = "required"
+                },
+                timeoutSeconds: 60,
+                onOutput: (message, _) => { output.Add(message); return Task.CompletedTask; },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(output, message =>
+                message.Contains("does not contain .pipeline-artifacts/delivery-contract.json", StringComparison.Ordinal));
+            Assert.DoesNotContain(output, message => message.Contains("not requested by this step", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(workDir, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Sibling of AGC-011: the deployed baseline was read from the merged workspace, so a contract left
+    /// there by an earlier restore stood in for the one this archive does not carry, and the run graded
+    /// itself against another release. The baseline is read from this archive's own entry.
+    /// </summary>
+    [Theory]
+    [InlineData("previous-deployed")]
+    [InlineData("current-deployed")]
+    public async Task RestoreArtifacts_DeployedSelector_NeverExportsAContractLeftInTheWorkspace(string selector)
+    {
+        var workDir = Directory.CreateTempSubdirectory("prm-baseline-stale-").FullName;
+        try
+        {
+            var staleDirectory = Directory.CreateDirectory(Path.Combine(workDir, ".pipeline-artifacts")).FullName;
+            await File.WriteAllTextAsync(
+                Path.Combine(staleDirectory, "delivery-contract.json"),
+                """{"candidateVersion":"0.9.1","sourceSha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}""",
+                TestContext.Current.CancellationToken);
+            var bytes = new MemoryStream();
+            using (var archive = new ZipArchive(bytes, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var entry = archive.CreateEntry("payload.txt");
+                await using var writer = new StreamWriter(entry.Open());
+                await writer.WriteAsync("payload");
+            }
+            bytes.Position = 0;
+            var api = Substitute.For<IServerApiClient>();
+            api.DownloadArtifactAsync(91, 42, Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<Stream?>(bytes));
+            var output = new List<string>();
+
+            var result = await NewExecutor(api).ExecuteAsync(
+                OperationKind.PipelineRestoreArtifacts,
+                target: "BuildArtifacts-artifacts",
+                envVars: new Dictionary<string, string>
+                {
+                    ["AETHEUS_RESTORE_ARTIFACT_ID"] = "91",
+                    ["AETHEUS_RESTORE_RUN_ID"] = "42",
+                    ["AETHEUS_RESTORE_ARTIFACT_SHA256"] = Sha256(bytes),
+                    ["AETHEUS_WORKING_DIR"] = workDir,
+                    ["AETHEUS_RESTORE_RELEASE_SELECTOR"] = selector
+                },
+                timeoutSeconds: 60,
+                onOutput: (message, _) => { output.Add(message); return Task.CompletedTask; },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(output, message =>
+                message.Contains("does not contain .pipeline-artifacts/delivery-contract.json", StringComparison.Ordinal));
+            Assert.DoesNotContain(output, message => message.Contains("DELIVERY_BASELINE", StringComparison.Ordinal));
+            // Refused before anything was unpacked over the workspace.
+            Assert.False(File.Exists(Path.Combine(workDir, "payload.txt")));
+        }
+        finally
+        {
+            Directory.Delete(workDir, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task RestoreArtifacts_WithoutRequiredMetadata_FailsHonestly()
     {

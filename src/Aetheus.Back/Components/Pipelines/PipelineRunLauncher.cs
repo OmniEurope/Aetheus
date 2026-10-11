@@ -377,7 +377,9 @@ public sealed class PipelineRunLauncher(
                         StepName = legName is not null ? $"{step.Name} [{legName}]" : step.Name,
                         Order = order++,
                         RetryCount = step.RetryCount,
-                        ContinueOnError = step.ContinueOnError,
+                        // An advisory AI step never stops its dependents; the scheduler then also
+                        // keeps its failure out of the run status (PipelineRunScheduler.AdvisoryStepKeys).
+                        ContinueOnError = step.ContinueOnError || step.Advisory,
                         MatrixLeg = legName,
                         GroupName = stage.Group
                     });

@@ -109,7 +109,8 @@ public class PipelineRunService(
         var definition = definitions.Parse(run);
         if (definition is null) return null;
         var organizationId = await repo.GetPipelineOrganizationIdAsync(run.Pipeline.Id, ct).ConfigureAwait(false);
-        return await parameterResolver.ResolveCandidateTargetServerIdsAsync(definition, organizationId, ct)
+        var projectId = await repo.GetRunProjectIdAsync(runId, ct).ConfigureAwait(false);
+        return await parameterResolver.ResolveCandidateTargetServerIdsAsync(definition, organizationId, projectId, ct)
             .ConfigureAwait(false);
     }
 

@@ -7,10 +7,19 @@ public abstract class ServerActionSectionBase : ComponentBase
     [Inject] protected IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] protected OmniDialogService Dialog { get; set; } = default!;
 
+    [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
+
     protected bool _actionRunning;
+
+    /// <summary>SITE-OFFLINE-001: the section's actions are disabled while the agent cannot claim a task.</summary>
+    protected bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
+
+    /// <summary>SITE-OFFLINE-001: the handler guard behind the disabled buttons; true when the action was refused.</summary>
+    protected bool BlockedByOfflineAgent() => AgentOfflineGuard.Blocks(Server, Toast);
 
     protected async Task ExecuteServerActionAsync(Func<Task<ApiStatus>> action)
     {
+        if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
         try
         {

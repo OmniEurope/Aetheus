@@ -51,7 +51,7 @@ public class AuthServiceMustChangePasswordTests
             TimeProvider.System,
             Substitute.For<IHttpContextAccessor>(),
             Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(),
-            Substitute.For<ILogger<AuthService>>());
+            Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(), Substitute.For<ILogger<AuthService>>());
     }
 
     private User MakeUser(bool mustChangePassword) => new()

@@ -62,7 +62,7 @@ else
                 <Template Context="template">
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                         <a href="@($"/templates/{template.Id}")" class="pipeline-name-link" title="@template.Name"
-                            @onclick:stopPropagation="true">@template.Name</a>
+                            @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@template.Name</a>
                     </OmniStack>
                 </Template>
             </OmniDataGridColumn>
@@ -93,7 +93,7 @@ else
                     {
                         <a href="@($"/pipelines?templateId={template.Id}")" class="pipeline-name-link"
                             title="@string.Format(L["ViewPipelinesUsingTemplate"], template.Name)"
-                            @onclick:stopPropagation="true">@template.PipelineCount</a>
+                            @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@template.PipelineCount</a>
                     }
                     else
                     {
@@ -117,7 +117,7 @@ else
             <OmniDataGridColumn TItem="PipelineTemplateSummaryDto" Title="@L["Actions"]" Width="8rem"
                 Sortable="false" Filterable="false" TextAlign="OmniDataGridTextAlign.End">
                 <Template Context="template">
-                    <span @onclick:stopPropagation="true">
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => UseTemplate(template))" title="@L["UseTemplate"]" Label="@L["UseTemplate"]"><OmniIcon Name="OmniIconName.Add" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ViewHistory(template))" title="@L["VersionHistoryTitle"]" Label="@L["Versions"]"><OmniIcon Name="OmniIconName.Reset" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExportTemplateAsync(template))" title="@L["Export"]" Label="@L["Export"]"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
