@@ -47,6 +47,16 @@
          ]
       },
       {
+         "name": "staged-secrets",
+         "group": "pre-commit",
+         "command": "pwsh",
+         "args": [
+            "-NoProfile",
+            "-File",
+            "scripts/check-staged-secrets.ps1"
+         ]
+      },
+      {
          "name": "quality-precheck",
          "group": "pre-push",
          "command": "pwsh",

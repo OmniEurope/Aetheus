@@ -71,13 +71,8 @@ internal sealed class PipelineRunLineageRepository(AppDbContext db) : IPipelineR
     public Task<List<PipelineRunLinkDto>> GetDownstreamRunsAsync(
         int runId, DateTime startedFromUtc, DateTime startedToUtc, CancellationToken ct = default)
     {
-        // A child carries its parent in the variables it was launched with (both launch paths write
-        // UPSTREAM_RUN_ID), serialized without spaces. The run has no typed parent column; the index on
-        // StartedAt bounds the read to the runs started while the parent ran, or just after it ended,
-        // so the text match never reads the whole table.
-        // Recette R2-026: a run started by one of this run's own `type: trigger` steps (its step run
-        // records the child in TriggeredRunId) is a stage of this run, already in its timeline; only
-        // the runs launched after it (an on_success chain) are its follow-ups.
+        // Follow-ups are found through launch metadata within an indexed time window. Trigger-stage
+        // children are excluded because the parent's timeline already includes them.
         var parentMarker = string.Create(
             System.Globalization.CultureInfo.InvariantCulture, $"\"UPSTREAM_RUN_ID\":\"{runId}\"");
         return db.PipelineRuns.AsNoTracking()

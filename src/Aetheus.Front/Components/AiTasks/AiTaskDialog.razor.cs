@@ -53,6 +53,8 @@ public partial class AiTaskDialog
                     OwnerType = definition.ProjectId.HasValue ? "project" : "server",
                     Schedule = definition.Schedule ?? string.Empty,
                     EventTypes = string.Join(", ", definition.EventTypes),
+                    ContextPaths = string.Join("\n", definition.ContextPaths),
+                    GitRange = definition.GitRange ?? string.Empty,
                     Enabled = definition.Enabled
                 };
             }
@@ -67,6 +69,11 @@ public partial class AiTaskDialog
         }
     }
 
+    private IReadOnlyList<string> ContextPathList =>
+        _model.ContextPaths.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private void OnContextPathsChanged(IReadOnlyList<string> paths) => _model.ContextPaths = string.Join("\n", paths);
+
     private async Task SubmitAsync()
     {
         _busy = true;
@@ -77,6 +84,15 @@ public partial class AiTaskDialog
             var eventTypes = _model.EventTypes
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
+            // Only a project task works on a repository: a server task sends no repository context.
+            var contextPaths = projectId.HasValue
+                ? _model.ContextPaths
+                    .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToList()
+                : [];
+            var gitRange = projectId.HasValue && !string.IsNullOrWhiteSpace(_model.GitRange)
+                ? _model.GitRange.Trim()
+                : null;
 
             if (IsEdit)
             {
@@ -89,6 +105,8 @@ public partial class AiTaskDialog
                     ServerId = serverId,
                     Schedule = string.IsNullOrWhiteSpace(_model.Schedule) ? null : _model.Schedule,
                     EventTypes = eventTypes,
+                    ContextPaths = contextPaths,
+                    GitRange = gitRange,
                     Enabled = _model.Enabled
                 });
                 if (updated is not null)
@@ -108,6 +126,8 @@ public partial class AiTaskDialog
                     ServerId = serverId,
                     Schedule = string.IsNullOrWhiteSpace(_model.Schedule) ? null : _model.Schedule,
                     EventTypes = eventTypes,
+                    ContextPaths = contextPaths,
+                    GitRange = gitRange,
                     Enabled = _model.Enabled
                 });
                 if (created is not null)
@@ -140,6 +160,13 @@ public partial class AiTaskDialog
         public int? ServerId { get; set; }
         public string Schedule { get; set; } = string.Empty;
         public string EventTypes { get; set; } = string.Empty;
+
+        /// <summary>One workspace-relative path per line.</summary>
+        public string ContextPaths { get; set; } = string.Empty;
+
+        [StringLength(200)]
+        public string GitRange { get; set; } = string.Empty;
+
         public bool Enabled { get; set; } = true;
     }
 }

@@ -3,12 +3,9 @@ using Aetheus.Front.Components.Git;
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// The findings of a readiness verdict, each with what fixes it. Shared by the setup wizard's summary
-/// and the project's pipelines page (recette R1-28). A missing repository is created in the existing
-/// dialog over the page, so the page and its state stay where they are (recette R1-19); the pages that
-/// create something else receive <see cref="ReturnUrl"/> and come back to it.
-/// </summary>
+/// <summary>Readiness findings share localized resolution links across the wizard and project page.
+/// Repository creation stays in a dialog; other creation pages receive <see cref="ReturnUrl"/> to
+/// preserve navigation.</summary>
 public partial class PipelineReadinessChecks
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;

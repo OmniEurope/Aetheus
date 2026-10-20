@@ -51,7 +51,7 @@ public class RolesDeepTests : BunitContext
     {
         SetupRoles();
         var cut = await RenderLoadedAsync();
-        cut.WaitForState(() => cut.Markup.Contains("Admin"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Admin"));
 
         // The role list is loaded from api/roles and rendered.
         Assert.Contains("Admin", cut.Markup);

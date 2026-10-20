@@ -83,10 +83,9 @@ public partial class LibraryPortAllocateDialog
                 LibraryId, new AllocateLibraryPortsRequest { ServerId = serverId, Keys = keys });
             if (outcome.Value is null)
             {
-                // PLAN-003 lot 24: the reported symptom is a red "an unexpected error occurred" over
-                // entries that were in fact created. The refusal is only overruled when none of the
-                // keys existed before the call and all of them exist after it; a read that failed on
-                // either side leaves the refusal standing.
+                // Override a reported refusal only when every requested key was absent before the
+                // call and present afterward. If either verification read fails, retain the
+                // refusal.
                 var written = before is { Count: 0 } ? await FindWrittenAsync(keys) : null;
                 if (written is not null && written.Count == keys.Count)
                 {

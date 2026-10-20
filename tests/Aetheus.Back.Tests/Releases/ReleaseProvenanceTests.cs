@@ -6,10 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests.Releases;
 
-/// <summary>
-/// Recette R-366/R-367: the run that created a release is recorded once and never moved by a later
-/// run, and the provenance view keeps creation, later uses and build inputs apart.
-/// </summary>
+/// <summary> The run that created a release is recorded once and never moved by a later run, and
+/// the provenance view keeps creation, later uses and build inputs apart. </summary>
 public sealed class ReleaseProvenanceTests : IDisposable
 {
     private static readonly DateTime T0 = new(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc);

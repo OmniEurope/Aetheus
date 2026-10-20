@@ -2,10 +2,9 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// The product's loading indicator: OE's <see cref="OmniLogoLoader"/> with the Aetheus plane (recette
-/// R-536). <see cref="Size"/> is OE's (1.5rem, 3rem, 5rem); <see cref="Centered"/> gives the loader the
-/// width of its container, the mark in the middle, for a wait that stands in for a whole block.
+/// <summary> The product's loading indicator: OE's <see cref="OmniLogoLoader"/> with the Aetheus
+/// plane. <see cref="Size"/> is OE's (1.5rem, 3rem, 5rem); <see cref="Centered"/> gives the loader
+/// the width of its container, the mark in the middle, for a wait that stands in for a whole block.
 /// </summary>
 public partial class AetheusLoader
 {

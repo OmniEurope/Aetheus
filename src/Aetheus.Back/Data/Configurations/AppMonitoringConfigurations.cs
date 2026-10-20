@@ -138,8 +138,8 @@ internal sealed class AppMetricHourlyConfiguration : IEntityTypeConfiguration<Ap
         builder.Property(e => e.AttributesJson).HasMaxLength(1024);
         builder.Property(e => e.Unit).HasMaxLength(32);
         builder.HasIndex(e => new { e.MonitoredAppId, e.MetricName, e.AttributesJson, e.HourUtc }).IsUnique();
-        // Recette R-478: the hourly sweep counts and reads the rollups of one hour at a time; the
-        // unique index starts with the application, so each of those reads walked 13 months of rows.
+        // Index the hour used by bounded rollup sweeps to avoid scanning application history for
+        // each hour.
         builder.HasIndex(e => e.HourUtc);
 
         builder.HasMonitoredAppCascade(e => e.MonitoredApp, e => e.MonitoredAppId);

@@ -8,6 +8,6 @@ public partial class PipelineRunGateOverview
     [Parameter, EditorRequired] public AnalysisRunGateDto Gate { get; set; } = default!;
     [Parameter] public EventCallback GateRequested { get; set; }
 
-    /// <summary>Recette R2-129: the letter the run is listed with, shown in place of the analysis letter.</summary>
+    /// <summary>The letter the run is listed with, shown in place of the analysis letter.</summary>
     [Parameter] public AnalysisGrade? RunGrade { get; set; }
 }

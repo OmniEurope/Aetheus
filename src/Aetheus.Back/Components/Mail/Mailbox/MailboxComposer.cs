@@ -6,12 +6,8 @@ using MimeKit.Utils;
 
 namespace Aetheus.Back.Components.Mail.Mailbox;
 
-/// <summary>
-/// Recette R1-17. Builds what a reply or a forward starts from (recipients, subject, the original
-/// quoted) and the MIME message finally sent. Pure: the service gives it the original and the time.
-/// The quote's introduction is written in the reader's language (French or English), since it becomes
-/// part of the message.
-/// </summary>
+/// <summary>Builds reply and forward drafts and final MIME messages from supplied source messages
+/// and time. Quote introductions use the reader French or English language.</summary>
 public static class MailboxComposer
 {
     private sealed record QuoteTexts(string Wrote, string Forwarded, string From, string Date, string Subject, string To, string Cc);

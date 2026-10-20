@@ -29,8 +29,8 @@ public class ReleaseRepositoryTests : IDisposable
     [Fact]
     public async Task GetReleasesPagedAsync_AppliesColumnFilters_AndResolvedIds_BeforeTheCount()
     {
-        // Recette R-224: publication range, status and grade lists, project name and the ids the
-        // source pipeline filter resolved to all narrow the query.
+        // Publication range, status and grade lists, project name and the ids the source pipeline
+        // filter resolved to all narrow the query.
         _db.Releases.AddRange(
             new Release { Id = 11, ProjectId = _projectId, Version = "1.0.0", BranchName = "main", Status = ReleaseStatus.Published, AssuranceGrade = AnalysisGrade.A, PublishedAt = new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc) },
             new Release { Id = 12, ProjectId = _projectId, Version = "1.1.0", BranchName = "main", Status = ReleaseStatus.Published, AssuranceGrade = AnalysisGrade.C, PublishedAt = new DateTime(2026, 9, 3, 0, 0, 0, DateTimeKind.Utc) },
@@ -271,8 +271,8 @@ public class ReleaseRepositoryTests : IDisposable
     [Fact]
     public async Task GetByPipelineRunIdAsync_KeepsTheReleaseACandidatePublished_AfterTheDeployRunRewroteIt()
     {
-        // Recette R-365: the candidate run published release 51, then the deploy run recorded it again
-        // and became its PipelineRunId. The candidate's release step output still names it. A RELEASE_ID
+        // The candidate run published release 51, then the deploy run recorded it again and became
+        // its PipelineRunId. The candidate's release step output still names it. A RELEASE_ID
         // pointing at another project's release, or written by a failed step, is ignored.
         _db.Pipelines.AddRange(
             new Pipeline { Id = 50, Name = "candidate", ProjectId = _projectId },
@@ -415,9 +415,8 @@ public class ReleaseRepositoryTests : IDisposable
     [Fact]
     public async Task GetReleasesPagedAsync_Deployable_KeepsEveryReleaseWhosePayloadIsRetained()
     {
-        // PLAN-005 lot 5 / D40, R-10: what a deployment's restore by release name can actually use is
-        // the retained payload, whatever the status - deploy-prod 2368 restored a release a failed
-        // deployment had marked Failed. The status is shown beside it; only a purged one is left out.
+        // Release restoration requires retained payload regardless of status; exclude purged
+        // artifacts.
         PipelineArtifact Payload() => new() { Name = "application-payload", FilePath = "a.tgz" };
         _db.Releases.AddRange(
             new Release { ProjectId = _projectId, Version = "published-with-payload", BranchName = "develop", Status = ReleaseStatus.Published, Artifacts = [Payload()] },
@@ -441,8 +440,8 @@ public class ReleaseRepositoryTests : IDisposable
     [Fact]
     public async Task GetRedeployTargetsAsync_NamesThePreviousDeploymentAndTheLivePipeline()
     {
-        // PLAN-007 lot 5: the newest Superseded release is the one production ran before the live one,
-        // and the live release points at the run that deployed it, launched with a candidateVersion.
+        // The newest Superseded release is the one production ran before the live one, and the live
+        // release points at the run that deployed it, launched with a candidateVersion.
         _db.Pipelines.Add(new Pipeline { Id = 40, Name = "deploy-prod" });
         _db.PipelineRuns.Add(new PipelineRun { Id = 400, PipelineId = 40, ParametersJson = "{\"candidateVersion\":\"c-3\"}" });
         _db.Releases.AddRange(
@@ -459,7 +458,7 @@ public class ReleaseRepositoryTests : IDisposable
     [Fact]
     public async Task GetRedeployTargetsAsync_NamesTheProjectsRevertPipeline_ByTheTemplateItExtends()
     {
-        // PLAN-003 2.7: "Revenir à N-1" is the project pipeline extending host-bluegreen-revert.
+        // Identify quick return through the host-bluegreen-revert template.
         _db.Pipelines.AddRange(
             new Pipeline { Id = 42, Name = "deploy-prod", ProjectId = _projectId, TemplateReferenceName = "host-bluegreen-deploy" },
             new Pipeline { Id = 43, Name = "revert-prod", ProjectId = _projectId, TemplateReferenceName = "host-bluegreen-revert" },

@@ -98,7 +98,7 @@ public class ContactAgentDialogTemplateTests : BunitContext
         SetField(cut.Instance, "_errorMessage", "Timed out");
         cut.Render();
         Assert.Contains("WhyOffline", cut.Markup);
-        Assert.Contains("Retry", cut.Markup);
+        Assert.NotNull(cut.FindMenuItem("Retry"));
     }
 
     [Fact]

@@ -3,13 +3,9 @@ using Aetheus.Back.Components.Shared;
 
 namespace Aetheus.Back.Components.Auth;
 
-/// <summary>
-/// Enforces a forced password change on the server. A token minted while the account must change its
-/// password carries <see cref="AetheusClaimTypes.MustChangePassword"/>; until then only the requests the
-/// change itself needs are served, everything else (hubs included) gets 403. The front used to be the
-/// only gate, so the same token reached the whole API (audit SITE-SEC-001). The 403 carries
-/// <see cref="RequiredHeader"/> so the front can tell it from an ordinary permission refusal.
-/// </summary>
+/// <summary>Enforce the MustChangePassword claim server-side, allowing only requests needed for the
+/// password change and returning 403 elsewhere, including hubs. RequiredHeader distinguishes this
+/// condition from ordinary permission refusal.</summary>
 public sealed class ForcedPasswordChangeMiddleware(RequestDelegate next)
 {
     public const string RequiredHeader = "X-Aetheus-Password-Change-Required";
@@ -22,7 +18,7 @@ public sealed class ForcedPasswordChangeMiddleware(RequestDelegate next)
         ("POST", "/api/auth/renew"),
         ("POST", "/api/auth/token/refresh"),
         ("POST", "/api/auth/session-ended"),
-        // R1-37: logging out of the forced-change screen still forgets the held mailbox passwords.
+        // Logging out of the forced-change screen still forgets the held mailbox passwords.
         ("POST", "/api/auth/logout"),
     ];
 

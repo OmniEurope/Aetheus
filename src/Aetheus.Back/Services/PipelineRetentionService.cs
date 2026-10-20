@@ -51,7 +51,7 @@ public sealed class PipelineRetentionService(
         await using var scope = scopeFactory.CreateAsyncScope();
 
         var runCutoff = timeProvider.GetUtcNow().UtcDateTime.AddDays(-retentionDays);
-        var pipelineRepo = scope.ServiceProvider.GetRequiredService<IPipelineRepository>();
+        var pipelineRepo = scope.ServiceProvider.GetRequiredService<IPipelineRunRetentionRepository>();
         var deletedRuns = await pipelineRepo.DeleteRunsOlderThanAsync(runCutoff, ct).ConfigureAwait(false);
 
         if (deletedRuns > 0)

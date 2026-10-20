@@ -4,10 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// Recette R-212: the column filters of a project's servers section. The keys are the grid's column keys;
-/// the status and action columns are not filterable, so they have no entry.
-/// </summary>
+/// <summary> The column filters of a project's servers section. The keys are the grid's column
+/// keys; the status and action columns are not filterable, so they have no entry. </summary>
 internal static class ProjectServerListQuery
 {
     internal static readonly GridQueryMap<ProjectServer> Columns = new GridQueryMap<ProjectServer>()

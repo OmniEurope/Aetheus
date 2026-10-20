@@ -6,9 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Shared;
 
-// 0-a: the shared VariableLibrariesList drives all 3 scopes - global/project are server-paginated
-// via GetVariableLibrariesAsync (projectId filter), server detail is self-loaded via
-// GetServerVariableLibrariesAsync. Consolidates the previously per-section grid coverage.
+// Exercises VariableLibrariesList across global, project and server scopes, using their respective
+// paginated and server-library API paths.
 public class VariableLibrariesListTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -29,7 +28,7 @@ public class VariableLibrariesListTests : BunitContext
         });
 
         var cut = Render<VariableLibrariesList>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("Shared Vars"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Shared Vars"));
 
         Assert.Contains("Shared Vars", cut.Markup);
     }
@@ -41,8 +40,7 @@ public class VariableLibrariesListTests : BunitContext
 
         var cut = Render<VariableLibrariesList>(p => p.Add(x => x.ServerId, 2));
         cut.WaitForState(() =>
-            ((List<VariableLibraryDto>?)ListType.GetField("_serverAll", Priv)!.GetValue(cut.Instance)) is not null,
-            TimeSpan.FromSeconds(2));
+            ((List<VariableLibraryDto>?)ListType.GetField("_serverAll", Priv)!.GetValue(cut.Instance)) is not null);
 
         var all = (List<VariableLibraryDto>)ListType.GetField("_serverAll", Priv)!.GetValue(cut.Instance)!;
         Assert.Empty(all);
@@ -58,7 +56,7 @@ public class VariableLibrariesListTests : BunitContext
         });
 
         var cut = Render<VariableLibrariesList>();
-        cut.WaitForState(() => cut.Markup.Contains("Globals"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Globals"));
 
         Assert.Contains("Globals", cut.Markup);
     }
@@ -73,7 +71,7 @@ public class VariableLibrariesListTests : BunitContext
         });
 
         var cut = Render<VariableLibrariesList>(p => p.Add(x => x.ProjectId, 7));
-        cut.WaitForState(() => cut.Markup.Contains("ProjLib"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("ProjLib"));
 
         Assert.Contains("ProjLib", cut.Markup);
         // Project column/caption is hidden in project scope.
@@ -132,7 +130,7 @@ public class VariableLibrariesListTests : BunitContext
         });
 
         var cut = Render<VariableLibrariesList>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }

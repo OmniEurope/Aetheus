@@ -24,10 +24,9 @@ public sealed class IngestController(
 {
     private const string KeyHeader = "x-aetheus-ingest-key";
 
-    /// <summary>
-    /// PLAN-013 lot 4: the configuration the <c>Aetheus.Telemetry</c> package reads with its ingest key,
-    /// the metric send interval of the application's project. 401 for an unknown key, like the exports.
-    /// </summary>
+    /// <summary> The configuration the <c>Aetheus.Telemetry</c> package reads with its ingest key,
+    /// the metric send interval of the application's project. 401 for an unknown key, like the
+    /// exports. </summary>
     [HttpGet("configuration")]
     public async Task<ActionResult<IngestConfigurationDto>> Configuration(CancellationToken ct)
     {
@@ -111,8 +110,8 @@ public sealed class IngestController(
         });
     }
 
-    // A missing key goes to the service as well, which refuses it and reports it with the other refused
-    // keys (recette R2-013): the request line of an ingest 401 is no longer a warning of its own.
+    // Pass missing keys through the service refusal path and its deduplicated warning;
+    // request-level 401 logging remains at Debug.
     private Task<int?> ResolveRequestAppIdAsync(CancellationToken ct) =>
         ingest.ResolveAppIdAsync(Request.Headers[KeyHeader].FirstOrDefault() ?? string.Empty, ct);
 

@@ -23,6 +23,7 @@ internal static class PipelineDtoMapper
             EnvironmentName = pipeline.Environment?.Name,
             ProjectServerId = pipeline.ProjectServerId,
             ProjectServerName = pipeline.ProjectServer?.DisplayName,
+            AiRunnerProfileId = pipeline.AiRunnerProfileId,
             LastRunStatus = lastRun?.Status,
             LastRunAt = lastRun?.StartedAt,
             RecentRuns = pipeline.Runs.Select(run =>
@@ -39,7 +40,8 @@ internal static class PipelineDtoMapper
                 };
             }).ToList(),
             CreatedAt = pipeline.CreatedAt,
-            UpdatedAt = pipeline.UpdatedAt
+            UpdatedAt = pipeline.UpdatedAt,
+            OwnerUsername = pipeline.CreatedByUsername
         };
     }
 }

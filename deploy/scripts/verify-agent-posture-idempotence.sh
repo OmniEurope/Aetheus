@@ -97,8 +97,8 @@ assert_one "teamspeak-setup"   "$ENABLE_TEAMSPEAK_SETUP"
 assert_one "deployment"        "$ENABLE_DEPLOYMENT"
 log_info "Established host keeps every capability across a reinstall - OK"
 
-# An explicit --enable-*/--disable-* on the command line still wins over the derivation, for the
-# capability it names only: the others keep what the host shows (audit DEP-021).
+# Apply each explicit capability flag only to its own setting so all other capabilities retain the
+# host's posture. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 reset_flags
 mark_explicit CERTBOT_MANAGE
 derive_existing_posture

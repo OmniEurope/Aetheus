@@ -56,12 +56,8 @@ public sealed class ServerDetailLoader : IAsyncDisposable
     /// <summary>Fired whenever <see cref="Server"/> / metric flags change. UI re-renders.</summary>
     public event Action? OnChanged;
 
-    /// <summary>
-    /// Fired when a task targeting the loaded server completes. Section pages subscribe to
-    /// refresh their own state - e.g. ServerApacheSection refreshes config/logs on
-    /// "Apache config" completion. Replaces the legacy <c>_apacheSection?.HandleTaskCompleted</c>
-    /// fan-out that ServerDetail.razor used to do (item #1 polish).
-    /// </summary>
+    /// <summary>Notify section subscribers when a task for the loaded server completes so each
+    /// section refreshes its own affected state.</summary>
     public event Func<TaskCompletedNotification, Task>? OnTaskCompleted;
 
     public ServerDetailLoader(ApiClient api, HubConnectionFactory hubFactory, NavigationManager nav, ILogger<ServerDetailLoader> logger,
@@ -88,44 +84,7 @@ public sealed class ServerDetailLoader : IAsyncDisposable
             // A completed load that found no server is final too: re-requesting on every render of the
             // "not found" state looped until the API answered 429.
             if (_currentId == id && (Server is not null || InitialLoadCompleted)) return;
-
-            // Switching servers: tear down the previous hub group + cancel any in-flight load
-            // so an out-of-order response cannot overwrite the new server's data.
-            await TeardownAsync().ConfigureAwait(false);
-
-            _currentId = id;
-            _loadCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var token = _loadCts.Token;
-
-            // Recette R2-087: a return to a server's pages shows its last known detail at once; the
-            // fetch below then replaces it.
-            var address = $"servers/{id}";
-            var ticket = _pageState?.Begin() ?? default;
-            if (_pageState?.TryRestore<ServerDetailState>(address, out var shown) == true)
-            {
-                Server = shown.Server;
-                Metrics = [.. shown.Metrics];
-                OnChanged?.Invoke();
-            }
-
-            Server = await _api.Servers.GetServerDetailAsync(id, token).ConfigureAwait(false);
-            Metrics = await LoadMetricsAsync(id, afterUtc: null, ct: token).ConfigureAwait(false);
-            InitialLoadCompleted = true;
-            if (Server is null) _pageState?.Forget<ServerDetailState>(address);
-            else _pageState?.Remember(ticket, address, new ServerDetailState(Server, [.. Metrics]));
-            if (Server is { MemoryTotalMb: > 0 })
-            {
-                MetricsReceived = true;
-                LastUpdated = DateTime.Now;
-            }
-            OnChanged?.Invoke();
-
-            if (Server is not null)
-            {
-                // Heartbeats enrich the page after its initial HTTP state is visible. SignalR
-                // negotiation is best effort and must never hold every server section loader.
-                _ = StartHubAsync(id, token);
-            }
+            await LoadAsync(id, ct).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {
@@ -146,6 +105,55 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         {
             _gate.Release();
         }
+    }
+
+    private async Task LoadAsync(int id, CancellationToken ct)
+    {
+        // Switching servers: tear down the previous hub group + cancel any in-flight load
+        // so an out-of-order response cannot overwrite the new server's data.
+        await TeardownAsync().ConfigureAwait(false);
+
+        _currentId = id;
+        _loadCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var token = _loadCts.Token;
+
+        // Show the cached server detail immediately on return, then replace it with the fetched
+        // state so navigation remains responsive.
+        var address = $"servers/{id}";
+        var ticket = _pageState?.Begin() ?? default;
+        ShowRememberedState(address);
+
+        Server = await _api.Servers.GetServerDetailAsync(id, token).ConfigureAwait(false);
+        Metrics = await LoadMetricsAsync(id, afterUtc: null, ct: token).ConfigureAwait(false);
+        InitialLoadCompleted = true;
+        RememberLoadedState(address, ticket);
+        if (Server is { MemoryTotalMb: > 0 })
+        {
+            MetricsReceived = true;
+            LastUpdated = DateTime.Now;
+        }
+        OnChanged?.Invoke();
+
+        if (Server is not null)
+        {
+            // Heartbeats enrich the page after its initial HTTP state is visible. SignalR
+            // negotiation is best effort and must never hold every server section loader.
+            _ = StartHubAsync(id, token);
+        }
+    }
+
+    private void ShowRememberedState(string address)
+    {
+        if (_pageState?.TryRestore<ServerDetailState>(address, out var shown) != true) return;
+        Server = shown.Server;
+        Metrics = [.. shown.Metrics];
+        OnChanged?.Invoke();
+    }
+
+    private void RememberLoadedState(string address, ListCacheService.Ticket ticket)
+    {
+        if (Server is null) _pageState?.Forget<ServerDetailState>(address);
+        else _pageState?.Remember(ticket, address, new ServerDetailState(Server, [.. Metrics]));
     }
 
     /// <summary>
@@ -171,11 +179,8 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         OnChanged?.Invoke();
     }
 
-    // Recette R2-031: the stored service list changes only when a heartbeat is stored, so the refresh a
-    // finished service action triggers usually reads the list from before the action, while the beat the
-    // agent sends right after the action is on its way. That stale read must not replace a newer list the
-    // live heartbeat already brought, and an unchanged list keeps its instance so the page does not take
-    // it for the result of the action (it clears the action's "succeeded" line on a new list).
+    // Do not overwrite a newer live heartbeat with a stale post-action read; retain unchanged
+    // service-list instances so the page does not mistake them for new action results.
     private int _heartbeatsApplied;
 
     private void ReloadAgentUpdate(int serverId, int id, CancellationToken ct)
@@ -183,11 +188,9 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         if (serverId == id) _ = ReloadAgentUpdateAsync(id, ct);
     }
 
-    /// <summary>
-    /// Recette R2-111: replaces the agent version, its compatibility and the persisted update request of
-    /// the loaded server with the backend's, leaving the live heartbeat fields alone. Best effort: a
-    /// failed read keeps what is shown, the next event or heartbeat brings it.
-    /// </summary>
+    /// <summary>Refresh agent version, compatibility and persisted update request without
+    /// overwriting live heartbeat fields; a failed read retains the displayed state for the next
+    /// event to refresh.</summary>
     internal async Task ReloadAgentUpdateAsync(int id, CancellationToken ct)
     {
         try
@@ -205,6 +208,32 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "[ServerDetailLoader] Agent update state reload failed for server {ServerId}", id);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The page left this server.
+        }
+    }
+
+    /// <summary>Re-reads the external probe result recorded with the Offline transition, without
+    /// touching live heartbeat fields; a failed read keeps the displayed state.</summary>
+    internal async Task ReloadExternalProbeAsync(int id, CancellationToken ct)
+    {
+        try
+        {
+            var fresh = await _api.Servers.GetServerDetailAsync(id, ct).ConfigureAwait(false);
+            if (fresh is null || Server is null || _currentId != id) return;
+            Server = Server with
+            {
+                ExternalProbe = fresh.ExternalProbe,
+                ExternalProbeAt = fresh.ExternalProbeAt,
+                ExternalProbeTarget = fresh.ExternalProbeTarget
+            };
+            OnChanged?.Invoke();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "[ServerDetailLoader] External probe reload failed for server {ServerId}", id);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -236,18 +265,25 @@ public sealed class ServerDetailLoader : IAsyncDisposable
     private async Task StartHubAsync(int id, CancellationToken ct)
     {
         var hub = _hubFactory.Create("servers");
+        // The reconnect handler reads hub, so ownership is tracked apart from the variable: nulling
+        // hub to skip the dispose below left that handler throwing on every reconnection.
+        var ownsHub = true;
 
         hub.On<ServerHeartbeatDto>("Heartbeat", h =>
         {
             if (Server is null) return;
             var capabilities = ResolveSudoersCapabilities(Server, h);
+            var clock = h.ClockSample?.Estimate();
             Server = Server with
             {
                 CpuPercent = h.CpuPercent,
+                ClockOffsetMs = clock?.OffsetMs,
+                ClockOffsetUncertaintyMs = clock?.UncertaintyMs,
                 MemoryUsedMb = h.MemoryUsedMb,
                 MemoryTotalMb = h.MemoryTotalMb,
                 DiskUsedGb = h.Disks.Sum(d => d.UsedGb),
                 DiskTotalGb = h.Disks.Sum(d => d.TotalGb),
+                InodeUsedPercent = DiskInfoDto.MaxInodeUsedPercent(h.Disks),
                 Services = h.Services,
                 Docker = h.Docker,
                 Apache = h.Apache,
@@ -269,6 +305,8 @@ public sealed class ServerDetailLoader : IAsyncDisposable
                 MailSetupAvailable = capabilities.MailSetup,
                 DeploymentTargetAvailable = capabilities.DeploymentTarget,
                 InsecureTls = h.InsecureTls,
+                // Null on a beat without the measure, as the backend clears it then: unknown.
+                OomKillsSinceBoot = h.OomKills?.KillCount,
                 StorageDiagnostics = h.StorageDiagnostics,
                 // S-TECH-43: stamp the live heartbeat so "last seen" refreshes in real-time instead
                 // of staying frozen at the value captured on the initial load (browser-local clock).
@@ -288,6 +326,8 @@ public sealed class ServerDetailLoader : IAsyncDisposable
             if (Server is null || serverId != id) return;
             Server = Server with { Status = ServerStatus.Offline };
             OnChanged?.Invoke();
+            // The backend announces the transition after its external probe (PLAN-010 lot 1).
+            _ = ReloadExternalProbeAsync(id, ct);
         });
 
         hub.On<TaskCompletedNotification>("TaskCompleted", async notification =>
@@ -300,8 +340,8 @@ public sealed class ServerDetailLoader : IAsyncDisposable
             await Task.WhenAll(handlers).ConfigureAwait(false);
         });
 
-        // Recette R2-111: each agent-update event reloads the server's update request and agent version, so
-        // the Overview's "Update in progress to x.y.z" ends on the new version, or on the failure and its reason.
+        // Reload update request and agent version on each agent-update event so the overview
+        // reflects completion or the failure reason.
         hub.On<int>("AgentUpdateQueued", serverId => ReloadAgentUpdate(serverId, id, ct));
         hub.On<AgentUpdateProgressDto>("AgentUpdateProgress", progress =>
         {
@@ -311,28 +351,17 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         hub.On<int, int>("AgentUpdateConfirmed", (serverId, _) => ReloadAgentUpdate(serverId, id, ct));
         hub.On<int, int>("AgentUpdateFailed", (serverId, _) => ReloadAgentUpdate(serverId, id, ct));
 
-        // Group membership is per-connection and lost on auto-reconnect - re-join so server
-        // updates/heartbeats keep flowing (the next heartbeat re-syncs the metrics). Recette R1-42:
-        // SignalR replays nothing, so an agent-update verdict sent while the tab slept is re-read too,
-        // inside the reconnect catch-up the "synchronising" indicator waits for.
+        // Rejoin the server group after reconnect because membership is connection-scoped; reread
+        // update verdicts during catch-up because SignalR does not replay missed events.
         hub.RejoinOnReconnect(() => RejoinAndReloadAgentUpdateAsync(() => hub.InvokeAsync("JoinServerGroup", id), id, ct));
         try
         {
             await hub.StartAsync(ct).ConfigureAwait(false);
             await hub.InvokeAsync("JoinServerGroup", id, ct).ConfigureAwait(false);
 
-            if (ct.IsCancellationRequested || _currentId != id) return;
-            var previous = Interlocked.Exchange(ref _hub, hub);
-            if (previous is not null && !ReferenceEquals(previous, hub))
-                await previous.DisposeAsync().ConfigureAwait(false);
-
-            // Teardown may have raced the exchange. Keep no connection for a server that is no
-            // longer current, otherwise transfer ownership to the loader and expose it to the UI.
-            if (ct.IsCancellationRequested || _currentId != id)
-                Interlocked.CompareExchange(ref _hub, null, hub);
-            else
+            if (await AdoptHubAsync(hub, id, ct).ConfigureAwait(false))
             {
-                hub = null!;
+                ownsHub = false;
                 OnChanged?.Invoke();
             }
         }
@@ -349,12 +378,30 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         }
         finally
         {
-            if (hub is not null)
-            {
-                try { await hub.DisposeAsync().ConfigureAwait(false); }
-                catch (Exception ex) { _logger.LogDebug(ex, "[ServerDetailLoader] hub dispose failed"); }
-            }
+            if (ownsHub)
+                await DisposeQuietlyAsync(hub).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Makes a started connection the loader's own, replacing (and disposing) the previous
+    /// one, unless the server is no longer current. Teardown may race the exchange: a connection
+    /// for a server that is no longer current is released again. True when the loader kept it.</summary>
+    private async Task<bool> AdoptHubAsync(HubConnection hub, int id, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested || _currentId != id) return false;
+        var previous = Interlocked.Exchange(ref _hub, hub);
+        if (previous is not null && !ReferenceEquals(previous, hub))
+            await previous.DisposeAsync().ConfigureAwait(false);
+
+        if (!ct.IsCancellationRequested && _currentId == id) return true;
+        Interlocked.CompareExchange(ref _hub, null, hub);
+        return false;
+    }
+
+    private async Task DisposeQuietlyAsync(HubConnection hub)
+    {
+        try { await hub.DisposeAsync().ConfigureAwait(false); }
+        catch (Exception ex) { _logger.LogDebug(ex, "[ServerDetailLoader] hub dispose failed"); }
     }
 
     internal static (bool? PackageManagement, bool MailSetup, bool? DeploymentTarget)
@@ -464,13 +511,8 @@ public sealed class ServerDetailLoader : IAsyncDisposable
     private bool OnServerPages =>
         _nav.ToBaseRelativePath(_nav.Uri).StartsWith("servers/", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Recette R-514: the teardown asked by leaving the server pages waits its turn behind the load in
-    /// flight, and is dropped when the reader is already back on a server page (browser back). It used
-    /// to run on its own, unawaited and outside the gate: a page that came back while it was still
-    /// leaving the hub group was told "already loaded", then the teardown finished and emptied the
-    /// loader under it, which left "Loading..." and a trail without the server's name for good.
-    /// </summary>
+    /// <summary>Serialize teardown behind in-flight loading and discard it if a server page is
+    /// active again so late cleanup cannot empty a newly reused loader.</summary>
     internal async Task TeardownOnLeaveAsync()
     {
         try
@@ -528,6 +570,6 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         _gate.Dispose();
     }
 
-    /// <summary>The server detail last shown, kept for a return to its pages (recette R2-087).</summary>
+    /// <summary>The server detail last shown, kept for a return to its pages.</summary>
     private sealed record ServerDetailState(ServerDetailDto Server, List<ServerMetricDto> Metrics);
 }

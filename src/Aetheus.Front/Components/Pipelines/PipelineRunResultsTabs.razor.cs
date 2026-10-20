@@ -22,10 +22,8 @@ public partial class PipelineRunResultsTabs
     [Parameter] public EventCallback<int> CoverageLogsRequested { get; set; }
     [Parameter] public EventCallback<int> LintLogsRequested { get; set; }
 
-    /// <summary>
-    /// Recette R-151, kept when R-423 took the coverage tile off the overview: the gauge's figure says
-    /// its tier in words too, so the colour is never the only cue.
-    /// </summary>
+    /// <summary>The coverage gauge states its tier in words so colour is not the only
+    /// cue.</summary>
     private string CoverageTierText(double rate) =>
         string.Format(System.Globalization.CultureInfo.CurrentCulture, L["CoverageTierTitle"],
             PipelineRunFormatting.FormatPercent(rate), L[PipelineRunFormatting.CoverageTierKey(rate)]);

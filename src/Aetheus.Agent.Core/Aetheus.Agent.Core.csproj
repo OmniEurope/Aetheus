@@ -6,7 +6,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Aetheus.Agent.Core.Tests" />
-    <!-- ManageablePackagesSudoersAuditTests pins the sudoers argv form to BuildAptArgv. -->
+    <!-- SudoersAuditTests pins the sudoers argv form to BuildAptArgv. -->
     <InternalsVisibleTo Include="Aetheus.Back.Tests" />
   </ItemGroup>
 
@@ -28,8 +28,22 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Every in-house OpenGrep rule file, listed one by one (OpenGrepSandbox.RuleFiles): a missing file
+         fails the build instead of shipping an agent whose SAST scan silently lost part of its rules. -->
     <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-security.yml"
                       LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-security.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-apache.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-apache.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-compose.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-compose.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-delivery.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-delivery.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-dockerfile.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-dockerfile.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-javascript.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-javascript.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-pipeline.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-pipeline.yml" />
     <EmbeddedResource Include="..\..\deploy\scripts\zap-active-automation.sh"
                       LogicalName="Aetheus.Agent.Core.AnalysisHarnesses.zap-active-automation.sh" />
     <EmbeddedResource Include="..\..\deploy\scripts\publish-observability-package.sh"

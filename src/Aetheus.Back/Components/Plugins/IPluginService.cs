@@ -5,7 +5,7 @@ namespace Aetheus.Back.Components.Plugins;
 public interface IPluginService
 {
     Task<List<PluginRegistrationDto>> GetPluginsAsync(CancellationToken ct = default);
-    /// <summary>Recette R-224: the values the plugins list's checkable column filters offer.</summary>
+    /// <summary>The values the plugins list's checkable column filters offer.</summary>
     Task<PluginFilterValuesDto> GetFilterValuesAsync(CancellationToken ct = default);
 
     Task<PaginatedResult<PluginRegistrationDto>> GetPluginsPageAsync(

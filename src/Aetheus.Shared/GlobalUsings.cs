@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
-// PLAN-008 lot 43: the contracts follow their module folder. A module that uses another module's
-// contract (a status enum, a pagination request) resolves it here rather than through a per-file
-// using, the way Back and Front already do.
+// Contracts follow their module folders; cross-module contracts are resolved through these global
+// imports.
 global using Aetheus.Shared.Components.AgentPools;
 global using Aetheus.Shared.Components.Agents;
 global using Aetheus.Shared.Components.AgentUpdate;
@@ -23,6 +22,7 @@ global using Aetheus.Shared.Components.Firewall;
 global using Aetheus.Shared.Components.Git;
 global using Aetheus.Shared.Components.Logs;
 global using Aetheus.Shared.Components.Mail;
+global using Aetheus.Shared.Components.MailTemplates;
 global using Aetheus.Shared.Components.ModuleLinks;
 global using Aetheus.Shared.Components.Monitoring;
 global using Aetheus.Shared.Components.Notifications;

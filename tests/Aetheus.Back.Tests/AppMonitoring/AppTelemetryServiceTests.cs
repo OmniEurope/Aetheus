@@ -198,7 +198,7 @@ public class AppTelemetryServiceTests : IDisposable
             new AppMetricSample { MonitoredAppId = 1, MetricName = "cpu", Timestamp = now.AddMinutes(-2), Value = 20, Unit = "%" },
             new AppMetricSample { MonitoredAppId = 1, MetricName = "cpu", Timestamp = now.AddMinutes(-1), Value = 30, Unit = "%" },
             new AppMetricSample { MonitoredAppId = 1, MetricName = "memory", Timestamp = now, Value = 1024, Unit = "MiB" });
-        // R-477: the names come from their own table, which the ingestion feeds.
+        // The names come from their own table, which the ingestion feeds.
         _db.AppMetricNames.AddRange(
             new AppMetricName { MonitoredAppId = 1, Name = "cpu" },
             new AppMetricName { MonitoredAppId = 1, Name = "memory" },
@@ -379,7 +379,7 @@ public class AppTelemetryServiceTests : IDisposable
         Assert.Equal("Probe.Run", error.TopFrame);
     }
 
-    // --- Recette R-358: sort and header filters of the log grid ---
+    // --- sort and header filters of the log grid ---
 
     private async Task SeedGridLogsAsync()
     {
@@ -492,7 +492,7 @@ public class AppTelemetryServiceTests : IDisposable
             [new GridFilter { Field = "Severity", Operator = GridFilterOperator.Contains, Value = "ERR" }]));
     }
 
-    // --- Sort and header filters of the error grid (same contract as the log grid of R-358) ---
+    // Sort and header filters of the error grid follow the log-grid contract.
 
     private async Task SeedGridErrorsAsync()
     {

@@ -70,11 +70,8 @@ public sealed class BreadcrumbRouteCoverageTests
         Assert.Contains(items, item => item.Text.Contains(leaf, StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// D3 / recette R-395: the trail line of the page header keeps a fixed height on every route, even with
-    /// nothing to show, so the content under it never moves. OmniPageHeader owns that geometry now; no
-    /// Aetheus rule may resize, clip or wrap the trail line.
-    /// </summary>
+    /// <summary>OE owns fixed breadcrumb-rail geometry; application CSS must not resize, clip or
+    /// wrap it.</summary>
     [Fact]
     public void Trail_Line_Keeps_The_Headers_Fixed_Geometry()
     {

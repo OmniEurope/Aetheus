@@ -15,7 +15,6 @@ public sealed class PipelineRunLiveDurationTests : BunitContext
         var initial = cut.Markup;
 
         cut.WaitForAssertion(
-            () => Assert.NotEqual(initial, cut.Markup),
-            timeout: TimeSpan.FromSeconds(2.5));
+            () => Assert.NotEqual(initial, cut.Markup));
     }
 }

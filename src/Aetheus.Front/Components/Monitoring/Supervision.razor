@@ -1,10 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @page "/monitoring"
+@inherits EntityLiveListBase
 @inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
 
-@* PLAN-003 lot 28: every supervised application, all projects together, with its status, the people
-   online and the last event received. The facts were already there, one project at a time; nothing
-   showed that Aetheus itself had stopped reporting on 28/08. *@
+@* Show monitored applications across projects with status, online audience and the latest received
+   event. *@
 <PageTitle>@L["Supervision"] - Aetheus</PageTitle>
 
 <OmniPageHeader Title="@L["Supervision"]" Subtitle="@Breadcrumb.Subtitle()">
@@ -14,7 +14,6 @@
     </Badges>
 </OmniPageHeader>
 
-<OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-md">@L["SupervisionDescription"]</OmniText>
 
 @if (_loadFailed)
 {
@@ -24,7 +23,7 @@
 }
 else
 {
-    @* Recette R-468: everything at a glance, all applications together, above their list. *@
+    @* Everything at a glance, all applications together, above their list. *@
     @if (_summary is not null)
     {
         <div class="supervision-totals omni-u-mb-md">
@@ -44,8 +43,8 @@ else
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mb-md supervision-totals-note">@L["SupervisionAudienceNote"]</OmniText>
         }
     }
-    <MonitoredAppsStatusGrid Applications="@_summary?.Applications" IsLoading="@(_summary is null)" ShowLastEvent="true" />
-    <ProjectStorageUsageView />
+    <SupervisionProjectsGrid Applications="@_summary?.Applications" Storage="@_storage" StorageFailed="@_storageFailed"
+        IsLoading="@(_summary is null || _storageLoading)" ShowReclaimLink="@Auth.IsAdmin" />
     @if (Auth.IsAdmin)
     {
         <ReclaimSpaceView />

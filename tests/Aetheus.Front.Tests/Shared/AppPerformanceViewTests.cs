@@ -4,10 +4,9 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// R-455 / R-444: the Performance tab of a supervised application. The overview and the per-route table
-/// come from the timings its Aetheus.Telemetry package exported; the metric explorer opens on demand.
-/// </summary>
+/// <summary> The Performance tab of a supervised application. The overview and the per-route table
+/// come from the timings its Aetheus.Telemetry package exported; the metric explorer opens on
+/// demand. </summary>
 public sealed class AppPerformanceViewTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -35,7 +34,7 @@ public sealed class AppPerformanceViewTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("api/orders/{id}", cut.Markup, StringComparison.Ordinal));
         var tiles = cut.FindAll(".app-performance-tile");
         Assert.Equal(4, tiles.Count);
-        // Recette R2-010: the last export is the first tile, the window its detail; no sentence above.
+        // The last export is the first tile, the window its detail; no sentence above.
         Assert.Contains("AppPerformanceLastSent", tiles[0].TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("Never", tiles[0].TextContent, StringComparison.Ordinal);
         Assert.Contains("AppPerformanceWindow", tiles[0].TextContent, StringComparison.Ordinal);
@@ -91,8 +90,7 @@ public sealed class AppPerformanceViewTests : BunitContext
             .Add(component => component.AppName, "Éditeur Toto"));
         cut.WaitForAssertion(() => Assert.Contains("api/orders/{id}", cut.Markup, StringComparison.Ordinal));
 
-        // Recette R2-011: the bar of the grid, under the table; no standalone button. R2-124 (second decision
-        // of 2026-10-05): Markdown alone, blue (R2-009), no CSV.
+        // The grid footer offers a single primary Markdown export.
         Assert.Empty(cut.FindComponents<OmniMarkdownExportButton<AppRouteTimingDto>>());
         var button = Assert.Single(cut.FindAll(".omni-data-grid__export-button"));
         Assert.Contains("omni-button--primary", button.ClassList);
@@ -100,7 +98,7 @@ public sealed class AppPerformanceViewTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Single(module.Invocations["download"]));
         var download = module.Invocations["download"].Single();
-        // Recette R2-036: the application's name, lowercase without accents, then the content; OE appends its time.
+        // The application's name, lowercase without accents, then the content; OE appends its time.
         Assert.Matches(@"^editeur-toto-performance-\d{4}-\d{2}-\d{2}-\d{4}\.md$", Assert.IsType<string>(download.Arguments[0]));
         var markdown = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
         Assert.Contains("Éditeur Toto (#5)", markdown, StringComparison.Ordinal);

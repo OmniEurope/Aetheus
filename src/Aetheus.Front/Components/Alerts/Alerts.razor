@@ -17,14 +17,14 @@
 {
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
         <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["RecentAlerts"] (@_recent.Count)</OmniHeading>
-        @* Recette R-405: the section's action sits in its action menu, named after what it does: it empties
-           this session's list of recent alerts (and the unread count), it does not mark them read. *@
+        @* The section's action sits in its action menu, named after what it does: it empties this
+           session's list of recent alerts (and the unread count), it does not mark them read. *@
         <OmniOverflowMenu Label="@L["MoreActions"]">
             <OmniMenuItem OnClick="@(() => AlertNotify.ClearRecent())"><Icon><OmniIcon Name="OmniIconName.Broom" /></Icon><ChildContent>@L["ClearRecentAlerts"]</ChildContent></OmniMenuItem>
         </OmniOverflowMenu>
     </OmniStack>
-    @* Recette R-198: never a pager; the list keeps at most AlertNotificationService.MaxRecent (50) alerts. *@
-    @* Recette R-227: a fired alert has no id; its trigger instant tells the rows apart for the bold new-row mark. *@
+    @* Never a pager; the list keeps at most AlertNotificationService.MaxRecent (50) alerts. *@
+    @* A fired alert has no id; its trigger instant tells the rows apart for the bold new-row mark. *@
     <AetheusDataGrid @ref="_recentGrid" ExportName="@L["RecentAlerts"]" Data="@_recent" TItem="AlertTriggeredDto" PageSize="50" Virtualize="@(_recent.Count > 50)" KeyProperty="TriggeredAt" class="omni-u-mb-2xl">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="AlertTriggeredDto" Property="TriggeredAt" Title="@L["TriggeredAt"]" Width="170px" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
@@ -39,7 +39,7 @@
 
 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["AlertRules"]</OmniHeading>
 @* Recette R-198 (rule R-049): the rules scroll in a virtualized full-height grid, no pager. *@
-<AetheusDataGrid @ref="_rulesGrid" ExportName="@L["AlertRules"]" FullHeight="true" Virtualize="true" Data="@_alerts" TItem="AlertRuleDto" IsLoading="@_loading" class="aetheus-grid-fullheight">
+<AetheusDataGrid @ref="_rulesGrid" RowClick="@(alert => OpenEditDialogAsync(alert))" ExportName="@L["AlertRules"]" FullHeight="true" Virtualize="true" Data="@_alerts" TItem="AlertRuleDto" IsLoading="@_loading" class="aetheus-grid-fullheight">
         <EmptyTemplate>
             <EmptyState Icon="notifications_off" Title="@L["NoAlerts"]" Description="@L["NoAlertsDescription"]" />
         </EmptyTemplate>
@@ -87,10 +87,12 @@
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AlertRuleDto" Title="@L["Actions"]" MinWidth="14rem" Sortable="false" Filterable="false" >
                 <Template Context="alert">
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenEditDialogAsync(alert))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(alert))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAlert(alert.Id))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                     </OmniStack>
+                    </span>
                 </Template>
             </OmniDataGridColumn>
         </Columns>

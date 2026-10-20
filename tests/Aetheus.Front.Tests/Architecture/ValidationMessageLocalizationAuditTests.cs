@@ -3,21 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R1-5: a validation message is a sentence in the user's language, never a resource key. The mail
-/// dialog returned <c>new ValidationResult("MailEmailInvalid", ...)</c> from its model, and OE's validator shows
-/// an <see cref="System.ComponentModel.DataAnnotations.IValidatableObject"/> message as it is: the user read
-/// <c>MailEmailInvalid</c> and <c>MailPasswordInvalid</c> under the fields. The fix reads every such message
-/// through the localizer (<c>new ValidationResult(L["Key"], ...)</c>, the keys then being checked by
-/// <see cref="LocalizerKeyCoverageTests"/>). Three rules keep it so:
-/// <list type="bullet">
-/// <item>no <c>new ValidationResult(</c> in the front takes a string literal as its message;</item>
-/// <item>a validation attribute's <c>ErrorMessage</c> literal is a key of both resource files, since OE's
-/// validator translates it through the form's localizer and shows it unchanged otherwise (an English
-/// sentence such as "Select a project" reached French users that way);</item>
-/// <item>every <c>OmniDataAnnotationsValidator</c> is given that localizer.</item>
-/// </list>
-/// </summary>
+/// <summary>ValidationResult messages use localized text, attribute-message keys exist in both
+/// resources and OE validators receive the form localizer.</summary>
 public sealed class ValidationMessageLocalizationAuditTests
 {
     private static readonly Regex ValidationResultCall = new(@"\bnew\s+ValidationResult\s*\(", RegexOptions.CultureInvariant);

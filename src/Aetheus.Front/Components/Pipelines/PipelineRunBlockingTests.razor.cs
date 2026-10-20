@@ -9,7 +9,12 @@ public partial class PipelineRunBlockingTests
 
     [Parameter] public IReadOnlyList<PipelineRunAssuranceVerdict.BlockingTest> Tests { get; set; } = [];
 
-    /// <summary>The producing run, opened on its logs with the producing step selected.</summary>
-    internal static string LogsHref(PipelineRunGateProducer.Producer producer) =>
-        $"/pipelines/runs/{producer.RunId}?tab=logs&step={producer.StepId}";
+    /// <summary>Recette R1-79: the run on screen. Its log tab finds the step among the runs it triggered,
+    /// so the link keeps the reader on the parent run rather than opening the child.</summary>
+    [Parameter] public int? ViewingRunId { get; set; }
+
+    /// <summary>The run on screen (or else the producing run), opened on its logs with the producing step
+    /// selected.</summary>
+    internal static string LogsHref(PipelineRunGateProducer.Producer producer, int? viewingRunId = null) =>
+        $"/pipelines/runs/{viewingRunId ?? producer.RunId}?tab=logs&step={producer.StepId}";
 }

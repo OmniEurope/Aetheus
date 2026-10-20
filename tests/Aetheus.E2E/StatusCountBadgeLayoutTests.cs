@@ -3,9 +3,8 @@ using System.Text.Json.Nodes;
 
 namespace Aetheus.E2E;
 
-/// <summary>
-/// Recette R2-109: on a phone a status count badge shows the status icon and the number, its name kept
-/// as accessible text and tooltip; wider, the full badge. Measured on the dashboard's Monitored
+/// <summary> On a phone a status count badge shows the status icon and the number, its name kept as
+/// accessible text and tooltip; wider, the full badge. Measured on the dashboard's Monitored
 /// applications tile, whose counts are fixed here (the rest of the summary is the real response).
 /// </summary>
 [Category("E2E")]
@@ -13,6 +12,8 @@ namespace Aetheus.E2E;
 [NonParallelizable]
 public sealed class StatusCountBadgeLayoutTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     [SetUp]
     public async Task SetUp()
     {

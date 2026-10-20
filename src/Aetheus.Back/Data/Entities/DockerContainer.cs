@@ -16,6 +16,12 @@ public class DockerContainer
     public double MemoryLimitMb { get; set; }
     public DateTime Created { get; set; }
     public DateTime LastUpdated { get; set; }
+    /// <summary>False when the agent did not read the container's settings: risks unknown, not clean.</summary>
+    public bool SecurityInspected { get; set; }
+    public DockerContainerRisks Risks { get; set; }
+    [System.ComponentModel.DataAnnotations.MaxLength(500)]
+    public string DangerousCapabilities { get; set; } = string.Empty;
+    public AetheusContainerRole AetheusRole { get; set; }
 
     // Navigation
     public Server Server { get; set; } = null!;

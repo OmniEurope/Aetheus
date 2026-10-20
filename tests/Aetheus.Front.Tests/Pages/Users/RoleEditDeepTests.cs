@@ -44,7 +44,7 @@ public class RoleEditDeepTests : BunitContext
     {
         // /roles/new URL
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // We can't drive Nav.Uri to contain "/roles/new" in bUnit, so _isNew resolves false and
         // the page takes the existing-role path: it fetches the role and finishes loading.
@@ -61,7 +61,7 @@ public class RoleEditDeepTests : BunitContext
     {
         SetupRole(1);
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // The stubbed role's name is loaded into the form model and a GET hit api/roles/1.
         var name = (string)typeof(RoleEdit).GetField("_name", Priv)!.GetValue(cut.Instance)!;
@@ -104,7 +104,7 @@ public class RoleEditDeepTests : BunitContext
         SetupRole(1);
         _handler.SetJsonResponse("api/roles/1", new RoleDto { Id = 1, Name = "Editor", Permissions = [] });
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         typeof(RoleEdit).GetField("_isNew", Priv)!.SetValue(cut.Instance, false);
         var model = typeof(RoleEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
@@ -125,7 +125,7 @@ public class RoleEditDeepTests : BunitContext
         SetupRole(1);
         _handler.SetJsonResponse("api/roles", new RoleDto { Id = 99, Name = "New", Permissions = [] });
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         typeof(RoleEdit).GetField("_isNew", Priv)!.SetValue(cut.Instance, true);
         var model = typeof(RoleEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
@@ -146,7 +146,7 @@ public class RoleEditDeepTests : BunitContext
         SetupRole(1);
         _handler.SetJsonResponse("api/roles/1/permissions", true);
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var rows = Enum.GetValues<ResourceType>().Select(rt =>
         {
@@ -194,7 +194,7 @@ public class RoleEditDeepTests : BunitContext
     {
         SetupRole(1);
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var perms = new List<ResourcePermissionDto>
         {
@@ -219,7 +219,7 @@ public class RoleEditDeepTests : BunitContext
         {
             var r = (List<RoleEdit.PermissionRowModel>)typeof(RoleEdit).GetField("_permissionRows", Priv)!.GetValue(cut.Instance)!;
             return r.Count > 0;
-        }, TimeSpan.FromSeconds(3));
+        });
         typeof(RoleEdit).GetField("_bulkPermission", Priv)!.SetValue(cut.Instance, (Permission?)null);
 
         // SetupRole has no permissions, so every row starts at scope "None" with no levels set.
@@ -251,9 +251,9 @@ public class RoleEditDeepTests : BunitContext
         });
 
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[role='tab']")), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[role='tab']")));
         cut.FindAll("[role='tab']").First(tab => tab.TextContent.Trim() == "Users").Click();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The user link and the remove button.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);

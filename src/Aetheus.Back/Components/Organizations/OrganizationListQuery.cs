@@ -4,10 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Organizations;
 
-/// <summary>
-/// Recette R-210: the column filters of the organizations list. The keys are the grid's column keys; the
-/// member and project counts are compared as the grid shows them.
-/// </summary>
+/// <summary> The column filters of the organizations list. The keys are the grid's column keys; the
+/// member and project counts are compared as the grid shows them. </summary>
 internal static class OrganizationListQuery
 {
     internal static readonly GridQueryMap<Organization> Columns = new GridQueryMap<Organization>()

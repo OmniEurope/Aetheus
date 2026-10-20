@@ -46,11 +46,8 @@ public sealed class DeployCompensationTests : IDisposable
         Assert.Contains(output, line => line.Contains("rolling back", StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// AGC-008, first window: the flip itself. <c>mv -T</c> may have renamed <c>current</c> when the
-    /// cancellation reaches the runner, which kills it and throws. That exit used to leave the flip
-    /// before the compensated section, so <c>current</c> could name a release no health gate ever saw.
-    /// </summary>
+    /// <summary>Cancellation may arrive after mv -T changes current, so compensation must cover the
+    /// symlink flip itself.</summary>
     [Fact]
     public async Task CancellationDuringTheFlip_RepointsCurrentToThePreviousRelease()
     {

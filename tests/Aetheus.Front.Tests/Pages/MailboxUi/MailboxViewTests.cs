@@ -6,7 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.MailboxUi;
 
-/// <summary>Recette R1-17: the integrated mailbox page, locked until the password is typed, then folders, list and reader.</summary>
+/// <summary>The integrated mailbox page, locked until the password is typed, then folders, list and
+/// reader.</summary>
 public sealed class MailboxViewTests : BunitContext
 {
     private const string Base = "api/servers/7/mail/accounts/3/mailbox";
@@ -99,6 +100,55 @@ public sealed class MailboxViewTests : BunitContext
         Assert.Equal((7, 3), ((int)_dialog.LastParameters!["ServerId"]!, (int)_dialog.LastParameters["AccountId"]!));
         cut.WaitForAssertion(() => Assert.Contains("Enum_MailboxFolderRole_Inbox", cut.Find(".mailbox-folders").TextContent, StringComparison.Ordinal));
         Assert.Contains("Invoices", cut.Find(".mailbox-folders").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R3_52_TheHeader_ShowsOneMainAction_AndKeepsTheOthersInTheMenu()
+    {
+        UnlockedMailbox();
+        var cut = RenderView();
+        cut.WaitForElement(".mailbox-folders");
+
+        var header = cut.Find(".mailbox-header");
+        var primary = Assert.Single(header.QuerySelectorAll("button.omni-button--primary"));
+        Assert.Contains("MailboxCompose", primary.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain(header.QuerySelectorAll("button"), button => button.TextContent.Contains("MailboxNewFolder", StringComparison.Ordinal));
+        Assert.NotNull(cut.FindMenuItem("MailboxNewFolder"));
+        Assert.NotNull(cut.FindMenuItem("Refresh"));
+        Assert.NotNull(cut.FindMenuItem("MailboxLock"));
+    }
+
+    [Fact]
+    public async Task R3_52_TheMessage_IsReadBesideTheList_WithOneVisibleAction_AndDeleteInTheMenu()
+    {
+        UnlockedMailbox();
+        var cut = RenderView();
+        cut.WaitForAssertion(() => Assert.Contains("Planning", cut.Markup, StringComparison.Ordinal));
+        Assert.NotEmpty(cut.FindAll(".mailbox-reader-empty"));
+
+        await cut.InvokeAsync(() => cut.Instance.OpenAsync(new MailboxMessageSummaryDto { Uid = 5 }));
+        cut.Render();
+
+        // Folders, list and reader are three columns of one row on a wide screen.
+        Assert.Equal([2, 4, 6], cut.FindComponents<OmniColumn>().Select(column => column.Instance.LargeSpan ?? 0).ToArray());
+        var actions = cut.WaitForElement(".mailbox-reader-actions");
+        var visible = Assert.Single(actions.QuerySelectorAll("button.omni-button:not(.omni-overflow-menu__trigger)"));
+        Assert.Contains("MailboxReply", visible.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("omni-button--primary", visible.ClassName, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".mailbox-view button.omni-button--danger"));
+        var delete = cut.FindMenuItem("Delete");
+        Assert.NotNull(delete);
+        Assert.Contains("danger", delete!.ClassName, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false, 5u, "mailbox-row--unread mailbox-row--open")]
+    [InlineData(true, 5u, "mailbox-row--open")]
+    [InlineData(false, null, "mailbox-row--unread")]
+    [InlineData(true, 9u, null)]
+    public void R3_52_AnUnreadRowIsBold_AndTheOpenOneIsTinted(bool isRead, uint? openUid, string? expected)
+    {
+        Assert.Equal(expected, MailboxView.MessageRowClass(new MailboxMessageSummaryDto { Uid = 5, IsRead = isRead }, openUid));
     }
 
     [Fact]
@@ -245,5 +295,58 @@ public sealed class MailboxViewTests : BunitContext
         cut.WaitForElement(".mailbox-folders");
         var write = cut.FindAll(".mailbox-header button").Single(button => button.TextContent.Contains("MailboxCompose", StringComparison.Ordinal));
         Assert.True(write.HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public async Task ToggleRead_MarksTheOpenReadMessageUnread_ThenRereadsTheFolder()
+    {
+        UnlockedMailbox();
+        _handler.SetJsonResponse(HttpMethod.Put, Base + "/messages/5/read", true);
+        var cut = RenderView();
+        cut.WaitForAssertion(() => Assert.Contains("Planning", cut.Markup, StringComparison.Ordinal));
+        await cut.InvokeAsync(() => cut.Instance.OpenAsync(new MailboxMessageSummaryDto { Uid = 5 }));
+        var listReads = _handler.Requests.Count(request => request.Url.Contains(Base + "/messages?", StringComparison.Ordinal));
+
+        await cut.InvokeAsync(() => cut.Instance.ToggleReadAsync());
+
+        var put = Assert.Single(_handler.RequestDetails, request => request.Method == "PUT");
+        Assert.Contains("messages/5/read?folder=INBOX", put.Url, StringComparison.Ordinal);
+        // The open message was read: the toggle marks it unread.
+        Assert.Contains("\"isRead\":false", put.Body, StringComparison.OrdinalIgnoreCase);
+        Assert.True(_handler.Requests.Count(request => request.Url.Contains(Base + "/messages?", StringComparison.Ordinal)) > listReads);
+    }
+
+    [Fact]
+    public async Task ToggleRead_WithoutAnOpenMessage_SendsNothing()
+    {
+        UnlockedMailbox();
+        var cut = RenderView();
+        cut.WaitForAssertion(() => Assert.Contains("Planning", cut.Markup, StringComparison.Ordinal));
+
+        await cut.InvokeAsync(() => cut.Instance.ToggleReadAsync());
+
+        Assert.DoesNotContain(_handler.Requests, request => request.Method == "PUT");
+    }
+
+    [Theory]
+    [InlineData("Receipts", 1)]
+    [InlineData("", 0)]
+    [InlineData(null, 0)]
+    public async Task CreateFolder_PostsTheNameFromTheDialog_ThenRereadsTheFolders(string? name, int expectedPosts)
+    {
+        UnlockedMailbox();
+        _handler.SetJsonResponse(HttpMethod.Post, Base + "/folders", new MailboxFolderDto { Path = "Receipts", Name = "Receipts" });
+        _dialog.OpenResult = name;
+        var cut = RenderView();
+        cut.WaitForAssertion(() => Assert.Contains("Planning", cut.Markup, StringComparison.Ordinal));
+        var folderReads = _handler.Requests.Count(request => request.Method == "GET" && request.Url.EndsWith(Base + "/folders", StringComparison.Ordinal));
+
+        await cut.InvokeAsync(() => cut.Instance.CreateFolderAsync());
+
+        Assert.Equal(typeof(MailboxFolderDialog), _dialog.LastComponent);
+        var posts = _handler.RequestDetails.Where(request => request.Method == "POST" && request.Url.EndsWith(Base + "/folders", StringComparison.Ordinal)).ToList();
+        Assert.Equal(expectedPosts, posts.Count);
+        Assert.All(posts, post => Assert.Contains("\"name\":\"Receipts\"", post.Body, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(folderReads + expectedPosts, _handler.Requests.Count(request => request.Method == "GET" && request.Url.EndsWith(Base + "/folders", StringComparison.Ordinal)));
     }
 }

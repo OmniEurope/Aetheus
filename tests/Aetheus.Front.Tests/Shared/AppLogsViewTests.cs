@@ -4,11 +4,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// The production Logs tab (2026-09-12) printed message templates, and a failed call looked exactly
-/// like an app that never logged. These pin both, and the grid of recette R-358 (sort and header
-/// filters sent to the API, live refresh on the telemetry push).
-/// </summary>
+/// <summary>Covers rendered log messages, distinct loading errors and server-side filters with live
+/// telemetry refresh.</summary>
 public sealed class AppLogsViewTests : BunitContext
 {
     private const string LogsUrl = "api/appmonitoring/apps/3/logs";
@@ -37,10 +34,10 @@ public sealed class AppLogsViewTests : BunitContext
 
         cut.WaitForAssertion(() =>
             Assert.Contains("Received HTTP response headers after 14.64ms - 200", cut.Markup, StringComparison.Ordinal));
-        // Recette R-358: the rendered message is also the cell's hover text, in full.
+        // The rendered message is also the cell's hover text, in full.
         Assert.Contains(cut.FindAll(".app-log-cell-text"),
             cell => cell.GetAttribute("title") == "Received HTTP response headers after 14.64ms - 200");
-        // Recette R2-012: the badge names the class of the severity number (the test localizer answers the key).
+        // The badge names the class of the severity number (the test localizer answers the key).
         Assert.Equal("LogSeverityInfo", cut.Find("td[data-omni-col='Severity'] .omni-badge").TextContent.Trim());
         Assert.DoesNotContain("NoLogsYet", cut.Markup, StringComparison.Ordinal);
     }
@@ -55,7 +52,7 @@ public sealed class AppLogsViewTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains("LoadFailed", cut.Markup, StringComparison.Ordinal));
         Assert.DoesNotContain("NoLogsYet", cut.Markup, StringComparison.Ordinal);
-        // The Retry of a failed load stays; only the unconditional Refresh went away (R-181).
+        // A failed load retains Retry while live updates provide ordinary refresh.
         Assert.Single(cut.FindAll("button"), b => b.TextContent.Contains("Retry", StringComparison.Ordinal));
     }
 
@@ -168,7 +165,7 @@ public sealed class AppLogsViewTests : BunitContext
         return module;
     }
 
-    /// <summary>Recette R2-011: the Markdown button of the grid's export bar (Markdown, then CSV).</summary>
+    /// <summary>The Markdown button of the grid's export bar (Markdown, then CSV).</summary>
     private static AngleSharp.Dom.IElement MarkdownExportButton(IRenderedComponent<AppLogsView> cut) =>
         cut.FindAll(".omni-data-grid__export-button")[0];
 
@@ -189,7 +186,7 @@ public sealed class AppLogsViewTests : BunitContext
         var markup = cut.Markup;
         Assert.True(markup.IndexOf("omni-data-grid__export", StringComparison.Ordinal)
                     > markup.IndexOf("<table", StringComparison.Ordinal));
-        // The grid's requests no longer carry a level or a search.
+        // Filtering travels through column filters rather than separate level or search parameters.
         Assert.DoesNotContain(handler.Requests, request => request.Url.Contains("minSeverity", StringComparison.Ordinal)
             || request.Url.Contains("search=", StringComparison.Ordinal));
     }
@@ -210,7 +207,7 @@ public sealed class AppLogsViewTests : BunitContext
         var download = module.Invocations["download"].Single();
         var fileName = Assert.IsType<string>(download.Arguments[0]);
         var markdown = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
-        // Recette R2-036: the application's name, then the content; OE appends its generation time once.
+        // The application's name, then the content; OE appends its generation time once.
         Assert.Matches(@"^aetheus-logs-\d{4}-\d{2}-\d{2}-\d{4}\.md$", fileName);
         // Both pages, with the grid's sort, and every line once.
         Assert.Contains(handler.Requests, request => request.Url.Contains("page=1&pageSize=200", StringComparison.Ordinal)
@@ -293,8 +290,7 @@ public sealed class AppLogsViewTests : BunitContext
         var buttons = cut.FindComponents<OmniButton>()
             .Where(button => button.Instance.Class?.Contains("omni-data-grid__export-button", StringComparison.Ordinal) == true)
             .ToArray();
-        // One blue button in the bar, the user's exception (R2-009): Markdown, with the file icon of its format;
-        // no CSV (R2-124, second decision of 2026-10-05).
+        // The export bar offers a single primary Markdown action with its format icon.
         var button = Assert.Single(buttons);
         Assert.Equal(OmniButtonVariant.Primary, button.Instance.Variant);
         Assert.Equal(OmniIconName.FileMd, button.FindComponent<OmniIcon>().Instance.Name);

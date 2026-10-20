@@ -8,8 +8,8 @@ public partial class ProjectTasksSection : ProjectPagedSectionBase<ServerTaskDto
     protected override string DefaultSortBy => "CreatedAt";
     protected override bool DefaultSortDescending => true;
 
-    // Recette R-212: the header filters are the base's column filters; the Server column lists the
-    // server names of the project's tasks.
+    // The header filters are the base's column filters; the Server column lists the server names of
+    // the project's tasks.
     private TaskFilterValuesDto _filterValues = new();
     private int? _filterValuesProjectId;
     private Func<string, string>? _statusText;
@@ -63,7 +63,7 @@ public partial class ProjectTasksSection : ProjectPagedSectionBase<ServerTaskDto
     private static string SourceServerName(ServerTaskDto task) =>
         string.IsNullOrWhiteSpace(task.ServerName) ? $"#{task.ServerId}" : task.ServerName;
 
-    /// <summary>Recette R2-124: the export writes the source the cell links to.</summary>
+    /// <summary>The export writes the source the cell links to.</summary>
     private Func<ServerTaskDto, object?> SourceExport => _sourceExport ??= task => task.PipelineRunId is { } pipelineRunId
         ? $"{L["PipelineRun"]} #{pipelineRunId}"
         : $"{L["Server"]}: {SourceServerName(task)}";

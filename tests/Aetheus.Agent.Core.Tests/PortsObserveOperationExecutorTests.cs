@@ -9,10 +9,8 @@ using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// PLAN-005 lot 2. The on-demand scan must actually report, because the UI tells the operator the
-/// refresh happened. A failure to report has to surface as a failed task, never as a silent success.
-/// </summary>
+/// <summary>An on-demand scan must report its result or fail the task; a refresh cannot silently
+/// succeed without evidence.</summary>
 public class PortsObserveOperationExecutorTests
 {
     private readonly IListeningPortsCollector _collector = Substitute.For<IListeningPortsCollector>();

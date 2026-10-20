@@ -22,16 +22,16 @@ public interface IMailOperationsService
     Task<MailTaskQueuedDto> RefreshQuotaAsync(int serverId, CancellationToken ct = default);
     Task<int> IngestQuotaReportAsync(int serverId, int taskId, CancellationToken ct = default);
 
-    /// <summary>Recette R2-080: queues the outbound port 25 check of the setup assistant on the server's agent.</summary>
+    /// <summary>Queues the outbound port 25 check of the setup assistant on the server's
+    /// agent.</summary>
     Task<MailTaskQueuedDto> ProbeOutboundSmtpAsync(int serverId, CancellationToken ct = default);
+
+    /// <summary>Recette R3-23: queues the read-only check of what a mail stack left on the host.</summary>
+    Task<MailTaskQueuedDto> CheckLeftoversAsync(int serverId, CancellationToken ct = default);
 }
 
-/// <summary>
-/// PLAN-005 lots 3, 4 and 6: TLS certificate, rspamd spam filter, delivery test, queue and mailbox usage.
-/// Every mutation is a typed operation run by the root-owned mail-manage helper; every endpoint returns
-/// the id of the queued task so the client can follow its completion. The quota report is the one task
-/// output the backend reads back: only from a successful <c>MailQuotaReport</c> task of the same server.
-/// </summary>
+/// <summary>Queue typed mail-management tasks and return their ids for client tracking. Read quota
+/// output only from a successful MailQuotaReport task belonging to the same server.</summary>
 public sealed class MailOperationsService(
     IMailRepository mailRepo,
     IMailInventoryRepository inventory,
@@ -204,6 +204,21 @@ public sealed class MailOperationsService(
                 "update the agent to check outbound port 25.");
         var task = ServerTaskFactory.Operation(serverId, "Mail - outbound port 25 check", OperationKind.MailOutboundProbe,
             MailOutboundProbe.Target, 60);
+        await TaskQueuePersistence.PersistAndNotifyAsync(mailRepo.AddTaskAsync, taskService, task, ct).ConfigureAwait(false);
+        return new MailTaskQueuedDto { TaskId = task.Id };
+    }
+
+    // Recette R3-23 / R3-26: like the outbound probe, no mail grant (the agent reads packages, paths and
+    // ports itself, on a host where the stack may be gone), only an agent publishing the capability.
+    public async Task<MailTaskQueuedDto> CheckLeftoversAsync(int serverId, CancellationToken ct = default)
+    {
+        var server = await serverRepo.FindServerAsync(serverId, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException($"Server {serverId} not found.");
+        if (server.AgentCapabilitiesJson?.Contains($"\"{AgentCapabilities.MailLeftoversCheck}\"", StringComparison.Ordinal) != true)
+            throw new BadRequestException(
+                $"The agent on '{server.Name}' does not publish the '{AgentCapabilities.MailLeftoversCheck}' capability: " +
+                "update the agent to check what the mail stack left.");
+        var task = ServerTaskFactory.Operation(serverId, MailTaskNames.LeftoversCheck, OperationKind.MailLeftoversCheck, "-", 120);
         await TaskQueuePersistence.PersistAndNotifyAsync(mailRepo.AddTaskAsync, taskService, task, ct).ConfigureAwait(false);
         return new MailTaskQueuedDto { TaskId = task.Id };
     }

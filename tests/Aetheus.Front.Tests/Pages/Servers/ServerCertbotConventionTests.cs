@@ -5,8 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>PLAN-007: the Certbot section shows how each certificate renews and the last renewal
-/// rehearsal, and offers Normalize and Test renewal.</summary>
+/// <summary>The Certbot view shows renewal conventions and rehearsal results with normalization and
+/// test actions.</summary>
 public sealed class ServerCertbotConventionTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -20,6 +20,24 @@ public sealed class ServerCertbotConventionTests : BunitContext
 
     private Aetheus.Front.Tests.TestDoubles.ImmediateDialogService Confirmation =>
         (Aetheus.Front.Tests.TestDoubles.ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(CertbotHelperVersion.Current, false)]
+    public void ACertbotHelperOlderThanTheRelease_IsShownAsToUpdate(int helperVersion, bool expectedAlert)
+    {
+        var cut = Render(new CertbotDataDto { IsInstalled = true, HelperVersion = helperVersion });
+
+        Assert.Equal(expectedAlert, cut.FindAll(".certbot-helper-outdated").Count == 1);
+    }
+
+    [Fact]
+    public void WithoutCertbot_NoHelperAlertIsShown()
+    {
+        var cut = Render(new CertbotDataDto { IsInstalled = false });
+
+        Assert.Empty(cut.FindAll(".certbot-helper-outdated"));
+    }
 
     [Fact]
     public void Certificates_ShowTheirConventionVerdict()
@@ -43,6 +61,53 @@ public sealed class ServerCertbotConventionTests : BunitContext
         Assert.Equal("webroot: /var/lib/aetheus-agent/acme-webroot", badges[2].GetAttribute("title"));
     }
 
+    [Fact]
+    public void R3_56_AFailedRehearsal_NamesEachFailingCertificateAndItsReason()
+    {
+        var cut = Render(new CertbotDataDto
+        {
+            IsInstalled = true,
+            RenewalCheckedAt = new DateTime(2026, 10, 12, 3, 0, 0, DateTimeKind.Utc),
+            RenewalCheckSucceeded = false,
+            RenewalCheckFailures =
+            [
+                new() { Name = "shop.example.com", Reason = "Some challenges have failed." },
+                new() { Name = "old.example.org", Reason = string.Empty }
+            ]
+        });
+
+        var lines = cut.FindAll(".certbot-renewal-failure").Select(line => line.TextContent.Trim()).ToArray();
+        Assert.Equal(2, lines.Length);
+        Assert.Contains("CertbotRenewalFailureLine", lines[0], StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".certbot-renewal-failures-unnamed"));
+    }
+
+    [Fact]
+    public void R3_56_AFailedRehearsalWithoutANamedCertificate_SaysWhereTheOutputIs()
+    {
+        var cut = Render(new CertbotDataDto
+        {
+            IsInstalled = true,
+            RenewalCheckedAt = new DateTime(2026, 10, 12, 3, 0, 0, DateTimeKind.Utc),
+            RenewalCheckSucceeded = false
+        });
+
+        Assert.Contains("CertbotRenewalCheckNoReason", cut.Find(".certbot-renewal-failures-unnamed").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R3_56_APassedRehearsal_ShowsNoFailureList()
+    {
+        var cut = Render(new CertbotDataDto
+        {
+            IsInstalled = true,
+            RenewalCheckedAt = new DateTime(2026, 10, 12, 3, 0, 0, DateTimeKind.Utc),
+            RenewalCheckSucceeded = true
+        });
+
+        Assert.Empty(cut.FindAll(".certbot-renewal-failures"));
+    }
+
     [Theory]
     [InlineData(null, "CertbotRenewalCheckNever")]
     [InlineData(true, "CertbotRenewalCheckPassed")]
@@ -64,7 +129,7 @@ public sealed class ServerCertbotConventionTests : BunitContext
     {
         var cut = Render(new CertbotDataDto { IsInstalled = true });
 
-        Button(cut, "CertbotRenewalCheck").Click();
+        cut.FindMenuItem("CertbotRenewalCheck")!.Click();
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, request =>
             request.Method == "POST" && request.Url.Contains("api/servers/10/certbot/action")
@@ -77,14 +142,14 @@ public sealed class ServerCertbotConventionTests : BunitContext
         var cut = Render(new CertbotDataDto { IsInstalled = true });
 
         // Declined first: nothing is sent, and the question named its verb on an ordinary (blue) button.
-        Button(cut, "CertbotNormalize").Click();
+        cut.FindMenuItem("CertbotNormalize")!.Click();
         Assert.DoesNotContain(_handler.RequestDetails, request => request.Url.Contains("certbot/action"));
         Assert.Equal("ConfirmCertbotNormalize", Confirmation.LastConfirmMessage);
         Assert.Equal("CertbotNormalize", Confirmation.LastConfirmOptions!.OkButtonText);
         Assert.False(Confirmation.LastConfirmOptions.Destructive);
 
         Confirmation.ConfirmResult = true;
-        Button(cut, "CertbotNormalize").Click();
+        cut.FindMenuItem("CertbotNormalize")!.Click();
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, request =>
             request.Method == "POST" && request.Url.Contains("api/servers/10/certbot/action")
@@ -97,8 +162,8 @@ public sealed class ServerCertbotConventionTests : BunitContext
         var cut = Render(new CertbotDataDto { IsInstalled = false });
 
         Assert.Empty(cut.FindAll("[data-testid=certbot-renewal-check]"));
-        Assert.True(Button(cut, "CertbotNormalize").HasAttribute("disabled"));
-        Assert.True(Button(cut, "CertbotRenewalCheck").HasAttribute("disabled"));
+        Assert.True(cut.FindMenuItem("CertbotNormalize")!.HasAttribute("disabled"));
+        Assert.True(cut.FindMenuItem("CertbotRenewalCheck")!.HasAttribute("disabled"));
     }
 
     private IRenderedComponent<ServerCertbotSection> Render(CertbotDataDto certbot) =>
@@ -130,4 +195,36 @@ public sealed class ServerCertbotConventionTests : BunitContext
             WebrootPath = webroot,
             RenewalConvention = convention
         };
+
+    [Fact]
+    public void R3_41_CreateIsTheOneVisibleAction_AndTheMaintenanceActionsSitInTheMenu()
+    {
+        var cut = Render(new CertbotDataDto { IsInstalled = true });
+
+        var standalone = cut.FindAll("button:not(.omni-menu__item):not(.omni-overflow-menu__trigger)")
+            .Select(b => b.TextContent.Trim()).ToList();
+        Assert.Contains("Create", standalone);
+        Assert.DoesNotContain("CertbotNormalize", standalone);
+        Assert.DoesNotContain("CertbotRenewalCheck", standalone);
+        Assert.DoesNotContain("Renew", standalone);
+        Assert.NotNull(cut.FindMenuItem("CertbotNormalize"));
+        Assert.NotNull(cut.FindMenuItem("CertbotRenewalCheck"));
+        Assert.NotNull(cut.FindMenuItem("RenewAll"));
+    }
+
+    [Fact]
+    public void R3_41_ACertificateRow_KeepsRenewVisible_AndRevokeInItsMenu()
+    {
+        var cut = Render(new CertbotDataDto
+        {
+            IsInstalled = true,
+            Certificates = [Certificate("ok.example.com", CertbotRenewalConvention.Conforming, "webroot", "/var/www/aetheus-acme")]
+        });
+
+        var row = cut.Find("button[title='Renew']").ParentElement!;
+        var standalone = row.QuerySelectorAll("button:not(.omni-menu__item):not(.omni-overflow-menu__trigger)")
+            .Select(b => b.GetAttribute("title")).ToList();
+        Assert.Equal(["Renew"], standalone);
+        Assert.NotNull(cut.FindMenuItem("Revoke"));
+    }
 }

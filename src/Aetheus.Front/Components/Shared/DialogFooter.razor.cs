@@ -8,7 +8,8 @@ public partial class DialogFooter
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
-    /// <summary>Dismiss button label; defaults to the localized "GoBack" ("Revenir", recette R-407).</summary>
+    /// <summary>Default the dismiss label to localized GoBack so shared dialog footers use
+    /// consistent wording.</summary>
     [Parameter] public string? CancelText { get; set; }
 
     /// <summary>Cancel button variant.</summary>

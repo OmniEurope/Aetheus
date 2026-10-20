@@ -540,6 +540,44 @@ public sealed class DockerStorageMaintenanceServiceTests
             Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>());
     }
 
+    [Theory]
+    [InlineData(0, "123456789\t/var/lib/aetheus/work\n", 123_456_789L, true)]
+    [InlineData(0, "  42 /srv", 42L, true)]
+    [InlineData(1, "123 /srv", 0L, false)]
+    [InlineData(0, "", 0L, false)]
+    [InlineData(0, "-5 /srv", 0L, false)]
+    [InlineData(0, "du: cannot read directory", 0L, false)]
+    public async Task MeasureWithDuAsync_ReadsTheByteCountOfASuccessfulDu(
+        int exitCode, string stdout, long expectedBytes, bool expectedComplete)
+    {
+        var shell = Substitute.For<IShellRunner>();
+        shell.RunExecAsync("du", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>())
+            .Returns(new ShellExecResult(exitCode, stdout, string.Empty));
+
+        var measurement = await Build(shell).MeasureWithDuAsync("/srv/data", TestContext.Current.CancellationToken);
+
+        Assert.Equal(expectedBytes, measurement.Bytes);
+        Assert.Equal(expectedComplete, measurement.IsComplete);
+        await shell.Received(1).RunExecAsync(
+            "du",
+            Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(new[] { "-sb", "--", "/srv/data" })),
+            Arg.Any<CancellationToken>(),
+            TimeSpan.FromMinutes(2));
+    }
+
+    [Fact]
+    public async Task MeasureWithDuAsync_ShellDoubleReturningNull_IsAnUnknownSize()
+    {
+        var shell = Substitute.For<IShellRunner>();
+        shell.RunExecAsync("du", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>(), Arg.Any<TimeSpan?>())
+            .Returns(Task.FromResult<ShellExecResult>(null!));
+
+        var measurement = await Build(shell).MeasureWithDuAsync("/srv/data", TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, measurement.Bytes);
+        Assert.False(measurement.IsComplete);
+    }
+
     private static DockerStorageMaintenanceService Build(
         IShellRunner shell, DockerStorageMaintenanceOptions? storage = null) => new(
         shell,

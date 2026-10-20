@@ -9,4 +9,7 @@ public static class MailInventoryLimits
     public const int MaxAccounts = 5000;
     public const int MaxAliases = 5000;
     public const int MaxDiagnostics = 50;
+    public const int MaxDeferredMessages = 20;
+    public const int MaxDeferralReasonLength = 300;
+    public const int MaxHostIpv6Addresses = 8;
 }

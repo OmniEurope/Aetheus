@@ -3,8 +3,8 @@ using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>PLAN-007 lot 7: a Trivy database built less than 24 h ago is scanned without a refresh;
-/// anything older, missing or unreadable keeps the refresh.</summary>
+/// <summary>A Trivy database built less than 24 h ago is scanned without a refresh; anything older,
+/// missing or unreadable keeps the refresh.</summary>
 public sealed class TrivyDatabaseFreshnessTests : IDisposable
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 12, 12, 0, 0, TimeSpan.Zero);

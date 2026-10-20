@@ -58,8 +58,7 @@ public class ModuleLinksSectionTests : BunitContext
     {
         var cut = RenderTab();
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         var links = (List<LinkedResourceDto>)typeof(ModuleLinksTab).GetField("_links", Priv)!.GetValue(cut.Instance)!;
         // The full resource set is queried once and the page contains two links.
@@ -73,8 +72,7 @@ public class ModuleLinksSectionTests : BunitContext
     {
         var cut = RenderTab(resources: []);
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         var links = (List<LinkedResourceDto>)typeof(ModuleLinksTab).GetField("_links", Priv)!.GetValue(cut.Instance)!;
         Assert.Empty(links);
@@ -91,8 +89,7 @@ public class ModuleLinksSectionTests : BunitContext
             .Add(c => c.SourceType, ModuleLinkType.Docker)
             .Add(c => c.Resources, new List<string> { "nginx" }));
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         var links = (List<LinkedResourceDto>)typeof(ModuleLinksTab).GetField("_links", Priv)!.GetValue(cut.Instance)!;
         Assert.Empty(links);
@@ -105,8 +102,7 @@ public class ModuleLinksSectionTests : BunitContext
     {
         var cut = RenderTab();
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         // Default OK response for auto-detect
         var method = typeof(ModuleLinksTab).GetMethod("AutoDetectAsync", Priv)!;
@@ -122,8 +118,7 @@ public class ModuleLinksSectionTests : BunitContext
     {
         var cut = RenderTab();
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         _handler.SetResponse("module-links/auto-detect", System.Net.HttpStatusCode.InternalServerError);
         var method = typeof(ModuleLinksTab).GetMethod("AutoDetectAsync", Priv)!;
@@ -147,8 +142,7 @@ public class ModuleLinksSectionTests : BunitContext
         });
         var cut = RenderTab();
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         var request = new AddModuleLinkResult(ModuleLinkType.Apache, "site.conf", "nginx");
         var method = typeof(ModuleLinksTab).GetMethod("AddLinkAsync", Priv)!;
@@ -165,8 +159,7 @@ public class ModuleLinksSectionTests : BunitContext
         _handler.SetResponse(HttpMethod.Post, "api/servers/1/module-links", System.Net.HttpStatusCode.BadRequest);
         var cut = RenderTab();
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         var request = new AddModuleLinkResult(ModuleLinkType.Apache, "site.conf", "nginx");
         var method = typeof(ModuleLinksTab).GetMethod("AddLinkAsync", Priv)!;
@@ -190,8 +183,7 @@ public class ModuleLinksSectionTests : BunitContext
             System.Net.HttpStatusCode.NoContent);
         var cut = RenderTab();
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         var method = typeof(ModuleLinksTab).GetMethod("DeleteLinkAsync", Priv)!;
         var resourceGetsBefore = _handler.Requests.Count(r => r.Url.Contains("module-links/resource-page"));
@@ -210,8 +202,7 @@ public class ModuleLinksSectionTests : BunitContext
     {
         var cut = RenderTab();
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         _handler.SetResponse("module-links/1", System.Net.HttpStatusCode.InternalServerError);
         var method = typeof(ModuleLinksTab).GetMethod("DeleteLinkAsync", Priv)!;
@@ -231,8 +222,7 @@ public class ModuleLinksSectionTests : BunitContext
     {
         var cut = RenderTab(sourceType: ModuleLinkType.Apache);
         cut.WaitForState(
-            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            () => !(bool)typeof(ModuleLinksTab).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         var targetTypes = (ModuleLinkType[])typeof(ModuleLinksTab).GetField("_targetTypes", Priv)!.GetValue(cut.Instance)!;
         Assert.DoesNotContain(ModuleLinkType.Apache, targetTypes);

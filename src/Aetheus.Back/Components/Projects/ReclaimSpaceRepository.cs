@@ -3,15 +3,12 @@ using Npgsql;
 
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 6: the one place Aetheus runs <c>VACUUM FULL</c>, an AGENTS.md raw-SQL exception pinned by
-/// <c>ReclaimSpaceSqlAuditTests</c>. Each statement is a fixed text per table, never built from input: a
-/// table name that is not a key of <see cref="Statements"/> is refused before anything runs. The size
-/// reads <c>pg_total_relation_size</c>, the function of the lot 1 measurement.
-/// </summary>
+/// <summary>Runs fixed per-table VACUUM FULL statements under the AGENTS.md raw-SQL exception
+/// enforced by ReclaimSpaceSqlAuditTests. Reject unknown table keys before execution and read table
+/// size with pg_total_relation_size.</summary>
 public sealed class ReclaimSpaceRepository(AppDbContext db) : IReclaimSpaceRepository
 {
-    /// <summary>The tables the data retention purges (PLAN-013 lots 2 to 5) and their vacuum statement.</summary>
+    /// <summary>Maps tables purged by data retention to their fixed vacuum statements.</summary>
     internal static readonly IReadOnlyDictionary<string, string> Statements = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         [ProjectStorageTables.MetricSamples] = "VACUUM (FULL, ANALYZE) \"AppMetricSamples\"",

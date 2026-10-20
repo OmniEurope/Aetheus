@@ -28,10 +28,8 @@ public class NetArchTests
     /// </summary>
     private static readonly HashSet<string> ComponentsDbContextCollaboratorWhitelist =
     [
-        // Extracted read-only collaborator of PipelineRepository (a repository split, instantiated
-        // directly by PipelineRepository) - it IS repository-layer code, just not name-suffixed.
-        // PipelineCoreRepository used to be listed here too; it was redundant, since the guard already
-        // excludes every type whose name ends in Repository.
+        // This read-only PipelineRepository collaborator belongs to the repository layer despite
+        // lacking the Repository suffix.
         "PipelineServerResolver",
         // Dev-only controller for test data management (also whitelisted in ControllerRepoWhitelist).
         "DevController",

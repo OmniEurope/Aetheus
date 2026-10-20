@@ -6,19 +6,8 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace Aetheus.Back.Components.Security;
 
-/// <summary>
-/// PLAN-003 lot 14: where the browser says which script the policy refused.
-///
-/// A violation was seen on a run page for a script that is NOT in index.html - it is created at
-/// runtime, because Blazor re-creates and executes any &lt;script&gt; found inside a rendered
-/// MarkupString. The CSP was right to block it, and the refusal is the proof that some rendered HTML
-/// carried a script. Without SSH and without the browser console, the only way to learn which one is
-/// to have the browser tell the server.
-///
-/// Anonymous by necessity (the browser posts the report itself, with no session), and therefore
-/// bounded: a small body limit and its own rate-limit partition, so the endpoint cannot be used to
-/// flood the logs.
-/// </summary>
+/// <summary>Receives browser CSP violation reports to identify blocked scripts. Anonymous requests
+/// have a small body limit and a dedicated rate-limit partition to bound log flooding.</summary>
 [ApiController]
 [Route("api/security")]
 [AllowAnonymous]

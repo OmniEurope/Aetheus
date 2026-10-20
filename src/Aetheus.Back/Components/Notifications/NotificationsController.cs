@@ -59,7 +59,7 @@ public class NotificationsController(INotificationService service) : ControllerB
         return Ok(await service.GetRulesAsync(request, ct));
     }
 
-    /// <summary>Recette R-224: the event types and channels the rules grid's column filters offer.</summary>
+    /// <summary>The event types and channels the rules grid's column filters offer.</summary>
     [HttpGet("rules/filter-values")]
     public async Task<ActionResult<NotificationAdminFilterValuesDto>> GetRuleFilterValues(CancellationToken ct) =>
         Ok(await service.GetRuleFilterValuesAsync(ct));

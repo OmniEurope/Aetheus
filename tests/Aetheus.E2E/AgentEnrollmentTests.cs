@@ -5,6 +5,7 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Agents")]
+[RollbackRelevant]
 public class AgentEnrollmentTests : E2ETestBase
 {
     [SetUp]

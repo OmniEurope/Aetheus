@@ -5,17 +5,9 @@ using Xunit.v3;
 
 namespace Aetheus.Tests.Shared;
 
-/// <summary>
-/// A test that only makes sense on one operating system ("windows" or "linux"). On any other, it is
-/// not discovered at all: it neither runs nor counts as skipped, so every suite reports zero skipped
-/// on this host and on the Linux CI runner alike, and a plain <c>dotnet test</c> behaves like the
-/// launchers.
-/// <para>
-/// This used to be a default <c>Platform!=...</c> filter on every run. Microsoft.Testing.Platform
-/// cannot carry one: xunit refuses to combine its trait filter with the <c>--filter</c> any caller
-/// adds, so the platform is decided at discovery instead, where no command line can undo it.
-/// </para>
-/// </summary>
+/// <summary>Restricts platform-specific tests at discovery so incompatible tests are neither run
+/// nor counted as skipped. Discovery avoids conflicting Microsoft.Testing.Platform trait and caller
+/// filters.</summary>
 public interface IPlatformSpecificTest
 {
     /// <summary>"windows" or "linux".</summary>

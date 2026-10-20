@@ -1,10 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@*
-    PLAN-005 lot 2 / D32: the detail of a toast, never more than four lines. The title stays whole
-    (the toast renders it apart); only this text is clamped, and "Show more" appears only when the
-    clamp actually hides something, opening the full text with its correlation id.
-*@
+@* Clamp notification detail to four lines while preserving its title so toasts remain compact;
+   show full text and correlation context only when content actually overflows. *@
 <div class="notification-body">
     <div @ref="_text" class="notification-body-text" data-testid="notification-body-text">@Detail</div>
     @if (_clamped)

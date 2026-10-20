@@ -3,12 +3,8 @@ using OmniEurope.Performance;
 
 namespace Aetheus.Back.Components.SystemLogs;
 
-/// <summary>
-/// PLAN-003 lot 27 / D27, R-455, decision of 2026-10-07: the administration Performance page reads Aetheus's
-/// own request timings from the collector of the OmniEurope.Performance package, the same collector the
-/// Aetheus.Telemetry export reads when it is enabled. This class only says which requests Aetheus keeps and
-/// maps the package's report to the page's contract.
-/// </summary>
+/// <summary>Map the shared OmniEurope.Performance collector report into the administration-page
+/// contract, using the same source as optional telemetry export.</summary>
 public static class ApiPerformanceReport
 {
     /// <summary>The Performance page's own route. Its endpoint carries <c>DisableHttpMetrics</c>: reading

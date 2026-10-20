@@ -3,19 +3,9 @@ using System.Text.Json;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// PLAN-003 2.7, the agent side of the confirmation window. A deployment of the control plane itself
-/// has a flaw no pipeline can cover: if the new backend is broken, nobody can approve its
-/// confirmation and nothing can dispatch its Rollback stage, because that backend is what hands out
-/// the tasks. So <c>bluegreen-switch</c> arms a countdown here, on the host, that only
-/// <c>bluegreen-commit</c> (or a rollback) disarms; <see cref="BlueGreenConfirmationWatchdog"/> puts
-/// traffic back on the previous colour by itself when it runs out.
-///
-/// One small file per environment under the agent's work directory, holding the deadline and the
-/// blue-green variables the switch received - enough to rebuild the same context without the
-/// backend. Those variables carry paths, ports and image tags, not secrets (the start-only names never
-/// reach a switch), and the file is written owner-only anyway.
-/// </summary>
+/// <summary>Persist a host-side confirmation deadline so the watchdog can restore traffic even when
+/// the newly deployed control plane cannot dispatch rollback. The owner-only file contains
+/// non-secret switch paths, ports and image tags sufficient to rebuild context.</summary>
 internal static class BlueGreenConfirmation
 {
     internal const string MinutesVariable = "AETHEUS_BG_CONFIRM_MINUTES";

@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Mail.Mailbox;
 
-/// <summary>
-/// Recette R1-17. The integrated mailbox of one account of a managed mail server. Every call names the
-/// signed-in reader (<paramref name="key"/>.UserId): the mailbox password that reader typed is the only
-/// one used. A call made while no password is held is refused with <see cref="ConflictException"/>;
-/// a login the server refuses forgets the held password and is refused the same way.
-/// </summary>
+/// <summary>Use only the mailbox password held for the signed-in reader on each call. Missing
+/// credentials or rejected mailbox authentication produce ConflictException, with rejected
+/// credentials forgotten.</summary>
 public interface IMailboxService
 {
     Task<MailClientSettingsDto> GetClientSettingsAsync(int serverId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Recette R1-41: one page of the active mailboxes of <paramref name="serverIds"/> (every server when null,
+    /// none when empty), for the "Messagerie" page.
+    /// </summary>
+    Task<PaginatedResult<MailboxDirectoryEntryDto>> ListDirectoryAsync(
+        IReadOnlyCollection<int>? serverIds, PaginationRequest request, CancellationToken ct = default);
 
     Task<MailboxAccessDto> GetAccessAsync(MailboxCredentialKey key, CancellationToken ct = default);
 

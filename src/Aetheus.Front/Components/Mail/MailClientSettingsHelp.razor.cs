@@ -2,7 +2,8 @@
 
 namespace Aetheus.Front.Components.Mail;
 
-/// <summary>Recette R1-17: frames <see cref="MailClientSettings"/> as a card, or as a dialog with its close button.</summary>
+/// <summary>Frames <see cref="MailClientSettings"/> as a card, or as a dialog with its close
+/// button.</summary>
 public partial class MailClientSettingsHelp
 {
     [Inject] private OmniDialogService Dialog { get; set; } = default!;

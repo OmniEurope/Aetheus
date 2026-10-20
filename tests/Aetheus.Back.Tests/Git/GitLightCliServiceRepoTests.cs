@@ -100,10 +100,9 @@ public sealed class GitLightCliServiceRepoTests : IDisposable
         Assert.Contains("initial", commits[0].Message);
     }
 
-    /// <summary>
-    /// Recette R-224: the commits grid's Author filter keeps the commits whose author name is exactly one of
-    /// the ticked ones: "Bob" is neither "Bobby" nor "B.b" (the name is escaped, not read as a pattern).
-    /// </summary>
+    /// <summary> The commits grid's Author filter keeps the commits whose author name is exactly
+    /// one of the ticked ones: "Bob" is neither "Bobby" nor "B.b" (the name is escaped, not read as
+    /// a pattern). </summary>
     [Fact]
     public async Task AuthorFilter_MatchesExactNames_AndCountsTheSame()
     {
@@ -384,7 +383,7 @@ public sealed class GitLightCliServiceRepoTests : IDisposable
     public async Task GetBlobAsync_PathStartingWithDash_Throws()
         => await Assert.ThrowsAsync<ArgumentException>(() => _sut.GetBlobAsync(_dir, "main", "-rf", ct: TestContext.Current.CancellationToken));
 
-    // --- Recette R-534: every file of a revision with its blob id, to compare two repositories ---
+    // --- every file of a revision with its blob id, to compare two repositories ---
 
     [Fact]
     public async Task GetTreeBlobsAsync_ListsEveryFileOfTheRevision_WithItsModeAndBlobId()

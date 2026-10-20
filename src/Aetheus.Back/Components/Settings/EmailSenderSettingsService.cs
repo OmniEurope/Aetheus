@@ -5,8 +5,7 @@ using Aetheus.Back.Services.Email;
 
 namespace Aetheus.Back.Components.Settings;
 
-/// <summary>
-/// Recette R1-16: saves the custom SMTP server in the platform settings (its password in the secret
+/// <summary> Saves the custom SMTP server in the platform settings (its password in the secret
 /// store, encrypted) and reports the sender really in use, default no-reply account included.
 /// </summary>
 public sealed class EmailSenderSettingsService(

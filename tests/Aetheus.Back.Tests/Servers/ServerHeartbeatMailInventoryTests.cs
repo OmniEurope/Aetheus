@@ -12,8 +12,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>PLAN-005 lot 2: the heartbeat persists the full mail state and hands the inventory to the Mail
-/// module through a domain event (Servers never calls Mail directly).</summary>
+/// <summary>The heartbeat persists the full mail state and hands the inventory to the Mail module
+/// through a domain event (Servers never calls Mail directly).</summary>
 public sealed class ServerHeartbeatMailInventoryTests
 {
     private readonly IServerRepository _repo = Substitute.For<IServerRepository>();

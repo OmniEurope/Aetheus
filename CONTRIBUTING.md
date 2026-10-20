@@ -11,7 +11,7 @@ started and what standards to follow.
 2. Browse `docs/contracts/` for detailed guidance on security, deployment, and
    UI patterns.
 3. Set up the dev environment (see [`docs/contracts/deployment.md`](docs/contracts/deployment.md)):
-   - A stable .NET 10 SDK, version 10.0.100 or later (`global.json` is a floor with
+   - A stable .NET 10 SDK, version 10.0.402 or later (`global.json` is a floor with
      `rollForward: latestFeature`, ADR-048)
    - Docker (for the local PostgreSQL container)
    - Run `launch-windows.ps1 -s` (Windows) or `launch-linux.sh -s` (Linux) to start the

@@ -1,27 +1,83 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Reflection;
 using Aetheus.Front.Components.Pipelines;
 using Aetheus.Front.Layout;
+using Aetheus.Front.Tests.Services;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Pages;
 
+/// <summary>
+/// The pipeline page driven through its markup, the public parameters and callbacks of its child
+/// components (the Monaco editor, the runs grid, the visual editor, the dropdowns), the navigation
+/// manager and the requests the faked API receives. The hub events the page listens to are delivered
+/// through a captured connection. No private member of the page is read or written (RFL-1), except for
+/// <see cref="PipelineRunStarted_UsesSecondHubArgumentAsPipelineId"/> (an unused handler, see there).
+/// </summary>
 public class PipelineEditTests : BunitContext
 {
     public PipelineEditTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
+        Services.AddSingleton<YamlSerializationService>();
+        // The settings tab's AI profile selector reads the profiles the user can see.
+        _handler.SetJsonResponse("api/ai/profile-options", new List<AiRunnerProfileDto>());
     }
 
     private readonly BunitTestHelper.TestHandler _handler;
 
-    private static string ModelYaml(IRenderedComponent<PipelineEdit> component)
+    private const string RunButton = ".omni-page-header__actions .omni-split-button button";
+
+    private void OpenTab(string tab, int id = 5) =>
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"/pipelines/{id}?tab={tab}");
+
+    private IRenderedComponent<PipelineEdit> RenderPipeline(int? id)
     {
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(component.Instance)!;
-        return (string)model.GetType().GetProperty("YamlDefinition")!.GetValue(model)!;
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, id));
+        return cut;
+    }
+
+    private static MonacoEditor Editor(IRenderedComponent<PipelineEdit> cut) => cut.FindComponent<MonacoEditor>().Instance;
+
+    private static Task ClickAsync(AngleSharp.Dom.IElement element) => element.ClickAsync(new MouseEventArgs());
+
+    private static AngleSharp.Dom.IElement ButtonLabelled(IRenderedComponent<PipelineEdit> cut, string label) =>
+        cut.FindAll("button").First(button => button.TextContent.Trim() == label);
+
+    // STD-BTN detection 11: Validate and Format sit in the editor toolbar's "More actions" menu.
+    private static AngleSharp.Dom.IElement MenuItemLabelled(IRenderedComponent<PipelineEdit> cut, string label) =>
+        cut.FindMenuItem(label) ?? throw new InvalidOperationException($"No menu entry {label}.");
+
+    private static bool ShowsBadge(IRenderedComponent<PipelineEdit> cut, string text) =>
+        cut.FindAll(".omni-badge").Any(badge => badge.TextContent.Trim() == text);
+
+    private static bool IsBusy(AngleSharp.Dom.IElement button) =>
+        button.ClassList.Contains("btn-busy") || button.GetAttribute("aria-busy") == "true";
+
+    /// <summary>The connections the page opened, by hub path, none of which ever delivers an event on
+    /// its own: a test delivers one with <see cref="HubHandlerInvoker"/>.</summary>
+    private Dictionary<string, SilentHubConnection> CaptureHubs()
+    {
+        var hubs = new Dictionary<string, SilentHubConnection>(StringComparer.Ordinal);
+        Services.AddSingleton<HubConnectionFactory>(services => new CapturingHubs(
+            services.GetRequiredService<IConfiguration>(),
+            services.GetRequiredService<AuthStateProvider>(),
+            hubs));
+        return hubs;
+    }
+
+    private sealed class CapturingHubs(IConfiguration config, AuthStateProvider auth, Dictionary<string, SilentHubConnection> hubs)
+        : HubConnectionFactory(config, auth, NullLogger<AuthDelegatingHandler>.Instance)
+    {
+        public override HubConnection Create(string hubPath, IRetryPolicy? retryPolicy = null) =>
+            hubs[hubPath] = new SilentHubConnection(refuseJoin: false);
     }
 
     private void SetupNewPipelineMocks()
@@ -58,7 +114,7 @@ public class PipelineEditTests : BunitContext
     {
         SetupNewPipelineMocks();
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
-        cut.WaitForState(() => cut.Markup.Length > 100, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 100);
 
         // New-pipeline mode renders the create title and never fetches an existing pipeline detail.
         Assert.Contains("NewPipeline", cut.Markup);
@@ -70,41 +126,41 @@ public class PipelineEditTests : BunitContext
     {
         SetupEditPipelineMocks();
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
         Assert.Contains("Deploy Prod", cut.Markup);
     }
 
     [Fact]
     public void Header_ShowsRunAlone_AndEditIsTheFirstEntryOfTheMoreActionsMenu()
     {
-        // Recette R-421 (standard): Run is the page's one visible action; Edit moved into the menu.
+        // Run is directly visible and Edit belongs to the header menu.
         SetupNewPipelineMocks(); // the edit tab the menu entry opens loads the editor's name lists
         SetupEditPipelineMocks();
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        var trigger = cut.WaitForElement(".omni-page-header__menu .omni-overflow-menu__trigger", TimeSpan.FromSeconds(2));
+        var trigger = cut.WaitForElement(".omni-page-header__menu .omni-overflow-menu__trigger");
 
         var headerButtons = cut.FindAll(".omni-page-header__actions > .omni-button");
         Assert.DoesNotContain(headerButtons, button => button.TextContent.Contains("Edit", StringComparison.Ordinal));
         Assert.Single(cut.FindAll(".omni-page-header__actions .omni-split-button"));
+        Assert.Empty(cut.FindComponents<MonacoEditor>());
 
         trigger.Click();
         var items = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item");
         Assert.Contains("Edit", items[0].TextContent, StringComparison.Ordinal);
 
         items[0].Click();
-        Assert.Equal(1, (int)typeof(PipelineEdit).GetField("_selectedTab", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(cut.Instance)!);
+        // The Edit tab is now the one shown: its editor is on the page.
+        Assert.NotEmpty(cut.FindComponents<MonacoEditor>());
         Assert.Empty(cut.FindAll(".omni-overflow-menu__popup"));
     }
 
     [Fact]
     public void RunsTab_EachSummaryTileHasItsLabelLineThenItsValueLine()
     {
-        // Recette R-417: the grade badge sat glued to its label; every tile now has a label line and a
-        // value line of its own.
+        // Each summary tile separates its label and value.
         SetupEditPipelineMocks();
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.FindAll(".pipeline-runs-summary-card").Count == 4, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.FindAll(".pipeline-runs-summary-card").Count == 4);
 
         Assert.All(cut.FindAll(".pipeline-runs-summary-card .omni-card__body"), body =>
         {
@@ -118,8 +174,8 @@ public class PipelineEditTests : BunitContext
     [Fact]
     public void RunsTab_LatestGradeAndLastSuccessTiles_OpenTheirRun()
     {
-        // Recette R2-128: "latest grade" opens the graded run on its Gate tab (its findings), "last
-        // success" opens the successful run; the two other tiles stay plain.
+        // "latest grade" opens the graded run on its Gate tab (its findings), "last success" opens
+        // the successful run; the two other tiles stay plain.
         SetupEditPipelineMocks();
         var start = new DateTime(2026, 10, 5, 8, 0, 0, DateTimeKind.Utc);
         _handler.SetJsonResponse("api/pipelines/5/runs", new PaginatedResult<PipelineRunDto>
@@ -132,7 +188,7 @@ public class PipelineEditTests : BunitContext
             TotalCount = 2
         });
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.FindAll("a.tile-link").Count == 2, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.FindAll("a.tile-link").Count == 2);
 
         var links = cut.FindAll("a.tile-link").Select(link => link.GetAttribute("href")).ToList();
         Assert.Equal(["/pipelines/runs/31?tab=gate", "/pipelines/runs/21"], links);
@@ -184,7 +240,7 @@ public class PipelineEditTests : BunitContext
         });
 
         var cut = Render<PipelineEdit>(parameters => parameters.Add(component => component.Id, 5));
-        var overflowTrigger = cut.WaitForElement(".omni-overflow-menu__trigger", TimeSpan.FromSeconds(2));
+        var overflowTrigger = cut.WaitForElement(".omni-page-header__menu .omni-overflow-menu__trigger");
 
         // The secondary header actions now live in the overflow menu, which renders its items only
         // while it is open - so the action must be absent before the trigger is clicked.
@@ -195,8 +251,30 @@ public class PipelineEditTests : BunitContext
             () => Assert.Contains(
                 "UpdatePipelineTemplate",
                 cut.Find(".omni-overflow-menu__popup").InnerHtml,
-                StringComparison.Ordinal),
-            TimeSpan.FromSeconds(2));
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void EditPipeline_FleetUpdateAction_OpensTheUpdateOfTheLatestVersion()
+    {
+        SetupEditPipelineMocks();
+        _handler.SetJsonResponse("api/pipelines/5/fleet-item", new PipelineFleetItemDto
+        {
+            PipelineId = 5,
+            PipelineName = "Deploy Prod",
+            TemplateName = "ci",
+            PinnedVersion = 1,
+            LatestVersion = 4,
+            Freshness = PipelineFleetFreshness.Outdated
+        });
+        var cut = Render<PipelineEdit>(parameters => parameters.Add(component => component.Id, 5));
+        cut.WaitForElement(".omni-overflow-menu__trigger");
+        var navigation = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+
+        cut.WaitForAssertion(() => Assert.NotNull(cut.FindMenuItem("UpdatePipelineTemplate")));
+        cut.FindMenuItem("UpdatePipelineTemplate")!.Click();
+
+        Assert.EndsWith("/pipelines/5/template/update/4", navigation.Uri, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -223,8 +301,8 @@ public class PipelineEditTests : BunitContext
         var selection = await coordinator.SelectAsync(7, "toto-ci");
         Assert.NotNull(selection);
         Assert.Single(selection.Parameters);
-        // R-490: "environment" is required and has no value yet, so nothing is sent to the resolver (it
-        // answered 400 and the template could not be selected); the base is the template as written.
+        // A missing required environment value suppresses resolution while the unexpanded template
+        // remains available.
         Assert.DoesNotContain(_handler.Requests, request =>
             request.Url.Contains("/resolve", StringComparison.Ordinal));
 
@@ -268,6 +346,37 @@ public class PipelineEditTests : BunitContext
         Assert.Equal("blue", values["colour"]);
         // Without the pipeline's default the required parameter has no value: nothing to resolve.
         Assert.Null(PipelineTemplateEditorCoordinator.ParameterValues(template, null));
+    }
+
+    [Fact]
+    public void R184_ParameterValues_NeverSendsAParameterTheTemplateDoesNotDeclare()
+    {
+        const string template = """
+            name: host-bluegreen-deploy
+            parameters:
+              - name: revision
+                default: main
+            stages: []
+            """;
+        // The pipeline still carries keys of a previous template: the back answers 400 for unknown ones.
+        const string pipeline = """
+            name: aetheus-deploy-prod
+            extends: host-bluegreen-deploy@1
+            parameters:
+              - name: revision
+                default: candidate
+              - name: allowBootstrap
+                default: "true"
+              - name: cacheScenario
+                default: warm
+            stages: []
+            """;
+
+        var values = PipelineTemplateEditorCoordinator.ParameterValues(template, pipeline);
+
+        Assert.NotNull(values);
+        Assert.Equal(["revision"], values.Keys);
+        Assert.Equal("candidate", values["revision"]);
     }
 
     [Fact]
@@ -325,6 +434,7 @@ public class PipelineEditTests : BunitContext
     [Fact]
     public void EditPipeline_LegacyTemplateReference_WarnsAndPinsCurrentVersion()
     {
+        SetupNewPipelineMocks(); // the edit tab loads the editor name lists
         SetupEditPipelineMocks();
         _handler.SetJsonResponse("api/pipelines/5", new PipelineDto
         {
@@ -347,13 +457,15 @@ public class PipelineEditTests : BunitContext
         _handler.SetJsonResponse(
             "api/pipelines/templates/1/resolve?version=3",
             "name: basic\nstages: []");
+        OpenTab("edit");
 
         var cut = Render<PipelineEdit>(parameters => parameters.Add(component => component.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("LegacyTemplateReferenceWarning"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("LegacyTemplateReferenceWarning"));
+        Assert.Contains("'Basic CI'", Editor(cut).Value);
         var button = cut.FindAll("button").Single(element => element.TextContent.Contains("PinTemplateVersion"));
         button.Click();
 
-        cut.WaitForAssertion(() => Assert.Contains("Basic CI@3", ModelYaml(cut)), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("Basic CI@3", Editor(cut).Value));
         Assert.DoesNotContain("LegacyTemplateReferenceWarning", cut.Markup);
     }
 
@@ -373,34 +485,35 @@ public class PipelineEditTests : BunitContext
             new() { Name = "main", IsDefault = true },
             new() { Name = "release/2026.07" }
         });
+        OpenTab("settings");
 
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForElement("#oe-formfield-pages-pipelines-pipelineedit-6");
 
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Equal("release/2026.07", model.GetType().GetProperty("SourceBranch")!.GetValue(model));
-        // The header badge that used to echo the branch was removed (PLAN-003 lot 16); the model
-        // assertion above is what proves the selected branch is kept.
+        // The settings tab offers the repository's branches and keeps the pipeline's own branch selected.
+        var branches = cut.FindComponents<OmniDropDown<string>>().Single(drop => drop.Instance.Id == "oe-formfield-pages-pipelines-pipelineedit-6");
+        Assert.Equal("release/2026.07", branches.Instance.Value);
+        Assert.Equal(["main", "release/2026.07"], branches.Instance.Options.Select(option => option.Value).ToArray());
     }
 
     [Fact]
-    public void Submit_NewPipeline_NavigatesToCreated()
+    public async Task Submit_NewPipeline_NavigatesToCreated()
     {
         SetupNewPipelineMocks();
         _handler.SetJsonResponse("api/pipelines", new PipelineDto { Id = 10, Name = "new" });
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
 
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
-        // Name is [Required]; populate it so the template form validates and OnSubmit actually runs.
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        model.GetType().GetProperty("Name")!.SetValue(model, "new");
+        // Name is [Required]; type it so the template form validates and OnSubmit actually runs.
+        cut.Find("input#Name").Input("new");
 
         var form = cut.Find("form");
-        form.Submit();
+        await form.SubmitAsync();
 
-        // A successful create POSTs the new pipeline and routes to its detail page.
-        cut.WaitForState(() => nav.Uri.Contains("/pipelines/10"), TimeSpan.FromSeconds(2));
-        Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.EndsWith("api/pipelines"));
+        // A successful create POSTs the new pipeline (with the typed name) and routes to its detail page.
+        cut.WaitForState(() => nav.Uri.Contains("/pipelines/10"));
+        var post = Assert.Single(_handler.RequestDetails, r => r.Method == "POST" && r.Url.EndsWith("api/pipelines"));
+        Assert.Contains("\"new\"", post.Body);
         Assert.Contains("/pipelines/10", nav.Uri);
     }
 
@@ -428,7 +541,7 @@ public class PipelineEditTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>());
 
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 6));
-        cut.WaitForState(() => cut.Markup.Contains("CI Pipeline"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("CI Pipeline"));
         Assert.Contains("CI Pipeline", cut.Markup);
     }
 
@@ -436,8 +549,13 @@ public class PipelineEditTests : BunitContext
     public async Task RunsGrid_LoadsRequestedServerPage()
     {
         SetupEditPipelineMocks();
+        _handler.SetJsonResponse("api/pipelines/5/runs", new PaginatedResult<PipelineRunDto>
+        {
+            Items = [new PipelineRunDto { Id = 1, PipelineId = 5, Status = PipelineStatus.Success }],
+            TotalCount = 26
+        });
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
         _handler.SetJsonResponse("api/pipelines/5/runs?page=2&pageSize=25",
             new PaginatedResult<PipelineRunDto>
             {
@@ -446,22 +564,19 @@ public class PipelineEditTests : BunitContext
                 Page = 2,
                 PageSize = 25
             });
-        var load = typeof(PipelineEdit).GetMethod("OnRunsLoadDataAsync",
-            BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var grid = cut.FindComponent<Aetheus.Front.Components.Shared.AetheusDataGrid<PipelineRunDto>>();
 
-        await cut.InvokeAsync(async () => await (Task)load.Invoke(cut.Instance,
-            [new GridLoadArgs { Skip = 25, Top = 25 }])!);
+        // The grid asks for its second block of 25 rows, the way scrolling or paging does.
+        await cut.InvokeAsync(() => grid.Instance.LoadData.InvokeAsync(new GridLoadArgs { Skip = 25, Top = 25 }));
 
         Assert.Contains(_handler.Requests, request =>
             request.Url.Contains("api/pipelines/5/runs?page=2&pageSize=25", StringComparison.Ordinal));
-        Assert.Equal(26, (int)typeof(PipelineEdit).GetField("_runsTotalCount",
-            BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!);
-        Assert.Equal(26, Assert.Single((List<PipelineRunDto>)typeof(PipelineEdit).GetField("_runs",
-            BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!).Id);
+        Assert.Equal(26, grid.Instance.Count);
+        Assert.Equal(26, Assert.Single(grid.Instance.Data!).Id);
     }
 
     [Fact]
-    public void PipelineIdChange_ClearsPriorSourceAndTemplateState()
+    public void PipelineIdChange_ClearsPriorSourceAndBranches()
     {
         SetupEditPipelineMocks(5);
         SetupEditPipelineMocks(6);
@@ -474,42 +589,86 @@ public class PipelineEditTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/git/repos/9/branches",
             new List<GitLightBranchDto> { new() { Name = "release" } });
         _handler.SetResponse("api/pipelines/6/source", System.Net.HttpStatusCode.NoContent);
+        OpenTab("settings");
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => ((List<string>)typeof(PipelineEdit).GetField("_sourceBranches",
-            BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!).Contains("release"));
-        typeof(PipelineEdit).GetField("_selectedTemplateId", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .SetValue(cut.Instance, 42);
-        typeof(PipelineEdit).GetField("_baseTemplateYaml", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .SetValue(cut.Instance, "old-template");
+        cut.WaitForElement("#oe-formfield-pages-pipelines-pipelineedit-6");
+        Assert.Equal("release", cut.FindComponents<OmniDropDown<string>>()
+            .Single(drop => drop.Instance.Id == "oe-formfield-pages-pipelines-pipelineedit-6").Instance.Value);
+
+        cut.Render(p => p.Add(x => x.Id, 6));
+
+        // Pipeline 6 has no Git source: the previous pipeline's branches must not stay on offer.
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests,
+            request => request.Url.Contains("api/pipelines/6/source", StringComparison.Ordinal)));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("#oe-formfield-pages-pipelines-pipelineedit-6")));
+        Assert.DoesNotContain("release", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PipelineIdChange_ClearsPriorBaseTemplate()
+    {
+        SetupEditPipelineMocks(5);
+        SetupEditPipelineMocks(6);
+        _handler.SetJsonResponse("api/pipelines/5", new PipelineDto
+        {
+            Id = 5,
+            Name = "Deploy Prod",
+            YamlDefinition = "name: deploy\nextends: 'Basic CI@3'\nstages: []",
+            TriggerType = PipelineTriggerType.Manual
+        });
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>
+        {
+            new() { Id = 1, Name = "Basic CI", Version = 3 }
+        });
+        _handler.SetJsonResponse("api/pipelines/templates/1", new PipelineTemplateDto
+        {
+            Id = 1,
+            Name = "Basic CI",
+            Version = 3,
+            Versions = [new PipelineTemplateVersionDto { Version = 3, YamlContent = "name: basic\nstages: []" }]
+        });
+        _handler.SetJsonResponse("api/pipelines/templates/1/resolve?version=3", "name: old-template\nstages: []");
+        OpenTab("visual");
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        var visual = cut.WaitForComponent<VisualPipelineEditor>(TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("old-template", visual.Instance.BaseTemplateYaml));
 
         cut.Render(p => p.Add(x => x.Id, 6));
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests,
-            request => request.Url.Contains("api/pipelines/6/source", StringComparison.Ordinal)));
-        Assert.Null(typeof(PipelineEdit).GetField("_source", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(cut.Instance));
-        Assert.Empty((List<string>)typeof(PipelineEdit).GetField("_sourceBranches",
-            BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!);
-        Assert.Null(typeof(PipelineEdit).GetField("_selectedTemplateId", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(cut.Instance));
-        Assert.Null(typeof(PipelineEdit).GetField("_baseTemplateYaml", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(cut.Instance));
+            request => request.Url.Contains("api/pipelines/6/runs", StringComparison.Ordinal)));
+        cut.WaitForAssertion(() => Assert.Null(cut.FindComponent<VisualPipelineEditor>().Instance.BaseTemplateYaml));
     }
 
     [Fact]
-    public async Task PipelineRunStarted_UsesSecondHubArgumentAsPipelineId()
+    public async Task PipelineIdChange_ClearsPriorTemplateSelection()
     {
-        SetupEditPipelineMocks();
-        var cut = Render<PipelineEdit>(parameters => parameters.Add(component => component.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
-        var before = _handler.Requests.Count(request => request.Url.Contains("api/pipelines/5/runs", StringComparison.Ordinal));
+        SetupNewPipelineMocks();
+        SetupEditPipelineMocks(5);
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>
+        {
+            new() { Id = 42, Name = "Basic CI", Version = 1 }
+        });
+        _handler.SetJsonResponse("api/pipelines/templates/42", new PipelineTemplateDto
+        {
+            Id = 42,
+            Name = "Basic CI",
+            Version = 1,
+            YamlContent = "name: basic-ci\nstages: []"
+        });
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
+        var picker = cut.WaitForComponent<OmniDropDown<int?>>(TimeSpan.FromSeconds(2));
+        await cut.InvokeAsync(() => picker.Instance.ValueChanged.InvokeAsync(42));
+        cut.WaitForAssertion(() => Assert.Contains("Basic CI", Editor(cut).Value));
+        Assert.Equal(42, picker.Instance.Value);
 
-        var method = typeof(PipelineEdit).GetMethod("OnPipelineRunStarted", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [999, 5])!);
+        cut.Render(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        cut.Render(p => p.Add(x => x.Id, null));
 
-        cut.WaitForAssertion(() =>
-            Assert.True(_handler.Requests.Count(request => request.Url.Contains("api/pipelines/5/runs", StringComparison.Ordinal)) > before),
-            TimeSpan.FromSeconds(2));
+        // Back on a new pipeline: no template is selected and the editor holds the starter definition.
+        cut.WaitForAssertion(() => Assert.Null(cut.FindComponent<OmniDropDown<int?>>().Instance.Value));
+        Assert.DoesNotContain("Basic CI", Editor(cut).Value);
     }
 
     [Fact]
@@ -533,43 +692,41 @@ public class PipelineEditTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>());
 
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 7));
-        cut.WaitForState(() => cut.Markup.Contains("Project Pipeline"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Project Pipeline"));
         Assert.Contains("Project Pipeline", cut.Markup);
     }
 
-    // --- Method-level tests ---
+    // --- Editing the definition ---
 
     [Fact]
-    public void OnYamlValueChanged_SetsYamlAndResetsValidation()
+    public async Task OnYamlValueChanged_SetsYamlAndResetsValidation()
     {
         SetupNewPipelineMocks();
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
 
-        var method = typeof(PipelineEdit).GetMethod("OnYamlValueChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, ["new yaml content"]);
+        await cut.InvokeAsync(() => Editor(cut).ValueChanged.InvokeAsync("new yaml content"));
 
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var yamlDef = model.GetType().GetProperty("YamlDefinition")!.GetValue(model) as string;
-        Assert.Equal("new yaml content", yamlDef);
-
-        var yamlValid = typeof(PipelineEdit).GetField("_yamlValid", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
-        Assert.Null(yamlValid);
+        // The editor is given the new definition back, and no validity verdict is shown for it.
+        Assert.Equal("new yaml content", Editor(cut).Value);
+        Assert.False(ShowsBadge(cut, "Valid") || ShowsBadge(cut, "Invalid"));
     }
 
     [Fact]
-    public void OnVisualYamlChanged_UpdatesModel()
+    public async Task OnVisualYamlChanged_UpdatesModel()
     {
+        SetupEditPipelineMocks();
         SetupNewPipelineMocks();
-        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
+        OpenTab("visual");
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        var visual = cut.WaitForComponent<VisualPipelineEditor>(TimeSpan.FromSeconds(2));
 
-        var method = typeof(PipelineEdit).GetMethod("OnVisualYamlChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, ["trigger: webhook\nstages: []"]);
+        await cut.InvokeAsync(() => visual.Instance.YamlDefinitionChanged.InvokeAsync("trigger: webhook\nstages: []"));
 
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var yamlDef = model.GetType().GetProperty("YamlDefinition")!.GetValue(model) as string;
-        Assert.Equal("trigger: webhook\nstages: []", yamlDef);
+        // The change reaches the page's definition: the visual editor gets it back, and so does the YAML tab.
+        Assert.Equal("trigger: webhook\nstages: []", cut.FindComponent<VisualPipelineEditor>().Instance.YamlDefinition);
+        OpenTab("edit");
+        cut.WaitForAssertion(() => Assert.Equal("trigger: webhook\nstages: []", Editor(cut).Value));
     }
-
 
     [Theory]
     [InlineData(0, 0, "0s")]
@@ -633,8 +790,7 @@ public class PipelineEditTests : BunitContext
     [InlineData(PipelineStatus.Success, OmniTone.Success)]
     [InlineData(PipelineStatus.Failed, OmniTone.Danger)]
     [InlineData(PipelineStatus.Running, OmniTone.Accent)]
-    // PLAN-003 D13: amber is now Partial (finished with a swallowed failure); a cancelled run is a
-    // non-event, so it takes the neutral grey.
+    // Partial runs use amber and cancelled runs use neutral grey.
     [InlineData(PipelineStatus.Cancelled, OmniTone.Info)]
     [InlineData(PipelineStatus.Partial, OmniTone.Warning)]
     public void GetRunBadge_ReturnsValue(PipelineStatus status, OmniTone expected)
@@ -648,37 +804,86 @@ public class PipelineEditTests : BunitContext
     {
         SetupEditPipelineMocks();
         _handler.SetJsonResponse("api/pipelines/5/update", new PipelineDto { Id = 5, Name = "Updated" });
+        OpenTab("settings");
 
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
 
-        var method = typeof(PipelineEdit).GetMethod("OnSubmit", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var dialog = Services.GetRequiredService<OmniDialogService>();
-        var submit = cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
+        var saveButton = ButtonLabelled(cut, "SaveSettings");
+        var submit = ClickAsync(saveButton);
         await cut.InvokeAsync(() => dialog.Close(new Aetheus.Front.Components.Pipelines.PipelineSaveDecision("main")));
         await submit;
 
-        var saving = (bool)typeof(PipelineEdit).GetField("_saving", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.False(saving);
+        Assert.False(IsBusy(ButtonLabelled(cut, "SaveSettings")));
         Assert.Contains(_handler.Requests, request => request.Method == "PUT" && request.Url.Contains("api/pipelines/5"));
     }
 
+    // PLAN-002 B7: the confirmation dialog is the save handler's first await, so the render it triggers
+    // comes before the save starts; the button must still read busy while the server has not answered.
     [Fact]
-    public void Front009_ALoadedPipeline_IsCleanUntilOnlyItsSourceBranchIsEdited()
+    public async Task OnSubmit_ExistingPipeline_TheButtonIsBusyWhileTheServerHasNotAnswered()
     {
         SetupEditPipelineMocks();
+        OpenTab("settings");
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
-        const BindingFlags priv = BindingFlags.NonPublic | BindingFlags.Instance;
-        var model = (PipelineModel)typeof(PipelineEdit).GetField("_model", priv)!.GetValue(cut.Instance)!;
-        bool Dirty() => PipelineDefinitionLiveSync.HasUnsavedChanges(
-            model,
-            (PipelineDto?)typeof(PipelineEdit).GetField("_pipeline", priv)!.GetValue(cut.Instance),
-            (string?)typeof(PipelineEdit).GetField("_savedSourceBranch", priv)!.GetValue(cut.Instance));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        var putReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var saveResponse = new TaskCompletionSource<PipelineDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Put, "api/pipelines/5", _ =>
+        {
+            putReceived.TrySetResult();
+            return saveResponse.Task;
+        });
 
-        Assert.False(Dirty());
-        model.SourceBranch = "release/2026.10";
-        Assert.True(Dirty());
+        var submit = ClickAsync(ButtonLabelled(cut, "SaveSettings"));
+        await cut.InvokeAsync(() => Services.GetRequiredService<OmniDialogService>().Close(new PipelineSaveDecision("main")));
+        await putReceived.Task.WaitAsync(BunitTestHelper.AsyncRenderWait, Xunit.TestContext.Current.CancellationToken);
+
+        // No render is forced here: the markup is the page's own last render, the one the user sees.
+        Assert.True(IsBusy(ButtonLabelled(cut, "SaveSettings")));
+        saveResponse.SetResult(new PipelineDto { Id = 5, Name = "Deploy Prod" });
+        await submit;
+        cut.WaitForAssertion(() => Assert.False(IsBusy(ButtonLabelled(cut, "SaveSettings"))));
+    }
+
+    [Fact]
+    public async Task Front009_ALoadedPipeline_IsCleanUntilOnlyItsSourceBranchIsEdited()
+    {
+        // A definition change announced by the hub reloads a page that holds no edit, and shows the
+        // "changed elsewhere" banner once the only edit is the source branch.
+        SetupNewPipelineMocks();
+        SetupEditPipelineMocks();
+        _handler.SetJsonResponse("api/pipelines/5/source", new PipelineSourceDto
+        {
+            RepositoryId = 9,
+            Path = ".pipeline/deploy-prod.yaml",
+            Branch = "release/2026.07"
+        });
+        _handler.SetPaginatedJsonResponse("api/git/repos/9/branches", new List<GitLightBranchDto>
+        {
+            new() { Name = "main", IsDefault = true },
+            new() { Name = "release/2026.07" }
+        });
+        var hubs = CaptureHubs();
+        OpenTab("settings");
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForElement("#oe-formfield-pages-pipelines-pipelineedit-6");
+        cut.WaitForAssertion(() => Assert.True(hubs.ContainsKey("entities")));
+        int PipelineReads() => _handler.Requests.Count(request => request.Method == "GET"
+            && request.Url.EndsWith("api/pipelines/5", StringComparison.Ordinal));
+        var readsBefore = PipelineReads();
+
+        await cut.InvokeAsync(() => HubHandlerInvoker.InvokeAsync(hubs["entities"], "EntityChanged", ResourceType.Pipeline, 5, "Updated"));
+
+        Assert.True(PipelineReads() > readsBefore);
+        Assert.Empty(cut.FindAll(".pipeline-changed-elsewhere"));
+
+        var branches = cut.FindComponents<OmniDropDown<string>>().Single(drop => drop.Instance.Id == "oe-formfield-pages-pipelines-pipelineedit-6");
+        await cut.InvokeAsync(() => branches.Instance.ValueChanged.InvokeAsync("main"));
+        await cut.InvokeAsync(() => HubHandlerInvoker.InvokeAsync(hubs["entities"], "EntityChanged", ResourceType.Pipeline, 5, "Updated"));
+
+        Assert.NotEmpty(cut.FindAll(".pipeline-changed-elsewhere"));
     }
 
     [Theory]
@@ -688,15 +893,14 @@ public class PipelineEditTests : BunitContext
     {
         // FRONT-008: Monaco's OnSave called OnSubmit outside the form's validity-gated submit.
         SetupEditPipelineMocks();
-        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("/pipelines/5?tab=edit");
+        OpenTab("edit");
         _handler.SetJsonResponse("api/variable-libraries/names", new List<string>());
         _handler.SetJsonResponse("api/vaults/names", new List<string>());
         _handler.SetJsonResponse("api/servers/names", new List<string>());
         _handler.SetJsonResponse("api/variable-libraries", new PaginatedResult<VariableLibraryDto> { Items = [], TotalCount = 0 });
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        model.GetType().GetProperty("Name")!.SetValue(model, invalidName);
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        cut.Find("input#Name").Input(invalidName);
         var requestsBefore = _handler.Requests.Count;
 
         var save = cut.InvokeAsync(() => cut.FindComponent<MonacoEditor>().Instance.OnSave.InvokeAsync());
@@ -718,19 +922,18 @@ public class PipelineEditTests : BunitContext
     {
         SetupEditPipelineMocks();
         // Preflight resolves cleanly (empty stage list) and the pipeline declares no queue-time
-        // parameters, so OnRun proceeds all the way to actually triggering the run.
+        // parameters, so Run proceeds all the way to actually triggering the run.
         _handler.SetJsonResponse("api/pipelines/5/preflight", new PipelinePreflightDto());
         _handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>());
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
 
-        var method = typeof(PipelineEdit).GetMethod("OnRun", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
+        await ClickAsync(cut.FindAll(RunButton)[0]);
 
-        // OnRun runs the preflight gate, then POSTs the run trigger, then clears the _running guard.
+        // Run goes through the preflight gate, then POSTs the run trigger, then leaves the button free.
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("api/pipelines/5/preflight"));
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.EndsWith("api/pipelines/5/run"));
-        Assert.False((bool)typeof(PipelineEdit).GetField("_running", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!);
+        Assert.Empty(cut.FindAll("[aria-busy=true]"));
     }
 
     [Fact]
@@ -740,15 +943,13 @@ public class PipelineEditTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/5/preflight", new PipelinePreflightDto());
         _handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>());
         var cut = Render<PipelineEdit>(parameters => parameters.Add(component => component.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
         var navigation = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         var uriBefore = navigation.Uri;
         var runLoadsBefore = _handler.Requests.Count(request => request.Method == "GET"
             && request.Url.Contains("api/pipelines/5/runs", StringComparison.Ordinal));
 
-        var method = typeof(PipelineEdit).GetMethod(
-            "OnRun", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
+        await ClickAsync(cut.FindAll(RunButton)[0]);
 
         // The launched run is read back into this page's grid; the page is not left for the run's.
         Assert.Equal(uriBefore, navigation.Uri);
@@ -759,18 +960,25 @@ public class PipelineEditTests : BunitContext
     }
 
     [Fact]
-    public void R2_038_WhileLaunching_TheRunButtonIsBusy_AndNoPageLoaderShows()
+    public async Task R2_038_WhileLaunching_TheRunButtonIsBusy_AndNoPageLoaderShows()
     {
         SetupEditPipelineMocks();
+        _handler.SetJsonResponse("api/pipelines/5/preflight", new PipelinePreflightDto());
+        _handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>());
+        var launched = new TaskCompletionSource<PipelineRunDto>();
+        _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/pipelines/5/run", _ => launched.Task);
         var cut = Render<PipelineEdit>(parameters => parameters.Add(component => component.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
         var loadersBefore = cut.FindAll("[role=status]").Count;
 
-        typeof(PipelineEdit).GetField("_running", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, true);
-        cut.Render();
-
-        Assert.NotEmpty(cut.FindAll("[aria-busy=true]"));
+        // The launch is held back: the Run button is busy meanwhile, and no page loader replaces the page.
+        var launch = ClickAsync(cut.FindAll(RunButton)[0]);
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[aria-busy=true]")));
         Assert.Equal(loadersBefore, cut.FindAll("[role=status]").Count);
+
+        launched.SetResult(new PipelineRunDto { Id = 1, PipelineId = 5 });
+        await launch;
+        Assert.Empty(cut.FindAll("[aria-busy=true]"));
     }
 
     [Fact]
@@ -778,16 +986,15 @@ public class PipelineEditTests : BunitContext
     {
         SetupNewPipelineMocks();
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
+        await cut.InvokeAsync(() => Editor(cut).ValueChanged.InvokeAsync(""));
+        var requestsBefore = _handler.Requests.Count;
 
-        // Set empty yaml
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        model.GetType().GetProperty("YamlDefinition")!.SetValue(model, "");
+        await ClickAsync(MenuItemLabelled(cut, "ValidateYaml"));
 
-        var method = typeof(PipelineEdit).GetMethod("OnValidateYaml", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await (Task)method.Invoke(cut.Instance, [])!;
-
-        var validating = (bool)typeof(PipelineEdit).GetField("_validating", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.False(validating);
+        // An empty definition is not sent for validation, shows no verdict and leaves the button free.
+        Assert.DoesNotContain(_handler.Requests.Skip(requestsBefore), request => request.Url.Contains("validate", StringComparison.Ordinal));
+        Assert.False(ShowsBadge(cut, "Valid") || ShowsBadge(cut, "Invalid"));
+        Assert.False(MenuItemLabelled(cut, "ValidateYaml").HasAttribute("disabled"));
     }
 
     [Fact]
@@ -796,15 +1003,17 @@ public class PipelineEditTests : BunitContext
         SetupEditPipelineMocks();
         _handler.SetResponse(HttpMethod.Delete, "api/pipelines/5", System.Net.HttpStatusCode.OK);
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
 
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         var dialog = Services.GetRequiredService<OmniDialogService>();
 
-        // OnDelete awaits a confirmation dialog that never resolves on its own: start it un-awaited,
+        // Delete awaits a confirmation dialog that never resolves on its own: start it un-awaited,
         // confirm it (Close(true)), then await. The confirmed path deletes the pipeline and routes back.
-        var method = typeof(PipelineEdit).GetMethod("OnDelete", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var task = cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
+        await ClickAsync(cut.WaitForElement(".omni-page-header__menu .omni-overflow-menu__trigger"));
+        var delete = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item")
+            .Single(item => item.TextContent.Trim() == "Delete");
+        var task = ClickAsync(delete);
         await cut.InvokeAsync(() => dialog.Close(true));
         await task;
 
@@ -827,32 +1036,25 @@ public class PipelineEditTests : BunitContext
         _handler.SetJsonResponse("api/variable-libraries", new PaginatedResult<VariableLibraryDto> { Items = [], TotalCount = 0 });
 
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
-        var templatesField = typeof(PipelineEdit).GetField("_templates", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        cut.WaitForState(() => ((List<PipelineTemplateSummaryDto>)templatesField.GetValue(cut.Instance)!).Count == 2, TimeSpan.FromSeconds(2));
+        var picker = cut.WaitForComponent<OmniDropDown<int?>>(TimeSpan.FromSeconds(2));
 
         // The new-pipeline form loads the available templates for its template-picker dropdown.
-        var templates = (List<PipelineTemplateSummaryDto>)templatesField.GetValue(cut.Instance)!;
-        Assert.Equal(2, templates.Count);
-        Assert.Contains(templates, t => t.Name == "Basic CI");
+        Assert.Equal(["Basic CI", "Docker Deploy"], picker.Instance.Options.Select(option => option.Text).ToArray());
     }
 
     [Fact]
-    public void OnYamlValueChanged_ClearsValidation()
+    public async Task OnYamlValueChanged_ClearsValidation()
     {
         SetupNewPipelineMocks();
+        _handler.SetJsonResponse("api/pipelines/validate", new PipelineYamlDefinition());
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
+        await ClickAsync(MenuItemLabelled(cut, "ValidateYaml"));
+        Assert.True(ShowsBadge(cut, "Valid"));
 
-        typeof(PipelineEdit).GetField("_yamlValid", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, true);
+        await cut.InvokeAsync(() => Editor(cut).ValueChanged.InvokeAsync("new yaml content"));
 
-        var method = typeof(PipelineEdit).GetMethod("OnYamlValueChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, ["new yaml content"]);
-
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var yamlDef = (string)model.GetType().GetProperty("YamlDefinition")!.GetValue(model)!;
-        Assert.Equal("new yaml content", yamlDef);
-
-        var yamlValid = typeof(PipelineEdit).GetField("_yamlValid", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
-        Assert.Null(yamlValid);
+        Assert.Equal("new yaml content", Editor(cut).Value);
+        Assert.False(ShowsBadge(cut, "Valid") || ShowsBadge(cut, "Invalid"));
     }
 
     [Fact]
@@ -862,14 +1064,11 @@ public class PipelineEditTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/validate", new PipelineYamlDefinition());
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
 
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        model.GetType().GetProperty("YamlDefinition")!.SetValue(model, "name: test\ntrigger: manual");
+        await cut.InvokeAsync(() => Editor(cut).DebouncedValueChanged.InvokeAsync("name: test"));
 
-        var method = typeof(PipelineEdit).GetMethod("OnDebouncedYamlChanged", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, ["name: test"])!);
-
-        var validating = (bool)typeof(PipelineEdit).GetField("_validating", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.False(validating); // Should be false after completion
+        Assert.Contains(_handler.Requests, request => request.Method == "POST" && request.Url.EndsWith("api/pipelines/validate", StringComparison.Ordinal));
+        Assert.True(ShowsBadge(cut, "Valid"));
+        Assert.False(MenuItemLabelled(cut, "ValidateYaml").HasAttribute("disabled")); // free again after completion
     }
 
     [Fact]
@@ -877,20 +1076,13 @@ public class PipelineEditTests : BunitContext
     {
         SetupNewPipelineMocks();
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
+        var before = Editor(cut).Value;
 
-        var modelField = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var model = modelField.GetValue(cut.Instance)!;
-        var yamlProp = model.GetType().GetProperty("YamlDefinition")!;
-        var before = (string)yamlProp.GetValue(model)!;
+        await ClickAsync(MenuItemLabelled(cut, "FormatYaml"));
 
-        var method = typeof(PipelineEdit).GetMethod("OnFormatYaml", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await (Task)method.Invoke(cut.Instance, [])!;
-
-        // OnFormatYaml only delegates formatting to the Monaco editor; it must not mutate the YAML model.
-        Assert.Equal(before, (string)yamlProp.GetValue(model)!);
+        // Format only delegates formatting to the Monaco editor; it must not mutate the YAML model.
+        Assert.Equal(before, Editor(cut).Value);
     }
-
-
 
     [Fact]
     public async Task OnValidateYaml_WithValidYaml_SetsYamlValidTrue()
@@ -898,36 +1090,38 @@ public class PipelineEditTests : BunitContext
         SetupNewPipelineMocks();
         _handler.SetJsonResponse("api/pipelines/validate", new PipelineYamlDefinition());
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
+        await cut.InvokeAsync(() => Editor(cut).ValueChanged.InvokeAsync("name: test\ntrigger: manual\nstages: []"));
 
-        var model = typeof(PipelineEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        model.GetType().GetProperty("YamlDefinition")!.SetValue(model, "name: test\ntrigger: manual\nstages: []");
+        await ClickAsync(MenuItemLabelled(cut, "ValidateYaml"));
 
-        var method = typeof(PipelineEdit).GetMethod("OnValidateYaml", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
-
-        var yamlValid = (bool?)typeof(PipelineEdit).GetField("_yamlValid", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
-        Assert.True(yamlValid);
+        Assert.True(ShowsBadge(cut, "Valid"));
+        Assert.False(ShowsBadge(cut, "Invalid"));
     }
 
     [Fact]
     public async Task LoadAutocompleteSuggestionsAsync_PopulatesNames()
     {
+        SetupEditPipelineMocks();
         SetupNewPipelineMocks();
         _handler.SetJsonResponse("api/variable-libraries/names", new List<string> { "lib1", "lib2" });
         _handler.SetJsonResponse("api/vaults/names", new List<string> { "vault1" });
         _handler.SetJsonResponse("api/servers/names", new List<string> { "server1", "server2" });
+        OpenTab("edit");
 
-        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, null));
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests,
+            request => request.Url.Contains("api/servers/names", StringComparison.Ordinal)));
+        await Task.Yield();
 
-        var method = typeof(PipelineEdit).GetMethod("LoadAutocompleteSuggestionsAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [null])!);
-
-        var libraryNames = (List<string>)typeof(PipelineEdit).GetField("_libraryNames", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var vaultNames = (List<string>)typeof(PipelineEdit).GetField("_vaultNames", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var serverNames = (List<string>)typeof(PipelineEdit).GetField("_serverNames", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Equal(2, libraryNames.Count);
-        Assert.Single(vaultNames);
-        Assert.Equal(2, serverNames.Count);
+        // The names the editor loaded are the ones the visual editor offers.
+        OpenTab("visual");
+        var visual = cut.WaitForComponent<VisualPipelineEditor>(TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(["lib1", "lib2"], visual.Instance.AvailableLibraries);
+            Assert.Equal(["vault1"], visual.Instance.AvailableVaults);
+            Assert.Equal(["server1", "server2"], visual.Instance.AvailableServers);
+        });
     }
 
     // SITE-FUNC-AUTOCOMPLETE-001: the suggestion lookups run from OnAfterRenderAsync; a network
@@ -947,6 +1141,7 @@ public class PipelineEditTests : BunitContext
         Assert.NotEmpty(cut.FindComponents<MonacoEditor>());
     }
 
+
     // SITE-FUNC-SELF-SAVE-001: the hub announces the page's own save, often while the save is still in
     // flight; the stored pipeline equal to what this page sent is not a change made elsewhere.
     [Theory]
@@ -955,15 +1150,16 @@ public class PipelineEditTests : BunitContext
     public async Task DefinitionChangedDuringTheSave_ShowsTheBannerOnlyForARemoteChange(string storedDescription, bool expectBanner)
     {
         SetupEditPipelineMocks();
-        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("/pipelines/5?tab=edit");
+        var hubs = CaptureHubs();
+        OpenTab("edit");
         _handler.SetJsonResponse("api/variable-libraries/names", new List<string>());
         _handler.SetJsonResponse("api/vaults/names", new List<string>());
         _handler.SetJsonResponse("api/servers/names", new List<string>());
         _handler.SetJsonResponse("api/variable-libraries", new PaginatedResult<VariableLibraryDto> { Items = [], TotalCount = 0 });
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
-        const BindingFlags priv = BindingFlags.NonPublic | BindingFlags.Instance;
-        ((PipelineModel)typeof(PipelineEdit).GetField("_model", priv)!.GetValue(cut.Instance)!).Description = "edited here";
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        cut.WaitForAssertion(() => Assert.True(hubs.ContainsKey("entities")));
+        cut.Find("input#Description").Input("edited here");
         PipelineDto Stored(string description) => new()
         {
             Id = 5,
@@ -974,14 +1170,20 @@ public class PipelineEditTests : BunitContext
             TriggerType = PipelineTriggerType.Manual
         };
         var saveResponse = new TaskCompletionSource<PipelineDto>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _handler.SetAsyncJsonResponse(HttpMethod.Put, "api/pipelines/5", _ => saveResponse.Task);
+        // PLAN-002 B7: the PUT is awaited where it arrives. A render-driven wait on the request list was
+        // checked only on renders, and none follows the request until the server answers.
+        var putReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Put, "api/pipelines/5", _ =>
+        {
+            putReceived.TrySetResult();
+            return saveResponse.Task;
+        });
         _handler.SetJsonResponse("api/pipelines/5", Stored(storedDescription));
 
         var save = cut.InvokeAsync(() => cut.FindComponent<MonacoEditor>().Instance.OnSave.InvokeAsync());
         await cut.InvokeAsync(() => Services.GetRequiredService<OmniDialogService>().Close(new PipelineSaveDecision("main")));
-        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request => request.Method == "PUT"));
-        var onChanged = typeof(PipelineEdit).GetMethod("OnDefinitionChangedAsync", priv)!;
-        await cut.InvokeAsync(() => (Task)onChanged.Invoke(cut.Instance, [])!);
+        await putReceived.Task.WaitAsync(BunitTestHelper.AsyncRenderWait, Xunit.TestContext.Current.CancellationToken);
+        await cut.InvokeAsync(() => HubHandlerInvoker.InvokeAsync(hubs["entities"], "EntityChanged", ResourceType.Pipeline, 5, "Updated"));
         saveResponse.SetResult(Stored("edited here"));
         await save;
 

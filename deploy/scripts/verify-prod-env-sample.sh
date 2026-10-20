@@ -1,14 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-# Behavioral proof for R-248: the first-deploy production environment file is rendered from the
-# versioned template deploy/env/prod.env.sample, and the result is byte for byte what the inline
-# heredoc it replaced wrote for the same secrets (same keys, same order, same values).
-#
-#   verify-prod-env-sample.sh [REPOSITORY_ROOT]
-#
-# Runs in a disposable temporary directory with a deterministic `openssl` shim first on PATH, so
-# every secret is known in advance. It executes the first-deploy block of prod-deploy-prepare.sh
-# itself, extracted from the script, so the proof cannot silently diverge from the production code.
+# Compare template-rendered production settings with the deterministic reference so keys, order and
+# values remain stable; run the real preparation block with a known-secret openssl stand-in in a
+# temporary directory. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 set -eu
 
 ROOT="${1:-$(cd "$(dirname "$0")/../.." && pwd)}"
@@ -46,7 +40,8 @@ PUBLIC_APP_URL="https://app.example.org"
 APP_VERSION="1.1.1842"
 export PUBLIC_API_URL PUBLIC_APP_URL APP_VERSION
 
-# --- Reference: the heredoc prod-deploy-prepare.sh wrote before R-248, verbatim ------------------
+# Reference environment with fixed secrets for a byte-for-byte rendering comparison. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 rm -f "$OPENSSL_SHIM_COUNTER"
 cat > "$TEST_ROOT/expected.env" <<EOF
 APPNAME=aetheus
@@ -94,7 +89,8 @@ else
   echo "SKIP: mode 600 not checked, this filesystem does not keep POSIX modes."
 fi
 
-# R-248 control: the keys of the template and of the produced file are the same, in the same order.
+# Require template and rendered keys to match in both membership and order. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 grep -v '^#' "$SAMPLE" | grep -v '^$' | cut -d= -f1 > "$TEST_ROOT/sample.keys"
 cut -d= -f1 "$PRODUCED" > "$TEST_ROOT/produced.keys"
 cmp -s "$TEST_ROOT/sample.keys" "$TEST_ROOT/produced.keys" || fail "template and produced keys differ"

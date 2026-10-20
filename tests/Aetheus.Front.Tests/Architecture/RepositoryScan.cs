@@ -1,4 +1,4 @@
-// kit-model RepositoryScan 1
+// kit-model RepositoryScan 2
 // SPDX-License-Identifier: EUPL-1.2
 //
 // File enumeration for repository-wide guard tests, with one property the raw
@@ -60,26 +60,28 @@ internal static class RepositoryScan
     internal static IReadOnlyList<string> EnumerateOptional(string directory, string pattern)
         => Directory.Exists(directory)
             ? Directory.EnumerateFiles(directory, pattern, SearchOption.AllDirectories)
-                .Where(file => !IsBuildOutput(file))
+                .Where(file => !IsBuildOutput(Path.DirectorySeparatorChar + Path.GetRelativePath(directory, file)))
                 .ToList()
             : [];
 
+    // Judged on the path below the scanned directory: the checkout running the scan may itself live
+    // under .worktrees, which would otherwise exclude every file.
     private static bool IsBuildOutput(string file)
     {
         var separator = Path.DirectorySeparatorChar;
         return file.Contains($"{separator}bin{separator}", StringComparison.OrdinalIgnoreCase)
             || file.Contains($"{separator}obj{separator}", StringComparison.OrdinalIgnoreCase)
-            || file.Contains($"{separator}node_modules{separator}", StringComparison.OrdinalIgnoreCase);
+            || file.Contains($"{separator}node_modules{separator}", StringComparison.OrdinalIgnoreCase)
+            || file.Contains($"{separator}.git{separator}", StringComparison.OrdinalIgnoreCase)
+            || file.Contains($"{separator}.worktrees{separator}", StringComparison.OrdinalIgnoreCase)
+            || file.Contains($"{separator}.claude{separator}worktrees{separator}", StringComparison.OrdinalIgnoreCase);
     }
 
     // Aetheus extensions beyond the kit model: the front's page folders (project configuration) and a
     // multi-folder scan with one floor over the union (candidate for the model).
 
-    /// <summary>
-    /// The folders holding the maintained pages, their dialogs and the shared components: since
-    /// PLAN-009 lot 2, <c>Components/{Module}</c> and <c>Components/Shared</c>, which replaced the
-    /// former <c>Pages/</c>, <c>Shared/</c>, <c>Services/</c> and <c>Helpers/</c> folders.
-    /// </summary>
+    /// <summary>Maintained pages and shared components live in Components module directories and
+    /// Components/Shared.</summary>
     internal static IReadOnlyList<string> PageRoots =>
     [
         Path.Combine(Root, "src", "Aetheus.Front", "Components"),

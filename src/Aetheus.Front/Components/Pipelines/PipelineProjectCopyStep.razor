@@ -49,7 +49,7 @@
                           Value="@Flow.TargetProjectId" ValueChanged="@((int? id) => Flow.SetTargetProject(id))"
                           ValueExpression="@(() => Flow.TargetProjectId)" Class="omni-u-w-100" />
         </OmniFormField>
-        <OmniFormField Label="@L["PipelinePrefix"]" Description="@L["PipelinePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-prefix">
+        <OmniFormField Label="@L["PipelinePrefix"]" Help="@L["PipelinePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-prefix">
             <OmniTextBox Id="pipeline-copy-prefix" Value="@Flow.Prefix" ValueChanged="@((string value) => Flow.SetPrefix(value))"
                          ValueExpression="@(() => Flow.Prefix)" Class="omni-u-w-100" />
         </OmniFormField>
@@ -58,7 +58,7 @@
                           Value="@Flow.SourceProjectId" ValueChanged="@((int? id) => Flow.SetSourceProject(id))"
                           ValueExpression="@(() => Flow.SourceProjectId)" Class="omni-u-w-100" />
         </OmniFormField>
-        <OmniFormField Label="@L["PipelineCopySourcePrefix"]" Description="@L["PipelineCopySourcePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-source-prefix">
+        <OmniFormField Label="@L["PipelineCopySourcePrefix"]" Help="@L["PipelineCopySourcePrefixHint"]" Class="omni-u-w-100" For="pipeline-copy-source-prefix">
             <OmniTextBox Id="pipeline-copy-source-prefix" Value="@Flow.SourcePrefix" ValueChanged="@((string value) => Flow.SetSourcePrefix(value))"
                          ValueExpression="@(() => Flow.SourcePrefix)" Class="omni-u-w-100" />
         </OmniFormField>

@@ -8,10 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Recette R2-001: <c>type: advance-branch</c> moves a branch onto the commit of the release the run
-/// deploys, as its candidate recorded it, and every outcome is visible on the step.
-/// </summary>
+/// <summary> <c>type: advance-branch</c> moves a branch onto the commit of the release the run
+/// deploys, as its candidate recorded it, and every outcome is visible on the step. </summary>
 public class PipelineBranchAdvanceStepTests
 {
     private const int RunId = 42;
@@ -139,7 +137,7 @@ public class PipelineBranchAdvanceStepTests
         Assert.Equal(TaskExecutionStatus.Success, _stepRun.Status);
         Assert.Equal(0, _stepRun.ExitCode);
         Assert.NotNull(_stepRun.CompletedAt);
-        // R2-071: a success is no run warning; it is the step's output.
+        // A success is no run warning; it is the step's output.
         Assert.Empty(_runLines);
         var line = Outcome();
         Assert.Contains("'main' advanced from 000000000000 to 111111111111", line, StringComparison.Ordinal);
@@ -165,8 +163,8 @@ public class PipelineBranchAdvanceStepTests
     [Fact]
     public async Task R2105_ABranchAlreadyPastTheRelease_Succeeds_WithAnInfoLine_AndNoWarning()
     {
-        // Recette R2-105 (aetheus-deploy-prod #2543): 'main' had been pushed to 011a2e9f4069, past the
-        // deployed candidate 9510ba4abd1e, and the whole successful deployment was marked failed.
+        // A branch already containing the deployed commit does not invalidate a successful
+        // deployment.
         GivenOutcome(GitBranchAdvanceOutcome.AlreadyContains, "2222222222222222222222222222222222222222");
 
         await ExecuteAsync();

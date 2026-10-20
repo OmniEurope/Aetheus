@@ -23,9 +23,9 @@ case "$ACTION" in
   *) echo "Action must be commit or rollback." >&2; exit 2 ;;
 esac
 
-# No transaction means the deployment stopped before opening one, so before any switch: the live
-# colour is the one it found, and there is nothing to undo. The failure that stopped it already fails
-# the run; this stage only reported a second, false one (run 2525, recette R2-081).
+# No transaction means no traffic switch occurred, so there is nothing to roll back and the original
+# failure already determines the run's result. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 if [ ! -d "$TRANSACTION_DIR" ]; then
   echo ">>> No fast deployment transaction is open: the deployment never switched colour, nothing to roll back."
   exit 0

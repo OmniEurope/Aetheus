@@ -35,7 +35,7 @@ public class NotificationsAdminTests : BunitContext
 
         var cut = Render<NotificationsAdmin>();
 
-        cut.WaitForState(() => cut.Markup.Contains("slack-ops"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("slack-ops"));
         Assert.Contains("slack-ops", cut.Markup);
         Assert.Contains("alert.triggered", cut.Markup);
         Assert.Contains(_handler.Requests, request =>
@@ -54,11 +54,11 @@ public class NotificationsAdminTests : BunitContext
             new NotificationTestResultDto { Status = NotificationTestStatus.NotConfigured, Message = "no transport" });
 
         var cut = Render<NotificationsAdmin>();
-        cut.WaitForState(() => cut.Markup.Contains("slack-ops"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("slack-ops"));
 
-        cut.FindAll("button").First(b => b.Names().Contains("TestConnection", StringComparison.Ordinal)).Click();
+        cut.FindMenuItem("TestConnection")!.Click();
 
-        cut.WaitForState(() => cut.Markup.Contains("Enum_NotificationTestStatus_NotConfigured"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("Enum_NotificationTestStatus_NotConfigured"));
         Assert.DoesNotContain("Enum_NotificationTestStatus_Sent", cut.Markup);
     }
 }

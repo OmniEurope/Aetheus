@@ -50,11 +50,9 @@ public sealed record UpdateVariableEntryRequest : KeyValueRequest
     public override string Value { get; init; } = string.Empty;
 }
 
-/// <summary>
-/// Recette R-210: the values the variable libraries list's checkable column filters offer. The list is loaded page by
-/// page, so the project names present across every variable libraries the caller can read come from the API rather
-/// than from the rows on screen.
-/// </summary>
+/// <summary> The values the variable libraries list's checkable column filters offer. The list is
+/// loaded page by page, so the project names present across every variable libraries the caller can
+/// read come from the API rather than from the rows on screen. </summary>
 public sealed record VariableLibraryFilterValuesDto
 {
     public List<string> ProjectNames { get; init; } = [];

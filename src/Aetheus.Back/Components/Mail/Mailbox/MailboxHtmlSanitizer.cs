@@ -6,15 +6,10 @@ using Ganss.Xss;
 
 namespace Aetheus.Back.Components.Mail.Mailbox;
 
-/// <summary>
-/// Recette R1-17. The HTML of a received message, made safe before it leaves the backend: no script,
-/// no event handler, no form, no frame, no style sheet, nothing positioned over the page. A link opens
-/// in a new tab without referrer. An image is shown only from data the message itself carries (inline
-/// <c>cid:</c> parts and <c>data:image</c>) or from <paramref name="remoteImages"/>, the remote images
-/// the reader asked to see, already fetched by the backend; every other remote resource (image source,
-/// CSS <c>url()</c>) is removed and listed in
-/// <see cref="MailboxSanitizedHtml.BlockedRemoteUrls"/>. The legacy <c>background</c> attribute is not allowed at all.
-/// </summary>
+/// <summary>Sanitize message HTML before returning it: remove executable content, handlers, forms,
+/// frames, stylesheets, positioned overlays and background attributes, and open links without
+/// referrers. Permit only inline message images or explicitly fetched remote raster images, listing
+/// all blocked remote resource URLs.</summary>
 public static partial class MailboxHtmlSanitizer
 {
     private static readonly string[] s_removedTags =
@@ -81,9 +76,8 @@ public static partial class MailboxHtmlSanitizer
         var url = originalUrl.Trim();
         // A link the reader clicks: web and mail addresses only. Anything else on an anchor is a
         // resource (a CSS url() in its style) and falls through to the resource rules.
-        if (element.LocalName is "a" or "area"
-            && string.Equals(element.GetAttribute("href")?.Trim(), url, StringComparison.Ordinal))
-            return IsScheme(url, "http") || IsScheme(url, "https") || IsScheme(url, "mailto") ? url : null;
+        if (IsClickedLink(element, url))
+            return IsWebUrl(url) || IsScheme(url, "mailto") ? url : null;
 
         if (IsScheme(url, "cid"))
         {
@@ -91,11 +85,24 @@ public static partial class MailboxHtmlSanitizer
             return inlineImages.TryGetValue(contentId, out var inline) ? inline : null;
         }
         if (IsSafeImageData(url)) return url;
-        if (IsScheme(url, "http") || IsScheme(url, "https") || url.StartsWith("//", StringComparison.Ordinal))
-        {
-            if (remoteImages is not null && remoteImages.TryGetValue(url, out var fetched)) return fetched;
-            blocked.Add(url);
-        }
+        return IsWebUrl(url) || url.StartsWith("//", StringComparison.Ordinal)
+            ? FilterRemoteResource(url, remoteImages, blocked)
+            : null;
+    }
+
+    private static bool IsClickedLink(IElement element, string url) =>
+        element.LocalName is "a" or "area"
+        && string.Equals(element.GetAttribute("href")?.Trim(), url, StringComparison.Ordinal);
+
+    private static bool IsWebUrl(string url) => IsScheme(url, "http") || IsScheme(url, "https");
+
+    // A remote resource is shown only from the copy fetched on the reader's request; otherwise it is
+    // reported as blocked.
+    private static string? FilterRemoteResource(
+        string url, IReadOnlyDictionary<string, string>? remoteImages, List<string> blocked)
+    {
+        if (remoteImages is not null && remoteImages.TryGetValue(url, out var fetched)) return fetched;
+        blocked.Add(url);
         return null;
     }
 

@@ -7,39 +7,57 @@ else
 {
     <OmniTemplateForm TModel="EditModel" Model="@_model" OnValidSubmit="@SubmitAsync">
         <OmniDataAnnotationsValidator Localizer="@L" />
+        @if (_needsReconfiguration)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-md">@L["AiProfileNeedsReconfiguration"]</OmniAlert>
+        }
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniFormField For="oe-pages-ai-airunnerprofiledialog-1" Class="omni-u-w-100"><LabelContent>@L["Name"]</LabelContent><ChildContent>
-                    <OmniTextBox @bind-Value="_model.Name" Class="omni-u-w-100" Id="oe-pages-ai-airunnerprofiledialog-1" />
+                <OmniFormField For="oe-pages-ai-airunnerprofiledialog-1" Required="@IsEdit" Class="omni-u-w-100"><LabelContent>@L["Name"]</LabelContent><ChildContent>
+                    <OmniTextBox @bind-Value="_model.Name" Placeholder="@(IsEdit ? null : string.Format(L["AiProfileNameGenerated"], GeneratedName))" Class="omni-u-w-100" Id="oe-pages-ai-airunnerprofiledialog-1" />
                 </ChildContent></OmniFormField>
                 <ValidationMessage For="@(() => _model.Name)" />
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniFormField For="oe-pages-ai-airunnerprofiledialog-2" Class="omni-u-w-100"><LabelContent>@L["Binary"]</LabelContent><ChildContent>
-                    <OmniTextBox @bind-Value="_model.Binary" Class="omni-u-w-100" Id="oe-pages-ai-airunnerprofiledialog-2" />
+                <OmniFormField For="ai-profile-provider" Required="true" Class="omni-u-w-100"><LabelContent>@L["Provider"]</LabelContent><ChildContent>
+                    <OmniDropDown Id="ai-profile-provider" @bind-Value:get="_model.Provider" @bind-Value:set="OnProviderChanged" Options="@ProviderOptions" AllowEmpty="true" Class="omni-u-w-100" />
                 </ChildContent></OmniFormField>
-                <ValidationMessage For="@(() => _model.Binary)" />
+                <ValidationMessage For="@(() => _model.Provider)" />
             </OmniColumn>
             <OmniColumn Span="12">
                 <OmniFormField For="oe-pages-ai-airunnerprofiledialog-3" Class="omni-u-w-100"><LabelContent>@L["Description"]</LabelContent><ChildContent>
                     <OmniTextBox @bind-Value="_model.Description" Class="omni-u-w-100" Id="oe-pages-ai-airunnerprofiledialog-3" />
                 </ChildContent></OmniFormField>
             </OmniColumn>
-            <OmniColumn Span="12">
-                <OmniFormField For="oe-pages-ai-airunnerprofiledialog-4" Class="omni-u-w-100"><LabelContent>@L["ArgumentTemplate"]</LabelContent><ChildContent>
-                    <OmniTextArea @bind-Value="_model.Arguments" Rows="7" Class="omni-u-w-100 text-mono" Id="oe-pages-ai-airunnerprofiledialog-4" />
+            <OmniColumn Span="12" MediumSpan="6">
+                @* Recette R3-7: while the list is read at the provider, OE's busy veil lies over the model
+                   field, which stays mounted underneath. *@
+                <div class="@(_refreshingModels ? "omni-busy ai-profile-model-zone" : "ai-profile-model-zone")" aria-busy="@(_refreshingModels ? "true" : "false")">
+                <OmniFormField For="ai-profile-model" Required="true" Help="@ModelHelp" Id="ai-profile-model-field" Class="omni-u-w-100"><LabelContent>@L["AiModel"]</LabelContent><ChildContent>
+                    <OmniAutocomplete TValue="string" Id="ai-profile-model" @bind-Value="_model.Model" Search="@SearchModelsAsync" MinimumLength="0" ShowToggle="true" AllowFreeText="true" Placeholder="@ModelExample" Class="omni-u-w-100 text-mono" />
                 </ChildContent></OmniFormField>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
-                    @L["AiArgumentTemplateHint"]
-                </OmniText>
+                <ValidationMessage For="@(() => _model.Model)" />
+                </div>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="6">
+                <OmniFormField For="ai-profile-base-url" Help="@L["AiBaseUrlHint"]" Id="ai-profile-base-url-field" Class="omni-u-w-100"><LabelContent>@L["AiBaseUrl"]</LabelContent><ChildContent>
+                    <OmniTextBox @bind-Value="_model.BaseUrl" Placeholder="@DefaultBaseUrl" Class="omni-u-w-100 text-mono" Id="ai-profile-base-url" />
+                </ChildContent></OmniFormField>
             </OmniColumn>
             <OmniColumn Span="12">
-                <OmniFormField For="oe-pages-ai-airunnerprofiledialog-5" Class="omni-u-w-100"><LabelContent>@L["EnvironmentVariables"]</LabelContent><ChildContent>
-                    <OmniTextArea @bind-Value="_model.Environment" Rows="4" Class="omni-u-w-100 text-mono" Id="oe-pages-ai-airunnerprofiledialog-5" />
+                <OmniFormField For="ai-profile-api-key" Required="@(!_hasStoredKey)" Help="@(_hasStoredKey ? L["AiApiKeyKeepHint"] : L["AiApiKeyHint"])" Id="ai-profile-api-key-field" Class="omni-u-w-100"><LabelContent>@L["AiApiKey"]</LabelContent><ChildContent>
+                    <OmniPassword Id="ai-profile-api-key" @bind-Value="_model.ApiKey" IgnorePasswordManagers="true" Autocomplete="off" Class="omni-u-w-100" />
                 </ChildContent></OmniFormField>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
-                    @L["AiEnvironmentHint"]
-                </OmniText>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField For="ai-profile-effort" Class="omni-u-w-100"><LabelContent>@L["AiReasoningEffort"]</LabelContent><ChildContent>
+                    <OmniDropDown Id="ai-profile-effort" @bind-Value="_model.ReasoningEffort" Options="@EffortOptions" Class="omni-u-w-100" />
+                </ChildContent></OmniFormField>
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField For="ai-profile-max-tokens"><LabelContent>@L["AiMaxOutputTokens"]</LabelContent><ChildContent>
+                    <OmniNumeric @bind-Value="_model.MaxOutputTokens" Minimum="256" Maximum="128000" Id="ai-profile-max-tokens" />
+                </ChildContent></OmniFormField>
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="4">
                 <OmniFormField For="ai-profile-timeout"><LabelContent>@L["TimeoutSeconds"]</LabelContent><ChildContent>
@@ -52,11 +70,50 @@ else
                 </ChildContent></OmniFormField>
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="4">
+                <OmniFormField For="ai-profile-priority" Help="@L["AiProfilePriorityHint"]" Id="ai-profile-priority-field"><LabelContent>@L["AiProfilePriority"]</LabelContent><ChildContent>
+                    <OmniNumeric @bind-Value="_model.Priority" Minimum="@AiProfilePriority.Minimum" Maximum="@AiProfilePriority.Maximum" Id="ai-profile-priority" />
+                </ChildContent></OmniFormField>
+                <ValidationMessage For="@(() => _model.Priority)" />
+            </OmniColumn>
+            <OmniColumn Span="12" MediumSpan="8">
                 <OmniSwitch @bind-Value="_model.SendsDataExternally">@L["ExternalData"]</OmniSwitch>
             </OmniColumn>
+            @if (_testResult is not null)
+            {
+                <OmniColumn Span="12">
+                    <OmniAlert Severity="@(_testResult.Succeeded ? OmniSeverity.Success : OmniSeverity.Danger)">
+                        <strong>@(_testResult.Succeeded ? L["AiConnectionSucceeded"] : L["AiConnectionFailed"])</strong>
+                        (@_testResult.DurationMs ms): @_testResult.Message
+                    </OmniAlert>
+                </OmniColumn>
+            }
+            else if (_testRefusal is not null)
+            {
+                <OmniColumn Span="12">
+                    <OmniAlert Severity="OmniSeverity.Danger">
+                        <strong>@L["AiConnectionFailed"]</strong>: @_testRefusal
+                    </OmniAlert>
+                </OmniColumn>
+            }
         </OmniRow>
         <DialogFooter OnCancel="@Cancel">
-            <OmniButton Busy="@_busy" ButtonType="OmniButtonType.Submit" Variant="OmniButtonVariant.Primary"><OmniIcon Name="@(IsEdit ? OmniIconName.Save : OmniIconName.Add)" /> <span>@(IsEdit ? L["Save"] : L["Create"])</span></OmniButton>
+            <SecondaryContent>
+                @* One action visible, the others in its menu (R3-41): "read the list now" exists only for a
+                   saved profile, so a new one keeps the plain button. *@
+                @if (IsEdit)
+                {
+                    <OmniSplitButton Text="@L["TestConnection"]" OnClick="@TestAsync" Busy="@(_testing || _refreshingModels)" Disabled="@(!CanTest && !CanRefreshModelList)" Class="ai-profile-test-actions"><Icon><OmniIcon Name="OmniIconName.WifiHigh" /></Icon><ChildContent>
+                        <OmniMenuItem OnClick="@RefreshModelListAsync" Disabled="@(!CanRefreshModelList)" Class="ai-profile-refresh-models"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["AiModelListRefresh"]</ChildContent></OmniMenuItem>
+                    </ChildContent></OmniSplitButton>
+                }
+                else
+                {
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@TestAsync" Busy="@_testing" Disabled="@(!CanTest)"><OmniIcon Name="OmniIconName.WifiHigh" /> <span>@L["TestConnection"]</span></OmniButton>
+                }
+            </SecondaryContent>
+            <ChildContent>
+                <OmniButton Busy="@_busy" ButtonType="OmniButtonType.Submit" Variant="OmniButtonVariant.Primary"><OmniIcon Name="@(IsEdit ? OmniIconName.Save : OmniIconName.Add)" /> <span>@(IsEdit ? L["Save"] : L["Create"])</span></OmniButton>
+            </ChildContent>
         </DialogFooter>
     </OmniTemplateForm>
 }

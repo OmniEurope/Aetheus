@@ -44,10 +44,11 @@ internal static class ProjectNavigationCatalog
         new("Tasks", "task_alt", "tasks"),
         new("Logs", "article", "logs"),
         new("Git", "commit", "git"),
-        new("Edit", "settings", "edit", ProjectNavigationAccess.ProjectWrite)
+        // Recette R3-70: the project's settings page, titled Settings rather than Edit.
+        new("Settings", "settings", "edit", ProjectNavigationAccess.ProjectWrite)
     ];
 
-    /// <summary>Recette R-219: the icon of a section, shown before its title; null for an unknown slug.</summary>
+    /// <summary>The icon of a section, shown before its title; null for an unknown slug.</summary>
     public static string? IconFor(string slug) =>
         Items.FirstOrDefault(item => string.Equals(item.Slug, slug, StringComparison.OrdinalIgnoreCase))?.Icon;
 

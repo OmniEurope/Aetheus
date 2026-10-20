@@ -64,7 +64,7 @@ public class ServersRenderTests : BunitContext
         var cut = Render<ServersPage>();
 
         // Both server names from the stubbed page render into the grid.
-        cut.WaitForState(() => cut.Markup.Contains("web-01"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("web-01"));
         Assert.Contains("db-01", cut.Markup);
         Assert.DoesNotContain("· P2", cut.Markup, StringComparison.Ordinal);
     }
@@ -172,7 +172,8 @@ public class ServersRenderTests : BunitContext
 
     // ── FilterByTag ───────────────────────────────────────────────────────────
 
-    /// <summary>Recette R-211: a tag clicked in a row becomes the Tags column's own filter, sent to the API.</summary>
+    /// <summary>A tag clicked in a row becomes the Tags column's own filter, sent to the
+    /// API.</summary>
     [Fact]
     public async Task FilterByTag_SetsTheTagsColumnFilter()
     {

@@ -3,11 +3,8 @@ using MimeKit;
 
 namespace Aetheus.Back.Components.Mail.Mailbox;
 
-/// <summary>
-/// Recette R1-17. A fetched message as the page reads it: the HTML sanitized (inline <c>cid:</c> images
-/// drawn from the message's own parts, remote images withheld unless already fetched), the text part,
-/// the attachments listed by position.
-/// </summary>
+/// <summary>Maps sanitized HTML, plain text and attachment positions for display, withholding
+/// remote images unless already fetched.</summary>
 public static class MailboxMessageMapper
 {
     /// <summary>Inline images larger than this, together, are not drawn: the page stays light.</summary>

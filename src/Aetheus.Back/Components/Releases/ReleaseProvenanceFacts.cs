@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.Releases;
 
-/// <summary>Recette R-366/R-367: the release columns the provenance view starts from.</summary>
+/// <summary>The release columns the provenance view starts from.</summary>
 public sealed record ReleaseProvenanceFacts(
     int ReleaseId,
     int ProjectId,

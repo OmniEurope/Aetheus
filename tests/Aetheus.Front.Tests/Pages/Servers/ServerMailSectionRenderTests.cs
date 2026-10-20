@@ -2,7 +2,9 @@
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -57,8 +59,27 @@ public class ServerMailSectionRenderTests : BunitContext
     public void Renders_WithDomains_ShowsDomainNames()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("example.com"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("example.com"));
         Assert.Contains("example.com", cut.Markup);
+    }
+
+    [Fact]
+    public void R3_42_DomainRows_KeepOneButton_AndPutTheOtherActionsInARowMenu()
+    {
+        // Recette R3-41/R3-42: the DNS records stay visible; verify, DKIM rotation and the destructive
+        // delete sit behind the row menu, delete in Danger.
+        var cut = RenderSection();
+        cut.WaitForState(() => cut.Markup.Contains("example.com"));
+        var row = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("example.com", StringComparison.Ordinal)
+            && r.QuerySelector(".mail-domain-row-actions") is not null);
+
+        Assert.Equal(["DnsRecords"], row.QuerySelectorAll(".mail-domain-row-actions .omni-button:not(.omni-overflow-menu__trigger)")
+            .Select(b => b.GetAttribute("title")).ToArray());
+
+        row.QuerySelector(".omni-overflow-menu__trigger")!.Click();
+        var entries = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item");
+        Assert.Equal(["MailVerifyDns", "RotateDkimKey", "Delete"], entries.Select(e => e.TextContent.Trim()).ToArray());
+        Assert.Contains("danger", entries[^1].ClassName, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -104,6 +125,47 @@ public class ServerMailSectionRenderTests : BunitContext
         Assert.NotEmpty(accounts);
     }
 
+
+    // ── Recette R3-51 ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void R3_51_AccountRow_OpensItsMailbox_AndItsMailboxButtonIsPrimary()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/servers/10/mail?tab=accounts");
+        var cut = RenderSection();
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
+        var row = cut.FindAll(RowEventIsolation.ClickableRows).Single(r => r.TextContent.Contains("admin@example.com", StringComparison.Ordinal));
+
+        var button = row.QuerySelectorAll("button").First(b => b.GetAttribute("title") == "MailboxOpen");
+        Assert.Contains("omni-button--primary", button.ClassName, StringComparison.Ordinal);
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow([row]) >= 2);
+
+        row.QuerySelector("td")!.Click();
+        Assert.EndsWith("/servers/10/mail/accounts/1/mailbox", Services.GetRequiredService<NavigationManager>().Uri, StringComparison.Ordinal);
+    }
+
+    // ── Recette R3-35, mail domains ───────────────────────────────────────────
+
+    [Fact]
+    public void R3_35_DomainRow_OpensItsDnsRecords_AndItsRowControlsStayIsolated()
+    {
+        _handler.SetJsonResponse("api/servers/10/mail/domains/1/dns", new MailDnsRecordsDto { Domain = "example.com" });
+        var cut = RenderSection();
+        cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(RowEventIsolation.ClickableRows),
+            r => r.QuerySelector(".mail-domain-row-actions") is not null));
+        var row = cut.FindAll(RowEventIsolation.ClickableRows).Single(r => r.TextContent.Contains("example.com", StringComparison.Ordinal)
+            && r.QuerySelector(".mail-domain-row-actions") is not null);
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow([row]) >= 2);
+
+        var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        Assert.Null(dialog.LastComponent);
+
+        row.QuerySelector("td")!.Click();
+
+        cut.WaitForAssertion(() => Assert.Equal(typeof(MailOperationDialog), dialog.LastComponent));
+        Assert.Equal(MailDialogMode.DnsRecords, dialog.LastParameters!["Mode"]);
+        Assert.Equal("example.com", ((MailDnsRecordsDto)dialog.LastParameters["DnsRecords"]!).Domain);
+    }
     // ── ExecuteActionAsync ────────────────────────────────────────────────────
 
     // ── Mail dialog model validation ─────────────────────────────────────────

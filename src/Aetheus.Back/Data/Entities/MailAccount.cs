@@ -10,7 +10,6 @@ public class MailAccount
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
 
-    // PLAN-005
     public MailRecordSource Source { get; set; } = MailRecordSource.Aetheus;
 
     /// <summary>Set by the heartbeat reconciliation when the server stopped reporting the mailbox.</summary>

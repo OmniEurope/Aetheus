@@ -28,8 +28,7 @@ public class ServerModulesSectionDeepTests : BunitContext
     {
         var cut = RenderSection();
         cut.WaitForState(() =>
-            typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance) is not null,
-            TimeSpan.FromSeconds(2));
+            typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance) is not null);
 
         // OnInit loads the two stubbed modules (nginx, node) into _modules.
         var modules = (List<ServerModuleDto>?)typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
@@ -55,7 +54,7 @@ public class ServerModulesSectionDeepTests : BunitContext
         {
             var f = typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
             return f is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var newModule = new ServerModuleDto { Id = 99, Name = "redis", Type = ServerModuleType.Redis, Status = ServerModuleStatus.Active };
         _handler.SetJsonResponse("api/servers/1/modules", newModule);
@@ -82,7 +81,7 @@ public class ServerModulesSectionDeepTests : BunitContext
         {
             var f = typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
             return f is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var newModule = new ServerModuleDto { Id = 98, Name = "redis", Type = ServerModuleType.Redis, Status = ServerModuleStatus.Active };
         _handler.SetJsonResponse("api/servers/1/modules", newModule);
@@ -105,7 +104,7 @@ public class ServerModulesSectionDeepTests : BunitContext
         {
             var f = typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
             return f is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         _handler.SetResponse("api/servers/1/modules", System.Net.HttpStatusCode.BadRequest);
 

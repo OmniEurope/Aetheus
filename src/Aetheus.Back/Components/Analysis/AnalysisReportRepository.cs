@@ -132,10 +132,8 @@ internal sealed class AnalysisReportRepository(AppDbContext db)
     /// tracker never holds more than this many of them.</summary>
     private const int MetricBatchSize = 2_000;
 
-    /// <summary>
-    /// Writes the report without its metrics, which stay on the report in memory for the policy engine and
-    /// the grade. <see cref="AddMetricsAsync"/> then writes the ones an analysis keeps (PLAN-013 lot 3).
-    /// </summary>
+    /// <summary>Writes the report while retaining its metrics in memory for policy and grading.
+    /// <see cref="AddMetricsAsync"/> persists the retained metric selection afterward.</summary>
     public async Task AddReportAsync(AnalysisReport report, CancellationToken ct)
     {
         var metrics = report.Metrics.ToList();
@@ -152,9 +150,8 @@ internal sealed class AnalysisReportRepository(AppDbContext db)
 
     public async Task AddMetricsAsync(int reportId, IReadOnlyCollection<AnalysisMetric> metrics, CancellationToken ct)
     {
-        // An architecture report carries ~39,000 metrics (candidate #2328). Inserted as one tracked
-        // graph they cost 6 to 7 s of EF fix-up on PostgreSQL, almost the whole ingestion (PLAN-007
-        // lot 6). They go in detached batches: same transaction (the caller's), a bounded change tracker.
+        // Insert metrics in detached batches within the caller transaction to bound EF change
+        // tracking for large reports.
         if (metrics.Count == 0) return;
         var autoDetectChanges = db.ChangeTracker.AutoDetectChangesEnabled;
         db.ChangeTracker.AutoDetectChangesEnabled = false;

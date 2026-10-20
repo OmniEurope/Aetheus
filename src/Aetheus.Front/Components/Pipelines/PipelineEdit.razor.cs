@@ -43,10 +43,10 @@ public partial class PipelineEdit : IAsyncDisposable
     private int _runsPage = 1;
     private int _runsPageSize = 25;
 
-    /// <summary>Runs tab tiles, from the first block of runs: the grid scrolls virtually (R-327).</summary>
+    /// <summary>Runs tab tiles, from the first block of runs: the grid scrolls virtually.</summary>
     private PipelineRunsSummary RunsSummary => PipelineRunsSummary.Create(_firstRunsPage);
 
-    /// <summary>Recette R2-128: a summary tile that opens a run draws as the other clickable tiles.</summary>
+    /// <summary>A summary tile that opens a run draws as the other clickable tiles.</summary>
     private static string SummaryCardClass(int? runId) => runId is null
         ? "analysis-summary-card pipeline-runs-summary-card"
         : "analysis-summary-card pipeline-runs-summary-card tile-clickable";
@@ -145,6 +145,17 @@ public partial class PipelineEdit : IAsyncDisposable
 
     private string TemplateParameterValue(string name) => _templateParameters.GetValue(name);
 
+    /// <summary>The id of a template parameter's control, named by the label of its field.</summary>
+    internal static string TemplateParameterControlId(string parameterName) => $"tpl-param-{parameterName}";
+
+    /// <summary>The id of a template parameter's OE field; the "?" of its Help carries <c>{id}-help-content</c>.</summary>
+    internal static string TemplateParameterFieldId(string parameterName) => $"{TemplateParameterControlId(parameterName)}-field";
+
+    /// <summary>The id of a template parameter's description behind the "?" of its field, named by the
+    /// control's <c>aria-describedby</c>; <c>null</c> without a description.</summary>
+    internal static string? TemplateParameterDescriptionId(string parameterName, string? description) =>
+        string.IsNullOrWhiteSpace(description) ? null : $"{TemplateParameterFieldId(parameterName)}-help-content";
+
     private void OnExtractTemplate() => Nav.NavigateTo($"/pipelines/{Id}/template/extract");
     private void OnPromoteTemplate() => Nav.NavigateTo($"/pipelines/{Id}/template/promote");
     private void OnUpdateTemplate()
@@ -214,8 +225,8 @@ public partial class PipelineEdit : IAsyncDisposable
 
     private async Task LoadExistingPipelineAsync(int generation)
     {
-        // Recette R2-087: a return shows at once what the page last showed, then refreshes behind it;
-        // the page-wide loader is for a first visit only.
+        // A return shows at once what the page last showed, then refreshes behind it; the page-wide
+        // loader is for a first visit only.
         var address = $"pipelines/{Id}";
         var ticket = PageState.Begin();
         var restored = PageState.TryRestore<PipelinePageState>(address, out var state);
@@ -274,7 +285,7 @@ public partial class PipelineEdit : IAsyncDisposable
         _fleetItem = state.FleetItem;
     }
 
-    /// <summary>What the pipeline page shows, kept for a return to it (recette R2-087).</summary>
+    /// <summary>What the pipeline page shows, kept for a return to it.</summary>
     private sealed record PipelinePageState(
         PipelineDto Pipeline, List<PipelineRunDto> FirstRuns, int RunsTotalCount, List<ProjectDto> Projects,
         List<PipelineTemplateSummaryDto> Templates, PipelineSourceDto? Source, List<string> SourceBranches,
@@ -291,7 +302,8 @@ public partial class PipelineEdit : IAsyncDisposable
             SourceBranch = pipeline.SourceBranch ?? _source?.Branch
                 ?? _projects.FirstOrDefault(project => project.Id == pipeline.ProjectId)?.DefaultBranch,
             EnvironmentId = pipeline.EnvironmentId,
-            ProjectServerId = pipeline.ProjectServerId
+            ProjectServerId = pipeline.ProjectServerId,
+            AiRunnerProfileId = pipeline.AiRunnerProfileId
         };
         _savedYaml = pipeline.YamlDefinition;
         _savedSourceBranch = _model.SourceBranch;
@@ -372,6 +384,9 @@ public partial class PipelineEdit : IAsyncDisposable
         if (!_isNew && !await ConfirmSaveAsync()) return;
 
         _saving = true;
+        // The confirmation dialog was the handler's first await, so the render it triggered predates the
+        // save: without this one the button only turned busy once the server had answered.
+        StateHasChanged();
         try
         {
             if (_isNew)
@@ -511,7 +526,7 @@ public partial class PipelineEdit : IAsyncDisposable
         if (_liveRuns is not null) await _liveRuns.SyncGroupsAsync();
     }
 
-    /// <summary>Recette R2-124: one page of the runs export, the same query as the grid's load.</summary>
+    /// <summary>One page of the runs export, the same query as the grid's load.</summary>
     private Task<PaginatedResult<PipelineRunDto>> ReadRunsExportAsync(GridLoadArgs args)
     {
         if (Id is not { } pipelineId) return Task.FromResult(new PaginatedResult<PipelineRunDto>());
@@ -535,17 +550,15 @@ public partial class PipelineEdit : IAsyncDisposable
         if (Id == pipelineId) ApplyRunsPage(result, page, pageSize);
     }
 
-    /// <summary>
-    /// Recette R-226: a live update (a run started or moved, the definition changed elsewhere) refreshes
-    /// the runs grid quietly, its page, sort, filters and scroll kept. Before the first run the grid is
-    /// not rendered yet, so the page is fetched directly to make it appear.
-    /// </summary>
+    /// <summary> A live update (a run started or moved, the definition changed elsewhere) refreshes
+    /// the runs grid quietly, its page, sort, filters and scroll kept. Before the first run the
+    /// grid is not rendered yet, so the page is fetched directly to make it appear. </summary>
     private Task RefreshRunsAsync() => _runsGrid is not null
         ? _runsGrid.Refresh()
         : LoadRunsPageAsync(_runsPage, _runsPageSize);
 
-    /// <summary>Recette R-210: a header filter that matches no run keeps the grid, so it can be cleared;
-    /// the "no runs yet" text is only for a pipeline that has never run.</summary>
+    /// <summary>A header filter that matches no run keeps the grid, so it can be cleared; the "no
+    /// runs yet" text is only for a pipeline that has never run.</summary>
     private bool RunsFiltered => _runsQuery?.Filters is { Count: > 0 };
 
     private Func<string, string>? _runStatusText;
@@ -586,10 +599,6 @@ public partial class PipelineEdit : IAsyncDisposable
             _changedElsewhere = true;
         StateHasChanged();
     }
-
-    private Task OnPipelineRunStarted(int runId, int pipelineId) => pipelineId == Id
-        ? ReloadRunsAsync()
-        : Task.CompletedTask;
 
     private async Task ReloadRunsAsync()
     {
@@ -636,7 +645,7 @@ public partial class PipelineEdit : IAsyncDisposable
         _running = true;
         try
         {
-            // R2-038: the launch is busy on the Run button only, and the run appears in this page grid.
+            // The launch is busy on the Run button only, and the run appears in this page grid.
             var launcher = new PipelineRunLauncher(Api, RunGate, RunDialogs, Nav, Toast, L) { OpenLaunchedRun = false };
             if (await launch(launcher) is not null) await ReloadRunsAsync();
         }
@@ -663,7 +672,7 @@ public partial class PipelineEdit : IAsyncDisposable
         Nav.NavigateTo("/pipelines");
     }
 
-    // Recette R2-124: the export writes the duration and the server the cells show.
+    // The export writes the duration and the server the cells show.
     private static readonly Func<PipelineRunDto, object?> RunDurationExport = run => PipelineRunFormatting.FormatDuration(run.StartedAt, run.CompletedAt);
     private static readonly Func<PipelineRunDto, object?> RunServerExport = run =>
         run.Steps.FirstOrDefault(step => !step.IsSystem && step.ServerName is not null)?.ServerName ?? string.Empty;

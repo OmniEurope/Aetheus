@@ -120,8 +120,8 @@ public sealed class AppWebAnalyticsRepository(AppDbContext db) : IAppWebAnalytic
 
         foreach (var analyticsEvent in ordered)
             RecordLoadedEvent(appId, analyticsEvent, sessionTimeoutMinutes, receivedAtUtc, returningPseudonyms);
-        // Audit R2-007 follow-up: the accepted volume, saved with the events, is what the rolling-hour
-        // cap reads (heartbeats included: they are accepted events even though no event row keeps them).
+        // Persisted accepted volume includes heartbeats so the rolling-hour cap counts them even
+        // without raw event rows.
         if (ordered.Count > 0)
         {
             db.AppAnalyticsIngestVolumes.Add(new AppAnalyticsIngestVolume
@@ -142,11 +142,8 @@ public sealed class AppWebAnalyticsRepository(AppDbContext db) : IAppWebAnalytic
         HashSet<(string SessionPseudonym, int KeyVersion)> returningPseudonyms)
     {
         var isHeartbeat = string.Equals(analyticsEvent.Kind, "heartbeat", StringComparison.Ordinal);
-        // Recette R2-007: a heartbeat only refreshes its session (LastSeenAtUtc and the period
-        // identities, below). Nothing reads it back as a row: the summary reads page views from the
-        // aggregates and the browser signals by their own kinds. Stored, one open tab wrote a row every
-        // 75 s and filled the storage budget with rows nobody reads. A replayed heartbeat is therefore
-        // not detected as a replay, which is harmless: it sets the same LastSeenAtUtc again.
+        // Heartbeats update session timestamps and period identities without storing unused raw
+        // rows. Replaying one is harmless because it reapplies the timestamp.
         if (!isHeartbeat)
         {
             db.AppAnalyticsEvents.Add(new AppAnalyticsEvent
@@ -236,9 +233,9 @@ public sealed class AppWebAnalyticsRepository(AppDbContext db) : IAppWebAnalytic
         foreach (var (kind, start, pseudonym) in Periods(analyticsEvent))
         {
             var newIdentity = TrackPeriodIdentity(appId, kind, start, pseudonym, analyticsEvent);
-            // Recette R-351: a signed-in visitor shares the period identity of the anonymous events
-            // that precede sign-in (same network, same period), so "first time this period" must be
-            // decided on the authenticated pseudonym's own identity, not on the visitor identity.
+            // A signed-in visitor shares the period identity of the anonymous events that precede
+            // sign-in (same network, same period), so "first time this period" must be decided on
+            // the authenticated pseudonym's own identity, not on the visitor identity.
             var newAuthenticatedIdentity = analyticsEvent.AuthenticatedPseudonym is { } authenticated
                 && TrackPeriodIdentity(appId, AuthenticatedKindOf(kind), start, authenticated, analyticsEvent);
 
@@ -431,8 +428,8 @@ public sealed class AppWebAnalyticsRepository(AppDbContext db) : IAppWebAnalytic
                 PageViews = group.Sum(item => item.PageViews)
             })
             .OrderByDescending(item => item.PageViews)
-            // Recette R-443: every route of the month, for the virtualized top pages list. Ingestion
-            // already refuses routes past this per-app limit, so the list stays bounded.
+            // Every route of the month, for the virtualized top pages list. Ingestion already
+            // refuses routes past this per-app limit, so the list stays bounded.
             .Take(AppMonitoringDefaults.MaximumAnalyticsRoutesPerApp)
             .ToListAsync(ct).ConfigureAwait(false);
         var historyStartInstantUtc = historyStartUtc.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);

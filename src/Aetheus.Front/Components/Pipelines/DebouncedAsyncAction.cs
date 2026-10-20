@@ -2,7 +2,8 @@
 namespace Aetheus.Front.Components.Pipelines;
 
 internal sealed class DebouncedAsyncAction(
-    Func<Task> action, ILogger logger, string logContext, TimeSpan? delay = null) : IAsyncDisposable
+    Func<Task> action, ILogger logger, string logContext, TimeSpan? delay = null, TimeProvider? clock = null)
+    : IAsyncDisposable
 {
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -11,12 +12,8 @@ internal sealed class DebouncedAsyncAction(
     private Task? _pendingTask;
     private bool _disposed;
 
-    /// <summary>
-    /// The lifetime's token. Once DisposeAsync has started it is a cancelled token, never the disposed
-    /// source's: the run page's queue poll read it on every tick and once more when it stopped, after the
-    /// source was disposed, and threw ObjectDisposedException (recette R2-100). <c>_disposed</c> is set
-    /// before the source is cancelled and disposed.
-    /// </summary>
+    /// <summary>Once disposal starts, return a cancelled token without accessing the disposed
+    /// source. The disposed flag is set before source cancellation and disposal.</summary>
     internal CancellationToken LifetimeToken => _disposed ? new CancellationToken(canceled: true) : _lifetime.Token;
 
     internal Task ScheduleAsync()
@@ -66,7 +63,7 @@ internal sealed class DebouncedAsyncAction(
         var entered = false;
         try
         {
-            await Task.Delay(delay ?? TimeSpan.FromMilliseconds(250), cancellation.Token);
+            await Task.Delay(delay ?? TimeSpan.FromMilliseconds(250), clock ?? TimeProvider.System, cancellation.Token);
             await _gate.WaitAsync(cancellation.Token);
             entered = true;
             if (!_disposed) await action();

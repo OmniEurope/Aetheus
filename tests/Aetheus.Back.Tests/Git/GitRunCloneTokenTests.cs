@@ -24,8 +24,8 @@ public class GitRunCloneTokenTests
         Assert.Equal(39, GitRunCloneToken.Validate(config, user, pass, projectId: 1, Now));
     }
 
-    // Recette R-464: during a blue-green switch to a dedicated RunTokenKey, the colour that has it must
-    // still accept the clone tokens the other colour minted under the Auth:EncryptionKey fallback.
+    // During a blue-green switch to a dedicated RunTokenKey, the colour that has it must still
+    // accept the clone tokens the other colour minted under the Auth:EncryptionKey fallback.
     [Fact]
     public void Validate_accepts_a_token_minted_under_the_fallback_key_once_a_dedicated_key_is_configured()
     {
@@ -45,8 +45,8 @@ public class GitRunCloneTokenTests
         Assert.Null(GitRunCloneToken.Validate(Config("another-secret-entirely-32-chars!"), newUser, newPass, projectId: 1, Now));
     }
 
-    // Recette R-464: Compose writes an unset ${GIT_RUN_TOKEN_KEY:-} as an empty string. An empty dedicated
-    // key is no key: tokens are signed with the fallback, not refused with "no signing key".
+    // Compose writes an unset ${GIT_RUN_TOKEN_KEY:-} as an empty string. An empty dedicated key is
+    // no key: tokens are signed with the fallback, not refused with "no signing key".
     [Fact]
     public void An_empty_dedicated_key_signs_with_the_fallback_and_the_fallback_colour_accepts_it()
     {

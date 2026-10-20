@@ -27,9 +27,9 @@ public class SecretValueDialogTests : BunitContext
         Assert.True(saveBtn.HasAttribute("disabled"));
     }
 
-    /// <summary>Recette R-437: rotating or updating a secret offers Generate again, a text button with a
-    /// menu; its click applies the key's recipe (DB_PASSWORD: 24 bytes as 48 hex characters) and fills
-    /// the field, which enables Save.</summary>
+    /// <summary>Rotating or updating a secret offers Generate again, a text button with a menu; its
+    /// click applies the key's recipe (DB_PASSWORD: 24 bytes as 48 hex characters) and fills the
+    /// field, which enables Save.</summary>
     [Fact]
     public async Task Generate_FillsTheValueWithTheKeysRecipe_AndOffersOtherWays()
     {
@@ -75,8 +75,8 @@ public class SecretValueDialogTests : BunitContext
         var cut = Render<SecretValueDialog>(p => p.Add(x => x.SecretKey, "MY_SECRET"));
 
         var input = cut.Find("#secret-value-input");
-        // Recette R-290: a masked text field, not a password field, so no password manager offers to
-        // save it or fills the login around it (OE OmniPassword IgnorePasswordManagers). The mask is the
+        // A masked text field, not a password field, so no password manager offers to save it or
+        // fills the login around it (OE OmniPassword IgnorePasswordManagers). The mask is the
         // stylesheet class of the unrevealed input.
         Assert.Equal("text", input.GetAttribute("type"));
         Assert.Equal("off", input.GetAttribute("autocomplete"));

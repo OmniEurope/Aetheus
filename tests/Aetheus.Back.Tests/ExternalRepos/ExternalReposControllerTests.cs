@@ -42,7 +42,7 @@ public class ExternalReposControllerTests
     [Fact]
     public async Task GetForProject_WithoutExternalRepository_AnswersNoContent()
     {
-        // Recette R-321: the normal "nothing attached" state is 204, never a 404 logged as a warning.
+        // The normal "nothing attached" state is 204, never a 404 logged as a warning.
         _service.GetForProjectAsync(2, Arg.Any<CancellationToken>()).Returns((ExternalRepoDto?)null);
 
         var result = await _sut.GetForProject(2, TestContext.Current.CancellationToken);

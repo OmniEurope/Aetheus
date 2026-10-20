@@ -23,7 +23,7 @@ internal sealed record ReadyStageServerResolution(
     string? Reason);
 
 internal sealed class PipelineReadyStageServerSelector(
-    IPipelineRepository repo,
+    IPipelineRunnerTargetReader repo,
     IPipelineDispatchServerResolver dispatchServers,
     ILogger logger)
 {

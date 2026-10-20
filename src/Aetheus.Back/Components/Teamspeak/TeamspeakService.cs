@@ -114,7 +114,7 @@ public class TeamspeakService(ITeamspeakRepository repo, IServerRepository serve
         };
     }
 
-    /// <summary>Recette R-210: what the clients grid's checkable Platform filter offers.</summary>
+    /// <summary>What the clients grid's checkable Platform filter offers.</summary>
     public async Task<TeamspeakFilterValuesDto> GetFilterValuesAsync(int serverId, CancellationToken ct = default) =>
         new() { Platforms = await repo.GetClientPlatformsAsync(serverId, ct).ConfigureAwait(false) };
 
@@ -168,10 +168,8 @@ public class TeamspeakService(ITeamspeakRepository repo, IServerRepository serve
                 "TeamSpeak install is not enabled on this server. Re-run the agent installer with the " +
                 "server-management module (or --enable-teamspeak-setup) to grant the controlled-sudo helper.");
 
-        // Dispatch the typed TeamspeakSetup operation instead of a free-form shell pipeline. The non-root
-        // agent could never run the old useradd/cat>/etc/systemd/systemctl pipeline directly; it now
-        // invokes the root-owned `teamspeak-setup` helper through the argv-exact aetheus-teamspeak
-        // sudoers grant. The install path is the operation target; the ports travel as env vars.
+        // Dispatch TeamspeakSetup through the root-owned helper with the exact sudoers grant. Pass
+        // installation path as target and ports through environment variables.
         var env = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [TeamspeakSetupEnv.VoicePort] = request.VoicePort.ToString(CultureInfo.InvariantCulture),

@@ -9,8 +9,12 @@ namespace Aetheus.Back.Services;
 public abstract class PeriodicBackgroundService(
     TimeSpan interval,
     IPostgresLeaderLease? leaderLease = null,
-    string? leaseName = null) : BackgroundService
+    string? leaseName = null,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
+    /// <summary>The clock of the worker: the injected provider, or the system one.</summary>
+    protected TimeProvider Clock { get; } = timeProvider ?? TimeProvider.System;
+
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
         leaderLease is null || string.IsNullOrWhiteSpace(leaseName)
             ? RunLoopAsync(stoppingToken)
@@ -18,7 +22,7 @@ public abstract class PeriodicBackgroundService(
 
     private async Task RunLoopAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(interval);
+        using var timer = new PeriodicTimer(interval, Clock);
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
             try

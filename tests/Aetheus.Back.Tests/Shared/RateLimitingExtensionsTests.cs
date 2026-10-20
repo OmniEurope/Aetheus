@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using System.Security.Claims;
+using System.Threading.RateLimiting;
+using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Auth;
 using Aetheus.Back.Components.PersonalAccessTokens;
 using Aetheus.Back.Configuration;
@@ -9,6 +11,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace Aetheus.Back.Tests.Extensions;
 
@@ -143,5 +147,107 @@ public sealed class RateLimitingExtensionsTests
             .Cast<ServiceFilterAttribute>());
 
         Assert.Equal(typeof(LoginValidationAuditFilter), filter.ServiceType);
+    }
+
+    [Theory]
+    [InlineData("/api/auth/external-login", "external-login-global")]
+    [InlineData("/API/AUTH/EXTERNAL-LOGIN", "external-login-global")]
+    [InlineData("/api/servers", "ip:192.0.2.10")]
+    [InlineData("", "ip:192.0.2.10")]
+    public void ResolveGlobalPartition_SharesOneBucketForExternalSignIn(string path, string expectedKey)
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.10");
+        context.Request.Path = path;
+
+        Assert.Equal(expectedKey, RateLimitingExtensions.ResolveGlobalPartition(context).PartitionKey);
+    }
+
+    [Fact]
+    public void ResolveGlobalLimit_AnonymousWithoutAddress_FallsBackToUnknown()
+    {
+        var result = RateLimitingExtensions.ResolveGlobalLimit(new DefaultHttpContext());
+
+        Assert.Equal("ip:unknown", result.PartitionKey);
+        Assert.Equal(BackendRuntimeDefaults.AuthenticatedUserRateLimit, result.PermitLimit);
+    }
+
+    [Fact]
+    public void ResolveAuthTokenPartitionKey_AuthenticatedUser_IsKeyedByName()
+    {
+        var context = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "admin")], "Bearer"))
+        };
+
+        Assert.Equal("user:admin", RateLimitingExtensions.ResolveAuthTokenPartitionKey(context));
+    }
+
+    [Fact]
+    public void ResolveAuthTokenPartitionKey_Anonymous_IsKeyedByAddressOrUnknown()
+    {
+        var withAddress = new DefaultHttpContext();
+        withAddress.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.10");
+
+        Assert.Equal("ip:192.0.2.10", RateLimitingExtensions.ResolveAuthTokenPartitionKey(withAddress));
+        Assert.Equal("ip:unknown", RateLimitingExtensions.ResolveAuthTokenPartitionKey(new DefaultHttpContext()));
+    }
+
+    [Fact]
+    public async Task WriteRejection_OnLogin_AuditsAddressAndCleanedUserAgentThenAnswersJson()
+    {
+        var audit = Substitute.For<IAuditService>();
+        var context = RejectedContext("/api/auth/login", audit);
+        context.HttpContext.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.10");
+        context.HttpContext.Request.Headers.UserAgent = "agent\u0007/1.0" + new string('x', 300);
+
+        await RateLimitingExtensions.WriteRejectionAsync(context, TestContext.Current.CancellationToken);
+
+        var expectedUserAgent = ("agent/1.0" + new string('x', 300))[..200];
+        await audit.Received(1).LogAsync("LoginFailed.RateLimited", "Authentication", null,
+            $"IP: 192.0.2.10, UA: {expectedUserAgent}", Arg.Any<CancellationToken>());
+        Assert.Equal("application/json", context.HttpContext.Response.ContentType?.Split(';')[0]);
+        Assert.Contains("Too many authentication attempts", ReadBody(context.HttpContext), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteRejection_OnLoginWithoutAddressOrUserAgent_AuditsUnknowns()
+    {
+        var audit = Substitute.For<IAuditService>();
+        var context = RejectedContext("/API/AUTH/LOGIN", audit);
+
+        await RateLimitingExtensions.WriteRejectionAsync(context, TestContext.Current.CancellationToken);
+
+        await audit.Received(1).LogAsync("LoginFailed.RateLimited", "Authentication", null,
+            "IP: unknown, UA: unknown", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WriteRejection_ElsewhereThanLogin_AnswersJsonWithoutAudit()
+    {
+        var audit = Substitute.For<IAuditService>();
+        var context = RejectedContext("/api/servers", audit);
+
+        await RateLimitingExtensions.WriteRejectionAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Empty(audit.ReceivedCalls());
+        Assert.Contains("Too many authentication attempts", ReadBody(context.HttpContext), StringComparison.Ordinal);
+    }
+
+    private static OnRejectedContext RejectedContext(string path, IAuditService audit)
+    {
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = new ServiceCollection().AddSingleton(audit).BuildServiceProvider()
+        };
+        httpContext.Request.Path = path;
+        httpContext.Response.Body = new MemoryStream();
+        return new OnRejectedContext { HttpContext = httpContext, Lease = RateLimitPartition.GetNoLimiter("test").Factory("test").AttemptAcquire() };
+    }
+
+    private static string ReadBody(HttpContext context)
+    {
+        context.Response.Body.Position = 0;
+        return new StreamReader(context.Response.Body).ReadToEnd();
     }
 }

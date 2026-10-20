@@ -6,8 +6,8 @@ DOMAIN="${1:-}"
 WEB_ROOT="${2:-}"
 SOURCE_DIR="${3:-site}"
 case "$DOMAIN" in ""|*SITE_DOMAIN*) echo "SITE_DOMAIN not provided by the Variable Library"; exit 1;; esac
-# A direct child of /var/www, whatever it is called. The `aetheus-` prefix this used to demand named
-# the project rather than bounding the path, and naming things is the Variable Library's job.
+# Require a direct child of /var/www so publication stays within a bounded web root while its name
+# comes from the library. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 case "$WEB_ROOT" in
   /var/www/*/*|*..*) echo "Refusing publication outside a dedicated /var/www child: '$WEB_ROOT'"; exit 1;;
   /var/www/?*) ;;

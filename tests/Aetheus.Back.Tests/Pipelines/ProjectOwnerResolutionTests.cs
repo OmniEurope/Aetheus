@@ -28,7 +28,7 @@ public class ProjectOwnerResolutionTests
         db.Projects.Add(new Project { Id = 5, Name = "proj", OrganizationId = 3 });
         await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var resolver = new PipelineServerResolver(db);
+        var resolver = new PipelineProjectOwnerRepository(db);
         Assert.Equal("alice", await resolver.GetProjectOwnerUsernameAsync(5, ct: TestContext.Current.CancellationToken));
     }
 
@@ -39,7 +39,7 @@ public class ProjectOwnerResolutionTests
         db.Projects.Add(new Project { Id = 5, Name = "proj", OrganizationId = 3 });
         await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var resolver = new PipelineServerResolver(db);
+        var resolver = new PipelineProjectOwnerRepository(db);
         Assert.Null(await resolver.GetProjectOwnerUsernameAsync(5, ct: TestContext.Current.CancellationToken));
     }
 }

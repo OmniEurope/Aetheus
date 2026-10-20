@@ -62,7 +62,7 @@ public class ProjectDetailSectionsRenderTests : BunitContext
             var commitsLoading = (bool)typeof(ProjectOverviewSection)
                 .GetField("_loadingRecentCommits", Priv)!.GetValue(cut.Instance)!;
             return !pipelinesLoading && !commitsLoading;
-        }, TimeSpan.FromSeconds(2));
+        });
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public class ProjectDetailSectionsRenderTests : BunitContext
             var loading = (bool)typeof(ProjectOverviewSection)
                 .GetField("_loadingRecentPipelines", Priv)!.GetValue(cut.Instance)!;
             return !loading;
-        }, TimeSpan.FromSeconds(2));
+        });
         // Set parameters again - recent data endpoints must NOT be hit a second time.
         cut.Render(p => p.Add(x => x.Project, project));
         var pipelineCalls = _handler.Requests.Count(r =>

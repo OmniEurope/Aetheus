@@ -29,7 +29,7 @@ public class ServerLogsSectionTests : BunitContext
     public void Renders_WithLogs_OnInit()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Build started"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Build started"));
         // OnInit GETs the first log page and renders the stubbed messages.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/servers/1/logs"));
         Assert.Contains("Build failed", cut.Markup);
@@ -54,7 +54,7 @@ public class ServerLogsSectionTests : BunitContext
     public void FirstBlock_AsksPageOneOfFifty()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Build started"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Build started"));
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/servers/1/logs", StringComparison.Ordinal)
             && r.Url.Contains("page=1", StringComparison.Ordinal)
             && r.Url.Contains("pageSize=50", StringComparison.Ordinal));
@@ -64,7 +64,7 @@ public class ServerLogsSectionTests : BunitContext
     public void Loading_InitiallyFalse()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Build started"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Build started"));
         var loading = (bool)typeof(ServerLogsSection).GetField("_loading", Priv)!.GetValue(cut.Instance)!;
         Assert.False(loading);
     }
@@ -75,7 +75,7 @@ public class ServerLogsSectionTests : BunitContext
     public async Task LoadLogsAsync_SecondBlock_AsksPageTwo()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Build started"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Build started"));
         _handler.SetJsonResponse(HttpMethod.Get, "page=2", new PaginatedResult<TaskLogDto>
         {
             Items = [new TaskLogDto { Id = 3, Message = "Deploy started", Level = TaskLogLevel.Info }],
@@ -95,7 +95,7 @@ public class ServerLogsSectionTests : BunitContext
     public async Task LoadLogsAsync_Failure_ShowsTheErrorAndARetryClearsIt()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Build started"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Build started"));
         _handler.SetResponse(HttpMethod.Get, "page=2", System.Net.HttpStatusCode.InternalServerError);
 
         await cut.InvokeAsync(() => InvokeLoad(cut, new GridLoadArgs { Skip = 50, Top = 50 }));
@@ -112,13 +112,13 @@ public class ServerLogsSectionTests : BunitContext
         Assert.Equal(2, _handler.Requests.Count(request => request.Url.Contains("page=2", StringComparison.Ordinal)));
     }
 
-    /// <summary>Recette R-210 / R-224: the level multi-select and the time range set in the headers reach
-    /// the API, so they narrow the whole log of the server and not only the loaded entries.</summary>
+    /// <summary>The level multi-select and the time range set in the headers reach the API, so they
+    /// narrow the whole log of the server and not only the loaded entries.</summary>
     [Fact]
     public async Task HeaderFilters_LevelAndTimeRange_ReachTheApi()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Build started"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Build started"));
         var grid = cut.FindComponent<AetheusDataGrid<TaskLogDto>>().Instance.Grid!;
         var levels = OmniDataGridFilterValues.Join(["Error", "Warning"]);
 
@@ -144,7 +144,7 @@ public class ServerLogsSectionTests : BunitContext
     public async Task LoadLogsAsync_Sort_ReachesTheApi()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Build started"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Build started"));
 
         await cut.InvokeAsync(() => InvokeLoad(cut, new GridLoadArgs
         {
@@ -177,5 +177,27 @@ public class ServerLogsSectionTests : BunitContext
         var method = typeof(ServerLogsSection).GetMethod("GetLevelBadge", PrivStatic)!;
         var result = (OmniTone)method.Invoke(null, [(object)(TaskLogLevel)99])!;
         Assert.Equal(OmniTone.Neutral, result);
+    }
+
+    [Fact]
+    public async Task TheExport_ReadsTheRequestedPageOfThisServersLogs_InTheGridsSort()
+    {
+        var cut = RenderSection(serverId: 3);
+        cut.WaitForState(() => cut.Markup.Contains("Build started"));
+        var grid = cut.FindComponent<AetheusDataGrid<TaskLogDto>>().Instance;
+
+        var page = await cut.InvokeAsync(() => grid.ExportRead!(new GridLoadArgs
+        {
+            Skip = 100,
+            Top = 50,
+            Sorts = [new GridSortDescriptor("Timestamp", GridSortOrder.Descending)],
+        }));
+
+        Assert.Equal(["Build started", "Build failed"], page.Items.Select(log => log.Message));
+        var url = _handler.Requests.Last(r => r.Url.Contains("api/servers/3/logs", StringComparison.Ordinal)).Url;
+        Assert.Contains("page=3", url, StringComparison.Ordinal);
+        Assert.Contains("pageSize=50", url, StringComparison.Ordinal);
+        Assert.Contains("sortBy=Timestamp", url, StringComparison.Ordinal);
+        Assert.Contains("sortDescending=True", url, StringComparison.Ordinal);
     }
 }

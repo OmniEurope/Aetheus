@@ -71,8 +71,8 @@ public sealed record PreflightStageDto
 public sealed record PreflightCheckDto
 {
     /// <summary>What class of requirement this is: <c>runner</c>, <c>environment</c>,
-    /// <c>pipeline-reference</c>, <c>ports</c>, <c>child-pipeline</c>, <c>scanner-manifest</c> or
-    /// <c>release-artifact</c>.</summary>
+    /// <c>pipeline-reference</c>, <c>ports</c>, <c>child-pipeline</c>, <c>scanner-manifest</c>,
+    /// <c>release-artifact</c> or <c>ai-profile</c>.</summary>
     public string Kind { get; init; } = string.Empty;
 
     /// <summary>What was checked: a stage's selector, an environment name, a pipeline name.</summary>
@@ -94,8 +94,8 @@ public sealed record PipelinePreflightOutcomeDto
     public List<string> Problems { get; init; } = [];
     public List<PreflightCheckDto> Checks { get; init; } = [];
 
-    /// <summary>Recorded on the run and never refuses it: a port seen listening that no project
-    /// declared, under <c>observed_port_policy: warning</c> (PLAN-005). Kept apart from
-    /// <see cref="Problems"/> so a note can never be read as a refusal.</summary>
+    /// <summary>Records an undeclared observed listener under observed_port_policy: warning without
+    /// refusing the run. Keep it separate from <see cref="Problems"/> so a warning cannot be
+    /// mistaken for a refusal.</summary>
     public List<string> Warnings { get; init; } = [];
 }

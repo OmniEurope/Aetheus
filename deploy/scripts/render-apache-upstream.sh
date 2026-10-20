@@ -1,15 +1,7 @@
 #!/bin/sh
-# Render the versioned blue-green Apache Define template without accepting arbitrary values.
-#
-#   render-apache-upstream.sh TEMPLATE OUTPUT FRONT_PORT BACK_PORT ACTIVE_COLOR
-#       the live upstream file itself (release-fast and its rollback);
-#   render-apache-upstream.sh --define-only TEMPLATE OUTPUT
-#       a run-local copy with only the environment's Define name resolved, for the bluegreen-switch
-#       step, which substitutes the ports and the colour and nothing else.
-#
-# Environment: UPSTREAM_DEFINE (AETHEUS in production, AETHEUS_DEMO for the demo), and for the first
-# form UPSTREAM_CONF, the one destination the live file may have. PLAN-003 2.1: the guard compares
-# with that variable instead of a literal path, so the demo can use the same mechanism.
+# Render only validated blue-green upstream values and require the configured destination so the
+# same mechanism is safe across environments. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 set -eu
 
 define_only=false

@@ -13,6 +13,19 @@ public static class PipelinesModuleExtensions
     {
         services.AddScoped<IPipelineRepository, PipelineRepository>();
         services.AddScoped<IPipelineRunLineageReader, PipelineRunLineageRepository>();
+        services.AddScoped<IPipelineRunLookupReader, PipelineRunLookupRepository>();
+        services.AddScoped<IPipelineTemplateRepository, PipelineTemplateRepository>();
+        services.AddScoped<IPipelineRunnerTargetReader, PipelineServerResolver>();
+        services.AddScoped<IPipelineAutoTriggerRepository, PipelineAutoTriggerRepository>();
+        services.AddScoped<IPipelineApprovalRepository, PipelineApprovalRepository>();
+        services.AddScoped<IPipelineQualityResultRepository, PipelineCoverageRepository>();
+        services.AddScoped<IPipelineArtifactRepository, PipelineArtifactRepository>();
+        services.AddScoped<IPipelineEnvironmentReader, PipelineEnvironmentRepository>();
+        services.AddScoped<IPipelineReleaseNumberRepository, ProjectReleaseNumberRepository>();
+        services.AddScoped<IProjectReleaseSeriesRepository, ProjectReleaseNumberRepository>();
+        services.AddScoped<IProjectReleaseSeriesService, ProjectReleaseSeriesService>();
+        services.AddScoped<IPipelineRunRetentionRepository, PipelineRunRetentionRepository>();
+        services.AddScoped<IPipelineProjectOwnerReader, PipelineProjectOwnerRepository>();
         services.AddScoped<IPipelineResourceLockRepository, PipelineResourceLockRepository>();
         services.AddScoped<IPipelineRunLineageService, PipelineRunLineageService>();
         services.AddScoped<IPipelineFavoriteRepository, PipelineFavoriteRepository>();
@@ -35,6 +48,7 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineStepTaskBuilder, PipelineStepTaskBuilder>();
         services.AddScoped<IPipelineAnalysisTaskFactory, PipelineAnalysisTaskFactory>();
         services.AddScoped<IPipelineDotnetTestTaskFactory, PipelineDotnetTestTaskFactory>();
+        services.AddScoped<IPipelineFunctionTaskFactory, PipelineFunctionTaskFactory>();
         services.AddScoped<IPipelineGateStatusTaskFactory, PipelineGateStatusTaskFactory>();
         services.AddScoped<IPipelineDeploymentTaskFactory, PipelineDeploymentTaskFactory>();
         services.AddScoped<IPipelineHostOperationTaskFactory, PipelineHostOperationTaskFactory>();
@@ -50,11 +64,14 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineAdvisoryPreflightBuilder, PipelineAdvisoryPreflightBuilder>();
         services.AddScoped<IPipelineScannerManifestPreflight, PipelineScannerManifestPreflight>();
         services.AddScoped<IPipelineReleaseArtifactPreflight, PipelineReleaseArtifactPreflight>();
+        services.AddScoped<IPipelineAiProfilePreflight, PipelineAiProfilePreflight>();
         services.AddScoped<IPipelineRunPreflightService, PipelineRunPreflightService>();
         services.AddScoped<IPipelineSetupReadinessService, PipelineSetupReadinessService>();
         services.AddScoped<IPipelineRequirementsProvisioner, PipelineRequirementsProvisioner>();
         services.AddScoped<IPipelineProjectCopyService, PipelineProjectCopyService>();
         services.AddScoped<IRunStageBaselineService, RunStageBaselineService>();
+        services.AddScoped<IPipelineMigrationGateRepository, PipelineMigrationGateRepository>();
+        services.AddScoped<IPipelineMigrationGateService, PipelineMigrationGateService>();
         services.AddScoped<IPipelinePortRegistryGuard, PipelinePortRegistryGuard>();
         services.AddScoped<IPipelineRunDefinitionParser, PipelineRunDefinitionParser>();
         services.AddScoped<IPipelineRunControlService, PipelineRunControlService>();
@@ -70,7 +87,14 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineRunLauncher, PipelineRunLauncher>();
         services.AddScoped<IPipelineTemplateService, PipelineTemplateService>();
         services.AddScoped<IPipelineWebhookService, PipelineWebhookService>();
+        services.AddScoped<IPipelineRunToEndPolicy, PipelineRunToEndPolicy>();
         services.AddScoped<IPipelineOwnerAuthorization, PipelineOwnerAuthorization>();
+        // Administrators change pipeline owners; Users asks for it before deactivating an owner.
+        services.AddScoped<IPipelineOwnershipRepository, PipelineOwnershipRepository>();
+        services.AddScoped<IPipelineOwnershipService, PipelineOwnershipService>();
+        services.AddScoped<
+            IDomainEventHandler<Users.Events.UserPipelinesTransferRequestedEvent>,
+            UserPipelinesTransferHandler>();
         // Only the colour behind the public API address leads (decision of 2026-10-02): the lease asks
         // the probe, which asks the address itself which instance answers.
         services.AddHttpClient(LiveInstanceProbe.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5));
@@ -101,6 +125,9 @@ public static class PipelinesModuleExtensions
         services.AddScoped<
             Services.DomainEvents.IDomainEventHandler<Tasks.Events.PipelineStepTaskMetricsCollectedEvent>,
             PipelineStepTaskMetricsHandler>();
+        services.AddScoped<
+            Services.DomainEvents.IDomainEventHandler<Tasks.Events.PipelineStepMigrationGateReportedEvent>,
+            PipelineStepMigrationGateHandler>();
         // SSRF hardening: the string-level IsSafeOutboundUrl guard in PipelineEnvironmentCheckGuard can be
         // bypassed by DNS-rebinding (TOCTOU between the check and the request). Re-validate the
         // resolved IP at connect time via SocketsHttpHandler.ConnectCallback, mirroring the

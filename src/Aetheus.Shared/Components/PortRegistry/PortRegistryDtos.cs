@@ -67,12 +67,8 @@ public sealed record PortCheckEntryDto
     /// <summary>Container or process seen holding the port, when one is listening.</summary>
     public string? ObservedHolder { get; init; }
 
-    /// <summary>
-    /// The project the check is relative to (the owner of the library being checked), null for a
-    /// server-scoped check that belongs to no project. PLAN-003 lot 24 / D14: without it, a port a
-    /// project declared for itself and is happily listening on cannot be told apart from a port
-    /// somebody else took.
-    /// </summary>
+    /// <summary>The project whose port ownership is evaluated, or null for a server-scoped check.
+    /// This distinguishes its declared listening ports from ports held by other projects.</summary>
     public int? ContextProjectId { get; init; }
 
     /// <summary>
@@ -90,7 +86,7 @@ public sealed record PortCheckEntryDto
                     : PortCheckVerdict.Free;
 }
 
-/// <summary>PLAN-003 lot 24 / D14: what to tell the reader about one port, in one phrase.</summary>
+/// <summary>One-sentence explanation of the port availability verdict.</summary>
 public enum PortCheckVerdict
 {
     /// <summary>Declared by the project being checked, listening or not. Nothing to do.</summary>
@@ -144,11 +140,9 @@ public sealed record CreatePortReservationRequest
     public int? ProjectId { get; init; }
 }
 
-/// <summary>
-/// One port seen listening on a host by the agent, TCP or UDP (PLAN-005 lots 2 and 6). It is an
-/// observation, never a decision: the backend records it as an <c>Observed</c> reservation and no
-/// automatic correction is derived from a mismatch with what a project declared.
-/// </summary>
+/// <summary>A TCP or UDP listener observed by the agent and recorded as an <c>Observed</c>
+/// reservation. Differences from declared ports do not trigger automatic correction
+/// (ADR-045).</summary>
 public sealed record ObservedPortDto
 {
     [Range(1, 65535)]

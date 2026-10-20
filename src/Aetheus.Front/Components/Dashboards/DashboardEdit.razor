@@ -24,9 +24,12 @@ else if (_dashboard is not null)
                 <OmniSwitch @bind-Value="_isDefault">@L["IsDefault"]</OmniSwitch>
             </OmniColumn>
             <OmniColumn Span="12" SmallSpan="12">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@AddWidget" title="@L["AddWidget"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+                @* STD-BTN detection 11: SaveDashboard visible, the other actions in the menu. *@
+                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End" Align="OmniAlignment.Center">
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveDashboard" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["SaveDashboard"]</span></OmniButton>
+                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniMenuItem OnClick="@AddWidget"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent>@L["AddWidget"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
                 </OmniStack>
             </OmniColumn>
         </OmniRow>
@@ -75,11 +78,14 @@ else if (_dashboard is not null)
                         <OmniSwitch TValue="bool" Value="@widget.IsVisible" ValueExpression="@(() => widget.IsVisible)" ValueChanged="@(value => widget.IsVisible = value)">@L["Visible"]</OmniSwitch>
                     </OmniColumn>
                     <OmniColumn Span="12" SmallSpan="12">
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall">
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => MoveUp(widget))" Disabled="@(index == 0)"><OmniIcon Name="OmniIconName.Upgrade" /> <span>@L["MoveUp"]</span></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => MoveDown(widget))" Disabled="@(index == _widgets.Count - 1)"><OmniIcon Name="OmniIconName.ArrowDown" /> <span>@L["MoveDown"]</span></OmniButton>
+                        @* STD-BTN detection 11: Settings visible, the other actions in the menu. *@
+                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ToggleConfig(widget))"><OmniIcon Name="OmniIconName.Settings" /> <span>@L["Settings"]</span></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RemoveWidget(widget))"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+                            <OmniOverflowMenu Label="@L["MoreActions"]">
+                                <OmniMenuItem OnClick="@(() => MoveUp(widget))" Disabled="@(index == 0)"><Icon><OmniIcon Name="OmniIconName.Upgrade" /></Icon><ChildContent>@L["MoveUp"]</ChildContent></OmniMenuItem>
+                                <OmniMenuItem OnClick="@(() => MoveDown(widget))" Disabled="@(index == _widgets.Count - 1)"><Icon><OmniIcon Name="OmniIconName.ArrowDown" /></Icon><ChildContent>@L["MoveDown"]</ChildContent></OmniMenuItem>
+                                <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => RemoveWidget(widget))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                            </OmniOverflowMenu>
                         </OmniStack>
                     </OmniColumn>
                 </OmniRow>

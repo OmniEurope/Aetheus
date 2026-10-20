@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>PLAN-013 lot 4: the « Conservation des données » setting of a project.</summary>
+/// <summary>The « Conservation des données » setting of a project.</summary>
 [ApiController]
 [Route("api/projects/{id:int}/data-retention")]
 [Authorize]

@@ -17,17 +17,27 @@ public abstract class ServerActionSectionBase : ComponentBase
     /// <summary>SITE-OFFLINE-001: the handler guard behind the disabled buttons; true when the action was refused.</summary>
     protected bool BlockedByOfflineAgent() => AgentOfflineGuard.Blocks(Server, Toast);
 
-    protected async Task ExecuteServerActionAsync(Func<Task<ApiStatus>> action)
+    /// <summary>Recette R3-37: the section's <see cref="ServerTaskFollower"/>, when its markup places one;
+    /// it then shows what becomes of each task <see cref="ExecuteServerActionAsync"/> queues.</summary>
+    protected ServerTaskFollower? _follower;
+
+    protected async Task ExecuteServerActionAsync(Func<Task<ApiStatus>> action, string? followTitle = null)
     {
         if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
+        if (followTitle is not null) _follower?.Expect(followTitle);
         try
         {
             if ((await action()).Success) Toast.Success(L["TaskQueued"]);
-            else Toast.Error(L["ActionFailed"]);
+            else
+            {
+                _follower?.Forget();
+                Toast.Error(L["ActionFailed"]);
+            }
         }
         catch
         {
+            _follower?.Forget();
             Toast.Error(L["ActionFailed"]);
         }
         finally
@@ -36,7 +46,8 @@ public abstract class ServerActionSectionBase : ComponentBase
         }
     }
 
-    /// <summary>An ordinary confirmation, whose blue confirm button says <paramref name="verb"/> (recette R-407).</summary>
+    /// <summary>An ordinary confirmation, whose blue confirm button says <paramref
+    /// name="verb"/>.</summary>
     protected Task ShowConfirm(string title, string message, Func<Task> action, string verb) =>
         AskThenRunAsync(title, message, action, verb, destructive: false, icon: null);
 
@@ -44,8 +55,8 @@ public abstract class ServerActionSectionBase : ComponentBase
     protected Task ShowDestructiveConfirm(string title, string message, Func<Task> action, string verb, OmniIconName? icon = null) =>
         AskThenRunAsync(title, message, action, verb, destructive: true, icon);
 
-    // Recette R-407: every confirmation names its verb (never "Valider"), and "Revenir" dismisses it.
-    // The question is the application's one confirmation dialog (STD-DIALOG), not a panel of this page.
+    // Every confirmation names its verb (never "Valider"), and "Revenir" dismisses it. The question
+    // is the application's one confirmation dialog (STD-DIALOG), not a panel of this page.
     private async Task AskThenRunAsync(
         string title, string message, Func<Task> action, string verb, bool destructive, OmniIconName? icon)
     {

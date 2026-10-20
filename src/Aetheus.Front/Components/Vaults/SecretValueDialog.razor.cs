@@ -22,7 +22,7 @@ public partial class SecretValueDialog
 
     private void Save() => Dialog.Close(_value);
 
-    /// <summary>Recette R-437: the recipe of the secret's key, as when adding a secret.</summary>
+    /// <summary>The recipe of the secret's key, as when adding a secret.</summary>
     private void GenerateForKey() => _value = VaultSecretGenerator.Generate(SecretKey);
 
     private void GenerateWith(SecretGenerationChoices.Choice choice) => _value = choice.Generate();

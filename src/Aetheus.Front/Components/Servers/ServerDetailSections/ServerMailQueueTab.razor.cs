@@ -2,7 +2,7 @@
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>PLAN-005 lot 6: typed view of the Postfix queue (<c>postqueue -j</c> read from the task log),
+/// <summary>Typed view of the Postfix queue (<c>postqueue -j</c> read from the task log),
 /// per-message deletion and flush.</summary>
 public partial class ServerMailQueueTab
 {
@@ -14,6 +14,12 @@ public partial class ServerMailQueueTab
     [Parameter, EditorRequired] public int ServerId { get; set; }
     [Parameter] public int QueueSize { get; set; }
     [Parameter] public bool CanManage { get; set; }
+    [Parameter] public MailDeliveryStateDto Delivery { get; set; } = new();
+    [Parameter] public string HostIpv4 { get; set; } = string.Empty;
+    /// <summary>Reported mail-manage helper version; the retry tuning needs <see cref="RetryTuningMinimumHelperVersion"/>.</summary>
+    [Parameter] public int HelperVersion { get; set; } = RetryTuningMinimumHelperVersion;
+
+    internal const int RetryTuningMinimumHelperVersion = 6;
 
     private List<MailQueueItemDto> _items = [];
     private OmniDataGrid<MailQueueItemDto>? _grid;
@@ -44,6 +50,16 @@ public partial class ServerMailQueueTab
         else Toast.Error(L["ActionFailed"]);
     }
 
+    private async Task ApplyRetryTuningAsync()
+    {
+        var confirmed = await Dialog.Confirm(L["MailConfirmRetryTuning"], L["MailApplyRetryTuning"],
+            new OmniConfirmOptions { OkButtonText = L["MailApplyRetryTuning"].Value, CancelButtonText = L["GoBack"].Value });
+        if (confirmed != true) return;
+        var queued = await Api.Mail.QueueMailActionAsync(ServerId, new MailActionRequest { Action = MailAction.ApplyRetryTuning });
+        if (queued is not null) Toast.Success(L["TaskQueued"]);
+        else Toast.Error(L["ActionFailed"]);
+    }
+
     private async Task DeleteAsync(string queueId)
     {
         var confirmed = await Dialog.Confirm(string.Format(L["MailConfirmDeleteQueued"], queueId), L["Delete"],
@@ -68,7 +84,7 @@ public partial class ServerMailQueueTab
         _pendingTaskId = null;
         if (notification.Status == TaskExecutionStatus.Success)
         {
-            var items = MailTaskOutputParser.ParseQueue(await MailTaskOutputLoader.ReadAsync(Api, notification.TaskId));
+            var items = MailTaskOutputParser.ParseQueue(await ServerTaskOutputLoader.ReadAsync(Api, notification.TaskId));
             // Recette R-227: told before the new queue arrives, the grid marks the messages it did not hold.
             if (_grid is not null) await _grid.RefreshAsync();
             _items = items;
@@ -88,6 +104,6 @@ public partial class ServerMailQueueTab
         _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
     };
 
-    /// <summary>Recette R2-124: the export writes the size as the cell does.</summary>
+    /// <summary>The export writes the size as the cell does.</summary>
     private static readonly Func<MailQueueItemDto, object?> SizeExport = item => FormatBytes(item.SizeBytes);
 }

@@ -49,7 +49,7 @@ public class OrganizationDetailRenderTests : BunitContext
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         nav.NavigateTo("/admin/organizations/1?tab=members");
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         // The admin path loads org 1 and renders its name and member from the stub.
         var org = (OrganizationDetailDto?)PageType.GetField("_org", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(org);
@@ -119,7 +119,7 @@ public class OrganizationDetailRenderTests : BunitContext
         _handler.SetJsonResponse("api/organizations/1/members/1", new OrganizationMemberDto(
             1, 2, "alice", null, OrganizationRole.Maintainer, DateTime.UtcNow));
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         var method = PageType.GetMethod("OnChangeMemberRole", Priv)!;
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [member, OrganizationRole.Maintainer])!);
 
@@ -135,7 +135,7 @@ public class OrganizationDetailRenderTests : BunitContext
     {
         _handler.SetJsonResponse("api/organizations/1/projects", true);
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         var method = PageType.GetMethod("OnSaveProjects", Priv)!;
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
         // OnSaveProjects PUTs the selected project ids to the org's /projects endpoint.
@@ -155,7 +155,7 @@ public class OrganizationDetailRenderTests : BunitContext
     public async Task LoadAsync_SetsOrg_WhenApiReturnsData()
     {
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         var org = (OrganizationDetailDto?)PageType.GetField("_org", Priv)!.GetValue(cut.Instance);
         // LoadAsync populates _org from the GET, and the stubbed members/projects come along.
         Assert.NotNull(org);

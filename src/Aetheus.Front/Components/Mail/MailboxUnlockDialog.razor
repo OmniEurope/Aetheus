@@ -1,9 +1,26 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* Recette R1-17: the mailbox password, typed to unlock the integrated mailbox. Checked by the server's
-   own login before Aetheus holds it, in memory only. No field takes the focus on open. *@
+   own login before Aetheus holds it, in memory only. No field takes the focus on open.
+   Recette R1-41 / R3-50: an administrator of a server whose administrator access is prepared opens the
+   mailbox without its password (the main action, traced in the audit log); typing it stays possible. *@
 <OmniTemplateForm TModel="MailboxUnlockModel" Model="@_model" OnValidSubmit="@UnlockAsync">
     <OmniDataAnnotationsValidator Localizer="@L" />
     <OmniStack Gap="OmniSpacing.Medium">
+        @if (CanOpenAsAdministrator)
+        {
+            <OmniAlert Severity="OmniSeverity.Info" Class="mailbox-admin-open">
+                <OmniStack Gap="OmniSpacing.Small">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailboxAdminOpenExplain"]</OmniText>
+                    @if (_adminError is not null)
+                    {
+                        <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Danger" Class="omni-u-m-0 mailbox-admin-open-error">@_adminError</OmniText>
+                    }
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Primary" Busy="@_adminBusy" Class="mailbox-admin-open-button" OnClick="@OpenAsAdministratorAsync"><OmniIcon Name="@MaterialIconMap.Resolve("admin_panel_settings")" /> <span>@L["MailboxAdminOpen"]</span></OmniButton>
+                    </OmniStack>
+                </OmniStack>
+            </OmniAlert>
+        }
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailboxUnlockExplain"]</OmniText>
         <OmniFormField Label="@L["Password"]" For="mailbox-unlock-password" Error="@_error">
             <OmniPassword Id="mailbox-unlock-password" @bind-Value="_model.Password" />
@@ -11,6 +28,13 @@
         <ValidationMessage For="@(() => _model.Password)" />
     </OmniStack>
     <DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /> <span>@L["MailboxUnlock"]</span></OmniButton>
+        @if (CanOpenAsAdministrator)
+        {
+            <OmniButton Variant="OmniButtonVariant.Secondary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /> <span>@L["MailboxUnlock"]</span></OmniButton>
+        }
+        else
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /> <span>@L["MailboxUnlock"]</span></OmniButton>
+        }
     </DialogFooter>
 </OmniTemplateForm>

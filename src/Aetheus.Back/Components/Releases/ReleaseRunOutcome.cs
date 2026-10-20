@@ -7,29 +7,14 @@ namespace Aetheus.Back.Components.Releases;
 /// <summary>What the end of a run does to the release that points at it.</summary>
 internal static class ReleaseRunOutcome
 {
-    /// <summary>
-    /// Applies <paramref name="status"/> to <paramref name="release"/>; returns <c>false</c> when the
-    /// release is left as it was. A release already deployed stays deployed. R-10: a run that ends
-    /// badly decides only for a release it was still building - deploy-prod 2367 failed at TLS,
-    /// before production changed, and turned the published candidate it was deploying into a Failed
-    /// release the launch dialog then hid. The payload did not change; the attempt failed, and that
-    /// stays visible as the status of the run the release points at.
-    /// </summary>
-    /// <summary>
-    /// True when a run records <paramref name="existing"/> as not deployed although an earlier run
-    /// deployed it. A rollback records its version that way to undo its own run's deployment; a
-    /// release an earlier run deployed is what the rollback returns to - deploy-prod 2369 redeployed
-    /// the live one - and is left as it is.
-    /// </summary>
+    /// <summary>Returns true when an earlier run deployed <paramref name="existing"/> and the
+    /// current run reports it as not deployed. Preserve that live release when a later attempt
+    /// rolls back.</summary>
     public static bool IsLiveBeforeThisRun([NotNullWhen(true)] Release? existing, bool deployed, int pipelineRunId) =>
         existing is { Status: ReleaseStatus.Deployed } && !deployed && existing.PipelineRunId != pipelineRunId;
 
-    /// <summary>
-    /// Recette R2-001: true when a run must leave the commit <paramref name="existing"/> records as it
-    /// is. A run that records the release as deployed, or demotes a deployed one (the rollback of
-    /// <c>aetheus-deploy-prod</c>), did not build it: its own workspace head may be a newer commit that
-    /// was never deployed, and a branch advanced onto the release would then name that commit.
-    /// </summary>
+    /// <summary>Preserve the recorded source commit during deployment or demotion because the
+    /// current workspace may differ from the built release.</summary>
     public static bool KeepsRecordedCommit(Release existing, bool deployed) =>
         !string.IsNullOrWhiteSpace(existing.CommitHash)
         && (deployed || existing.Status == ReleaseStatus.Deployed);

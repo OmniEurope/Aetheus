@@ -219,14 +219,14 @@ public class ServerDockerSectionTemplateTests : BunitContext
         var method = typeof(DockerContainersTab).GetMethod("RequestInspectAsync", BF)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(tab.Instance, ["abc123def456ghi"])!);
 
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 1,
             ServerId = 6,
             TaskName = "docker inspect abc123",
             Status = TaskExecutionStatus.Success,
             Output = "{\"Id\": \"abc123\"}"
-        }));
+        })));
 
         var content = (string?)typeof(DockerContainersTab).GetField("_inspectContent", BF)!.GetValue(tab.Instance);
         Assert.NotNull(content);
@@ -273,14 +273,14 @@ public class ServerDockerSectionTemplateTests : BunitContext
         var method = typeof(DockerContainersTab).GetMethod("RequestEnvVarsAsync", BF)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(tab.Instance, ["abc123def456ghi", "nginx"])!);
 
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 2,
             ServerId = 9,
             TaskName = "docker env abc123",
             Status = TaskExecutionStatus.Success,
             Output = "[\"PATH=/usr/bin\",\"HOME=/root\"]"
-        }));
+        })));
 
         var content = (string?)typeof(DockerContainersTab).GetField("_envContent", BF)!.GetValue(tab.Instance);
         Assert.NotNull(content);
@@ -353,14 +353,14 @@ public class ServerDockerSectionTemplateTests : BunitContext
         var openMethod = typeof(DockerComposeTab).GetMethod("OpenComposeEditorAsync", BF)!;
         await cut.InvokeAsync(async () => await (Task)openMethod.Invoke(composeTab.Instance, ["webapp-stack"])!);
 
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 3,
             ServerId = 13,
             TaskName = DockerTaskNames.ComposeFile("webapp-stack"),
             Status = TaskExecutionStatus.Success,
             Output = "version: '3'\nservices:\n  web:\n    image: nginx"
-        }));
+        })));
 
         var content = (string?)typeof(DockerComposeTab).GetField("_composeEditorContent", BF)!.GetValue(composeTab.Instance);
         Assert.NotNull(content);
@@ -424,14 +424,14 @@ public class ServerDockerSectionTemplateTests : BunitContext
         var method = typeof(DockerContainersTab).GetMethod("OpenFileBrowserAsync", BF)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(tab.Instance, ["abc123def456ghi", "nginx"])!);
 
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 4,
             ServerId = 17,
             TaskName = "docker ls /",
             Status = TaskExecutionStatus.Success,
             Output = "bin  etc  usr"
-        }));
+        })));
 
         var content = (string?)typeof(DockerContainersTab).GetField("_browseContent", BF)!.GetValue(tab.Instance);
         Assert.Equal("bin  etc  usr", content);

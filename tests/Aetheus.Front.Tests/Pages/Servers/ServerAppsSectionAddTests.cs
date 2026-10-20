@@ -44,8 +44,7 @@ public class ServerAppsSectionAddTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/servers/20/apps", initialApps);
         var cut = Render<ServerAppsSection>(p => p.Add(x => x.ServerId, 20));
         cut.WaitForState(
-            () => Priv_Get<List<ServerAppDto>?>(cut.Instance, "_apps") is not null,
-            TimeSpan.FromSeconds(2));
+            () => Priv_Get<List<ServerAppDto>?>(cut.Instance, "_apps") is not null);
 
         // Seed _apps so Add() can work after POST
         Priv_Set(cut.Instance, "_apps", new List<ServerAppDto>());
@@ -72,8 +71,7 @@ public class ServerAppsSectionAddTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/servers/21/apps", new List<ServerAppDto>());
         var cut = Render<ServerAppsSection>(p => p.Add(x => x.ServerId, 21));
         cut.WaitForState(
-            () => Priv_Get<List<ServerAppDto>?>(cut.Instance, "_apps") is not null,
-            TimeSpan.FromSeconds(2));
+            () => Priv_Get<List<ServerAppDto>?>(cut.Instance, "_apps") is not null);
 
         // Override with single item for POST
         Priv_Set(cut.Instance, "_apps", new List<ServerAppDto>());
@@ -97,8 +95,7 @@ public class ServerAppsSectionAddTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/servers/22/apps", new List<ServerAppDto>());
         var cut = Render<ServerAppsSection>(p => p.Add(x => x.ServerId, 22));
         cut.WaitForState(
-            () => Priv_Get<List<ServerAppDto>?>(cut.Instance, "_apps") is not null,
-            TimeSpan.FromSeconds(2));
+            () => Priv_Get<List<ServerAppDto>?>(cut.Instance, "_apps") is not null);
 
         // Override with single app for POST
         Priv_Set(cut.Instance, "_apps", new List<ServerAppDto>());
@@ -122,8 +119,7 @@ public class ServerAppsSectionAddTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/servers/23/apps", new List<ServerAppDto>());
         var cut = Render<ServerAppsSection>(p => p.Add(x => x.ServerId, 23));
         cut.WaitForState(
-            () => Priv_Get<List<ServerAppDto>?>(cut.Instance, "_apps") is not null,
-            TimeSpan.FromSeconds(2));
+            () => Priv_Get<List<ServerAppDto>?>(cut.Instance, "_apps") is not null);
 
         Priv_Set(cut.Instance, "_apps", new List<ServerAppDto>());
         _handler.SetJsonResponse(HttpMethod.Post, "api/servers/23/apps", newApp);

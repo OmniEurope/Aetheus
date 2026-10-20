@@ -2,15 +2,10 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// Recette R1-18: the technology the setup wizard generates for. The application templates are
-/// language-agnostic (they run the project's own adapters); what depends on the technology is the web
-/// analytics package of the observability set. .NET is the only technology implemented today, so it is
-/// the only entry: another one is added here with its own package template, never offered before.
-/// </summary>
-/// <param name="Key">The technology's name in the wizard's address.</param>
-/// <param name="LabelKey">The resource key of its visible name.</param>
-/// <param name="AnalyticsPackageTemplate">The template that builds its web analytics package.</param>
+/// <summary>Application adapters are language-agnostic; the stack selects the implemented web
+/// analytics package template.</summary> <param name="Key">Technology name used in the wizard
+/// address.</param> <param name="LabelKey">Resource key for the visible name.</param> <param
+/// name="AnalyticsPackageTemplate">Template that builds its web analytics package.</param>
 public sealed record PipelineSetupStack(string Key, string LabelKey, string AnalyticsPackageTemplate)
 {
     public static readonly PipelineSetupStack DotNet =

@@ -2,12 +2,8 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// PLAN-005 lot 5 / D37: which declared parameter a picked release fills. One definition, read by the
-/// launch dialogs (to know whether releases are worth loading at all) and by the parameter fields (to
-/// know which field a click fills): a required string parameter with no default, and only when there
-/// is exactly one, since a click must never guess between two.
-/// </summary>
+/// <summary>A picked release fills the sole required string parameter without a default. Sharing
+/// this rule between dialogs and fields avoids guessing when multiple targets exist.</summary>
 internal static class RunParameterTargets
 {
     internal static string? ReleaseFillTarget(IEnumerable<PipelineRunParameterDto> parameters) =>

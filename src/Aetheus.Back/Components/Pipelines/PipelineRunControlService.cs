@@ -14,8 +14,8 @@ namespace Aetheus.Back.Components.Pipelines;
 /// </summary>
 public interface IPipelineRunControlService
 {
-    /// <summary>Cancels a run and every run it triggered, depth-first through the trigger tree. Each
-    /// cancelled run is audited with the cancellation's author and reason (recette R2-103).</summary>
+    /// <summary>Cancels a run and every run it triggered, depth-first through the trigger tree.
+    /// Each cancelled run is audited with the cancellation's author and reason.</summary>
     Task<bool> CancelRunAsync(
         int runId, PipelineRunCancellation cancellation, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct);
 
@@ -23,11 +23,9 @@ public interface IPipelineRunControlService
     Task<bool> ResumeAfterApprovalAsync(
         int runId, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct);
 
-    /// <summary>
-    /// Applies a refused or expired approval: the run fails. A stage's own confirmation (PLAN-003 2.7)
-    /// fails that stage instead, so its failure handlers run first. Returns the run's status after,
-    /// or null when it could not leave WaitingForApproval.
-    /// </summary>
+    /// <summary>Refused or expired environment approval fails the run, while stage confirmation
+    /// fails its stage so failure handlers execute first. Returns null if the run cannot leave
+    /// WaitingForApproval.</summary>
     Task<PipelineStatus?> ApplyRefusalAsync(
         int runId, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct);
 
@@ -97,8 +95,8 @@ public sealed class PipelineRunControlService(
 
         var cancellationAlreadyRequested = HasCancellationRequest(current.AdditionalVariablesJson);
         await repo.RequestPipelineRunCancellationAsync(current.Id, cancellation, ct).ConfigureAwait(false);
-        // Recette R2-103: the launch was audited, its cancellation was not. Every request is recorded,
-        // a repeated one too: the audit says who pressed it again, the run keeps the first author.
+        // Every cancellation request is audited, including repeats, while the run preserves the
+        // first request's author.
         await audit.LogAsync("Cancelled", "PipelineRun", current.Id,
             $"{current.Pipeline?.Name} | by {cancellation.By} | {cancellation.Reason}", ct).ConfigureAwait(false);
         await repo.CancelPendingStepRunsExceptStagesAsync(
@@ -117,9 +115,7 @@ public sealed class PipelineRunControlService(
         return true;
     }
 
-    internal static bool IsDeploymentRollback(PipelineStageDefinition stage) =>
-        string.Equals(stage.Condition?.Trim(), "failed()", StringComparison.OrdinalIgnoreCase)
-        && stage.Steps.Any(step => string.Equals(step.Type, "bluegreen-rollback", StringComparison.OrdinalIgnoreCase));
+    internal static bool IsDeploymentRollback(PipelineStageDefinition stage) => PipelineDeploymentStages.IsRollback(stage);
 
     public async Task<bool> ResumeAfterApprovalAsync(
         int runId, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct)
@@ -170,10 +166,8 @@ public sealed class PipelineRunControlService(
         var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
         if (run?.Pipeline is null) return false;
 
-        // Every refusal below used to be the same silent false, which the API turned into a bare 404 and
-        // the page into one generic "run failed" toast: clicking Retry failed on a run that cannot be
-        // retried looked exactly like a retry that had been attempted and failed again. Each reason now
-        // says itself, and reaches the user through the error toast the front already raises on non-2xx.
+        // Distinct refusal reasons reach the caller through the non-success response so an invalid
+        // retry is distinguishable from an attempted execution.
         if (run.Status is not (PipelineStatus.Failed or PipelineStatus.Cancelled))
             throw new ConflictException(
                 $"Only a failed or cancelled run can be retried; this one is {run.Status}.");

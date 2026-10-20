@@ -3,13 +3,9 @@ using Aetheus.Back.Services.DomainEvents;
 
 namespace Aetheus.Back.Components.Users.Events;
 
-/// <summary>
-/// Recette R1-37. Raised when an Aetheus user's session ends on the server's side: an explicit logout,
-/// a refresh-token chain revoked as a replay, a self-service password change (the client signs out right
-/// after), a deactivation or a deletion. Lets higher modules drop what they hold in memory for that user
-/// (the typed mailbox passwords of the Mail module) without the emitters (Auth, L2; Users, L1) reaching
-/// up to them. Declared here, in Users (L1), so both emitters and every listener sit above it.
-/// </summary>
+/// <summary>Announces server-side session termination so higher modules can clear per-user
+/// in-memory state without Auth or Users depending on them. Covers logout, replay revocation,
+/// self-service password changes, deactivation and deletion.</summary>
 public sealed record UserSessionEndedEvent(int UserId, string Reason) : IDomainEvent;
 
 /// <summary>The <see cref="UserSessionEndedEvent.Reason"/> values, for the logs.</summary>

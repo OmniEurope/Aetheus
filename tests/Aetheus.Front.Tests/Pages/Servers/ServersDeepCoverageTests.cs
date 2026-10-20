@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 using ServersPage = Aetheus.Front.Components.Servers.Servers;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -109,7 +110,8 @@ public class ServersDeepCoverageTests : BunitContext
 
     // ── Test 5: FilterByTag sets _search ─────────────────────────────────────
 
-    /// <summary>Recette R-211: a tag clicked in a row becomes the Tags column's own filter, sent to the API.</summary>
+    /// <summary>A tag clicked in a row becomes the Tags column's own filter, sent to the
+    /// API.</summary>
     [Fact]
     public async Task FilterByTag_SetsTheTagsColumnFilter()
     {
@@ -213,10 +215,9 @@ public class ServersDeepCoverageTests : BunitContext
         var method = typeof(ServersPage).GetMethod("PersistColumnVisibilityAsync", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
 
-        // The hidden-column set is persisted via Aetheus.setLocal(key, "Tags").
-        var call = JSInterop.Invocations.Single(i => i.Identifier == "Aetheus.setLocal");
-        Assert.Equal("servers-columns-hidden", call.Arguments[0]);
-        Assert.Equal("Tags", call.Arguments[1]);
+        // R1-66: the hidden-column set is the user's preference, kept on the server.
+        Assert.Equal("Tags", Services.GetRequiredService<Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences>()
+            .Read<string>(PreferenceKeys.ServerHiddenColumns));
     }
 
     // ── Test 12: OnPermissionsChanged refreshes _canWrite ────────────────────

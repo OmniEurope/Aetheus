@@ -100,7 +100,7 @@ proxy_rev=$(printf '%s' "$proxy_line" | sed 's/^ProxyPass/ProxyPassReverse/')
 cat > "$ssl_site" <<VHOST
 #{include:certbot/local-ssl-site.conf}#
 VHOST
-a2enmod ssl >/dev/null 2>&1 || true
+a2enmod ssl headers >/dev/null 2>&1 || true
 ln -sfn "$ssl_site" "$SITES_ENABLED/${primary}-ssl.conf"
 if apache2ctl configtest 2>&1; then
     apache2ctl graceful 2>/dev/null || systemctl reload apache2

@@ -42,7 +42,7 @@ public class DashboardsExtendedTests : BunitContext
     {
         SetupDashboards([]);
         var cut = Render<Dashboards>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // CreateDashboard awaits Dialog.OpenAsync<DashboardNameDialog>; close it with null to cancel.
         var dialog = Spy();
@@ -64,7 +64,7 @@ public class DashboardsExtendedTests : BunitContext
     {
         SetupDashboards();
         var cut = Render<Dashboards>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var method = typeof(Dashboards).GetMethod("EditDashboard", Priv)!;
         method.Invoke(cut.Instance, [new DashboardDto { Id = 7, Name = "Test", Widgets = [] }]);
@@ -81,7 +81,7 @@ public class DashboardsExtendedTests : BunitContext
     {
         SetupDashboards();
         var cut = Render<Dashboards>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var loading = (bool)typeof(Dashboards).GetField("_loading", Priv)!.GetValue(cut.Instance)!;
         Assert.False(loading);

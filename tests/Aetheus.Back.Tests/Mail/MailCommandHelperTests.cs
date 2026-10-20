@@ -68,13 +68,11 @@ public class MailCommandHelperTests
         Assert.Equal(expected, MailCommandHelper.IsValidDkimSelector(selector));
     }
 
-    // BuildServiceCommand / BuildGetLogsCommand were removed (PLAN-005): the typed operations are covered
-    // by MailManageCommandBuilderTests (agent argv) and MailServiceTests (dispatch).
+    // Typed mail-operation dispatch and argv are covered by MailServiceTests and
+    // MailManageCommandBuilderTests.
 
-    // Mail full setup no longer builds a shell command (BuildSetupCommand was removed): it dispatches
-    // the typed OperationKind.MailSetup through the root-owned mail-setup helper so the non-root agent
-    // can run it via the controlled-sudo recipe (S-FEAT-W8KN). The setup path is covered by
-    // MailServiceTests (dispatch) and MailOperationExecutorTests (argv + validation).
+    // Mail setup dispatch uses the root-owned helper under controlled sudo; MailServiceTests and
+    // MailOperationExecutorTests cover dispatch and validated argv.
 
     // S-FEAT-W8KN: BuildAddDomainCommand / BuildAddAccountCommand / BuildAddAliasCommand /
     // BuildDkimRotateCommand were removed - those ops now dispatch the typed MailAddDomain /

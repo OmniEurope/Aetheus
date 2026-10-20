@@ -3,8 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Shared.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 6: the tables whose disk space « Récupérer la place » gives back, their size now, the one
+/// <summary> The tables whose disk space « Récupérer la place » gives back, their size now, the one
 /// running, and the results so far. A purge frees rows, not disk: only <c>VACUUM FULL</c> does.
 /// </summary>
 public sealed record ReclaimSpaceStatusDto

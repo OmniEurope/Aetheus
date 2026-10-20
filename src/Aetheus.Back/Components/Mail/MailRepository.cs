@@ -34,7 +34,7 @@ public class MailRepository(AppDbContext db) : IMailRepository
             var pattern = $"%{search.Trim()}%";
             query = query.Where(item => EF.Functions.ILike(item.Name, pattern));
         }
-        // Recette R-210: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = MailListQuery.DomainColumns.ApplyFilters(query, filters);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
         query = (sortBy?.Trim().ToLowerInvariant(), sortDescending) switch
@@ -80,7 +80,7 @@ public class MailRepository(AppDbContext db) : IMailRepository
             var pattern = $"%{search.Trim()}%";
             query = query.Where(item => EF.Functions.ILike(item.Email, pattern));
         }
-        // Recette R-210 / R-224: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = MailListQuery.AccountColumns.ApplyFilters(query, filters);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
         query = (sortBy?.Trim().ToLowerInvariant(), sortDescending) switch
@@ -162,9 +162,51 @@ public class MailRepository(AppDbContext db) : IMailRepository
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task<List<MailAccount>> GetMissingAccountsAsync(int serverId, CancellationToken ct = default) =>
+        await db.MailAccounts
+            .Where(a => a.MailDomain.ServerId == serverId && a.MissingSince != null)
+            .OrderBy(a => a.Email)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+    public async Task DeleteAccountsAsync(IReadOnlyCollection<MailAccount> accounts, CancellationToken ct = default)
+    {
+        db.MailAccounts.RemoveRange(accounts);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
     public async Task AddTaskAsync(ServerTask task, CancellationToken ct = default)
     {
         db.Tasks.Add(task);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<bool> TryClaimQuotaResyncAsync(int serverId, DateTime now, CancellationToken ct = default)
+    {
+        if (db.Database.IsRelational())
+            return await db.MailStates
+                .Where(s => s.ServerId == serverId && s.QuotaResyncedAt == null
+                    && s.HelperVersion >= MailService.QuotaMinimumHelperVersion)
+                .ExecuteUpdateAsync(u => u.SetProperty(s => s.QuotaResyncedAt, now), ct).ConfigureAwait(false) == 1;
+        var state = await db.MailStates.FirstOrDefaultAsync(s => s.ServerId == serverId, ct).ConfigureAwait(false);
+        if (state is null || state.QuotaResyncedAt is not null || state.HelperVersion < MailService.QuotaMinimumHelperVersion)
+            return false;
+        state.QuotaResyncedAt = now;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return true;
+    }
+
+    public async Task ReleaseQuotaResyncAsync(int serverId, CancellationToken ct = default)
+    {
+        if (db.Database.IsRelational())
+        {
+            await db.MailStates.Where(s => s.ServerId == serverId)
+                .ExecuteUpdateAsync(u => u.SetProperty(s => s.QuotaResyncedAt, (DateTime?)null), ct).ConfigureAwait(false);
+            return;
+        }
+        var state = await db.MailStates.FirstOrDefaultAsync(s => s.ServerId == serverId, ct).ConfigureAwait(false);
+        if (state is null) return;
+        state.QuotaResyncedAt = null;
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
@@ -202,7 +244,7 @@ public class MailRepository(AppDbContext db) : IMailRepository
                 EF.Functions.ILike(item.SourceEmail, pattern) ||
                 EF.Functions.ILike(item.DestinationEmail, pattern));
         }
-        // Recette R-210: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = MailListQuery.AliasColumns.ApplyFilters(query, filters);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
         query = (sortBy?.Trim().ToLowerInvariant(), sortDescending) switch

@@ -8,7 +8,7 @@ using Aetheus.Back.Data.Entities;
 namespace Aetheus.Back.Components.Pipelines;
 
 public partial class PipelineWebhookService(
-    IPipelineRepository pipelineRepo,
+    IPipelineAutoTriggerRepository pipelineRepo,
     IPipelineRunService runService,
     ISettingsService settingsService,
     ILogger<PipelineWebhookService> logger,
@@ -97,8 +97,8 @@ public partial class PipelineWebhookService(
         }
         catch (BadRequestException refusal)
         {
-            // Mandatory catch (recette R-522): inside the transaction the launcher records nothing, since
-            // the rollback would erase it; the refusal is recorded here, once the transaction is over.
+            // Mandatory catch : inside the transaction the launcher records nothing, since the
+            // rollback would erase it; the refusal is recorded here, once the transaction is over.
             await runService.RecordRefusedAutomatedLaunchAsync(
                 pipeline.Id, "Webhook", refusal.Message, variables, ct).ConfigureAwait(false);
             throw;

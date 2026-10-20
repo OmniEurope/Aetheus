@@ -19,7 +19,7 @@ public class PipelineSchedulerServiceTests
     {
         var runService = Substitute.For<IPipelineRunService>();
         var services = new ServiceCollection();
-        services.AddScoped(_ => pipelineRepo);
+        services.AddScoped<IPipelineAutoTriggerRepository>(_ => pipelineRepo);
         services.AddScoped(_ => runService);
         var sp = services.BuildServiceProvider();
         var sut = new PipelineSchedulerService(

@@ -5,16 +5,8 @@ using Aetheus.Back.Services;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// PLAN-003 lot 30 / D22. The wizard used to NAME the libraries and vaults a template requires and
-/// leave the operator to recreate each one by hand, key by key. This creates them in the project:
-/// the names come from the readiness check (so exactly what would block the launch), the keys from a
-/// same-named library or vault the caller can already read elsewhere, and every value is empty.
-///
-/// Values are never copied. A library called <c>aetheus-prod-host</c> in another project holds that
-/// project's hosts and ports; carrying them over would give the new project a working-looking
-/// configuration pointing at somebody else's machine.
-/// </summary>
+/// <summary>Provisioning creates required library and vault keys from accessible resources but
+/// leaves values empty, preventing another project's hosts or secrets from being copied.</summary>
 public sealed class PipelineRequirementsProvisioner(
     IPipelineSetupReadinessService readiness,
     IPipelineRepository pipelines,
@@ -102,18 +94,19 @@ public sealed class PipelineRequirementsProvisioner(
         var byResource = new Dictionary<string, (string Kind, string Name, List<string> Waiting)>(StringComparer.OrdinalIgnoreCase);
         int? owningOrganizationId = null;
         var referencedByPipeline = new List<(string Pipeline, PipelineRequiresDefinition Referenced)>();
+        // R3-67: `${{ project.slug }}.share` is this project's library, as a run reads it.
+        var slug = await PipelineProjectResourceNames.FindSlugAsync(pipelines, projectId, ct).ConfigureAwait(false);
         foreach (var (pipelineId, name, yaml) in await pipelines.GetPipelineDefinitionsForProjectAsync(projectId, ct).ConfigureAwait(false))
         {
             owningOrganizationId ??= await pipelines.GetPipelineOrganizationIdAsync(pipelineId, ct).ConfigureAwait(false);
             var definition = await ResolveAsync(yaml, owningOrganizationId, ct).ConfigureAwait(false);
+            if (definition is not null) definition = PipelineProjectResourceNames.Expand(definition, slug);
             if (ReferencedResources(definition) is { } referenced)
                 referencedByPipeline.Add((name, referenced));
         }
         if (referencedByPipeline.Count == 0) return [];
 
-        // Recette R-486: the project's libraries and vaults are checked once for everything its
-        // pipelines reference together. The check ran once per pipeline and read the same names of the
-        // project each time.
+        // Resolve the project's libraries and vaults once for all pipeline references.
         var everything = new PipelineRequiresDefinition
         {
             Libraries = [.. referencedByPipeline.SelectMany(item => item.Referenced.Libraries).Distinct(StringComparer.OrdinalIgnoreCase)],

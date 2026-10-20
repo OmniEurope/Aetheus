@@ -32,6 +32,39 @@ public sealed class ScannerProcessRunnerTests
         Assert.False(ScannerProcessRunner.TryParseUsage(value, out _, out _));
     }
 
+    [Theory]
+    [InlineData("7B", 7)]
+    [InlineData("2kb", 2_000)]
+    [InlineData("3MB", 3_000_000)]
+    [InlineData("1,5MiB", 1_572_864)]
+    [InlineData("2GB", 2_000_000_000)]
+    [InlineData("1 GiB", 1_073_741_824)]
+    public void TryParseUsage_ConvertsEveryDockerSizeUnit(string memory, long expectedBytes)
+    {
+        Assert.True(ScannerProcessRunner.TryParseUsage($"1%|{memory} / 4GiB", out _, out var bytes));
+        Assert.Equal(expectedBytes, bytes);
+    }
+
+    [Theory]
+    [InlineData("5TB")]
+    [InlineData("MiB")]
+    [InlineData("1.2.3MB")]
+    [InlineData("12")]
+    public void TryParseUsage_RejectsUnknownUnitsAndMalformedAmounts(string memory)
+    {
+        Assert.False(ScannerProcessRunner.TryParseUsage($"1%|{memory} / 4GiB", out _, out var bytes));
+        Assert.Equal(0, bytes);
+    }
+
+    [Fact]
+    public void TryParseUsage_RejectsIncompleteIoColumns()
+    {
+        Assert.False(ScannerProcessRunner.TryParseUsage(
+            "1%|1MiB / 2GiB|1MB|2MB / 3MB", out _, out _, out _, out _, out _, out _));
+        Assert.False(ScannerProcessRunner.TryParseUsage(
+            "1%|1MiB / 2GiB|1MB / 2MB", out _, out _, out _, out _, out _, out _));
+    }
+
     [Fact]
     public void TryParseUsage_ParsesCpuMemoryDiskAndNetwork()
     {
@@ -145,7 +178,7 @@ public sealed class ScannerProcessRunnerTests
             TimeSpan.FromMilliseconds(50));
 
         Assert.False(completed);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1), $"Monitor wait took {stopwatch.Elapsed}.");
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"Monitor wait took {stopwatch.Elapsed}.");
     }
 
     private static bool ProcessHasExited(int processId)

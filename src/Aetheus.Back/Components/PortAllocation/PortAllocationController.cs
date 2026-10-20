@@ -2,12 +2,8 @@
 
 namespace Aetheus.Back.Components.PortAllocation;
 
-/// <summary>
-/// PLAN-005 lot 5. Allocation from a library is gated on writing the LIBRARY, plus reading the server.
-/// Not on writing the server: the reservation is written by the system under the project's identity,
-/// exactly as a pipeline launch already does without any server grant. Requiring server write here
-/// would deny the operation to the very people who own the deployment.
-/// </summary>
+/// <summary>Requires library write and server read permissions for allocation. The system reserves
+/// ports under the project's identity, so server write permission is not required.</summary>
 [ApiController]
 [Route("api/variable-libraries/{libraryId:int}/ports")]
 [Authorize]

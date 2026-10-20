@@ -24,7 +24,7 @@ public class EnvironmentRepositoryTests : IDisposable
     [Fact]
     public async Task GetEnvironmentsPagedAsync_AppliesColumnFilters_BeforeTheCount()
     {
-        // Recette R-224: type list, approval yes/no and name text are column filters of the query.
+        // Type list, approval yes/no and name text are column filters of the query.
         _db.Environments.AddRange(
             new Environment { Name = "prod-eu", Type = EnvironmentType.Production, RequireApproval = true },
             new Environment { Name = "prod-us", Type = EnvironmentType.Production, RequireApproval = false },

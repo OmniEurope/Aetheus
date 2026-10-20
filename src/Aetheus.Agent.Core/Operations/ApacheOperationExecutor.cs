@@ -14,6 +14,12 @@ public sealed class ApacheOperationExecutor(
 {
     private readonly AetheusAgentOptions _options = options.Value;
 
+    internal bool IsLinux { get; init; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+    internal Func<string, bool> LogFileExists { get; init; } = File.Exists;
+    internal Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>>
+        RunProcessWithLoggerAsync
+    { get; init; } = static (startInfo, timeoutSeconds, onOutput, processLogger, ct) =>
+            ProcessRunner.RunAsync(startInfo, timeoutSeconds, onOutput, processLogger, ct);
     internal Func<string, bool> HtaccessFileExists { get; init; } = File.Exists;
     internal Func<string, CancellationToken, Task<string>> ReadHtaccessAsync { get; init; } = File.ReadAllTextAsync;
     internal Func<string, byte[], CancellationToken, Task> WriteHtaccessAsync { get; init; } = File.WriteAllBytesAsync;
@@ -85,9 +91,6 @@ public sealed class ApacheOperationExecutor(
         if (await RejectUnsupportedPlatformAsync(onOutput).ConfigureAwait(false))
             return new ExecutorResult(-1, false);
 
-        const string SitesAvailable = "/etc/apache2/sites-available";
-        const string SitesEnabled = "/etc/apache2/sites-enabled";
-
         // 1) Write the vhost to sites-available (reuses the hardened SaveConfig path: b64 decode,
         //    path-traversal guard, direct ACL write).
         var save = await SaveConfigAsync(siteFileName, envVars, onOutput, ct).ConfigureAwait(false);
@@ -97,18 +100,18 @@ public sealed class ApacheOperationExecutor(
         // 2) Enable the site by symlinking it into sites-enabled (idempotent). Direct symlink rather
         //    than `a2ensite` keeps this argv/syscall-only (no perl, no extra sudo grant); requires the
         //    ACL +rw on sites-enabled granted by `install-agent-linux.sh --enable-apache-manage`.
-        if (!Directory.Exists(SitesEnabled))
+        if (!Directory.Exists(SitesEnabledPath))
         {
-            await onOutput($"{SitesEnabled} not found - Apache may not be installed.", TaskLogLevel.Error).ConfigureAwait(false);
+            await onOutput($"{SitesEnabledPath} not found - Apache may not be installed.", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
         }
-        var linkPath = Path.Combine(SitesEnabled, siteFileName);
-        var srcPath = Path.Combine(SitesAvailable, siteFileName);
+        var linkPath = Path.Combine(SitesEnabledPath, siteFileName);
+        var srcPath = Path.Combine(SitesAvailablePath, siteFileName);
         try
         {
             if (File.Exists(linkPath) || Directory.Exists(linkPath))
                 File.Delete(linkPath);
-            File.CreateSymbolicLink(linkPath, srcPath);
+            CreateSiteSymbolicLink(linkPath, srcPath);
             await onOutput($"Enabled site: {linkPath} -> {srcPath}", TaskLogLevel.Info).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
@@ -183,7 +186,7 @@ public sealed class ApacheOperationExecutor(
         // read the log file directly with `tail` (argv-only, no shell, no allow-list dance).
         // Falls back to /var/log/httpd/* when the Debian-style path is missing.
         if (kind == OperationKind.ApacheGetLogs)
-            return await GetLogsAsync(target, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+            return await GetLogsAsync(target, timeoutSeconds, onOutput, cancellationToken).ConfigureAwait(false);
 
         // Item #5.2/#5.3/#6 - service-control + test config go through the controlled-sudo
         // recipe (sudoers file deposited by `install-agent-linux.sh --enable-apache-manage`).
@@ -201,14 +204,14 @@ public sealed class ApacheOperationExecutor(
         var psi = BuildPsi(kind);
         return psi is null
             ? new ExecutorResult(-1, false)
-            : await ProcessRunner.RunAsync(
+            : await RunProcessWithLoggerAsync(
                 psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<bool> RejectUnsupportedPlatformAsync(
+    private async Task<bool> RejectUnsupportedPlatformAsync(
         Func<string, TaskLogLevel, Task> onOutput)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return false;
+        if (IsLinux) return false;
 
         await onOutput(
             "Apache operations are only supported on Linux",
@@ -222,7 +225,7 @@ public sealed class ApacheOperationExecutor(
     /// requires extending the sudoers file too (justified per the
     /// <c>Controlled Sudo Escalation</c> recipe).
     /// </summary>
-    private static ProcessStartInfo? BuildPsi(OperationKind kind)
+    internal static ProcessStartInfo? BuildPsi(OperationKind kind)
     {
         var psi = SudoProcessStartInfo.Create();
         psi.ArgumentList.Add("-n"); // never prompt - NOPASSWD is required by the sudoers rule
@@ -268,31 +271,30 @@ public sealed class ApacheOperationExecutor(
     /// granted by the install script's <c>--enable-apache-manage</c> flag. The parent dir is
     /// hard-coded - even a regex bypass on the target filename cannot escape it.
     /// </summary>
-    private static async Task<ExecutorResult> SaveConfigAsync(
+    private async Task<ExecutorResult> SaveConfigAsync(
         string siteFileName,
         IReadOnlyDictionary<string, string> envVars,
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken ct)
     {
-        const string SitesAvailable = "/etc/apache2/sites-available";
-
         if (!envVars.TryGetValue("AETHEUS_APACHE_CONFIG_B64", out var b64) || string.IsNullOrEmpty(b64))
         {
             await onOutput("Missing AETHEUS_APACHE_CONFIG_B64 env var.", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
         }
 
-        if (!Directory.Exists(SitesAvailable))
+        if (!Directory.Exists(SitesAvailablePath))
         {
-            await onOutput($"{SitesAvailable} not found - Apache may not be installed.", TaskLogLevel.Error).ConfigureAwait(false);
+            await onOutput($"{SitesAvailablePath} not found - Apache may not be installed.", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
         }
 
-        // Path.Combine pinned to SitesAvailable; we then verify the resolved absolute path
-        // still lives under SitesAvailable. Belt-and-braces: even if siteFileName slipped a
+        // Path.Combine pinned to SitesAvailablePath; we then verify the resolved absolute path
+        // still lives under SitesAvailablePath. Belt-and-braces: even if siteFileName slipped a
         // "../" past the regex, the final realpath check refuses to write outside.
-        var dest = Path.GetFullPath(Path.Combine(SitesAvailable, siteFileName));
-        if (!dest.StartsWith(SitesAvailable + "/", StringComparison.Ordinal))
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(SitesAvailablePath));
+        var dest = Path.GetFullPath(Path.Combine(SitesAvailablePath, siteFileName));
+        if (!dest.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
         {
             await onOutput("Path traversal blocked.", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
@@ -451,11 +453,10 @@ public sealed class ApacheOperationExecutor(
     /// (Debian vs RHEL) using <see cref="File.Exists"/> rather than a shell <c>||</c> chain so
     /// the operation stays inside the typed-op envelope (no allow-list bypass surface).
     /// </summary>
-    private static async Task<ExecutorResult> GetLogsAsync(
+    private async Task<ExecutorResult> GetLogsAsync(
         string target,
         int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput,
-        ILogger logger,
         CancellationToken ct)
     {
         // The target string is the log type (already validated by OperationTargetValidator).
@@ -469,8 +470,8 @@ public sealed class ApacheOperationExecutor(
         var altFileName = fileName.Replace(".log", "_log"); // RHEL convention: error_log / access_log
 
         string? logPath =
-            File.Exists($"/var/log/apache2/{fileName}") ? $"/var/log/apache2/{fileName}"
-            : File.Exists($"/var/log/httpd/{altFileName}") ? $"/var/log/httpd/{altFileName}"
+            LogFileExists($"/var/log/apache2/{fileName}") ? $"/var/log/apache2/{fileName}"
+            : LogFileExists($"/var/log/httpd/{altFileName}") ? $"/var/log/httpd/{altFileName}"
             : null;
 
         if (logPath is null)
@@ -491,6 +492,6 @@ public sealed class ApacheOperationExecutor(
         psi.ArgumentList.Add("100"); // Fixed cap on the agent - the front knob is advisory only.
         psi.ArgumentList.Add(logPath);
 
-        return await ProcessRunner.RunAsync(psi, timeoutSeconds, onOutput, logger, ct).ConfigureAwait(false);
+        return await RunProcessWithLoggerAsync(psi, timeoutSeconds, onOutput, logger, ct).ConfigureAwait(false);
     }
 }

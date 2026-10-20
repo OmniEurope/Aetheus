@@ -3,20 +3,9 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Aetheus.Back.Services;
 
-/// <summary>
-/// The scoped transaction of one request. Re-entrant: the OUTERMOST caller owns the database
-/// transaction, and an inner caller that also wraps its work joins it instead of opening a second one.
-///
-/// Re-entrance is not a convenience. Two services that each legitimately wrap their own write are
-/// composed all the time - one calls the other - and they share this scope and its
-/// <see cref="AppDbContext"/>. Without it EF throws "the connection is already in a transaction", so
-/// the composition fails on PostgreSQL while passing on the InMemory provider that has no
-/// transactions at all: a defect no unit test can see. That is exactly how the port allocation of
-/// PLAN-005 lot 5 shipped broken.
-///
-/// An inner rollback dooms the whole nesting: the work is already abandoned, and letting the outer
-/// commit succeed would persist half of it. The outer commit then refuses rather than lying.
-/// </summary>
+/// <summary>The outermost caller owns the request transaction; nested callers join it so composed
+/// services can share one AppDbContext. An inner rollback invalidates the entire transaction and
+/// prevents an outer commit from persisting partial work.</summary>
 public sealed class DbTransactionScope(AppDbContext db) : IDbTransactionScope, IDisposable, IAsyncDisposable
 {
     private IDbContextTransaction? _transaction;

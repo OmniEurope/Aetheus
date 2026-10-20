@@ -17,11 +17,9 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R2-034: the bell stayed empty because nobody followed a project and nothing announced a
-/// deployment or an agent update. Over the real service and repository: following every readable
-/// project, and the release and agent update events reaching the followers of the right projects.
-/// </summary>
+/// <summary>Tests notification delivery through the real service and repository: users follow
+/// readable projects, and release and agent-update events reach the corresponding
+/// followers.</summary>
 public sealed class ProjectNotificationReachTests : IDisposable
 {
     private const int Alice = 1;

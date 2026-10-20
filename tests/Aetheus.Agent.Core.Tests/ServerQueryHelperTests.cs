@@ -31,6 +31,7 @@ public class ServerQueryHelperTests
     [InlineData("a\\/b", "a/b")]
     [InlineData("x\\py", "x|y")]
     [InlineData("line1\\nline2", "line1\nline2")]
+    [InlineData("line1\\rline2", "line1\rline2")]
     public void UnescapeServerQuery_ReversesEscape(string input, string expected)
     {
         Assert.Equal(expected, ServerQueryHelper.UnescapeServerQuery(input));

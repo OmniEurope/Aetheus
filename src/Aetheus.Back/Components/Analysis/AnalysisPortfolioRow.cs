@@ -25,7 +25,7 @@ public sealed record AnalysisPortfolioRow(
     int BlockerCount,
     int WarningCount,
     DateTime CompletedAt,
-    // Recette R-373: the run's snapshotted clone URL, and the internal repository it names (resolved
-    // after materialisation by PipelineRunRepositoryLinks, one query per page).
+    // The run's snapshotted clone URL, and the internal repository it names (resolved after
+    // materialisation by PipelineRunRepositoryLinks, one query per page).
     string? RepositoryUrl = null,
     int? RepositoryId = null);

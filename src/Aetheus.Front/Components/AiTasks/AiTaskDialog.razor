@@ -15,7 +15,7 @@ else
                 <ValidationMessage For="@(() => _model.Name)" />
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniFormField Label="@L["AiRunnerProfile"]" Class="omni-u-w-100" For="oe-formfield-pages-ai-aitaskdialog-1">
+                <OmniFormField Label="@L["AiRunnerProfile"]" Required="true" Class="omni-u-w-100" For="oe-formfield-pages-ai-aitaskdialog-1">
                     <OmniDropDown Id="oe-formfield-pages-ai-aitaskdialog-1" @bind-Value="_model.ProfileId" Options="@(_profiles.ToOptions(item => item.Id, item => item.Name))" Class="omni-u-w-100" />
                 </OmniFormField>
             </OmniColumn>
@@ -47,18 +47,27 @@ else
                 </ChildContent></OmniFormField>
                 <ValidationMessage For="@(() => _model.PromptTemplate)" />
             </OmniColumn>
+            @if (FixedProjectId.HasValue || _model.OwnerType == "project")
+            {
+                <OmniColumn Span="12" MediumSpan="6">
+                    <AiContextFilePicker ProjectId="@(FixedProjectId ?? _model.ProjectId)" Paths="@ContextPathList" PathsChanged="@OnContextPathsChanged" />
+                </OmniColumn>
+                <OmniColumn Span="12" MediumSpan="6">
+                    <OmniFormField For="oe-pages-ai-aitaskdialog-10" Help="@L["AiGitRangeHint"]" Id="oe-pages-ai-aitaskdialog-10-field" Class="omni-u-w-100"><LabelContent>@L["AiGitRange"]</LabelContent><ChildContent>
+                        <OmniTextBox @bind-Value="_model.GitRange" Placeholder="@L["AiGitRangePlaceholder"]" Class="omni-u-w-100 text-mono" Id="oe-pages-ai-aitaskdialog-10" />
+                    </ChildContent></OmniFormField>
+                </OmniColumn>
+            }
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniFormField For="oe-pages-ai-aitaskdialog-7" Class="omni-u-w-100"><LabelContent>@L["Schedule"]</LabelContent><ChildContent>
+                <OmniFormField For="oe-pages-ai-aitaskdialog-7" Help="@L["AiScheduleHint"]" Id="oe-pages-ai-aitaskdialog-7-field" Class="omni-u-w-100"><LabelContent>@L["Schedule"]</LabelContent><ChildContent>
                     <OmniTextBox @bind-Value="_model.Schedule" Placeholder="0 0 */6 * * *" Class="omni-u-w-100 text-mono" Id="oe-pages-ai-aitaskdialog-7" />
                 </ChildContent></OmniFormField>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["AiScheduleHint"]</OmniText>
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniFormField For="oe-pages-ai-aitaskdialog-8" Class="omni-u-w-100"><LabelContent>@L["EventTypes"]</LabelContent><ChildContent>
+                <OmniFormField For="oe-pages-ai-aitaskdialog-8" Help="@L["AiEventTypesHint"]" Id="oe-pages-ai-aitaskdialog-8-field" Class="omni-u-w-100"><LabelContent>@L["EventTypes"]</LabelContent><ChildContent>
                     <OmniTextBox @bind-Value="_model.EventTypes" Placeholder="@L["PlaceholderEventTypes"]"
                                    Class="omni-u-w-100 text-mono" Id="oe-pages-ai-aitaskdialog-8" />
                 </ChildContent></OmniFormField>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["AiEventTypesHint"]</OmniText>
             </OmniColumn>
             <OmniColumn Span="12">
                 <OmniSwitch @bind-Value="_model.Enabled">@L["Active"]</OmniSwitch>

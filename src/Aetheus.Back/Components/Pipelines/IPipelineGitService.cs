@@ -45,6 +45,13 @@ public interface IPipelineGitService
         int projectId, string relativePath, string revision, CancellationToken ct = default,
         int? sourceRepositoryId = null);
 
+    /// <summary>Reads the root <c>Directory.Build.props</c> at the exact run revision, whose
+    /// <c>VersionPrefix</c> names the release series (<see cref="ReleaseSeries"/>). Null when the
+    /// project has no internal repository, the revision is not an immutable commit, or the file is
+    /// absent or too large.</summary>
+    Task<string?> ReadVersionPropsAtRevisionAsync(
+        int projectId, string revision, CancellationToken ct = default, int? sourceRepositoryId = null);
+
     /// <summary>Best-effort head commit SHA of the project's internal repo default branch, captured
     /// at run trigger time so the run records exactly which commit it built. Returns null when the
     /// project has no internal repo on disk or the commit cannot be resolved. Workspace pipelines

@@ -1,14 +1,13 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R2-090: the mail page opens on its state, one list, each line green or red; every red line
-   carries what fixes it (R1-9); all green, a test message proves delivery end to end. The other tools stay
-   below, secondary. *@
+@* The initial mail checklist exposes each failure's resolution; delivery testing and secondary
+   tools follow below. *@
 @using Microsoft.AspNetCore.Components.Sections
-@* Recette R1-13: while tasks of this page run, one banner at the top names them; it goes when the last ends. *@
+@* While tasks of this page run, one banner at the top names them; it goes when the last ends. *@
 @if (_running.Count > 0)
 {
     <MailTaskBanner Labels="@RunningLabels" Since="@RunningSince" />
 }
-@* Recette R1-12: the mail actions are a "..." menu in the page header, beside Réinstaller. *@
+@* The mail actions are a "..." menu in the page header, beside Réinstaller. *@
 @if (CanManage)
 {
     <SectionContent SectionName="@ServerMailReinstall.HeaderMenuSection">
@@ -63,7 +62,9 @@
                     }
                 }
             </OmniStack>
-            @* Recette R1-11: the step-by-step help to publish the records, folded, once a mail domain is checked. *@
+            @* Recette R3-48: whether the DNS provider has anything to change, or the exact records to publish. *@
+            <MailDnsSummary Items="@StatusItems" />
+            @* The step-by-step help to publish the records, folded, once a mail domain is checked. *@
             @if (HelpDomain is { } helpDomain)
             {
                 <MailDnsHelp Domain="@helpDomain" />
@@ -80,10 +81,16 @@
             }
         }
 
-        @* Recette R1-7: a failed action task (services, OpenDKIM, certificate) says so, with its last log line. *@
+        @* A failed action task (services, OpenDKIM, certificate) says so, with its last log line. *@
         @if (_failure is not null)
         {
-            <OmniAlert Severity="OmniSeverity.Danger" Class="mail-task-failed">@_failure</OmniAlert>
+            <OmniAlert Severity="OmniSeverity.Danger" Class="mail-task-failed">
+                <OmniText Element="OmniTextElement.Strong">@_failure</OmniText>
+                @if (!string.IsNullOrWhiteSpace(_failureLog))
+                {
+                    <OmniText Element="OmniTextElement.Paragraph" Class="task-output-error">@_failureLog</OmniText>
+                }
+            </OmniAlert>
         }
 
         @if (_delivery is not null)
@@ -109,17 +116,17 @@
         @if (CanManage)
         {
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-status-tools">
-                <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Postfix"]" Busy="@IsBusy(MailTaskKind.Postfix)" OnClick="@(() => ServiceActionAsync("postfix", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
-                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "start"))"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniMenuItem>
-                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "stop"))"><OmniIcon Name="@MaterialIconMap.Resolve("stop")" /> <span>@L["Stop"]</span></OmniMenuItem>
-                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "restart"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniMenuItem>
-                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("postfix", "reload"))"><OmniIcon Name="@MaterialIconMap.Resolve("sync")" /> <span>@L["Reload"]</span></OmniMenuItem>
-                </ChildContent></OmniSplitButton>
-                <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["Dovecot"]" Busy="@IsBusy(MailTaskKind.Dovecot)" OnClick="@(() => ServiceActionAsync("dovecot", "restart"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
-                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "start"))"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniMenuItem>
-                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "stop"))"><OmniIcon Name="@MaterialIconMap.Resolve("stop")" /> <span>@L["Stop"]</span></OmniMenuItem>
-                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "restart"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniMenuItem>
-                    <OmniMenuItem OnClick="@(() => ServiceActionAsync("dovecot", "reload"))"><OmniIcon Name="@MaterialIconMap.Resolve("sync")" /> <span>@L["Reload"]</span></OmniMenuItem>
+                @* One button for both services (user decision, 2026-10-17): its main part restarts
+                   Postfix, its menu names the service of each action. *@
+                <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@ServiceLabel("postfix", "restart")" MenuLabel="@L["MailServiceActions"]"
+                                 Busy="@(IsBusy(MailTaskKind.Postfix) || IsBusy(MailTaskKind.Dovecot))" OnClick="@(() => ServiceActionAsync("postfix", "restart"))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>
+                    @foreach (var unit in MailServiceUnits)
+                    {
+                        @foreach (var verb in MailServiceVerbs)
+                        {
+                            <OmniMenuItem OnClick="@(() => ServiceActionAsync(unit, verb))"><Icon><OmniIcon Name="@ServiceVerbIcon(verb)" /></Icon><ChildContent>@ServiceLabel(unit, verb)</ChildContent></OmniMenuItem>
+                        }
+                    }
                 </ChildContent></OmniSplitButton>
             </OmniStack>
         }

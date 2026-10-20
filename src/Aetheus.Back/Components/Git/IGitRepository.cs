@@ -16,7 +16,7 @@ public interface IGitRepository
         string? sortBy = null, bool sortDescending = true,
         IReadOnlyList<GridFilter>? columnFilters = null);
 
-    /// <summary>Recette R-224: the distinct authors of a connection's pull requests.</summary>
+    /// <summary>The distinct authors of a connection's pull requests.</summary>
     Task<List<string>> GetPullRequestAuthorsAsync(int gitConnectionId, CancellationToken ct = default);
     Task<PullRequest?> FindPullRequestByExternalIdAsync(int gitConnectionId, int externalId, CancellationToken ct = default);
     Task AddPullRequestAsync(PullRequest pr, CancellationToken ct = default);

@@ -34,7 +34,8 @@ internal static class RunStageBuilder
                     IsSystem = isSystem,
                     GroupName = steps.FirstOrDefault()?.GroupName,
                     Depth = steps.Select(step => step.StageDepth).FirstOrDefault(depth => depth is not null),
-                    SkippedCondition = PipelineRunFormatting.GetSkippedCondition(steps)
+                    SkippedCondition = PipelineRunFormatting.GetSkippedCondition(steps),
+                    IsRejected = PipelineRunFormatting.IsRejectedStage(steps)
                 };
             })
             .ToList();

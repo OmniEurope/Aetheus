@@ -36,7 +36,7 @@ public class GitLightRepository(AppDbContext db) : IGitLightRepository
         bool sortDescending, int page, int pageSize, CancellationToken ct = default,
         IReadOnlyList<GridFilter>? columnFilters = null)
     {
-        // Recette R-224: the grid's column header filters, after the scope and before the count.
+        // The grid's column header filters, after the scope and before the count.
         var query = GitRepositoryListQuery.Columns.ApplyFilters(FilterAccessible(projectIds, projectId, search), columnFilters);
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
         var items = await OrderAccessible(query, sortBy, sortDescending)
@@ -72,7 +72,7 @@ public class GitLightRepository(AppDbContext db) : IGitLightRepository
         return query;
     }
 
-    private static IOrderedQueryable<GitInternalRepo> OrderAccessible(
+    internal static IOrderedQueryable<GitInternalRepo> OrderAccessible(
         IQueryable<GitInternalRepo> query, string? sortBy, bool sortDescending) =>
         (sortBy, sortDescending) switch
         {

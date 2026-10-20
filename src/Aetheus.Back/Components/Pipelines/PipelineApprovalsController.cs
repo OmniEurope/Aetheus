@@ -2,11 +2,8 @@
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// PLAN-007 lot 7: approvals were only readable run by run, so a deployment waiting for a decision
-/// was invisible until someone opened that run. This lists every approval still pending, across the
-/// pipelines the caller may read, for the home page and the top bar.
-/// </summary>
+/// <summary>Lists pending approvals across readable pipelines for the home page and top
+/// bar.</summary>
 [ApiController]
 [Route("api/pipelines/approvals")]
 [Authorize]

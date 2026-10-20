@@ -56,7 +56,7 @@ public class ServerModulesSectionRenderTests : BunitContext
         {
             var m = (List<ServerModuleDto>?)typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
             return m is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
         var modules = (List<ServerModuleDto>?)typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(modules);
         Assert.Equal(3, modules!.Count);
@@ -70,8 +70,7 @@ public class ServerModulesSectionRenderTests : BunitContext
 
         // Empty list still resolves to a non-null _modules so the empty-state branch renders.
         cut.WaitForState(() =>
-            typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance) is not null,
-            TimeSpan.FromSeconds(2));
+            typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance) is not null);
         var modules = (List<ServerModuleDto>?)typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(modules);
         Assert.Empty(modules!);
@@ -111,7 +110,7 @@ public class ServerModulesSectionRenderTests : BunitContext
         {
             var m = (List<ServerModuleDto>?)typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
             return m is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var newModule = new ServerModuleDto { Id = 99, Name = "postgres", Type = ServerModuleType.PostgreSQL, Status = ServerModuleStatus.Active };
         _handler.SetJsonResponse("api/servers/7/modules", newModule);
@@ -140,7 +139,7 @@ public class ServerModulesSectionRenderTests : BunitContext
         {
             var m = (List<ServerModuleDto>?)typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
             return m is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var newModule = new ServerModuleDto { Id = 88, Name = "nginx", Type = ServerModuleType.Nginx, Status = ServerModuleStatus.Active };
         _handler.SetJsonResponse("api/servers/7/modules", newModule);
@@ -205,8 +204,7 @@ public class ServerModulesSectionRenderTests : BunitContext
 
         // Every enum-typed module loads into _modules without the badge switch throwing.
         cut.WaitForState(() =>
-            typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance) is not null,
-            TimeSpan.FromSeconds(2));
+            typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance) is not null);
         var modules = (List<ServerModuleDto>?)typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(modules);
         Assert.Equal(allTypes.Count, modules!.Count);
@@ -227,7 +225,7 @@ public class ServerModulesSectionRenderTests : BunitContext
         {
             var m = (List<ServerModuleDto>?)typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
             return m is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var modules = (List<ServerModuleDto>?)typeof(ServerModulesSection).GetField("_modules", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(modules);

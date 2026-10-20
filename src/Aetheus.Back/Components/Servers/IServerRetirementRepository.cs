@@ -3,10 +3,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// PLAN-004 R-11: persistence of the server retirement lifecycle. Retiring keeps the row and every
-/// link; purging is the former hard delete, reachable only for an already retired server.
-/// </summary>
+/// <summary>Persists server retirement while preserving links; permanent purge is restricted to
+/// already retired servers.</summary>
 public interface IServerRetirementRepository
 {
     /// <summary>Loads a server for update whether it is active or retired (null when it never existed

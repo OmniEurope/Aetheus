@@ -85,8 +85,7 @@ public class VariableLibraryEditAsyncTests : BunitContext
 
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 60));
         cut.WaitForState(
-            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         var method = typeof(VariableLibraryEdit).GetMethod("OnSubmit", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -107,8 +106,7 @@ public class VariableLibraryEditAsyncTests : BunitContext
 
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 61));
         cut.WaitForState(
-            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         SetFormValue(cut.Instance, "_newEntry", "Key", "NEW_VAR");
         SetFormValue(cut.Instance, "_newEntry", "Value", "new-value");
@@ -169,8 +167,7 @@ public class VariableLibraryEditAsyncTests : BunitContext
 
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 64));
         cut.WaitForState(
-            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         typeof(VariableLibraryEdit).GetField("_editEntryKey", Priv)!.SetValue(cut.Instance, "BASE_URL");
         typeof(VariableLibraryEdit).GetField("_editEntryValue", Priv)!.SetValue(cut.Instance, "https://updated.example.com");
@@ -198,8 +195,7 @@ public class VariableLibraryEditAsyncTests : BunitContext
 
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 65));
         cut.WaitForState(
-            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         var method = typeof(VariableLibraryEdit).GetMethod("ExportEntries", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -219,8 +215,7 @@ public class VariableLibraryEditAsyncTests : BunitContext
 
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 66));
         cut.WaitForState(
-            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         var method = typeof(VariableLibraryEdit).GetMethod("ReloadDetail", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);

@@ -11,11 +11,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>
-/// Recette R-479: a heartbeat rewrote every inventory section (22 bulk deletes and their inserts) on every
-/// beat. A section is now rewritten only when its fingerprint changed; the first beat, and the first beat
-/// after <see cref="HeartbeatInventoryFingerprints.FullRewriteInterval"/>, rewrite all of them.
-/// </summary>
+/// <summary>Rewrite changed inventory sections, with a full rewrite on the first heartbeat and
+/// after FullRewriteInterval.</summary>
 public sealed class ServerHeartbeatDifferentialUpdateTests
 {
     private readonly IServerRepository _repo = Substitute.For<IServerRepository>();

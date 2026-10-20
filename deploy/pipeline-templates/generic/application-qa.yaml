@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: EUPL-1.2
-# Validates the immutable CI payload through the project's QA adapter. The restore and the adapter sit in
-# two stages: the steps of one stage run concurrently (ADR-012), and the adapter reads what the restore
-# writes.
+# Validates the immutable CI payload with the project's QA commands, shell written in its pipeline in
+# APPLICATION_QA_COMMANDS (run with `sh -eu -c` from the workspace): nothing is required in the project's
+# repository (ADR-050, recette R3-64). Without commands the step fails and says so: a QA that validated
+# nothing is never reported green. The restore and the commands sit in two stages: the steps of one stage
+# run concurrently (ADR-012), and the commands read what the restore writes.
 name: application-qa-template
 trigger: manual
 parameters:
@@ -13,6 +15,16 @@ variables:
   APPLICATION_CI_PIPELINE: application-ci
   APPLICATION_ROLLBACK_ENABLED: "true"
   APPLICATION_PERFORMANCE_ENABLED: "${{ parameters.performance }}"
+  APPLICATION_QA_COMMANDS: ""
+
+# Recette R3-67: the QA identity and secrets, named like the platform's own (`<project>.share`,
+# `<project>.qa` libraries, `<project>.qa` Vault): `${{ project.slug }}` is the project's slug, so the setup
+# wizard creates them in the project under the name its runs read.
+vaults:
+  - "${{ project.slug }}.qa"
+variable_libraries:
+  - "${{ project.slug }}.share"
+  - "${{ project.slug }}.qa"
 
 stages:
   - name: Restore CI payload
@@ -32,12 +44,15 @@ stages:
     os: linux
     depends_on: [Restore CI payload]
     steps:
-      - name: Run project QA adapter
+      - name: Run project QA commands
         working_directory: "$(WORKSPACE)"
         shell: |
           set -eu
-          test -f .pipeline/scripts/qa.sh
+          if test -z "${APPLICATION_QA_COMMANDS:-}"; then
+            echo "No QA command declared: set APPLICATION_QA_COMMANDS in this pipeline." >&2
+            exit 1
+          fi
           APPLICATION_ROLLBACK_ENABLED="$(APPLICATION_ROLLBACK_ENABLED)" \
           APPLICATION_PERFORMANCE_ENABLED="$(APPLICATION_PERFORMANCE_ENABLED)" \
-            sh .pipeline/scripts/qa.sh
+            sh -eu -c "$APPLICATION_QA_COMMANDS"
         timeout_seconds: 18000

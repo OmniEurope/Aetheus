@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Collections.Concurrent;
+using Aetheus.Agent.Core.Functions;
 using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Services;
@@ -10,6 +11,7 @@ public sealed class PollingService(
     IEnumerable<IExecutor> executors,
     IEnumerable<IOperationExecutor> operationExecutors,
     IContainerExecutor containerExecutor,
+    ContainerPipelineFunctionExecutor containerFunctions,
     IDockerStorageMaintenance dockerStorageMaintenance,
     IDeploymentBuildRefusalOutbox refusalOutbox,
     AgentState agentState,
@@ -119,8 +121,8 @@ public sealed class PollingService(
         await ReplayDeploymentBuildRefusalsAsync(stoppingToken).ConfigureAwait(false);
         await ReconcileRunningTasksAsync(stoppingToken).ConfigureAwait(false);
 
-        // Recette R1-42: while a self-update runs the process is about to be replaced, so it asks for
-        // nothing else; a task claimed now would be cut by the exit and end as a timeout.
+        // While a self-update runs the process is about to be replaced, so it asks for nothing
+        // else; a task claimed now would be cut by the exit and end as a timeout.
         var freeSlots = _runningTasks.Values.Any(tracked => tracked.IsSelfUpdate)
             ? 0
             : Math.Max(0, _options.MaxConcurrentTasks - _runningTasks.Count);
@@ -317,13 +319,14 @@ public sealed class PollingService(
         OperationKind.ServiceStart or OperationKind.ServiceStop or OperationKind.ServiceRestart or
         OperationKind.ServiceEnable or OperationKind.ServiceInstall or OperationKind.ServiceUninstall;
 
-    /// <summary>Recette R1-8: every mail operation that can change what the mail inventory reports (services,
-    /// certificate, OpenDKIM, domains, accounts, aliases, queue, spam filter, setup, purge). The read-only ones
-    /// (queue view, logs, configuration check, quota report, outbound probe) leave it as it is.</summary>
+    /// <summary>Every mail operation that can change what the mail inventory reports (services,
+    /// certificate, OpenDKIM, domains, accounts, aliases, queue, spam filter, setup, purge). The
+    /// read-only ones (queue view, logs, configuration check, quota report, outbound probe) leave
+    /// it as it is.</summary>
     internal static bool ChangesMailInventory(OperationKind operation) =>
         operation.ToString().StartsWith("Mail", StringComparison.Ordinal) && operation is not
             (OperationKind.MailViewQueue or OperationKind.MailGetLogs or OperationKind.MailTestConfig
-            or OperationKind.MailQuotaReport or OperationKind.MailOutboundProbe);
+            or OperationKind.MailQuotaReport or OperationKind.MailOutboundProbe or OperationKind.MailLeftoversCheck);
 
     private async Task ExecuteOperationAsync(PendingTaskDto task, CancellationToken ct)
     {
@@ -373,10 +376,10 @@ public sealed class PollingService(
         try
         {
             await CompleteTaskAsync(task.Id, result, CancellationToken.None).ConfigureAwait(false);
-            // Recette R-508: whatever the outcome, the host's services may have changed.
+            // Whatever the outcome, the host's services may have changed.
             if (ChangesHostServices(task.Operation))
                 runtimeHealth.RequestHeartbeat();
-            // Recette R1-8: the same for the mail stack, whose inventory the heartbeat also caches.
+            // The same for the mail stack, whose inventory the heartbeat also caches.
             if (ChangesMailInventory(task.Operation))
             {
                 runtimeHealth.InvalidateMailInventory();
@@ -490,10 +493,15 @@ public sealed class PollingService(
         await apiClient.StartTaskAsync(task.Id, ct).ConfigureAwait(false);
         await using var logForwarder = new BufferedLogForwarder(task.Id, apiClient, timeProvider, ct);
 
-        var command = PipelineSecretPlaceholder.Resolve(task.Command, task.EnvironmentVariables);
-        var result = await containerExecutor.ExecuteAsync(
-            task.Container!, command, task.EnvironmentVariables, task.TimeoutSeconds,
-            logForwarder.OnOutputAsync, ct).ConfigureAwait(false);
+        // A type: aetheus step of a container-isolated stage runs its function inside the step
+        // container (aetheus-fn); its target is a catalog name, never a script.
+        var result = ContainerPipelineFunctionExecutor.Handles(task.Operation)
+            ? await containerFunctions.ExecuteAsync(
+                task.Container!, task.Operation, task.Command, task.EnvironmentVariables, task.TimeoutSeconds,
+                logForwarder.OnOutputAsync, ct).ConfigureAwait(false)
+            : await containerExecutor.ExecuteAsync(
+                task.Container!, PipelineSecretPlaceholder.Resolve(task.Command, task.EnvironmentVariables),
+                task.EnvironmentVariables, task.TimeoutSeconds, logForwarder.OnOutputAsync, ct).ConfigureAwait(false);
 
         try
         {
@@ -520,7 +528,7 @@ public sealed class PollingService(
             Status = status,
             ExitCode = result.ExitCode,
             FailureCode = result.FailureCode,
-            FailureReason = result.FailureReason
+            FailureReason = BoundFailureReason(result.FailureReason)
         }, ct).ConfigureAwait(false);
     }
 
@@ -551,7 +559,7 @@ public sealed class PollingService(
             Status = TaskExecutionStatus.Failed,
             ExitCode = -1,
             FailureCode = failureCode,
-            FailureReason = failureReason
+            FailureReason = BoundFailureReason(failureReason)
         }, ct).ConfigureAwait(false);
     }
 
@@ -574,12 +582,19 @@ public sealed class PollingService(
 
     private static string BuildExecutionFailureReason(Exception error)
     {
-        const int maxLength = 512;
         var detail = string.IsNullOrWhiteSpace(error.Message)
             ? "No exception message was provided."
             : error.Message.Replace('\r', ' ').Replace('\n', ' ').Trim();
-        var reason = $"Agent execution failed before the executor returned ({error.GetType().Name}): {detail}";
-        return reason.Length <= maxLength ? reason : reason[..maxLength];
+        return BoundFailureReason(
+            $"Agent execution failed before the executor returned ({error.GetType().Name}): {detail}")!;
+    }
+
+    // TaskResultDto.FailureReason is capped at 512 characters: a longer reason makes the server
+    // refuse the whole completion with HTTP 400, so the task never reports its real outcome.
+    internal static string? BoundFailureReason(string? reason)
+    {
+        const int maxLength = 512;
+        return reason is null || reason.Length <= maxLength ? reason : reason[..maxLength];
     }
 
     internal static async Task SendLogBatchAsync(

@@ -3,13 +3,9 @@ using System.Globalization;
 
 namespace Aetheus.Agent.Core.Collectors;
 
-/// <summary>
-/// Reads how each certbot lineage renews and compares it with the Aetheus convention (PLAN-007): the
-/// ACME web root the installer writes into <c>/etc/letsencrypt/cli.ini</c>. Also reads the outcome of
-/// the last renewal rehearsal the <c>aetheus-certbot-manage renewal-check</c> helper recorded. Files
-/// are read directly (the certbot introspection ACL covers <c>/etc/letsencrypt</c>); an unreadable file
-/// yields <see cref="CertbotRenewalConvention.Unknown"/>, never a conforming verdict.
-/// </summary>
+/// <summary>Read renewal methods, configured ACME webroot and the latest rehearsal outcome directly
+/// through Certbot introspection ACLs. Unreadable files yield Unknown rather than a conforming
+/// verdict.</summary>
 internal sealed class CertbotRenewalInspector(Func<string, string?> readFile, Func<string, bool> fileExists)
 {
     private const string CliIniPath = "/etc/letsencrypt/cli.ini";
@@ -34,6 +30,32 @@ internal sealed class CertbotRenewalInspector(Func<string, string?> readFile, Fu
     }
 
     public (DateTime? CheckedAt, bool? Succeeded) ReadRenewalCheck() => ParseRenewalCheck(readFile(RenewalCheckPath));
+
+    /// <summary>Recette R3-56: the lineages the last rehearsal failed, with certbot's reason.</summary>
+    public List<CertbotRenewalFailureDto> ReadRenewalCheckFailures() => ParseRenewalCheckFailures(readFile(RenewalCheckPath));
+
+    /// <summary>The <c>failed=&lt;name&gt;&lt;TAB&gt;&lt;reason&gt;</c> lines the manage helper records after a failed
+    /// <c>certbot renew --dry-run</c>, at most <see cref="CertbotRenewalFailureDto.MaxFailures"/>.</summary>
+    internal static List<CertbotRenewalFailureDto> ParseRenewalCheckFailures(string? content)
+    {
+        if (content is null) return [];
+        return
+        [
+            .. content.Split('\n')
+                .Select(line => line.TrimEnd('\r'))
+                .Where(line => line.StartsWith("failed=", StringComparison.Ordinal))
+                .Select(line => line["failed=".Length..].Split('\t', 2))
+                .Where(parts => parts[0].Length > 0)
+                .Select(parts => new CertbotRenewalFailureDto
+                {
+                    Name = Truncate(parts[0], CertbotRenewalFailureDto.MaxNameLength),
+                    Reason = parts.Length > 1 ? Truncate(parts[1].Trim(), CertbotRenewalFailureDto.MaxReasonLength) : string.Empty
+                })
+                .Take(CertbotRenewalFailureDto.MaxFailures)
+        ];
+    }
+
+    private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];
 
     internal static CertbotRenewalConvention Evaluate(RenewalSettings? renewal, string? expectedWebroot, bool aliasEnabled)
     {

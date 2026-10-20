@@ -39,7 +39,7 @@ public class ProjectRepository(
             .Take(pageSize)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        // R-481: the pipeline count and the last run, without the pipelines' YAML.
+        // The pipeline count and the last run, without the pipelines' YAML.
         await ProjectPipelineSummaries.AttachAsync(db, items, withLastRun: true, ct).ConfigureAwait(false);
 
         return (items, totalCount);
@@ -88,17 +88,40 @@ public class ProjectRepository(
         if (projectIds.Count == 0) return [];
 
         var latestCommits = await LatestCommitsAsync(projectIds, ct).ConfigureAwait(false);
+        var latestRuns = await LatestRootRunsAsync(projectIds, ct).ConfigureAwait(false);
 
-        // PLAN-003 lot 8 / D24: the tile names the run a person launched, never one of its children.
-        // A child run is the one a parent's step triggered, so "root" is simply a run no step points
-        // at. Filtering here rather than walking up from the newest run keeps it one query, and the
-        // tile loses its "child of" line because there is no longer a child to explain.
-        // PLAN-005 lot 7 / D45: a root run still Running wins over a newer finished one, otherwise the
-        // tile says "last run: success" in the middle of a deployment. Running is the only status
-        // counted as in progress; among several, the most recently started. The step it is on comes
-        // back in the same row (running, else assigned, else the next pending non-system step), so
-        // the list stays within its bounded number of commands.
-        var latestRuns = await db.PipelineRuns
+        // Use the same cross-run, latest-domain grade as the project Quality page. Looking only at
+        // the newest gate run is incorrect when quality and security are evaluated by separate
+        // pipelines: the most recent run may be A while another current required domain is F.
+        var gradesByProject = await analysisGrades.GetGradesAsync(projectIds, ct)
+            .ConfigureAwait(false);
+
+        var monitoredApps = await EnabledMonitoredAppsAsync(projectIds, activeSessionCutoffUtc, ct).ConfigureAwait(false);
+        var productionAppsByProject = ProjectListInsightAssembler.ProductionAppsByProject(monitoredApps);
+
+        var commitsByProject = latestCommits.ToDictionary(commit => commit.ProjectId);
+        var runsByProject = latestRuns.ToDictionary(run => run.ProjectId);
+        var result = new Dictionary<int, ProjectListInsight>(projectIds.Count);
+
+        foreach (var projectId in projectIds)
+        {
+            result[projectId] = ProjectListInsightAssembler.Build(
+                projectId,
+                commitsByProject.GetValueOrDefault(projectId),
+                runsByProject.GetValueOrDefault(projectId),
+                gradesByProject.GetValueOrDefault(projectId)?.OverallGrade,
+                productionAppsByProject.GetValueOrDefault(projectId) ?? []);
+        }
+
+        return result;
+    }
+
+    // Select root runs in the query, prioritizing the most recently started Running run over
+    // finished runs. Fetch its current step in the same row, preferring running, assigned, then
+    // pending non-system steps, to keep the command count bounded.
+    private async Task<List<ProjectListRun>> LatestRootRunsAsync(IReadOnlyCollection<int> projectIds, CancellationToken ct)
+    {
+        var rows = await db.PipelineRuns
             .AsNoTracking()
             .Where(run => run.Pipeline.ProjectId.HasValue
                 && projectIds.Contains(run.Pipeline.ProjectId.Value)
@@ -128,14 +151,14 @@ public class ProjectRepository(
                 .First())
             .ToListAsync(ct)
             .ConfigureAwait(false);
+        return rows.ConvertAll(row => new ProjectListRun(row.ProjectId, row.Id, row.PipelineName, row.Status, row.StartedAt,
+            row.CurrentStep is { } step ? new ProjectListCurrentStep(step.StageName, step.StepName) : null));
+    }
 
-        // Use the same cross-run, latest-domain grade as the project Quality page. Looking only at
-        // the newest gate run is incorrect when quality and security are evaluated by separate
-        // pipelines: the most recent run may be A while another current required domain is F.
-        var gradesByProject = await analysisGrades.GetGradesAsync(projectIds, ct)
-            .ConfigureAwait(false);
-
-        var monitoredApps = await db.MonitoredApps
+    private async Task<List<ProjectListApp>> EnabledMonitoredAppsAsync(
+        IReadOnlyCollection<int> projectIds, DateTime activeSessionCutoffUtc, CancellationToken ct)
+    {
+        var rows = await db.MonitoredApps
             .AsNoTracking()
             .Where(app => app.Enabled && projectIds.Contains(app.ProjectId))
             .Select(app => new
@@ -156,66 +179,17 @@ public class ProjectRepository(
             })
             .ToListAsync(ct)
             .ConfigureAwait(false);
-
-        var productionAppsByProject = monitoredApps
-            .GroupBy(app => app.ProjectId)
-            .ToDictionary(
-                group => group.Key,
-                group =>
-                {
-                    var explicitlyProduction = group
-                        .Where(app => app.EnvironmentType == EnvironmentType.Production)
-                        .ToList();
-                    return explicitlyProduction.Count > 0
-                        ? explicitlyProduction
-                        : group.Where(app => app.EnvironmentType is null).ToList();
-                });
-
-        var commitsByProject = latestCommits.ToDictionary(commit => commit.ProjectId);
-        var runsByProject = latestRuns.ToDictionary(run => run.ProjectId);
-        var result = new Dictionary<int, ProjectListInsight>(projectIds.Count);
-
-        foreach (var projectId in projectIds)
-        {
-            commitsByProject.TryGetValue(projectId, out var commit);
-            runsByProject.TryGetValue(projectId, out var run);
-            var productionApps = productionAppsByProject.GetValueOrDefault(projectId) ?? [];
-            var productionStatus = ResolveProductionStatus(productionApps.Select(app => app.CurrentStatus));
-            var analyticsAvailable = productionApps.Any(app => app.AnalyticsEnabled);
-
-            result[projectId] = new ProjectListInsight(
-                projectId,
-                commit?.Id,
-                commit?.Sha,
-                commit?.Message,
-                commit?.Date,
-                run?.Id,
-                run?.PipelineName,
-                run?.Status,
-                run?.StartedAt,
-                gradesByProject.GetValueOrDefault(projectId)?.OverallGrade,
-                productionStatus,
-                analyticsAvailable
-                    ? productionApps.Where(app => app.AnalyticsEnabled).Sum(app => app.ActiveSessionCount)
-                    : null,
-                run?.Status == PipelineStatus.Running,
-                run is { Status: PipelineStatus.Running, CurrentStep: { } step }
-                    ? $"{NormalizeStageName(step.StageName)} · {step.StepName}"
-                    : null);
-        }
-
-        return result;
+        return rows.ConvertAll(row => new ProjectListApp(
+            row.ProjectId, row.CurrentStatus, row.AnalyticsEnabled, row.EnvironmentType, row.ActiveSessionCount));
     }
 
-    private sealed record LatestCommit(int ProjectId, int Id, string Sha, string? Message, DateTime Date);
 
-    /// <summary>
-    /// Recette R-481: the newest commit of each project, one indexed top-1 lookup per project instead of
-    /// numbering every commit of every listed project. A commit's date is <c>CommittedAt ?? CreatedAt</c>;
-    /// a sort on that expression cannot use an index, so each side is looked up on its own index
-    /// (<c>ProjectId, CommittedAt, Id</c> and <c>ProjectId, CreatedAt, Id</c>) and the newer one wins.
-    /// </summary>
-    private async Task<List<LatestCommit>> LatestCommitsAsync(IReadOnlyCollection<int> projectIds, CancellationToken ct)
+    /// <summary> The newest commit of each project, one indexed top-1 lookup per project instead of
+    /// numbering every commit of every listed project. A commit's date is <c>CommittedAt ??
+    /// CreatedAt</c>; a sort on that expression cannot use an index, so each side is looked up on
+    /// its own index (<c>ProjectId, CommittedAt, Id</c> and <c>ProjectId, CreatedAt, Id</c>) and
+    /// the newer one wins. </summary>
+    private async Task<List<ProjectLatestCommit>> LatestCommitsAsync(IReadOnlyCollection<int> projectIds, CancellationToken ct)
     {
         // Single-column correlated subqueries stay scalar subqueries with LIMIT 1 in SQL (an index
         // top-1 each); a row projection here would be rewritten into a ROW_NUMBER over every commit.
@@ -250,17 +224,17 @@ public class ProjectRepository(
             .Select(head => new[]
                 {
                     head.DatedId is { } datedId && head.DatedAt is { } datedAt
-                        ? new LatestCommit(head.ProjectId, datedId, head.DatedSha ?? string.Empty, head.DatedMessage, datedAt)
+                        ? new ProjectLatestCommit(head.ProjectId, datedId, head.DatedSha ?? string.Empty, head.DatedMessage, datedAt)
                         : null,
                     head.RecordedId is { } recordedId && head.RecordedAt is { } recordedAt
-                        ? new LatestCommit(head.ProjectId, recordedId, head.RecordedSha ?? string.Empty, head.RecordedMessage, recordedAt)
+                        ? new ProjectLatestCommit(head.ProjectId, recordedId, head.RecordedSha ?? string.Empty, head.RecordedMessage, recordedAt)
                         : null
                 }
-                .OfType<LatestCommit>()
+                .OfType<ProjectLatestCommit>()
                 .OrderByDescending(commit => commit.Date)
                 .ThenByDescending(commit => commit.Id)
                 .FirstOrDefault())
-            .OfType<LatestCommit>()
+            .OfType<ProjectLatestCommit>()
             .ToList();
     }
 
@@ -299,7 +273,7 @@ public class ProjectRepository(
                 step => $"{NormalizeStageName(step.StageName)} · {step.StepName}");
     }
 
-    private static ProjectProductionStatus ResolveProductionStatus(IEnumerable<AppHealthStatus> statuses)
+    internal static ProjectProductionStatus ResolveProductionStatus(IEnumerable<AppHealthStatus> statuses)
     {
         var values = statuses.ToList();
         if (values.Count == 0 || values.Any(status => status == AppHealthStatus.Unknown))
@@ -333,24 +307,22 @@ public class ProjectRepository(
                     || step.PipelineRun.Status == PipelineStatus.WaitingForApproval)),
             ct);
 
-    private static string NormalizeStageName(string stageName) =>
+    internal static string NormalizeStageName(string stageName) =>
         stageName.StartsWith("System:", StringComparison.Ordinal)
             ? stageName["System:".Length..]
             : stageName;
 
-    /// <summary>Recette R-482, R2-024: the same grade as the list's insight (the latest candidate's),
-    /// without the rest of it; its run is the candidate's root run.</summary>
+    /// <summary>Returns the latest candidate grade, matching the list insight, and its root run
+    /// without loading other insights.</summary>
     public async Task<AnalysisGradeSummaryDto?> GetLatestGateGradeAsync(int projectId, CancellationToken ct = default) =>
         (await analysisGrades.GetGradesAsync([projectId], ct).ConfigureAwait(false))
             .GetValueOrDefault(projectId);
 
     public async Task<ProjectSectionCounts> GetProjectSectionCountsAsync(int projectId, CancellationToken ct = default)
     {
-        // Recette R-482: the six counts in one round trip (one statement with six scalar subqueries)
-        // instead of six statements one after the other; still counts, never the collections.
-        // PLAN-003 lot 29 / D23: a server also reaches the project through one of its environments.
-        // Counted apart from the direct attachments, and distinct, so a server linked to three
-        // environments of the same project counts once.
+        // Read six counts in one statement without loading collections. Count distinct
+        // environment-linked servers separately from direct project attachments so each section
+        // count matches its rows.
         var counts = await db.Projects.AsNoTracking()
             .Where(project => project.Id == projectId)
             .Select(project => new ProjectSectionCounts(
@@ -444,7 +416,7 @@ public class ProjectRepository(
                     && projectServer.Server.Name.ToLower().Contains(normalized)));
         }
 
-        // Recette R-212: the header filters of the project's servers, before the count.
+        // The header filters of the project's servers, before the count.
         query = ProjectServerListQuery.Columns.ApplyFilters(query, columnFilters);
 
         query = query.Include(projectServer => projectServer.Server);
@@ -498,7 +470,7 @@ public class ProjectRepository(
                 || (task.Server != null && task.Server.Name.ToLower().Contains(normalized)));
         }
 
-        // Recette R-212: the header filters of the project's tasks, before the count.
+        // The header filters of the project's tasks, before the count.
         query = TaskListQuery.Columns.ApplyFilters(query, columnFilters);
 
         query = query.Include(task => task.Server);
@@ -544,7 +516,7 @@ public class ProjectRepository(
             query = query.Where(log => log.Message.ToLower().Contains(normalized));
         }
 
-        // Recette R-212: the header filters of the project's logs, before the count.
+        // The header filters of the project's logs, before the count.
         query = ProjectLogListQuery.Columns.ApplyFilters(query, columnFilters);
 
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);

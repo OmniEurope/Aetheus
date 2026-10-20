@@ -8,7 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Auth;
 
-/// <summary>Recette R1-37: the client's logout reaches the server, which ends the signed-in user's session.</summary>
+/// <summary>The client's logout reaches the server, which ends the signed-in user's
+/// session.</summary>
 public sealed class AuthControllerLogoutTests
 {
     private readonly IAuthService _auth = Substitute.For<IAuthService>();

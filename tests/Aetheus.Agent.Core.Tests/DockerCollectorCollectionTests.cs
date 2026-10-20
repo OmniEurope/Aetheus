@@ -33,11 +33,17 @@ public sealed class DockerCollectorCollectionTests
             .Returns(new ShellExecResult(0, "net1\tapi_default\tbridge\tlocal\tapi\nshort\n", string.Empty));
         shell.RunExecAsync("docker", Arg.Is<IReadOnlyList<string>>(a => a.Contains("volume")), Arg.Any<CancellationToken>())
             .Returns(new ShellExecResult(0, "api_data\tlocal\t/var/lib/docker/volumes/api_data\tapi\nshort\n", string.Empty));
+        shell.RunExecAsync("docker", Arg.Is<IReadOnlyList<string>>(a => a.Contains("inspect") && a.Contains("abc123")), Arg.Any<CancellationToken>())
+            .Returns(new ShellExecResult(0,
+                """{"id":"abc123def456","name":"/api_web_1","image":"api:latest","privileged":true,"pidMode":"","networkMode":"bridge","capAdd":null,"mounts":[],"role":null,"service":null}""" + "\n",
+                string.Empty));
 
         var result = await new DockerCollector(NullLogger<DockerCollector>.Instance, shell).CollectAllAsync(TestContext.Current.CancellationToken);
 
         var container = Assert.Single(result.Containers);
         Assert.Equal("abc123", container.ContainerId);
+        Assert.True(container.SecurityInspected);
+        Assert.Equal(DockerContainerRisks.Privileged, container.Risks);
         Assert.Equal("api", container.Project);
         Assert.Equal(12.5, container.CpuPercent);
         Assert.Equal(256, container.MemoryUsageMb);
@@ -49,7 +55,7 @@ public sealed class DockerCollectorCollectionTests
         Assert.Equal("C:/deploy/docker compose.yml", stack.ConfigFile);
         Assert.Equal("api", Assert.Single(result.Networks).Project);
         Assert.Equal("api", Assert.Single(result.Volumes).Project);
-        await shell.Received(6).RunExecAsync("docker", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>());
+        await shell.Received(7).RunExecAsync("docker", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

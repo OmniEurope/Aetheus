@@ -103,13 +103,13 @@ public sealed class ProjectListInsightsIntegrationTests(PostgresFixture fixture)
             TestContext.Current.CancellationToken);
 
         var insight = Assert.Single(insights).Value;
-        // PLAN-003 lot 8 / D24, on real PostgreSQL: the child is the newest run, the insight still names
-        // the root. This is the check that the NOT EXISTS filter translates, not just that it compiles.
+        // A newer child run must not replace the root insight; PostgreSQL execution verifies NOT
+        // EXISTS translation.
         Assert.Equal(parentRunId, insight.LastRunId);
         Assert.Equal("parent", insight.LastRunName);
         Assert.NotEqual(childRunId, insight.LastRunId);
-        // PLAN-005 lot 7 / D45: the conditional sort and the current-step subquery translate too, and
-        // cost no extra command: the running root is in progress, on its running step.
+        // Conditional ordering and current-step projection must translate without an extra database
+        // command.
         Assert.True(insight.LastRunIsActive);
         Assert.Equal("orchestrate · child", insight.LastRunCurrentStep);
         Assert.InRange(counter.Count, 1, 4);

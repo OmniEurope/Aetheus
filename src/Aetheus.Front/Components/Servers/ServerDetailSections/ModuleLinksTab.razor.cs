@@ -30,7 +30,7 @@ public partial class ModuleLinksTab
     private Func<string, string>? _typeText;
     private Func<string, string>? _sourceText;
 
-    // Recette R-210: what the Type and Source header filters show for each value.
+    // What the Type and Source header filters show for each value.
     private Func<string, string> TypeText => _typeText ??= GridFilterText.ForEnum<ModuleLinkType>(L);
     private Func<string, string> SourceText => _sourceText ??= value =>
         bool.TryParse(value, out var automatic) ? L[automatic ? "Auto" : "Manual"].Value : value;
@@ -38,9 +38,9 @@ public partial class ModuleLinksTab
     protected override async Task OnParametersSetAsync()
     {
         _targetTypes = Enum.GetValues<ModuleLinkType>().Where(t => t != SourceType).ToArray();
-        // Recette R-327: the grid scrolls (remote virtualization) and only shows what it fetched itself. A
-        // parent render with the same server, type and resources leaves it, and its scroll position, alone;
-        // a real change reloads it from its first row.
+        // The grid scrolls (remote virtualization) and only shows what it fetched itself. A parent
+        // render with the same server, type and resources leaves it, and its scroll position,
+        // alone; a real change reloads it from its first row.
         var key = $"{ServerId}|{SourceType}|{string.Join('\n', Resources)}";
         if (key == _loadedKey) return;
         _loadedKey = key;
@@ -53,7 +53,7 @@ public partial class ModuleLinksTab
         return _grid is not null ? _grid.GoToPage(0, forceReload: true) : LoadLinksAsync();
     }
 
-    /// <summary>Recette R2-124: one page of the export, the same query as the grid's load.</summary>
+    /// <summary>One page of the export, the same query as the grid's load.</summary>
     private Task<PaginatedResult<LinkedResourceDto>> ReadExportAsync(GridLoadArgs args)
     {
         var resourceIdentifiers = Resources
@@ -120,7 +120,7 @@ public partial class ModuleLinksTab
     {
         (_page, _pageSize) = args.ToPageRequest();
         (_sortBy, _sortDescending) = GetSort(args);
-        // Recette R-210: the header filters, applied by the API.
+        // The header filters, applied by the API.
         _columnFilters = args.ToApiFilters();
         await LoadLinksAsync();
     }

@@ -7,8 +7,8 @@ public static class PortAllocationModuleExtensions
     {
         services.AddScoped<IPortAllocationRepository, PortAllocationRepository>();
         services.AddScoped<IPortAllocationService, PortAllocationService>();
-        // PLAN-005 lot 6: records a server app's port. Registered here and not in ServerApps because
-        // the registry sits on that module's own layer and may not be reached from it.
+        // Registers the application-port handler here to keep the ServerApps and PortRegistry
+        // storage modules independent (ADR-039).
         services.AddScoped<
             Services.DomainEvents.IDomainEventHandler<ServerApps.Events.ServerAppPortChangedEvent>,
             ServerAppPortRegistryHandler>();

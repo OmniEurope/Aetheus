@@ -5,11 +5,8 @@ using Aetheus.Telemetry;
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
-/// <summary>
-/// PLAN-013 lot 1 (R2-113): turns the database size gauges an application exported through
-/// <c>Aetheus.Telemetry</c> (<see cref="DatabaseSizeMetrics"/>) into its Database tab. Pure, so the
-/// grouping is tested without a database.
-/// </summary>
+/// <summary>Maps exported database-size gauges into the Database view independently of
+/// persistence.</summary>
 public static class AppDatabaseSize
 {
     public static readonly IReadOnlyList<string> MetricNames =

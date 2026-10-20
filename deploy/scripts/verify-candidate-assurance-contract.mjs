@@ -25,9 +25,9 @@ try {
 }
 const sourceSha = readFileSync(sourceCommitPath, "utf8").trim().toLowerCase();
 if (!/^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(sourceSha)) throw new Error("Artifact source commit is invalid.");
-// Schema 2 adds the qualification profile and the previousSmoke test (PLAN-006 lot 9). Schema 1 is
-// still accepted because candidates published before this change are retained and remain deployable:
-// they ran the full V-1 suites unconditionally, which is exactly what a schema-2 `full` records.
+// Accept schema 1 for retained releases because its unconditional V-1 suites provide the evidence
+// schema 2 records under full qualification. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 if (contract.schema !== 1 && contract.schema !== 2) throw new Error("Unsupported assurance contract schema.");
 const profile = contract.schema === 1 ? "full" : contract.profile;
 if (profile !== "light" && profile !== "full") {
@@ -91,10 +91,9 @@ for (const [name, analysis] of Object.entries(contract.analyses ?? {})) {
   if (actualHash !== analysis.sha256) throw new Error(`${name} evidence hash does not match the contract.`);
   effectiveGrades.push(analysis.effectiveGrade);
 }
-// Every contract carries the three analyses a candidate produces. A `full` qualification (the
-// nightly, PLAN-007 lot 2) may add exactly the two extension grades, both or neither; each counts in
-// the overall grade through the loop above. The three-key form stays the only one a light contract
-// may have, so every contract sealed before this change reads exactly as before.
+// Light qualification carries only the three base analyses; full qualification may add both
+// extension grades together so every included grade contributes to the overall verdict. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 const analysisKeys = Object.keys(contract.analyses ?? {}).sort().join(",");
 const extendedAnalysisKeys = "dynamicSecurity,extendedDynamicSecurity,quality,security,securityHistory";
 if (analysisKeys !== "dynamicSecurity,quality,security"

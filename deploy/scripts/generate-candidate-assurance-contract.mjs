@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
-// The two trailing directories are the nightly extensions (PLAN-007 lot 2): aetheus-security-history
-// and aetheus-qa-extended each grade their own run, and a `full` qualification seals both grades
-// beside the three every contract carries. They come together or not at all.
+// Full qualification seals both nightly extension grades alongside the three base analyses;
+// accepting only one would leave incomplete evidence. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 const [outputPath, evidenceDirectory, sourceSha, qualityDirectory, securityDirectory, qaDirectory, provenancePath,
   securityHistoryDirectory, extendedQaDirectory] = process.argv.slice(2);
 if (!outputPath || !evidenceDirectory || !sourceSha || !qualityDirectory || !securityDirectory || !qaDirectory || !provenancePath
@@ -115,10 +115,25 @@ function outcome(variableName) {
   return { status: "Unavailable", effectiveGrade: "F", reason: "output-variable-unavailable" };
 }
 
+// The persist-compatibility-mode function publishes COMPATIBILITY_MODE and PREVIOUS_VERSION_TESTED;
+// the script it replaced (qa/persist-compatibility-mode.sh, since deleted) published them as
+// CompatibilityMode and PreviousVersionTested, which runs stored before the move still carry. The upper
+// snake case name wins; the legacy one is read only when it is absent or empty.
+const legacyCompatibilityVariables = {
+  COMPATIBILITY_MODE: "CompatibilityMode",
+  PREVIOUS_VERSION_TESTED: "PreviousVersionTested"
+};
+
+function compatibilityVariable(name) {
+  const value = process.env[name];
+  const legacy = legacyCompatibilityVariables[name];
+  return (value === undefined || value === "") && legacy !== undefined ? process.env[legacy] : value;
+}
+
 function compatibilityOutcome(variableName, modeVariable, testedVariable) {
   const result = outcome(variableName);
-  const mode = process.env[modeVariable];
-  const tested = process.env[testedVariable];
+  const mode = compatibilityVariable(modeVariable);
+  const tested = compatibilityVariable(testedVariable);
   if (mode !== "NMinusOne" && mode !== "Bootstrap") {
     return { ...result, status: "Unavailable", effectiveGrade: "F", reason: "compatibility-mode-unavailable", mode: null, tested: null };
   }
@@ -140,12 +155,9 @@ function declared(name, build) {
   return { required: false, status: "NotRun", effectiveGrade: null, reason: "not-applicable-to-project" };
 }
 
-// Qualification profile (PLAN-006 lot 9). `light` is what every push runs; it does not run the full
-// V-1 suites nor the retained-agent contract, so those three are recorded NotRun and unrequired
-// rather than read from output variables the run never published. The rollback is still proved, by
-// previousSmoke below, which is required in BOTH profiles: a profile may remove depth, never the
-// proof itself. The image analyses stay required in both, because they judge the very images this
-// candidate packages.
+// Record checks omitted by light qualification as NotRun and unrequired instead of reading
+// nonexistent outputs; both profiles still require rollback smoke and analysis of the packaged
+// images. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 const profile = process.env.AETHEUS_ASSURANCE_PROFILE ?? "full";
 if (profile !== "light" && profile !== "full") {
   throw new Error(`AETHEUS_ASSURANCE_PROFILE must be 'light' or 'full', not '${profile}'.`);
@@ -191,16 +203,16 @@ const tests = {
     () => ({ required: true, ...outcome("QA_CURRENT_INTEGRATION_GATE_STATUS") })),
   currentE2E: declared("currentE2E", () => ({ required: true, ...outcome("QA_CURRENT_E2E_GATE_STATUS") })),
   previousSmoke: declared("previousSmoke", () => ({ required: true, ...compatibilityOutcome(
-    "QA_PREVIOUS_SMOKE_GATE_STATUS", "CompatibilityMode", "PreviousVersionTested") })),
+    "QA_PREVIOUS_SMOKE_GATE_STATUS", "COMPATIBILITY_MODE", "PREVIOUS_VERSION_TESTED") })),
   agentCompatibility: declared("agentCompatibility", () => profiled("agentCompatibility",
     () => ({ required: true, ...compatibilityOutcome(
       "QA_AGENT_COMPATIBILITY_GATE_STATUS", "AgentCompatibilityMode", "PreviousAgentTested") }))),
   previousIntegration: declared("previousIntegration", () => profiled("previousIntegration",
     () => ({ required: true, ...compatibilityOutcome(
-      "QA_PREVIOUS_INTEGRATION_GATE_STATUS", "CompatibilityMode", "PreviousVersionTested") }))),
+      "QA_PREVIOUS_INTEGRATION_GATE_STATUS", "COMPATIBILITY_MODE", "PREVIOUS_VERSION_TESTED") }))),
   previousE2E: declared("previousE2E", () => profiled("previousE2E",
     () => ({ required: true, ...compatibilityOutcome(
-      "QA_PREVIOUS_E2E_GATE_STATUS", "CompatibilityMode", "PreviousVersionTested") }))),
+      "QA_PREVIOUS_E2E_GATE_STATUS", "COMPATIBILITY_MODE", "PREVIOUS_VERSION_TESTED") }))),
   performance
 };
 const provenanceBytes = readFileSync(provenancePath);

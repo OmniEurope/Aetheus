@@ -2,21 +2,9 @@
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// R-368: the assurance-grade threshold of a deployment, checked by the control plane before the run
-/// dispatches anything.
-///
-/// The threshold used to be read only by a script in the second stage of aetheus-deploy-prod, whose
-/// first stage is already bound to <c>environment: prod</c>: a release graded F had its production
-/// approval requested, and its System prepare and artifact restore run on the production agent,
-/// before anything compared its grade with the declared E. The agent-side check stays (it verifies the
-/// sealed contract itself); this one decides whether the attempt may start at all.
-///
-/// A run declares the threshold with <see cref="MinimumGradeVariable"/> and names the release with
-/// <see cref="ReleaseVariable"/>, the two variables aetheus-deploy-prod already carries, so no
-/// definition has to change and an older control plane reading the same YAML is unaffected. Every
-/// doubt refuses: an unreadable threshold, no release, an unknown release, a release with no sealed grade.
-/// </summary>
+/// <summary>The control plane checks the declared deployment-grade threshold before any dispatch;
+/// the agent independently verifies the sealed contract. Unreadable thresholds or missing
+/// release-grade evidence refuse the attempt.</summary>
 internal sealed class PipelineDeploymentGradeGate(IPipelineRepository repo)
 {
     internal const string MinimumGradeVariable = "AETHEUS_DEPLOY_MINIMUM_GRADE";
@@ -26,18 +14,9 @@ internal sealed class PipelineDeploymentGradeGate(IPipelineRepository repo)
     public async Task<string?> EvaluateAsync(
         int runId, IReadOnlyDictionary<string, string> variables, CancellationToken ct)
     {
-        if (!variables.TryGetValue(MinimumGradeVariable, out var rawThreshold) || string.IsNullOrWhiteSpace(rawThreshold))
-            return null;
-        var threshold = rawThreshold.Trim();
-        // Exactly one capital letter: Enum.TryParse would also accept "4" or "e" and read a typo as a grade.
-        if (threshold.Length != 1 || threshold[0] is < 'A' or > 'F')
-            return $"Deployment refused before it started: {MinimumGradeVariable} '{threshold}' is not an assurance grade (A to F).";
+        if (!TryReadGateInputs(variables, out var threshold, out var selector, out var refusal))
+            return refusal;
         var minimum = Enum.Parse<AnalysisGrade>(threshold);
-
-        var selector = variables.TryGetValue(ReleaseVariable, out var rawRelease) ? rawRelease.Trim() : string.Empty;
-        if (selector.Length == 0 || selector.Contains("$(", StringComparison.Ordinal))
-            return $"Deployment refused before it started: the deployment threshold {threshold} is declared but "
-                + $"{ReleaseVariable} names no release ('{selector}'), so no grade can be checked.";
 
         var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
         var projectId = run?.Pipeline is null
@@ -58,5 +37,36 @@ internal sealed class PipelineDeploymentGradeGate(IPipelineRepository repo)
             ? $"Deployment refused before it started: release '{release.Version}' has assurance grade {grade}, "
                 + $"below the deployment threshold {threshold}."
             : null;
+    }
+
+    /// <summary>
+    /// The declared threshold (one capital letter, A to F) and the release it applies to. False when
+    /// the gate stops here: with no refusal when no threshold is declared (the run may start), with the
+    /// refusal when the threshold is not a grade or no release is named.
+    /// </summary>
+    internal static bool TryReadGateInputs(
+        IReadOnlyDictionary<string, string> variables, out string threshold, out string selector, out string? refusal)
+    {
+        threshold = string.Empty;
+        selector = string.Empty;
+        refusal = null;
+        if (!variables.TryGetValue(MinimumGradeVariable, out var rawThreshold) || string.IsNullOrWhiteSpace(rawThreshold))
+            return false;
+        threshold = rawThreshold.Trim();
+        // Exactly one capital letter: Enum.TryParse would also accept "4" or "e" and read a typo as a grade.
+        if (threshold.Length != 1 || threshold[0] is < 'A' or > 'F')
+        {
+            refusal = $"Deployment refused before it started: {MinimumGradeVariable} '{threshold}' is not an assurance grade (A to F).";
+            return false;
+        }
+
+        selector = variables.TryGetValue(ReleaseVariable, out var rawRelease) ? rawRelease.Trim() : string.Empty;
+        if (selector.Length == 0 || selector.Contains("$(", StringComparison.Ordinal))
+        {
+            refusal = $"Deployment refused before it started: the deployment threshold {threshold} is declared but "
+                + $"{ReleaseVariable} names no release ('{selector}'), so no grade can be checked.";
+            return false;
+        }
+        return true;
     }
 }

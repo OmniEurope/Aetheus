@@ -17,7 +17,7 @@ public class ServerAppsController(IServerAppService service, IResourceAuthorizat
         return Ok(await service.GetPageAsync(serverId, request, ct));
     }
 
-    // Recette R-210: the sources the grid's checkable Source filter offers.
+    // The sources the grid's checkable Source filter offers.
     [HttpGet("filter-values")]
     public async Task<ActionResult<ServerAppFilterValuesDto>> GetFilterValues(int serverId, CancellationToken ct)
     {

@@ -30,7 +30,7 @@ public static class AppMonitoringModuleExtensions
         services.AddScoped<IAppTelemetrySendIntervalService, AppTelemetrySendIntervalService>();
         services.AddScoped<IAppDeployEnvProvider, AppDeployEnvProvider>();
         services.AddSingleton<IngestKeyHasher>();
-        // Singleton so a refused key is reported once per period across request scopes (recette R2-013).
+        // Singleton so a refused key is reported once per period across request scopes.
         services.AddSingleton<IngestKeyRejectionLog>();
         services.AddSingleton<AppAnalyticsSiteRateLimiter>();
         // Singleton so the per-app metric-ingest lock is shared across request scopes.

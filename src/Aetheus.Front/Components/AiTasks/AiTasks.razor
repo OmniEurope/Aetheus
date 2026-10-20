@@ -36,9 +36,8 @@
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))" Disabled="@(!CanCreate)" title="@(!CanCreate ? L["InsufficientPermissions"] : "")"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
 </OmniStack>
 
-@* Recette R-239: the grid stays mounted while it loads (IsLoading shows the state). Swapping it for a
-   loader recreated it on every load, and the new grid loaded again: the page flickered in a loop until
-   the server answered 429. A failed load reads as a message with Retry, never as a raw exception. *@
+@* Keep the grid mounted while IsLoading indicates progress to avoid restarting its initial fetch
+   on each render. Show failures with a Retry action. *@
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
@@ -46,7 +45,7 @@
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadPageAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
     </OmniAlert>
 }
-    <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_tasks" Count="@_totalCount"
+    <AetheusDataGrid FullHeight="true" @ref="_grid" RowClick="@OpenResults" Data="@_tasks" Count="@_totalCount"
                 TItem="AiTaskDefinitionDto" PageSize="25"
                 LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" IsLoading="@_loading"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
@@ -71,11 +70,11 @@
                 <Template Context="task">
                     @if (task.ProjectId is { } projectId)
                     {
-                        <OmniLink Href="@($"/projects/{projectId}/overview")">@($"{L["Project"]}: {task.ProjectName ?? $"#{projectId}"}")</OmniLink>
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/projects/{projectId}/overview")">@($"{L["Project"]}: {task.ProjectName ?? $"#{projectId}"}")</OmniLink></span>
                     }
                     else if (task.ServerId is { } serverId)
                     {
-                        <OmniLink Href="@($"/servers/{serverId}/overview")">@($"{L["Server"]}: {task.ServerName ?? $"#{serverId}"}")</OmniLink>
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/servers/{serverId}/overview")">@($"{L["Server"]}: {task.ServerName ?? $"#{serverId}"}")</OmniLink></span>
                     }
                 </Template>
             </OmniDataGridColumn>
@@ -90,10 +89,12 @@
             <OmniDataGridColumn TItem="AiTaskDefinitionDto" Title="@L["Actions"]" Width="190px"
                                   Sortable="false" Filterable="false" TextAlign="OmniDataGridTextAlign.Center">
                 <Template Context="task">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => RunAsync(task))" Disabled="@(_runningTaskId.HasValue || !CanWrite(task))" Class="@((_runningTaskId == task.Id) ? "btn-busy" : null)" Busy="@((_runningTaskId == task.Id))" title="@L["RunNow"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenResultsAsync(task))" title="@L["Results"]"><OmniIcon Name="OmniIconName.Document" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenDialogAsync(task))" Disabled="@(!CanWrite(task))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => RunAsync(task))" Disabled="@(_runningTaskId.HasValue || !CanWrite(task))" Class="@((_runningTaskId == task.Id) ? "btn-busy" : null)" Busy="@((_runningTaskId == task.Id))" title="@L["RunNow"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenResults(task))" title="@L["Results"]"><OmniIcon Name="OmniIconName.Document" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Success" OnClick="@(() => OpenDialogAsync(task))" Disabled="@(!CanWrite(task))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(task))" Disabled="@(!CanAdmin(task))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    </span>
                 </Template>
             </OmniDataGridColumn>
         </Columns>

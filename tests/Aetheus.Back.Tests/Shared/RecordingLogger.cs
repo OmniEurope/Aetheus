@@ -8,6 +8,19 @@ internal sealed class RecordingLogger<T> : ILogger<T>
 {
     private readonly Lock _gate = new();
     private readonly List<(LogLevel Level, string Message)> _entries = [];
+    private readonly List<LogRecord> _records = [];
+
+    /// <summary>Every entry with its exception, for tests that assert what was reported.</summary>
+    public IReadOnlyList<LogRecord> Records
+    {
+        get
+        {
+            lock (_gate)
+                return [.. _records];
+        }
+    }
+
+    internal sealed record LogRecord(LogLevel Level, string Message, Exception? Exception);
 
     public IReadOnlyList<(LogLevel Level, string Message)> Entries
     {
@@ -27,6 +40,10 @@ internal sealed class RecordingLogger<T> : ILogger<T>
         Func<TState, Exception?, string> formatter)
     {
         lock (_gate)
-            _entries.Add((logLevel, formatter(state, exception)));
+        {
+            var message = formatter(state, exception);
+            _entries.Add((logLevel, message));
+            _records.Add(new LogRecord(logLevel, message, exception));
+        }
     }
 }

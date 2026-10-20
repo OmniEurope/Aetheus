@@ -36,7 +36,7 @@ done
 [ -S /var/spool/postfix/private/dovecot-lmtp ] && pass "dovecot LMTP socket in postfix chroot" || fail "dovecot LMTP socket missing"
 [ -S /var/spool/postfix/private/auth ] && pass "dovecot auth socket in postfix chroot" || fail "dovecot auth socket missing"
 [ -f /etc/aetheus/mail-stack.managed ] && pass "ownership marker written" || fail "ownership marker missing"
-expect_ok "helper version reported" sh -c "\"$MANAGE\" version | grep -qx 'aetheus-mail-helper-version: 3'"
+expect_ok "helper version reported" sh -c "\"$MANAGE\" version | grep -qx 'aetheus-mail-helper-version: 6'"
 # The agent collector runs unprivileged: every inventory source must be readable without sudo, and the
 # DKIM private key must stay out of reach.
 for path in /etc/postfix/vmailbox /etc/opendkim/KeyTable /etc/aetheus/mail-stack.managed \
@@ -80,6 +80,82 @@ if swaks --server 127.0.0.1 --port 587 --tls --auth PLAIN --auth-user bob@second
 else
   fail "wrong password not refused on 587"
 fi
+
+echo "== mailbox quota enforced by Dovecot (DEP-005)"
+# Limit in KiB that doveadm reports for the STORAGE resource of one mailbox ("-" when unlimited).
+storage_limit() { doveadm quota get -u "$1" 2>/dev/null | awk '$(NF-3) == "STORAGE" { print $(NF-1) }'; }
+# Writes a message of about $2 bytes of base64 body, tagged with token $1, to stdout.
+message_of() { printf 'From: admin@example.test\r\nTo: bob@second.test\r\nSubject: quota %s\r\n\r\n' "$1"; head -c "$2" /dev/urandom | base64 -w 76 | sed 's/$/\r/'; }
+# Final Postfix status (sent, bounced, deferred) of the message tagged $1, and its LMTP reply.
+lmtp_outcome() {
+  i=0; line=""
+  while [ $i -lt 30 ] && [ -z "$line" ]; do
+    qid="$(journalctl -u postfix.service -u postfix@-.service --since "-10min" --no-pager -o cat 2>/dev/null \
+      | grep -F "message-id=<$1@" | head -n1 | sed -n 's/^\([0-9A-Za-z]*\): .*/\1/p')"
+    [ -n "$qid" ] && line="$(journalctl -u postfix.service -u postfix@-.service --since "-10min" --no-pager -o cat 2>/dev/null \
+      | grep -F "$qid: to=<" | grep -F "status=" | tail -n1)"
+    [ -n "$line" ] || { sleep 1; i=$((i + 1)); }
+  done
+  printf '%s' "$line"
+}
+deliver() {
+  # $1 token, $2 body bytes: hands the message to Postfix, which delivers it over Dovecot LMTP.
+  { printf 'Message-ID: <%s@example.test>\r\n' "$1"; message_of "$1" "$2"; } | tr -d '\r' \
+    | /usr/sbin/sendmail -f admin@example.test bob@second.test
+  lmtp_outcome "$1"
+}
+imap_append() {
+  # $1 token, $2 body bytes: APPEND (LITERAL+) to bob's INBOX over IMAPS; prints the tagged replies.
+  message_of "$1" "$2" > /root/append.eml
+  size="$(wc -c < /root/append.eml)"
+  { printf 'a1 LOGIN "bob@second.test" "B0bPassw0rd!"\r\na2 APPEND INBOX {%s+}\r\n' "$size"; cat /root/append.eml
+    printf '\r\na3 LOGOUT\r\n'; sleep 3; } | openssl s_client -quiet -connect 127.0.0.1:993 2>/dev/null | grep -E '^a[123] ' | tr -d '\r'
+}
+limit="$(storage_limit bob@second.test)"
+if [ "$limit" = 524288 ]; then pass "add-account quota enforced by Dovecot (bob 512 MB = $limit KiB)"; else fail "bob quota limit: '$limit'"; fi
+limit="$(storage_limit admin@example.test)"
+if [ "$limit" = 1048576 ]; then pass "mail-setup quota enforced by Dovecot (admin 1024 MB = $limit KiB)"; else fail "admin quota limit: '$limit'"; fi
+expect_ok "set-quota bob to 1 MB" "$MANAGE" set-quota bob@second.test 1
+sleep 2
+limit="$(storage_limit bob@second.test)"
+if [ "$limit" = 1024 ]; then pass "Dovecot reports bob's new limit ($limit KiB)"; else fail "bob limit after set-quota: '$limit'"; fi
+expect_ok "set-quota keeps bob's password" sh -c "doveadm auth test bob@second.test 'B0bPassw0rd!' | grep -q 'auth succeeded'"
+token="quota-big-$$"
+out="$(deliver "$token" 1500000)"
+if printf '%s' "$out" | grep -q 'status=bounced' && printf '%s' "$out" | grep -q '552 5.2.2'; then
+  pass "LMTP delivery over the quota refused ($(printf '%s' "$out" | sed -n 's/.*said: \(552[^(]*\).*/\1/p'))"
+else
+  fail "LMTP delivery over the quota -> $out"
+fi
+[ -z "$(delivered_to /var/mail/vhosts/second.test/bob "$token")" ] && pass "refused message not stored" || fail "refused message stored in bob's Maildir"
+token="quota-small-$$"
+out="$(deliver "$token" 20000)"
+if printf '%s' "$out" | grep -q 'status=sent' && [ -n "$(delivered_to /var/mail/vhosts/second.test/bob "$token")" ]; then
+  pass "LMTP delivery under the quota accepted and stored"
+else
+  fail "LMTP delivery under the quota -> $out"
+fi
+out="$(imap_append "quota-append-big-$$" 1500000)"
+if printf '%s' "$out" | grep -q '^a2 NO .*OVERQUOTA'; then pass "IMAP APPEND over the quota refused ($(printf '%s' "$out" | grep '^a2 '))"; else fail "IMAP APPEND over the quota -> $out"; fi
+out="$(imap_append "quota-append-small-$$" 20000)"
+if printf '%s' "$out" | grep -q '^a2 OK'; then pass "IMAP APPEND under the quota accepted"; else fail "IMAP APPEND under the quota -> $out"; fi
+expect_refused "set-quota refuses a non-numeric quota" "$MANAGE" set-quota bob@second.test '1;id'
+expect_refused "set-quota refuses an unknown account" "$MANAGE" set-quota nobody@second.test 10
+# A stack set up before DEP-005 has no quota plugin and two-field users lines: set-quota rewrites the
+# managed Dovecot file and pads the old lines, so their mailboxes still exist for the userdb.
+sed -i '/^# Quota plugin (DEP-005)/d' /etc/dovecot/conf.d/99-aetheus.conf
+awk -F: '$1 == "admin@example.test" { print $1 ":" $2; next } { print }' /etc/dovecot/users > /root/users.legacy
+cat /root/users.legacy > /etc/dovecot/users
+expect_ok "set-quota bob to unlimited (0)" "$MANAGE" set-quota bob@second.test 0
+grep -q '^# Quota plugin (DEP-005)' /etc/dovecot/conf.d/99-aetheus.conf && pass "set-quota restores the quota configuration" || fail "quota configuration not restored"
+sleep 2
+expect_ok "a pre-DEP-005 two-field account still exists for the userdb" doveadm user admin@example.test
+limit="$(storage_limit bob@second.test)"
+if [ "$limit" = - ]; then pass "quota 0 is unlimited for Dovecot"; else fail "bob limit after set-quota 0: '$limit'"; fi
+token="quota-unlimited-$$"
+out="$(deliver "$token" 1500000)"
+if printf '%s' "$out" | grep -q 'status=sent'; then pass "the same large message is accepted once unlimited"; else fail "large delivery when unlimited -> $out"; fi
+expect_ok "set-quota bob back to 512 MB" "$MANAGE" set-quota bob@second.test 512
 
 echo "== antispam"
 if swaks --server 127.0.0.1 --port 25 --from outsider@remote.test --to admin@example.test --header 'Subject: gtube' \
@@ -143,6 +219,13 @@ expect_ok "change-password" sh -c "printf 'N3wPassw0rd!\n' | \"$MANAGE\" change-
 # synced it, so give the new hash one second to become visible.
 sleep 2
 expect_ok "new password authenticates" sh -c "doveadm auth test bob@second.test 'N3wPassw0rd!' | grep -q 'auth succeeded'"
+limit="$(storage_limit bob@second.test)"
+if [ "$limit" = 524288 ]; then pass "change-password keeps bob's quota ($limit KiB)"; else fail "bob quota after change-password: '$limit'"; fi
+# Recette R1-41: the master user opens bob's mailbox without bob's password, and only with its own.
+expect_ok "master-set" sh -c "printf 'M4sterPassw0rd!\n' | \"$MANAGE\" master-set"
+expect_ok "master user logs in as bob" sh -c "doveadm auth test 'bob@second.test*aetheus-master' 'M4sterPassw0rd!' | grep -q 'auth succeeded'"
+expect_refused "master user with a wrong password" sh -c "doveadm auth test 'bob@second.test*aetheus-master' 'wrong-password' | grep -q 'auth succeeded'"
+expect_refused "master user on an unknown mailbox" sh -c "doveadm auth test 'nobody@second.test*aetheus-master' 'M4sterPassw0rd!' | grep -q 'auth succeeded'"
 expect_ok "remove-alias" "$MANAGE" remove-alias info@second.test
 expect_ok "delete-account" "$MANAGE" delete-account bob@second.test second.test
 expect_ok "remove-domain" "$MANAGE" remove-domain second.test

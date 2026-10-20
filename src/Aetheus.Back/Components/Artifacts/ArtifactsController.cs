@@ -20,8 +20,8 @@ public class ArtifactsController(
         return Ok(await artifactService.GetProjectArtifactsAsync(projectId, request, ct));
     }
 
-    /// <summary>Recette R-210: the pipeline and environment names the project artifacts grid's column
-    /// filters offer.</summary>
+    /// <summary>The pipeline and environment names the project artifacts grid's column filters
+    /// offer.</summary>
     [HttpGet("project/{projectId:int}/filter-values")]
     public async Task<ActionResult<ProjectArtifactFilterValuesDto>> GetProjectArtifactFilterValues(
         int projectId, CancellationToken ct)
@@ -107,14 +107,8 @@ public class ArtifactsController(
         return Ok(result);
     }
 
-    // --- Chunked upload (PLAN-006 lot 5) -------------------------------------------------------
-    // An artifact larger than MaxArtifactUploadBytes cannot be a single request. It used to be split
-    // into four separately named artifacts and reassembled with `cat` in three YAML files, which put
-    // the integrity of a deployed payload in a shell pipeline nothing verified. Here the digests are
-    // declared up front and checked on arrival, and MaxArtifactUploadBytes becomes the per-part cap.
-    //
-    // The single-request upload above is unchanged and still accepted: an agent that predates this
-    // keeps working, which matters because the agent is deployed by the pipeline it serves.
+    // Chunked uploads declare and verify digests with MaxArtifactUploadBytes as the per-part cap.
+    // Single-request upload remains supported for compatible agents.
 
     [HttpPost("upload/{runId:int}/begin")]
     [Authorize(Policy = "AgentToken")]
@@ -157,11 +151,10 @@ public class ArtifactsController(
         if (stageName is { Length: > 200 }) return BadRequest("Invalid stage name");
 
         // Assembled and digest-checked before anything is published: an artifact that does not match
-        // what was announced never reaches the content-addressed store.
-        await using var assembled = await chunkedUploads.OpenCompletedAsync(runId, uploadId, ct);
-        var result = await artifactService.PublishArtifactAsync(
-            runId, name, stageName, assembled.Length, assembled, ct);
-        chunkedUploads.Discard(uploadId);
+        // what was announced never reaches the content-addressed store. The verified file is then
+        // moved into the store, not copied (recette R1-91).
+        var result = await chunkedUploads.CompleteAsync(runId, uploadId,
+            verified => artifactService.PublishVerifiedArtifactAsync(runId, name, stageName, verified, ct), ct);
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -170,8 +163,8 @@ public class ArtifactsController(
     public async Task<IActionResult> AbandonChunkedUpload(int runId, string uploadId, CancellationToken ct)
     {
         if (await AgentIsAssignedAsync(runId, ct) is { } failure) return failure;
-        chunkedUploads.Discard(uploadId);
-        return NoContent();
+        // AUD-06: an agent assigned to this run cannot abandon another run's upload by its id.
+        return await chunkedUploads.DiscardForRunAsync(runId, uploadId, ct) ? NoContent() : NotFound();
     }
 
     /// <summary>The agent-token check every upload endpoint shares: enrolled, and executing THIS run.</summary>

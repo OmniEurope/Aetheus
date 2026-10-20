@@ -26,12 +26,12 @@ public sealed class GitApi(HttpClient http) : ApiClientBase(http)
             ["sortBy"] = sortBy,
             ["sortDescending"] = sortDescending.ToString()
         };
-        // Recette R-224: the list's column header filters.
+        // The list's column header filters.
         return await GetJsonAsync<PaginatedResult<GitLightRepoDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/git/repos", query), filters), ct).ConfigureAwait(false) ?? new();
     }
 
-    /// <summary>Recette R-224: the default branches the repositories list's checkable filter offers.</summary>
+    /// <summary>The default branches the repositories list's checkable filter offers.</summary>
     public async Task<GitRepositoryFilterValuesDto> GetGitRepoFilterValuesAsync(int? projectId = null, CancellationToken ct = default) =>
         await GetJsonAsync<GitRepositoryFilterValuesDto>(
             projectId is { } id ? $"api/git/repos/filter-values?projectId={id}" : "api/git/repos/filter-values", ct).ConfigureAwait(false) ?? new();
@@ -86,8 +86,8 @@ public sealed class GitApi(HttpClient http) : ApiClientBase(http)
     }
 
 
-    /// <summary>R2-003: the repository at <paramref name="refName"/> (its default branch when null) as a zip,
-    /// with the file name the API offers; null when the API refused it.</summary>
+    /// <summary>The repository at <paramref name="refName"/> (its default branch when null) as a
+    /// zip, with the file name the API offers; null when the API refused it.</summary>
     public async Task<(Stream Content, string FileName)?> DownloadGitArchiveAsync(int repoId, string? refName = null, CancellationToken ct = default)
     {
         var url = $"api/git/repos/{repoId}/archive";
@@ -237,7 +237,7 @@ public sealed class GitApi(HttpClient http) : ApiClientBase(http)
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString($"api/git/repos/{repoId}/pull-requests", query), filters), JsonOptions.Web) ?? new();
     }
 
-    /// <summary>Recette R-224: the authors the commits and pull requests grids' Author filters offer.</summary>
+    /// <summary>The authors the commits and pull requests grids' Author filters offer.</summary>
     public async Task<GitRepositoryDetailFilterValuesDto> GetGitRepoDetailFilterValuesAsync(int repoId, CancellationToken ct = default) =>
         await GetJsonAsync<GitRepositoryDetailFilterValuesDto>($"api/git/repos/{repoId}/filter-values", ct).ConfigureAwait(false) ?? new();
 
@@ -328,7 +328,8 @@ public sealed class GitApi(HttpClient http) : ApiClientBase(http)
     public async Task<ExternalRepoDto?> GetExternalRepoAsync(int projectId)
     {
         var response = await Http.GetAsync($"api/external-repos/project/{projectId}");
-        // Recette R-321: no external repository is a normal state, answered 204 (404 from an older backend).
+        // An absent external repository is normal: 204 is expected and 404 is accepted for
+        // compatibility.
         if (response.StatusCode is System.Net.HttpStatusCode.NoContent or System.Net.HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ExternalRepoDto>(JsonOptions.Web);

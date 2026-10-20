@@ -1,0 +1,38 @@
+[Unit]
+Description=Aetheus agent read-only access to the SSH configuration
+Before=aetheus-agent.service
+ConditionPathExists=#{AGENT_READ_GRANT_HELPER_PATH}#
+
+[Service]
+# Pulled in (Wants=) and ordered before aetheus-agent.service, so it runs on every start of the agent
+# and a file recreated since (cloud-init, a package, an editor that replaces authorized_keys) gets its
+# grant back. It is a unit of its own, not an ExecStartPre= of the agent: a bind mount of the agent
+# unit (BindReadOnlyPaths=) applies to that command too, even with the '+' prefix, and would make the
+# very files this grants access to read-only for setfacl.
+#
+# Root, because only root can set an ACL on a file it does not own; the helper sets read ACLs on
+# fixed paths, never write access, a capability, a group or a sudo rule (docs/contracts/security.md,
+# "Read-only host observation rights"). Nothing else is needed, so nothing else is allowed: the bounding
+# set keeps root to opening any file or directory for reading (CAP_DAC_READ_SEARCH) and writing the ACL of a
+# file it does not own (CAP_FOWNER). Measured on Ubuntu 24.04 (systemd 255): with neither, a login user's
+# files get no entry; CAP_DAC_OVERRIDE (writing any file) is not needed and is not given.
+Type=oneshot
+ExecStart=#{AGENT_READ_GRANT_HELPER_PATH}#
+TimeoutStartSec=30
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_FOWNER CAP_DAC_READ_SEARCH
+PrivateNetwork=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM

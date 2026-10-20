@@ -8,8 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>PLAN-005 lot 1: the collector inventories an existing configuration from disk, reports what it
-/// could not read, and never claims a list is complete when a source was missing.</summary>
+/// <summary>The collector inventories an existing configuration from disk, reports what it could
+/// not read, and never claims a list is complete when a source was missing.</summary>
 public sealed class MailCollectorInventoryTests
 {
     private const string VmailboxPath = "/etc/postfix/vmailbox";
@@ -60,6 +60,19 @@ public sealed class MailCollectorInventoryTests
         var request = new CertificateRequest($"CN={cn}", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         using var cert = request.CreateSelfSigned(notAfter.AddDays(-30), notAfter);
         return cert.ExportCertificatePem();
+    }
+
+    [Fact]
+    public async Task MissingPostfixBinary_ReportsNotInstalledWithoutProbingAnythingElse()
+    {
+        var shell = Substitute.For<IShellRunner>();
+        shell.RunExecAsync(Arg.Is<string>(x => x == "which" || x == "where"), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new ShellExecResult(1, string.Empty, "not found"));
+
+        var data = await CollectAsync(shell, []);
+
+        Assert.False(data.IsInstalled);
+        await shell.DidNotReceive().RunExecAsync("postconf", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

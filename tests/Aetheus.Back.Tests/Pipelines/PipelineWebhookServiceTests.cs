@@ -273,8 +273,8 @@ public class PipelineWebhookServiceTests
     [Fact]
     public async Task HandleWebhookAsync_ARefusalRolledBackWithItsTransaction_IsRecordedAgainOutsideIt()
     {
-        // Recette R-522: the launcher records a refused automated launch as a failed run, but the webhook
-        // runs in a transaction the refusal rolls back, and that record with it.
+        // The launcher records a refused automated launch as a failed run, but the webhook runs in
+        // a transaction the refusal rolls back, and that record with it.
         const string secret = "webhook-secret";
         _settingsMock.GetSettingValueAsync("WebhookSecret", Arg.Any<CancellationToken>()).Returns(secret);
         var pipeline = new Pipeline

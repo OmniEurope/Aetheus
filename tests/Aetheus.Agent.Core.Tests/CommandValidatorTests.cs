@@ -110,7 +110,7 @@ public class CommandValidatorTests
     [InlineData("apt-get install -y wget malware")]    // arbitrary / multiple packages
     [InlineData("apt install apache2")]                // only apt-get install is allow-listed
     [InlineData("apt-get remove -y openssh-server")]   // not a managed service
-    [InlineData("apt-get remove -y postfix")]          // uninstall is the typed purge operation, never a shell task (R2-031)
+    [InlineData("apt-get remove -y postfix")]          // Uninstall is the typed purge operation, never a shell task
     [InlineData("apt-get install -y apache2 nginx")]   // single service per command only
     public void IsAllowed_RejectsNonServiceAptInstall(string command)
     {

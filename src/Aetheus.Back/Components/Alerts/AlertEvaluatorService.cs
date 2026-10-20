@@ -168,6 +168,12 @@ public sealed class AlertEvaluatorService(
             MetricType.BuildCache => metric.BuildCacheAvailable
                 ? metric.BuildCacheBytes / (1024d * 1024d * 1024d)
                 : null,
+            MetricType.Inodes => metric.InodeUsedPercent,
+            // The offset the measure guarantees (absolute offset less its uncertainty): a slow
+            // round trip widens the bound and lowers this figure, it cannot raise the alert.
+            MetricType.ClockOffset => metric is { ClockOffsetMs: { } offset, ClockOffsetUncertaintyMs: { } uncertainty }
+                ? new ClockOffsetEstimate(offset, uncertainty).GuaranteedMs / 1000d
+                : null,
             _ => null
         };
 

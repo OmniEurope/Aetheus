@@ -4,16 +4,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 lot 3 / D8: outside a table every control stands at one height, the measured
-/// <c>--aetheus-control-height</c> (1.75rem, read in the browser on the reference button, not
-/// chosen). Before this, the same screen showed buttons at 20, 28, 32 and 50px, badges at 20 and
-/// 20.8, header icons at 32 and input fields at 40: twelve pixels taller than the button beside them.
-///
-/// Two ways that comes back, so two guards: a per-call-site <c>ButtonSize</c> that reintroduces a
-/// second height in markup, and a literal height written on a control selector in the stylesheet.
-/// A table is excluded on purpose: a row action is sized by the grid row (lot 4).
-/// </summary>
+/// <summary>Controls outside tables share the control-height token; guards reject per-call size
+/// overrides and literal control heights. Grid actions use their row-specific size.</summary>
 public sealed class ControlHeightAuditTests
 {
     private const string Token = "var(--aetheus-control-height)";
@@ -100,13 +92,8 @@ public sealed class ControlHeightAuditTests
         }
     }
 
-    /// <summary>
-    /// PLAN-003 lot 1 / D3: the page header is a height, not a floor, and does not shrink, so the
-    /// content starts at the same Y everywhere; its title line has one fixed height. Since recette R-395
-    /// the header is OE's OmniPageHeader, whose frame and title line carry that fixed geometry: app.css may
-    /// size the title's text (recette R-014, 1.875rem) but never the height of the frame, of the row or of
-    /// the title line, except to let a header the reader opened on its toggle grow (the fold, R-324).
-    /// </summary>
+    /// <summary>OE owns fixed page-header geometry; application CSS may size title text but not the
+    /// frame, except to expand an opened compact header.</summary>
     [Fact]
     public void The_Page_Header_Frame_Has_One_Height()
     {

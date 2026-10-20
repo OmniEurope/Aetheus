@@ -4,12 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 lot 8 / D25: one corner radius for the whole site, <c>--aetheus-radius</c>, measured on
-/// a project tile (4px, the former library's own radius token). Before it, <c>app.css</c> carried
-/// 22 corners at 0.5rem, 17 at 0.25rem, 14 at 0.375rem and a dozen other values, so two cards side
-/// by side could be rounded differently for no reason anyone could name.
-/// </summary>
+/// <summary>The shared radius token keeps site corners consistent.</summary>
 public sealed class BorderRadiusAuditTests
 {
     /// <summary>Deliberately round shapes, each named for why it is not a box.</summary>

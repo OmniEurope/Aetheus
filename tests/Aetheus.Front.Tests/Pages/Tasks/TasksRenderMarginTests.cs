@@ -42,7 +42,7 @@ public class TasksRenderMarginTests : BunitContext
             Assert.Contains("scan", cut.Markup);
             Assert.Equal("/pipelines/runs/42", cut.Find("a[href='/pipelines/runs/42']").GetAttribute("href"));
             Assert.Equal("/servers/8/overview", cut.Find("a[href='/servers/8/overview']").GetAttribute("href"));
-        }, TimeSpan.FromSeconds(2));
+        });
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class TasksRenderMarginTests : BunitContext
         var cut = Render<TasksPage>();
 
         // Initial load settles to an empty grid: no task-name rows, but the filter chrome stays.
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
         Assert.DoesNotContain("deploy", cut.Markup);
         Assert.DoesNotContain("backup", cut.Markup);
         Assert.Contains(cut.FindComponents<OmniIcon>(), icon => icon.Instance.Name == OmniIconName.Filter);

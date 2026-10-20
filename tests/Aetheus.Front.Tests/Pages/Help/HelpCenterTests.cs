@@ -23,7 +23,7 @@ public class HelpCenterTests : BunitContext
         });
 
         var cut = Render<HelpCenterPage>();
-        cut.WaitForState(() => cut.Markup.Contains("Servers"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Servers"));
 
         // The loaded article's title is rendered as a card.
         Assert.Contains("Servers", cut.Markup);
@@ -39,7 +39,7 @@ public class HelpCenterTests : BunitContext
         });
 
         var cut = Render<HelpCenterPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         Assert.Contains("Servers", cut.Markup);
         Assert.Contains("Pipelines", cut.Markup);
@@ -55,7 +55,7 @@ public class HelpCenterTests : BunitContext
         });
 
         var cut = Render<HelpCenterPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         typeof(HelpCenterPage).GetField("_search", BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(cut.Instance, "servers");
@@ -76,7 +76,7 @@ public class HelpCenterTests : BunitContext
         _handler.SetJsonResponse("help/help-", new List<HelpArticle>());
 
         var cut = Render<HelpCenterPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var inputs = cut.FindAll("input");
         Assert.True(inputs.Count >= 1);
@@ -92,7 +92,7 @@ public class HelpCenterTests : BunitContext
         });
 
         var cut = Render<HelpCenterPage>();
-        cut.WaitForState(() => cut.Markup.Contains("Servers"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Servers"));
 
         cut.Find("input").Input("servers");
 

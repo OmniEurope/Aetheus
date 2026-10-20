@@ -3,11 +3,9 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Shared.Components.Settings;
 
-/// <summary>
-/// Recette R1-16: the platform e-mail sender. By default the no-reply account of the mail domain
-/// Aetheus manages; a custom SMTP server replaces it when <see cref="UseCustom"/> is set. The password
-/// never travels back: <see cref="HasPassword"/> only says whether one is stored.
-/// </summary>
+/// <summary>Describes the managed no-reply sender or the custom SMTP sender selected by <see
+/// cref="UseCustom"/>. Passwords are never returned; <see cref="HasPassword"/> indicates only
+/// whether one is stored.</summary>
 public sealed record EmailSenderSettingsDto
 {
     public bool UseCustom { get; init; }

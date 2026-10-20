@@ -2,7 +2,8 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>Recette R-361: read-only detail of one grouped app error, opened from <see cref="AppErrorsView"/>.</summary>
+/// <summary>Read-only detail of one grouped app error, opened from <see
+/// cref="AppErrorsView"/>.</summary>
 public partial class AppErrorDetailDialog
 {
     [Parameter, EditorRequired] public AppErrorEventDto Error { get; set; } = default!;

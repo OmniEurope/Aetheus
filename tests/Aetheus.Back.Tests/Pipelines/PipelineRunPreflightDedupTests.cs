@@ -26,7 +26,8 @@ public sealed class PipelineRunPreflightDedupTests
                 Substitute.For<IPipelineTemplateResolver>(), Substitute.For<IPipelineVariableResolver>()),
             Substitute.For<IPipelineRequirementsChecker>(),
             new PipelineScannerManifestPreflight(_repo, new PipelineDispatchServerResolver(_repo)),
-            new PipelineReleaseArtifactPreflight(Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactRepository>()),
+            new PipelineReleaseArtifactPreflight(Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactRepository>(), Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactStorageService>()),
+            new PipelineAiProfilePreflight(Substitute.For<Aetheus.Back.Components.AiTasks.IAiTaskService>()),
             Substitute.For<ILogger<PipelineRunPreflightService>>());
 
     private static IPipelineEnvironmentCheckGuard Admits(bool verdict)

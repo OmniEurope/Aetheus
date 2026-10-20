@@ -9,11 +9,14 @@
                                IncludePatchManagement="@IncludePatchManagement"
                                IncludeFirewallManagement="@IncludeFirewallManagement"
                                IncludeDocker="@IncludeDocker" DevModeInsecureTls="@DevModeInsecureTls" />
+    @* STD-BTN detection 11: Download visible, the other actions in the menu. *@
     <OmniRow Gap="OmniSpacing.Small">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenDownloadAsync"><OmniIcon Name="OmniIconName.Download" /> <span>@DownloadLabel</span></OmniButton>
         @if (!string.IsNullOrWhiteSpace(InstallerToken))
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyInstallerLinkAsync"><OmniIcon Name="@MaterialIconMap.Resolve((_linkCopied ? "check" : "link"))" /> <span>@(_linkCopied ? L["WizardInstallerLinkCopied"] : L["WizardCopyInstallerLink"])</span></OmniButton>
+            <OmniOverflowMenu Label="@L["MoreActions"]">
+                <OmniMenuItem OnClick="@CopyInstallerLinkAsync"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_linkCopied ? "check" : "link"))" /></Icon><ChildContent>@(_linkCopied ? L["WizardInstallerLinkCopied"] : L["WizardCopyInstallerLink"])</ChildContent></OmniMenuItem>
+            </OmniOverflowMenu>
         }
     </OmniRow>
     @if (!string.IsNullOrWhiteSpace(InstallerToken))

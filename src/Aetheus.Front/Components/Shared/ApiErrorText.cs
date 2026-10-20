@@ -3,13 +3,9 @@ using System.Text.Json;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Reads the human reason out of a refused request's body, whatever shape the endpoint wrote it in:
-/// a validation result (<c>errors</c> as a list), the <c>ErrorHandlingMiddleware</c> error object
-/// (<c>message</c>), a ProblemDetails (<c>detail</c>, then its <c>errors</c> dictionary, then
-/// <c>title</c>), a JSON string, or plain text. Recette R2-039: a refusal must reach the user as text,
-/// never as an exception, so nothing here throws on an unexpected body; it returns null instead.
-/// </summary>
+/// <summary>Extract a readable refusal from validation errors, middleware messages, ProblemDetails,
+/// JSON strings or plain text so callers can explain failed requests; return null for unexpected
+/// bodies instead of throwing.</summary>
 internal static class ApiErrorText
 {
     public static string? Read(string? payload)

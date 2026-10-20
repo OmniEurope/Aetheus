@@ -41,6 +41,17 @@ public static class BackendProbe
         string? pinnedThumbprint,
         CancellationToken ct = default)
     {
+        var timeout = ParseTimeout(args);
+        using var handler = CreateHandler(serverUrl, allowInsecure, pinnedThumbprint);
+        var result = await ProbeAsync(serverUrl, timeout, handler, ct).ConfigureAwait(false);
+        Console.WriteLine(result.Message);
+        return result.Ok ? 0 : 1;
+    }
+
+    /// <summary>The probe timeout: <c>--timeout N</c> when N is a positive number of seconds, capped
+    /// at 60, otherwise the default.</summary>
+    internal static TimeSpan ParseTimeout(string[] args)
+    {
         var timeout = TimeSpan.FromSeconds(DefaultTimeoutSeconds);
         for (var i = 0; i < args.Length - 1; i++)
         {
@@ -50,10 +61,14 @@ public static class BackendProbe
                 timeout = TimeSpan.FromSeconds(Math.Min(seconds, 60));
             }
         }
+        return timeout;
+    }
 
-        // Use the exact runtime TLS callback precedence (pin, then local-development
-        // AllowInsecureCerts, then platform validation) so installer success predicts whether the
-        // subsequently started agent can connect.
+    // Use the exact runtime TLS callback precedence (pin, then local-development
+    // AllowInsecureCerts, then platform validation) so installer success predicts whether the
+    // subsequently started agent can connect. Null when platform validation applies unchanged.
+    internal static SocketsHttpHandler? CreateHandler(string serverUrl, bool allowInsecure, string? pinnedThumbprint)
+    {
         var options = new AetheusAgentOptions
         {
             ServerUrl = serverUrl,
@@ -61,7 +76,7 @@ public static class BackendProbe
             PinnedServerCertThumbprint = pinnedThumbprint
         };
         var certValidation = AgentCoreServiceCollectionExtensions.BuildCertValidationCallback(options);
-        using var handler = certValidation is null
+        return certValidation is null
             ? null
             : new SocketsHttpHandler
             {
@@ -70,10 +85,6 @@ public static class BackendProbe
                     RemoteCertificateValidationCallback = certValidation
                 }
             };
-
-        var result = await ProbeAsync(serverUrl, timeout, handler, ct).ConfigureAwait(false);
-        Console.WriteLine(result.Message);
-        return result.Ok ? 0 : 1;
     }
 
     /// <summary>

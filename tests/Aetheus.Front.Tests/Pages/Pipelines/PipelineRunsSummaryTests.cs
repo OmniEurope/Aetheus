@@ -3,7 +3,7 @@ using Aetheus.Front.Components.Pipelines;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>Recette R2-128: the "latest grade" and "last success" tiles open the run they describe.</summary>
+/// <summary>The "latest grade" and "last success" tiles open the run they describe.</summary>
 public class PipelineRunsSummaryTests
 {
     private static readonly DateTime Start = new(2026, 10, 5, 8, 0, 0, DateTimeKind.Utc);

@@ -11,12 +11,15 @@ public static class ReleasesModuleExtensions
     {
         services.AddScoped<IReleaseRepository, ReleaseRepository>();
         services.AddScoped<IReleaseService, ReleaseService>();
+        services.AddScoped<IReleaseStatusRestoreService, ReleaseStatusRestoreService>();
         services.AddScoped<IReleaseDeploymentAnnouncer, ReleaseDeploymentAnnouncer>();
         services.AddScoped<IReleaseProvenanceRepository, ReleaseProvenanceRepository>();
         services.AddScoped<IReleaseProvenanceService, ReleaseProvenanceService>();
         services.AddScoped<IDomainEventHandler<PipelineRunCompletedEvent>, PipelineRunCompletedReleaseHandler>();
         services.AddScoped<IDomainEventHandler<RollbackDeploymentSucceededEvent>, RollbackDeploymentSucceededHandler>();
         services.AddHostedService<ReleaseScanService>();
+        services.AddScoped<IReleaseRetentionRepository, ReleaseRetentionRepository>();
+        services.AddHostedService<ReleaseRetentionService>();
         return services;
     }
 }

@@ -64,8 +64,8 @@ public partial class QualityGatePolicyEditor
     private bool _previewing;
     private bool _applying;
 
-    // Recette R-210: the header filters name origins, behaviors and states as the cells do; built once
-    // so the columns see the same delegates on every render.
+    // The header filters name origins, behaviors and states as the cells do; built once so the
+    // columns see the same delegates on every render.
     private Func<string, string>? _scopeText;
     private Func<string, string>? _behaviorText;
     private Func<string, string>? _effectiveText;

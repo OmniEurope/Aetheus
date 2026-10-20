@@ -22,7 +22,7 @@ public static class ServerSection
     public const string Teamspeak = "teamspeak";
     public const string Portsentry = "portsentry";
 
-    /// <summary>The port registry (PLAN-005), not the Portsentry intrusion module above.</summary>
+    /// <summary>The port registry, separate from the Portsentry intrusion module.</summary>
     public const string Ports = "ports";
 
     public const string Rkhunter = "rkhunter";

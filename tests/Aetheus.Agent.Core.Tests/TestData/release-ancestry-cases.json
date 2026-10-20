@@ -1,0 +1,206 @@
+{
+  "node": "v24.7.0",
+  "git": "git version 2.40.0.windows.1",
+  "shell": "sh (Git for Windows)",
+  "cases": [
+    {
+      "name": "contains",
+      "description": "verify-release-ancestry.test.mjs: accepts a release the deploy branch contains.",
+      "shape": "plain",
+      "exitCode": 0,
+      "stdout": "Deploy branch ({onBranch:short}) contains release commit {onBranch:short}.\n",
+      "stderr": "",
+      "provenance": "{onBranch}\n"
+    },
+    {
+      "name": "never-received",
+      "description": "verify-release-ancestry.test.mjs: refuses a release the deploy branch never received.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Refusing to deploy: the deploy branch does not contain this release.\n\n  release commit : {offBranch}\n  deploy branch  : {onBranch:short} (HEAD)\n\nThe image would be the one this release built, but the deployment instructions would come from an\nolder branch state. Anything the release added to the deployment contract - a new BG_COMPOSE_ENV\nentry, a new Compose variable, a changed migration step - would be silently dropped, and the run\nwould still report success.\n\nPromote the release commit to the deploy branch first, then run this deployment again.\n",
+      "provenance": "{offBranch}\n"
+    },
+    {
+      "name": "abbreviated",
+      "description": "verify-release-ancestry.test.mjs: refuses an abbreviated commit id.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release provenance '{onBranch:8}' is not a full commit id; refusing to guess which commit it means.\n",
+      "provenance": "{onBranch:8}\n"
+    },
+    {
+      "name": "directory",
+      "description": "A directory where the provenance file should be is not a regular file.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release provenance file '.pipeline-artifacts/source-commit' is missing; cannot prove the deploy branch carries this release.\n",
+      "provenance": "<directory>"
+    },
+    {
+      "name": "missing-file",
+      "description": "verify-release-ancestry.test.mjs: refuses a missing provenance file.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release provenance file '.pipeline-artifacts/source-commit' is missing; cannot prove the deploy branch carries this release.\n"
+    },
+    {
+      "name": "empty-file",
+      "description": "verify-release-ancestry.test.mjs: refuses an empty provenance file.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release provenance '' is not a full commit id; refusing to guess which commit it means.\n",
+      "provenance": "\n"
+    },
+    {
+      "name": "not-hex",
+      "description": "verify-release-ancestry.test.mjs: refuses a provenance file that is not a commit id.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release provenance file '.pipeline-artifacts/source-commit' does not hold a commit id.\n",
+      "provenance": "not-a-sha\n"
+    },
+    {
+      "name": "unknown-commit",
+      "description": "verify-release-ancestry.test.mjs: refuses a commit this checkout has never heard of.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa is unknown to this checkout, so the deploy branch cannot be shown to contain it.\nDeepen the deploy checkout (AETHEUS_GIT_HISTORY_DEPTH) or confirm the release was published to this remote.\n",
+      "provenance": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+    },
+    {
+      "name": "blanks-removed",
+      "description": "Spaces, tabs, CR and LF anywhere in the file are removed before the checks.",
+      "shape": "plain",
+      "exitCode": 0,
+      "stdout": "Deploy branch ({onBranch:short}) contains release commit {onBranch:short}.\n",
+      "stderr": "",
+      "provenance": " {onBranch:0:20}\t {onBranch:20:40}\r\n\n"
+    },
+    {
+      "name": "uppercase",
+      "description": "An uppercase full id is accepted as hexadecimal.",
+      "shape": "plain",
+      "exitCode": 0,
+      "stdout": "Deploy branch ({onBranch:short}) contains release commit {onBranch:short}.\n",
+      "stderr": "",
+      "provenance": "{onBranch:upper}\n"
+    },
+    {
+      "name": "unknown-64",
+      "description": "A 64-character id unknown to a SHA-1 repository.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release commit bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb is unknown to this checkout, so the deploy branch cannot be shown to contain it.\nDeepen the deploy checkout (AETHEUS_GIT_HISTORY_DEPTH) or confirm the release was published to this remote.\n",
+      "provenance": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+    },
+    {
+      "name": "length-39",
+      "description": "A 39-character id is not a full commit id.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release provenance '{onBranch:0:39}' is not a full commit id; refusing to guess which commit it means.\n",
+      "provenance": "{onBranch:0:39}\n"
+    },
+    {
+      "name": "length-41",
+      "description": "A 41-character id is not a full commit id.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release provenance '{onBranch}a' is not a full commit id; refusing to guess which commit it means.\n",
+      "provenance": "{onBranch}a\n"
+    },
+    {
+      "name": "vertical-tab",
+      "description": "A vertical tab is not removed, so the id is not hexadecimal.",
+      "shape": "plain",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release provenance file '.pipeline-artifacts/source-commit' does not hold a commit id.\n",
+      "provenance": "{onBranch}\u000b\n"
+    },
+    {
+      "name": "deploy-ref",
+      "description": "The deploy ref names another branch, which contains the release.",
+      "shape": "plain",
+      "exitCode": 0,
+      "stdout": "Deploy branch ({offBranch:short}) contains release commit {offBranch:short}.\n",
+      "stderr": "",
+      "provenance": "{offBranch}\n",
+      "deployRef": "unmerged"
+    },
+    {
+      "name": "deploy-ref-unknown",
+      "description": "The deploy ref does not resolve: git rev-parse fails under set -e.",
+      "shape": "plain",
+      "exitCode": 128,
+      "stdout": "",
+      "stderr": "fatal: Needed a single revision\n",
+      "provenance": "{onBranch}\n",
+      "deployRef": "no-such-ref"
+    },
+    {
+      "name": "shallow-deepened",
+      "description": "A shallow clone is unshallowed from origin, then shown to contain an older release.",
+      "shape": "shallow-reachable",
+      "exitCode": 0,
+      "stdout": "Deploy branch ({c3:short}) contains release commit {c1:short}.\n",
+      "stderr": "",
+      "provenance": "{c1}\n"
+    },
+    {
+      "name": "shallow-refused",
+      "description": "A shallow clone is unshallowed, then shown to lack a release on another branch.",
+      "shape": "shallow-reachable",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Refusing to deploy: the deploy branch does not contain this release.\n\n  release commit : {s1}\n  deploy branch  : {c3:short} (HEAD)\n\nThe image would be the one this release built, but the deployment instructions would come from an\nolder branch state. Anything the release added to the deployment contract - a new BG_COMPOSE_ENV\nentry, a new Compose variable, a changed migration step - would be silently dropped, and the run\nwould still report success.\n\nPromote the release commit to the deploy branch first, then run this deployment again.\n",
+      "provenance": "{s1}\n"
+    },
+    {
+      "name": "shallow-unprovable",
+      "description": "A shallow clone whose origin is gone holds the release as a graft: still shallow, cannot decide.",
+      "shape": "shallow-unreachable",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release commit {s1} is not reachable from {c3:short}, but this checkout is still shallow,\nso the deploy branch cannot be shown either to contain or to lack it. Deepen the checkout and retry.\n",
+      "provenance": "{s1}\n"
+    },
+    {
+      "name": "shallow-unknown",
+      "description": "A shallow clone whose origin is gone lacks the older release entirely.",
+      "shape": "shallow-unreachable",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Release commit {c1} is unknown to this checkout, so the deploy branch cannot be shown to contain it.\nDeepen the deploy checkout (AETHEUS_GIT_HISTORY_DEPTH) or confirm the release was published to this remote.\n",
+      "provenance": "{c1}\n"
+    },
+    {
+      "name": "shallow-head",
+      "description": "A shallow clone whose origin is gone: HEAD itself is its own ancestor.",
+      "shape": "shallow-unreachable",
+      "exitCode": 0,
+      "stdout": "Deploy branch ({c3:short}) contains release commit {c3:short}.\n",
+      "stderr": "",
+      "provenance": "{c3}\n"
+    },
+    {
+      "name": "fetched-by-id",
+      "description": "A release only origin holds is fetched by its id, then shown absent from the deploy branch.",
+      "shape": "late",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Refusing to deploy: the deploy branch does not contain this release.\n\n  release commit : {l1}\n  deploy branch  : {c1:short} (HEAD)\n\nThe image would be the one this release built, but the deployment instructions would come from an\nolder branch state. Anything the release added to the deployment contract - a new BG_COMPOSE_ENV\nentry, a new Compose variable, a changed migration step - would be silently dropped, and the run\nwould still report success.\n\nPromote the release commit to the deploy branch first, then run this deployment again.\n",
+      "provenance": "{l1}\n"
+    }
+  ]
+}

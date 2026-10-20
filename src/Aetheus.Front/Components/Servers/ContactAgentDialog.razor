@@ -85,13 +85,8 @@
         }
     }
 
-    @* DF6L (decided - stays bespoke, NOT migrated to DialogFooter): this footer is state-driven -
-       Running shows a single Cancel; Failed shows WhyOffline + Retry + Close (Close last); Success shows
-       only Close. DialogFooter renders ChildContent then a fixed standard Cancel (last, recette R-335),
-       with cancel semantics it owns - it can't express the per-state button sets nor the
-       cancel-vs-close distinction without bloating the shared component with state options for
-       this one dialog. The DialogFooter migration is
-       complete for every dialog it fits; this one is intentionally left bespoke. *@
+    @* The footer needs different button sets and Cancel versus Close semantics for running, failed
+       and successful states. Keep it local because DialogFooter owns a fixed cancel action. *@
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
         @if (_state == ContactState.Running)
         {
@@ -102,7 +97,10 @@
             @if (_state == ContactState.Failed)
             {
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadDiagnosticAsync" Disabled="@(_diagnostic is not null && !_diagnosticLoading)" Class="@(_diagnosticLoading ? "btn-busy" : null)" Busy="@(_diagnosticLoading)" title="@L["WhyOffline"]"><OmniIcon Name="OmniIconName.Question" /> <span>@L["Diagnostic"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@StartAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+                @* STD-BTN detection 11: Diagnostic visible, the other actions in the menu. *@
+                <OmniOverflowMenu Label="@L["MoreActions"]">
+                    <OmniMenuItem OnClick="@StartAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Retry"]</ChildContent></OmniMenuItem>
+                </OmniOverflowMenu>
             }
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close(_state == ContactState.Success))"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Close"]</span></OmniButton>
         }

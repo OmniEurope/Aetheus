@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Configuration;
+using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services;
 using Microsoft.Extensions.Options;
 
@@ -26,7 +27,7 @@ public sealed class ExternalRepoSyncService(
 
     private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(PollInterval);
+        using var timer = new PeriodicTimer(PollInterval, timeProvider);
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
             try
@@ -57,28 +58,47 @@ public sealed class ExternalRepoSyncService(
 
         foreach (var mirrorRepo in mirrors)
         {
-            if (mirrorRepo.GitConnectionId is null)
+            try
             {
-                continue;
+                await SyncIfDueAsync(mirrorRepo, now, lightRepo, gitRepo, mirror, notifier, ct).ConfigureAwait(false);
             }
-
-            var connection = await gitRepo.FindConnectionAsync(mirrorRepo.GitConnectionId.Value, ct).ConfigureAwait(false);
-            if (connection is null || !connection.AutoSyncEnabled || connection.MirrorStatus == GitMirrorStatus.Syncing)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                continue;
+                throw;
             }
-
-            var interval = TimeSpan.FromMinutes(Math.Clamp(connection.FetchIntervalMinutes, 1, 1440));
-            var due = connection.LastFetchedAt is null || now - connection.LastFetchedAt.Value >= interval;
-            if (!due)
+            catch (Exception ex)
             {
-                continue;
+                // One failing mirror must not stop the refresh of the other mirrors.
+                logger.LogError(ex, "[ExternalRepos] scheduled sync failed for repository {RepositoryId}", mirrorRepo.Id);
             }
-
-            await mirror.SyncAsync(connection, mirrorRepo, ct).ConfigureAwait(false);
-            await gitRepo.SaveChangesAsync(ct).ConfigureAwait(false);
-            await lightRepo.SaveChangesAsync(ct).ConfigureAwait(false);
-            await notifier.BroadcastAsync(ResourceType.Project, connection.ProjectId, EntityChangeOps.Updated, ct).ConfigureAwait(false);
         }
+    }
+
+    private static async Task SyncIfDueAsync(
+        GitInternalRepo mirrorRepo, DateTime now, IGitLightRepository lightRepo, IGitRepository gitRepo,
+        IExternalRepoMirrorService mirror, IEntityChangeNotifier notifier, CancellationToken ct)
+    {
+        if (mirrorRepo.GitConnectionId is null)
+        {
+            return;
+        }
+
+        var connection = await gitRepo.FindConnectionAsync(mirrorRepo.GitConnectionId.Value, ct).ConfigureAwait(false);
+        if (connection is null || !connection.AutoSyncEnabled || connection.MirrorStatus == GitMirrorStatus.Syncing)
+        {
+            return;
+        }
+
+        var interval = TimeSpan.FromMinutes(Math.Clamp(connection.FetchIntervalMinutes, 1, 1440));
+        var due = connection.LastFetchedAt is null || now - connection.LastFetchedAt.Value >= interval;
+        if (!due)
+        {
+            return;
+        }
+
+        await mirror.SyncAsync(connection, mirrorRepo, ct).ConfigureAwait(false);
+        await gitRepo.SaveChangesAsync(ct).ConfigureAwait(false);
+        await lightRepo.SaveChangesAsync(ct).ConfigureAwait(false);
+        await notifier.BroadcastAsync(ResourceType.Project, connection.ProjectId, EntityChangeOps.Updated, ct).ConfigureAwait(false);
     }
 }

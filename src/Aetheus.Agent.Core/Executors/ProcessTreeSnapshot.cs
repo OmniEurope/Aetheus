@@ -47,12 +47,16 @@ internal static class ProcessTreeSnapshot
         return descendants;
     }
 
-    private static Dictionary<int, int> ReadLinuxParents()
+    private static Dictionary<int, int> ReadLinuxParents() => ReadParentsFromProc("/proc");
+
+    // The parent of every process listed under a proc-style directory, so the parsing is asserted on a
+    // temporary directory on any platform.
+    internal static Dictionary<int, int> ReadParentsFromProc(string procRoot)
     {
         var result = new Dictionary<int, int>();
         try
         {
-            foreach (var directory in Directory.EnumerateDirectories("/proc"))
+            foreach (var directory in Directory.EnumerateDirectories(procRoot))
             {
                 if (!int.TryParse(Path.GetFileName(directory), out var processId))
                     continue;

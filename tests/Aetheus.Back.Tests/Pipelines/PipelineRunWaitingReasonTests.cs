@@ -9,12 +9,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// A run that dispatches nothing used to look exactly like a run making progress: Running, no task
-/// moving, and the reason living only inside the planner's local state. These tests pin the reason
-/// onto the run, and pin that it disappears the moment something moves - a stale "waiting for a
-/// runner" on an advancing run would be worse than none.
-/// </summary>
+/// <summary>Reports why a run cannot dispatch work and clears the reason as soon as progress
+/// resumes.</summary>
 public class PipelineRunWaitingReasonTests
 {
     private const int RunId = 4242;

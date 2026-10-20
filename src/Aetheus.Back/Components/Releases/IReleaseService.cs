@@ -18,14 +18,23 @@ public interface IReleaseService
     Task<PaginatedResult<ReleaseDto>> GetServerReleasesAsync(
         int serverId, PaginationRequest request, CancellationToken ct = default);
 
-    /// <summary>Recette R-224: the project and source pipeline names across the releases of a scope
-    /// (a server's when <paramref name="serverId"/> is set, else the accessible ones, of one project or all).</summary>
+    /// <summary>The project and source pipeline names across the releases of a scope (a server's
+    /// when <paramref name="serverId"/> is set, else the accessible ones, of one project or
+    /// all).</summary>
     Task<ReleaseFilterValuesDto> GetReleaseFilterValuesAsync(
         int? projectId, List<int>? accessibleIds, int? serverId, CancellationToken ct = default);
     Task<List<ReleaseDto>> SyncReleasesAsync(int projectId, CancellationToken ct = default);
     /// <param name="authorizedRun">The run of <c>request.PipelineId</c> the caller was authorized to launch
     /// (BACK-023); it is the one launched.</param>
     Task<ReleaseDto> TriggerReleaseBuildAsync(
+        int releaseId, TriggerReleaseBuildRequest request, PipelineRunPreparation authorizedRun, CancellationToken ct = default);
+
+    /// <summary>Decision D2: runs a complete pipeline of the release's project again from the commit of an
+    /// archived release. The release itself is not changed; a run that publishes its version again
+    /// makes it Published.</summary>
+    /// <param name="authorizedRun">The run of <c>request.PipelineId</c>, pinned to the release's commit,
+    /// the caller was authorized to launch (BACK-023); it is the one launched.</param>
+    Task<PipelineRunDto> RelaunchFromCommitAsync(
         int releaseId, TriggerReleaseBuildRequest request, PipelineRunPreparation authorizedRun, CancellationToken ct = default);
 
     /// <param name="authorizedRun">The run of <c>request.PipelineId</c> the caller was authorized to launch

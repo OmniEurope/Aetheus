@@ -4,18 +4,12 @@ using Deque.AxeCore.Playwright;
 
 namespace Aetheus.E2E;
 
-/// <summary>
-/// Automated accessibility fixture. Logs in through the shared <see cref="E2ETestBase"/>
-/// harness, then runs an axe-core scan over the main authenticated pages and fails on any
-/// WCAG <b>serious</b> or <b>critical</b> violation. Every violation, whatever its impact, is
-/// also written as SARIF (<see cref="AccessibilitySarif"/>) for a lint step to publish as
-/// Accessibility findings (PLAN-003 2.4): minor and moderate ones are tracked, not gated.
-///
-/// Like the rest of the suite this needs a running app + browsers to execute (the
-/// E2E/Accessibility categories gate it), but it compiles and is discoverable without one.
-/// </summary>
+/// <summary>Scan authenticated pages with axe-core and fail on serious or critical WCAG violations
+/// while exporting every impact as SARIF. Execution requires the running test application and
+/// browsers.</summary>
 [Category("E2E")]
 [Category("Accessibility")]
+[RollbackRelevant]
 public class AccessibilityTests : E2ETestBase
 {
     // The impacts we refuse to ship. Axe reports impact as one of

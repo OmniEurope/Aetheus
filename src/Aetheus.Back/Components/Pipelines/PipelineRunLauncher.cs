@@ -139,12 +139,9 @@ public sealed class PipelineRunLauncher(
         var preflightProblems = preflightOutcome.Problems;
         if (preflightProblems.Count > 0)
         {
-            // A360-28: the refusal happens before the run row exists, so an interactive caller sees the
-            // 400 but a scheduler or a git push saw nothing at all - no run, no trace, no way to tell a
-            // refused launch from one that never fired. The audit trail is the only record those
-            // triggers can leave, so the refusal is written there before it is thrown.
-            // Information, not Warning (recette R-521): the preflight already warned once, with one
-            // entry per problem; this line only ties that refusal to the pipeline id.
+            // Automated launch refusal is audited before throwing because no run row exists yet.
+            // The informational entry links the refusal to the pipeline without duplicating
+            // preflight warnings.
             var reason = string.Join(" ", preflightProblems);
             logger.LogInformation(
                 "Preflight refused the launch of pipeline {PipelineId} ({PipelineName}): {Reason}",
@@ -167,8 +164,11 @@ public sealed class PipelineRunLauncher(
         var run = CreatePipelineRun(
             preparation, runtimePreparation, variables, effectiveParams, idempotencyKey,
             preflightOutcome.Checks);
-        run.ReleaseNumber = await PipelineReleaseNumbers.ResolveAsync(
-            repo, runtimePreparation.Definition, runtimePreparation.EffectiveProjectId, variables, ct).ConfigureAwait(false);
+        var release = await PipelineReleaseNumbers.ResolveAsync(
+            repo, runtimePreparation.Definition, runtimePreparation.EffectiveProjectId, variables,
+            runtimePreparation.ReleaseSeries, ct).ConfigureAwait(false);
+        run.ReleaseNumber = release?.Number;
+        run.ReleaseSeries = release?.Series;
         var existing = await PersistPipelineRunAsync(run, ct).ConfigureAwait(false);
         if (existing is not null) return existing;
 
@@ -222,11 +222,10 @@ public sealed class PipelineRunLauncher(
         string? idempotencyKey,
         IReadOnlyList<PreflightCheckDto> preflightChecks) => new()
         {
-            // What the preflight verified to let this run start. Kept because the refusal path is the
-            // only one that used to leave a trace, so an accepted launch said nothing about what had
-            // been looked at.
+            // Accepted runs retain the preflight checks that justified their launch.
             PreflightJson = preflightChecks.Count > 0 ? JsonSerializer.Serialize(preflightChecks) : null,
             PipelineId = preparation.PipelineId,
+            RunToEnd = preparation.RunToEnd,
             Status = PipelineStatus.Running,
             StartedAt = timeProvider.GetUtcNow().UtcDateTime,
             YamlSnapshot = runtimePreparation.YamlSnapshot,
@@ -311,7 +310,6 @@ public sealed class PipelineRunLauncher(
     {
         var pipeline = preparation.Pipeline;
         var definition = preparation.Definition;
-        var effectiveStages = preparation.EffectiveStages;
         var effectiveProjectId = preparation.EffectiveProjectId;
 
         // Inject project-level system vars that require a DB lookup.
@@ -328,7 +326,7 @@ public sealed class PipelineRunLauncher(
         }
         if (!string.IsNullOrWhiteSpace(run.CommitHash))
             projectVars["BUILD_SOURCEVERSION"] = run.CommitHash;
-        PipelineReleaseNumbers.Inject(projectVars, run.ReleaseNumber);
+        PipelineReleaseNumbers.Inject(projectVars, run.ReleaseNumber, run.ReleaseSeries);
 
         var (resolvedVars, warnings, secretKeys) = await variableResolver.ResolveVariablesWithWarningsAsync(
             definition, effectiveProjectId, projectVars, ct,
@@ -339,70 +337,8 @@ public sealed class PipelineRunLauncher(
         warnings.InsertRange(0, preparation.DefinitionWarnings);
         run.WarningsJson = warnings.Count > 0 ? JsonSerializer.Serialize(warnings) : null;
 
-        // System:Prepare (clone/prepare workspace) and System:Cleanup only make sense when at least one
-        // step actually uses the workspace. A pure orchestration pipeline - every step is `type: trigger`,
-        // which merely launches and waits on a child run - needs neither, so skip both. Keeps the run view
-        // clean (no useless "Clone Repository"/"Cleanup") and lets the trigger steps stand on their own.
-        var requiresWorkspace = PipelineRunPreparationService.RequiresWorkspace(definition);
-        var hasRepo = !string.IsNullOrEmpty(preparation.RepositoryUrl);
-        var order = 0;
-        if (requiresWorkspace)
-        {
-            repo.TrackPipelineStepRun(new PipelineStepRun
-            {
-                PipelineRunId = run.Id,
-                StageName = PipelineRunService.SystemPrepareStage,
-                StepName = hasRepo ? "Clone Repository" : "Prepare Workspace",
-                Order = order++,
-                IsSystem = true
-            });
-        }
-
-        // Create step runs for each stage/step (with matrix expansion) - effectiveStages was
-        // flattened once above (shared with the matrix validation).
-        foreach (var stage in effectiveStages)
-        {
-            var matrixLegs = ExpandMatrix(stage.Matrix);
-
-            foreach (var leg in matrixLegs)
-            {
-                var legName = leg.Count > 0 ? string.Join("-", leg.Values) : null;
-
-                foreach (var step in stage.Steps)
-                {
-                    repo.TrackPipelineStepRun(new PipelineStepRun
-                    {
-                        PipelineRunId = run.Id,
-                        StageName = stage.Name,
-                        StepName = legName is not null ? $"{step.Name} [{legName}]" : step.Name,
-                        Order = order++,
-                        RetryCount = step.RetryCount,
-                        // An advisory AI step never stops its dependents; the scheduler then also
-                        // keeps its failure out of the run status (PipelineRunScheduler.AdvisoryStepKeys).
-                        ContinueOnError = step.ContinueOnError || step.Advisory,
-                        MatrixLeg = legName,
-                        GroupName = stage.Group
-                    });
-                }
-            }
-
-            // Artifact collection is dispatched post-stage (in AdvanceStageAsync),
-            // not as an injected step - avoids the task claim concurrency bug.
-        }
-
-        // Inject system cleanup step (always runs) - only when the workspace was prepared above.
-        if (requiresWorkspace)
-        {
-            repo.TrackPipelineStepRun(new PipelineStepRun
-            {
-                PipelineRunId = run.Id,
-                StageName = PipelineRunService.SystemCleanupStage,
-                StepName = "Cleanup",
-                Order = order++,
-                IsSystem = true,
-                ContinueOnError = true
-            });
-        }
+        foreach (var stepRun in PipelineStepRunPlan.Build(run, preparation))
+            repo.TrackPipelineStepRun(stepRun);
 
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
 
@@ -441,9 +377,9 @@ public sealed class PipelineRunLauncher(
         }
         catch (BadRequestException refusal)
         {
-            // Mandatory catch (recette R-522): nobody is in front of an automated trigger to read the
-            // refusal, and no run row exists to carry it. It is rethrown once a failed run carries it
-            // and the subscribers are told.
+            // Mandatory catch : nobody is in front of an automated trigger to read the refusal, and
+            // no run row exists to carry it. It is rethrown once a failed run carries it and the
+            // subscribers are told.
             await refusals.RecordAsync(
                 preparation.Pipeline, preparation, triggerSource, refusal.Message, additionalVariables, ct).ConfigureAwait(false);
             throw;
@@ -488,8 +424,8 @@ public sealed class PipelineRunLauncher(
         }
         catch (BadRequestException refusal)
         {
-            // Mandatory catch (recette R-522), as in TriggerPreparedAutomatedRunAsync: a definition that
-            // cannot be prepared (invalid YAML, a source repository that differs or cannot be read) is a
+            // Mandatory catch, as in TriggerPreparedAutomatedRunAsync: a definition that cannot be
+            // prepared (invalid YAML, a source repository that differs or cannot be read) is a
             // refusal nobody reads unless a failed run carries it.
             await refusals.RecordAsync(pipeline, null, triggerSource, refusal.Message, additionalVariables, ct).ConfigureAwait(false);
             throw;
@@ -549,9 +485,9 @@ public sealed class PipelineRunLauncher(
             additional[PipelineRunService.ResumeSourceRunVariable] = sourceRunId.ToString();
         }
 
-        // Recette R-534: a run with a source: block records two revisions, the definition's and the
-        // workspace's (its own CommitHash). A same-commit rerun reads the definition at the first and
-        // checks out the second; without the block both are the run's commit.
+        // A run with a source: block records two revisions, the definition's and the workspace's
+        // (its own CommitHash). A same-commit rerun reads the definition at the first and checks
+        // out the second; without the block both are the run's commit.
         var definitionCommit = PipelineRunService.ResolveDefinitionCommit(source);
         var workspaceCommit = string.Equals(definitionCommit, source.CommitHash, StringComparison.OrdinalIgnoreCase)
             ? null

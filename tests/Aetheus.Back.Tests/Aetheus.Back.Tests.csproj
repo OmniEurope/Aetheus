@@ -32,7 +32,7 @@
   <ItemGroup>
     <!-- Tests that only exist on one OS: see tests/Shared/PlatformSpecificTests.cs. -->
     <Compile Include="..\Shared\PlatformSpecificTests.cs" Link="Shared\PlatformSpecificTests.cs" />
-    <!-- PLAN-003 2.4: the SARIF the accessibility suite writes, fed here to the real parser. -->
+    <!-- Exercises the real SARIF parser with output written by the accessibility suite. -->
     <Compile Include="..\Aetheus.E2E\AccessibilitySarif.cs" Link="Shared\AccessibilitySarif.cs" />
   </ItemGroup>
 

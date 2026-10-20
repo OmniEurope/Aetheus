@@ -24,7 +24,7 @@ public sealed class AuthControllerExternalLoginSecurityTests
 
         var result = await controller.ExternalLogin(Request(), TestContext.Current.CancellationToken);
 
-        // R2-120: a feature that is not configured answers 404 with the ApiError body, never 503.
+        // A feature that is not configured answers 404 with the ApiError body, never 503.
         var response = Assert.IsType<NotFoundObjectResult>(result.Result);
         Assert.Equal(StatusCodes.Status404NotFound, response.StatusCode);
         Assert.IsType<Aetheus.Shared.Components.Shared.ApiError>(response.Value);

@@ -38,9 +38,8 @@ public sealed class UserNotificationService(
 
         _hub = hubFactory.Create("user");
         _hub.On<string>("PermissionsChanged", reason => HandleServerMessage(reason));
-        // Recette R-182: a notification recorded, read or added for this user reloads the one feed the
-        // bell, the menu badge and /notifications all read.
-        // R-461: bursts of pushes are coalesced by the feed into one refresh.
+        // Refresh the shared user feed for recorded, read or added notifications so the bell, menu
+        // and page stay consistent; coalesce bursts into one reload.
         _hub.On("NotificationsChanged", () =>
         {
             notificationsFeed?.RefreshFromPush();
@@ -51,10 +50,8 @@ public sealed class UserNotificationService(
         if (await TryConnectAsync().ConfigureAwait(false))
             return;
 
-        // Reconciliation used to live only in OnReconnectedAsync, which never fires unless the hub
-        // connected at least once - a backend that is down at initial load left this service blind
-        // for the entire session. Retry the same (never-connected) hub on the same backoff schedule
-        // TaskTrackerService uses until the initial connect succeeds.
+        // Retry an initially unavailable hub on the normal backoff schedule because reconnect
+        // callbacks require a connection to have succeeded first.
         _startRetryCts = new CancellationTokenSource();
         _ = InitialRetryLoopAsync(_startRetryCts.Token);
     }

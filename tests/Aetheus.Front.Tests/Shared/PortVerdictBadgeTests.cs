@@ -3,11 +3,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// PLAN-003 lot 24 / D14: one phrase per port, relative to the project doing the asking. The case
-/// that motivated it is the first one here: a project's own deployed app answering on its own
-/// declared port used to read "UNUSABLE".
-/// </summary>
+/// <summary>Port verdicts are relative to the requesting project, including listeners belonging to
+/// its own declared deployment.</summary>
 public class PortVerdictBadgeTests : BunitContext
 {
     private IRenderedComponent<PortVerdictBadge> RenderFor(PortCheckEntryDto entry)

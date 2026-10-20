@@ -3,7 +3,8 @@ using Aetheus.Back.Components.Mail.Mailbox;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-17: the HTML of a received message is made safe on the backend before the page shows it.</summary>
+/// <summary>The HTML of a received message is made safe on the backend before the page shows
+/// it.</summary>
 public sealed class MailboxHtmlSanitizerTests
 {
     private static readonly Dictionary<string, string> s_noInline = [];

@@ -3,7 +3,7 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.PersonalAccessTokens;
 
-/// <summary>Recette R-224: the column filters of the caller's personal access tokens grid.</summary>
+/// <summary>The column filters of the caller's personal access tokens grid.</summary>
 internal static class PersonalAccessTokenListQuery
 {
     internal static readonly GridQueryMap<PersonalAccessToken> Columns = new GridQueryMap<PersonalAccessToken>()

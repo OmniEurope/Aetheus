@@ -7,10 +7,7 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Services;
 
-/// <summary>
-/// Tests for the ApiStatus overload of UiActions.RunAsync - the third variant
-/// (lines 62–80 in UiActions.cs) that was previously at 0 % coverage.
-/// </summary>
+/// <summary>Verifies the ApiStatus overload of UiActions.RunAsync.</summary>
 public class UiActionsApiStatusTests
 {
     private readonly OmniOverlayService _overlay = new(new FakeTimeProvider());

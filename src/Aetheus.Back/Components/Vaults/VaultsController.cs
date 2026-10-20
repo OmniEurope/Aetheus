@@ -17,7 +17,7 @@ public class VaultsController(IVaultService service, IResourceAuthorizationServi
         return Ok(await service.GetVaultsAsync(projectId, environmentId, projectServerId, request, accessibleIds, ct));
     }
 
-    /// <summary>Recette R-210: the project names the vaults list's column filter offers.</summary>
+    /// <summary>The project names the vaults list's column filter offers.</summary>
     [HttpGet("filter-values")]
     public async Task<ActionResult<VaultFilterValuesDto>> GetFilterValues(CancellationToken ct)
     {
@@ -120,11 +120,9 @@ public class VaultsController(IVaultService service, IResourceAuthorizationServi
         return NoContent();
     }
 
-    /// <summary>
-    /// Recette R-292: the clear value of one secret, for the copy button. POST so no URL, proxy log or
-    /// browser history ever carries it; Write permission (the right to change the value), never Read;
-    /// no-store so no cache keeps it; audited by the service.
-    /// </summary>
+    /// <summary> The clear value of one secret, for the copy button. POST so no URL, proxy log or
+    /// browser history ever carries it; Write permission (the right to change the value), never
+    /// Read; no-store so no cache keeps it; audited by the service. </summary>
     [HttpPost("{id:int}/secrets/{secretId:int}/reveal")]
     public async Task<ActionResult<RevealedSecretValueDto>> RevealSecretValue(int id, int secretId, CancellationToken ct)
     {

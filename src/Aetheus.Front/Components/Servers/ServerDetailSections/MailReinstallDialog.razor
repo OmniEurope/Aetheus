@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* "Réinstaller la messagerie" (recette R2-083 / R2-088): says what is erased and asks for the domain
-   (or the mail host name) typed back before the red button enables. *@
+@* Mail reinstallation explains erased resources and requires the domain or host name to be typed
+   before enabling confirmation. *@
 <OmniTemplateForm TModel="MailReinstallDialogModel" Model="@_model" OnValidSubmit="@Submit">
     <OmniStack Gap="OmniSpacing.Medium">
         <OmniAlert Severity="OmniSeverity.Danger" Title="@L["MailReinstallErasesTitle"]">

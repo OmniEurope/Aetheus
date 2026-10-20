@@ -4,14 +4,9 @@ using System.Text;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// Recette R2-080: the "outbound port 25" prerequisite of the mail setup assistant. Many hosting providers
-/// block outbound SMTP, and a mail server that cannot reach port 25 accepts mail it will never deliver. The
-/// agent opens the connection itself (no helper, no privilege), reads the SMTP greeting, says QUIT and prints
-/// one <c>CHECK outbound-25 ok|fail detail</c> line, the format the mail page already reads. Only a
-/// <c>220</c> greeting counts as reached: a refused or timed-out connection, or another answer, is a
-/// failure, and the step exits non-zero so the task status says the same as the line.
-/// </summary>
+/// <summary>Probe outbound SMTP directly without privilege and accept only a 220 greeting before
+/// QUIT. Emit CHECK outbound-25 status and return failure for timeout, refusal or unexpected
+/// greeting.</summary>
 public sealed class MailOutboundProbeOperationExecutor(
     IOutboundTcpConnector connector,
     ILogger<MailOutboundProbeOperationExecutor> logger) : IOperationExecutor

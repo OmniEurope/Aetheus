@@ -29,8 +29,7 @@ public sealed class AvailabilitySparklineTests : BunitContext
         Assert.Equal("Uptime24hLegend", cut.Find("svg > title").TextContent);
     }
 
-    /// <summary>Recette R-440: the bars were black because their colour named tokens that exist
-    /// nowhere. The classes must resolve to the OE status tokens in app.css.</summary>
+    /// <summary>Availability-bar classes resolve to OE status tokens.</summary>
     [Theory]
     [InlineData("availability-sparkline-bar--up", "--omni-color-success")]
     [InlineData("availability-sparkline-bar--down", "--omni-color-danger")]

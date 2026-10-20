@@ -98,7 +98,7 @@ public sealed class ExternalRepoServiceTests
     public async Task AttachAsync_WhenAnExternalRepositoryIsAlreadyAttached_Rejects(bool asProjectSource)
     {
         // One external repository per project: the project's own source, or the additional source
-        // that sits beside its internal repository (recette R-534).
+        // that sits beside its internal repository.
         var project = new Project { Id = 1, GitConnectionId = asProjectSource ? 8 : null };
         _projects.FindProjectAsync(1, Arg.Any<CancellationToken>()).Returns(project);
         if (!asProjectSource)

@@ -15,8 +15,8 @@ public partial class GitCommitGraph
 
     [Parameter, EditorRequired] public List<GitLightCommitDto> Commits { get; set; } = [];
 
-    /// <summary>Recette R-373: the repository the commits belong to, so each SHA links to its commit
-    /// page. Without it the SHA is plain text.</summary>
+    /// <summary>The repository the commits belong to, so each SHA links to its commit page. Without
+    /// it the SHA is plain text.</summary>
     [Parameter] public int? RepoId { get; set; }
 
     private string? CommitHref(GitLightCommitDto commit) => RepoId is { } repoId

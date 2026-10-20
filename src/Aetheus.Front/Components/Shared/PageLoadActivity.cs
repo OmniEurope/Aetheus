@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Recette R-333: whether a page is loading after a navigation, for the progress bar under the top bar.
-/// A navigation opens a load window; every API request sent while it is open is counted, and the window
-/// closes once they have all answered (after a short settle, so chained requests stay one load). A
-/// navigation that sends nothing closes after <see cref="Grace"/>, and a load that never settles closes
-/// after <see cref="Cap"/>. Requests sent outside a window (background refreshes, polls) are ignored,
-/// so the bar never flickers on its own.
-/// </summary>
-public sealed class PageLoadActivity
+/// <summary>Count requests started in a navigation window so chained loads share one progress
+/// indication while background refreshes are ignored; close after settling, Grace when no request
+/// starts, or Cap when loading never settles.</summary>
+public sealed class PageLoadActivity(TimeProvider time)
 {
     internal static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(400);
     internal static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(150);
@@ -66,7 +61,7 @@ public sealed class PageLoadActivity
 
     private async Task CloseAfterAsync(int generation, TimeSpan delay, bool requireIdle)
     {
-        await Task.Delay(delay).ConfigureAwait(false);
+        await Task.Delay(delay, time).ConfigureAwait(false);
         lock (_gate)
         {
             if (generation != _generation || !_active) return;
@@ -77,7 +72,7 @@ public sealed class PageLoadActivity
     }
 }
 
-/// <summary>Recette R-333: reports each API request to <see cref="PageLoadActivity"/>.</summary>
+/// <summary>Reports each API request to <see cref="PageLoadActivity"/>.</summary>
 public sealed class PageLoadActivityHandler(PageLoadActivity activity) : DelegatingHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

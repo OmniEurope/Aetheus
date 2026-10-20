@@ -7,7 +7,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.SystemLogs;
 
-/// <summary>R-181: the push that replaces the Refresh button of the administration Performance page.</summary>
+/// <summary>Verifies change broadcasts for the administration Performance page.</summary>
 public sealed class ApiPerformanceChangeBroadcasterTests : IDisposable
 {
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 9, 21, 12, 0, 0, TimeSpan.Zero));

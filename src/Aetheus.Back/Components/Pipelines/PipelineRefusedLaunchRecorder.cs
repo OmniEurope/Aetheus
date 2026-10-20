@@ -6,23 +6,9 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R-522: an automated launch (schedule, push, webhook) that is refused has nobody in front of it
-/// to read the refusal, and a refusal happens before any run exists: the nightly was refused every night
-/// and the pipeline's page showed nothing. The refusal is recorded as a run that failed at once and
-/// carries the reason, so it shows in the pipeline's own run list like any other failure, and the
-/// subscribers of the project are told.
-/// </summary>
-/// <remarks>
-/// Recette R1-3: the same refusal again, with no other run in between, does not add a run: the last
-/// refused run counts it (a second warning: how many times, and when last), its completion moves to the
-/// latest refusal, the audit records each one and the subscribers are told only the first time, so a
-/// frequent schedule refused for one reason leaves one visible failure instead of one per passage.
-/// Inside a caller's transaction nothing is recorded: the caller's rollback would erase the run after
-/// its events had already gone out, and the caller records the refusal once its transaction is over
-/// (the webhook does). Once the run is saved, the audit line, the live event and the notification are
-/// best effort, so a failure of one of them never replaces the refusal the caller rethrows.
-/// </remarks>
+/// <summary>Automated refusals become failed runs; repeated identical refusals reuse the last run
+/// and notify only once. Recording waits until outside the caller's transaction, and ancillary
+/// audit or notification failures must not replace the original refusal.</summary>
 public sealed class PipelineRefusedLaunchRecorder(
     IPipelineRepository repo,
     IHubContext<PipelineHub> pipelineHub,

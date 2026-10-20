@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Services.Email;
+
 namespace Aetheus.Back.Components.DailyRecap;
 
-/// <summary>
-/// Turns a <see cref="DailyRecapReport"/> into a <see cref="RecapDocument"/>: which section comes
-/// first, what each status is called and which colour it takes. Failures are listed before
-/// successes, so the eye lands on what needs action. A section with nothing to tell and a figure
-/// at zero are left out (recette R1-47): the e-mail lists only what happened.
-/// </summary>
+/// <summary>Builds the recap sections, status labels and colours with failures first. Empty
+/// sections and zero counts are omitted so the email focuses on observed activity.</summary>
 internal static class DailyRecapComposer
 {
     /// <summary>A certificate or secret this close to expiry is shown in red rather than amber.</summary>
@@ -20,8 +18,8 @@ internal static class DailyRecapComposer
         ArgumentNullException.ThrowIfNull(t);
         var date = t.Date(report.Day);
         var blocks = new List<RecapBlock?>();
-        if (report.Has(DailyRecapSection.Pipelines)) blocks.Add(Pipelines(report, t));
-        if (report.Has(DailyRecapSection.Servers)) blocks.Add(Servers(report, t));
+        if (report.Has(DailyRecapSection.Pipelines)) blocks.Add(Pipelines(report, t, frontOrigin));
+        if (report.Has(DailyRecapSection.Servers)) blocks.Add(Servers(report, t, frontOrigin));
         if (report.Has(DailyRecapSection.Releases)) blocks.Add(Releases(report, t));
         if (report.Has(DailyRecapSection.Backups)) blocks.Add(Backups(report, t));
         if (report.Has(DailyRecapSection.Certificates))
@@ -41,16 +39,16 @@ internal static class DailyRecapComposer
             shown,
             t["Footer"],
             t["LabelSeparator"],
-            SettingsLink(frontOrigin, t));
+            SettingsLink(frontOrigin, t), t["EmailLabel"], date);
     }
 
     private static RecapLink? SettingsLink(string? frontOrigin, DailyRecapText t)
     {
-        if (!Uri.TryCreate(frontOrigin?.Trim(), UriKind.Absolute, out var origin)
-            || (origin.Scheme != Uri.UriSchemeHttps && origin.Scheme != Uri.UriSchemeHttp))
-            return null;
-        return new RecapLink(t["SettingsLink"], origin.GetLeftPart(UriPartial.Authority) + "/admin/settings?tab=daily-recap");
+        return Link(frontOrigin, "/admin/settings?tab=daily-recap", t["SettingsLink"]);
     }
+
+    private static RecapLink? Link(string? origin, string path, string text) =>
+        EmailHtmlLayout.Url(origin, path) is { } url ? new RecapLink(text, url) : null;
 
     private static List<RecapTile> Tiles(DailyRecapReport report, DailyRecapText t)
     {
@@ -72,7 +70,7 @@ internal static class DailyRecapComposer
         return tiles;
     }
 
-    private static RecapBlock? Pipelines(DailyRecapReport report, DailyRecapText t)
+    private static RecapBlock? Pipelines(DailyRecapReport report, DailyRecapText t, string? frontOrigin)
     {
         var runs = report.PipelineRuns;
         if (runs.Count == 0) return null;
@@ -85,14 +83,15 @@ internal static class DailyRecapComposer
                 run.PipelineName,
                 Join(run.ProjectName, run.BranchName),
                 new RecapBadge(PipelineTone(run.Status), t[$"Run{run.Status}"]),
-                [new RecapLine(t["FinishedAt"], null, t.Format("RunNumber", run.RunId, t.Time(run.CompletedAtUtc, report.TimeZone)))]))
+                [new RecapLine(t["FinishedAt"], null, t.Format("RunNumber", run.RunId, t.Time(run.CompletedAtUtc, report.TimeZone)))],
+                run.RunId > 0 ? Link(frontOrigin, $"/pipelines/runs/{run.RunId}", t["RunLink"]) : null))
             .ToList();
         var summary = t.Format("PipelinesSummary", runs.Count, succeeded, failed, runs.Count - succeeded - failed);
         var note = runs.Count >= DailyRecapCollector.MaxPipelineRuns ? t.Format("PipelinesTruncated", DailyRecapCollector.MaxPipelineRuns) : t["PipelinesParentsOnly"];
         return new RecapBlock(t["PipelinesTitle"], summary, items, note);
     }
 
-    private static RecapBlock? Servers(DailyRecapReport report, DailyRecapText t)
+    private static RecapBlock? Servers(DailyRecapReport report, DailyRecapText t, string? frontOrigin)
     {
         if (report.Servers.Count == 0) return null;
         var items = report.Servers
@@ -102,7 +101,8 @@ internal static class DailyRecapComposer
                 server.Name,
                 server.Status == ServerStatus.Online ? null : t.Format("LastSeen", t.Moment(server.LastHeartbeatUtc, report.TimeZone)),
                 new RecapBadge(StatusTone(server.Status), t[$"Server{server.Status}"]),
-                [OsUpdates(server, t), Agent(server, t), Disk(server, t)]))
+                [OsUpdates(server, t), Agent(server, t), Disk(server, t)],
+                server.Id > 0 ? Link(frontOrigin, $"/servers/{server.Id}/overview", t["ServerLink"]) : null))
             .ToList();
         var attention = report.Servers.Count(server => ServerTone(server) is RecapTone.Danger or RecapTone.Warning);
         var summary = t.Format("ServersSummary", report.Servers.Count, attention);

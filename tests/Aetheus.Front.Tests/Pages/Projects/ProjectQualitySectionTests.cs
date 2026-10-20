@@ -24,8 +24,7 @@ public class ProjectQualitySectionTests : BunitContext
     [Fact]
     public void CoverageTrend_IsNotRenderedOnTheOverview()
     {
-        // PLAN-003 lot 23: the coverage trend (table or chart) left the quality overview on request.
-        // The trend payload is still fetched (the tests trend feeds the page), but no coverage block renders.
+        // Fetch trend data for the tests trend without rendering a coverage trend block.
         var date = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
         _handler.SetJsonResponse("api/pipelines/projects/1/quality-trend", new ProjectQualityTrendDto
         {
@@ -36,7 +35,7 @@ public class ProjectQualitySectionTests : BunitContext
 
         var cut = Render<ProjectQualitySection>(p => p.Add(c => c.ProjectId, 1));
 
-        cut.WaitForState(() => !cut.Markup.Contains("aetheus-loader", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("aetheus-loader", StringComparison.Ordinal));
         Assert.DoesNotContain("CoverageTrend", cut.Markup);
     }
 
@@ -51,7 +50,7 @@ public class ProjectQualitySectionTests : BunitContext
 
         var cut = Render<ProjectQualitySection>(p => p.Add(c => c.ProjectId, 2));
 
-        cut.WaitForState(() => cut.Markup.Contains("NoQualityData"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("NoQualityData"));
         Assert.Contains("NoQualityData", cut.Markup);
     }
 
@@ -100,17 +99,17 @@ public class ProjectQualitySectionTests : BunitContext
             component => component.ProjectId,
             4));
 
-        cut.WaitForState(() => cut.Markup.Contains("AnalysisGlobalGrade"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("AnalysisGlobalGrade"));
         Assert.Contains("analysis-grade-letter", cut.Markup);
         // The hero is the shared badge, sized by analysis-grade-letter alone.
         Assert.NotEmpty(cut.FindAll(".grade-badge.analysis-grade-letter"));
         Assert.Contains("AnalysisDuplicatedCode", cut.Markup);
         Assert.DoesNotContain(">grade.duplication<", cut.Markup);
-        // Recettes R-373 and R2-143: the commit is a tile with its eight first characters.
+        // Display the first eight commit characters in a tile.
         var commit = cut.FindAll(".analysis-grade-meta-tiles .omni-stat-tile")
             .Single(tile => tile.QuerySelector(".omni-stat-tile__label")!.TextContent.Trim() == "Commit");
         Assert.Equal("aaaaaaaa", commit.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim());
-        // Recettes R2-139 and R2-141: no limiting-domain sentence, no required/complete/freshness line.
+        // Omit limiting-domain prose and the required, complete and freshness line.
         Assert.DoesNotContain("AnalysisLimitingDomain", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("AnalysisFreshness", cut.Markup, StringComparison.Ordinal);
     }
@@ -185,7 +184,7 @@ public class ProjectQualitySectionTests : BunitContext
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 5));
 
-        cut.WaitForState(() => cut.Markup.Contains("AnalysisCrapAverage", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("AnalysisCrapAverage", StringComparison.Ordinal));
         var combined = Assert.Single(cut.FindAll(".analysis-grade-domain"), element =>
             element.TextContent.Contains("AnalysisCodeQualityAndTests", StringComparison.Ordinal));
         Assert.Contains("omni-badge--warning", combined.InnerHtml, StringComparison.Ordinal);
@@ -209,7 +208,7 @@ public class ProjectQualitySectionTests : BunitContext
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
 
-        cut.WaitForState(() => cut.Markup.Contains("NoQualityData"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("NoQualityData"));
         Assert.True(cut.FindComponent<UrlSyncedTabs>().Instance.RenderAllPanels);
         Assert.Equal(2, cut.FindComponent<UrlSyncedTabs>().FindAll("[role='tab']").Count);
     }
@@ -222,7 +221,7 @@ public class ProjectQualitySectionTests : BunitContext
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
 
-        cut.WaitForState(() => cut.Markup.Contains("NoQualityData", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("NoQualityData", StringComparison.Ordinal));
         Assert.DoesNotContain(
             _handler.Requests,
             request => request.Url.Contains("api/analysis/projects/2/findings", StringComparison.Ordinal));
@@ -231,12 +230,12 @@ public class ProjectQualitySectionTests : BunitContext
     [Fact]
     public void SummaryCards_ShowOnlyTheCountsAboveZero()
     {
-        // Recette R-311: a count card with nothing in it is not drawn; the others keep their shortcut.
+        // A count card with nothing in it is not drawn; the others keep their shortcut.
         _handler.SetJsonResponse("api/pipelines/projects/2/quality-trend", new ProjectQualityTrendDto());
         MockAnalysisEndpoints(2, new AnalysisProjectSummaryDto { OpenCount = 3, HighCount = 2 });
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
-        cut.WaitForElement("[data-quality-shortcut='open']", TimeSpan.FromSeconds(3));
+        cut.WaitForElement("[data-quality-shortcut='open']");
 
         Assert.Equal(["open", "high"], cut.FindAll("[data-quality-shortcut]").Select(card => card.GetAttribute("data-quality-shortcut")));
         Assert.Single(cut.FindAll(".analysis-summary-static"));
@@ -252,13 +251,12 @@ public class ProjectQualitySectionTests : BunitContext
             new PaginatedResult<AnalysisFindingDto>());
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
-        cut.WaitForElement("[data-quality-shortcut='critical']", TimeSpan.FromSeconds(3));
+        cut.WaitForElement("[data-quality-shortcut='critical']");
 
         cut.Find("[data-quality-shortcut='critical']").Click();
 
         cut.WaitForState(
-            () => Services.GetRequiredService<NavigationManager>().Uri.Contains("tab=findings", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(3));
+            () => Services.GetRequiredService<NavigationManager>().Uri.Contains("tab=findings", StringComparison.Ordinal));
         cut.WaitForAssertion(() => Assert.Contains(
             _handler.Requests,
             request => request.Method == "GET"
@@ -296,16 +294,15 @@ public class ProjectQualitySectionTests : BunitContext
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
 
         cut.WaitForState(
-            () => cut.Markup.Contains("Finding loaded on activation", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(3));
+            () => cut.Markup.Contains("Finding loaded on activation", StringComparison.Ordinal));
         Assert.Contains("Finding loaded on activation", cut.Markup);
         Assert.Single(_handler.Requests, request => request.Url.Contains(
             "api/analysis/projects/2/findings?page=1&pageSize=25&status=Open",
             StringComparison.Ordinal));
     }
 
-    /// <summary>Recette R-466: the Status, Severity and Category cells of the findings list show the
-    /// translated name (the text of the Enum_ resource, the one the column's filter lists), the status in a
+    /// <summary>The Status, Severity and Category cells of the findings list show the translated
+    /// name (the text of the Enum_ resource, the one the column's filter lists), the status in a
     /// badge, never the raw enum member ("Open").</summary>
     [Fact]
     public void Findings_Cells_Show_The_Translated_Enum_Names_The_Filter_Lists()
@@ -332,7 +329,7 @@ public class ProjectQualitySectionTests : BunitContext
         navigation.NavigateTo(navigation.GetUriWithQueryParameter("tab", "findings"));
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
-        cut.WaitForState(() => cut.Markup.Contains("Translated cells", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("Translated cells", StringComparison.Ordinal));
 
         var status = cut.Find("tbody td[data-omni-col='Status']");
         Assert.Equal("Enum_AnalysisFindingStatus_Open", status.QuerySelector(".omni-badge")?.TextContent.Trim());
@@ -343,8 +340,8 @@ public class ProjectQualitySectionTests : BunitContext
         Assert.Equal("Enum_AnalysisCategory_Secrets", cut.Find("tbody td[data-omni-col='Category']").TextContent.Trim());
     }
 
-    /// <summary>Recette R-221: the default "open only" filter is the Status column's own filter, ticked
-    /// and marked active in its header, and lifting it there loads every status.</summary>
+    /// <summary>The default "open only" filter is the Status column's own filter, ticked and marked
+    /// active in its header, and lifting it there loads every status.</summary>
     [Fact]
     public void DefaultOpenFilter_IsVisibleInTheStatusHeader_AndLiftingItLoadsEveryStatus()
     {
@@ -355,7 +352,7 @@ public class ProjectQualitySectionTests : BunitContext
         navigation.NavigateTo(navigation.GetUriWithQueryParameter("tab", "findings"));
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
-        var toggle = cut.WaitForElement("th[data-omni-col='Status'] .omni-data-grid__filter-menu-toggle", TimeSpan.FromSeconds(3));
+        var toggle = cut.WaitForElement("th[data-omni-col='Status'] .omni-data-grid__filter-menu-toggle");
 
         Assert.Contains("omni-data-grid__filter-menu-toggle--active", toggle.ClassName, StringComparison.Ordinal);
         var open = cut.FindAll("th[data-omni-col='Status'] .omni-multi-select__option")
@@ -368,7 +365,7 @@ public class ProjectQualitySectionTests : BunitContext
             request.Url.EndsWith("api/analysis/projects/2/findings?page=1&pageSize=25", StringComparison.Ordinal)));
     }
 
-    /// <summary>Recette R-210: ticking a second status sends both, in the list parameter.</summary>
+    /// <summary>Ticking a second status sends both, in the list parameter.</summary>
     [Fact]
     public void TickingASecondStatus_SendsBothStatuses()
     {
@@ -379,7 +376,7 @@ public class ProjectQualitySectionTests : BunitContext
         navigation.NavigateTo(navigation.GetUriWithQueryParameter("tab", "findings"));
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
-        cut.WaitForElement("th[data-omni-col='Status'] .omni-multi-select__checkbox", TimeSpan.FromSeconds(3));
+        cut.WaitForElement("th[data-omni-col='Status'] .omni-multi-select__checkbox");
 
         // Members in declaration order: Open, Fixed, Accepted, FalsePositive, Mitigated.
         cut.FindAll("th[data-omni-col='Status'] .omni-multi-select__checkbox")[1].Change(true);
@@ -396,8 +393,7 @@ public class ProjectQualitySectionTests : BunitContext
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
         cut.WaitForState(
-            () => _handler.Requests.Any(request => request.Url.Contains("/summary", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+            () => _handler.Requests.Any(request => request.Url.Contains("/summary", StringComparison.Ordinal)));
         var summaryRequests = _handler.Requests.Count(request =>
             request.Url.Contains("api/analysis/projects/2/summary", StringComparison.Ordinal));
 
@@ -446,9 +442,9 @@ public class ProjectQualitySectionTests : BunitContext
         var cut = Render<ProjectQualitySection>(parameters => parameters
             .Add(component => component.ProjectId, projectId)
             .AddCascadingValue(menu));
-        // Recette R2-054: "Export all" is the blue Markdown button under the findings table, enabled once
-        // the findings are counted; the header's "..." menu no longer holds it (R-431 is undone).
-        cut.WaitForState(() => cut.FindAll("button.analysis-findings-export-button:not([disabled])").Count == 1, TimeSpan.FromSeconds(3));
+        // Place the enabled Markdown export button below the findings table once findings are
+        // counted.
+        cut.WaitForState(() => cut.FindAll("button.analysis-findings-export-button:not([disabled])").Count == 1);
         var export = cut.Find("button.analysis-findings-export-button");
         Assert.Contains("AnalysisExportAllAiPrompt", export.TextContent, StringComparison.Ordinal);
         Assert.Contains("omni-button--primary", export.ClassName, StringComparison.Ordinal);
@@ -467,14 +463,14 @@ public class ProjectQualitySectionTests : BunitContext
             StringComparison.Ordinal));
         var download = Assert.Single(JSInterop.Invocations, invocation => invocation.Identifier == "downloadFile");
         var markdown = Assert.IsType<string>(download.Arguments[1]);
-        // Recette R2-036: "<project>-findings-<date>.md"; the project is not loaded here, so its id stands in.
+        // "<project>-findings-<date>.md"; the project is not loaded here, so its id stands in.
         Assert.Matches(@"^project-6-findings-\d{4}-\d{2}-\d{2}\.md$", Assert.IsType<string>(download.Arguments[0]));
         Assert.Contains("Finding 1", markdown);
         Assert.Contains("Final finding", markdown);
         Assert.Contains("AnalysisBulkAiPromptCount: 201", markdown);
     }
 
-    /// <summary>Recette R-431: the overview tab adds nothing to the header menu (Follow and Edit only).</summary>
+    /// <summary>The overview tab adds nothing to the header menu (Follow and Edit only).</summary>
     [Fact]
     public void OverviewTab_AddsNoHeaderMenuAction()
     {
@@ -487,10 +483,10 @@ public class ProjectQualitySectionTests : BunitContext
             .Add(component => component.ProjectId, 7)
             .AddCascadingValue(menu));
 
-        cut.WaitForState(() => menu.Actions.Count == 0, TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => menu.Actions.Count == 0);
     }
 
-    /// <summary>Recette R-430: the commit, the latest analysis run and the latest release are links.</summary>
+    /// <summary>The commit, the latest analysis run and the latest release are links.</summary>
     [Fact]
     public void Overview_LinksTheCommitTheLastRunAndTheLatestRelease()
     {
@@ -507,7 +503,7 @@ public class ProjectQualitySectionTests : BunitContext
 
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 8));
 
-        // Recette R2-143: each figure is a tile that opens its page (R-430's links kept).
+        // Each figure is a tile linking to its detail page.
         var navigation = Services.GetRequiredService<NavigationManager>();
         cut.WaitForAssertion(() => Assert.Equal(4, cut.FindAll(".analysis-grade-meta-tiles .omni-stat-tile").Count));
         foreach (var (value, target) in new[] { ("773f2080", "/git-repositories/commits/41"), ("#2464", "/pipelines/runs/2464"), ("1.4.2", "/releases/12") })
@@ -562,11 +558,8 @@ public class ProjectQualitySectionTests : BunitContext
         })
     ];
 
-    /// <summary>
-    /// Recette R2-124: the findings table has the export bar under it (Markdown, then CSV). The Markdown
-    /// file holds every open finding, read from the API page after page with the Status filter of the
-    /// grid, not the 25 rows on screen; its cells read as the screen does (translated names, path:line).
-    /// </summary>
+    /// <summary>The export bar reads every matching finding through paginated API requests with the
+    /// grid Status filter. Export cells use translated names and path:line formatting.</summary>
     [Fact]
     public async Task R2124_TheFindingsTable_ExportsEveryFindingAsMarkdown_ReadPageByPage()
     {
@@ -583,9 +576,9 @@ public class ProjectQualitySectionTests : BunitContext
         var navigation = Services.GetRequiredService<NavigationManager>();
         navigation.NavigateTo(navigation.GetUriWithQueryParameter("tab", "findings"));
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 2));
-        cut.WaitForState(() => cut.Markup.Contains("Finding 25", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("Finding 25", StringComparison.Ordinal));
 
-        // Markdown alone (R2-124, second decision of 2026-10-05).
+        // Export Markdown only.
         await Assert.Single(cut.FindAll(".omni-data-grid__export-button")).ClickAsync(new());
 
         cut.WaitForAssertion(() => Assert.Single(module.Invocations["download"]));

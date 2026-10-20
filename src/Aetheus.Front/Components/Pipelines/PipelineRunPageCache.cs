@@ -33,10 +33,9 @@ internal sealed class PipelineRunPageCache(TimeProvider? timeProvider = null)
             _gates[run.Id] = new(gate, _timeProvider.GetUtcNow());
     }
 
-    /// <summary>
-    /// Recette R2-027: a finding's decision reverted from the Gate tab changes the status the cached
-    /// gates still carry, for the run and the runs of its tree alike; the next read goes to the server.
-    /// </summary>
+    /// <summary> A finding's decision reverted from the Gate tab changes the status the cached
+    /// gates still carry, for the run and the runs of its tree alike; the next read goes to the
+    /// server. </summary>
     public void ForgetGates() => _gates.Clear();
 
     private bool TryGet<T>(ConcurrentDictionary<int, CacheEntry<T>> entries, int id, out T? value)

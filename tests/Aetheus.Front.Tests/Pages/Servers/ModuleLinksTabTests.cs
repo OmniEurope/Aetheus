@@ -47,8 +47,7 @@ public class ModuleLinksTabTests : BunitContext
              .Add(x => x.Resources, new List<string> { "nginx" }));
 
         var priv = BindingFlags.NonPublic | BindingFlags.Instance;
-        cut.WaitForState(() => !(bool)typeof(ModuleLinksTab).GetField("_loading", priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !(bool)typeof(ModuleLinksTab).GetField("_loading", priv)!.GetValue(cut.Instance)!);
         // The single stubbed Apache link is loaded into _links.
         var links = (List<LinkedResourceDto>)typeof(ModuleLinksTab).GetField("_links", priv)!.GetValue(cut.Instance)!;
         Assert.Single(links);
@@ -69,8 +68,7 @@ public class ModuleLinksTabTests : BunitContext
              .Add(x => x.Resources, new List<string> { "nginx", "redis" }));
 
         var priv = BindingFlags.NonPublic | BindingFlags.Instance;
-        cut.WaitForState(() => !(bool)typeof(ModuleLinksTab).GetField("_loading", priv)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !(bool)typeof(ModuleLinksTab).GetField("_loading", priv)!.GetValue(cut.Instance)!);
         // The resource set is sent in one paginated request and returns two unique links.
         var links = (List<LinkedResourceDto>)typeof(ModuleLinksTab).GetField("_links", priv)!.GetValue(cut.Instance)!;
         Assert.Equal(2, links.Count);
@@ -88,7 +86,7 @@ public class ModuleLinksTabTests : BunitContext
             .Add(component => component.Resources, new List<string> { "nginx" }));
         var flags = BindingFlags.NonPublic | BindingFlags.Instance;
         cut.WaitForState(() => !(bool)typeof(ModuleLinksTab)
-            .GetField("_loading", flags)!.GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+            .GetField("_loading", flags)!.GetValue(cut.Instance)!);
         _handler.SetPaginatedJsonResponse(HttpMethod.Post,
             "api/servers/1/module-links/resource-page",
             new List<LinkedResourceDto> { new() { LinkId = 26, Identifier = "second-page" } });

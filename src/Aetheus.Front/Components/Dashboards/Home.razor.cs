@@ -22,7 +22,7 @@ public partial class Home : IAsyncDisposable
     private DashboardOverviewDto? _dashboard;
     private AetheusDataGrid<ServerDto>? _serversGrid;
     private AetheusDataGrid<ProjectDto>? _projectsGrid;
-    // Recette R-210: header filter text, built once so the column sees the same delegate on every render.
+    // Header filter text, built once so the column sees the same delegate on every render.
     private Func<string, string>? _serverStatusText;
     private Func<string, string> ServerStatusText => _serverStatusText ??= GridFilterText.ForEnum<ServerStatus>(L);
 
@@ -34,9 +34,8 @@ public partial class Home : IAsyncDisposable
     private HubConnection? _entitiesHub;
     private bool _reloading;
     private readonly CancellationTokenSource _lifetimeCts = new();
-    // Recette R2-100: the token is read once, while its source is alive. A hub event or a tracked-task
-    // change that arrives after the page was left read _lifetimeCts.Token from the disposed source and
-    // threw ObjectDisposedException into the error boundary; this copy only reports the cancellation.
+    // Capture the token while its source is alive so late events observe cancellation without
+    // accessing a disposed source.
     private readonly CancellationToken _lifetime;
     private bool _disposed;
 
@@ -137,8 +136,7 @@ public partial class Home : IAsyncDisposable
     // failure leaves the page static (still loaded once).
     private async Task ConnectHubsAsync()
     {
-        // Recette R2-100: the page may have been left while it loaded; a hub created now would never be
-        // disposed and its events would reach a disposed page.
+        // Stop initialization if the page was left during loading so no hub outlives the page.
         if (_disposed) return;
         try
         {
@@ -157,7 +155,7 @@ public partial class Home : IAsyncDisposable
         }
         catch { /* best-effort */ }
 
-        // Left while the previous hub started (R2-100).
+        // The page may have been left while the preceding hub started.
         if (_disposed) return;
         try
         {
@@ -175,7 +173,7 @@ public partial class Home : IAsyncDisposable
         }
         catch { /* best-effort */ }
 
-        // Left while the previous hub started (R2-100).
+        // The page may have been left while the preceding hub started.
         if (_disposed) return;
         try
         {
@@ -221,8 +219,8 @@ public partial class Home : IAsyncDisposable
                 var ticket = Cache.Begin();
                 var dashboard = await Api.Monitoring.GetDashboardAsync();
                 if (!Cache.IsCurrent(ticket)) return;
-                // Recette R-227: the grids note the rows they hold before the new ones land, so a
-                // server or project that appeared reads bold for a few seconds.
+                // The grids note the rows they hold before the new ones land, so a server or
+                // project that appeared reads bold for a few seconds.
                 if (_serversGrid is not null) await _serversGrid.Refresh();
                 if (_projectsGrid is not null) await _projectsGrid.Refresh();
                 if (Cache.TryStore(ticket, DashboardCacheKey, dashboard)) _dashboard = dashboard;

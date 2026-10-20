@@ -17,7 +17,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
 
     [Parameter] public int ProjectId { get; set; }
 
-    /// <summary>Recette R-431: the project header's "..." menu, where the findings tab puts "Export all".</summary>
+    /// <summary>The project header's menu outlet.</summary>
     [CascadingParameter] public Layout.ProjectSectionMenu? SectionMenu { get; set; }
 
 
@@ -39,8 +39,8 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
     private IReadOnlyList<AnalysisFindingStatus> _findingStatuses = [];
     private bool? _findingIsNew;
     private (int? From, int? To, int? Not) _findingIdRange;
-    // Recette R-221 / R-210: what the findings grid opens filtered on, shown in its column headers
-    // (Status on Open by default, or what a summary shortcut asked for) and removable there.
+    // What the findings grid opens filtered on, shown in its column headers (Status on Open by
+    // default, or what a summary shortcut asked for) and removable there.
     private FindingColumnDefaults _findingDefaults = FindingColumnDefaults.OpenOnly;
     private Func<string, string>? _severityText;
     private Func<string, string>? _statusText;
@@ -63,10 +63,10 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
     private bool HasAny => _summary.Grade is not null
         || _coverage.Count > 0 || _tests.Count > 0 || _complexity.Count > 0;
 
-    // Recette R-177: a chart alone takes the full width instead of half of it beside an empty column.
+    // A chart alone takes the full width instead of half of it beside an empty column.
     private int ChartLargeSpan => _tests.Count >= 2 && _complexity.Count >= 2 ? 6 : 12;
 
-    /// <summary>Recette R-177: a chart alone spans the card (wide and low), two share the row.</summary>
+    /// <summary>A chart alone spans the card (wide and low), two share the row.</summary>
     private double ChartAspectRatio => ChartLargeSpan == 12 ? 4 : 2;
 
     private string LastAnalysisText => _summary.LastAnalysisAt?.ToString("g") ?? L["Never"];
@@ -118,10 +118,8 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         PublishMenuActions();
     }
 
-    /// <summary>
-    /// Recette R2-054: the project header's "..." menu no longer holds "Export all" (R-431 had put it
-    /// there); it is the blue button under the findings table. The section publishes no action of its own.
-    /// </summary>
+    /// <summary>Findings export belongs beneath the table; the section publishes no separate header
+    /// action.</summary>
     private void PublishMenuActions() => SectionMenu?.Clear();
 
     protected override void OnAfterRender(bool firstRender) => PublishMenuActions();
@@ -135,11 +133,8 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
             : 0;
     }
 
-    /// <summary>
-    /// Recette R-181: a finished analysis report pushes EntityChanged(Project, id) on the entities hub
-    /// (AnalysisReportPublisher). This page used to listen for "Project" on the admin hub, which never
-    /// sends it and refuses non-admins, so it only ever refreshed through a 60-second poll.
-    /// </summary>
+    /// <summary>Analysis-report completion arrives through the entities hub as a project
+    /// change.</summary>
     private async Task StartRealtimeAsync()
     {
         try
@@ -162,18 +157,13 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// R-460: every analysis report of a run pushes its own EntityChanged, one scanner after the other,
-    /// and each reload re-reads the findings page (measured at 2 s, five times in one minute). The reload
-    /// waits for this much quiet after the last push, so the reports of one run, seconds apart, collapse
-    /// into one reload once they stop arriving.
-    /// </summary>
+    /// <summary>Debounce report bursts so a run's closely spaced scanner events produce one reload
+    /// after they settle.</summary>
     internal static readonly TimeSpan RealtimeReloadQuietPeriod = TimeSpan.FromSeconds(5);
 
     private Task QueueRealtimeReloadAsync()
     {
-        // Recette R2-100: an EntityChanged delivered after the section was left (while its hub was being
-        // disposed) cancelled the disposed debounce source and threw ObjectDisposedException.
+        // Ignore late entity events once disposal starts to avoid using a disposed debounce source.
         if (_disposed) return Task.CompletedTask;
         _reloadDebounce?.Cancel();
         _reloadDebounce?.Dispose();
@@ -207,7 +197,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
 
     private async Task LoadFindingsAsync(GridLoadArgs args)
     {
-        // Recette R-221 / R-210: the column header filters, and only they, are the filters of the findings.
+        // The column header filters, and only they, are the filters of the findings.
         ApplyHeaderFilters(args);
         var queryKey = FindingQueryKey(args);
         if (queryKey == _lastFindingQueryKey) return;
@@ -221,11 +211,10 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         _lastFindingQueryKey = queryKey;
     }
 
-    /// <summary>
-    /// Recette R2-124: one page of the findings export, every page read from the API with the sort and
-    /// the column filters of the grid. Those are the filters the grid's last load applied, so applying
-    /// them again leaves the page's filters as they were; the rows on screen are not touched.
-    /// </summary>
+    /// <summary> One page of the findings export, every page read from the API with the sort and
+    /// the column filters of the grid. Those are the filters the grid's last load applied, so
+    /// applying them again leaves the page's filters as they were; the rows on screen are not
+    /// touched. </summary>
     private Task<PaginatedResult<AnalysisFindingDto>> ReadFindingsAsync(GridLoadArgs args)
     {
         ApplyHeaderFilters(args);
@@ -272,8 +261,8 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         AnalysisSeverity? severity = null,
         bool? isNew = null)
     {
-        // Recette R-221: a shortcut sets the column filters themselves, visible and removable in the
-        // headers. The grid is not on screen from the overview, so its columns open with them.
+        // A shortcut sets the column filters themselves, visible and removable in the headers. The
+        // grid is not on screen from the overview, so its columns open with them.
         _findingDefaults = new FindingColumnDefaults(status, severity, isNew);
         _findingScanner = null;
         _findingBranch = null;
@@ -320,7 +309,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
             var markdown = AnalysisAiPromptBuilder.BuildBulk(findings, L);
             await Js.InvokeVoidAsync(
                 "downloadFile",
-                // Recette R2-036: "<project>-findings-2026-10-01.md"; the loader holds the open project.
+                // "<project>-findings-2026-10-01.md"; the loader holds the open project.
                 ExportFileNames.Dated(Loader.Project is { } project && project.Id == ProjectId ? project.Name : null,
                     $"project-{ProjectId}", "findings", DateTime.Now, "md"),
                 markdown,
@@ -385,8 +374,8 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
             _findingIdRange.Not);
     }
 
-    /// <summary>Recette R-430: the recorded commit's page; the commit page finds its repository. Null
-    /// (plain text) when the project's history does not hold the commit.</summary>
+    /// <summary>The recorded commit's page; the commit page finds its repository. Null (plain text)
+    /// when the project's history does not hold the commit.</summary>
     private string? GradeCommitHref => _summary.GradeCommitId is { } commitId
         ? $"/git-repositories/commits/{commitId}"
         : null;

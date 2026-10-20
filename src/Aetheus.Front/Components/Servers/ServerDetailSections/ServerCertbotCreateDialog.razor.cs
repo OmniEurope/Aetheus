@@ -6,6 +6,9 @@ public partial class ServerCertbotCreateDialog
 {
     [Parameter] public int ServerId { get; set; }
 
+    /// <summary>Recette R3-37: the Certbot page's follower, told about the task this dialog queues.</summary>
+    [Parameter] public ServerTaskFollower? Follower { get; set; }
+
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -39,6 +42,8 @@ public partial class ServerCertbotCreateDialog
         try
         {
             var domains = _model.Domains.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            // The backend names the task "Certbot create - {domains}".
+            Follower?.Expect($"{L["NewCertificate"]} {string.Join(", ", domains)}", "Certbot create");
             var success = await Api.ServerTools.CreateCertbotCertificateAsync(ServerId, new CertbotCreateRequest
             {
                 Domains = string.Join(",", domains),
@@ -53,11 +58,13 @@ public partial class ServerCertbotCreateDialog
             }
             else
             {
+                Follower?.Forget();
                 Toast.Error(L["ActionFailed"]);
             }
         }
         catch
         {
+            Follower?.Forget();
             Toast.Error(L["ActionFailed"]);
         }
         finally

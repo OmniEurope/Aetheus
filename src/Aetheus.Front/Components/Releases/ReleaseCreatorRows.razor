@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R-366: the pipeline and the run that created the release, inside the Source card. When the
-   creator was never recorded, the last run that recorded the release is shown under its own label,
-   never passed off as the creator. *@
+@* The pipeline and the run that created the release, inside the Source card. When the creator was
+   never recorded, the last run that recorded the release is shown under its own label, never
+   passed off as the creator. *@
 @if (Provenance?.CreatedBy is { } creator)
 {
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">

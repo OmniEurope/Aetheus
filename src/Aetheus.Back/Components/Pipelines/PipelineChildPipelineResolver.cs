@@ -137,11 +137,8 @@ public sealed class PipelineChildPipelineResolver(
         ArgumentNullException.ThrowIfNull(problems);
 
         var seed = new Dictionary<string, string>(parentVariables, StringComparer.OrdinalIgnoreCase);
-        // A parent value the parent's own resolution left referencing a name it provides later (its
-        // stage `outputs:`, D-02) is not resolvable in the child, which never declares that output:
-        // aetheus-nightly's BG_BROWSER_IMAGE = $(AETHEUS_BROWSER_SMOKE_IMAGE), published by its own
-        // preparation stage (Prepare QA host since R-523), refused all six children it triggers. The name is provided; its value
-        // is only unknown at launch, so it is seeded empty like a forwarded one.
+        // Parent outputs supplied only at runtime are seeded empty for child preflight, since a
+        // deferred value is not a missing variable.
         foreach (var (name, value) in parentVariables)
             if (PipelineUnresolvedVariableGuard.ReferencesAnUnresolvedName(value, parentVariables))
                 seed[name] = string.Empty;

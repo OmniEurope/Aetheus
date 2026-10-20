@@ -7,11 +7,8 @@ using Environment = Aetheus.Back.Data.Entities.Environment;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-005 lot 3 / D34, on a real PostgreSQL: the closing query translates, closes every approval
-/// still Pending on an ended run (the shape of run 2323: Cancelled, Rollback approval Pending), and
-/// leaves alone an approval that a live run is genuinely waiting on.
-/// </summary>
+/// <summary>The PostgreSQL closing query rejects pending approvals of ended runs while retaining
+/// live-run approvals.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class EndedRunApprovalsIntegrationTests(PostgresFixture fixture)
 {
@@ -52,7 +49,7 @@ public sealed class EndedRunApprovalsIntegrationTests(PostgresFixture fixture)
 
         await using (var db = new AppDbContext(options))
         {
-            var closed = await new PipelineLifecycleRepository(db, TimeProvider.System)
+            var closed = await new PipelineApprovalRepository(db)
                 .CloseApprovalsOfEndedRunsAsync(null, now, EndedRunApprovals.Reason, ct);
             Assert.Equal(1, closed);
         }

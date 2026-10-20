@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Text.Json;
 using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Data.Entities;
 using Microsoft.Extensions.Options;
@@ -59,7 +58,7 @@ public sealed class AnalysisContinuousSyncService(
                     tracking.LastSbomReportId, isContinuous: true, now, out var observations);
                 await repository.SaveTrackingSnapshotAsync(tracking, observations, ct).ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+            catch (Exception exception) when (!ct.IsCancellationRequested)
             {
                 tracking.SyncStatus = "Failed";
                 tracking.LastError = exception.Message.Length <= 2000 ? exception.Message : exception.Message[..2000];

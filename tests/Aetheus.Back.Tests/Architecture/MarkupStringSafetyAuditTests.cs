@@ -4,13 +4,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 lot 14. Blazor re-creates and EXECUTES any &lt;script&gt; found inside a rendered
-/// <c>MarkupString</c>, which is how a script the CSP had never seen ended up running on a run page.
-/// So every MarkupString must come from one of two places: HTML that was encoded first, or a Markdig
-/// pipeline built with <c>DisableHtml()</c>. The seven current sites respect that; this stops the
-/// eighth from forgetting.
-/// </summary>
+/// <summary>MarkupString content must originate from encoded HTML or a Markdig pipeline with
+/// DisableHtml to prevent executable raw markup.</summary>
 public sealed class MarkupStringSafetyAuditTests
 {
     /// <summary>What makes a MarkupString safe, in the file that produces it.</summary>

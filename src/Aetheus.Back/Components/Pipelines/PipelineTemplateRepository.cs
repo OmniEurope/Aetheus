@@ -3,9 +3,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-internal sealed class PipelineTemplateRepository(AppDbContext db)
+internal sealed class PipelineTemplateRepository(AppDbContext db) : IPipelineTemplateRepository
 {
-    /// <summary>Recette R-210 / R-224: the header filters of a template's version history grid.</summary>
+    /// <summary>The header filters of a template's version history grid.</summary>
     internal static readonly GridQueryMap<PipelineTemplateVersion> VersionColumns = new GridQueryMap<PipelineTemplateVersion>()
         .Number("Version", version => version.Version)
         .Text("ChangelogEntry", version => version.ChangelogEntry)
@@ -95,12 +95,8 @@ internal sealed class PipelineTemplateRepository(AppDbContext db)
             .ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Recette R2-121: the shipped delivery templates are seeded once, in the platform organization,
-    /// and shared with every organization rather than copied into each (a copy per organization would
-    /// drift and multiply the R2-094 version history). Only the shipped names are shared: a template
-    /// someone wrote in the platform organization stays private to it.
-    /// </summary>
+    /// <summary>Shipped templates are shared from the platform organization to avoid divergent
+    /// copies. Other platform templates remain private.</summary>
     public async Task<PipelineTemplate?> FindSharedTemplateByNameAsync(string name, CancellationToken ct = default)
     {
         var normalizedName = name.Trim().ToLowerInvariant();
@@ -169,4 +165,9 @@ internal sealed class PipelineTemplateRepository(AppDbContext db)
                 && version.TemplateId != excludedTemplateId)
             .Select(version => version.YamlContent)
             .ToListAsync(ct).ConfigureAwait(false);
+
+    public async Task SaveChangesAsync(CancellationToken ct = default)
+    {
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
 }

@@ -42,14 +42,12 @@ public sealed class PipelineFleetTests : BunitContext
         await cut.InvokeAsync(async () => await (Task)load.Invoke(cut.Instance,
             [new GridLoadArgs { Skip = 0, Top = 25, OrderBy = "PipelineName desc" }])!);
         cut.Render();
-        cut.WaitForState(() => cut.Markup.Contains("outdated", StringComparison.Ordinal), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("outdated", StringComparison.Ordinal));
         Assert.Contains("Current", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Outdated", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Update", cut.Markup, StringComparison.Ordinal);
-        // PLAN-003 lot 15: the grid is now the shared wrapper, which asks for its own first page,
-        // and this test also drives LoadDataAsync by hand to check the sort. Two fleet calls are
-        // therefore expected; what must never happen is the SAME page being fetched twice, which is
-        // the defect the original single-call assertion was guarding against.
+        // The grid requests its first page and the test explicitly requests sorted data; distinct
+        // pages may be fetched, but the same page must not be duplicated.
         var fleetUrls = _handler.Requests
             .Where(request => request.Method == "GET"
                 && request.Url.Contains("api/pipelines/fleet", StringComparison.Ordinal))
@@ -94,7 +92,7 @@ public sealed class PipelineFleetTests : BunitContext
     [Fact]
     public async Task FilterLoadFailure_RemainsVisibleAfterSuccessfulGridLoad()
     {
-        // Recette R-224: the Template column's values replaced the templates dropdown; their failure still shows.
+        // Template-filter value loading failures remain visible.
         _handler.SetResponse(HttpMethod.Get, "api/pipelines/fleet/filter-values", System.Net.HttpStatusCode.ServiceUnavailable);
         _handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto>());
         _handler.SetJsonResponse("api/pipelines/fleet", new PaginatedResult<PipelineFleetItemDto>());
@@ -110,8 +108,8 @@ public sealed class PipelineFleetTests : BunitContext
         Assert.DoesNotContain(">LoadError<", cut.Markup, StringComparison.Ordinal);
     }
 
-    /// <summary>Recette R-224: a header filter reaches the fleet API as a column filter, the project picker
-    /// still travels as its own parameter.</summary>
+    /// <summary>A header filter reaches the fleet API as a column filter, the project picker still
+    /// travels as its own parameter.</summary>
     [Fact]
     public async Task HeaderFilter_ReachesTheApi()
     {
@@ -151,7 +149,7 @@ public sealed class PipelineFleetTests : BunitContext
         var cut = Render<PipelineFleetUpdateDialog>(parameters => parameters
             .Add(component => component.PipelineId, 2)
             .Add(component => component.TargetVersion, 2));
-        cut.WaitForState(() => cut.Markup.Contains("OrphanOverridesWarning", StringComparison.Ordinal), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("OrphanOverridesWarning", StringComparison.Ordinal));
 
         var diff = cut.FindComponent<MonacoDiffViewer>();
         Assert.Equal("name: old", diff.Instance.OriginalValue);
@@ -174,7 +172,7 @@ public sealed class PipelineFleetTests : BunitContext
 
         var cut = Render<PromotePipelineTemplateDialog>(parameters => parameters
             .Add(component => component.PipelineId, 2));
-        cut.WaitForState(() => cut.FindComponents<MonacoDiffViewer>().Count == 1, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.FindComponents<MonacoDiffViewer>().Count == 1);
 
         var diff = cut.FindComponent<MonacoDiffViewer>();
         Assert.Equal("name: ci\nstages: []", diff.Instance.OriginalValue);
@@ -313,5 +311,14 @@ public sealed class PipelineFleetTests : BunitContext
         var method = instance.GetType().GetMethod(
             methodName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
         return (Task)method.Invoke(instance, [])!;
+    }
+
+    [Fact]
+    public void R2_145_ANewerCatalogueVersion_ReadsAsInformation_NotAsAWarning()
+    {
+        // A pinned template version is a choice, not a delay, in the fleet and in the dependency grid.
+        Assert.Equal(OmniTone.Info, PipelineFleet.FreshnessStyle(PipelineFleetFreshness.Outdated));
+        Assert.Equal(OmniTone.Info, Aetheus.Front.Components.Shared.PipelineDependencyGrid.FreshnessStyle(PipelineFleetFreshness.Outdated));
+        Assert.Equal(OmniTone.Success, PipelineFleet.FreshnessStyle(PipelineFleetFreshness.Current));
     }
 }

@@ -16,10 +16,16 @@ public sealed class PrivateReflectionBudgetTests
             // observed this budget falling by about eleven a month, which is a ratchet loose enough to
             // let a new test add debt as fast as an old one pays it. Every number here is now exactly
             // what the tree contains, so any addition fails immediately rather than being absorbed.
-            ["BindingFlags.NonPublic"] = 864,
-            [".GetMethod("] = 908,
-            [".GetField("] = 1282,
-            [".GetProperty("] = 305
+            // RFL-1, 2026-10-13: the AddAgent, DashboardEdit, PipelineEdit and ServerDockerSection suites are
+            // driven through markup, child-component parameters and the faked services; the four numbers are
+            // again exactly what the tree contains.
+            // C3 (RFL-1), 2026-10-15: the dead AddAgent.CopyTokenAsync, PipelineEdit.OnPipelineRunStarted and
+            // DockerContainersTab.BrowseParentAsync are deleted with the tests that reached them by reflection,
+            // and the browse-panel test no longer forces a sub-directory path.
+            ["BindingFlags.NonPublic"] = 607,
+            [".GetMethod("] = 786,
+            [".GetField("] = 1021,
+            [".GetProperty("] = 277
         };
 
     [Fact]

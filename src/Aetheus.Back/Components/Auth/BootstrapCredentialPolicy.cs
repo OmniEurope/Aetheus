@@ -5,25 +5,9 @@ namespace Aetheus.Back.Components.Auth;
 /// <summary>Which bootstrap identity a login request satisfied, and how long its token may live.</summary>
 internal sealed record BootstrapMatch(DateTimeOffset? ExpiresAt);
 
-/// <summary>
-/// Decides whether a login request matches one of the two bootstrap identities. It answers a
-/// question; issuing the token stays with <see cref="AuthService"/>.
-///
-/// There are two identities and they are deliberately separate:
-///
-///   the persistent administrator (Auth:AdminUser / Auth:AdminPassword) comes from the environment
-///   file and is usable only until the database holds a user - which is the moment DbInitializer has
-///   seeded it from that same password and a real login can take over;
-///
-///   the deployment identity (Auth:DeploymentBootstrapUser / ...Password) is derived per run, is
-///   self-expiring, and exists so a deployment smoke can exercise real authentication without
-///   changing or learning a persisted user's password.
-///
-/// They used to share the ADMIN_* names. Because DbInitializer hashes Auth:AdminPassword into the
-/// seeded `admin`, deploying to a NEW environment then gave it a permanent administrator whose
-/// password was that run's throwaway secret - one the run masks out of its own log by design. The
-/// environment came up healthy and nobody could ever log into it again.
-/// </summary>
+/// <summary>Separates the persistent bootstrap administrator, usable only before user seeding, from
+/// the expiring per-run deployment identity. This lets deployment smoke tests authenticate without
+/// modifying persisted user passwords.</summary>
 internal static class BootstrapCredentialPolicy
 {
     internal static BootstrapMatch? Match(

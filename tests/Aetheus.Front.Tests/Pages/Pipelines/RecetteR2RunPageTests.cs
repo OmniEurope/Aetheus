@@ -8,10 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// Recette R2 on the run page: the lineage tile's follow-ups (R2-026), going back on a finding's
-/// decision (R2-027) and the approval that waits for the new version (R2-021).
-/// </summary>
+/// <summary>Covers lineage follow-ups, finding-decision reversal and version-gated
+/// approval.</summary>
 public sealed class RecetteR2RunPageTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -23,8 +21,8 @@ public sealed class RecetteR2RunPageTests : BunitContext
         BunitTestHelper.UseImmediateDialogs(this);
         _dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
         Services.GetRequiredService<PermissionService>().SetPermissions([], isAdmin: true);
-        // Recette R-485: the Gate tab pages through the tree's findings on the server; it serves the
-        // gate's open findings by default and every one when the decided ones are asked for.
+        // The Gate tab pages through the tree's findings on the server; it serves the gate's open
+        // findings by default and every one when the decided ones are asked for.
         AnalysisRunFindingsPageDto Page(IReadOnlyList<AnalysisRunGateFindingDto> items, int open, int decided) =>
             new() { Items = items, TotalCount = items.Count, Page = 1, PageSize = 25, OpenCount = open, DecidedCount = decided, NewOpenCount = 1 };
         _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/findings",
@@ -46,7 +44,7 @@ public sealed class RecetteR2RunPageTests : BunitContext
             Status = PipelineStatus.Success
         })];
 
-    // ---------- R2-026: lineage tile ----------
+    // Lineage tile.
 
     [Fact]
     public async Task R2_026_ManyFollowUps_ShowsThree_AndSeeAllOpensTheFullList()
@@ -106,7 +104,7 @@ public sealed class RecetteR2RunPageTests : BunitContext
         Assert.Equal("/pipelines/runs/105?projectId=8", links[4].GetAttribute("href"));
     }
 
-    // ---------- R2-027: reverting a finding's decision ----------
+    // Finding-decision reversal.
 
     private static AnalysisRunGateDto Gate() => new()
     {
@@ -181,8 +179,8 @@ public sealed class RecetteR2RunPageTests : BunitContext
         Assert.Empty(cut.FindAll("button.analysis-finding-revert-decision"));
     }
 
-    /// <summary>Recette R2-027 with R-485: after a revert the merged gate's figures are read again from
-    /// the server for the whole tree; the verdict stays.</summary>
+    /// <summary>Reverting a finding refreshes whole-tree figures while retaining the evaluated
+    /// verdict.</summary>
     [Fact]
     public async Task R2_027_AReopenedFinding_CountsAsOpenAgain_InTheMergedGate()
     {
@@ -252,8 +250,8 @@ public sealed class RecetteR2RunPageTests : BunitContext
             .NavigateTo("/analysis/findings/10?tab=decisions");
 
         var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 10));
-        // Recette R2-133: reopening is one of the decision tiles.
-        var revert = cut.WaitForElement(".analysis-decision-choices .analysis-decision-reopen button.analysis-decision-revert", TimeSpan.FromSeconds(3));
+        // Reopening is one of the decision tiles.
+        var revert = cut.WaitForElement(".analysis-decision-choices .analysis-decision-reopen button.analysis-decision-revert");
         await cut.InvokeAsync(() => revert.Click());
 
         Assert.Contains(_handler.Requests, request => request.Method == "DELETE"
@@ -279,12 +277,12 @@ public sealed class RecetteR2RunPageTests : BunitContext
             .NavigateTo("/analysis/findings/11?tab=decisions");
 
         var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 11));
-        cut.WaitForState(() => cut.Markup.Contains("analysis-decision-card", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("analysis-decision-card", StringComparison.Ordinal));
 
         Assert.Empty(cut.FindAll("button.analysis-decision-revert"));
     }
 
-    // ---------- R2-021: an approval waits for the new version ----------
+    // Approval waits for the deployed version.
 
     private PipelineRunApprovalController PendingApproval()
     {
@@ -305,7 +303,7 @@ public sealed class RecetteR2RunPageTests : BunitContext
         Assert.Contains(_handler.Requests, request => request.Url.Contains("appsettings.json", StringComparison.Ordinal));
     }
 
-    // ---------- R2-116: the two requests of a delivery carry their own title ----------
+    // Environment approval and stage confirmation have distinct titles.
 
     [Theory]
     [InlineData(ApprovalScope.Environment, "EnvironmentApprovalTitle", "PipelineApprovalTitle")]
@@ -332,7 +330,7 @@ public sealed class RecetteR2RunPageTests : BunitContext
         Assert.DoesNotContain("ApprovalRequiredTitle", cut.Markup, StringComparison.Ordinal);
     }
 
-    // ---------- R1-24: the approver reads the environment's approval instructions ----------
+    // Approvers receive the environment's instructions.
 
     [Fact]
     public async Task R1_24_TheApprover_SeesTheEnvironmentApprovalInstructions_BesideTheDecision()
@@ -383,9 +381,8 @@ public sealed class RecetteR2RunPageTests : BunitContext
     [Fact]
     public void R2_095_OnAPhone_ApproveAndRejectCanShrinkToIcons_WithTheirNameAndTooltip_AndTheButtonsWrap()
     {
-        // Recette R2-095: the banner's text and buttons ran past it on a phone. The CSS that reduces
-        // the two decisions to their icon below phone width targets these classes; the layout itself
-        // is measured at 375 px by the E2E R2095_MobileApprovalBanner_* test.
+        // The responsive classes identify icon-only phone actions; actual geometry is covered by
+        // the mobile approval-banner E2E scenario.
         var cut = Render<PipelineRunApprovalPanel>(parameters => parameters.Add(component => component.Approval, PendingApproval()));
         cut.WaitForAssertion(() => Assert.Contains("Approve", cut.Markup, StringComparison.Ordinal));
 

@@ -7,23 +7,9 @@ using Aetheus.Back.Components.Git;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// Recette R1-39: the <c>forbidden</c> list of <c>deploy/public-distribution/boundary.json</c> (a real
-/// server address, the private git host) was only applied by <c>export-public-distribution.mjs --check</c>
-/// run by hand, so a literal committed in a test surfaced when exporting <c>main</c> to the public copy.
-/// This guard applies the same rule at commit time: every file the export would publish (working tree,
-/// minus <c>exclude</c>, overlay files included) is scanned for each forbidden literal, so
-/// <c>ylaunch -ta</c> and the CI fail instead of the export.
-/// <para>
-/// Same semantics as the script: <c>git ls-files -co --exclude-standard</c>, the glob translation of
-/// <c>globToRegExp</c>, text files only (no NUL byte in the first 8000), bytes read as latin1, ordinal
-/// substring match. One deliberate difference, on the stricter side: the test methods of
-/// <c>dropTests</c> are not stripped before the scan, so a literal inside a test the export would drop is
-/// reported too. The script's renaming of launcher names cannot create a forbidden literal and is not replayed.
-/// </para>
-/// This file reads boundary.json, which the public distribution leaves out, so its methods are listed in
-/// <c>dropTests</c>.
-/// </summary>
+/// <summary>Scans exportable text, including overlays, against the public-distribution forbidden
+/// literals with the exporter’s matching semantics. Dropped test bodies remain in this stricter
+/// scan; the guard itself is excluded from public distribution.</summary>
 public sealed class PublicDistributionBoundaryAuditTests
 {
     private const string BoundaryPath = "deploy/public-distribution/boundary.json";

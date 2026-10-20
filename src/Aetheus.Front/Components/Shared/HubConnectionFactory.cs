@@ -9,10 +9,18 @@ public class HubConnectionFactory(
     AuthStateProvider auth,
     ILogger<AuthDelegatingHandler> handlerLogger,
     RealtimeSyncStatus? syncStatus = null,
-    ClientErrorReporter? errorReporter = null)
+    ClientErrorReporter? errorReporter = null,
+    TimeProvider? clock = null)
 {
-    /// <summary>An outage at least this long is reported to the system logs once the connection is back.</summary>
-    internal static readonly TimeSpan ReportedOutage = TimeSpan.FromSeconds(60);
+    /// <summary>
+    /// The clock the realtime deadlines run on: the outage grouping window and the start timeout of the
+    /// connections built here (<see cref="FrontendRuntimeDefaults.SignalRStartTimeout"/>).
+    /// </summary>
+    public TimeProvider Clock { get; } = clock ?? TimeProvider.System;
+
+    // One reporter for every connection of the tab, so one outage of all the hubs is one report (R1-89).
+    private readonly RealtimeOutageReporter? _outages =
+        errorReporter is null ? null : new RealtimeOutageReporter(errorReporter, clock ?? TimeProvider.System);
 
     /// <summary>
     /// Where every connection built here reports its reconnect catch-up, for the "synchronising"
@@ -80,23 +88,19 @@ public class HubConnectionFactory(
 
     // Recette of 2026-10-06 (no SSH: what happened must be readable in the UI): a connection that closes
     // on an error, or comes back after a long outage, says so in the system logs (api/client-errors).
-    private void ReportOutages(HubConnection connection, string hubPath)
+    internal void ReportOutages(HubConnection connection, string hubPath)
     {
-        if (errorReporter is null) return;
+        if (_outages is not { } outages || errorReporter is null) return;
         DateTimeOffset? downSince = null;
         connection.Reconnecting += _ =>
         {
-            downSince ??= DateTimeOffset.UtcNow;
+            downSince ??= outages.Clock.GetUtcNow();
             return Task.CompletedTask;
         };
         connection.Reconnected += _ =>
         {
-            if (downSince is { } since && DateTimeOffset.UtcNow - since >= ReportedOutage)
-            {
-                var seconds = (int)(DateTimeOffset.UtcNow - since).TotalSeconds;
-                errorReporter.Report(Guid.NewGuid().ToString("N"), "Realtime connection restored after an outage",
-                    $"The '{hubPath}' realtime connection was lost at {since:u} and came back after {seconds} s.");
-            }
+            if (downSince is { } since)
+                outages.Restored(hubPath, since);
             downSince = null;
             return Task.CompletedTask;
         };

@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.Settings;
 
-/// <summary>Recette R1-16: the platform e-mail sender as the settings page reads and saves it.</summary>
+/// <summary>The platform e-mail sender as the settings page reads and saves it.</summary>
 public interface IEmailSenderSettingsService
 {
     Task<EmailSenderSettingsDto> GetAsync(CancellationToken ct = default);

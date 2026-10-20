@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using AngleSharp.Dom;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
@@ -48,12 +47,9 @@ public sealed class QualityGatePolicyEditorHistoryTests : BunitContext
             .Add(component => component.ProjectId, 4)
             .Add(component => component.CanEdit, true)
             .Add(component => component.InitialPolicies, new List<AnalysisPolicyDto> { Local() }));
-        cut.WaitForState(() => cut.Markup.Contains("No cycles"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("No cycles"));
         return cut;
     }
-
-    private static IElement Button(IRenderedComponent<QualityGatePolicyEditor> cut, string label) =>
-        cut.FindAll("button").First(b => b.TextContent.Contains(label, StringComparison.Ordinal));
 
     private void StubRevisions(params int[] versions) =>
         _handler.SetJsonResponse(
@@ -66,12 +62,11 @@ public sealed class QualityGatePolicyEditorHistoryTests : BunitContext
         StubRevisions(1, 2, 3);
         var cut = RenderEditor();
 
-        cut.Find("button[title='QualityGateHistory']").Click();
+        cut.FindMenuItem("QualityGateHistory")!.Click();
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "GET" && r.Url.Contains("policies/20/revisions", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "GET" && r.Url.Contains("policies/20/revisions", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -80,13 +75,12 @@ public sealed class QualityGatePolicyEditorHistoryTests : BunitContext
         StubRevisions();
         var cut = RenderEditor();
 
-        cut.Find("button[title='QualityGateHistory']").Click();
+        cut.FindMenuItem("QualityGateHistory")!.Click();
 
         // Rollback is not asserted here: it is only reachable from a revision row, which an empty
         // history never renders, so asserting its absence would hold vacuously.
         cut.WaitForAssertion(
-            () => Assert.Contains(_handler.Requests, r => r.Url.Contains("revisions", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+            () => Assert.Contains(_handler.Requests, r => r.Url.Contains("revisions", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -96,9 +90,9 @@ public sealed class QualityGatePolicyEditorHistoryTests : BunitContext
         var cut = RenderEditor();
         var before = _handler.Requests.Count;
 
-        cut.Find("button[title='Duplicate']").Click();
+        cut.FindMenuItem("Duplicate")!.Click();
 
-        cut.WaitForState(() => cut.FindAll("form").Count > 0, TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.FindAll("form").Count > 0);
         Assert.Equal(before, _handler.Requests.Count);
     }
 
@@ -110,8 +104,8 @@ public sealed class QualityGatePolicyEditorHistoryTests : BunitContext
         _handler.SetJsonResponse(HttpMethod.Post, "api/analysis/projects/4/policies", Local());
         _handler.SetJsonResponse("api/analysis/projects/4/policies", new List<AnalysisPolicyDto> { Local() });
         var cut = RenderEditor();
-        cut.Find("button[title='Duplicate']").Click();
-        cut.WaitForState(() => cut.FindAll("form").Count > 0, TimeSpan.FromSeconds(3));
+        cut.FindMenuItem("Duplicate")!.Click();
+        cut.WaitForState(() => cut.FindAll("form").Count > 0);
         cut.Find("input#PolicyName").Input("No cycles copy");
         cut.Find("input#MetricKey").Input("architecture.cycles*");
         cut.Find("input#quality-gate-threshold").Change("0");
@@ -120,8 +114,7 @@ public sealed class QualityGatePolicyEditorHistoryTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "POST" && r.Url.EndsWith("projects/4/policies", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "POST" && r.Url.EndsWith("projects/4/policies", StringComparison.Ordinal)));
         Assert.DoesNotContain(_handler.Requests, r => r.Method == "PUT");
     }
 
@@ -134,11 +127,10 @@ public sealed class QualityGatePolicyEditorHistoryTests : BunitContext
         var cut = RenderEditor();
         var before = _handler.Requests.Count;
 
-        Button(cut, "Export").Click();
+        cut.FindMenuItem("Export")!.Click();
 
         cut.WaitForAssertion(
-            () => Assert.Contains(JSInterop.Invocations, i => i.Identifier == "downloadFile"),
-            TimeSpan.FromSeconds(3));
+            () => Assert.Contains(JSInterop.Invocations, i => i.Identifier == "downloadFile"));
         Assert.Equal(before, _handler.Requests.Count);
     }
 
@@ -150,13 +142,13 @@ public sealed class QualityGatePolicyEditorHistoryTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         var cut = RenderEditor();
 
-        Button(cut, "Export").Click();
+        cut.FindMenuItem("Export")!.Click();
 
         cut.WaitForAssertion(() =>
         {
             var call = JSInterop.Invocations.First(i => i.Identifier == "downloadFile");
             Assert.Equal("quality-gates-project.json", call.Arguments[0]);
-        }, TimeSpan.FromSeconds(3));
+        });
     }
 
     [Fact]
@@ -165,13 +157,13 @@ public sealed class QualityGatePolicyEditorHistoryTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         var cut = RenderEditor();
 
-        Button(cut, "Export").Click();
+        cut.FindMenuItem("Export")!.Click();
 
         cut.WaitForAssertion(() =>
         {
             var call = JSInterop.Invocations.First(i => i.Identifier == "downloadFile");
             Assert.Equal("application/json", call.Arguments[2]);
             Assert.Contains("architecture.cycles*", (string)call.Arguments[1]!, StringComparison.Ordinal);
-        }, TimeSpan.FromSeconds(3));
+        });
     }
 }

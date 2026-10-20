@@ -10,10 +10,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Recette R2-101, on the real PostgreSQL schema: a mail setup run again on a domain already recorded
-/// answered HTTP 500 (23505 on the unique (ServerId, Name) index) although its task had been queued.
-/// </summary>
+/// <summary>Repeated mail setup on an existing domain must respect the PostgreSQL uniqueness
+/// constraint and return a valid queued task.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class MailSetupRerunIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
@@ -60,7 +58,8 @@ public sealed class MailSetupRerunIntegrationTests(PostgresFixture fixture) : Re
             Substitute.For<IAuditService>(),
             encryption,
             serverRepository,
-            Substitute.For<ITaskService>());
+            Substitute.For<ITaskService>(),
+            Substitute.For<IMailMasterSecrets>());
 
         var queued = await service.SetupAsync(serverId, new MailSetupRequest
         {
@@ -72,8 +71,8 @@ public sealed class MailSetupRerunIntegrationTests(PostgresFixture fixture) : Re
             QuotaMb = quotaMb
         }, ct);
 
-        // The first task is still pending when the setup is run again: close it as the agent would, so
-        // the R2-085 "a setup is already running" guard does not refuse the re-run.
+        // Complete the first task before repeating setup so the concurrent-setup guard does not
+        // reject the scenario.
         await db.Tasks.Where(t => t.Id == queued.TaskId)
             .ExecuteUpdateAsync(set => set.SetProperty(t => t.Status, TaskExecutionStatus.Success), ct);
         return queued;

@@ -5,13 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Layout;
 
-/// <summary>
-/// PLAN-003 D2 / recette R-395: the page header is OE's <see cref="OmniPageHeader"/>, fed by the Aetheus
-/// <see cref="BreadcrumbService"/> through OE's <see cref="OmniBreadcrumbService"/>. Line 1 is the title,
-/// the trail's leaf; line 2 is the trail, its ancestors then the title as the current item (the user's
-/// R-395 decision), or the subtitle when the page has no ancestor. The route fallback comes from
-/// <see cref="AetheusBreadcrumbResolver"/>.
-/// </summary>
+/// <summary>Feed OmniPageHeader through the shared breadcrumb services: the title is the leaf,
+/// followed by the trail or a subtitle when no ancestor exists. AetheusBreadcrumbResolver supplies
+/// route fallbacks.</summary>
 public sealed class AppBreadcrumbTests : BunitContext
 {
     public AppBreadcrumbTests() => BunitTestHelper.RegisterServices(this);
@@ -103,9 +99,8 @@ public sealed class AppBreadcrumbTests : BunitContext
         breadcrumb.Set(new BreadcrumbItem("Dashboard"));
         cut.Render(parameters => parameters.Add(header => header.Subtitle, breadcrumb.Subtitle()));
 
-        // D3: line 2 exists even with no ancestor, so every page starts its content at the same Y.
-        // Since recette R-089 it holds the page description when there is no trail; either way the
-        // leaf is written once, as the title.
+        // Keep the second header line with the page description when no breadcrumb ancestors exist,
+        // maintaining stable content alignment.
         cut.WaitForAssertion(() =>
         {
             Assert.Single(cut.FindAll(".omni-page-header__trail"));
@@ -127,8 +122,8 @@ public sealed class AppBreadcrumbTests : BunitContext
         Assert.Contains("Projects", Trail(cut), StringComparison.Ordinal);
     }
 
-    /// <summary>R-014 / R-089: the route description stands in for a missing subtitle only when the page has
-    /// no ancestor; with a trail, only the page's own subtitle shows, under the header.</summary>
+    /// <summary>The route description stands in for a missing subtitle only when the page has no
+    /// ancestor; with a trail, only the page's own subtitle shows, under the header.</summary>
     [Fact]
     public void The_Subtitle_Falls_Back_To_The_Route_Description_Only_Without_Ancestors()
     {

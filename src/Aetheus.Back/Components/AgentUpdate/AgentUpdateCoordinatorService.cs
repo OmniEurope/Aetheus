@@ -14,6 +14,10 @@ internal sealed class AgentUpdateCoordinatorService(
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(5);
 
+    /// <summary>How long a task may stay unclaimed before an agent that cannot execute it is blamed.
+    /// Long enough for a heartbeat to publish capabilities right after an update.</summary>
+    internal static readonly TimeSpan UnexecutableTaskGrace = TimeSpan.FromMinutes(1);
+
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
         leaderLease is null
             ? RunLeaderLoopAsync(stoppingToken)
@@ -89,6 +93,50 @@ internal sealed class AgentUpdateCoordinatorService(
                 $"{request.FailureCode}: {request.FailureDiagnostic}",
                 ct).ConfigureAwait(false);
             await notifications.PublishOutcomeAsync(request, ct).ConfigureAwait(false);
+        }
+
+        await RefuseUnexecutableTasksAsync(scope.ServiceProvider, repository, audit, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The task claim silently skips work an agent cannot execute, so a run whose step needs a
+    /// capability the server's agent lacks sat Pending for as long as the agent kept polling. There is
+    /// no policy that updates an agent by itself (an update is always an operator's action, from the
+    /// server page), so waiting would only repeat the hang: such a task is failed, with the reason and
+    /// the way out, once it has stayed unclaimed past the grace. Never while the server is mid-update
+    /// (its fenced work resumes with the new agent) or while the agent is not polling (the offline
+    /// handling owns that case).
+    /// </summary>
+    private async Task RefuseUnexecutableTasksAsync(
+        IServiceProvider services,
+        IAgentUpdateRepository repository,
+        IAuditService audit,
+        CancellationToken ct)
+    {
+        var release = services.GetRequiredService<IAgentReleaseCatalog>().Current;
+        var refuser = services.GetRequiredService<IUnexecutableTaskRefuser>();
+
+        var candidates = await repository
+            .GetPendingTasksOfPollingAgentsAsync(UnexecutableTaskGrace, ct)
+            .ConfigureAwait(false);
+        foreach (var candidate in candidates)
+        {
+            if (AgentContractDiagnosis.Diagnose(candidate, release) is not { } gap)
+                continue;
+            if (!await refuser.RefuseAsync(candidate.TaskId, gap.FailureCode, gap.Reason, ct).ConfigureAwait(false))
+                continue;
+
+            logger.LogError(
+                "Task {TaskId} ({Operation}) failed without running: {Reason}",
+                candidate.TaskId,
+                candidate.Operation,
+                gap.Reason);
+            await audit.LogAsync(
+                "TaskRefusedAgentIncompatible",
+                "ServerTask",
+                candidate.TaskId,
+                $"{candidate.Operation}: {gap.FailureCode}",
+                ct).ConfigureAwait(false);
         }
     }
 }

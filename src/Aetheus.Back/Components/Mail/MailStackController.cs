@@ -2,9 +2,8 @@
 
 namespace Aetheus.Back.Components.Mail;
 
-/// <summary>PLAN-005: TLS certificate, spam filter, delivery test, queue, mailbox usage, DNS verification
-/// and diagnostics of a server's mail stack. Same route prefix and authorization model as
-/// <see cref="MailController"/> (server Read for reads, server Write for every queued operation).</summary>
+/// <summary>Exposes mail stack diagnostics and operations under the MailController authorization
+/// model: server Read for reads and Write for queued operations.</summary>
 [ApiController]
 [Route("api/servers/{serverId:int}/mail")]
 [Authorize]
@@ -13,6 +12,8 @@ public class MailStackController(
     IMailOperationsService operations,
     IMailDiagnosticsService diagnostics,
     IMailStackPurgeService purge,
+    IMailMasterAccessService masterAccess,
+    IMailAccountPurgeService accountPurge,
     IResourceAuthorizationService authz) : ControllerBase
 {
     /// <summary>"Réinstaller la messagerie": erases the whole mail stack. Same permission as the setup
@@ -22,6 +23,26 @@ public class MailStackController(
     {
         if (!await CanAsync(serverId, Permission.Write, ct)) return Forbid();
         return Ok(await purge.PurgeAsync(serverId, request, ct));
+    }
+
+    /// <summary>
+    /// Recette R1-41 / R3-50: "Préparer l'accès administrateur", (re)creates the Dovecot master user an
+    /// administrator opens mailboxes with. Administrators only, on top of server Write.
+    /// </summary>
+    [HttpPost("master-access")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<MailTaskQueuedDto>> PrepareMasterAccess(int serverId, CancellationToken ct)
+    {
+        if (!await CanAsync(serverId, Permission.Write, ct)) return Forbid();
+        return Ok(await masterAccess.PrepareAsync(serverId, ct));
+    }
+
+    /// <summary>Recette R3-49: "Purger", deletes the Aetheus mailbox rows the server no longer reports (server Write).</summary>
+    [HttpPost("accounts/purge-missing")]
+    public async Task<ActionResult<MailAccountPurgeResultDto>> PurgeMissingAccounts(int serverId, CancellationToken ct)
+    {
+        if (!await CanAsync(serverId, Permission.Write, ct)) return Forbid();
+        return Ok(await accountPurge.PurgeMissingAsync(serverId, ct));
     }
 
     [HttpGet("certificate")]
@@ -136,7 +157,7 @@ public class MailStackController(
         return Ok(await diagnostics.PreviewMxAsync(domain, ct));
     }
 
-    /// <summary>Recette R2-080: A record and reverse DNS of the host name the setup assistant proposes.</summary>
+    /// <summary>A record and reverse DNS of the host name the setup assistant proposes.</summary>
     [HttpGet("prerequisites")]
     public async Task<ActionResult<MailDiagnosticsDto>> CheckPrerequisites(int serverId, [FromQuery] string hostname, CancellationToken ct)
     {
@@ -144,12 +165,22 @@ public class MailStackController(
         return Ok(await diagnostics.CheckPrerequisitesAsync(serverId, hostname, ct));
     }
 
-    /// <summary>Recette R2-080: queues the outbound port 25 check; same permission as the setup it precedes.</summary>
+    /// <summary>Queues the outbound port 25 check; same permission as the setup it
+    /// precedes.</summary>
     [HttpPost("prerequisites/outbound-smtp")]
     public async Task<ActionResult<MailTaskQueuedDto>> ProbeOutboundSmtp(int serverId, CancellationToken ct)
     {
         if (!await CanAsync(serverId, Permission.Write, ct)) return Forbid();
         return Ok(await operations.ProbeOutboundSmtpAsync(serverId, ct));
+    }
+
+    /// <summary>Recette R3-23: queues the read-only check of what a mail stack left on the host (packages,
+    /// directories, marker, ports); same permission as the setup and the reinstall it follows.</summary>
+    [HttpPost("leftovers-check")]
+    public async Task<ActionResult<MailTaskQueuedDto>> CheckLeftovers(int serverId, CancellationToken ct)
+    {
+        if (!await CanAsync(serverId, Permission.Write, ct)) return Forbid();
+        return Ok(await operations.CheckLeftoversAsync(serverId, ct));
     }
 
     private Task<bool> CanAsync(int serverId, Permission permission, CancellationToken ct) =>

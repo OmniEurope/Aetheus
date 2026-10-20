@@ -31,7 +31,8 @@ public class ServerConfigSectionTemplateTests : BunitContext
         // The ServerId parameter is bound and the Export/Import YAML actions render in the section.
         Assert.Equal(10, cut.Instance.ServerId);
         Assert.Contains("ExportYaml", cut.Markup);
-        Assert.Contains("ImportYaml", cut.Markup);
+        // Import sits in the "More actions" menu beside Export (STD-BTN detection 11).
+        Assert.NotNull(cut.FindMenuItem("ImportYaml"));
     }
 
     [Fact]

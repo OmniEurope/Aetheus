@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Http;
 namespace Aetheus.Back.Components.Pipelines;
 
 internal sealed class PipelineOwnershipResolver(
-    IPipelineRepository repository,
+    IPipelineProjectOwnerReader repository,
     IHttpContextAccessor httpContextAccessor,
     ILogger<PipelineService> logger)
 {

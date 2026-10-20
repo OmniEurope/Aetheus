@@ -7,11 +7,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// R2-003 / R2-004 / R2-005 against a real throwaway repository: the zip <c>git archive</c> streams, and
-/// the commits grid's column filters (branch, message, committer dates) as git applies them, the total
-/// counting exactly what the page lists.
-/// </summary>
+/// <summary>Exercise archive streaming and commit filters against a real temporary Git repository,
+/// with totals matching paged results.</summary>
 public sealed class GitCommitLogAndArchiveTests : IDisposable
 {
     private readonly string _dir;

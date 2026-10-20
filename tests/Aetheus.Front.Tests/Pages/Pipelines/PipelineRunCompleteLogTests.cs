@@ -6,10 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// Recette R2-104 and audit FRONT-010, on the run page: a step's log pane showed only the tail of the
-/// log (113 lines in run 2551) while the live stream grew without bound.
-/// </summary>
+/// <summary>Covers on-demand complete logs and bounded live-stream retention on the run
+/// page.</summary>
 public sealed class PipelineRunCompleteLogTests : BunitContext
 {
     private const BindingFlags Priv = BindingFlags.NonPublic | BindingFlags.Instance;
@@ -80,7 +78,7 @@ public sealed class PipelineRunCompleteLogTests : BunitContext
 
         cut.FindAll("button").Single(button => button.TextContent.Contains("ShowCompleteLog", StringComparison.Ordinal)).Click();
 
-        cut.WaitForAssertion(() => Assert.DoesNotContain("ShowCompleteLog", cut.Markup, StringComparison.Ordinal), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => Assert.DoesNotContain("ShowCompleteLog", cut.Markup, StringComparison.Ordinal));
         Assert.Equal(Enumerable.Range(1, total + 1), Logs(cut)[300].Select(line => line.Id));
     }
 
@@ -113,8 +111,7 @@ public sealed class PipelineRunCompleteLogTests : BunitContext
         });
         Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo("/pipelines/runs/42?tab=logs");
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 42));
-        cut.WaitForState(() => cut.Instance.SelectedStep?.TaskId is { } taskId && cut.Instance.LogWindow.HasSnapshot(taskId),
-            TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Instance.SelectedStep?.TaskId is { } taskId && cut.Instance.LogWindow.HasSnapshot(taskId));
         return cut;
     }
 

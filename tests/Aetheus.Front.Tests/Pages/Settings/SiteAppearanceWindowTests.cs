@@ -1,66 +1,61 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Settings;
-using Aetheus.Front.Components.Shared;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Settings;
 
-/// <summary>
-/// Recette R-390: the user menu's "Theme" opens OE's appearance window with the site's theme, palette,
-/// text size, density and control size, read from and written to the same storage keys as the settings
-/// page (SiteAppearanceState), which the application's OmniThemeScope paints at once.
+/// <summary> The user menu's "Theme" opens OE's appearance window with the site's theme, palette,
+/// text size, density and control size, read from and written to OE's OmniAppearanceState (the user
+/// preference omni.appearance, R1-66), the same source as the settings page, which the application's
+/// OmniThemeScope paints at once.
 /// </summary>
 public sealed class SiteAppearanceWindowTests : BunitContext
 {
     public SiteAppearanceWindowTests() => BunitTestHelper.RegisterServices(this);
 
+    private OmniAppearanceState State => Services.GetRequiredService<OmniAppearanceState>();
+
     [Theory]
     [InlineData(OmniDensity.Compact, "compact")]
     [InlineData(OmniDensity.Comfortable, "comfortable")]
     [InlineData(OmniDensity.Spacious, "spacious")]
-    public void Densities_AreStoredUnderTheNamesTheStylesheetKnows(OmniDensity density, string stored)
-    {
-        Assert.Equal(stored, SiteAppearance.StoredDensity(density));
+    public void FormerDensities_ReadBackUnderTheNamesAetheusStored(OmniDensity density, string stored) =>
         Assert.Equal(density, SiteAppearance.ParseDensity(stored));
-    }
 
     [Fact]
-    public async Task Open_ReadsTheStoredChoices_AndShowsEveryRowItApplies()
+    public async Task Open_ShowsTheUsersAppearance_AndEveryRowAetheusApplies_ButNotTheContentWidth()
     {
         var theme = OmniThemePresets.All[1];
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.ThemePreset).SetResult(theme.Name);
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.ThemePalette).SetResult(string.Empty);
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.Density).SetResult("compact");
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.TextSize).SetResult("7");
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.ControlSize).SetResult("3");
+        await State.SetPresetAsync(theme);
+        await State.SetDensityAsync(OmniDensity.Compact);
+        await State.SetTextSizeLevelAsync(7);
+        await State.SetControlSizeLevelAsync(3);
         var cut = Render<SiteAppearanceWindow>();
         Assert.Empty(cut.FindAll(".omni-appearance-window"));
 
         await cut.InvokeAsync(cut.Instance.OpenAsync);
 
         var window = cut.Find(".omni-appearance-window");
-        // Decision of 2026-10-06: the whole window as OE draws it, every row bound: theme, palette with the
-        // mode beside it, font, density, text size, control size (the moving field only under Givre and
-        // Trou noir, below).
+        // Decision of 2026-10-06: theme, palette with the mode beside it, font, density, text size, control
+        // size (the moving field only under Givre and Trou noir, below). The content width row OE shows when
+        // the window follows the state is left out: Aetheus' main column is always full width.
         var rows = window.QuerySelectorAll(".omni-appearance-settings--window .omni-appearance-settings__row");
         Assert.Equal(6, rows.Length);
         Assert.Contains(rows, row => row.TextContent.Contains("7/10", StringComparison.Ordinal));
         Assert.Contains(rows, row => row.TextContent.Contains("3/10", StringComparison.Ordinal));
         var densities = rows[3].QuerySelectorAll(".omni-select-bar__item");
         Assert.Equal(3, densities.Length);
-        // No moving field under this theme, so no switch to hold it still.
         Assert.Empty(window.QuerySelectorAll(".omni-switch__track"));
         Assert.Contains("omni-select-bar__item--selected", densities[0].ClassList);
     }
 
     /// <summary>Decision of 2026-10-06: under a theme that moves its field the window offers to hold it
-    /// still, and the choice is stored and handed to the scope.</summary>
+    /// still, and the choice is kept in the user's appearance.</summary>
     [Fact]
-    public async Task UnderTrouNoir_TheMovingFieldCanBeHeldStill_AndTheChoiceIsStored()
+    public async Task UnderTrouNoir_TheMovingFieldCanBeHeldStill_AndTheChoiceIsKept()
     {
-        var trouNoir = OmniThemePresets.All.Single(preset => preset.Name == "Trou noir");
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.ThemePreset).SetResult(trouNoir.Name);
+        await State.SetPresetAsync(OmniThemePresets.All.Single(preset => preset.Name == "Trou noir"));
         var cut = Render<SiteAppearanceWindow>();
         await cut.InvokeAsync(cut.Instance.OpenAsync);
 
@@ -68,17 +63,16 @@ public sealed class SiteAppearanceWindowTests : BunitContext
         var rows = window.QuerySelectorAll(".omni-appearance-settings--window .omni-appearance-settings__row");
         Assert.Equal(6, rows.Length);
         // The switch sits on the theme row's title line, so it adds no row.
-        Assert.NotNull(rows[0].QuerySelector(".omni-switch__track"));
+        var track = rows[0].QuerySelector(".omni-switch__track");
+        Assert.NotNull(track);
 
-        var state = Services.GetRequiredService<SiteAppearanceState>();
-        await cut.InvokeAsync(() => state.SetBackdropMotionAsync(false));
-        Assert.False(state.BackdropMotion);
-        Assert.Contains(JSInterop.Invocations["localStorage.setItem"],
-            call => (string?)call.Arguments[0] == StorageKeys.BackdropMotion && (string?)call.Arguments[1] == "off");
+        await cut.InvokeAsync(() => cut.FindComponent<OmniAppearanceWindow>().Instance.BackdropMotionChanged.InvokeAsync(false));
+
+        Assert.False(State.BackdropMotion);
     }
 
-    /// <summary>User decision 2026-09-29: no "Aetheus" theme of its own; the list is OE's, where the
-    /// first catalogue theme (Essentiel) stands for the default.</summary>
+    /// <summary>Use the OE theme catalogue, with Essentiel as the default and no
+    /// application-specific theme.</summary>
     [Fact]
     public async Task TheThemeList_IsOesOwn_WithoutAnAetheusEntry()
     {
@@ -92,7 +86,7 @@ public sealed class SiteAppearanceWindowTests : BunitContext
     }
 
     [Fact]
-    public async Task ChangingTheDensity_StoresAndAppliesItsBand()
+    public async Task ChangingTheDensity_KeepsItInTheUsersAppearance()
     {
         var cut = Render<SiteAppearanceWindow>();
         await cut.InvokeAsync(cut.Instance.OpenAsync);
@@ -100,30 +94,23 @@ public sealed class SiteAppearanceWindowTests : BunitContext
         // OE shows the three densities as a bar of choices: the third is Spacious.
         cut.FindAll(".omni-appearance-settings--window .omni-select-bar__item")[2].Click();
 
-        Assert.Contains(JSInterop.Invocations, call => call.Identifier == "localStorage.setItem"
-            && Equals(call.Arguments[0], StorageKeys.Density) && Equals(call.Arguments[1], "spacious"));
         // STD-SHELL: the application's OmniThemeScope paints it from the shared state (AppThemeScopeTests).
-        Assert.Equal(OmniDensity.Spacious, Services.GetRequiredService<SiteAppearanceState>().Density);
+        Assert.Equal(OmniDensity.Spacious, State.Density);
     }
 
     [Fact]
-    public async Task ChangingTheTextAndControlSizes_StoresAndAppliesThem()
+    public async Task ChangingTheTextAndControlSizes_KeepsThemInTheUsersAppearance()
     {
         var cut = Render<SiteAppearanceWindow>();
         await cut.InvokeAsync(cut.Instance.OpenAsync);
-        var sliders = cut.FindAll(".omni-appearance-settings--window input[type=range]");
 
-        sliders[0].Input("8");
+        cut.FindAll(".omni-appearance-settings--window input[type=range]")[0].Input("8");
         cut.FindAll(".omni-appearance-settings--window input[type=range]")[1].Input("2");
 
-        Assert.Contains(JSInterop.Invocations, call => call.Identifier == "localStorage.setItem"
-            && Equals(call.Arguments[0], StorageKeys.TextSize) && Equals(call.Arguments[1], "8"));
-        Assert.Contains(JSInterop.Invocations, call => call.Identifier == "Aetheus.setTextSize"
-            && Equals(call.Arguments[0], 8));
-        Assert.Contains(JSInterop.Invocations, call => call.Identifier == "localStorage.setItem"
-            && Equals(call.Arguments[0], StorageKeys.ControlSize) && Equals(call.Arguments[1], "2"));
-        Assert.Contains(JSInterop.Invocations, call => call.Identifier == "Aetheus.setControlSize"
-            && Equals(call.Arguments[0], 2));
+        // The theme scope that follows the state sets data-oe-text-size and data-oe-control-size itself.
+        Assert.Equal(8, State.TextSizeLevel);
+        Assert.Equal(2, State.ControlSizeLevel);
+        Assert.DoesNotContain(JSInterop.Invocations, call => call.Identifier is "Aetheus.setTextSize" or "Aetheus.setControlSize");
     }
 
     [Theory]
@@ -135,6 +122,6 @@ public sealed class SiteAppearanceWindowTests : BunitContext
     [InlineData("x", 5)]
     [InlineData("1", 1)]
     [InlineData("10", 10)]
-    public void AStoredScaleLevel_OutOfRange_ReadsAsDrawn(string? stored, int expected)
+    public void AFormerScaleLevel_OutOfRange_ReadsAsDrawn(string? stored, int expected)
         => Assert.Equal(expected, SiteAppearance.ParseLevel(stored));
 }

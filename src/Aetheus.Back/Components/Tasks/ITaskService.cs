@@ -67,6 +67,6 @@ public interface ITaskService
     /// </summary>
     Task<List<ServerTaskDto>> GetActiveTasksAsync(List<int>? accessibleServerIds, CancellationToken ct = default);
 
-    /// <summary>Recette R-212: the server names across the caller's tasks (optionally one server's).</summary>
+    /// <summary>The server names across the caller's tasks (optionally one server's).</summary>
     Task<TaskFilterValuesDto> GetTaskFilterValuesAsync(List<int>? accessibleServerIds, int? serverId, CancellationToken ct = default);
 }

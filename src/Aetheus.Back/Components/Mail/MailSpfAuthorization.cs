@@ -4,14 +4,9 @@ using System.Net.Sockets;
 
 namespace Aetheus.Back.Components.Mail;
 
-/// <summary>
-/// Recette R1-10: whether a published SPF record authorises one sending address, evaluated as a receiver
-/// would (RFC 7208, section 4.6): the terms are read in order, the first mechanism that matches decides, and
-/// only a pass (<c>+</c> or no qualifier) authorises. <c>ip4</c>, <c>ip6</c>, <c>a</c>, <c>mx</c>,
-/// <c>include</c> and <c>redirect</c> are resolved through <see cref="IMailDnsResolver"/>; the DNS lookups
-/// are bounded by the RFC limit of ten, so a chain of includes can never run unbounded. <c>exists</c>,
-/// <c>ptr</c> and terms written with macros are not evaluated: they never authorise here.
-/// </summary>
+/// <summary>Evaluates SPF mechanisms in order, accepting only a pass and bounding DNS resolution to
+/// ten lookups through <see cref="IMailDnsResolver"/> (RFC 7208, section 4.6). Supports ip4, ip6,
+/// a, mx, include and redirect; exists, ptr and macro terms never authorize here.</summary>
 internal sealed class MailSpfAuthorization(IMailDnsResolver resolver)
 {
     /// <summary>RFC 7208 4.6.4: at most ten mechanisms or modifiers that query the DNS.</summary>

@@ -3,13 +3,11 @@ using Microsoft.Playwright;
 
 namespace Aetheus.E2E;
 
-/// <summary>
-/// Recette R2-087 (decided 2026-10-03): going back to a page shows at once what it showed, at its
-/// scroll position, without the page-wide loader; that loader is for a first visit. Measured on the
-/// runs list of the pipelines page, the case measured in production (1.3 s of loader on a return).
-/// </summary>
+/// <summary>Returning to the pipeline runs page restores content and scroll position immediately.
+/// Reserve the full-page loader for an initial visit.</summary>
 [Category("E2E")]
 [Category("Pipelines")]
+[RollbackRelevant]
 public class PageReturnTests : E2ETestBase
 {
     [SetUp]
@@ -65,7 +63,9 @@ public class PageReturnTests : E2ETestBase
         await Page.EvaluateAsync("""
             () => {
                 window.__r2087SawLoader = false;
+                window.__r2087Frames = 0;
                 const check = () => {
+                    window.__r2087Frames++;
                     if (location.pathname === '/pipelines'
                         && document.querySelector('#main-content .aetheus-loader-centered')) window.__r2087SawLoader = true;
                     if (!window.__r2087Stop) requestAnimationFrame(check);
@@ -73,6 +73,11 @@ public class PageReturnTests : E2ETestBase
                 requestAnimationFrame(check);
             }
             """);
+        // Going back restores the list from its state and refreshes it in the background: the window in
+        // which a page-wide loader could show closes when that refresh has answered and rendered.
+        var refreshAnswered = Task.WhenAll(
+            Page.WaitForResponseAsync(response => response.Url.Contains("/api/pipelines/runs/recent", StringComparison.Ordinal)),
+            Page.WaitForResponseAsync(response => response.Url.Contains("/api/pipelines/dependencies", StringComparison.Ordinal)));
         var started = DateTime.UtcNow;
         await Page.GoBackAsync(new() { WaitUntil = WaitUntilState.Commit });
         await Expect(runLinks.First).ToBeAttachedAsync(new() { Timeout = 15000 });
@@ -82,7 +87,10 @@ public class PageReturnTests : E2ETestBase
                 return !!element && Math.abs(element.scrollTop - expected) <= 1;
             }
             """, scrolled, new() { Timeout = 5000 });
-        await Page.WaitForTimeoutAsync(1500);
+        await refreshAnswered;
+        var framesAtRefresh = await Page.EvaluateAsync<int>("() => window.__r2087Frames");
+        // The observer samples every frame: two more frames after the refresh answered cover its render.
+        await Page.WaitForFunctionAsync("start => window.__r2087Frames >= start + 2", framesAtRefresh);
         var sawLoader = await Page.EvaluateAsync<bool>("() => { window.__r2087Stop = true; return window.__r2087SawLoader; }");
 
         TestContext.Progress.WriteLine($"R2-087: runs list shown {shownAfter.TotalMilliseconds:F0} ms after going back.");

@@ -48,7 +48,7 @@ public static partial class MailValidation
     // Mailbox quota in MB - a plain non-negative integer bounded well above any realistic mailbox.
     public static bool IsValidQuotaMb(int quotaMb) => quotaMb is >= 0 and <= 1_048_576;
 
-    // --- PLAN-005: mail-manage helper version 2 ---
+    // Mail-management field validation.
 
     /// <summary>Units whose journal and lifecycle the mail helper may touch.</summary>
     public static IReadOnlyList<string> ManagedUnits { get; } = ["postfix", "dovecot", "opendkim", "rspamd"];

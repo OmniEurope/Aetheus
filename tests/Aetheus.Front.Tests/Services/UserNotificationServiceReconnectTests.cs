@@ -5,13 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Services;
 
-/// <summary>
-/// Covers finding #5: a failed initial connect used to leave <see cref="UserNotificationService"/>
-/// permanently blind for the session, because reconciliation only ran from <c>Reconnected</c>, which
-/// never fires unless the hub connected at least once. Uses the bUnit harness (whose
-/// <c>HubConnectionFactory</c> always fails to connect immediately) so the failure path is exercised
-/// deterministically, mirroring <c>TaskTrackerServiceReconnectTests</c>.
-/// </summary>
+/// <summary>Verifies recovery after an initial notification-hub connection failure using a
+/// deterministic failing hub factory.</summary>
 public class UserNotificationServiceReconnectTests : BunitContext
 {
     private static readonly BindingFlags Priv = BindingFlags.NonPublic | BindingFlags.Instance;
@@ -50,7 +45,6 @@ public class UserNotificationServiceReconnectTests : BunitContext
         sut.OnPermissionsChanged += () => prompted = true;
 
         await ReconcileAsync(sut);
-        await Task.Delay(50, Xunit.TestContext.Current.CancellationToken);
 
         Assert.False(prompted);
         Assert.True(permissions.IsLoaded);
@@ -69,7 +63,6 @@ public class UserNotificationServiceReconnectTests : BunitContext
         sut.OnPermissionsChanged += () => prompted = true;
 
         await ReconcileAsync(sut);
-        await Task.Delay(200, Xunit.TestContext.Current.CancellationToken);
 
         Assert.True(prompted);
         await sut.DisposeAsync();

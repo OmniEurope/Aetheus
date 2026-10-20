@@ -28,8 +28,8 @@ public partial class VaultsList
     private int _totalCount;
     private bool _loading;
     private bool _canWrite;
-    // Recette R-210: the project column's checkable filter lists every project owning a vault the
-    // caller can read: served by the API for the global list, taken from the loaded list in server scope.
+    // The project column's checkable filter lists every project owning a vault the caller can read:
+    // served by the API for the global list, taken from the loaded list in server scope.
     private VaultFilterValuesDto _filterValues = new();
 
     private string CacheKey => $"vaults:server:{ServerId}";
@@ -103,8 +103,8 @@ public partial class VaultsList
 
     private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.Vault);
 
-    /// <summary>Recette R2-124: one page of the export, the vaults as listed (names and counts, never a
-    /// secret value), in the scope of the list, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, the vaults as listed (names and counts, never a secret
+    /// value), in the scope of the list, with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<VaultDto>> ReadExportAsync(GridLoadArgs args)
     {
         if (IsServerScope)
@@ -132,7 +132,7 @@ public partial class VaultsList
             return;
         }
 
-        // Recette R-210: every header filter goes to the API, which checks it against its column map.
+        // Every header filter goes to the API, which checks it against its column map.
         var filters = args.ToApiFilters();
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, sortDescending) = args.ToSortRequest(nameof(VaultDto.Name));
@@ -147,8 +147,8 @@ public partial class VaultsList
 
     private AetheusDataGrid<VaultDto>? _grid;
 
-    /// <summary>Recette R-226: a change pushed by the hub refreshes the grid quietly, its page, sort,
-    /// filters and scroll kept, and brings a new project into the project filter.</summary>
+    /// <summary>A change pushed by the hub refreshes the grid quietly, its page, sort, filters and
+    /// scroll kept, and brings a new project into the project filter.</summary>
     private async Task RefreshGridAsync()
     {
         await LoadFilterValuesAsync();

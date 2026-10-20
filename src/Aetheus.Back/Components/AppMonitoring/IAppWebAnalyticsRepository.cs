@@ -25,13 +25,15 @@ public interface IAppWebAnalyticsRepository
 
     Task<long> EstimateStorageBytesAsync(int appId, CancellationToken ct = default);
 
-    /// <summary>Recette R2-007: deletes the app's oldest raw audience rows until it weighs at most <paramref name="targetBytes"/>.</summary>
+    /// <summary>Deletes the app's oldest raw audience rows until it weighs at most <paramref
+    /// name="targetBytes"/>.</summary>
     Task<WebAnalyticsTrimResult> TrimToAsync(int appId, long targetBytes, CancellationToken ct = default);
 
     /// <summary>The apps holding raw audience rows, with their storage budget (0 when none was set).</summary>
     Task<IReadOnlyList<WebAnalyticsStorageBudget>> GetStorageBudgetsAsync(CancellationToken ct = default);
 
-    /// <summary>Audit R2-007 follow-up: the events the app accepted since <paramref name="sinceUtc"/>, all colours.</summary>
+    /// <summary>Counts accepted events since <paramref name="sinceUtc"/> across backend
+    /// colours.</summary>
     Task<int> CountAcceptedSinceAsync(int appId, DateTime sinceUtc, CancellationToken ct = default);
     Task<HashSet<string>> GetRouteNamesAsync(int appId, CancellationToken ct = default);
     Task RecordRejectionAsync(int appId, string reasonCode, int count, DateTime occurredAtUtc, CancellationToken ct = default);

@@ -13,7 +13,7 @@ public class PipelineArtifactServiceTests
 
     public PipelineArtifactServiceTests()
     {
-        _sut = new PipelineArtifactService(_repoMock, TimeProvider.System, NullLogger<PipelineArtifactService>.Instance);
+        _sut = new PipelineArtifactService(_repoMock, _repoMock, _repoMock, TimeProvider.System, NullLogger<PipelineArtifactService>.Instance);
     }
 
     [Fact]
@@ -31,8 +31,8 @@ public class PipelineArtifactServiceTests
     [Fact]
     public async Task PublishArtifactAsync_RunNotFound_ReturnsNull()
     {
-        _repoMock.GetPipelineRunWithPipelineAsync(99, Arg.Any<CancellationToken>())
-            .Returns((PipelineRun?)null);
+        _repoMock.GetPipelineIdForRunAsync(99, Arg.Any<CancellationToken>())
+            .Returns((int?)null);
 
         var result = await _sut.PublishArtifactAsync(99, new PublishArtifactRequest { Name = "a", FilePath = "/a" }, ct: TestContext.Current.CancellationToken);
 
@@ -42,8 +42,8 @@ public class PipelineArtifactServiceTests
     [Fact]
     public async Task PublishArtifactAsync_ValidRun_CreatesAndReturnsArtifact()
     {
-        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>())
-            .Returns(new PipelineRun { Id = 1, PipelineId = 1 });
+        _repoMock.GetPipelineIdForRunAsync(1, Arg.Any<CancellationToken>())
+            .Returns((int?)1);
         _repoMock.AddArtifactAsync(Arg.Any<PipelineArtifact>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
@@ -80,8 +80,8 @@ public class PipelineArtifactServiceTests
     [Fact]
     public async Task PublishTestResultsAsync_RunNotFound_ReturnsNull()
     {
-        _repoMock.GetPipelineRunWithPipelineAsync(99, Arg.Any<CancellationToken>())
-            .Returns((PipelineRun?)null);
+        _repoMock.GetPipelineIdForRunAsync(99, Arg.Any<CancellationToken>())
+            .Returns((int?)null);
 
         var result = await _sut.PublishTestResultsAsync(99, new PublishTestResultsRequest
         {
@@ -107,8 +107,8 @@ public class PipelineArtifactServiceTests
             </testsuite>
             """;
 
-        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>())
-            .Returns(new PipelineRun { Id = 1, PipelineId = 1 });
+        _repoMock.GetPipelineIdForRunAsync(1, Arg.Any<CancellationToken>())
+            .Returns((int?)1);
         _repoMock.AddTestResultsAsync(Arg.Any<List<TestResult>>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
@@ -132,8 +132,8 @@ public class PipelineArtifactServiceTests
     [Fact]
     public async Task PublishComplexityAsync_RunNotFound_ReturnsFalse()
     {
-        _repoMock.GetPipelineRunWithPipelineAsync(99, Arg.Any<CancellationToken>())
-            .Returns((PipelineRun?)null);
+        _repoMock.GetPipelineIdForRunAsync(99, Arg.Any<CancellationToken>())
+            .Returns((int?)null);
 
         var ok = await _sut.PublishComplexityAsync(99, new PublishComplexityRequest { AvgCyclomatic = 4 }, ct: TestContext.Current.CancellationToken);
 
@@ -144,8 +144,8 @@ public class PipelineArtifactServiceTests
     [Fact]
     public async Task PublishComplexityAsync_NoCoverage_PublishesBaseMetricsWithoutCrap()
     {
-        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>())
-            .Returns(new PipelineRun { Id = 1, PipelineId = 1 });
+        _repoMock.GetPipelineIdForRunAsync(1, Arg.Any<CancellationToken>())
+            .Returns((int?)1);
         _repoMock.GetCoverageResultsAsync(1, Arg.Any<CancellationToken>()).Returns([]);
         List<RunMetric>? captured = null;
         await _repoMock.AddRunMetricsAsync(Arg.Do<IEnumerable<RunMetric>>(m => captured = m.ToList()), Arg.Any<CancellationToken>());
@@ -171,8 +171,8 @@ public class PipelineArtifactServiceTests
     [Fact]
     public async Task PublishComplexityAsync_WithCoverage_DerivesCrapFromMostComprehensiveReport()
     {
-        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>())
-            .Returns(new PipelineRun { Id = 1, PipelineId = 1 });
+        _repoMock.GetPipelineIdForRunAsync(1, Arg.Any<CancellationToken>())
+            .Returns((int?)1);
         _repoMock.GetCoverageResultsAsync(1, Arg.Any<CancellationToken>()).Returns(
         [
             new CoverageResult { PipelineRunId = 1, LineRate = 0.20, LinesValid = 10 },

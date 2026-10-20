@@ -10,12 +10,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Vaults;
 
-/// <summary>
-/// The vault actions that go through a dialog, driven with an immediate dialog double:
-/// deleting the vault, updating, rotating and deleting a secret, importing a JSON payload and
-/// reading a secret's version history. Those paths were previously skipped because the real dialog
-/// service never completes under bUnit, so none of their confirm/cancel rules were protected.
-/// </summary>
+/// <summary>Exercises vault and secret actions with an immediate dialog double, including
+/// confirmation and cancellation paths.</summary>
 public sealed class VaultEditDialogActionTests : BunitContext
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -88,7 +84,7 @@ public sealed class VaultEditDialogActionTests : BunitContext
         _dialog.ConfirmResult = false;
         var cut = RenderVault();
 
-        ToolsMenuItem(cut, "Delete").Click(); // Recette R-287: the vault's Delete is in the tools menu.
+        ToolsMenuItem(cut, "Delete").Click(); // The vault's Delete is in the tools menu.
 
         Assert.False(Sent("DELETE", "api/vaults/1"));
     }
@@ -100,9 +96,9 @@ public sealed class VaultEditDialogActionTests : BunitContext
         _dialog.ConfirmResult = true;
         var cut = RenderVault();
 
-        ToolsMenuItem(cut, "Delete").Click(); // Recette R-287: the vault's Delete is in the tools menu.
+        ToolsMenuItem(cut, "Delete").Click(); // The vault's Delete is in the tools menu.
 
-        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/vaults/1")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/vaults/1")));
     }
 
     [Fact]
@@ -113,9 +109,9 @@ public sealed class VaultEditDialogActionTests : BunitContext
         var navigation = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
         var cut = RenderVault();
 
-        ToolsMenuItem(cut, "Delete").Click(); // Recette R-287: the vault's Delete is in the tools menu.
+        ToolsMenuItem(cut, "Delete").Click(); // The vault's Delete is in the tools menu.
 
-        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/vaults/1")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/vaults/1")));
         Assert.DoesNotContain("/vaults", new Uri(navigation.Uri).AbsolutePath.TrimEnd('/') + "/end");
     }
 
@@ -132,7 +128,7 @@ public sealed class VaultEditDialogActionTests : BunitContext
         Button(cut, "Edit").Click();
 
         cut.WaitForAssertion(
-            () => Assert.True(Sent("PUT", "api/vaults/1/secrets/10")), TimeSpan.FromSeconds(2));
+            () => Assert.True(Sent("PUT", "api/vaults/1/secrets/10")));
         var request = LastBody<UpdateVaultSecretRequest>("PUT", "api/vaults/1/secrets/10");
         Assert.Equal("DB_PASS", request.Key);
         Assert.Equal("new-secret-value", request.Value);
@@ -177,7 +173,7 @@ public sealed class VaultEditDialogActionTests : BunitContext
         Button(cut, "Rotate").Click();
 
         cut.WaitForAssertion(
-            () => Assert.True(Sent("POST", "api/vaults/1/secrets/10/rotate")), TimeSpan.FromSeconds(2));
+            () => Assert.True(Sent("POST", "api/vaults/1/secrets/10/rotate")));
         var request = LastBody<RotateVaultSecretRequest>("POST", "api/vaults/1/secrets/10/rotate");
         Assert.Equal("rotated-value", request.Value);
         // The front deserializes dates as browser-local, so compare the instant, not the Kind.
@@ -219,7 +215,7 @@ public sealed class VaultEditDialogActionTests : BunitContext
         Button(cut, "Delete").Click();
 
         cut.WaitForAssertion(
-            () => Assert.True(Sent("DELETE", "api/vaults/1/secrets/10")), TimeSpan.FromSeconds(2));
+            () => Assert.True(Sent("DELETE", "api/vaults/1/secrets/10")));
     }
 
     // ---------- FRONT-025: a refused mutation never reports success ----------
@@ -242,7 +238,7 @@ public sealed class VaultEditDialogActionTests : BunitContext
 
         Button(cut, "Edit").Click();
 
-        cut.WaitForAssertion(() => AssertFailureReportedWithoutSuccess("SaveFailed"), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => AssertFailureReportedWithoutSuccess("SaveFailed"));
     }
 
     [Theory]
@@ -257,7 +253,7 @@ public sealed class VaultEditDialogActionTests : BunitContext
 
         Button(cut, "Rotate").Click();
 
-        cut.WaitForAssertion(() => AssertFailureReportedWithoutSuccess("SaveFailed"), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => AssertFailureReportedWithoutSuccess("SaveFailed"));
     }
 
     [Theory]
@@ -271,7 +267,7 @@ public sealed class VaultEditDialogActionTests : BunitContext
 
         Button(cut, "Delete").Click();
 
-        cut.WaitForAssertion(() => AssertFailureReportedWithoutSuccess(detail), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => AssertFailureReportedWithoutSuccess(detail));
     }
 
     // ---------- version history ----------
@@ -289,7 +285,7 @@ public sealed class VaultEditDialogActionTests : BunitContext
         Button(cut, "History").Click();
 
         cut.WaitForAssertion(
-            () => Assert.True(Sent("GET", "api/vaults/1/secrets/10/versions")), TimeSpan.FromSeconds(2));
+            () => Assert.True(Sent("GET", "api/vaults/1/secrets/10/versions")));
         var versions = Assert.IsType<List<VaultSecretVersionDto>>(
             Assert.Contains("Versions", _dialog.LastParameters!));
         Assert.Equal([2, 1], versions.Select(version => version.Version));
@@ -307,7 +303,7 @@ public sealed class VaultEditDialogActionTests : BunitContext
 
         ToolsMenuItem(cut, "Import").Click();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/vaults/1/import")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/vaults/1/import")));
         var request = LastBody<List<CreateVaultSecretRequest>>("POST", "api/vaults/1/import");
         Assert.Equal(["A", "B"], request.Select(secret => secret.Key));
     }

@@ -7,9 +7,8 @@
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("admin_panel_settings")" /></Icon>
 </OmniPageHeader>
 
-@* Recette R-237: the tiles are grouped by what they administer, and every icon has the one accent
-   tint. Recette R-456: one OE settings tile per entry of the side menu's Administration group (none
-   missing), with that menu entry's icon, its title and a line of description under it. *@
+@* Group administration tiles by purpose and keep one entry per administration menu destination
+   with matching icon and title. *@
 @foreach (var group in Groups)
 {
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L[group.TitleKey]</OmniHeading>

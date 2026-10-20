@@ -152,8 +152,8 @@ public abstract class ApiClientBase(HttpClient http)
             var payload = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(payload))
                 return new(null, null, false, response.StatusCode);
-            // R2-039: the reason is read from the body itself, so a refusal written by the error
-            // middleware ({ message }), a ProblemDetails or plain text reads as well as the typed DTO.
+            // The reason is read from the body itself, so a refusal written by the error middleware
+            // ({ message }), a ProblemDetails or plain text reads as well as the typed DTO.
             var message = ApiErrorText.Read(payload);
             try
             {

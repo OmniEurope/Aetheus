@@ -2,11 +2,10 @@
 <OmniTemplateForm TModel="CronForm" Model="@_form" OnValidSubmit="@Save">
     <OmniDataAnnotationsValidator Localizer="@L" />
     <OmniStack Gap="OmniSpacing.Small">
-        <OmniFormField For="oe-pages-servers-serverdetailsections-cronjobdialog-1"><LabelContent>@L["User"]</LabelContent><ChildContent>
+        <OmniFormField For="oe-pages-servers-serverdetailsections-cronjobdialog-1" Help="@L["CronNonRootHint"]"><LabelContent>@L["User"]</LabelContent><ChildContent>
             <OmniTextBox @bind-Value="_form.User" Placeholder="deploy" maxlength="64" Id="oe-pages-servers-serverdetailsections-cronjobdialog-1" />
             <ValidationMessage For="@(() => _form.User)" />
         </ChildContent></OmniFormField>
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["CronNonRootHint"]</OmniText>
         <OmniFormField Label="@L["Schedule"]" For="Schedule">
             <OmniTextBox @bind-Value="_form.Schedule" Id="Schedule" Placeholder="*/5 * * * *" maxlength="100" />
             <ValidationMessage For="@(() => _form.Schedule)" />

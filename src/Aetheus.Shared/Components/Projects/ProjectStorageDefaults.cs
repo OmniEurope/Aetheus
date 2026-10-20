@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Projects;
 
-/// <summary>PLAN-013 lot 5 (recette R2-115): the storage budget of a project.</summary>
+/// <summary>Defines the default project storage budget.</summary>
 public static class ProjectStorageDefaults
 {
     public const int DefaultBudgetMegabytes = 200;

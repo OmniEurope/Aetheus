@@ -103,7 +103,8 @@ public class OwnerTypeSelectorTests : BunitContext
             .Add(x => x.Projects, MakeProjects())
             .Add(x => x.EnvironmentId, 10));
 
-        await Task.Delay(300, Xunit.TestContext.Current.CancellationToken);
+        // The mocked answers complete at once: whatever the renders queued has run once this item has.
+        await cut.InvokeAsync(() => { });
         cut.Render();
         cut.Render();
 
@@ -119,7 +120,7 @@ public class OwnerTypeSelectorTests : BunitContext
             .Add(x => x.Projects, projects)
             .Add(x => x.ProjectServerId, 20));
         // The owner lookup, then the dropdown's own load once the kind is inferred.
-        cut.WaitForAssertion(() => Assert.Equal(2, _handler.Requests.Count(r => r.Url.Contains("api/projects/1/servers"))));
+        await _handler.WhenRequestedAsync(r => r.Url.Contains("api/projects/1/servers", StringComparison.Ordinal), 2, "the owner lookup and the list load");
         _handler.SetPaginatedJsonResponse("api/projects/1/servers", new List<ProjectServerDto>());
         var requestsBefore = _handler.Requests.Count(r => r.Url.Contains("api/projects/1/servers"));
 
@@ -127,7 +128,8 @@ public class OwnerTypeSelectorTests : BunitContext
         // old loop re-rendered itself; a parameter re-render would re-run the owner lookup on this URL).
         var method = typeof(OwnerTypeSelector).GetMethod("OnProjectChanged", Priv)!;
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [1])!);
-        await Task.Delay(300, Xunit.TestContext.Current.CancellationToken);
+        // The mocked answers complete at once: whatever the renders queued has run once this item has.
+        await cut.InvokeAsync(() => { });
 
         Assert.Equal(requestsBefore + 1, _handler.Requests.Count(r => r.Url.Contains("api/projects/1/servers")));
     }
@@ -377,8 +379,8 @@ public class OwnerTypeSelectorTests : BunitContext
     private static OwnerTypeSelector.OwnerKind ReadKind(OwnerTypeSelector instance)
         => (OwnerTypeSelector.OwnerKind)typeof(OwnerTypeSelector).GetField("_kind", Priv)!.GetValue(instance)!;
 
-    // SITE-FUNC-OWNER-001: for an environment or server owner, ProjectId is null; the project dropdown must show
-    // the context project the environment or server belongs to, not the (empty) Project owner.
+    // For server or environment ownership, the project selector uses the owner's context project
+    // rather than the null direct ProjectId.
     [Fact]
     public void EnvironmentOwner_ProjectDropdown_ShowsTheEnvironmentsProject()
     {

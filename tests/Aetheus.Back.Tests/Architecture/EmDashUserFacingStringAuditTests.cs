@@ -58,10 +58,8 @@ public sealed class EmDashUserFacingStringAuditTests
         || file.EndsWith(".g.cs", StringComparison.Ordinal)
         || file.EndsWith(".razor.g.cs", StringComparison.Ordinal);
 
-    // Single pass over one line: tracks whether we are inside a double-quoted string literal, a block
-    // comment, or reached a line comment, and reports an em-dash only when it sits inside a string literal.
-    // Recette R2-107: one method per state (block comment, string, code), each under the grade-A
-    // cyclomatic threshold.
+    // Tracks comments and literals in one pass and reports the prohibited character only inside
+    // string literals.
     private static bool LineHasEmDashInStringLiteral(string line, ref bool inBlockComment)
     {
         var trimmed = line.TrimStart();

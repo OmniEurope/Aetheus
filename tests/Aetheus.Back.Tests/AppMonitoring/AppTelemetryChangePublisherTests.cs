@@ -9,7 +9,8 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Aetheus.Back.Tests.AppMonitoring;
 
-/// <summary>R-181: the push that replaces the Refresh button of a monitored app's Logs and Errors tabs.</summary>
+/// <summary>The push that replaces the Refresh button of a monitored app's Logs and Errors
+/// tabs.</summary>
 public sealed class AppTelemetryChangePublisherTests : IDisposable
 {
     private readonly IAppMonitoringRepository _apps = Substitute.For<IAppMonitoringRepository>();

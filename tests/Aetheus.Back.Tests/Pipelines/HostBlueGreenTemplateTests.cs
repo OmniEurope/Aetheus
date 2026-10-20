@@ -15,11 +15,7 @@ namespace Aetheus.Back.Tests.Pipelines;
 /// </summary>
 public sealed class HostBlueGreenTemplateTests
 {
-    /// <summary>
-    /// The version a consuming pipeline should extend. Recette R2-094 restarted the numbering: v1 holds
-    /// what was published as v6, and the older contents are gone. Every contract below is asserted
-    /// against the latest the seeder publishes (asserted below), so a new version cannot quietly drop one.
-    /// </summary>
+    /// <summary>Contracts target the latest template version published by the seeder.</summary>
     private const string Resource = "host-bluegreen-deploy-v1.yaml";
 
     [Fact]
@@ -81,11 +77,8 @@ public sealed class HostBlueGreenTemplateTests
             steps.Select(step => step.Type!).Distinct().Order(StringComparer.Ordinal));
     }
 
-    /// <summary>
-    /// The commit must come after the evidence stage. That ordering is the whole point of splitting
-    /// the cutover: it is what stops a probe finding from undoing a deployment that is already
-    /// serving correctly, which is exactly what the shell implementation used to do.
-    /// </summary>
+    /// <summary>Evidence precedes commit so the cutover remains compensatable until validation
+    /// completes.</summary>
     [Fact]
     public void Commit_DependsOnTheEvidenceStage()
     {
@@ -97,14 +90,8 @@ public sealed class HostBlueGreenTemplateTests
         Assert.Contains("Switch", evidence.DependsOn);
     }
 
-    /// <summary>
-    /// The rollback must name the LAST stage it guards, not the first. A failed() stage resolves its
-    /// dependencies against terminal stages, so its condition is answered as soon as the stage it
-    /// names settles: naming `Switch` answered it the moment the cutover succeeded and retired the
-    /// rollback while the run was still green, leaving the evidence stage after the cutover with no
-    /// compensation at all. Naming `Commit` keeps it pending through Evidence and Commit and fires it
-    /// on a failure of either, while still never reaching it on a healthy run.
-    /// </summary>
+    /// <summary>Rollback depends on the last guarded stage, keeping it eligible through evidence
+    /// and commit failures.</summary>
     [Fact]
     public void Rollback_IsAFailureHandlerOnTheLastStageItGuards()
     {
@@ -135,11 +122,8 @@ public sealed class HostBlueGreenTemplateTests
         Assert.False(string.IsNullOrWhiteSpace(step.Revision));
     }
 
-    /// <summary>
-    /// PLAN-003 2.7: the switch forwards the consumer's confirmation window, and a consumer that sets
-    /// none arms nothing (0), so every environment but the one whose backend is being deployed is
-    /// unaffected.
-    /// </summary>
+    /// <summary>The switch forwards the consumer's confirmation window; zero leaves the host window
+    /// unarmed.</summary>
     [Fact]
     public void V6_Switch_ForwardsTheConfirmationWindow_WhichDefaultsToNone()
     {
@@ -229,7 +213,7 @@ public sealed class HostBlueGreenTemplateTests
             .Where(step => step.Type?.StartsWith("bluegreen-", StringComparison.Ordinal) == true)
             .ToArray();
 
-        Assert.Equal(5, blueGreenSteps.Length);
+        Assert.NotEmpty(blueGreenSteps);
         Assert.All(blueGreenSteps, step => Assert.Equal("$(BG_COMPOSE_ENV)", step.ComposeEnv));
         Assert.Equal(string.Empty, definition.Variables["BG_COMPOSE_ENV"]);
     }

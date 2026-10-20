@@ -12,13 +12,11 @@ internal static class SecurityHeadersExtensions
         this WebApplication app,
         IEnumerable<string> corsOrigins)
     {
-        // Content-Security-Policy - Blazor WASM requires 'wasm-unsafe-eval' and Monaco loads worker
-        // scripts from blob: URLs. Recette R-526: styles are 'self' only. The 'unsafe-inline' this header
-        // carried dated from the component library the front no longer uses; the API serves no page of
-        // its own, and the front's policy is the static server's.
-        // connect-src is restricted to self + the configured frontend origin (translated to ws/wss
-        // for SignalR). No global ws:/wss: wildcard. Computed once at startup since CORS origins
-        // don't change at runtime.
+        // Allow required WASM evaluation and blob workers while restricting styles to self and
+        // connections to self plus configured frontend origins, including their WebSocket
+        // equivalents. Compute the policy at startup without global ws/wss wildcards.
+        // 'report-sample' allows nothing: it only asks the browser to put the first 40 characters of a
+        // blocked inline script in the report, which the four reports of recette R1-83 lacked.
         var cspConnectSources = new List<string> { "'self'" };
         foreach (var origin in corsOrigins.Distinct())
         {
@@ -31,7 +29,7 @@ internal static class SecurityHeadersExtensions
         }
         var contentSecurityPolicy =
             "default-src 'self'; " +
-            "script-src 'self' 'wasm-unsafe-eval' blob:; " +
+            "script-src 'self' 'wasm-unsafe-eval' blob: 'report-sample'; " +
             "worker-src 'self' blob:; " +
             "style-src 'self'; " +
             "img-src 'self' data: blob:; " +
@@ -40,8 +38,7 @@ internal static class SecurityHeadersExtensions
             "frame-ancestors 'none'; " +
             "base-uri 'self'; " +
             "form-action 'self'; " +
-            // PLAN-003 lot 14: the browser names the refused script for us. report-uri is deprecated
-            // but still the only one Safari and older Chrome honour, so both are sent.
+            // Send reporting directives with the legacy fallback for browsers that require it.
             "report-uri /api/security/csp-report; " +
             "report-to csp-endpoint";
 

@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Shared.Components.Git;
 
-// --- R-01: Git Connection ---
+// Git connections.
 
 public sealed record GitConnectionDto
 {
@@ -47,7 +47,7 @@ public sealed record UpdateGitConnectionRequest
     public bool AutoSyncEnabled { get; init; } = true;
 }
 
-// --- R-02: Pull Requests ---
+// Pull requests.
 
 public sealed record PullRequestDto
 {
@@ -80,7 +80,7 @@ public sealed record PullRequestPaginationRequest : PaginationRequest
     public PullRequestStatus? Status { get; init; }
 }
 
-// --- R-03: Branch Policies ---
+// Branch policies.
 
 public sealed record BranchPolicyDto
 {

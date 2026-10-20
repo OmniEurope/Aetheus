@@ -22,8 +22,10 @@ internal sealed class StageViewModel
     /// concurrently; null when the run carries no usable definition snapshot.</summary>
     public int? Depth { get; init; }
 
-    /// <summary>The condition that kept this stage from running, when every one of its steps was
-    /// cancelled by an unmet condition. A stage in that state used to read as "pending" for the rest
-    /// of the run, because the aggregate status had no case for it and fell through to Pending.</summary>
+    /// <summary>Explains the unmet condition when every step in a stage was cancelled by that
+    /// condition.</summary>
     public string? SkippedCondition { get; init; }
+
+    /// <summary>Recette R1-80: the stage completed and one of its controls ran and found failures.</summary>
+    public bool IsRejected { get; init; }
 }

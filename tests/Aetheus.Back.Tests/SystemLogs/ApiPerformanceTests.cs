@@ -9,12 +9,9 @@ using OmniEurope.Performance;
 
 namespace Aetheus.Back.Tests.SystemLogs;
 
-/// <summary>
-/// PLAN-003 lot 27 / D27, R-455, decision of 2026-10-07: the API's own timings, measured by the collector of
-/// OmniEurope.Performance (whose arithmetic the package's own tests pin). Here: what Aetheus keeps, how the
-/// report maps to the page's contract, and what only a real host proves: ASP.NET Core publishes the request
-/// duration with the route TEMPLATE, the change signal fires on it, and reading the report is never measured.
-/// </summary>
+/// <summary>Verifies retained API timings and report mapping, including route-template measurements
+/// and change signals from a real ASP.NET Core host. Report reads are excluded from
+/// measurement.</summary>
 public sealed class ApiPerformanceTests(CustomWebApplicationFactory factory) : IClassFixture<CustomWebApplicationFactory>
 {
     private static readonly DateTime Now = new(2026, 9, 21, 12, 0, 0, DateTimeKind.Utc);
@@ -70,7 +67,16 @@ public sealed class ApiPerformanceTests(CustomWebApplicationFactory factory) : I
         for (var i = 0; i < 4; i++)
             (await client.GetAsync("/api/projects", ct)).EnsureSuccessStatusCode();
         await recorder.WaitForChangeAsync(ct).WaitAsync(TimeSpan.FromSeconds(5), ct);
+        // A sample is recorded once the response has completed, after the client already read it:
+        // the change signal can fire before the fourth request is in (3 counted, ylaunch -ta of
+        // 2026-10-11). Read again until all four are heard, within the same 5 s budget.
+        var deadline = DateTime.UtcNow.AddSeconds(5);
         var after = await ReadAsync(client, ct);
+        while (ProjectsCount(after) < 4 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50, ct);
+            after = await ReadAsync(client, ct);
+        }
 
         var projects = Assert.Single(after.Endpoints, endpoint => endpoint.Route == "api/projects" && endpoint.Method == "GET");
         Assert.True(projects.Count >= 4, $"GET api/projects counted {projects.Count} times, expected at least 4");
@@ -108,10 +114,21 @@ public sealed class ApiPerformanceTests(CustomWebApplicationFactory factory) : I
     /// <summary>Takes any change signal left by earlier traffic of the shared host.</summary>
     private static async Task DrainAsync(RequestPerformanceRecorder recorder, CancellationToken ct)
     {
-        using var drain = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        drain.CancelAfter(TimeSpan.FromMilliseconds(200));
-        try { await recorder.WaitForChangeAsync(drain.Token); } catch (OperationCanceledException) { }
+        // Keeps taking signals until a full second passes without one (bounded at 10 s): a late
+        // signal from earlier traffic of the shared host on a loaded machine can no longer slip
+        // past a single short drain window and surface later as a false change.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            using var window = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            window.CancelAfter(TimeSpan.FromSeconds(1));
+            try { await recorder.WaitForChangeAsync(window.Token); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return; }
+        }
     }
+
+    private static int ProjectsCount(ApiPerformanceReportDto report) =>
+        report.Endpoints.FirstOrDefault(endpoint => endpoint.Route == "api/projects" && endpoint.Method == "GET")?.Count ?? 0;
 
     private static async Task<ApiPerformanceReportDto> ReadAsync(HttpClient client, CancellationToken ct)
     {

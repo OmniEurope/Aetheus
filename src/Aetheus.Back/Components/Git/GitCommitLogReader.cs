@@ -4,14 +4,8 @@ using System.Text;
 
 namespace Aetheus.Back.Components.Git;
 
-/// <summary>
-/// Everything that walks a repository's history with <c>git log</c> / <c>git rev-list</c>: the commit
-/// page, its total and the authors the grid's filter offers.
-///
-/// Extracted from <see cref="GitLightCliService"/> when the commits grid gained its column filters
-/// (R2-004 / R2-005) and the facade would have crossed the file-size budget (FileSizeAuditTests). The
-/// page and the count share one argument builder, so the total always counts what the page lists.
-/// </summary>
+/// <summary>Reads commit pages, counts and filter authors through git log and git rev-list. Page
+/// and count share argument construction so totals match the listed scope.</summary>
 internal sealed class GitCommitLogReader(GitProcessRunner git, ILogger logger, TimeProvider timeProvider)
 {
     private static readonly System.Diagnostics.Metrics.Meter s_meter = new("Aetheus.Git");
@@ -24,9 +18,8 @@ internal sealed class GitCommitLogReader(GitProcessRunner git, ILogger logger, T
     // grid is loud rather than silent.
     private const int DeepSkipWarningThreshold = 1000;
 
-    // S-FEAT-G6T9: %D yields the ref decorations (branches/tags) for graph annotations. R2-004: %cI is
-    // the committer date, the one --since/--until filter on. R2-005: %S is the ref through which the walk
-    // reached the commit (needs --source), shown as the commit's branch.
+    // %D supplies ref decorations, %cI supplies the committer date used by date filters, and %S
+    // identifies the traversal source ref when --source is enabled.
     private const string LogFormat = "--format=%H%n%h%n%s%n%an%n%ae%n%aI%n%P%n%D%n%cI%n%S";
 
     public async Task<List<GitLightCommitDto>> GetCommitsAsync(
@@ -132,10 +125,9 @@ internal sealed class GitCommitLogReader(GitProcessRunner git, ILogger logger, T
         if (filter?.Until is { } until) args.Add($"--until={FormatGitDate(until)}");
     }
 
-    /// <summary>
-    /// R2-004: the grid's Branch filter walks exactly the ticked branches, fully qualified so a name can
-    /// only resolve to a branch; without it the caller's ref applies, none meaning every ref.
-    /// </summary>
+    /// <summary> The grid's Branch filter walks exactly the ticked branches, fully qualified so a
+    /// name can only resolve to a branch; without it the caller's ref applies, none meaning every
+    /// ref. </summary>
     private static void AddRevisionArgs(List<string> args, string? refName, GitCommitLogFilter? filter)
     {
         if (filter?.Branches is { Count: > 0 } branches)
@@ -150,11 +142,9 @@ internal sealed class GitCommitLogReader(GitProcessRunner git, ILogger logger, T
         args.Add(string.IsNullOrEmpty(refName) ? "--all" : refName);
     }
 
-    /// <summary>
-    /// Recette R-224: one <c>--author</c> per ticked name (git keeps a commit matching any of them). git
-    /// matches the pattern against "Name &lt;email&gt;" as a basic regular expression, so the name is
-    /// escaped and anchored on both sides: "Bob" never matches "Bobby" nor "Jim Bob".
-    /// </summary>
+    /// <summary> One <c>--author</c> per ticked name (git keeps a commit matching any of them). git
+    /// matches the pattern against "Name &lt;email&gt;" as a basic regular expression, so the name
+    /// is escaped and anchored on both sides: "Bob" never matches "Bobby" nor "Jim Bob". </summary>
     private static void AddAuthorArgs(List<string> args, IReadOnlyList<string>? authors)
     {
         if (authors is null) return;
@@ -194,10 +184,9 @@ internal sealed class GitCommitLogReader(GitProcessRunner git, ILogger logger, T
         return refs;
     }
 
-    /// <summary>
-    /// R2-005: <c>%S</c> names the revision argument the walk came from. A branch reads as its short name
-    /// ("refs/heads/main" or "main" become "main"), another ref keeps its kind ("tags/v1"), and a commit id
-    /// passed as the walk's start (a commit page) is no branch at all.
+    /// <summary> <c>%S</c> names the revision argument the walk came from. A branch reads as its
+    /// short name ("refs/heads/main" or "main" become "main"), another ref keeps its kind
+    /// ("tags/v1"), and a commit id passed as the walk's start (a commit page) is no branch at all.
     /// </summary>
     internal static string? ParseSourceRef(string source)
     {

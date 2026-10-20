@@ -22,7 +22,13 @@ internal sealed class CapturingHubConnectionFactory(IServiceProvider services) :
         get { lock (_created) return [.. _created]; }
     }
 
+    private readonly StateSignal _creations = new();
+
     public HubConnection Hub(string path) => Created.Last(created => created.Path == path).Connection;
+
+    /// <summary>Completes once a connection to <paramref name="path"/> was built.</summary>
+    public Task WhenCreatedAsync(string path) =>
+        _creations.WhenAsync(() => Created.Any(created => created.Path == path), $"a connection to {path}");
 
     public override HubConnection Create(string hubPath, IRetryPolicy? retryPolicy = null)
     {
@@ -31,6 +37,7 @@ internal sealed class CapturingHubConnectionFactory(IServiceProvider services) :
                 options.HttpMessageHandlerFactory = _ => new FailingHandler())
             .Build();
         lock (_created) _created.Add((hubPath, connection));
+        _creations.Pulse();
         return connection;
     }
 

@@ -17,6 +17,9 @@ internal sealed class PipelineModel
     public int? EnvironmentId { get; set; }
     public int? ProjectServerId { get; set; }
 
+    /// <summary>The AI runner profile the pipeline's AI steps fall back on; null is automatic.</summary>
+    public int? AiRunnerProfileId { get; set; }
+
     /// <summary>The form's data-annotation rules, for the save entry points outside the form (FRONT-008).</summary>
     public bool IsValid() =>
         Validator.TryValidateObject(this, new ValidationContext(this), validationResults: null, validateAllProperties: true);
@@ -29,7 +32,8 @@ internal sealed class PipelineModel
         ProjectId = ProjectId,
         SourceBranch = SourceBranch,
         EnvironmentId = EnvironmentId,
-        ProjectServerId = ProjectServerId
+        ProjectServerId = ProjectServerId,
+        AiRunnerProfileId = AiRunnerProfileId
     };
 
     public UpdatePipelineRequest ToUpdateRequest() => new()
@@ -40,6 +44,7 @@ internal sealed class PipelineModel
         ProjectId = ProjectId,
         SourceBranch = SourceBranch,
         EnvironmentId = EnvironmentId,
-        ProjectServerId = ProjectServerId
+        ProjectServerId = ProjectServerId,
+        AiRunnerProfileId = AiRunnerProfileId
     };
 }

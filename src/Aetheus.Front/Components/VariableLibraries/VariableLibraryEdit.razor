@@ -4,8 +4,8 @@
 
 <PageTitle>@(_isNew ? L["NewVariableLibrary"] : _detail?.Name ?? L["VariableLibrary"]) - Aetheus</PageTitle>
 
-@* Recette R-288: no entry-count badge; R-284: Edit and Delete of the library live in the ⋮ menu.
-   Recette R-275: no header body at all, an empty one showed a phone toggle that opened nothing. *@
+@* Keep library Edit and Delete in the header menu and omit empty header content so mobile has no
+   empty toggle. *@
 <OmniPageHeader Title="@(_isNew ? L["NewVariableLibrary"] : _detail?.Name ?? "")" ShowBack="true" BackHref="@LocalReturnUrl.Validated(ReturnUrl)" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("data_object")" /></Icon>
 </OmniPageHeader>
@@ -25,8 +25,7 @@ else if (_loadFailed || (!_isNew && _detail is null))
 }
 else
 {
-    @* Recette R-284: an existing library opens on its entries; its properties form shows from the
-       ⋮ menu's Edit, so the page no longer starts with a form that is rarely changed. *@
+    @* Open existing libraries on their entries; show properties only from the Edit menu action. *@
     @if (_isNew || _editingProperties)
     {
     <OmniTemplateForm TModel="LibraryModel" Model="@_model" OnValidSubmit="@OnSubmit">
@@ -88,8 +87,8 @@ else
                 <OmniMenuItem OnClick="@OnDelete"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
                 <OmniMenuItem OnClick="@ExportEntries"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["Export"]</ChildContent></OmniMenuItem>
                 <OmniMenuItem OnClick="@ImportEntries"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
-                @* PLAN-005 lot 5: only on a saved library - allocating writes reservations on a
-                   server, which needs a library that already exists to hold them. *@
+                @* Only on a saved library - allocating writes reservations on a server, which
+                   needs a library that already exists to hold them. *@
                 @if (!_isNew)
                 {
                     <OmniMenuItem OnClick="@CheckPortsAsync"><Icon><OmniIcon Name="OmniIconName.MagnifyingGlassPlus" /></Icon><ChildContent>@L["CheckPorts"]</ChildContent></OmniMenuItem>
@@ -123,9 +122,8 @@ else
             <Columns>
                 <OmniDataGridColumn Frozen="true" TItem="VariableEntryDto" Property="Key" Title="@L["Key"]" Filterable="true" >
                     <Template Context="entry">
-                        @* Recette R-292: a copy button beside the key and beside the value, blue on every row: a STD-BTN
-                           exception chosen by the user (R-435, 2026-09-28). R2-064: on the left of the text, so the
-                           buttons line up whatever the length of the value. *@
+                        @* Place aligned blue copy buttons before keys and values under the
+                           approved STD-BTN exception. *@
                         <span class="library-cell">
                             <span @onclick:stopPropagation="true">
                                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyAsync(entry.Key))" Class="library-copy-btn"
@@ -165,8 +163,8 @@ else
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="VariableEntryDto" Title="" Width="160px" Sortable="false" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
                     <Template Context="entry">
-                        @* Recette R-293: every action filled. R2-066 (2026-10-02, user choice against STD-BTN): History
-                           blue, Edit green, recorded in ButtonRoleColourGuardTests. *@
+                        @* Use filled actions with blue History and green Edit under the exception
+                           recorded by ButtonRoleColourGuardTests. *@
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ShowVersions(entry))" title="@L["History"]" Label="@L["History"]"><OmniIcon Name="OmniIconName.Reset" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Success" OnClick="@(() => EditEntry(entry))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteEntry(entry))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>

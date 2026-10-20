@@ -24,7 +24,7 @@ public sealed record VaultSecretDto
     public int VersionCount { get; init; }
 }
 
-/// <summary>Recette R-292: one secret's clear value, answered to the copy button only.</summary>
+/// <summary>One secret's clear value, answered to the copy button only.</summary>
 public sealed record RevealedSecretValueDto
 {
     public string Value { get; init; } = string.Empty;
@@ -36,7 +36,7 @@ public sealed record VaultSecretVersionDto
     public string Key { get; init; } = string.Empty;
     public DateTime ChangedAt { get; init; }
     public ChangeType ChangeType { get; init; }
-    /// <summary>Recette R-287: the author; null for versions older than the field.</summary>
+    /// <summary>The author, when recorded for this version.</summary>
     public string? ChangedBy { get; init; }
 }
 
@@ -77,11 +77,9 @@ public sealed record RotateVaultSecretRequest
     public DateTime? ExpiresAt { get; init; }
 }
 
-/// <summary>
-/// Recette R-210: the values the vaults list's checkable column filters offer. The list is loaded page by
-/// page, so the project names present across every vaults the caller can read come from the API rather
-/// than from the rows on screen.
-/// </summary>
+/// <summary> The values the vaults list's checkable column filters offer. The list is loaded page
+/// by page, so the project names present across every vaults the caller can read come from the API
+/// rather than from the rows on screen. </summary>
 public sealed record VaultFilterValuesDto
 {
     public List<string> ProjectNames { get; init; } = [];

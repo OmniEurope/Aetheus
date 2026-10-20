@@ -40,8 +40,8 @@ internal sealed class EnvironmentServerConfiguration : IEntityTypeConfiguration<
     public void Configure(EntityTypeBuilder<EnvironmentServer> builder)
     {
         builder.HasKey(e => new { e.EnvironmentId, e.ServerId });
-        // PLAN-004 R-11: a retired server's link is kept but hidden, so an environment edit (which
-        // replaces the loaded links) cannot drop it, and a revived server is back in its environments.
+        // Hide retained retired-server links so environment link replacement does not delete them
+        // and revival restores membership.
         builder.HasQueryFilter(ServerQueryFilters.ExcludeRetired, e => e.Server.DeletedAt == null);
         builder.HasOne(e => e.Environment)
                .WithMany(env => env.Servers)
@@ -89,7 +89,7 @@ internal sealed class AgentPoolServerConfiguration : IEntityTypeConfiguration<Ag
     public void Configure(EntityTypeBuilder<AgentPoolServer> builder)
     {
         builder.HasKey(e => new { e.AgentPoolId, e.ServerId });
-        // PLAN-004 R-11: as for EnvironmentServer, a pool edit must not drop a retired server's link.
+        // Hide retained retired-server pool links so pool edits preserve them.
         builder.HasQueryFilter(ServerQueryFilters.ExcludeRetired, e => e.Server.DeletedAt == null);
         builder.HasOne(e => e.AgentPool)
                .WithMany(p => p.Servers)

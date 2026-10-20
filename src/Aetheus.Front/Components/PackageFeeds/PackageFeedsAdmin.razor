@@ -15,7 +15,7 @@
     </Filters>
 </OmniPageHeader>
 
-<AetheusDataGrid @ref="_grid" Data="@_feeds" TItem="PackageFeedDto" Count="@_totalCount"
+<AetheusDataGrid @ref="_grid" RowClick="@(feed => ManagePackagesAsync(feed))" Data="@_feeds" TItem="PackageFeedDto" Count="@_totalCount"
     IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="20"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<PackageFeedDto>(_feeds, _totalCount))"
@@ -34,8 +34,10 @@
         <OmniDataGridColumn TItem="PackageFeedDto" Property="PackageCount" Title="@L["Packages"]" Width="100px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
         <OmniDataGridColumn TItem="PackageFeedDto" Title="@L["Actions"]" Width="200px" Sortable="false" Filterable="false" >
             <Template Context="f">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ManagePackagesAsync(f))" title="@L["ManagePackages"]" Label="@L["ManagePackages"]"><OmniIcon Name="OmniIconName.Archive" /></OmniButton>
                 <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(f))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                </span>
             </Template>
         </OmniDataGridColumn>
     </Columns>

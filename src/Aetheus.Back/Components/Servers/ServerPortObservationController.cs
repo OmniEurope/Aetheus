@@ -4,14 +4,11 @@ using Aetheus.Back.Components.PortRegistry;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// PLAN-005 lot 2: the two ends of a port scan. Asking for one is a task queued on the agent
-/// (<see cref="OperationKind.PortsObserve"/>); the result comes back on the agent's own token.
-///
-/// It lives in <c>Servers</c> and not in <c>PortRegistry</c> on purpose: queueing a task means reaching
-/// <c>Tasks</c>, and the registry sits below it in the module layering. Servers is above both, so it can
-/// hold the orchestration while the registry keeps being pure storage.
-/// </summary>
+/// <summary> The two ends of a port scan. Asking for one is a task queued on the agent (<see
+/// cref="OperationKind.PortsObserve"/>); the result comes back on the agent's own token. It lives
+/// in <c>Servers</c> and not in <c>PortRegistry</c> on purpose: queueing a task means reaching
+/// <c>Tasks</c>, and the registry sits below it in the module layering. Servers is above both, so
+/// it can hold the orchestration while the registry keeps being pure storage. </summary>
 [ApiController]
 [Route("api/servers/{serverId:int}/ports")]
 // Class-level [Authorize] is the default deny; the agent-facing action overrides it with the

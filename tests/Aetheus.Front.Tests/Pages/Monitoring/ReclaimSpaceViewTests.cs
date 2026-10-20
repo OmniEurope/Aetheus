@@ -6,8 +6,7 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Pages.Monitoring;
 
-/// <summary>
-/// PLAN-013 lot 6: « Récupérer la place » lists the purged tables, asks before rewriting one, refuses to
+/// <summary> « Récupérer la place » lists the purged tables, asks before rewriting one, refuses to
 /// start while a pipeline runs, shows the sizes before and after, and only administrators see it.
 /// </summary>
 public sealed class ReclaimSpaceViewTests : BunitContext
@@ -113,5 +112,27 @@ public sealed class ReclaimSpaceViewTests : BunitContext
             LastMessage = message ?? string.Empty;
             return Task.FromResult<bool?>(Answer);
         }
+    }
+
+    [Fact]
+    public void R171_TheViewHasNoExplanatoryParagraph_ButKeepsItsConfirmation()
+    {
+        _handler.SetJsonResponse("api/data-storage/reclaim", Status());
+        var cut = Render<ReclaimSpaceView>();
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=reclaim-space-start]").Count));
+
+        // D1 (PLAN-002 lot 4) adds a "?" help mark in the heading; still no paragraph under the grid.
+        Assert.Empty(cut.FindAll("[data-testid=reclaim-space-note]"));
+    }
+
+    [Fact]
+    public void TheSection_HasTheAnchorTheLinkTargetsAndAHelpMarkSayingWhenToRunIt()
+    {
+        _handler.SetJsonResponse("api/data-storage/reclaim", Status());
+
+        var cut = Render<ReclaimSpaceView>();
+
+        Assert.NotNull(cut.Find("#reclaim-space"));
+        Assert.Equal("ReclaimSpaceHelp", cut.Find("[data-testid=reclaim-space-help]").GetAttribute("aria-label"));
     }
 }

@@ -3,12 +3,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// How the OmniEurope.Blazor UI opens a dialog (PLAN-008 lot 11, verification OE-13): a component
-/// with its parameters, in a dialog of one of the <see cref="AppDialogWidth"/> widths, whose outcome
-/// the component reports through <see cref="Close"/>. The dialog is shown by the host in
-/// <c>App.razor</c>, which uses the same scoped <see cref="OmniOverlayService"/>.
-/// </summary>
+/// <summary>Open components through the shared scoped OmniOverlayService and App.razor host so
+/// dialogs use standard widths and report outcomes through Close.</summary>
 public sealed class AppDialogs(OmniOverlayService overlay, IStringLocalizer<AppStrings> localizer)
 {
     /// <summary>
@@ -33,7 +29,7 @@ public sealed class AppDialogs(OmniOverlayService overlay, IStringLocalizer<AppS
             Draggable = options.Draggable,
             Resizable = options.Resizable,
             Intent = options.Intent,
-            // Recette R1-35: no field takes the focus when a dialog opens; the first Tab reaches it.
+            // No field takes the focus when a dialog opens; the first Tab reaches it.
             InitialFocus = OmniDialogInitialFocus.Panel
         });
     }
@@ -52,20 +48,9 @@ public sealed class AppDialogs(OmniOverlayService overlay, IStringLocalizer<AppS
     /// <summary>Closes the dialog on top and hands <paramref name="result"/> to whoever opened it.</summary>
     public void Close(object? result = null) => overlay.CloseDialog(result);
 
-    /// <summary>
-    /// Asks a yes-or-no question. True only when the action is chosen; cancelling and every way of
-    /// dismissing the dialog answer false. STD-BTN (revised 2026-09-28, colour follows importance) and
-    /// recette R-407 (decided 2026-09-28):
-    /// <list type="bullet">
-    /// <item>the confirm button names its short precise verb ("Créer", "Mettre à jour", "Supprimer"...):
-    /// there is no generic "Valider", so <paramref name="confirmText"/> is required;</item>
-    /// <item>an ordinary confirmation is the dialog's main action, blue (<see cref="OmniButtonVariant.Primary"/>,
-    /// check icon); a <paramref name="destructive"/> one stays red (<see cref="OmniButtonVariant.Danger"/>)
-    /// like the button that opened it;</item>
-    /// <item>the dismiss button is the neutral grey (<see cref="OmniButtonVariant.Secondary"/>), labelled
-    /// "Revenir" unless the caller names it.</item>
-    /// </list>
-    /// </summary>
+    /// <summary>Return true only for the explicitly named confirmation action, and false for every
+    /// dismissal; STD-BTN uses blue for ordinary confirmation, red for destructive actions and
+    /// neutral grey for dismissal.</summary>
     public Task<bool> ConfirmAsync(
         string title,
         string message,

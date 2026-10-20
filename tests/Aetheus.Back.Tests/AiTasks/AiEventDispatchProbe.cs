@@ -34,9 +34,9 @@ internal static class AiEventDispatchProbe
         {
             OrganizationId = 7,
             Name = "reviewer",
-            Binary = "codex",
-            ArgsTemplateJson = """["{prompt_file}"]""",
-            EnvironmentJsonEncrypted = "{}",
+            Provider = "anthropic",
+            Model = "claude-sonnet-5-5",
+            ApiKeyEncrypted = "sk-probe-key",
             TimeoutSeconds = 90,
             MaxOutputBytes = 4096
         };
@@ -79,12 +79,10 @@ internal static class AiEventDispatchProbe
             .Returns(call => call.ArgAt<string>(0));
         var service = new AiTaskService(
             repo,
-            Substitute.For<IOrganizationRepository>(),
             Substitute.For<IAuditService>(),
             encryption,
             masking,
             Substitute.For<ITaskQueueNotifier>(),
-            Substitute.For<IGitLightService>(),
             new FakeTimeProvider(new DateTimeOffset(2026, 7, 30, 12, 0, 0, TimeSpan.Zero)),
             new ConfigurationBuilder().AddInMemoryCollection(
                 new Dictionary<string, string?> { ["GitLight:RunTokenKey"] = "ai-event-probe-signing-key" }).Build(),

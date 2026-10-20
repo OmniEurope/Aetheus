@@ -4,9 +4,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>The run page rows of the 2026-09-26 recette: the release tile (R-365), the compatibility
-/// attestation as its own tile under the timeline (R-364), its explained codes (R-374) and the short,
-/// linked V-1 commit (R-373).</summary>
+/// <summary>Covers release and compatibility tiles, explanatory labels and links to the
+/// previous-version commit.</summary>
 public sealed class PipelineRunRecette20260926Tests : BunitContext
 {
     private const string PreviousSha = "9e1d0a3b5c7e9f1a2b4c6d8e0f1a3b5c7d9e332d";
@@ -44,7 +43,7 @@ public sealed class PipelineRunRecette20260926Tests : BunitContext
     [Fact]
     public void TheRunPage_ShowsTheReleaseItCreated_ShortAndLinked_AndTheAttestationRightUnderTheTimeline()
     {
-        _handler.SetJsonResponse("api/pipelines/runs/2421", Run(new() { ["CompatibilityMode"] = "NMinusOne" }));
+        _handler.SetJsonResponse("api/pipelines/runs/2421", Run(new() { ["COMPATIBILITY_MODE"] = "NMinusOne" }));
         _handler.SetJsonResponse(HttpMethod.Get, "api/releases/by-run/2421", new List<ReleaseDto>
         {
             new() { Id = 88, Version = "c-" + PreviousSha, Status = ReleaseStatus.Published }
@@ -66,9 +65,9 @@ public sealed class PipelineRunRecette20260926Tests : BunitContext
         var cut = Render<PipelineRunCompatibilityAttestation>(parameters => parameters
             .Add(component => component.Run, Run(new()
             {
-                ["CompatibilityMode"] = "NMinusOne",
-                ["PreviousVersionTested"] = PreviousSha,
-                ["CompatibilityVerdict"] = "NMinusOneDegraded"
+                ["COMPATIBILITY_MODE"] = "NMinusOne",
+                ["PREVIOUS_VERSION_TESTED"] = PreviousSha,
+                ["COMPATIBILITY_VERDICT"] = "NMinusOneDegraded"
             }))
             .Add(component => component.RepoId, 3));
 
@@ -91,9 +90,9 @@ public sealed class PipelineRunRecette20260926Tests : BunitContext
         var cut = Render<PipelineRunCompatibilityAttestation>(parameters => parameters
             .Add(component => component.Run, Run(new()
             {
-                ["CompatibilityMode"] = "Bootstrap",
-                ["PreviousVersionTested"] = "false",
-                ["CompatibilityVerdict"] = "SomethingNew"
+                ["COMPATIBILITY_MODE"] = "Bootstrap",
+                ["PREVIOUS_VERSION_TESTED"] = "false",
+                ["COMPATIBILITY_VERDICT"] = "SomethingNew"
             })));
 
         Assert.Equal("CompatibilityModeHintBootstrap", cut.Find("[data-testid='attestation-mode'] .run-attestation-hint").TextContent);
@@ -102,6 +101,42 @@ public sealed class PipelineRunRecette20260926Tests : BunitContext
         var verdict = cut.Find("[data-testid='attestation-verdict']");
         Assert.Contains("SomethingNew", verdict.TextContent, StringComparison.Ordinal);
         Assert.Empty(verdict.QuerySelectorAll(".run-attestation-hint"));
+    }
+
+    [Fact]
+    public void ARunStoredWithTheScriptsPascalCaseNames_StillShowsItsAttestation()
+    {
+        var cut = Render<PipelineRunCompatibilityAttestation>(parameters => parameters
+            .Add(component => component.Run, Run(new()
+            {
+                ["CompatibilityMode"] = "NMinusOne",
+                ["PreviousVersionTested"] = PreviousSha,
+                ["CompatibilityVerdict"] = "NMinusOneVerified"
+            }))
+            .Add(component => component.RepoId, 3));
+
+        Assert.Equal("CompatibilityModeValueNMinusOne", cut.Find("[data-testid='attestation-mode'] .run-attestation-value").TextContent);
+        Assert.Equal(
+            $"/git-repositories/3/commits/{PreviousSha}",
+            cut.Find("[data-testid='attestation-previous'] a.short-id__text").GetAttribute("href"));
+        Assert.Contains("CompatibilityVerdictValueNMinusOneVerified", cut.Find("[data-testid='attestation-verdict']").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheUpperSnakeCaseName_WinsOverTheLegacyOne()
+    {
+        var cut = Render<PipelineRunCompatibilityAttestation>(parameters => parameters
+            .Add(component => component.Run, Run(new()
+            {
+                ["CompatibilityMode"] = "NMinusOne",
+                ["COMPATIBILITY_MODE"] = "Bootstrap",
+                ["PREVIOUS_VERSION_TESTED"] = "false",
+                ["CompatibilityVerdict"] = "NMinusOneDegraded",
+                ["COMPATIBILITY_VERDICT"] = "CurrentVersionVerified"
+            })));
+
+        Assert.Equal("CompatibilityModeValueBootstrap", cut.Find("[data-testid='attestation-mode'] .run-attestation-value").TextContent);
+        Assert.Contains("CompatibilityVerdictValueCurrentVersionVerified", cut.Find("[data-testid='attestation-verdict']").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

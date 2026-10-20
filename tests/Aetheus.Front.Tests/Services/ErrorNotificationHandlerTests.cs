@@ -201,6 +201,64 @@ public class ErrorNotificationHandlerTests
         handler.Dispose();
     }
 
+    private static async Task<string?> DetailOfAsync(HttpStatusCode status, string? body, string? mediaType)
+    {
+        var notif = new OmniOverlayService(new FakeTimeProvider());
+        var localizerMock = Substitute.For<IStringLocalizer<AppStrings>>();
+        localizerMock[Arg.Any<string>()].Returns(ci => new LocalizedString((string)ci[0], (string)ci[0]));
+        var toast = new NotifyHelper(notif, localizerMock);
+        using var handler = new ErrorNotificationHandler(toast, localizerMock) { InnerHandler = new RawBodyHandler(status, body, mediaType) };
+        using var client = new HttpClient(handler);
+
+        await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "http://localhost/api/data"), Xunit.TestContext.Current.CancellationToken);
+
+        return Assert.Single(notif.Toasts()).Detail;
+    }
+
+    [Theory]
+    [InlineData("""{"detail":"The pipeline is locked.","title":"Conflict"}""", "The pipeline is locked.")]
+    [InlineData("""{"title":"One or more validation errors occurred."}""", "One or more validation errors occurred.")]
+    [InlineData("""{"detail":"  ","title":"Fallback title"}""", "Fallback title")]
+    public async Task SendAsync_AProblemDetailsBody_SurfacesItsDetailThenItsTitle(string body, string expected) =>
+        Assert.Equal(expected, await DetailOfAsync(HttpStatusCode.BadRequest, body, "application/problem+json"));
+
+    [Theory]
+    [InlineData("""{"detail":null,"title":null}""")]
+    [InlineData("""{"other":"value"}""")]
+    [InlineData("""{"message":""}""")]
+    public async Task SendAsync_AJsonBodyWithNoUsableMessage_FallsBackToTheStatusMessage(string body) =>
+        Assert.Equal("InvalidRequest", await DetailOfAsync(HttpStatusCode.BadRequest, body, "application/json"));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SendAsync_AnEmptyJsonBody_FallsBackToTheStatusMessage(string? body) =>
+        Assert.Equal("UnexpectedServerError", await DetailOfAsync(HttpStatusCode.InternalServerError, body, "application/json"));
+
+    [Fact]
+    public async Task SendAsync_ABodyThatIsNotValidJson_FallsBackToTheStatusMessage() =>
+        Assert.Equal("AccessDenied", await DetailOfAsync(HttpStatusCode.Forbidden, "<html>proxy error</html>", "application/json"));
+
+    [Fact]
+    public async Task SendAsync_ANonJsonBody_IsNeverParsedAndFallsBackToTheStatusMessage() =>
+        Assert.Equal("ConflictingOperation", await DetailOfAsync(HttpStatusCode.Conflict, """{"message":"ignored"}""", "text/plain"));
+
+    private sealed class RawBodyHandler(HttpStatusCode statusCode, string? body, string? mediaType) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(statusCode);
+            if (body is not null)
+            {
+                response.Content = new StringContent(body);
+                response.Content.Headers.ContentType = new(mediaType!);
+            }
+            return Task.FromResult(response);
+        }
+    }
+
     private static (OmniOverlayService notif, ErrorNotificationHandler handler, HttpClient client) CreateSetup(
         HttpStatusCode statusCode, object? jsonBody = null)
     {

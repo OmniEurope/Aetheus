@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.Releases;
 
-/// <summary>Recette R-366/R-367: read-only queries behind the release provenance view.</summary>
+/// <summary>Read-only queries behind the release provenance view.</summary>
 public interface IReleaseProvenanceRepository
 {
     Task<ReleaseProvenanceFacts?> GetFactsAsync(int releaseId, CancellationToken ct = default);

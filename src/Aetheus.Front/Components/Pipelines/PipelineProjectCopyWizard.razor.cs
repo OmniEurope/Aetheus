@@ -3,13 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// Recette R1-29, option 1: the setup wizard's "start from an existing project". The user names the new
-/// project and its prefix, the project to start from and its prefix; the backend plans the copy
-/// (names, verdict of each pipeline, structure of the libraries and vaults they use) and makes it.
-/// Nothing here ever carries a value of a variable or a secret: the plan and the result name keys only,
-/// and the result says which ones are now empty and what the new project still lacks.
-/// </summary>
+/// <summary>The wizard plans and applies a project copy from selected source and target names.
+/// Plans and results carry variable and secret keys only, identifying empty values without exposing
+/// their contents.</summary>
 public partial class PipelineProjectCopyWizard
 {
     [Inject] private ApiClient Api { get; set; } = default!;

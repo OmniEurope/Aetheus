@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 6: the size on disk of a purged table and its <c>VACUUM FULL</c>. Only the tables of
-/// <see cref="ReclaimSpaceRepository.Statements"/> are accepted; anything else throws.
-/// </summary>
+/// <summary> The size on disk of a purged table and its <c>VACUUM FULL</c>. Only the tables of <see
+/// cref="ReclaimSpaceRepository.Statements"/> are accepted; anything else throws. </summary>
 public interface IReclaimSpaceRepository
 {
     /// <summary>The table's <c>pg_total_relation_size</c> (heap, indexes, TOAST); null off PostgreSQL.</summary>

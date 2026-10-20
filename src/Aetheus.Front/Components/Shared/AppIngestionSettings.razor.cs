@@ -19,7 +19,7 @@ public partial class AppIngestionSettings
     [Parameter] public EventCallback OnChanged { get; set; }
 
     private List<AppMetricThresholdDto> _thresholds = [];
-    // Recette R-210: header filter texts, built once so the columns see the same delegate on every render.
+    // Header filter texts, built once so the columns see the same delegate on every render.
     private Func<string, string>? _operatorText;
     private Func<string, string>? _breachedText;
     private Func<string, string> OperatorText => _operatorText ??= GridFilterText.ForEnum<ComparisonOperator>(L);
@@ -79,37 +79,44 @@ public partial class AppIngestionSettings
 
     private async Task LoadAnalyticsConfigurationAsync(int appId, int generation)
     {
-        if (generation == _loadGeneration && appId == AppId)
+        if (IsCurrentLoad(appId, generation))
             _analyticsLoading = true;
         try
         {
             var configuration = await Api.Monitoring.GetAppWebAnalyticsConfigurationAsync(appId);
-            if (generation != _loadGeneration || appId != AppId)
+            if (!IsCurrentLoad(appId, generation))
                 return;
-            _analyticsConfiguration = configuration;
-            _analyticsEnabled = configuration?.Enabled ?? false;
-            _analyticsPublicIngestEnabled = configuration?.PublicIngestEnabled ?? false;
-            _analyticsSiteId = configuration?.SiteId ?? string.Empty;
-            _analyticsOrigins = string.Join(Environment.NewLine, configuration?.AllowedOrigins ?? []);
-            _analyticsStorageBudgetBytes = configuration?.StorageBudgetBytes
-                ?? AppMonitoringDefaults.DefaultAnalyticsStorageBudgetBytes;
+            ApplyAnalyticsConfiguration(configuration);
         }
         catch (HttpRequestException)
         {
-            if (generation == _loadGeneration && appId == AppId)
+            if (IsCurrentLoad(appId, generation))
                 _analyticsConfiguration = null;
         }
         finally
         {
-            if (generation == _loadGeneration && appId == AppId)
+            if (IsCurrentLoad(appId, generation))
                 _analyticsLoading = false;
         }
     }
 
-    /// <summary>
-    /// Recette R2-007: the audience summary, read for its storage figures only (estimate, budget, refused
-    /// events), the one line under the budget field. A failed read leaves the line out.
-    /// </summary>
+    // A load still answers for the application on screen, not one the page has since left.
+    private bool IsCurrentLoad(int appId, int generation) => generation == _loadGeneration && appId == AppId;
+
+    // The form fields of a configuration read; none (no configuration yet) gives the defaults.
+    private void ApplyAnalyticsConfiguration(AppWebAnalyticsConfigurationDto? configuration)
+    {
+        _analyticsConfiguration = configuration;
+        _analyticsEnabled = configuration?.Enabled ?? false;
+        _analyticsPublicIngestEnabled = configuration?.PublicIngestEnabled ?? false;
+        _analyticsSiteId = configuration?.SiteId ?? string.Empty;
+        _analyticsOrigins = string.Join(Environment.NewLine, configuration?.AllowedOrigins ?? []);
+        _analyticsStorageBudgetBytes = configuration?.StorageBudgetBytes
+            ?? AppMonitoringDefaults.DefaultAnalyticsStorageBudgetBytes;
+    }
+
+    /// <summary> The audience summary, read for its storage figures only (estimate, budget, refused
+    /// events), the one line under the budget field. A failed read leaves the line out. </summary>
     private async Task LoadAudienceStorageAsync(int appId, int generation)
     {
         try

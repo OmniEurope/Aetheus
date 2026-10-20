@@ -5,7 +5,8 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>R-459: a slow heartbeat says how long each of its stages took; a normal one writes nothing.</summary>
+/// <summary>A slow heartbeat says how long each of its stages took; a normal one writes
+/// nothing.</summary>
 public sealed class HeartbeatStageTimerTests
 {
     [Fact]
@@ -25,7 +26,8 @@ public sealed class HeartbeatStageTimerTests
         Assert.Equal(TimeSpan.FromMilliseconds(6040), timer.Total);
     }
 
-    /// <summary>Recette R-479: 2 to 10 s is Information (common while a host compiles or deploys), 10 s and more a Warning.</summary>
+    /// <summary>2 to 10 s is Information (common while a host compiles or deploys), 10 s and more a
+    /// Warning.</summary>
     [Fact]
     public void OnlyASlowHeartbeat_IsWritten_AsInformationBelowTheWarningThreshold()
     {

@@ -2,11 +2,8 @@
 
 namespace Aetheus.Front.Components.Servers;
 
-/// <summary>
-/// The update of one server's agent: a confirmation naming the installed and target versions, then
-/// the per-server update call. Asked from the Tools menu of the server header and, recette R2-033, from
-/// the agent version on the Overview when an update is available.
-/// </summary>
+/// <summary>Confirms installed and target agent versions before requesting an update for one
+/// server. Shared by the server Tools menu and the Overview update action.</summary>
 internal sealed class AgentUpdateRequester(
     ApiClient api,
     OmniDialogService dialog,

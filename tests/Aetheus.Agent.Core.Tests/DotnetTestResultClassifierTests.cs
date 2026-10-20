@@ -163,6 +163,24 @@ public sealed class DotnetTestResultClassifierTests
         Assert.False(files.WasRead("/w/result.trx"));
     }
 
+    [Fact]
+    public void TwoResultSummariesAreRefused()
+    {
+        var result = Classify(0, Files(Trx() + Trx()), coverageDirectory: null);
+
+        Assert.False(result.IsValue);
+        Assert.Contains("exactly one result summary", result.Failure.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnIncompleteOutcomeIsRefusedBeforeATechnicalFailureIsReported()
+    {
+        var result = Classify(1, Files(Trx(error: 1, outcome: "Aborted")), coverageDirectory: null);
+
+        Assert.False(result.IsValue);
+        Assert.Contains("outcome 'Aborted' is incomplete", result.Failure.Reason, StringComparison.Ordinal);
+    }
+
     // --- Coverage evidence ---
 
     [Fact]

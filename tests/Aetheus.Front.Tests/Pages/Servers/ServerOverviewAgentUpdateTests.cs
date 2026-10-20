@@ -6,11 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// Recette R2-033: when the agent should be updated, the Overview offers "Update" right under its
-/// version, to whoever may write on the server, and the click asks the same confirmation as the Tools
-/// menu before queuing the update.
-/// </summary>
+/// <summary> When the agent should be updated, the Overview offers "Update" right under its
+/// version, to whoever may write on the server, and the click asks the same confirmation as the
+/// Tools menu before queuing the update. </summary>
 public class ServerOverviewAgentUpdateTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -113,19 +111,21 @@ public class ServerOverviewAgentUpdateTests : BunitContext
     }
 
     [Fact]
-    public void ADeclinedConfirmation_QueuesNothing()
+    public async Task ADeclinedConfirmation_QueuesNothing()
     {
         var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
         dialog.ConfirmResult = false;
         var cut = RenderOverview(Server(AgentCompatibilityStatus.UpdateRequired));
 
-        UpdateButton(cut)!.Click();
+        // Awaited: Click() only queues the event when the renderer is busy, and the count was read
+        // before the handler ran (Expected 1, Actual 0 under load).
+        await UpdateButton(cut)!.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         Assert.Equal(1, dialog.OpenCount);
         Assert.False(UpdateRequested);
     }
 
-    // ──── Recette R2-111: after the confirmation, the update shows as running until it ends ────
+    // Confirmed updates remain visibly running until a terminal outcome.
 
     private static AngleSharp.Dom.IElement? UpdateState(IRenderedComponent<ServerOverviewSection> cut) =>
         AgentVersionItem(cut).QuerySelector(".agent-update-overview-state");

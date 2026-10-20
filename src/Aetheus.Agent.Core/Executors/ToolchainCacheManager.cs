@@ -17,9 +17,20 @@ internal static class ToolchainCacheManager
         ToolchainResolution resolution,
         string homePath,
         ILogger logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider) =>
+        CreateMountsCore(workDirectory, spec, resolution, homePath, logger, timeProvider, OperatingSystem.IsWindows());
+
+    // The mount creation itself, with the platform decision injected so it is asserted on any platform.
+    internal static IReadOnlyList<KeyValuePair<string, string>> CreateMountsCore(
+        string workDirectory,
+        ContainerSpec spec,
+        ToolchainResolution resolution,
+        string homePath,
+        ILogger logger,
+        TimeProvider timeProvider,
+        bool isWindows)
     {
-        if (OperatingSystem.IsWindows())
+        if (isWindows)
             return [];
 
         var mounts = new List<KeyValuePair<string, string>>(resolution.Caches.Count);

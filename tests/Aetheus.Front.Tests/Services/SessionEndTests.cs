@@ -8,10 +8,8 @@ using Microsoft.JSInterop;
 
 namespace Aetheus.Front.Tests.Services;
 
-/// <summary>
-/// PLAN-005 lot 9: a session ends only for a definitive reason, which it carries (D48, D49), and two
-/// tabs of one browser never make the server see a replay of their own refresh token (D50).
-/// </summary>
+/// <summary>Carry definitive session-end reasons and coordinate browser-tab refreshes to avoid
+/// replaying the same refresh token.</summary>
 public sealed class SessionEndTests
 {
     private static readonly CancellationToken Ct = Xunit.TestContext.Current.CancellationToken;

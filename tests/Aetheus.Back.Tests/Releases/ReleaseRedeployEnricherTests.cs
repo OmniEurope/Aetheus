@@ -4,8 +4,9 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Releases;
 
-/// <summary>PLAN-007 lot 5: only the previous deployment is offered for redeploy, and only when the
-/// deploy gate could accept it (sealed grade, retained artifacts, a pipeline taking candidateVersion).</summary>
+/// <summary>Only the previous deployment is offered for redeploy, and only when the deploy gate
+/// could accept it (sealed grade, retained artifacts, a pipeline taking
+/// candidateVersion).</summary>
 public sealed class ReleaseRedeployEnricherTests
 {
     private readonly IReleaseRepository _repository = Substitute.For<IReleaseRepository>();
@@ -40,8 +41,8 @@ public sealed class ReleaseRedeployEnricherTests
         });
     }
 
-    /// <summary>PLAN-003 2.7: the quick return is offered on the LIVE release, seal or not: it moves
-    /// traffic to a colour that still runs, and the agent refuses it when that colour is gone.</summary>
+    /// <summary>Offer quick return for the live release, leaving reserve availability validation to
+    /// the agent.</summary>
     [Fact]
     public async Task TheLiveRelease_OffersTheQuickReturn_WhenTheProjectHasARevertPipeline()
     {

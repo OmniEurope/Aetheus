@@ -58,11 +58,8 @@ public class AuditService(IAuditRepository repo, IHttpContextAccessor httpContex
         }
     }
 
-    /// <summary>
-    /// Recette R-181: the audit page follows new entries over the admin hub instead of a Refresh
-    /// button. Best effort: the entry is written already; a failed push only delays the page until
-    /// its next load, so it never fails the audited action.
-    /// </summary>
+    /// <summary>Broadcasts new audit entries through the admin hub on a best-effort basis. Push
+    /// failure cannot fail an audited action whose entry is already persisted.</summary>
     private async Task BroadcastAsync(int id, CancellationToken ct)
     {
         if (adminNotifier is null) return;

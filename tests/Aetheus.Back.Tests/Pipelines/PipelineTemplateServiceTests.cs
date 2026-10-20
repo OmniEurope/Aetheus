@@ -458,11 +458,8 @@ public class PipelineTemplateServiceTests
         Assert.Equal("child-value", resolved.Parameters.Single(p => p.Name == "shared").Default);
     }
 
-    /// <summary>
-    /// PLAN-003 lot 30: the template's <c>requires:</c> reaches the resolved pipeline, joined with the
-    /// pipeline's own, so the launch preflight checks what the template needs. A wizard pipeline
-    /// (<c>extends:</c> only) used to resolve with no requirement at all.
-    /// </summary>
+    /// <summary>Resolved pipelines inherit template requirements alongside their own so preflight
+    /// checks both.</summary>
     [Fact]
     public async Task ResolveTemplateAsync_Extends_JoinsTheTemplateRequiresWithThePipelines()
     {
@@ -609,8 +606,8 @@ public class PipelineTemplateServiceTests
         Assert.Contains("Cyclic", exception.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>Recette R2-121: a project of an organization that holds no copy of the catalog extends
-    /// the shipped template the platform shares; an organization's own template still wins.</summary>
+    /// <summary>A project of an organization that holds no copy of the catalog extends the shipped
+    /// template the platform shares; an organization's own template still wins.</summary>
     [Fact]
     public async Task Resolver_AnotherOrganization_ExtendsTheSharedShippedTemplate_UnlessItHasItsOwn()
     {

@@ -78,8 +78,8 @@ public sealed class PipelineHostOperationTaskFactory(
             : null;
     }
 
-    /// <param name="DefinitionCommit">The revision the versioned templates are read at: the run's own,
-    /// or its definition's when the workspace comes from another repository (recette R-534).</param>
+    /// <param name="DefinitionCommit">The revision the versioned templates are read at: the run's
+    /// own, or its definition's when the workspace comes from another repository.</param>
     private sealed record ImmutableProjectRun(PipelineRun Run, int ProjectId, string DefinitionCommit);
 
     // Apache reverse-proxy task: render a versioned .pipeline/configs template at the immutable run
@@ -333,12 +333,14 @@ public sealed class PipelineHostOperationTaskFactory(
         return false;
     }
 
-    private bool TryBuildSmokeVariables(
+    /// <summary>The smoke's time budget (empty for none, otherwise a positive number of seconds) and
+    /// its sample count (1 by default, 1 to 50), after variable substitution.</summary>
+    internal static bool TryReadSmokeLimits(
         PipelineStepDefinition stepDef, Dictionary<string, string> legVars,
-        out Dictionary<string, string> smokeVars, out string error)
+        out string maxSeconds, out int samples, out string error)
     {
-        smokeVars = [];
-        var maxSeconds = SubstituteVariables(stepDef.MaxSeconds ?? string.Empty, legVars).Trim();
+        samples = 1;
+        maxSeconds = SubstituteVariables(stepDef.MaxSeconds ?? string.Empty, legVars).Trim();
         if (maxSeconds.Length > 0
             && (!double.TryParse(maxSeconds, NumberStyles.Float, CultureInfo.InvariantCulture, out var budget) || budget <= 0))
         {
@@ -347,7 +349,6 @@ public sealed class PipelineHostOperationTaskFactory(
         }
 
         var samplesRaw = SubstituteVariables(stepDef.Samples ?? string.Empty, legVars).Trim();
-        var samples = 1;
         if (samplesRaw.Length > 0
             && (!int.TryParse(samplesRaw, NumberStyles.None, CultureInfo.InvariantCulture, out samples)
                 || samples is < 1 or > 50))
@@ -355,6 +356,16 @@ public sealed class PipelineHostOperationTaskFactory(
             error = $"'samples' must be between 1 and 50, got '{samplesRaw}'.";
             return false;
         }
+        error = string.Empty;
+        return true;
+    }
+
+    private bool TryBuildSmokeVariables(
+        PipelineStepDefinition stepDef, Dictionary<string, string> legVars,
+        out Dictionary<string, string> smokeVars, out string error)
+    {
+        smokeVars = [];
+        if (!TryReadSmokeLimits(stepDef, legVars, out var maxSeconds, out var samples, out error)) return false;
 
         if (!TryResolveEvidenceGate(stepDef, legVars, out var gate, out error)) return false;
 
@@ -458,10 +469,10 @@ public sealed class PipelineHostOperationTaskFactory(
             return;
         }
         await BlueGreenRunOwnership.StampAsync(binding!.Variables, runId, resourceLocks, ct).ConfigureAwait(false);
-        // Recette R2-092: bluegreen-up refuses a compose_env name the run does not define, so a rollback
-        // that finds one undefined belongs to a run that never started a colour, let alone switched
-        // one. The agent's rollback says there is nothing to undo; a run warning about variables it
-        // does not need would only repeat the failure that stopped the run in other words.
+        // Bluegreen-up refuses a compose_env name the run does not define, so a rollback that finds
+        // one undefined belongs to a run that never started a colour, let alone switched one. The
+        // agent's rollback says there is nothing to undo; a run warning about variables it does not
+        // need would only repeat the failure that stopped the run in other words.
         if (binding!.SkippedComposeEnv.Count > 0 && operation != OperationKind.BlueGreenRollback)
             await repo.AppendRunWarningsAsync(runId, [$"Blue-green step '{stepRun.StepName}': compose_env did not forward {string.Join(", ", binding.SkippedComposeEnv)}, which this run does not define at this point."], ct).ConfigureAwait(false);
 
@@ -514,7 +525,7 @@ public sealed class PipelineHostOperationTaskFactory(
     /// endpoint could not be computed would trade the deployment for its instrumentation. The reason
     /// is logged instead, and the colour starts with telemetry disabled as it did before.
     /// </remarks>
-    private async Task AddTelemetryEnvironmentAsync(
+    internal async Task AddTelemetryEnvironmentAsync(
         int runId, Dictionary<string, string> legVars, CancellationToken ct)
     {
         try
@@ -537,7 +548,7 @@ public sealed class PipelineHostOperationTaskFactory(
         }
     }
 
-    private bool TryAddDeploymentBootstrapIdentity(
+    internal bool TryAddDeploymentBootstrapIdentity(
         int runId, Dictionary<string, string> legVars, bool forSmoke, out string error)
     {
         error = string.Empty;
@@ -548,10 +559,8 @@ public sealed class PipelineHostOperationTaskFactory(
         var required = forSmoke
             ? new[] { "AETHEUS_SMOKE_ADMIN_USER", "AETHEUS_SMOKE_ADMIN_PASSWORD" }
             : BlueGreenStepBinding.StartOnlyNames;
-        // A pipeline that supplies every name itself needs no derivation, and must not be refused for
-        // lacking a key it never uses. It still gets masked: a self-supplied credential is exactly as
-        // sensitive as a derived one, and returning before RegisterRuntimeSecret used to publish it in
-        // clear in the run log, which is the transport this whole derivation exists to remove.
+        // Self-supplied credentials still require runtime-secret registration and masking even when
+        // no derivation is needed.
         if (required.All(name => legVars.TryGetValue(name, out var declared) && !string.IsNullOrEmpty(declared)))
         {
             foreach (var name in SecretBearingNames(forSmoke))

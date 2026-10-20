@@ -6,10 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Shared;
 
-// 0-a: the shared EnvironmentsList drives the global and project scopes (environments aren't
-// server-scoped). Both are server-paginated via GetEnvironmentsAsync (projectId filter).
-// Consolidates the coverage previously on the global page + project section. Type badge mapping is
-// covered by EnvironmentHelperTests.
+// Exercises the shared EnvironmentsList in global and project scopes using server-side pagination.
+// EnvironmentHelperTests covers type-badge mapping.
 public class EnvironmentsListTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -31,7 +29,7 @@ public class EnvironmentsListTests : BunitContext
         });
 
         var cut = Render<EnvironmentsList>();
-        cut.WaitForState(() => cut.Markup.Contains("Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Prod"));
 
         Assert.Contains("Prod", cut.Markup);
     }
@@ -46,7 +44,7 @@ public class EnvironmentsListTests : BunitContext
         });
 
         var cut = Render<EnvironmentsList>(p => p.Add(x => x.ProjectId, 7));
-        cut.WaitForState(() => cut.Markup.Contains("ProjEnv"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("ProjEnv"));
 
         Assert.Contains("ProjEnv", cut.Markup);
         Assert.DoesNotContain("Scoped", cut.Markup);
@@ -71,8 +69,7 @@ public class EnvironmentsListTests : BunitContext
     [Fact]
     public async Task HeaderFilters_AreSentAsColumnFilters()
     {
-        // Recette R-221 / R-224: the search row and its Clear button are gone; the column header filters
-        // (Name text, Type list, approval yes/no) narrow the server query as column filters.
+        // Environment header filters are transmitted as server-side column filters.
         _handler.SetJsonResponse("api/environments", new PaginatedResult<EnvironmentDto> { Items = [], TotalCount = 0 });
         var cut = Render<EnvironmentsList>();
         var grid = cut.FindComponent<AetheusDataGrid<EnvironmentDto>>();
@@ -163,7 +160,7 @@ public class EnvironmentsListTests : BunitContext
         });
 
         var cut = Render<EnvironmentsList>();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The name link and the duplicate button.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);

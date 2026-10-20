@@ -23,6 +23,11 @@ public class Pipeline
     public int? EnvironmentId { get; set; }
     public int? ProjectServerId { get; set; }
 
+    /// <summary>The AI runner profile this pipeline's <c>ai</c> steps use when the step names none that
+    /// can run. Null means automatic (the organization's most preferred usable profile). The profile
+    /// belongs to the pipeline's organization (checked by the service); deleting it clears this.</summary>
+    public int? AiRunnerProfileId { get; set; }
+
     // F-EXEC-1b: the user who created (or last re-saved an unowned) pipeline. Non-interactive
     // triggers (webhook / scheduler) have no ClaimsPrincipal, so automated runs are authorized
     // against this owner's permissions. Nullable: legacy rows have no owner and their automated
@@ -49,5 +54,6 @@ public class Pipeline
     public GitInternalRepo? SourceRepository { get; set; }
     public Environment? Environment { get; set; }
     public ProjectServer? ProjectServer { get; set; }
+    public AiRunnerProfile? AiRunnerProfile { get; set; }
     public List<PipelineRun> Runs { get; set; } = [];
 }

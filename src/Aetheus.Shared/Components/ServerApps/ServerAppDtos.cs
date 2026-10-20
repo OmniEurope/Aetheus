@@ -58,8 +58,7 @@ public sealed record UpdateServerAppRequest
     public string? Path { get; init; }
 }
 
-/// <summary>
-/// Recette R-210: the values the applications grid's checkable Source filter offers. The grid is loaded
+/// <summary> The values the applications grid's checkable Source filter offers. The grid is loaded
 /// page by page, so the sources present across every application of the server come from the API.
 /// </summary>
 public sealed record ServerAppFilterValuesDto

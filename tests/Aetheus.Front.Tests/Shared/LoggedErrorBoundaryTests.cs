@@ -7,11 +7,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recette R2-100: a browser error reached the system logs as "Client error at : ... ObjectDisposedException
-/// - CancellationTokenSource_Disposed", with no page and no call stack, so the failing screen could not
-/// be named. The report now carries the page's path (never its query string) and the call stack.
-/// </summary>
+/// <summary>Client-error reports include page path and stack trace while omitting query
+/// strings.</summary>
 public sealed class LoggedErrorBoundaryTests : BunitContext
 {
     [Fact]
@@ -34,6 +31,8 @@ public sealed class LoggedErrorBoundaryTests : BunitContext
         Assert.Equal("Unhandled client exception: ObjectDisposedException", json.RootElement.GetProperty("summary").GetString());
         Assert.Contains(nameof(ThrowingChild), json.RootElement.GetProperty("stackTrace").GetString(), StringComparison.Ordinal);
         Assert.DoesNotContain("s3cr3t", body, StringComparison.Ordinal);
+        // No level: the back end writes it as an error, as every report was before R1-89.
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, json.RootElement.GetProperty("level").ValueKind);
     }
 
     [Fact]
@@ -66,18 +65,15 @@ public sealed class LoggedErrorBoundaryTests : BunitContext
         Assert.Equal(4000, json.RootElement.GetProperty("stackTrace").GetString()!.Length);
     }
 
+    // The report is posted in the background: the test waits for that request, which the handler records
+    // with its body in the same step.
     private static async Task<string> ReportBodyAsync(BunitTestHelper.TestHandler handler)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < deadline)
-        {
-            var report = handler.RequestDetails.ToList().FirstOrDefault(request => request.Url.Contains("api/client-errors"));
-            if (report.Body is not null)
-                return report.Body;
-            await Task.Delay(10);
-        }
-
-        throw new TimeoutException("No client error report was posted.");
+        await handler.WhenRequestedAsync(
+            request => request.Url.Contains("api/client-errors", StringComparison.Ordinal), 1, "the client error report");
+        var report = handler.RequestDetails.ToList().First(request => request.Url.Contains("api/client-errors", StringComparison.Ordinal));
+        Assert.NotNull(report.Body);
+        return report.Body;
     }
 
     private sealed class ThrowingChild : ComponentBase

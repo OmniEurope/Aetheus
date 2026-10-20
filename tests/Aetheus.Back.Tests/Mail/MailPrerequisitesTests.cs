@@ -13,8 +13,8 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R2-080 (prerequisites checked before "Configurer") and R2-090 (the status list carries
-/// SPF, DKIM and DMARC, each with the exact record to publish).</summary>
+/// <summary>Verify setup prerequisites and exact SPF, DKIM and DMARC publication
+/// guidance.</summary>
 public sealed class MailPrerequisitesTests
 {
     private const int ServerId = 9;
@@ -106,6 +106,32 @@ public sealed class MailPrerequisitesTests
         var error = await Assert.ThrowsAsync<BadRequestException>(() => _operations.ProbeOutboundSmtpAsync(ServerId, Ct));
 
         Assert.Contains(AgentCapabilities.MailOutboundProbe, error.Message, StringComparison.Ordinal);
+        await _mailRepo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R3_23_LeftoversCheck_QueuesTheReadOnlyAgentCheck_EvenWithoutTheMailGrant()
+    {
+        _server.MailSetupAvailable = false;
+        _server.AgentCapabilitiesJson = $"[\"{AgentCapabilities.MailLeftoversCheck}\",\"shell.execute\"]";
+
+        await _operations.CheckLeftoversAsync(ServerId, Ct);
+
+        await _mailRepo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
+            t.ServerId == ServerId
+            && t.Operation == OperationKind.MailLeftoversCheck
+            && t.Command == "-"
+            && t.Name == MailTaskNames.LeftoversCheck), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R3_23_LeftoversCheck_IsRefusedByNameOnAnAgentTooOld()
+    {
+        _server.AgentCapabilitiesJson = "[\"shell.execute\"]";
+
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => _operations.CheckLeftoversAsync(ServerId, Ct));
+
+        Assert.Contains(AgentCapabilities.MailLeftoversCheck, error.Message, StringComparison.Ordinal);
         await _mailRepo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 

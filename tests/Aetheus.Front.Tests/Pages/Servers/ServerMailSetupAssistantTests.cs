@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Servers.ServerDetailSections;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>Recette R2-080: the first configuration as a step-by-step assistant, each prerequisite really
-/// checked before Configure; recette R-512: a "?" help on every field.</summary>
+/// <summary>The setup assistant validates prerequisites before Configure and supplies field
+/// help.</summary>
 public sealed class ServerMailSetupAssistantTests : BunitContext
 {
     private const string ServerIp = "203.0.113.25";
@@ -180,7 +181,7 @@ public sealed class ServerMailSetupAssistantTests : BunitContext
         var body = _handler.RequestDetails.Single(r => r.Url.EndsWith("mail/setup", StringComparison.Ordinal)).Body!;
         Assert.Contains("\"hostname\":\"mx.example.com\"", body, StringComparison.Ordinal);
         Assert.Contains("\"adminEmail\":\"admin@example.com\"", body, StringComparison.Ordinal);
-        // R2-085: while the setup runs, Configure starts nothing.
+        // While the setup runs, Configure starts nothing.
         Assert.True(cut.Instance.SetupBusy);
         Assert.True(IsDisabled(cut, "omni-wizard__finish"));
         Assert.NotEmpty(cut.FindAll(".mail-setup-running"));
@@ -191,6 +192,57 @@ public sealed class ServerMailSetupAssistantTests : BunitContext
         Assert.False(cut.Instance.SetupBusy);
         Assert.NotEmpty(cut.FindAll(".mail-setup-failed"));
         Assert.False(IsDisabled(cut, "omni-wizard__finish"));
+    }
+
+    private TaskTrackerService Tracker => Services.GetRequiredService<TaskTrackerService>();
+
+    [Fact]
+    public void R3_45_WhileTheSetupRuns_TheVeilLiesOverTheWholeAssistant_AndNoLoaderIsAdded()
+    {
+        Tracker.Upsert(new ServerTaskDto { Id = 91, ServerId = 10, Name = "Mail - full setup (example.com)", Status = TaskExecutionStatus.Running });
+
+        var cut = RenderAssistant();
+
+        var veil = cut.Find(".mail-setup-veil");
+        Assert.Contains("omni-busy", veil.ClassList);
+        Assert.Equal("true", veil.GetAttribute("aria-busy"));
+        Assert.NotNull(veil.QuerySelector(".omni-wizard"));
+        Assert.Empty(cut.FindComponents<AetheusLoader>());
+    }
+
+    [Fact]
+    public void R3_45_WithoutASetup_TheAssistantIsNotVeiled()
+    {
+        var cut = RenderAssistant();
+
+        var veil = cut.Find(".mail-setup-veil");
+        Assert.DoesNotContain("omni-busy", veil.ClassList);
+        Assert.Equal("false", veil.GetAttribute("aria-busy"));
+        Assert.Empty(cut.FindAll(".mail-setup-running"));
+    }
+
+    [Fact]
+    public async Task R3_46_BackOnThePage_TheOpenSetupIsFollowed_SaysItContinues_AndItsFailureIsShown()
+    {
+        // Another server's setup and a finished one are not this assistant's.
+        Tracker.Upsert(new ServerTaskDto { Id = 80, ServerId = 11, Name = "Mail - full setup (other.org)", Status = TaskExecutionStatus.Running });
+        var cut = RenderAssistant();
+        Assert.False(cut.Instance.SetupBusy);
+
+        // The live feed lists the setup queued before the user left: the assistant binds to it.
+        await cut.InvokeAsync(() => Tracker.Upsert(new ServerTaskDto { Id = 92, ServerId = 10, Name = "Mail - full setup (example.com)", Status = TaskExecutionStatus.Pending }));
+
+        cut.WaitForAssertion(() => Assert.True(cut.Instance.SetupBusy));
+        Assert.True(cut.Instance.OwnsSetupTask(92));
+        var running = cut.Find(".mail-setup-running");
+        Assert.Contains("MailSetupContinuesInBackground", running.TextContent, StringComparison.Ordinal);
+        Assert.Contains("/tasks/92", running.InnerHtml, StringComparison.Ordinal);
+
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompletedAsync(
+            new TaskCompletedNotification { TaskId = 92, ServerId = 10, Status = TaskExecutionStatus.Failed }));
+        Assert.False(cut.Instance.SetupBusy);
+        Assert.Equal(0, cut.Instance.Step);
+        Assert.NotEmpty(cut.FindAll(".mail-setup-failed"));
     }
 
     [Fact]

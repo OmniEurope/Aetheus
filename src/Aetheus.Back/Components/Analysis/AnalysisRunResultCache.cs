@@ -3,14 +3,9 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.Analysis;
 
-/// <summary>
-/// Recette R-485: the computed result of a finished run, kept in memory with the stamp it was computed
-/// under (<see cref="AnalysisRunResultStamp"/>). An entry is used only while the run's current stamp is
-/// the same: a decision, a later scan, a report or an evaluation changes the stamp, so a stale result is
-/// never served and nothing has to remember to invalidate it. That also holds across the two
-/// blue-green colours, each with its own cache, since the stamp is read from the shared database.
-/// Bounded in size (rows held, findings and reports) and in time, so a large run cannot pin memory.
-/// </summary>
+/// <summary>Reuse a finished run result only while its database stamp still matches, including
+/// across independent blue-green caches. Bound entries by retained row count and
+/// lifetime.</summary>
 public sealed class AnalysisRunResultCache : IDisposable
 {
     /// <summary>Rows (findings plus reports, plus one per entry) held at most across every entry.</summary>

@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>Recette R2-090 / R1-9 / R1-14: the fix of one red line of the mail status, chosen from its key.</summary>
+/// <summary>The fix of one red line of the mail status, chosen from its key.</summary>
 public partial class MailStatusFix
 {
     internal enum FixKind { Services, Certificate, Dns, Unknown }
@@ -16,8 +16,8 @@ public partial class MailStatusFix
     [Parameter] public string Hostname { get; set; } = string.Empty;
 
     [Parameter] public bool CanManage { get; set; }
-    // Recette R1-7: each button is busy from its click until the task it queued completes; while one
-    // certificate task runs, the other certificate button waits (disabled).
+    // Each button is busy from its click until the task it queued completes; while one certificate
+    // task runs, the other certificate button waits (disabled).
     [Parameter] public bool StartServicesBusy { get; set; }
     [Parameter] public bool ObtainCertificateBusy { get; set; }
     [Parameter] public bool InstallCertificateBusy { get; set; }
@@ -43,7 +43,7 @@ public partial class MailStatusFix
 
     private string Domain => Item.Key.IndexOf(':', StringComparison.Ordinal) is var colon and > 0 ? Item.Key[(colon + 1)..] : string.Empty;
 
-    /// <summary>Recette R1-9: what the record (or the check) is, and why mail needs it, in plain words.</summary>
+    /// <summary>What the record (or the check) is, and why mail needs it, in plain words.</summary>
     internal string? WhatItIs => Prefix switch
     {
         "hostname-dns" => L["MailFixWhatA"].Value,
@@ -56,7 +56,7 @@ public partial class MailStatusFix
         _ => null
     };
 
-    /// <summary>Recette R1-9: what publishing the record changes, written under the record to copy.</summary>
+    /// <summary>What publishing the record changes, written under the record to copy.</summary>
     internal string? Effect => Kind != FixKind.Dns ? null : Prefix switch
     {
         "mx" => L["MailFixEffectMx"].Value,
@@ -66,11 +66,9 @@ public partial class MailStatusFix
         _ => null
     };
 
-    /// <summary>
-    /// Recette R1-14: an MX that still shows another host may be an old answer kept in DNS caches until its
-    /// time-to-live runs out. With the remaining TTL the resolver reported, the note says how long; without
-    /// it, the note says so in general terms. Nothing is estimated.
-    /// </summary>
+    /// <summary> An MX that still shows another host may be an old answer kept in DNS caches until
+    /// its time-to-live runs out. With the remaining TTL the resolver reported, the note says how
+    /// long; without it, the note says so in general terms. Nothing is estimated. </summary>
     internal string? CacheNote
     {
         get

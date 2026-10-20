@@ -3,11 +3,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Shared.Components.Shared;
 
-/// <summary>
-/// How a grid column filter compares the column with its value (PLAN-008 lot 12). The set mirrors
-/// the operators the front's grid offers; which ones a column accepts depends on its type, and the
-/// back refuses the others with a 400.
-/// </summary>
+/// <summary>Defines grid comparison operators, with accepted combinations determined by column
+/// type. Unsupported operators return HTTP 400.</summary>
 public enum GridFilterOperator
 {
     Contains,
@@ -25,10 +22,9 @@ public enum GridFilterOperator
     IsEmpty,
     IsNotEmpty,
 
-    /// <summary>
-    /// Recette R-210: the value carries several candidates, joined by <see cref="GridFilter.ListSeparator"/>,
-    /// and a row matches any of them (a column's checkable header filter).
-    /// </summary>
+    /// <summary> The value carries several candidates, joined by <see
+    /// cref="GridFilter.ListSeparator"/>, and a row matches any of them (a column's checkable
+    /// header filter). </summary>
     In,
 
     /// <summary>A row matches none of the candidates of <see cref="In"/>.</summary>
@@ -51,7 +47,7 @@ public sealed record GridFilter
 {
     public const int MaximumValueLength = 200;
 
-    /// <summary>Recette R-210: most candidates one <see cref="GridFilterOperator.In"/> filter may carry.</summary>
+    /// <summary>Most candidates one <see cref="GridFilterOperator.In"/> filter may carry.</summary>
     public const int MaximumListCount = 50;
 
     /// <summary>Longest encoded value: a list of candidates, each at most <see cref="MaximumValueLength"/>.</summary>

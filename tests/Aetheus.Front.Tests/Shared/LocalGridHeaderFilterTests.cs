@@ -5,18 +5,15 @@ using RunStatus = Aetheus.Shared.Components.Pipelines.PipelineStatus;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recette R-210 / R-213 / R-227 on grids that hold their whole list in memory: a header filter set
-/// exactly as the user would (OmniDataGrid.SetFiltersAsync) narrows the rows, and a row brought by a
-/// new list reads bold (omni-data-grid__row--new) while the first list marks nothing.
-/// </summary>
+/// <summary>Local-grid header filters narrow rows, and live replacements highlight new entries
+/// while initial loads establish the baseline.</summary>
 public class LocalGridHeaderFilterTests : BunitContext
 {
     private const string NewRowClass = "omni-data-grid__row--new";
 
     public LocalGridHeaderFilterTests() => BunitTestHelper.RegisterServices(this);
 
-    /// <summary>R-213: the status column filters on the catalogue statuses of the summary chips.</summary>
+    /// <summary>The status column filters on the catalogue statuses of the summary chips.</summary>
     [Fact]
     public async Task CatalogStatusFilter_KeepsTheRowsMatchingAnyChosenStatus()
     {
@@ -30,7 +27,8 @@ public class LocalGridHeaderFilterTests : BunitContext
         cut.WaitForAssertion(() => Assert.Equal(["deploy", "lint"], RowNames(cut)));
     }
 
-    /// <summary>R-213: the model column filters on the model name its cell shows, the trigger on its enum.</summary>
+    /// <summary>The model column filters on the model name its cell shows, the trigger on its
+    /// enum.</summary>
     [Fact]
     public async Task TemplateAndTriggerFilters_KeepTheMatchingRows()
     {
@@ -62,7 +60,7 @@ public class LocalGridHeaderFilterTests : BunitContext
             PipelineDependencyGrid.ParseStatuses(OmniDataGridFilterValues.Join(["Failed", "bogus", "Current"])));
     }
 
-    /// <summary>R-227: a monitored application that appears in the next list reads bold.</summary>
+    /// <summary>A monitored application that appears in the next list reads bold.</summary>
     [Fact]
     public void MonitoredAppsStatusGrid_MarksOnlyTheApplicationThatAppeared()
     {
@@ -83,7 +81,8 @@ public class LocalGridHeaderFilterTests : BunitContext
         });
     }
 
-    /// <summary>R-227: a run that the host's next list brings reads bold; the runs already there do not.</summary>
+    /// <summary>A run that the host's next list brings reads bold; the runs already there do
+    /// not.</summary>
     [Fact]
     public void PipelineRunsGrid_MarksOnlyTheRunThatAppeared()
     {

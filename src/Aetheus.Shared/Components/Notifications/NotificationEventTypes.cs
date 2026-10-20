@@ -14,30 +14,45 @@ public static class NotificationEventTypes
 {
     public const string PipelineFailed = "pipeline.failed";
     public const string PipelineSucceeded = "pipeline.succeeded";
+    /// <summary>Recette R1-77: a run an assurance seal rejected, as a final result of its own beside failed and succeeded.</summary>
+    public const string PipelineRejected = "pipeline.rejected";
     public const string PipelineApprovalRequested = "pipeline.approval-requested";
-    /// <summary>Recette R-522: an automated trigger (schedule, push, upstream run) whose launch the
-    /// configuration checks refused. Nobody is there to read the refusal: it is recorded as a failed run
-    /// carrying the reason (PipelineRefusedLaunchRecorder), and this notification tells the subscribers.</summary>
+    /// <summary>An automated trigger (schedule, push, upstream run) whose launch the configuration
+    /// checks refused. Nobody is there to read the refusal: it is recorded as a failed run carrying
+    /// the reason (PipelineRefusedLaunchRecorder), and this notification tells the
+    /// subscribers.</summary>
     public const string PipelineLaunchRefused = "pipeline.launch-refused";
-    /// <summary>Recette R2-034: a release recorded as deployed (a deploy step past its health gate, or a
-    /// <c>type: release</c> step with <c>deployed: true</c>), for the subscribers of its project.</summary>
+    /// <summary>A release recorded as deployed (a deploy step past its health gate, or a <c>type:
+    /// release</c> step with <c>deployed: true</c>), for the subscribers of its project.</summary>
     public const string ReleaseDeployed = "release.deployed";
-    /// <summary>Recette R2-034: an agent update the agent's heartbeat confirmed, for the subscribers of
-    /// every project the server is attached to. A server attached to no project notifies nobody.</summary>
+    /// <summary>An agent update the agent's heartbeat confirmed, for the subscribers of every
+    /// project the server is attached to. A server attached to no project notifies
+    /// nobody.</summary>
     public const string AgentUpdateCompleted = "agent-update.completed";
-    /// <summary>Recette R2-034: an agent update that failed (failure reported by the agent, wrong
-    /// version, deadline passed), for the subscribers of every project the server is attached to.</summary>
+    /// <summary>An agent update that failed (failure reported by the agent, wrong version, deadline
+    /// passed), for the subscribers of every project the server is attached to.</summary>
     public const string AgentUpdateFailed = "agent-update.failed";
+    /// <summary>Recette R3-16: a run of an AI task finished, with a link to it on the task's results page,
+    /// for the subscribers of its project (or of the projects its server is attached to).</summary>
+    public const string AiTaskCompleted = "ai-task.completed";
+    /// <summary>Recette R1-77, a switch rather than an event (nothing is raised with it): a subscriber who enables it
+    /// is also e-mailed the result of the pipelines started by another pipeline; off by default, the e-mail goes
+    /// only for the root run. Their in-app notifications are unchanged.</summary>
+    public const string PipelineChildResults = "pipeline.child-results";
 
     public static IReadOnlyList<NotificationEventTypeDescriptor> All { get; } =
     [
         new(PipelineFailed, DefaultEnabled: true, CarriesProjectId: true),
         new(PipelineSucceeded, DefaultEnabled: false, CarriesProjectId: true),
+        new(PipelineRejected, DefaultEnabled: true, CarriesProjectId: true),
         new(PipelineApprovalRequested, DefaultEnabled: true, CarriesProjectId: true),
         new(PipelineLaunchRefused, DefaultEnabled: true, CarriesProjectId: true),
         new(ReleaseDeployed, DefaultEnabled: true, CarriesProjectId: true),
         new(AgentUpdateCompleted, DefaultEnabled: false, CarriesProjectId: true),
         new(AgentUpdateFailed, DefaultEnabled: true, CarriesProjectId: true),
+        // Recette R3-16: in the inbox only for now, the owner wants no e-mail for it yet.
+        new(AiTaskCompleted, DefaultEnabled: true, CarriesProjectId: true, SentByEmail: false),
+        new(PipelineChildResults, DefaultEnabled: false, CarriesProjectId: true, SentByEmail: false),
         new("analysis.report.completed", DefaultEnabled: false, CarriesProjectId: true),
         new("analysis.gate.warning", DefaultEnabled: false, CarriesProjectId: true),
         new("analysis.gate.blocked", DefaultEnabled: false, CarriesProjectId: true),

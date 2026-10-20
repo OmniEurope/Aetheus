@@ -332,27 +332,31 @@ public static class ArchitectureAnalyzer
             var directory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
             if (projectIdentities.TryGetValue(directory, out var cached)) return cached;
             var projectFile = FindProjectFile(path);
-            if (projectFile is not null)
-            {
-                if (projectIdentities.TryGetValue(projectFile, out cached))
-                    return projectIdentities[directory] = cached;
-                var project = Path.GetFileNameWithoutExtension(projectFile);
-                var assembly = ReadAssemblyName(projectFile) ?? project;
-                var identity = new ProjectIdentity(project, assembly);
-                projectIdentities[projectFile] = identity;
-                return projectIdentities[directory] = identity;
-            }
+            return projectIdentities[directory] = projectFile is not null
+                ? ProjectFileIdentity(projectFile)
+                : InferIdentity(path, symbol.ContainingAssembly?.Name);
+        }
+
+        // The project named by its .csproj, and the assembly it builds (its AssemblyName when set).
+        private ProjectIdentity ProjectFileIdentity(string projectFile)
+        {
+            if (projectIdentities.TryGetValue(projectFile, out var cached)) return cached;
+            var project = Path.GetFileNameWithoutExtension(projectFile);
+            var assembly = ReadAssemblyName(projectFile) ?? project;
+            return projectIdentities[projectFile] = new ProjectIdentity(project, assembly);
+        }
+
+        // No project file: the folder under src/ or tests/, else the file's own folder.
+        private static ProjectIdentity InferIdentity(string path, string? assemblyName)
+        {
             var segments = path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
             for (var index = 0; index < segments.Length - 1; index++)
             {
                 if (segments[index] is "src" or "tests")
-                {
-                    var inferred = segments[index + 1];
-                    return projectIdentities[directory] = new ProjectIdentity(inferred, inferred);
-                }
+                    return new ProjectIdentity(segments[index + 1], segments[index + 1]);
             }
-            var name = segments.Length > 1 ? segments[^2] : symbol.ContainingAssembly?.Name ?? string.Empty;
-            return projectIdentities[directory] = new ProjectIdentity(name, name);
+            var name = segments.Length > 1 ? segments[^2] : assemblyName ?? string.Empty;
+            return new ProjectIdentity(name, name);
         }
 
         private static string? FindProjectFile(string sourcePath)

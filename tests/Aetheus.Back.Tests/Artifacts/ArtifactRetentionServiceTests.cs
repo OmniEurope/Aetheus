@@ -36,7 +36,7 @@ public class ArtifactRetentionServiceTests
     [Fact]
     public async Task ApplyBuildAndReleaseRetention_NullProjectId_DoNotThrow()
     {
-        // BACK-009: a project-less artifact used to NRE on ProjectId!.Value after it was stored.
+        // Retention must handle an artifact with no project identifier without dereferencing null.
         var build = new PipelineArtifact { Id = 1, PipelineId = 1, ProjectId = null };
         var released = new PipelineArtifact { Id = 2, PipelineId = 1, ProjectId = null };
 
@@ -66,8 +66,8 @@ public class ArtifactRetentionServiceTests
     [Fact]
     public async Task ApplyDeployRetentionAsync_NullProjectId_DoesNotThrow_AndFlagsDeployed()
     {
-        // Regression: a project-less artifact (orphan run) used to NRE on artifact.ProjectId!.Value.
-        // The guard now flags it Deployed with the global-latest window and never dereferences null.
+        // Project-less artifacts use the global deployed-retention window without dereferencing a
+        // missing project identifier.
         var artifact = new PipelineArtifact { Id = 1, PipelineId = 1, ProjectId = null, RetentionPolicy = ArtifactRetentionPolicy.Build };
 
         await _sut.ApplyDeployRetentionAsync(artifact, "prod", ct: TestContext.Current.CancellationToken);

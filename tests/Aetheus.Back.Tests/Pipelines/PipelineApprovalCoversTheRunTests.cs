@@ -10,15 +10,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// An approval authorises the RUN to touch an environment, not one stage of it. The gate used to
-/// match on the stage name alone, so every stage bound to an approval-gated environment raised its
-/// own prompt: aetheus-deploy-prod has fourteen stages, all environment: prod, so a single
-/// deployment demanded fourteen identical manual approvals for a decision taken once.
-///
-/// The environment stays in the match on purpose: a run that reached staging and then prod must
-/// still ask for prod, because what was authorised is prod, not "whatever comes next".
-/// </summary>
+/// <summary>Environment approval applies to the whole run, while a different environment requires a
+/// separate authorization.</summary>
 public class PipelineApprovalCoversTheRunTests
 {
     private const int RunId = 7312;
@@ -48,9 +41,7 @@ public class PipelineApprovalCoversTheRunTests
     [Fact]
     public async Task AStillPendingApprovalOnAnotherStage_HoldsTheStageWithoutASecondPrompt()
     {
-        // Pending is not authorisation: the stage is not dispatched. It is not a reason to ask again
-        // either (R-370): a second prompt for the same decision would outlive the first one's answer and
-        // later expire, failing a run that was approved.
+        // Pending approval neither authorizes dispatch nor requires a duplicate prompt.
         var repo = Harness(out var planner, approvals:
         [
             new PipelineApproval
@@ -90,11 +81,8 @@ public class PipelineApprovalCoversTheRunTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>
-    /// PLAN-003 2.7: a confirmation window is a second decision about one moment of the run. It asks
-    /// even though the run is already approved for prod, and it carries its own delay, so the
-    /// reconcile sweep expires it in minutes rather than after the environment's day.
-    /// </summary>
+    /// <summary>Stage confirmation is separate from environment authorization and expires on its
+    /// own delay.</summary>
     [Fact]
     public async Task AStageWithItsOwnDelay_AsksAgain_WithThatDelay()
     {

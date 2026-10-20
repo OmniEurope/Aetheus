@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Users;
+using Aetheus.Front.Tests.Architecture;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -162,7 +163,7 @@ public class UserEditDeepTests : BunitContext
         Assert.NotEmpty(roundTrip!.EffectivePermissions);
 
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.Instance.EditedUsername is not null, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Instance.EditedUsername is not null);
         Assert.Equal("tester", cut.Instance.EditedUsername);
         Assert.True(cut.Instance.IsEditingCurrentUser);
         Assert.Equal("tester", auth.Username);
@@ -236,5 +237,21 @@ public class UserEditDeepTests : BunitContext
         var method = typeof(UserEdit).GetMethod("GetPermissionBadgeStyle", BindingFlags.NonPublic | BindingFlags.Static)!;
         var result = (OmniTone)method.Invoke(null, [permission])!;
         Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void R152_TheFlagSwitches_StayEnabledSoTheyKeepFocus_AndTheValidOutlineSkipsThem()
+    {
+        SetupExistingUser();
+        var cut = Render<UserEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
+
+        var switches = cut.FindAll("button[role='switch']");
+        Assert.Equal(2, switches.Count);
+        Assert.All(switches, s => Assert.False(s.HasAttribute("disabled")));
+
+        // R1-52: the green outline of a valid modified field must not frame the switch (a button).
+        var css = File.ReadAllText(Path.Combine(RepositoryScan.Root, "src", "Aetheus.Front", "wwwroot", "css", "app.css"));
+        Assert.Contains(".valid.modified:not([type=checkbox]):not(.omni-switch)", css, StringComparison.Ordinal);
     }
 }

@@ -103,12 +103,9 @@ internal static class AnalysisGradeEngine
             summaries.Max(summary => summary.EvaluatedAt)));
     }
 
-    /// <summary>
-    /// Recette R2-118 (decided 2026-10-05): the grade of a run tree (a candidate or a nightly and the
-    /// runs its trigger steps started: quality, security, QA...) merges the runs domain by domain, by the
-    /// rule the run's Gate tab also applies (<see cref="AnalysisGradeMerge"/>). Grades are compared, never
-    /// counts added, so a finding two runs report is not counted twice.
-    /// </summary>
+    /// <summary>Merge a run and its triggered descendants domain by domain through <see
+    /// cref="AnalysisGradeMerge"/>. Compare grades without adding finding counts, which would
+    /// duplicate findings reported by multiple runs.</summary>
     public static AnalysisGradeSummaryDto MergeRuns(
         IReadOnlyCollection<AnalysisGradeSummaryDto> runs,
         int pipelineRunId) =>
@@ -184,11 +181,10 @@ internal static class AnalysisGradeEngine
         return BuildMeasure(rule, domain!.Value, direction!.Value, category, severity, observedValue, unit, null);
     }
 
-    /// <summary>
-    /// Recette R2-119: the findings a grading rule counts, one per fingerprint, and only the open ones. A
-    /// finding someone accepted, marked as a false positive or mitigated is decided, not left to do, and
-    /// a fixed one is no longer reported (one that comes back is reopened before the report is graded).
-    /// </summary>
+    /// <summary> The findings a grading rule counts, one per fingerprint, and only the open ones. A
+    /// finding someone accepted, marked as a false positive or mitigated is decided, not left to
+    /// do, and a fixed one is no longer reported (one that comes back is reopened before the report
+    /// is graded). </summary>
     private static IEnumerable<AnalysisFinding> OpenFindings(
         AnalysisReport report,
         PipelineAnalysisGradeRuleDefinition rule) =>
@@ -290,7 +286,7 @@ internal static class AnalysisGradeEngine
 
     private static AnalysisGrade Grade(AnalysisGradeMeasureDto measure, double value)
     {
-        // Recette R2-119: one open critical finding makes a weighted finding score not deliverable.
+        // One open critical finding makes a weighted finding score not deliverable.
         if (measure.FindingCounts is { Critical: > 0 }) return AnalysisGrade.F;
         var thresholds = new[]
         {

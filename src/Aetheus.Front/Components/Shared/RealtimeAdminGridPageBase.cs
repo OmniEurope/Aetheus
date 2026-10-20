@@ -36,8 +36,8 @@ public abstract class RealtimeAdminGridPageBase<T> : ComponentBase, IAsyncDispos
 
     protected Task ReloadAsync() => _grid?.Reload() ?? Task.CompletedTask;
 
-    /// <summary>Recette R-226: a change pushed by another session refreshes quietly (rows, page, scroll
-    /// and filters kept); the page's own actions keep <see cref="ReloadAsync"/>.</summary>
+    /// <summary>A change pushed by another session refreshes quietly (rows, page, scroll and
+    /// filters kept); the page's own actions keep <see cref="ReloadAsync"/>.</summary>
     protected Task RefreshAsync() => _grid?.Refresh() ?? Task.CompletedTask;
 
     // Remote-virtualized grids stay on "page 1", so a plain GoToPage(0) would not reload them.

@@ -205,4 +205,92 @@ public class NuGetRegistryControllerTests
 
         await _registry.Received().SearchAsync("json", 0, 20, true, Arg.Any<CancellationToken>());
     }
+
+    // --- publish, unlist, relist ---------------------------------------------
+
+    [Fact]
+    public async Task APublishWhileAnotherIsRunning_IsRefusedWith429()
+    {
+        var gate = new PackageRegistryUploadGate();
+        using var held = gate.TryEnter();
+        var sut = new NuGetRegistryController(_registry, gate)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+
+        var result = await sut.Publish(TestContext.Current.CancellationToken);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        await _registry.DidNotReceiveWithAnyArgs().PublishAsync(default!, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task APublishThatIsNotMultipart_IsABadRequest()
+    {
+        var sut = Build();
+        sut.ControllerContext.HttpContext.Request.ContentType = "application/octet-stream";
+
+        var result = await sut.Publish(TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task APublishWithAnEmptyPackage_IsABadRequest()
+    {
+        var sut = BuildWithForm(new FormFile(Stream.Null, 0, 0, "package", "empty.nupkg"));
+
+        var result = await sut.Publish(TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await _registry.DidNotReceiveWithAnyArgs().PublishAsync(default!, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task APublishedPackage_IsStoredUnderThePublisherName_AndAnswers201()
+    {
+        var bytes = new byte[] { 1, 2, 3 };
+        var sut = BuildWithForm(new FormFile(new MemoryStream(bytes), 0, bytes.Length, "package", "a.nupkg"));
+        sut.ControllerContext.HttpContext.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity([new System.Security.Claims.Claim(
+                System.Security.Claims.ClaimTypes.Name, "alice")], "test"));
+        byte[]? published = null;
+        await _registry.PublishAsync(Arg.Do<Func<Stream>>(open =>
+        {
+            using var copy = new MemoryStream();
+            open().CopyTo(copy);
+            published = copy.ToArray();
+        }), "alice", Arg.Any<CancellationToken>());
+
+        var result = await sut.Publish(TestContext.Current.CancellationToken);
+
+        Assert.Equal(StatusCodes.Status201Created, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        Assert.Equal(bytes, published);
+    }
+
+    [Theory]
+    [InlineData(true, typeof(NoContentResult))]
+    [InlineData(false, typeof(NotFoundResult))]
+    public async Task UnlistAndRelist_AnswerWhetherTheVersionChanged(bool changed, Type expected)
+    {
+        _registry.SetListedAsync("pkg", "1.0.0", Arg.Any<bool>(), "unknown", Arg.Any<CancellationToken>())
+            .Returns(changed);
+
+        var unlist = await Build().Unlist("pkg", "1.0.0", TestContext.Current.CancellationToken);
+        var relist = await Build().Relist("pkg", "1.0.0", TestContext.Current.CancellationToken);
+
+        Assert.IsType(expected, unlist);
+        Assert.IsType(expected, relist);
+        await _registry.Received(1).SetListedAsync("pkg", "1.0.0", false, "unknown", Arg.Any<CancellationToken>());
+        await _registry.Received(1).SetListedAsync("pkg", "1.0.0", true, "unknown", Arg.Any<CancellationToken>());
+    }
+
+    private NuGetRegistryController BuildWithForm(IFormFile file)
+    {
+        var sut = Build();
+        var request = sut.ControllerContext.HttpContext.Request;
+        request.ContentType = "multipart/form-data; boundary=test";
+        request.Form = new FormCollection([], new FormFileCollection { file });
+        return sut;
+    }
 }

@@ -16,8 +16,8 @@ public sealed partial class ExpandContractMigrationAuditTests
     /// </summary>
     private static readonly HashSet<string> ReviewedContractDrops = new(StringComparer.Ordinal)
     {
-        // Recette R2-001: Environments.AdvanceBranchOnDeploy / AdvanceBranchName, unmapped by
-        // 20261002163217_UnmapRetiredEnvironmentBranchAdvance (shipped in v1.3.6 and v1.3.9).
+        // These environment columns are absent from the preceding release's mapping, allowing the
+        // reviewed contract drop documented in docs/contracts/deployment.md.
         "20261010093813_DropRetiredEnvironmentBranchAdvanceColumns.cs",
     };
 

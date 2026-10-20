@@ -18,9 +18,9 @@ public class ProjectTasksSectionRenderTests : BunitContext
     {
         _handler.SetJsonResponse("api/projects/1/tasks", new PaginatedResult<ServerTaskDto> { Items = [], TotalCount = 0 });
         var cut = Render<ProjectTasksSection>(p => p.Add(x => x.ProjectId, 1));
-        // The redundant "Tasks" section heading was removed (the breadcrumb leaf already carries it),
-        // so an empty section is identified by the grid's own empty text. Recette R-184: no search box.
-        cut.WaitForState(() => cut.Markup.Contains("NoRecords", StringComparison.Ordinal), TimeSpan.FromSeconds(2));
+        // Identify an empty section through grid empty text; the breadcrumb provides its heading
+        // and no search box is rendered.
+        cut.WaitForState(() => cut.Markup.Contains("NoRecords", StringComparison.Ordinal));
         Assert.DoesNotContain("aetheus-loader-logo", cut.Markup, StringComparison.Ordinal);
         Assert.Empty(cut.FindAll(".pipeline-list-search"));
         Assert.Empty(cut.FindAll(".rz-data-row"));
@@ -46,7 +46,7 @@ public class ProjectTasksSectionRenderTests : BunitContext
             TotalCount = 1
         });
         var cut = Render<ProjectTasksSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("deploy"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("deploy"));
         Assert.Contains("deploy", cut.Markup);
         Assert.NotNull(cut.Find("a[href='/pipelines/runs/77']"));
     }

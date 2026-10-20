@@ -14,10 +14,9 @@ public readonly record struct MailboxCredentialKey(string UserId, int ServerId, 
     public static string Holder(string? authenticationType, string nameIdentifier) =>
         $"{authenticationType}:{nameIdentifier}";
 
-    /// <summary>
-    /// Recette R1-37: true when this key belongs to the Aetheus user <paramref name="userId"/>, whatever scheme
-    /// they signed in with. An agent principal, whose identifier is a server id, never matches.
-    /// </summary>
+    /// <summary> True when this key belongs to the Aetheus user <paramref name="userId"/>, whatever
+    /// scheme they signed in with. An agent principal, whose identifier is a server id, never
+    /// matches. </summary>
     public bool IsHeldBy(int userId)
     {
         var separator = UserId.LastIndexOf(':');

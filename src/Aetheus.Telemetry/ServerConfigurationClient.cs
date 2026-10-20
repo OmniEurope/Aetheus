@@ -5,12 +5,10 @@ using System.Text.Json.Serialization;
 
 namespace Aetheus.Telemetry;
 
-/// <summary>
-/// PLAN-013 lot 4: reads the configuration Aetheus keeps for the application's ingest key
-/// (<c>GET {metrics endpoint}/../configuration</c>, same key header as the exports). Anything but a valid
-/// answer (an older Aetheus answers 404, a network failure, a malformed body) returns null: the package
-/// keeps sending at the interval it already has.
-/// </summary>
+/// <summary> Reads the configuration Aetheus keeps for the application's ingest key (<c>GET
+/// {metrics endpoint}/../configuration</c>, same key header as the exports). Anything but a valid
+/// answer (an older Aetheus answers 404, a network failure, a malformed body) returns null: the
+/// package keeps sending at the interval it already has. </summary>
 internal sealed class ServerConfigurationClient(HttpClient http, Uri configurationUri, string ingestKey)
 {
     internal const string KeyHeader = "x-aetheus-ingest-key";

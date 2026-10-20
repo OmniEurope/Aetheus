@@ -123,11 +123,8 @@ public sealed class MutationNotificationAuditTests
         return -1;
     }
 
-    /// <summary>
-    /// An unescaped quote opens or closes a string or char literal (one kind cannot open inside the
-    /// other); true when the character at <paramref name="i"/> was such a quote. Recette R2-107: moved out
-    /// of <see cref="FindMatchingBrace"/>, under the grade-A cyclomatic threshold.
-    /// </summary>
+    /// <summary>Tracks unescaped string and character delimiters while preventing one literal kind
+    /// from opening inside another.</summary>
     private static bool ToggleQuote(string source, int i, ref bool inString, ref bool inChar)
     {
         var current = source[i];

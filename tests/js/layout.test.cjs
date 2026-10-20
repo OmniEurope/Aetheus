@@ -11,7 +11,7 @@ function loadLayout(markup = '<div id="app-splash"></div><link href="material-ba
     global.window = dom.window;
     global.document = dom.window.document;
     global.navigator = dom.window.navigator;
-    // layout.js reads the bare `location` global when it loads (page-scroll memory, R2-087).
+    // Provides the location global read by layout.js during initialization.
     global.location = dom.window.location;
     global.MutationObserver = dom.window.MutationObserver;
     // layout.js tests "instanceof Element" when it labels grid buttons.
@@ -38,7 +38,7 @@ test('layout helpers update language and remove the splash idempotently', () => 
     Aetheus.hideSplash();
 
     assert.equal(document.documentElement.lang, 'fr');
-    // Recette R2-112: the mode is OE's (theme scope, omni-boot.js); layout.js no longer copies it.
+    // OE owns theme-mode persistence through the theme scope and boot script.
     assert.equal(Aetheus.setOmniTheme, undefined);
     assert.equal(document.documentElement.getAttribute('data-omni-theme'), null);
     assert.equal(document.getElementById('app-splash'), null);

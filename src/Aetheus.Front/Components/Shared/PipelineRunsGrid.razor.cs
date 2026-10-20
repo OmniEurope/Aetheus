@@ -39,7 +39,7 @@ public partial class PipelineRunsGrid
     private OmniDataGrid<PipelineRunTableItem>? _grid;
     private static readonly TimeSpan NewRowHighlight = TimeSpan.FromSeconds(5);
 
-    // Recette R-210: header filter text, built once so the column sees the same delegate on every render.
+    // Header filter text, built once so the column sees the same delegate on every render.
     private Func<string, string>? _statusText;
     private Func<string, string> StatusText => _statusText ??= GridFilterText.ForEnum<PipelineStatus>(L);
 
@@ -53,9 +53,8 @@ public partial class PipelineRunsGrid
         if (ReferenceEquals(Items, _groupedSource))
             return;
 
-        // Recette R-227: the host hands a new list on each live reload. The grid on screen notes the
-        // runs it holds before it renders the new ones, so a run that just started reads bold for a
-        // few seconds. The first list, or one replacing an empty table (no grid shown), marks nothing.
+        // Compare live run lists before rendering so newly started runs can be highlighted briefly;
+        // initial or previously empty lists mark nothing.
         if (_groupedSource is { Count: > 0 } && _grid is not null)
             await _grid.RefreshAsync();
 
@@ -145,7 +144,7 @@ public partial class PipelineRunsGrid
             _expandedRunId = null;
     }
 
-    /// <summary>Recette R2-124: the export writes the duration the cell shows, a running run's up to now.</summary>
+    /// <summary>The export writes the duration the cell shows, a running run's up to now.</summary>
     private Func<PipelineRunTableItem, object?> DurationExport => _durationExport ??= run => PipelineRunTablePresentation.FormatDuration(run, L);
     private Func<PipelineRunTableItem, object?>? _durationExport;
 }

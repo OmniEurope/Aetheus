@@ -9,7 +9,11 @@ public interface IUserService
     Task<UserDto?> GetCurrentUserAsync(CancellationToken ct = default);
     Task<UserDto> CreateUserAsync(CreateUserRequest request, CancellationToken ct = default);
     Task<UserDto?> UpdateUserAsync(int id, UpdateUserRequest request, CancellationToken ct = default);
-    Task<bool> DeleteUserAsync(int id, CancellationToken ct = default);
+    /// <summary>Deletes the user. a pipeline owner is refused (409) unless <paramref
+    /// name="transferPipelinesTo"/> names an active user to take the pipelines over, or <paramref
+    /// name="forceWithOwnedPipelines"/> is set.</summary>
+    Task<bool> DeleteUserAsync(
+        int id, CancellationToken ct = default, string? transferPipelinesTo = null, bool forceWithOwnedPipelines = false);
     Task<bool> ChangePasswordAsync(int id, ChangeUserPasswordRequest request, CancellationToken ct = default);
     Task<bool> ChangeOwnPasswordAsync(ChangeUserPasswordRequest request, CancellationToken ct = default);
     Task<List<string>> GetRolesAsync(CancellationToken ct = default);

@@ -42,8 +42,7 @@ public class StaticBadgeMethodsTests
         Assert.Equal(expected, result);
     }
 
-    // --- AuditActionPresentation.Badge (recette R-452, shared by the audit log, its dialog and the
-    // entity audit trails) ---
+    // AuditActionPresentation.Badge is shared by audit lists, dialogs and entity trails.
 
     [Theory]
     [InlineData("Created", OmniTone.Success)]

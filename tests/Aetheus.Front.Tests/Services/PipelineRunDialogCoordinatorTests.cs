@@ -30,6 +30,7 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
                 new() { Name = "develop" },
                 new() { Name = "main", IsDefault = true }
             });
+        handler.SetJsonResponse("api/pipelines/run-options", new PipelineRunOptionsDto());
         handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>());
 
         var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
@@ -54,10 +55,8 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
             && request.Url.Contains("pageSize=100", StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// The unified dialog carries the parameters too, so a user who only wants to change one no longer
-    /// has to walk through a separate branch step first.
-    /// </summary>
+    /// <summary>The unified run dialog includes parameters without a separate branch-selection
+    /// step.</summary>
     [Fact]
     public async Task ConfigureLaunchAsync_CarriesTheDeclaredParametersIntoTheSameDialog()
     {
@@ -65,6 +64,7 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
         BunitTestHelper.UseImmediateDialogs(this);
         handler.SetJsonResponse("api/pipelines/5/source", new PipelineSourceDto { RepositoryId = 0 });
         handler.SetJsonResponse("api/pipelines/5", new PipelineDto { Id = 5, Name = "app-ci" });
+        handler.SetJsonResponse("api/pipelines/run-options", new PipelineRunOptionsDto());
         handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>
         {
             new() { Name = "flavour", DisplayName = "Flavour", Type = "string", Default = "fast" }
@@ -100,6 +100,7 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
     {
         var handler = BunitTestHelper.RegisterServices(this);
         BunitTestHelper.UseImmediateDialogs(this);
+        handler.SetJsonResponse("api/pipelines/run-options", new PipelineRunOptionsDto());
         handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>
         {
             new() { Name = "flavour", DisplayName = "Flavour", Type = "string", Default = "fast" },
@@ -125,6 +126,7 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
     {
         var handler = BunitTestHelper.RegisterServices(this);
         BunitTestHelper.UseImmediateDialogs(this);
+        handler.SetJsonResponse("api/pipelines/run-options", new PipelineRunOptionsDto());
         handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>
         {
             new() { Name = "candidateVersion", DisplayName = "Candidate", Type = "string", Required = true }
@@ -149,6 +151,7 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
     {
         var handler = BunitTestHelper.RegisterServices(this);
         BunitTestHelper.UseImmediateDialogs(this);
+        handler.SetJsonResponse("api/pipelines/run-options", new PipelineRunOptionsDto());
         handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>
         {
             new() { Name = "candidateVersion", DisplayName = "Candidate", Type = "string", Required = true }
@@ -167,7 +170,7 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
         var offered = Assert.IsType<List<ReleaseDto>>(dialog.LastParameters!["AvailableReleases"]);
         Assert.Equal("1.1.482", Assert.Single(offered).Version);
         Assert.Equal(1, dialog.LastParameters!["AvailableReleaseTotal"]);
-        // R-10: every release whose payload is retained, in one request the grid then pages.
+        // Every release whose payload is retained, in one request the grid then pages.
         Assert.Contains(handler.Requests, r => r.Url.Contains("api/releases") && r.Url.Contains("projectId=3")
             && r.Url.Contains("pageSize=200") && r.Url.Contains("deployable=true"));
     }
@@ -178,6 +181,7 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
     {
         var handler = BunitTestHelper.RegisterServices(this);
         BunitTestHelper.UseImmediateDialogs(this);
+        handler.SetJsonResponse("api/pipelines/run-options", new PipelineRunOptionsDto());
         handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>
         {
             new() { Name = "note", DisplayName = "Note", Type = "string", Required = true }
@@ -197,11 +201,11 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
     [InlineData(true, 1)]
     public async Task Releases_AreFetchedOnlyWhenAParameterTakesAVersion(bool versionParameter, int releaseCalls)
     {
-        // PLAN-005 lot 5 / D37: aetheus-candidate takes no version and used to fetch the project's
-        // releases anyway; aetheus-deploy-prod takes one and fetches them once.
+        // Fetch releases only when the pipeline accepts a version, once per dialog.
         var handler = BunitTestHelper.RegisterServices(this);
         BunitTestHelper.UseImmediateDialogs(this);
         handler.SetJsonResponse("api/pipelines/5/source", new PipelineSourceDto());
+        handler.SetJsonResponse("api/pipelines/run-options", new PipelineRunOptionsDto());
         handler.SetJsonResponse("api/pipelines/5/parameters", versionParameter
             ? new List<PipelineRunParameterDto> { new() { Name = "candidateVersion", Type = "string", Required = true } }
             : new List<PipelineRunParameterDto> { new() { Name = "dryRun", Type = "boolean", Default = "false" } });
@@ -213,5 +217,29 @@ public sealed class PipelineRunDialogCoordinatorTests : BunitContext
 
         Assert.Equal(releaseCalls, handler.Requests.Count(request => request.Url.Contains("api/releases", StringComparison.Ordinal)));
         Assert.Equal(versionParameter, dialog.LastParameters!["AvailableReleases"] is not null);
+    }
+
+    /// <summary>"Run to end" is offered only when the backend says the platform allows it, and an
+    /// unreadable answer (an older backend, an outage) hides it rather than blocking the launch.</summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(null, false)]
+    public async Task ConfigureLaunchAsync_OffersRunToEndOnlyWhenTheBackendAllowsIt(bool? allowed, bool offered)
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        BunitTestHelper.UseImmediateDialogs(this);
+        handler.SetJsonResponse("api/pipelines/5/source", new PipelineSourceDto { RepositoryId = 0 });
+        handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>());
+        if (allowed is { } value)
+            handler.SetJsonResponse("api/pipelines/run-options", new PipelineRunOptionsDto { RunToEndAllowed = value });
+        else
+            handler.SetResponse("api/pipelines/run-options", System.Net.HttpStatusCode.ServiceUnavailable);
+
+        var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        await Services.GetRequiredService<PipelineRunDialogCoordinator>().ConfigureLaunchAsync(5);
+
+        Assert.NotNull(dialog.LastParameters);
+        Assert.Equal(offered, dialog.LastParameters["RunToEndAllowed"]);
     }
 }

@@ -13,6 +13,9 @@ public partial class NotificationsInbox : IDisposable
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private void OpenOptions() => Nav.NavigateTo("/settings/notifications");
 
     private List<NotificationDeliveryDto> _rows = [];
     private int _count;
@@ -26,7 +29,7 @@ public partial class NotificationsInbox : IDisposable
     private int _lastUnreadCount = -1;
     private AetheusDataGrid<NotificationDeliveryDto>? _grid;
 
-    // Recette R-224: the event types the Event column offers, and the texts of the closed filters.
+    // The event types the Event column offers, and the texts of the closed filters.
     private UserNotificationFilterValuesDto _filterValues = new();
     private Func<string, string>? _statusText;
     private Func<string, string>? _yesNoText;
@@ -37,7 +40,7 @@ public partial class NotificationsInbox : IDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        // Recette R-189: a trail under the title, as on every page with an ancestor.
+        // A trail under the title, as on every page with an ancestor.
         Breadcrumb.Set(new BreadcrumbItem(L["Dashboard"], "/"), new BreadcrumbItem(L["MyNotifications"]));
         Feed.OnChanged += OnFeedChanged;
         await Feed.EnsureStartedAsync();
@@ -57,16 +60,14 @@ public partial class NotificationsInbox : IDisposable
         }
     }
 
-    /// <summary>A new or newly read notification (from the bell, or pushed by the server) changes the unread
-    /// count: the grid refreshes then, not on every poll that brings nothing new. Recette R-226: quietly,
-    /// rows, page, scroll and filters kept, a new row in bold.</summary>
+    /// <summary>Refresh the grid when the feed changes the unread count, preserving page, scroll
+    /// and filters; polls with no change do not reload rows.</summary>
     private void OnFeedChanged() => _ = InvokeAsync(async () =>
     {
         var changed = _lastUnreadCount >= 0 && _lastUnreadCount != Feed.UnreadCount;
         _lastUnreadCount = Feed.UnreadCount;
-        // Recette R-301: a mark-as-read of this page refreshes the grid itself, once, when it is done.
-        // Refreshing here too ran a second load beside it; the reload emptied the grid's cache under the
-        // refresh, which then took every row for a new one and set them all bold.
+        // The mark-as-read action refreshes this page once on completion. Avoid a concurrent feed
+        // refresh that would invalidate its row cache.
         if (changed && !_loading && !_acting)
         {
             await LoadFilterValuesAsync();
@@ -76,7 +77,7 @@ public partial class NotificationsInbox : IDisposable
             StateHasChanged();
     });
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<NotificationDeliveryDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(DefaultPageSize);
@@ -95,8 +96,8 @@ public partial class NotificationsInbox : IDisposable
     {
         (_page, _pageSize) = args.ToPageRequest(DefaultPageSize);
         (_sortBy, _sortDescending) = args.ToSortRequest(nameof(NotificationDeliveryDto.CreatedAt), fallbackDescending: true);
-        // Recette R-224: each header filter travels as a column filter the endpoint applies itself (the
-        // status and event lists, read yes/no, the subject and the date range).
+        // Each header filter travels as a column filter the endpoint applies itself (the status and
+        // event lists, read yes/no, the subject and the date range).
         _filters = new UserNotificationPageRequest { Filters = args.ToApiFilters() };
         await FetchAsync();
     }
@@ -108,8 +109,8 @@ public partial class NotificationsInbox : IDisposable
 
     private bool _acting;
 
-    /// <summary>Recette R-301: the action, then one refresh; the feed event it raises meanwhile only
-    /// records the new unread count.</summary>
+    /// <summary>The action, then one refresh; the feed event it raises meanwhile only records the
+    /// new unread count.</summary>
     private async Task ActThenRefreshAsync(Func<Task<bool>> action, string successMessage)
     {
         _acting = true;
@@ -137,8 +138,9 @@ public partial class NotificationsInbox : IDisposable
         }
     }
 
-    /// <summary>Recette R-314: opening an unread notification reads it. The dialog opens first; the mark,
-    /// its count and its row follow while it is shown, quietly (no toast for a read that was not asked).</summary>
+    /// <summary>Opening an unread notification reads it. The dialog opens first; the mark, its
+    /// count and its row follow while it is shown, quietly (no toast for a read that was not
+    /// asked).</summary>
     private async Task OpenAsync(NotificationDeliveryDto row)
     {
         var dialog = Dialog.OpenAsync<InboxNotificationDialog>(L["NotificationDetails"].Value,

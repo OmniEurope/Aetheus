@@ -5,6 +5,10 @@ namespace Aetheus.Agent.Linux.Collectors;
 
 public sealed class LinuxMetricsCollector(ILogger<LinuxMetricsCollector> logger) : BaseMetricsCollector
 {
+    private readonly OomKillTracker _oomKills = new(
+        () => ReadProcText("/proc/vmstat"),
+        () => ReadProcText("/proc/sys/kernel/random/boot_id"),
+        LinuxKernelLog.ReadRecords);
     private long _previousIdle;
     private long _previousTotal;
     private bool _cpuInitialized;
@@ -90,6 +94,21 @@ public sealed class LinuxMetricsCollector(ILogger<LinuxMetricsCollector> logger)
         }
     }
 
+    protected override OomKillReportDto? GetOomKills() => _oomKills.Read();
+
+    // Null when unreadable: the OOM report is then unknown, never "no kill".
+    private static string? ReadProcText(string path)
+    {
+        try
+        {
+            return File.ReadAllText(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     protected override bool ShouldIncludeDrive(DriveInfo drive)
     {
         return drive.Name.StartsWith("/dev") ||
@@ -97,6 +116,8 @@ public sealed class LinuxMetricsCollector(ILogger<LinuxMetricsCollector> logger)
                drive.Name.StartsWith("/home") ||
                drive.Name.StartsWith("/mnt");
     }
+
+    protected override InodeUsage? GetInodeUsage(string mountPoint) => LinuxStatvfs.Read(mountPoint);
 
     private static double ParseMemInfoLine(string line)
     {

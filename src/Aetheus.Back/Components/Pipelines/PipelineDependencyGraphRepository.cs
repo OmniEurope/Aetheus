@@ -6,11 +6,8 @@ namespace Aetheus.Back.Components.Pipelines;
 /// <summary>Read-only projection used by the pipeline parent/leaf graph.</summary>
 internal sealed class PipelineDependencyGraphRepository(AppDbContext db)
 {
-    /// <summary>
-    /// PLAN-003 lot 12: <paramref name="projectId"/> narrows the graph the same way
-    /// <paramref name="serverId"/> already did. A project's pipelines page used to load the graph
-    /// of the whole fleet and throw away everything but its own rows.
-    /// </summary>
+    /// <summary>Restricts the dependency graph by <paramref name="projectId"/> and <paramref
+    /// name="serverId"/> before loading unrelated fleet data.</summary>
     internal async Task<List<PipelineDto>> GetAsync(
         List<int>? accessibleIds = null, int? serverId = null, int? projectId = null,
         CancellationToken ct = default)
@@ -87,10 +84,12 @@ internal sealed class PipelineDependencyGraphRepository(AppDbContext db)
         return (items, identities, totalCount);
     }
 
-    private static IQueryable<PipelineDto> Project(IQueryable<Data.Entities.Pipeline> query) => query.Select(pipeline => new PipelineDto
+    private IQueryable<PipelineDto> Project(IQueryable<Data.Entities.Pipeline> query) => query.Select(pipeline => new PipelineDto
     {
         Id = pipeline.Id,
         Name = pipeline.Name,
+        OwnerUsername = pipeline.CreatedByUsername,
+        OwnerInactive = !db.Users.Any(user => user.Username == pipeline.CreatedByUsername && user.IsActive),
         ProjectId = pipeline.ProjectId,
         ProjectName = pipeline.Project != null ? pipeline.Project.Name : null,
         TriggerType = pipeline.TriggerType,

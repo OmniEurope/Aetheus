@@ -27,7 +27,7 @@ public class ProjectBoardSectionTests : BunitContext
 
         var cut = Render<ProjectBoardSection>(p => p.Add(c => c.ProjectId, 1));
 
-        cut.WaitForState(() => cut.Markup.Contains("Design login"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("Design login"));
         Assert.Contains("Design login", cut.Markup);
         Assert.Contains("Enum_WorkItemStatus_Active", cut.Markup); // column header
     }
@@ -40,7 +40,7 @@ public class ProjectBoardSectionTests : BunitContext
             new WorkItemDto { Id = 1, ProjectId = 1, Title = "Design login", Type = WorkItemType.Feature, Status = WorkItemStatus.Active });
 
         var cut = Render<ProjectBoardSection>(p => p.Add(c => c.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("Design login"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("Design login"));
 
         // Start dragging the card, then drop onto the Active column's drop zone.
         cut.FindAll(".kanban-card").First().DragStart();
@@ -48,6 +48,6 @@ public class ProjectBoardSectionTests : BunitContext
 
         // The move endpoint was hit (a null/failed move would trigger a board reload instead).
         cut.WaitForAssertion(() =>
-            Assert.Contains(_handler.Requests, r => r.Url.Contains("api/work-items/1/move")), TimeSpan.FromSeconds(3));
+            Assert.Contains(_handler.Requests, r => r.Url.Contains("api/work-items/1/move")));
     }
 }

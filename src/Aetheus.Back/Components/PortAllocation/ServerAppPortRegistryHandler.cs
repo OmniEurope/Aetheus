@@ -5,17 +5,9 @@ using Aetheus.Back.Services.DomainEvents;
 
 namespace Aetheus.Back.Components.PortAllocation;
 
-/// <summary>
-/// PLAN-005 lot 6: records a server app's port in the registry.
-///
-/// This is the upper half of the inversion that keeps <c>ServerApps</c> and <c>PortRegistry</c>, both
-/// storage on the same layer, from reaching each other. Whether a port belongs to somebody is this
-/// side's business; the app only states that its own field changed.
-///
-/// Dispatched strictly by the emitter, so a refusal - the port belongs to another holder - reaches the
-/// caller as the conflict it is, instead of leaving an app row claiming a port the registry says is
-/// taken.
-/// </summary>
+/// <summary>Records application ports through an upper-layer handler, keeping <c>ServerApps</c> and
+/// <c>PortRegistry</c> independent. Strict dispatch propagates ownership conflicts to the caller
+/// instead of leaving an application claiming a reserved port (ADR-039).</summary>
 internal sealed class ServerAppPortRegistryHandler(IPortRegistryService registry)
     : IDomainEventHandler<ServerAppPortChangedEvent>
 {

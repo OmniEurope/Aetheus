@@ -147,8 +147,7 @@ public sealed class PipelineYamlDiagnosticsTests
             """;
 
         Assert.Single(Warnings(yaml), warning => warning.Contains("artifact_name", StringComparison.Ordinal));
-        // Recette R2-041: the deserializer used to refuse it; an unknown key is now skipped, the warning
-        // above being what keeps it visible.
+        // Unknown keys are skipped with explicit diagnostics.
         var definition = Aetheus.Back.Services.YamlParsingHelper.Deserializer
             .Deserialize<Aetheus.Shared.Components.Pipelines.PipelineYamlDefinition>(yaml);
         Assert.Equal("j", Assert.Single(Assert.Single(definition.Stages).Jobs).Name);

@@ -117,6 +117,42 @@ public class AddAgentRealtimeTests : BunitContext
     }
 
     [Fact]
+    public async Task TheDetectionWindow_RunsOut_StopsListeningAndSaysSoOnce()
+    {
+        SetupDefaultStubs();
+        var clock = new ObservedFakeClock(DateTimeOffset.UnixEpoch);
+        var changes = 0;
+        var changed = new StateSignal();
+        var monitor = new AgentDetectionMonitor(
+            Services.GetRequiredService<ApiClient>(),
+            Services.GetRequiredService<HubConnectionFactory>(),
+            NullLogger.Instance,
+            () => { Interlocked.Increment(ref changes); changed.Pulse(); return Task.CompletedTask; },
+            clock);
+
+        await monitor.StartAsync(null);
+        // Each second of the countdown says so once (and the last one says it timed out): the clock is
+        // moved one second at a time, each time once the previous second was told.
+        for (var second = 0; second <= AgentDetectionMonitor.MaxSeconds && !monitor.TimedOut; second++)
+        {
+            var told = Volatile.Read(ref changes);
+            clock.Advance(TimeSpan.FromSeconds(1));
+            await changed.WhenAsync(() => Volatile.Read(ref changes) > told, $"second {second + 1} of the countdown");
+        }
+
+        Assert.True(monitor.TimedOut);
+        Assert.False(monitor.Listening);
+        Assert.False(monitor.AgentFound);
+        // The countdown and the polling stopped: no timer is left that moving the clock could fire.
+        await clock.WhenNonePendingAsync(TimeSpan.FromSeconds(1));
+        await clock.WhenNonePendingAsync(TimeSpan.FromSeconds(3));
+        var afterTimeout = Volatile.Read(ref changes);
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal(afterTimeout, Volatile.Read(ref changes));
+        await monitor.DisposeAsync();
+    }
+
+    [Fact]
     public async Task CancelAsync_ClearsState()
     {
         SetupDefaultStubs();

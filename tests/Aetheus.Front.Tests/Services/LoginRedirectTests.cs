@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Services;
 
-/// <summary>PLAN-005 lot 8 / D47: the requested page survives the sign-in, and nothing else does.</summary>
+/// <summary>Preserve only a validated local return page through sign-in.</summary>
 public sealed class LoginRedirectTests : BunitContext
 {
     private const string RunLogs = "/pipelines/runs/2323?tab=logs";

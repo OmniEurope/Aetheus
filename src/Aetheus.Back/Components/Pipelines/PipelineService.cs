@@ -41,7 +41,11 @@ public class PipelineService(
     public async Task<PipelineDto?> GetPipelineAsync(int id, CancellationToken ct = default)
     {
         var pipeline = await repo.GetPipelineWithRunsAsync(id, ct).ConfigureAwait(false);
-        return pipeline is null ? null : PipelineDtoMapper.Map(pipeline);
+        if (pipeline is null) return null;
+        // Owner status determines whether chained-run authorization is available.
+        var ownerActive = !string.IsNullOrWhiteSpace(pipeline.CreatedByUsername)
+            && await repo.IsActiveUsernameAsync(pipeline.CreatedByUsername, ct).ConfigureAwait(false);
+        return PipelineDtoMapper.Map(pipeline) with { OwnerInactive = !ownerActive };
     }
 
     public Task<PipelineSourceDto?> GetPipelineSourceAsync(
@@ -82,8 +86,25 @@ public class PipelineService(
         };
     }
 
+    /// <summary>The assigned AI profile must exist and belong to the organization that owns the
+    /// pipeline: another organization's profile (and key) is never reachable from this one.</summary>
+    private async Task EnsureAiProfileBelongsToPipelineOrganizationAsync(
+        int? aiRunnerProfileId, int? projectId, int? environmentId, int? projectServerId, CancellationToken ct)
+    {
+        if (aiRunnerProfileId is not { } profileId) return;
+        var profileOrganizationId = await repo.GetAiRunnerProfileOrganizationIdAsync(profileId, ct).ConfigureAwait(false)
+            ?? throw new BadRequestException("AI runner profile not found.");
+        var pipelineOrganizationId = await repo
+            .GetPipelineOwnerOrganizationIdAsync(projectId, environmentId, projectServerId, ct).ConfigureAwait(false);
+        if (pipelineOrganizationId != profileOrganizationId)
+            throw new BadRequestException("The AI runner profile and the pipeline must belong to the same organization.");
+    }
+
     public async Task<PipelineDto> CreatePipelineAsync(CreatePipelineRequest request, CancellationToken ct = default)
     {
+        await EnsureAiProfileBelongsToPipelineOrganizationAsync(
+            request.AiRunnerProfileId, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct)
+            .ConfigureAwait(false);
         var pipeline = new Pipeline
         {
             Name = request.Name,
@@ -95,6 +116,7 @@ public class PipelineService(
             SourceBranch = request.SourceBranch?.Trim(),
             EnvironmentId = request.EnvironmentId,
             ProjectServerId = request.ProjectServerId,
+            AiRunnerProfileId = request.AiRunnerProfileId,
             // F-EXEC-1b: record the creator so webhook/scheduler runs can be authorized
             // against a principal (interactive runs authorize the live caller instead).
             CreatedByUsername = _ownership.CurrentUsername
@@ -116,6 +138,9 @@ public class PipelineService(
     {
         var pipeline = await repo.FindPipelineAsync(id, ct).ConfigureAwait(false);
         if (pipeline is null) return null;
+        await EnsureAiProfileBelongsToPipelineOrganizationAsync(
+            request.AiRunnerProfileId, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct)
+            .ConfigureAwait(false);
 
         var snapshot = PipelineStateSnapshot.Capture(pipeline);
         var previousLocation = snapshot.ProjectId is { } oldProjectId
@@ -147,6 +172,7 @@ public class PipelineService(
         pipeline.SourceBranch = nextBranch;
         pipeline.EnvironmentId = request.EnvironmentId;
         pipeline.ProjectServerId = request.ProjectServerId;
+        pipeline.AiRunnerProfileId = request.AiRunnerProfileId;
         pipeline.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
         // F-EXEC-1b: adopt ownership when a legacy/unowned pipeline is re-saved by an
         // authorized user - this is the documented remediation to re-enable its automated

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using System.Net.Http.Json;
+using Aetheus.Back.Data;
+using Aetheus.Back.Data.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Back.IntegrationTests;
@@ -50,6 +53,7 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/pipelines")]
     [InlineData("/api/pipelines/templates")]
     [InlineData("/api/pipelines/approvals/pending")]
+    [InlineData("/api/pipelines/ownership/candidates")]
     [InlineData("/api/service-connections")]
     [InlineData("/api/test-suites")]
     [InlineData("/api/webhooks")]
@@ -61,11 +65,14 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/variable-libraries/names")]
     [InlineData("/api/settings")]
     [InlineData("/api/settings/daily-recap")]
+    [InlineData("/api/mail-templates")]
+    [InlineData("/api/mail-templates/NotificationChannelTest/fr")]
     [InlineData("/api/environments")]
     [InlineData("/api/git/repos")]
     [InlineData("/api/git/connections")]
     [InlineData("/api/notifications/channels")]
     [InlineData("/api/notifications/me/unread-count")]
+    [InlineData("/api/users/me/preferences")]
     [InlineData("/api/auth/registration-tokens")]
     [InlineData("/api/personal-access-tokens")]
     [InlineData("/api/backups")]
@@ -75,10 +82,11 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     // Covers both AppMonitoringController and AppTelemetryController (shared api/appmonitoring prefix).
     [InlineData("/api/appmonitoring/summary")]
     [InlineData("/metrics")]
-    // PLAN-013 lots 5 and 6: the storage per project, and the size of the purged tables read from
-    // PostgreSQL (pg_total_relation_size) for the reclaim action.
+    // Storage and reclamation sizes are read from PostgreSQL catalog measurements.
     [InlineData("/api/data-storage/projects")]
     [InlineData("/api/data-storage/reclaim")]
+    // The mailbox directory is read from the stored mail inventory of every readable server.
+    [InlineData("/api/mail/mailboxes")]
     public async Task CollectionGetEndpoint_AsAdmin_ReturnsNonEmpty200(string route)
     {
         using var client = fixture.CreateAdminClient();
@@ -92,12 +100,8 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
             $"GET {route} returned 200 with an empty body - broken projection or no-content regression.");
     }
 
-    // --- server-scoped read paths -------------------------------------------------------------
-    // The 7 server-management modules (Certbot/Docker/Apache/Mail/Portsentry/Rkhunter/Teamspeak)
-    // plus modules/apps were previously excluded from the admin read sweep on the assumption that
-    // their GETs hit the live agent and would flake. That assumption is false: every GET here
-    // reads cached snapshots from its repository (only the POST actions queue agent tasks), so
-    // they are safe deterministic read paths and a 500 (e.g. broken EF projection) must surface.
+    // Server-management GET endpoints read cached repository snapshots rather than contacting
+    // agents, making them deterministic targets for the admin read sweep.
 
     [Theory]
     [InlineData("certbot")]
@@ -147,7 +151,7 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
             $"GET {prefix}{{projectId}} returned 200 with an empty body.");
     }
 
-    /// <summary>PLAN-013 lot 4: the data retention setting of the seeded project, Standard by default.</summary>
+    /// <summary>The data retention setting of the seeded project, Standard by default.</summary>
     [Theory]
     [InlineData("/api/projects/0/data-retention")]
     public async Task ProjectSettingGet_AsAdmin_ReturnsNonEmpty200(string template)
@@ -163,10 +167,24 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
         Assert.Contains("telemetryExportIntervalMinutes", body, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// PLAN-013 lot 4: the configuration the Aetheus.Telemetry package reads with its ingest key. The
-    /// key belongs to an application of the seeded project (Standard profile: 5 minutes).
-    /// </summary>
+    /// <summary>The version series of the seeded project: a JSON array, empty before any release.</summary>
+    [Theory]
+    [InlineData("/api/projects/0/release-series")]
+    public async Task ProjectReleaseSeriesGet_AsAdmin_ReturnsAnArray(string template)
+    {
+        using var client = fixture.CreateAdminClient();
+        var route = template.Replace("/0/", $"/{fixture.ProjectId}/", StringComparison.Ordinal);
+
+        using var response = await client.GetAsync(route, cancellationToken: TestContext.Current.CancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(response.StatusCode == HttpStatusCode.OK,
+            $"GET {route} returned {(int)response.StatusCode}. Body: {Truncate(body)}");
+        Assert.StartsWith("[", body.TrimStart(), StringComparison.Ordinal);
+    }
+
+    /// <summary> The configuration the Aetheus.Telemetry package reads with its ingest key. The key
+    /// belongs to an application of the seeded project (Standard profile: 5 minutes). </summary>
     [Theory]
     [InlineData("/api/ingest/otlp/v1/configuration")]
     public async Task IngestConfiguration_WithAnIngestKey_ReturnsTheSendInterval(string route)
@@ -175,7 +193,7 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
         using (var scope = fixture.Factory.Services.CreateScope())
         {
             var hasher = scope.ServiceProvider.GetRequiredService<Aetheus.Back.Components.AppMonitoring.Ingest.IngestKeyHasher>();
-            var db = scope.ServiceProvider.GetRequiredService<Aetheus.Back.Data.AppDbContext>();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             db.MonitoredApps.Add(new Aetheus.Back.Data.Entities.MonitoredApp
             {
                 ProjectId = fixture.ProjectId,
@@ -192,6 +210,65 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
             route, IntegrationJsonOptions.Default, TestContext.Current.CancellationToken);
 
         Assert.Equal(300, configuration!.MetricExportIntervalSeconds);
+    }
+
+    /// <summary> The Maven repository reads with the credential Maven sends: a read-only personal
+    /// access token as the Basic password (the registry scheme refuses the admin JWT). The metadata is
+    /// generated from the database, so a seeded version is enough; no file is written. </summary>
+    [Theory]
+    [InlineData("/api/packages/maven/org/example/smoke/maven-metadata.xml")]
+    public async Task MavenMetadata_WithAReadOnlyToken_ReturnsTheSeededVersion(string route)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            if (!await db.RegistryPackages.AnyAsync(package => package.NormalizedName == "org.example:smoke", ct))
+            {
+                db.RegistryPackages.Add(new RegistryPackage
+                {
+                    Kind = PackageRegistryKind.Maven,
+                    Name = "org.example:smoke",
+                    NormalizedName = "org.example:smoke",
+                    Versions =
+                    [
+                        new RegistryPackageVersion
+                        {
+                            Version = "1.0.0", NormalizedVersion = "1.0.0", FilePath = "maven/smoke/smoke-1.0.0.jar",
+                            ContentType = "application/java-archive", Sha256 = new string('a', 64), Sha1 = new string('b', 40),
+                            Integrity = "sha512-smoke", Metadata = "{}", PublishedBy = "admin",
+                            Files =
+                            [
+                                new RegistryPackageFile
+                                {
+                                    FileName = "smoke-1.0.0.jar", FilePath = "maven/smoke/smoke-1.0.0.jar",
+                                    ContentType = "application/java-archive", Sha256 = new string('a', 64),
+                                    Sha1 = new string('b', 40), Md5 = new string('c', 32), Sha512 = new string('d', 128),
+                                    PublishedBy = "admin"
+                                }
+                            ]
+                        }
+                    ]
+                });
+                await db.SaveChangesAsync(ct);
+            }
+        }
+
+        using var admin = fixture.CreateAdminClient();
+        var created = await admin.PostAsJsonAsync("/api/personal-access-tokens",
+            new CreatePersonalAccessTokenRequest { Name = $"smoke-{Guid.NewGuid():N}", Scope = PatScope.ReadOnly, ExpirationDays = 1 }, ct);
+        created.EnsureSuccessStatusCode();
+        var token = (await created.Content.ReadFromJsonAsync<CreatedPersonalAccessTokenDto>(IntegrationJsonOptions.Default, ct))!.PlaintextToken;
+        using var client = fixture.Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Basic", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("admin:" + token)));
+
+        using var response = await client.GetAsync(route, ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+
+        Assert.True(response.StatusCode == HttpStatusCode.OK,
+            $"GET {route} returned {(int)response.StatusCode}. Body: {Truncate(body)}");
+        Assert.Contains("<version>1.0.0</version>", body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -214,7 +291,7 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [Fact]
     public async Task RunLineage_AsAdmin_ReturnsNonEmpty200()
     {
-        // R-498: the audit lookup and the bounded text match of the downstream runs, on PostgreSQL.
+        // The audit lookup and the bounded text match of the downstream runs, on PostgreSQL.
         using var client = fixture.CreateAdminClient();
         var route = $"/api/pipelines/runs/{fixture.PipelineRunId}/lineage";
 
@@ -246,10 +323,65 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     }
 
     /// <summary>
-    /// PLAN-005 lot 5: the allocation controller's read path (candidate servers for a library). It
-    /// needs a real library, so the library is created through its own API first - which is why this
-    /// route carries no literal and the guard exempts its prefix, pointing here.
+    /// Recette R1-43, on PostgreSQL: the directive line a blue-green migrate step writes is parsed the
+    /// way task completion parses it, dispatched through the registered handler, stored by the
+    /// migration's table, and read back through the run's endpoint.
     /// </summary>
+    [Fact]
+    public async Task MigrationGate_AsAdmin_ReturnsTheVerdictAMigrateStepReported()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var migrationId = $"20261014000000_Drop{Guid.NewGuid():N}";
+        var line = MigrationGateReport.Directive + System.Text.Json.JsonSerializer.Serialize(
+            new MigrationGateReport
+            {
+                Outcome = MigrationGateOutcome.Refused,
+                PendingCount = 1,
+                Migrations =
+                [
+                    new MigrationGateMigrationVerdict
+                    {
+                        MigrationId = migrationId,
+                        Compatible = false,
+                        Violations = [$"{migrationId}: line 12 is not expand-compatible: migrationBuilder.DropColumn("]
+                    }
+                ]
+            },
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var verdicts = Aetheus.Back.Components.Tasks.TaskMigrationGateParser.Parse(
+                "Pending migrations are not expand-compatible.\n" + line,
+                fixture.PipelineRunId, "Deploy", "Migrate", DateTime.UtcNow);
+            Assert.Single(verdicts);
+            await scope.ServiceProvider
+                .GetRequiredService<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>()
+                .DispatchStrictAsync(
+                    new Aetheus.Back.Components.Tasks.Events.PipelineStepMigrationGateReportedEvent(
+                        fixture.PipelineRunId, verdicts),
+                    ct);
+        }
+
+        using var client = fixture.CreateAdminClient();
+        var route = $"/api/pipelines/runs/{fixture.PipelineRunId}/migration-gate";
+        using var response = await client.GetAsync(route, ct);
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        Assert.True(response.StatusCode == HttpStatusCode.OK,
+            $"GET {route} returned {(int)response.StatusCode} {response.StatusCode}. Body: {Truncate(body)}");
+        var gates = await response.Content.ReadFromJsonAsync<List<PipelineRunMigrationGateDto>>(
+            IntegrationJsonOptions.Default, ct);
+        var gate = Assert.Single(gates!, g => g.Migrations.Any(m => m.MigrationId == migrationId));
+        Assert.Equal(MigrationGateOutcome.Refused, gate.Outcome);
+        Assert.Equal("Migrate", gate.StepName);
+        Assert.Equal(1, gate.PendingCount);
+        var migration = Assert.Single(gate.Migrations);
+        Assert.False(migration.Compatible);
+        Assert.Contains("not expand-compatible", Assert.Single(migration.Violations), StringComparison.Ordinal);
+    }
+
+    /// <summary>Candidate-server lookup requires creating a library through its API first, so the
+    /// dynamic route is covered here.</summary>
     [Fact]
     public async Task VariableLibraryPortTargets_AsAdmin_ReturnsNonEmpty200()
     {
@@ -273,6 +405,67 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
             $"GET {route} returned {(int)response.StatusCode} {response.StatusCode}. Body: {Truncate(body)}");
         Assert.False(string.IsNullOrWhiteSpace(body),
             $"GET {route} returned 200 with an empty body.");
+    }
+
+    /// <summary>Recette R3-59: the read-only installed package list is asked with a POST (it queues an agent
+    /// task) but changes nothing on the host, so Read is enough. On an online Linux agent publishing
+    /// <c>package.inventory</c> it queues the typed PackageInventory task on PostgreSQL; on the seeded server
+    /// (agent offline, capability absent) it is refused instead of queued.</summary>
+    [Fact]
+    public async Task InstalledPackageInventory_AsAdminAndReader_QueuesTheReadOnlyTask()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        int serverId;
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var org = await db.Organizations.FirstAsync(o => o.Slug == "aetheus", ct);
+            var server = new Server
+            {
+                Name = $"pkg-{Guid.NewGuid():N}"[..30],
+                Hostname = $"pkg-{Guid.NewGuid():N}.test",
+                OrganizationId = org.Id,
+                Status = ServerStatus.Online,
+                OsType = OsType.Linux,
+                LastHeartbeat = DateTime.UtcNow,
+                AgentCapabilitiesJson = $"[\"{AgentCapabilities.PackageInventory}\",\"{AgentCapabilities.ShellExecution}\"]"
+            };
+            db.Servers.Add(server);
+            await db.SaveChangesAsync(ct);
+            serverId = server.Id;
+        }
+
+        using var admin = fixture.CreateAdminClient();
+        using var reader = await fixture.CreateReaderClientAsync();
+        var queuedIds = new List<int>();
+        foreach (var client in new[] { admin, reader })
+        {
+            using var response = await client.PostAsync($"/api/servers/{serverId}/packages/inventory", content: null, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            Assert.True(response.StatusCode == HttpStatusCode.OK,
+                $"POST packages/inventory returned {(int)response.StatusCode}. Body: {Truncate(body)}");
+            var queued = await response.Content.ReadFromJsonAsync<ServiceTaskResponse>(IntegrationJsonOptions.Default, ct);
+            Assert.True(queued!.TaskId > 0);
+            queuedIds.Add(queued.TaskId);
+        }
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var tasks = await db.Tasks.Where(t => queuedIds.Contains(t.Id)).ToListAsync(ct);
+            Assert.Equal(2, tasks.Count);
+            Assert.All(tasks, task =>
+            {
+                Assert.Equal(serverId, task.ServerId);
+                Assert.Equal(OperationKind.PackageInventory, task.Operation);
+                Assert.Equal("-", task.Command);
+                Assert.Equal(InstalledPackages.TaskName, task.Name);
+            });
+        }
+
+        using var refused = await admin.PostAsync($"/api/servers/{fixture.ServerId}/packages/inventory", content: null, ct);
+        Assert.True(refused.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.BadRequest,
+            $"The seeded server (agent offline, no capability) answered {(int)refused.StatusCode}.");
     }
 
     private static string Truncate(string value) =>

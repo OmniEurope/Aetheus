@@ -18,6 +18,9 @@ public interface IServerServiceManagementService
     /// <summary>ADR-024 4.1: enqueue a system package upgrade (dry-run preview or consented apply).</summary>
     Task<int> UpgradeSystemAsync(int serverId, bool dryRun, CancellationToken ct = default);
 
+    /// <summary>Recette R3-59: enqueue the read-only list of every installed package (no grant, nothing changed).</summary>
+    Task<int> ListInstalledPackagesAsync(int serverId, CancellationToken ct = default);
+
     /// <summary>ADR-024 4.1: read the server's last reported patch status (pending counts + packages).</summary>
     Task<ServerSecurityUpdatesDto> GetSecurityUpdatesAsync(int serverId, CancellationToken ct = default);
 

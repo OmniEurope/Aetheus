@@ -6,8 +6,7 @@ using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>PLAN-007 lot 6: the 130 s of candidate #2328 were never attributed. Each phase of the
-/// architecture publication reports its own duration as a run metric.</summary>
+/// <summary>Each architecture publication phase reports its own duration as a run metric.</summary>
 public sealed class ArchitectureAnalysisPublisherTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"architecture-{Guid.NewGuid():N}");

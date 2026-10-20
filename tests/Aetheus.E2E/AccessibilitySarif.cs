@@ -9,16 +9,9 @@ public sealed record AccessibilityViolation(
     string Page, string RuleId, string? Impact, string Description, string Help, string? HelpUrl,
     IReadOnlyList<string> Targets);
 
-/// <summary>
-/// PLAN-003 2.4: writes every axe-core violation of the accessibility suite - all impacts, not only
-/// the serious and critical ones that fail the test - as SARIF 2.1, the format the platform already
-/// imports. A <c>type: lint</c> step with <c>analysis_category: accessibility</c> publishes it as
-/// Accessibility findings, so the minor and moderate ones stop being visible only in a test log.
-///
-/// Compiled by the E2E suite and linked into the backend tests, which feed its output to the real
-/// SARIF parser. Each result names the page as its location and carries a fingerprint of the page,
-/// the rule and the element, so the same violation keeps its identity from one run to the next.
-/// </summary>
+/// <summary>Export every axe-core violation as SARIF 2.1 with a stable page, rule and element
+/// fingerprint, including impacts that do not fail the accessibility test. Backend tests parse this
+/// exporter output through the real SARIF parser.</summary>
 public static class AccessibilitySarif
 {
     public const string FileName = "accessibility.sarif";

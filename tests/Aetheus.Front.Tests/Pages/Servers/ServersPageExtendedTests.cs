@@ -84,7 +84,8 @@ public class ServersPageExtendedTests : BunitContext
 
     // ── FilterByTag ───────────────────────────────────────────────────────────
 
-    /// <summary>Recette R-211: a tag clicked in a row becomes the Tags column's own filter, sent to the API.</summary>
+    /// <summary>A tag clicked in a row becomes the Tags column's own filter, sent to the
+    /// API.</summary>
     [Fact]
     public async Task FilterByTag_SetsTheTagsColumnFilter()
     {
@@ -208,7 +209,7 @@ public class ServersPageExtendedTests : BunitContext
         releaseList.SetResult();
         // Generous: the whole suite runs in parallel and the grid renders the settled state a few
         // dispatches after the response.
-        cut.WaitForAssertion(() => Assert.Contains("EmptyServersTitle", cut.Markup), TimeSpan.FromSeconds(10));
+        cut.WaitForAssertion(() => Assert.Contains("EmptyServersTitle", cut.Markup));
     }
 
     // ── Render coverage ───────────────────────────────────────────────────────

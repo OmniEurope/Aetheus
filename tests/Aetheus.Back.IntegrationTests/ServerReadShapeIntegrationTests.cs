@@ -12,11 +12,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Recettes R-480 to R-485 (server performance, 2026-09-30), on real PostgreSQL: the reads translate,
-/// and the statements they send name only the columns the screen shows (no YAML, no per-file coverage
-/// JSON, no server inventory) and bound the rows they read.
-/// </summary>
+/// <summary>PostgreSQL read-shape tests verify bounded rows and only the columns needed by each
+/// view.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class ServerReadShapeIntegrationTests(PostgresFixture fixture)
 {

@@ -7,7 +7,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-16: Aetheus prepares the no-reply mailbox with a password it generates and stores.</summary>
+/// <summary>Aetheus prepares the no-reply mailbox with a password it generates and
+/// stores.</summary>
 public sealed class MailNoReplySenderServiceTests
 {
     private const string NoReply = "no-reply@example.org";
@@ -21,6 +22,7 @@ public sealed class MailNoReplySenderServiceTests
     public MailNoReplySenderServiceTests()
     {
         _senderSettings.GetAsync(Arg.Any<CancellationToken>()).Returns(new EmailSenderSettingsDto());
+        _mail.GetAccountsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
         _sut = new MailNoReplySenderService(_resolver, _mail, _settings, _senderSettings);
     }
 
@@ -48,6 +50,52 @@ public sealed class MailNoReplySenderServiceTests
                 secret.Key == EmailSenderSettingKeys.NoReplyPasswordSecret(NoReply) && secret.Value == created.Password),
             Arg.Any<CancellationToken>());
         await _mail.DidNotReceive().UpdateAccountAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<UpdateMailAccountRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MailboxGoneFromTheServer_IsCreatedAgain_NotUpdated()
+    {
+        // Production state: the row exists but is inactive and flagged absent, so the resolver reports no account.
+        _resolver.ResolveAsync(Arg.Any<CancellationToken>()).Returns(new EmailSenderResolution
+        {
+            Problem = EmailSenderProblem.NoReplyAccountMissing,
+            NoReplyAddress = NoReply,
+            NoReplyServerId = 3
+        });
+        _mail.GetAccountsAsync(3, Arg.Any<CancellationToken>()).Returns(
+        [
+            new MailAccountDto { Id = 12, Email = NoReply, IsActive = false, MissingSince = DateTime.UtcNow.AddDays(-1) }
+        ]);
+
+        await _sut.PrepareAsync(Ct);
+
+        await _mail.Received(1).CreateAccountAsync(3,
+            Arg.Is<CreateMailAccountRequest>(request => request.Email == NoReply && request.Password.Length == 40),
+            Arg.Any<CancellationToken>());
+        await _mail.DidNotReceive().UpdateAccountAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<UpdateMailAccountRequest>(), Arg.Any<CancellationToken>());
+        await _settings.Received(1).CreateSecretAsync(Arg.Any<CreateSecretRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MailboxDisabledByHand_GetsANewPassword_AndIsEnabledAgain()
+    {
+        _resolver.ResolveAsync(Arg.Any<CancellationToken>()).Returns(new EmailSenderResolution
+        {
+            Problem = EmailSenderProblem.NoReplyAccountMissing,
+            NoReplyAddress = NoReply,
+            NoReplyServerId = 3
+        });
+        _mail.GetAccountsAsync(3, Arg.Any<CancellationToken>()).Returns(
+        [
+            new MailAccountDto { Id = 12, Email = "No-Reply@Example.org", IsActive = false }
+        ]);
+
+        await _sut.PrepareAsync(Ct);
+
+        await _mail.Received(1).UpdateAccountAsync(3, 12,
+            Arg.Is<UpdateMailAccountRequest>(request => request.IsActive == true && !string.IsNullOrEmpty(request.NewPassword)),
+            Arg.Any<CancellationToken>());
+        await _mail.DidNotReceive().CreateAccountAsync(Arg.Any<int>(), Arg.Any<CreateMailAccountRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

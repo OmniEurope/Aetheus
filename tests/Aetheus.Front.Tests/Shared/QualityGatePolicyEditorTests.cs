@@ -48,20 +48,74 @@ public sealed class QualityGatePolicyEditorTests : BunitContext
             .Add(component => component.CanEdit, true)
             .Add(component => component.InitialPolicies, policies));
 
-        cut.WaitForState(() => cut.Markup.Contains("quality.coverage.line"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("quality.coverage.line"));
         Assert.Contains("QualityGateScopeSystem", cut.Markup);
         Assert.Contains("QualityGateScopeProject", cut.Markup);
         Assert.Single(cut.FindAll("button[title='QualityGateOverride']"));
         Assert.Single(cut.FindAll("button[title='Edit']"));
-        Assert.Single(cut.FindAll("button[title='QualityGateHistory']"));
-        Assert.Equal(2, cut.FindAll("button[title='Duplicate']").Count);
-        Assert.Contains("QualityGateRecommended", cut.Markup);
-        Assert.Contains("QualityGateStrict", cut.Markup);
         Assert.Contains("QualityGateOptionalTitle", cut.Markup);
-        Assert.NotNull(cut.Find(".omni-code-block.quality-gate-yaml-panel figcaption button")); // R-516: the YAML example and its copy button
+        Assert.NotNull(cut.Find(".omni-code-block.quality-gate-yaml-panel figcaption button")); // The YAML example and its copy button
         Assert.Contains("analysis_preset: recommended", cut.Markup);
-        Assert.Contains(">Import<", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains(">Export<", cut.Markup, StringComparison.Ordinal);
+
+        // STD-BTN detection 11: history, duplicate, presets, import and export sit in "More actions" menus.
+        var entries = MenuEntries(cut);
+        Assert.Single(entries, entry => entry == "QualityGateHistory");
+        Assert.Equal(2, entries.Count(entry => entry == "Duplicate"));
+        Assert.Contains("Recommended", entries);
+        Assert.Contains("QualityGateStrict", entries);
+        Assert.Contains("Import", entries);
+        Assert.Contains("Export", entries);
+    }
+
+    /// <summary>Opens every overflow menu in turn and returns the labels of their entries.</summary>
+    private static List<string> MenuEntries(IRenderedComponent<QualityGatePolicyEditor> cut)
+    {
+        var labels = new List<string>();
+        var count = cut.FindAll(".omni-overflow-menu__trigger").Count;
+        for (var index = 0; index < count; index++)
+        {
+            cut.FindAll(".omni-overflow-menu__trigger")[index].Click();
+            labels.AddRange(cut.FindAll(".omni-menu__item .omni-menu__label").Select(label => label.TextContent.Trim()));
+            cut.FindAll(".omni-overflow-menu__trigger")[index].Click();
+        }
+
+        return labels;
+    }
+
+    [Fact]
+    public void RuleList_ShowsEachRuleCriterion_AsItsMetricThresholdOrItsFindingFilters()
+    {
+        var policies = new List<AnalysisPolicyDto>
+        {
+            new()
+            {
+                Id = 31, PolicyKey = "metric.rule", Name = "Coverage floor", MetricKey = "coverage.line.percent",
+                Operator = AnalysisPolicyOperator.LessThan, Threshold = 80, Scope = AnalysisPolicyScope.Global,
+                IsEffective = true, Enabled = true, Version = 1
+            },
+            new()
+            {
+                Id = 32, PolicyKey = "finding.rule", Name = "New high semgrep", Category = AnalysisCategory.Sast,
+                ScannerKey = "semgrep", RuleId = "csharp.sql-injection", SeverityThreshold = AnalysisSeverity.High,
+                NewFindingsOnly = true, Scope = AnalysisPolicyScope.Global, IsEffective = true, Enabled = true, Version = 1
+            },
+            new()
+            {
+                Id = 33, PolicyKey = "any.rule", Name = "Any secret", Category = AnalysisCategory.Secrets,
+                Scope = AnalysisPolicyScope.Global, IsEffective = true, Enabled = true, Version = 1
+            }
+        };
+
+        var cut = Render<QualityGatePolicyEditor>(parameters => parameters
+            .Add(component => component.Scope, AnalysisPolicyScope.Global)
+            .Add(component => component.CanEdit, true)
+            .Add(component => component.InitialPolicies, policies));
+
+        cut.WaitForState(() => cut.Markup.Contains("Coverage floor"));
+        Assert.Contains("coverage.line.percent LessThan 80", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(
+            "Sast / semgrep / csharp.sql-injection / &gt;= High / QualityGateNewOnlyShort", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(">Secrets<", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]

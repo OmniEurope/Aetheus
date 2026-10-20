@@ -1,17 +1,14 @@
-// kit-model ButtonZoneScanner 1
+// kit-model ButtonZoneScanner 3
 // SPDX-License-Identifier: EUPL-1.2
 //
-// Razor zone reader behind the STD-BTN guard "at most one blue button per zone" (docs/code-rules.md).
+// Razor zone reader behind the STD-BTN guards "at most one blue button per zone" (detection 6) and
+// "one visible main action, the rest in a menu" (detection 11, docs/code-rules.md).
 // Copy it into a test project next to ButtonConventionGuardTests.cs and adapt only the namespace;
 // keep the kit-model line so verify-rules.ps1 (STD-KITCOPY) reports the copy when this model moves.
 //
-// Aetheus copy: the model reads the button of the kit's example app, from a component library Aetheus
-// no longer uses. Aetheus renders OE buttons, so the three button-library points are adapted: the
-// button tags (OmniButton and OmniSplitButton), the colour attribute (Variant) and the default colour
-// in IsMain (an OmniButton defaults to Primary, an OmniSplitButton to Secondary). The walk of Buttons
-// is a ZoneWalker class split by what starts at the current character (tag, branch, brace), and the
-// branch test is StartsBranch, both unchanged in behaviour, to keep every method under the grade-A
-// cyclomatic threshold (15) of the nightly quality grade (recette R2-107; the model's Buttons is at 26).
+// Recognize OE button tags, Variant colours and their defaults: Primary for OmniButton and
+// Secondary for OmniSplitButton. ZoneWalker and StartsBranch keep each method within the cyclomatic
+// complexity threshold of 15.
 
 using System.Text.RegularExpressions;
 
@@ -21,14 +18,17 @@ namespace Aetheus.Front.Tests.Architecture;
 /// Reads a <c>.razor</c> source as markup for the <c>STD-BTN</c> zone rule (docs/code-rules.md): every
 /// button with the element that directly holds it (its zone: a header's actions, a dialog footer, a
 /// form's submit row, a toolbar...) and the <c>if</c>/<c>else</c> branches around it, since two buttons
-/// in different branches of one <c>if</c> never render together.
+/// in different branches of one <c>if</c> never render together. A button in the cell template of a data
+/// grid column also carries its grid, whose columns make one row.
 /// </summary>
 internal static class ButtonZoneScanner
 {
     /// <summary>The button tags of this app: OE's button and split button.</summary>
     private static readonly HashSet<string> ButtonTags = new(StringComparer.Ordinal) { "OmniButton", "OmniSplitButton" };
 
-    internal sealed record ZoneButton(string Markup, int Line, int Zone, IReadOnlyList<(int If, int Branch)> Branches);
+    /// <param name="Row">The grid whose row shows the button (its nearest <c>*DataGrid</c> element, reached
+    /// through a <c>*DataGridColumn</c> and no template other than <c>Template</c>), 0 off a grid row.</param>
+    internal sealed record ZoneButton(string Markup, int Line, int Zone, IReadOnlyList<(int If, int Branch)> Branches, int Row);
 
     private static readonly HashSet<string> VoidElements = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -55,12 +55,8 @@ internal static class ButtonZoneScanner
         return new ZoneWalker(source).Walk();
     }
 
-    /// <summary>
-    /// One pass over a markup source: the open elements (a button's zone is the innermost one) and the
-    /// <c>if</c>/<c>else</c> frames around the current position. Recette R2-107: the walk is split
-    /// by what starts at the current character (a tag, a branch, a brace) so no method of it goes over
-    /// the grade-A cyclomatic threshold (15) the nightly quality grade applies to every source.
-    /// </summary>
+    /// <summary>Tracks open elements and conditional frames in one source pass to identify
+    /// simultaneously rendered button zones.</summary>
     private sealed class ZoneWalker(string source)
     {
         private readonly List<ZoneButton> _result = [];
@@ -83,7 +79,7 @@ internal static class ButtonZoneScanner
 
                 if (StartsBranch(source, i, out var branch))
                 {
-                    var open = source.IndexOf('{', i);
+                    var open = BranchBrace(source, branch);
                     if (open < 0)
                     {
                         break;
@@ -153,7 +149,8 @@ internal static class ButtonZoneScanner
             var line = source.AsSpan(0, i).Count('\n') + 1;
             _result.Add(new ZoneButton(source[i..end], line,
                 _elements.Count > 0 ? _elements.Peek().Id : 0,
-                _frames.Where(f => f.If >= 0).ToList()));
+                _frames.Where(f => f.If >= 0).ToList(),
+                RowOf(_elements)));
             return end;
         }
 
@@ -194,6 +191,98 @@ internal static class ButtonZoneScanner
         return branch.Success;
     }
 
+    /// <summary>
+    /// The index of the brace opening the branch <paramref name="branch"/> starts, or -1. An <c>if</c>
+    /// condition is skipped first, its parentheses balanced and its string and character literals read
+    /// whole, so a brace inside it (a property pattern <c>x is { } y</c>) is not taken for the branch.
+    /// </summary>
+    private static int BranchBrace(string source, Match branch)
+    {
+        if (!branch.Value.EndsWith('('))
+        {
+            return source.IndexOf('{', branch.Index);
+        }
+
+        var i = branch.Index + branch.Length;
+        for (var depth = 1; depth > 0; i++)
+        {
+            if (i >= source.Length)
+            {
+                return -1;
+            }
+
+            var c = source[i];
+            if (c is '"' or '\'')
+            {
+                i = LiteralEnd(source, i);
+            }
+            else if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')')
+            {
+                depth--;
+            }
+        }
+
+        return source.IndexOf('{', i);
+    }
+
+    /// <summary>The index of the quote closing the literal opened at <paramref name="start"/>, escapes skipped.</summary>
+    private static int LiteralEnd(string source, int start)
+    {
+        for (var i = start + 1; i < source.Length; i++)
+        {
+            if (source[i] == '\\')
+            {
+                i++;
+            }
+            else if (source[i] == source[start])
+            {
+                return i;
+            }
+        }
+
+        return source.Length;
+    }
+
+    /// <summary>
+    /// The grid whose row shows a button held by <paramref name="elements"/> (innermost first), or 0. An
+    /// edit, header, footer or filter template never renders beside the row's display cells, so a button
+    /// in one is off the row.
+    /// </summary>
+    private static int RowOf(Stack<(string Name, int Id)> elements)
+    {
+        string? template = null;
+        var inCell = false;
+        foreach (var (name, id) in elements)
+        {
+            if (inCell)
+            {
+                if (name.EndsWith("DataGrid", StringComparison.Ordinal))
+                {
+                    return id;
+                }
+            }
+            else if (name.EndsWith("DataGridColumn", StringComparison.Ordinal))
+            {
+                if (template is not null && template != "Template")
+                {
+                    return 0;
+                }
+
+                inCell = true;
+            }
+            else if (name.EndsWith("Template", StringComparison.Ordinal))
+            {
+                template ??= name;
+            }
+        }
+
+        return 0;
+    }
+
     /// <summary>True when the two buttons sit in different branches of one <c>if</c>.</summary>
     internal static bool Exclusive(ZoneButton a, ZoneButton b) =>
         a.Branches.Any(x => b.Branches.Any(y => y.If == x.If && y.Branch != x.Branch));
@@ -227,6 +316,41 @@ internal static class ButtonZoneScanner
                     }
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// The largest set of <paramref name="buttons"/> that can render together: no two of them sit in
+    /// different branches of one <c>if</c>. A zone holds a handful of buttons, so the search is exhaustive.
+    /// </summary>
+    internal static List<ZoneButton> RenderedTogether(IReadOnlyList<ZoneButton> buttons)
+    {
+        var best = new List<ZoneButton>();
+        var current = new List<ZoneButton>();
+        Extend(0);
+        return best;
+
+        void Extend(int next)
+        {
+            if (current.Count + (buttons.Count - next) <= best.Count)
+            {
+                return;
+            }
+
+            if (next == buttons.Count)
+            {
+                best = [.. current];
+                return;
+            }
+
+            if (current.TrueForAll(b => !Exclusive(b, buttons[next])))
+            {
+                current.Add(buttons[next]);
+                Extend(next + 1);
+                current.RemoveAt(current.Count - 1);
+            }
+
+            Extend(next + 1);
         }
     }
 }

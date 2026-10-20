@@ -28,6 +28,12 @@ internal static class PipelineRunFormatting
         return TaskExecutionStatus.Pending;
     }
 
+    /// <summary>Recette R1-80: a stage whose steps all completed, at least one of them a control that
+    /// ran and found failures (<see cref="PipelineStepRunDto.IsRejected"/>). A failed or running step
+    /// keeps the stage failed or running: an error outranks a rejection.</summary>
+    public static bool IsRejectedStage(List<PipelineStepRunDto> steps) =>
+        GetAggregateStatus(steps) == TaskExecutionStatus.Success && steps.Any(step => step.IsRejected);
+
     /// <summary>The condition that kept a whole stage from running, or null when the stage was not
     /// skipped by one. Only a stage whose every step was cancelled by an unmet condition qualifies:
     /// a stage cancelled after an upstream failure carries no condition and must not claim one.</summary>
@@ -84,41 +90,42 @@ internal static class PipelineRunFormatting
         && step.OutputVariables.TryGetValue(RolledBackVar, out var v)
         && string.Equals(v, "true", StringComparison.OrdinalIgnoreCase);
 
-    // S-DES-18, revised by PLAN-003 lot 22 / D13: a failed step is red, always, including one that
-    // was allowed to continue; what distinguishes the latter is that it is drawn outlined, as a
-    // failure that did not block, rather than a different colour that reads as a warning. A
-    // rolled-back deploy (RLBK) keeps its own "restored, not down" warning colour.
+    // Failed steps stay red, with an outline for failures that allow execution to continue.
+    // Rolled-back deployments use the warning colour to distinguish restored service.
     public static OmniTone GetStepBadge(PipelineStepRunDto step) =>
         IsRolledBack(step) ? OmniTone.Warning
         : IsSkippedWithoutWork(step) ? OmniTone.Neutral
+        : step.IsRejected ? OmniTone.Warning
         : GetStepBadge(step.Status);
 
-    /// <summary>PLAN-007 lot 3: a step that finished Success without doing its work, such as an
-    /// <c>allow_missing</c> restore that found no artifact. Drawn as skipped, never as a green tick.</summary>
+    /// <summary>A step that finished Success without doing its work, such as an
+    /// <c>allow_missing</c> restore that found no artifact. Drawn as skipped, never as a green
+    /// tick.</summary>
     public static bool IsSkippedWithoutWork(PipelineStepRunDto step) =>
         step.Status == TaskExecutionStatus.Success && !string.IsNullOrWhiteSpace(step.SkippedReason);
 
-    /// <summary>PLAN-003 lot 22: a failure the pipeline was told to continue past.</summary>
+    /// <summary>A failure the pipeline was told to continue past.</summary>
     public static bool IsNonBlockingFailure(PipelineStepRunDto step) =>
         step is { Status: TaskExecutionStatus.Failed, ContinueOnError: true } && !IsRolledBack(step);
 
-    /// <summary>Outlined for a non-blocking failure, solid otherwise (recette R-023, R-052).</summary>
+    /// <summary>Outlined for a non-blocking failure, solid otherwise.</summary>
     public static OmniFill GetStepBadgeVariant(PipelineStepRunDto step) =>
         IsNonBlockingFailure(step) ? OmniFill.Outline : OmniFill.Solid;
 
-    /// <summary>Recette R-246: a step the engine never started because its condition (or its stage's)
-    /// was false. It is stored as <see cref="TaskExecutionStatus.Cancelled"/> - the enum is persisted
-    /// and has no Skipped value - and only <c>SkippedCondition</c> tells it apart from a step cancelled
-    /// after an upstream failure or by a user, so every status display must read it through here.</summary>
+    /// <summary>A false condition is persisted as <see cref="TaskExecutionStatus.Cancelled"/>
+    /// because the enum has no Skipped value. Status displays must inspect <c>SkippedCondition</c>
+    /// to distinguish it from cancellation.</summary>
     public static bool IsSkippedByCondition(PipelineStepRunDto step) =>
         step.Status == TaskExecutionStatus.Cancelled && !string.IsNullOrWhiteSpace(step.SkippedCondition);
 
     /// <summary>Status label for a step badge - "Rolled back" for a restored-after-failure deploy,
-    /// "Skipped" for a step whose condition was false (R-246), otherwise the localized execution status.</summary>
+    /// "Skipped" for a step whose condition was false, otherwise the localized execution
+    /// status.</summary>
     public static string StepStatusText(PipelineStepRunDto step, IStringLocalizer localizer) =>
         IsRolledBack(step) ? localizer["RolledBack"].Value
         : IsSkippedWithoutWork(step) ? localizer["StepSkippedArtifactMissing"].Value
         : IsSkippedByCondition(step) ? localizer["Skipped"].Value
+        : step.IsRejected ? localizer.Localize(PipelineStatus.Rejected)
         : localizer.Localize(step.Status);
 
     /// <summary>Tooltip of a step badge: why a failure did not block, why a step did no work, or the
@@ -128,14 +135,17 @@ internal static class PipelineRunFormatting
         : IsNonBlockingFailure(step) ? localizer["StepFailedNonBlocking"].Value
         : IsSkippedWithoutWork(step) ? step.SkippedReason
         : IsSkippedByCondition(step) ? step.SkippedCondition
+        : step.IsRejected ? localizer["StepRejectedHint"].Value
         : null;
 
-    /// <summary>R-246: the icon a skipped status carries, so "skipped" is not told by its text alone and
-    /// never by a colour it shares with Cancelled. Null for every other status (text-only badge).</summary>
+    /// <summary>The icon a skipped status carries, so "skipped" is not told by its text alone and
+    /// never by a colour it shares with Cancelled. Null for every other status (text-only
+    /// badge).</summary>
     public static OmniIconName? StepStatusIcon(PipelineStepRunDto step) =>
         IsSkippedByCondition(step) || IsSkippedWithoutWork(step) ? SkippedIcon : null;
 
-    /// <summary>R-246: one icon for "skipped" everywhere (step badge, Gantt stage and step rows).</summary>
+    /// <summary>One icon for "skipped" everywhere (step badge, Gantt stage and step
+    /// rows).</summary>
     public const OmniIconName SkippedIcon = OmniIconName.ArrowUUpRight;
 
     // UCHN: cascade lineage read from a run's variables - the downstream-trigger handler forwards
@@ -190,11 +200,8 @@ internal static class PipelineRunFormatting
         _ => "omni-u-text-danger"
     };
 
-    /// <summary>
-    /// Recette R-428: the OE chart colour of a coverage gauge, on the tiers of <see cref="CoverageColorClass"/>.
-    /// OE's palette is 1 green, 2 orange, 4 red; the gauge used to read 1 below 80 % and 2 above it, so a
-    /// good figure was orange and a middling one green, against the text beside it.
-    /// </summary>
+    /// <summary>Coverage gauge colours use the same tiers as <see cref="CoverageColorClass"/>: OE
+    /// palette indices 1, 2 and 4 denote green, orange and red.</summary>
     public static int CoverageChartColorIndex(double rate) => rate switch
     {
         >= 0.8 => 1,
@@ -202,8 +209,8 @@ internal static class PipelineRunFormatting
         _ => 4
     };
 
-    /// <summary>Recette R-151: the resource key naming the tier <see cref="CoverageColorClass"/> colours,
-    /// on the same thresholds, so the verdict is also given in words and not by the hue alone.</summary>
+    /// <summary>The resource key naming the tier <see cref="CoverageColorClass"/> colours, on the
+    /// same thresholds, so the verdict is also given in words and not by the hue alone.</summary>
     public static string CoverageTierKey(double rate) => rate switch
     {
         >= 0.8 => "CoverageTierGood",

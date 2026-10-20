@@ -13,6 +13,7 @@ public static class ArtifactsModuleExtensions
         // Singleton like the storage service: sessions live on disk, so it holds no per-request state.
         services.AddSingleton<IChunkedArtifactUploadService, ChunkedArtifactUploadService>();
         services.AddHostedService<ArtifactCleanupService>();
+        services.AddSingleton<ArtifactFileInventory>();
         services.AddHostedService<ArtifactStorageMonitorService>();
         return services;
     }

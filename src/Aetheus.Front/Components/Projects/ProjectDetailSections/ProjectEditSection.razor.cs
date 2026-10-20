@@ -6,9 +6,7 @@ namespace Aetheus.Front.Components.Projects.ProjectDetailSections;
 public partial class ProjectEditSection
 {
     [Inject] private ApiClient Api { get; set; } = default!;
-    [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
-    [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private ILogger<ProjectEditSection> Logger { get; set; } = default!;
 
@@ -124,11 +122,5 @@ public partial class ProjectEditSection
         _saving = false;
     }
 
-    private async Task OnDelete()
-    {
-        // Recette R2-122: the dialog counts what goes with the project, asks for its name and deletes it.
-        if (!await ProjectDeleteDialog.OpenAsync(Dialog, L, Project!.Id)) return;
-        Nav.NavigateTo("/projects");
-    }
 
 }

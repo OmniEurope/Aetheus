@@ -3,8 +3,9 @@
 #
 # Scanning every reachable commit costs minutes and answers a question about the repository, not about
 # the change a candidate packages: the current-tree scan of application-security catches the secret a
-# commit adds. So only the nightly triggers this pipeline. It reads .gitleaks.toml at the repository
-# root, like the current-tree scan.
+# commit adds. So only the nightly triggers this pipeline. Like the current-tree scan, it reads
+# .gitleaks.toml at the repository root when there is one, and Gitleaks' built-in rules otherwise
+# (recette R3-63): nothing is required in the repository.
 name: application-security-history-template
 trigger: manual
 variables:
@@ -23,8 +24,9 @@ stages:
         scanner: gitleaks-history
         timeout_seconds: 1800
 
-  # The severity rules every security pipeline uses; recette R2-119 will switch them to the weighted
-  # finding score once the deployed backend parses `finding_score`.
+  # The generic grade counts open findings by severity (owner decision of 2026-10-17, ADR-030
+  # amendment of that date): no `finding_score: weighted` rule here. A project that wants the weighted
+  # score overrides this step in its own pipeline.
   - name: Grade security history
     group: Security
     execution_role: build

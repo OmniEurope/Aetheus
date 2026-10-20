@@ -21,8 +21,8 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Parameter] public int Id { get; set; }
 
-    /// <summary>Recette R-504: the pipeline run the reader comes from (the Gate tab of that run). The
-    /// page then shows what that run analysed: its file, its line, its commit.</summary>
+    /// <summary>The pipeline run the reader comes from (the Gate tab of that run). The page then
+    /// shows what that run analysed: its file, its line, its commit.</summary>
     [SupplyParameterFromQuery(Name = "run")] public int? Run { get; set; }
 
     /// <summary>The occurrence shown: the one of the run the reader comes from when the finding has one,
@@ -44,7 +44,7 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
     private bool _showPromptPreview;
     private SourceExcerpt? _excerpt;
     private readonly DecisionFormModel _decision = new();
-    // Recette R-210: header filter texts, built once so the columns see the same delegate on every render.
+    // Header filter texts, built once so the columns see the same delegate on every render.
     private Func<string, string>? _statusText;
     private Func<string, string>? _yesNoText;
     private Func<string, string> StatusText => _statusText ??= GridFilterText.ForEnum<AnalysisFindingStatus>(L);
@@ -76,11 +76,9 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         await LoadExcerptAsync();
     }
 
-    /// <summary>
-    /// Recette R-433: the passage of the file under the location, read from the repository at the
-    /// finding's commit (its branch when no commit was recorded). A file gone at that ref, a binary one
-    /// or a line past its end shows no passage; the location and its link stay.
-    /// </summary>
+    /// <summary> The passage of the file under the location, read from the repository at the
+    /// finding's commit (its branch when no commit was recorded). A file gone at that ref, a binary
+    /// one or a line past its end shows no passage; the location and its link stay. </summary>
     private async Task LoadExcerptAsync()
     {
         _excerpt = null;
@@ -103,14 +101,14 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
     private string ExcerptTitle(SourceExcerpt excerpt) =>
         string.Format(L["AnalysisSourceExcerptTitle"], excerpt.FirstLine, excerpt.LastLine);
 
-    /// <summary>Recette R-433: the branch's files in its repository, when the repository is known.</summary>
+    /// <summary>The branch's files in its repository, when the repository is known.</summary>
     private static string? BranchHref(AnalysisFindingOccurrenceDto source) =>
         source.RepositoryId is { } repositoryId && !string.IsNullOrWhiteSpace(source.BranchName)
             ? QueryHelpers.AddQueryString($"/git-repositories/{repositoryId}",
                 new Dictionary<string, string?> { ["tab"] = "files", ["ref"] = source.BranchName })
             : null;
 
-    /// <summary>Recette R-433: the commit's page in its repository, when the repository is known.</summary>
+    /// <summary>The commit's page in its repository, when the repository is known.</summary>
     private static string? CommitHref(AnalysisFindingOccurrenceDto source) =>
         source.RepositoryId is { } repositoryId && !string.IsNullOrWhiteSpace(source.CommitHash)
             ? $"/git-repositories/{repositoryId}/commits/{Uri.EscapeDataString(source.CommitHash)}"
@@ -159,7 +157,7 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>Recette R2-027: a decision is in force (not revoked) and the finding still carries it.</summary>
+    /// <summary>A decision is in force (not revoked) and the finding still carries it.</summary>
     private bool HasRevertibleDecision => _finding is not null
         && AnalysisFindingDecisionRevert.CanRevert(_finding.Status)
         && _decisions.Any(decision => decision.RevokedAt is null);
@@ -299,7 +297,7 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
 
     private sealed class DecisionFormModel
     {
-        // Recette R2-134: nothing is chosen until the reviewer picks an outcome.
+        // Nothing is chosen until the reviewer picks an outcome.
         [Required(ErrorMessage = "AnalysisDecisionOutcomeRequired")] public AnalysisFindingStatus? Status { get; set; }
         [Required, StringLength(2000, MinimumLength = 10)] public string Reason { get; set; } = string.Empty;
         public DateTime? ExpiresAt { get; set; }

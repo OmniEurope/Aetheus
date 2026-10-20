@@ -5,13 +5,11 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Monitoring;
 
-/// <summary>
-/// Recette R-263: the run LIST row every run grid shows (EF projection, list warnings), read straight
+/// <summary> The run LIST row every run grid shows (EF projection, list warnings), read straight
 /// from the shared <see cref="PipelineRun"/> entity. It lives in this read-model module (L1) so the
 /// dashboard's recent runs and the Pipelines module (L6, which forwards to it) read the same row
-/// without Monitoring reaching up into the orchestrator. Only pure JSON reads and entity fields here:
-/// nothing that runs a pipeline.
-/// </summary>
+/// without Monitoring reaching up into the orchestrator. Only pure JSON reads and entity fields
+/// here: nothing that runs a pipeline. </summary>
 public static class PipelineRunListRows
 {
     // Server-side EF projection for the run LIST: scalar run fields + step summary chips only.
@@ -25,6 +23,7 @@ public static class PipelineRunListRows
         ProjectId = r.Pipeline != null ? r.Pipeline.ProjectId : null,
         PipelineName = r.Pipeline != null ? r.Pipeline.Name : string.Empty,
         Status = r.Status,
+        RunToEnd = r.RunToEnd,
         ProjectedWarningsJson = r.WarningsJson,
         // Only an active run can still be waiting. A finished run keeps the column (it is the last
         // thing the planner observed, useful post-mortem in the database) but must never show it as a
@@ -61,6 +60,10 @@ public static class PipelineRunListRows
             StartedAt = s.StartedAt,
             CompletedAt = s.CompletedAt,
             ExitCode = s.ExitCode,
+            // The category only, same precedence as the detail (the task's own report first). The
+            // reason text stays detail-only: it can quote a substituted value, and only the detail
+            // path masks it. IsAdvisory needs the YAML snapshot: PipelineAdvisorySteps.ApplyToListAsync.
+            FailureCode = s.Task != null && s.Task.FailureCode != null ? s.Task.FailureCode : s.FailureCode,
             RetryCount = s.RetryCount,
             ContinueOnError = s.ContinueOnError,
             MatrixLeg = s.MatrixLeg,

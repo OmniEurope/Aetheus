@@ -7,8 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests.AppMonitoring;
 
-/// <summary>
-/// R-458: the hourly metric rollup reads only the hours that still miss rows. R-455: the per-route
+/// <summary> The hourly metric rollup reads only the hours that still miss rows. the per-route
 /// timings an application exports through Aetheus.Telemetry become its Performance table.
 /// </summary>
 public sealed class AppMetricRollupAndPerformanceTests : IDisposable
@@ -30,7 +29,7 @@ public sealed class AppMetricRollupAndPerformanceTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    /// <summary>The sweep's loop: each completed hour of the lookback, one at a time (R2-020).</summary>
+    /// <summary>The sweep's loop: each completed hour of the lookback, one at a time.</summary>
     private async Task<int> AggregateLastHoursAsync(int hours, CancellationToken ct)
     {
         var written = 0;
@@ -150,7 +149,7 @@ public sealed class AppMetricRollupAndPerformanceTests : IDisposable
         var login = """{"http.request.method":"POST","http.route":"api/login"}""";
         var gone = """{"http.request.method":"GET","http.route":"api/old"}""";
         _db.AppMetricSamples.AddRange(
-            // login was last called three hours ago: no sample of it since (R2-082, idle routes are not exported).
+            // The last login sample is three hours old; idle routes export no new samples.
             Sample(CurrentHour.AddHours(-3).AddMinutes(-1), RequestPerformanceMetrics.P95Metric, 700, login),
             Sample(CurrentHour.AddHours(-3), RequestPerformanceMetrics.P95Metric, 650, login),
             Sample(CurrentHour.AddHours(-3), RequestPerformanceMetrics.CountMetric, 9, login),

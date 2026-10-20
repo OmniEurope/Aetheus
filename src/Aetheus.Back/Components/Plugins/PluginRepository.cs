@@ -27,7 +27,7 @@ public class PluginRepository(AppDbContext db) : IPluginRepository
         int page, int pageSize, CancellationToken ct = default,
         IReadOnlyList<GridFilter>? columnFilters = null)
     {
-        // Recette R-224: the grid's column header filters, before the count.
+        // The grid's column header filters, before the count.
         var query = PluginListQuery.Columns.ApplyFilters(db.PluginRegistrations.AsNoTracking(), columnFilters);
         if (!string.IsNullOrWhiteSpace(search))
         {

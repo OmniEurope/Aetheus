@@ -53,8 +53,8 @@ public sealed class AnalysisApi(HttpClient http) : ApiClientBase(http)
     public async Task<AnalysisRunGateDto?> GetAnalysisRunGateAsync(int runId, CancellationToken ct = default) =>
         await Http.GetFromJsonAsync<AnalysisRunGateDto>($"api/analysis/runs/{runId}/result", JsonOptions.Web, ct);
 
-    /// <summary>Recette R-485: one page of the findings a run and the runs it triggered observed, with
-    /// the counts of the whole set. Throws <see cref="HttpRequestException"/> on a failed read.</summary>
+    /// <summary>One page of the findings a run and the runs it triggered observed, with the counts
+    /// of the whole set. Throws <see cref="HttpRequestException"/> on a failed read.</summary>
     public async Task<AnalysisRunFindingsPageDto> GetAnalysisRunFindingsAsync(
         AnalysisRunFindingsRequest request, CancellationToken ct = default)
     {
@@ -96,12 +96,13 @@ public sealed class AnalysisApi(HttpClient http) : ApiClientBase(http)
         if (!string.IsNullOrWhiteSpace(commit)) query["commit"] = commit;
         if (from.HasValue) query["from"] = from.Value.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture);
         if (to.HasValue) query["to"] = to.Value.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture);
-        // Recette R-224: the grid's column header filters.
+        // The grid's column header filters.
         var url = GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/analysis/portfolio", query), filters);
         return await Http.GetFromJsonAsync<PaginatedResult<AnalysisPortfolioRowDto>>(url, JsonOptions.Web, ct) ?? new();
     }
 
-    /// <summary>Recette R-224: the organizations, projects and scanners the portfolio's checkable filters offer.</summary>
+    /// <summary>The organizations, projects and scanners the portfolio's checkable filters
+    /// offer.</summary>
     public async Task<AnalysisPortfolioFilterValuesDto> GetAnalysisPortfolioFilterValuesAsync(CancellationToken ct = default) =>
         await GetJsonAsync<AnalysisPortfolioFilterValuesDto>("api/analysis/portfolio/filter-values", ct) ?? new();
 
@@ -126,7 +127,7 @@ public sealed class AnalysisApi(HttpClient http) : ApiClientBase(http)
         if (!string.IsNullOrWhiteSpace(branch)) query["branch"] = branch;
         if (!string.IsNullOrWhiteSpace(responsible)) query["responsible"] = responsible;
         var url = QueryHelpers.AddQueryString($"api/analysis/projects/{projectId}/findings", query);
-        // Recette R-210: a multi-valued column filter repeats its key, one value each.
+        // A multi-valued column filter repeats its key, one value each.
         url = QueryValues.AddMany(url, "categories", categories);
         url = QueryValues.AddMany(url, "severities", severities);
         url = QueryValues.AddMany(url, "statuses", statuses);
@@ -155,7 +156,7 @@ public sealed class AnalysisApi(HttpClient http) : ApiClientBase(http)
         PostForApiErrorOutcomeAsync<CreateAnalysisFindingDecisionRequest, AnalysisFindingDecisionDto>(
             $"api/analysis/findings/{findingId}/decisions", request, ct);
 
-    /// <summary>Recette R2-027: reverts the active decision of the finding, which is open again.</summary>
+    /// <summary>Reverts the active decision of the finding, which is open again.</summary>
     public Task<ApiStatus> RevokeAnalysisFindingDecisionAsync(int findingId, CancellationToken ct = default) =>
         DeleteAsync($"api/analysis/findings/{findingId}/decisions/active", ct);
 

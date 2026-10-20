@@ -8,8 +8,9 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>PLAN-005 lot 2: the heartbeat reconciliation adopts an existing configuration additively,
-/// deactivates instead of deleting, never trusts a partial inventory and never resurrects a pending removal.</summary>
+/// <summary>The heartbeat reconciliation adopts an existing configuration additively, deactivates
+/// instead of deleting, never trusts a partial inventory and never resurrects a pending
+/// removal.</summary>
 public sealed class MailStateReconcilerTests : IDisposable
 {
     private const int ServerId = 7;
@@ -151,8 +152,8 @@ public sealed class MailStateReconcilerTests : IDisposable
     [Fact]
     public async Task APurgeInProgress_AdoptsNothingBack()
     {
-        // "Réinstaller la messagerie" dropped the rows; a heartbeat taken while the host is being erased
-        // still lists them and must not bring them back (the same domain could no longer be set up).
+        // Do not recreate purged mail rows from an inventory captured while host erasure is still
+        // in progress.
         _db.Tasks.Add(new ServerTask
         {
             ServerId = ServerId,

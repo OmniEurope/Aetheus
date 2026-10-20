@@ -51,7 +51,7 @@ public class PipelineRunDeepTests : BunitContext
     {
         _handler.SetResponse("api/pipelines/runs", System.Net.HttpStatusCode.NotFound);
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 99));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular") || cut.Markup.Contains("RunNotFound"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular") || cut.Markup.Contains("RunNotFound"));
 
         // A 404 leaves _run null and the page shows the RunNotFound empty state.
         Assert.Null(typeof(PipelineRun).GetField("_run", Priv)!.GetValue(cut.Instance));
@@ -73,7 +73,7 @@ public class PipelineRunDeepTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/42", run);
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 42));
-        cut.WaitForState(() => cut.Markup.Contains("CI Build") || !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("CI Build") || !cut.Markup.Contains("rz-progressbar-circular"));
 
         // The loaded run's pipeline name renders in the header.
         Assert.Contains("CI Build", cut.Markup);
@@ -93,7 +93,7 @@ public class PipelineRunDeepTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/10", run);
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 10));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // The "no online server matches agent" warning is a blocking warning and is surfaced in the run view.
         Assert.Contains("no online server matches agent", cut.Markup);
@@ -109,7 +109,7 @@ public class PipelineRunDeepTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/5", run);
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 5));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var selected = typeof(PipelineRun).GetField("_selectedStep", Priv)!;
         Assert.NotNull(selected.GetValue(cut.Instance));

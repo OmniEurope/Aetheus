@@ -19,13 +19,9 @@ public sealed class LinuxServiceCollector(ILogger<LinuxServiceCollector> logger,
         return services;
     }
 
-    // Recette R2-031: services whose Debian package alone provides both the unit and the program. When
-    // dpkg says that package is not installed (purged, or `rc` after `apt-get remove`), the service is
-    // not installed, whatever unit or init script it left behind - otherwise it stays under "Installed"
-    // where Start fails ("Unit not found") and Uninstall has nothing left to do. Services that another
-    // package can legitimately provide stay out (docker-ce for docker.io, snap for certbot, nginx-core
-    // for the nginx metapackage on older releases, the version-suffixed database packages): for them a
-    // missing catalogue package proves nothing, and the unit/binary evidence decides alone.
+    // For services supplied exclusively by their catalogue Debian package, dpkg installation status
+    // determines availability. Services with alternative providers use unit and binary evidence
+    // instead.
     private static readonly string[] PackageDecidedServices = ["apache2", "postfix", "dovecot", "portsentry", "rkhunter"];
 
     private async Task RemoveServicesOfUninstalledPackagesAsync(List<ServiceInfoDto> services, CancellationToken ct)
@@ -73,9 +69,7 @@ public sealed class LinuxServiceCollector(ILogger<LinuxServiceCollector> logger,
             "ls -d /opt/teamspeak* /opt/ts3server* /usr/local/teamspeak* 2>/dev/null | head -n1 | grep -q ."),
         ("apache2",    new[] { "apache2", "httpd" },
             "command -v apache2 >/dev/null 2>&1 || command -v httpd >/dev/null 2>&1"),
-        // Recette R-506: the binary, never the configuration directory. `apt-get remove` leaves
-        // /etc/postfix and /etc/dovecot in place, so a removed mail server stayed listed as installed
-        // and every action on it failed ("Unit dovecot.service not found").
+        // Checks the executable because package removal may leave configuration directories behind.
         ("postfix",    new[] { "postfix" },
             "command -v postfix >/dev/null 2>&1 || test -x /usr/sbin/postfix"),
         ("dovecot",    new[] { "dovecot" },
@@ -166,10 +160,8 @@ public sealed class LinuxServiceCollector(ILogger<LinuxServiceCollector> logger,
         return byName.Values.ToList();
     }
 
-    // Recette R2-031: the program a manageable service's init script starts. `apt-get remove` keeps
-    // /etc/init.d/<name> (a conffile) and systemd-sysv-generator turns it into a "generated" unit that
-    // loads fine but starts nothing. A generated unit is kept only when its program is still there;
-    // generated units outside this table (unknown programs) are left as they are.
+    // Known generated SysV units require their service executable because package removal may
+    // retain init scripts. Units with unknown executable mappings retain their normal detection.
     private static readonly Dictionary<string, string[]> GeneratedUnitPrograms = new(StringComparer.OrdinalIgnoreCase)
     {
         ["nginx"] = ["/usr/sbin/nginx"],
@@ -264,9 +256,8 @@ public sealed class LinuxServiceCollector(ILogger<LinuxServiceCollector> logger,
                 var name = parts[0].Replace(".service", string.Empty);
                 if (string.IsNullOrWhiteSpace(name)) continue;
 
-                // Recette R2-031: columns are UNIT LOAD ACTIVE SUB. A `not-found` unit has no unit file
-                // left (its package is gone): systemd lists it only because something still refers to it.
-                // Counting it made a removed dovecot "installed" again, with every action failing.
+                // Columns are UNIT LOAD ACTIVE SUB; a not-found unit has no unit file and does not
+                // prove that a service is installed.
                 if (parts[1].Equals("not-found", StringComparison.OrdinalIgnoreCase)) continue;
 
                 var status = parts[3];
@@ -395,9 +386,7 @@ public sealed class LinuxServiceCollector(ILogger<LinuxServiceCollector> logger,
         return result;
     }
 
-    // audit E-1: constant `systemctl …` strings, zero external interpolation. Routed through the
-    // injected IShellRunner (`/bin/bash -c <constant>`) instead of an in-class Process.Start so the
-    // collector no longer launches processes directly - documented architectural exception.
+    // Executes constant systemctl commands through IShellRunner without external interpolation.
     private async Task<string> RunCommandAsync(string command, CancellationToken ct)
     {
         var res = await shellRunner.RunExecAsync("/bin/bash", ["-c", command], ct, TimeSpan.FromSeconds(30)).ConfigureAwait(false);

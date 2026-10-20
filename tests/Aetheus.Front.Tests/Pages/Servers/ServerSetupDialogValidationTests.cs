@@ -36,7 +36,7 @@ public class ServerSetupDialogValidationTests : BunitContext
     private ServerSetupDialogModel SubmittedModel(IRenderedComponent<ServerSetupDialog> cut)
     {
         cut.Find("form").Submit();
-        cut.WaitForAssertion(() => Assert.IsType<ServerSetupDialogModel>(Spy().LastResult), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.IsType<ServerSetupDialogModel>(Spy().LastResult));
         return (ServerSetupDialogModel)Spy().LastResult!;
     }
 
@@ -44,8 +44,7 @@ public class ServerSetupDialogValidationTests : BunitContext
     {
         cut.Find("form").Submit();
         var context = cut.FindComponent<EditForm>().Instance.EditContext!;
-        cut.WaitForAssertion(() => Assert.NotEmpty(context.GetValidationMessages(context.Field(field))),
-            TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.NotEmpty(context.GetValidationMessages(context.Field(field))));
         Assert.False(spy.Closed);
     }
 

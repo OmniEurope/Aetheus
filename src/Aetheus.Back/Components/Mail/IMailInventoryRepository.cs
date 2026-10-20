@@ -3,8 +3,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Mail;
 
-/// <summary>PLAN-005: tracked access to the mail rows of one server for the heartbeat reconciliation,
-/// the quota ingestion and the DNS verification (batched writes, one SaveChanges per pass).</summary>
+/// <summary>Provides tracked mail inventory access with batched writes and one SaveChanges per
+/// reconciliation, quota-ingestion or DNS-verification pass.</summary>
 public interface IMailInventoryRepository
 {
     /// <summary>Tracked domains of the server with their accounts and aliases.</summary>

@@ -10,10 +10,9 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R1-37: the end of an Aetheus user's session forgets the mailbox passwords that user holds, at once,
-/// and only theirs. Driven through the real in-process dispatcher, wired the way the Mail module wires it.
-/// </summary>
+/// <summary> The end of an Aetheus user's session forgets the mailbox passwords that user holds, at
+/// once, and only theirs. Driven through the real in-process dispatcher, wired the way the Mail
+/// module wires it. </summary>
 public sealed class MailboxCredentialSessionEndTests
 {
     private const string Password = "s3cret-mailbox-pass";

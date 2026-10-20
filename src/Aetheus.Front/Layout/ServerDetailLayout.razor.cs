@@ -30,8 +30,8 @@ public partial class ServerDetailLayout : IDisposable
         // reactivate the moment permissions land.
         Permissions.OnPermissionsChanged += OnPermissionsChanged;
         RefreshCanWrite();
-        // PLAN-003 lot 1: the entity name now lives ONLY in the trail, so it has to be set on mount
-        // too - a loader that already holds the entity fires no change event to trigger it later.
+        // Set the breadcrumb entity name on mount because a loader already holding the entity emits
+        // no later change event.
         ReassertBreadcrumb();
     }
 
@@ -50,12 +50,16 @@ public partial class ServerDetailLayout : IDisposable
         _ = InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>Recette R2-035: where the server stands, for OE's detail frame.</summary>
+    /// <summary>Where the server stands, for OE's detail frame.</summary>
     internal OmniDetailState DetailState => Loader.Server is not null
         ? OmniDetailState.Found
         : Loader.InitialLoadCompleted ? OmniDetailState.NotFound : OmniDetailState.Loading;
 
-    /// <summary>Recette R-199: /servers/{id} and /servers/{id}/overview show the server's own actions.</summary>
+    /// <summary>The header's back arrow: the logical parent (R3-29). The server crumb links to the
+    /// overview, so on the overview itself the arrow leads to the list instead of to the same page.</summary>
+    internal string? BackHref => LogicalParentRoute.Of(Nav.ToBaseRelativePath(Nav.Uri), Breadcrumb.Items);
+
+    /// <summary>/servers/{id} and /servers/{id}/overview show the server's own actions.</summary>
     internal bool IsOverview => IsOverviewPath(Nav.ToBaseRelativePath(Nav.Uri));
 
     internal static bool IsOverviewPath(string relativePath)
@@ -65,7 +69,7 @@ public partial class ServerDetailLayout : IDisposable
             || segments.Length == 3 && segments[0] == "servers" && segments[2] == "overview";
     }
 
-    /// <summary>Recette R-275: the header shows the section's icon, the same one as the side menu.</summary>
+    /// <summary>The header shows the section's icon, the same one as the side menu.</summary>
     internal string SectionIcon => SectionIconFor(Nav.ToBaseRelativePath(Nav.Uri));
 
     internal static string SectionIconFor(string relativePath)
@@ -130,14 +134,26 @@ public partial class ServerDetailLayout : IDisposable
         Nav.NavigateTo($"/servers/{Loader.Server.Id}/configuration");
     }
 
+    private bool CanEnableAgentCapabilities =>
+        Loader.Server is { } server && OsTypeHelper.FromDescription(server.OsDescription) != OsType.Windows;
+
+    private Task OpenAgentCapabilitiesDialog()
+    {
+        if (Loader.Server is null) return Task.CompletedTask;
+        return Dialog.OpenAsync<AgentCapabilitiesDialog>(
+            L["EnableAgentCapabilities"],
+            new Dictionary<string, object?> { { "Server", Loader.Server } },
+            new OmniDialogOptions { Width = "560px", CloseDialogOnOverlayClick = false, AutoFocusFirstElement = false });
+    }
+
     private async Task UpdateAgentAsync()
     {
         if (Loader.Server is null) return;
         await new AgentUpdateRequester(Api, Dialog, Toast, L).RequestAsync(Loader.Server);
     }
 
-    // Recette R1-42: the progress card heard nothing for a while (an event lost while the tab slept);
-    // re-read the persisted request, whose status the card then applies.
+    // The progress card heard nothing for a while (an event lost while the tab slept); re-read the
+    // persisted request, whose status the card then applies.
     private Task ReloadAgentUpdateAsync() =>
         Loader.Server is null ? Task.CompletedTask : Loader.ReloadAgentUpdateAsync(Loader.Server.Id, CancellationToken.None);
 

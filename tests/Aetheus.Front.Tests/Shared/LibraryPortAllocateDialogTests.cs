@@ -5,10 +5,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// PLAN-005 lot 5. The dialog's job is to stop an operator inventing port numbers. What must not slip:
-/// offering an allocation the backend will always refuse, and losing the reason it gave.
-/// </summary>
+/// <summary>The allocation dialog must prevent invalid requests and preserve the backend's refusal
+/// reason.</summary>
 public class LibraryPortAllocateDialogTests : BunitContext
 {
     private BunitTestHelper.TestHandler? _handler;
@@ -20,7 +18,7 @@ public class LibraryPortAllocateDialogTests : BunitContext
         _handler.SetJsonResponse(
             HttpMethod.Post, "/ports/allocate",
             new List<VariableEntryDto> { new() { Key = "PORT_FRONT", Value = "10000" } });
-        // The dialog reads the library before allocating (PLAN-003 lot 24): empty, nothing pre-exists.
+        // Read the library before allocation to identify pre-existing entries.
         _handler.SetJsonResponse(HttpMethod.Get, "/entries", new PaginatedResult<VariableEntryDto>());
 
         return Render<LibraryPortAllocateDialog>(parameters => parameters.Add(c => c.LibraryId, 100));
@@ -73,8 +71,7 @@ public class LibraryPortAllocateDialogTests : BunitContext
             HttpMethod.Post, "/ports/allocate",
             new ApiError { Message = "The allocation window 10000-10001 has only 2 free port(s) left, and 4 were requested." },
             HttpStatusCode.Conflict);
-        // PLAN-003 lot 24: after a refusal the dialog re-reads the library before believing it. Here
-        // nothing was written, so the refusal stands.
+        // After refusal, re-read the library; absence of written entries confirms the refusal.
         _handler.SetJsonResponse(HttpMethod.Get, "/entries", new PaginatedResult<VariableEntryDto>());
 
         var cut = Render<LibraryPortAllocateDialog>(parameters => parameters.Add(c => c.LibraryId, 100));
@@ -87,9 +84,8 @@ public class LibraryPortAllocateDialogTests : BunitContext
     [Fact]
     public void Allocate_FailedAfterWriting_ReportsTheEntriesInsteadOfAnError()
     {
-        // PLAN-003 lot 24, constat 3: the reported production symptom. The call answers 500, yet the
-        // PORT_ entries are there afterwards. Believing the status code told the operator their
-        // allocation had failed while their ports existed, so they retried and burnt four more.
+        // A failed response can follow persisted allocation, so the subsequent library read must
+        // detect existing ports and prevent duplicate allocation.
         _handler = BunitTestHelper.RegisterServices(this);
         _handler.SetJsonResponse(HttpMethod.Get, "/ports/servers", Targets());
         _handler.SetJsonResponse(

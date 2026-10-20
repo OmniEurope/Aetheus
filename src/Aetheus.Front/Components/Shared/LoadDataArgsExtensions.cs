@@ -26,12 +26,8 @@ public static class GridLoadArgsExtensions
     public static (int Page, int PageSize) ToPageRequest(this GridLoadArgs args, int defaultPageSize = DefaultPageSize)
         => (args.GetPage(defaultPageSize), args.GetPageSize(defaultPageSize));
 
-    /// <summary>Returns a page from an already loaded collection, honouring the grid's sort and column
-    /// filters.
-    /// <para>The whole collection is in memory here, so both are applied to all of it before the page
-    /// is cut. Paging the raw list first, as this used to, made the header affordances decorative: the
-    /// filter popups opened and the sort arrows moved while the same rows came back in the same
-    /// order.</para></summary>
+    /// <summary>Apply sorting and column filters to the complete in-memory collection before
+    /// slicing its page so header controls affect all rows.</summary>
     public static List<T> ToClientPage<T>(
         this GridLoadArgs args,
         IReadOnlyList<T> source,
@@ -107,8 +103,8 @@ public static class GridLoadArgsExtensions
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
-    /// <summary>Recette R-210: every value ticked in one column's checkable header filter (a single value
-    /// for any other filter shape), empty when the column is unfiltered.</summary>
+    /// <summary>Every value ticked in one column's checkable header filter (a single value for any
+    /// other filter shape), empty when the column is unfiltered.</summary>
     public static IReadOnlyList<string> ColumnFilterValues(this GridLoadArgs args, string property)
     {
         var filter = Find(args, property);
@@ -125,8 +121,8 @@ public static class GridLoadArgsExtensions
             .OfType<TEnum>()
             .Distinct()];
 
-    /// <summary>Recette R-224: the bounds of one column's date range header filter, an inclusive start and
-    /// an exclusive end, either null when that side is open. The grid resolves the whole-day rule; the
+    /// <summary>The bounds of one column's date range header filter, an inclusive start and an
+    /// exclusive end, either null when that side is open. The grid resolves the whole-day rule; the
     /// bounds are the dates the column shows, which are UTC, so they come back as UTC.</summary>
     public static (DateTime? From, DateTime? ToExclusive) ColumnDateRange(this GridLoadArgs args, string property)
     {

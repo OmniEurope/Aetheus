@@ -55,7 +55,7 @@ public partial class UserEdit : IAsyncDisposable
     private static readonly Func<EffectivePermissionDto, object> PermissionKey =
         grant => (grant.ResourceType, grant.ResourceId, grant.Permission, grant.GrantedByRole);
 
-    // Recette R-210: the header filters show the same words as the cells, built once for stable delegates.
+    // The header filters show the same words as the cells, built once for stable delegates.
     private Func<string, string>? _plainText;
     private Func<string, string> PlainText => _plainText ??= value => L[value];
     private Func<string, string>? _orgRoleText;
@@ -119,8 +119,8 @@ public partial class UserEdit : IAsyncDisposable
         if (!_isNew)
         {
             await LoadEffectivePermissions();
-            // Recette R-181: a user's effective permissions follow their roles, those roles'
-            // permissions and their organizations; the admin hub says when any of them changed.
+            // A user's effective permissions follow their roles, those roles' permissions and their
+            // organizations; the admin hub says when any of them changed.
             if (_permissionChanges is null)
             {
                 _permissionChanges = new AdminEntitySubscription(HubFactory);
@@ -128,7 +128,8 @@ public partial class UserEdit : IAsyncDisposable
                     [AdminEntities.User, AdminEntities.Role, AdminEntities.Organization],
                     () => InvokeAsync(async () =>
                     {
-                        // Recette R-227: told before the new list arrives, the grid marks the grants it did not hold.
+                        // Told before the new list arrives, the grid marks the grants it did not
+                        // hold.
                         if (_permissionsGrid is not null) await _permissionsGrid.RefreshAsync();
                         await LoadEffectivePermissions();
                         StateHasChanged();
@@ -176,7 +177,7 @@ public partial class UserEdit : IAsyncDisposable
         return query.TryGetValue("tab", out var value) ? value.ToString() : null;
     }
 
-    // Slugs order: 0 general, 1 roles, 2 organizations, 3 security, 4 audit.
+    // Slugs order: 0 general, 1 roles, 2 organizations, 3 security, 4 pipelines, 5 audit.
     private async Task OnTabChanged(int index)
     {
         if (index == 2 && !_orgsLoaded)
@@ -351,24 +352,28 @@ public partial class UserEdit : IAsyncDisposable
     private async Task OnActiveChangedAsync(bool value)
     {
         if (_user is null || value == _user.IsActive) return;
+        UserPipelineHandover? handover = null;
         if (!value)
         {
-            var confirmed = await Dialog.Confirm(
-                string.Format(L["DeactivateUserConfirm"].Value, _user.Username),
-                L["DeactivateUser"].Value,
-                new OmniConfirmOptions
-                {
-                    Destructive = true,
-                    OkButtonText = L["Deactivate"].Value,
-                    CancelButtonText = L["GoBack"].Value
-                });
-            if (confirmed != true) return;
+            // The pipelines this user owns pass to another active user, or the admin says not to.
+            handover = await AskPipelineHandoverAsync(
+                _user.Username, string.Format(L["DeactivateUserConfirm"].Value, _user.Username), L["DeactivateUser"].Value, delete: false);
+            if (handover is null) return;
         }
 
-        await UpdateFlagsAsync(value, _model.MustChangePassword);
+        await UpdateFlagsAsync(value, _model.MustChangePassword, handover);
     }
 
-    private async Task UpdateFlagsAsync(bool isActive, bool mustChangePassword)
+    private async Task<UserPipelineHandover?> AskPipelineHandoverAsync(string username, string message, string title, bool delete) =>
+        await Dialog.OpenAsync<UserPipelineHandoverDialog>(title, new Dictionary<string, object?>
+        {
+            [nameof(UserPipelineHandoverDialog.Username)] = username,
+            [nameof(UserPipelineHandoverDialog.Message)] = message,
+            [nameof(UserPipelineHandoverDialog.Delete)] = delete,
+            [nameof(UserPipelineHandoverDialog.DefaultTarget)] = Auth.Username,
+        }, new OmniDialogOptions { Width = "560px", AutoFocusFirstElement = false }) as UserPipelineHandover;
+
+    private async Task UpdateFlagsAsync(bool isActive, bool mustChangePassword, UserPipelineHandover? handover = null)
     {
         if (_isNew || Id is null or 0 || _user is null || _savingFlags) return;
         var previousActive = _model.IsActive;
@@ -385,33 +390,24 @@ public partial class UserEdit : IAsyncDisposable
                 Email = _user.Email,
                 IsActive = isActive,
                 MustChangePassword = mustChangePassword,
-                Roles = _user.Roles
+                Roles = _user.Roles,
+                TransferPipelinesToUsername = handover?.TransferTo,
+                ForceWithOwnedPipelines = handover?.Force ?? false
             });
             if (updated is null)
             {
-                _model.IsActive = previousActive;
-                _model.MustChangePassword = previousMustChange;
-                Toast.Error("Error", "SaveFailed");
+                RestoreFlags(previousActive, previousMustChange);
                 return;
             }
-
             _user = updated;
             _model.IsActive = updated.IsActive;
             _model.MustChangePassword = updated.MustChangePassword;
             Toast.Success("Saved", "UserSaved");
-
-            if (editingCurrentUser && !updated.IsActive)
-            {
-                await RealtimeSession.StopAsync();
-                await Auth.LogoutAsync();
-                Nav.NavigateTo(LoginRedirect.ToLogin(Nav));
-            }
+            await EndOwnSessionIfDeactivatedAsync(updated, editingCurrentUser);
         }
         catch (HttpRequestException)
         {
-            _model.IsActive = previousActive;
-            _model.MustChangePassword = previousMustChange;
-            Toast.Error("Error", "SaveFailed");
+            RestoreFlags(previousActive, previousMustChange);
         }
         finally
         {
@@ -419,15 +415,33 @@ public partial class UserEdit : IAsyncDisposable
         }
     }
 
+    // The save was refused: the switches go back to what they showed, and the reader is told.
+    private void RestoreFlags(bool isActive, bool mustChangePassword)
+    {
+        _model.IsActive = isActive;
+        _model.MustChangePassword = mustChangePassword;
+        Toast.Error("Error", "SaveFailed");
+    }
+
+    // Deactivating one's own account ends the session: the realtime connections stop and the login
+    // page takes over.
+    private async Task EndOwnSessionIfDeactivatedAsync(UserDto updated, bool editingCurrentUser)
+    {
+        if (!editingCurrentUser || updated.IsActive) return;
+        await RealtimeSession.StopAsync();
+        await Auth.LogoutAsync();
+        Nav.NavigateTo(LoginRedirect.ToLogin(Nav));
+    }
+
     private async Task OnDelete()
     {
         if (DisplayedTarget() is not { } target) return;
-        var confirmed = await Dialog.Confirm(L["DeleteUserConfirm"].Value, L["DeleteUser"].Value,
-            new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
+        // The confirmation also decides who takes over the pipelines the user owns.
+        var handover = await AskPipelineHandoverAsync(target.Username, L["DeleteUserConfirm"].Value, L["DeleteUser"].Value, delete: true);
         // FRONT-024: the confirmed account, still the one on screen, and nobody else.
-        if (confirmed == true && DisplayedTarget()?.Id == target.Id)
+        if (handover is not null && DisplayedTarget()?.Id == target.Id)
         {
-            var status = await Api.Auth.DeleteUserAsync(target.Id);
+            var status = await Api.Auth.DeleteUserAsync(target.Id, handover.TransferTo, handover.Force);
             if (status.Success)
             {
                 Toast.Success("Deleted", "Deleted");

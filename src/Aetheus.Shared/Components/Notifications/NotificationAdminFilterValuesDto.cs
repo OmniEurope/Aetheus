@@ -2,7 +2,7 @@
 
 namespace Aetheus.Shared.Components.Notifications;
 
-/// <summary>Recette R-224: the values the notification rules grid's checkable column filters offer.</summary>
+/// <summary>The values the notification rules grid's checkable column filters offer.</summary>
 public sealed record NotificationAdminFilterValuesDto
 {
     public List<string> EventTypes { get; init; } = [];

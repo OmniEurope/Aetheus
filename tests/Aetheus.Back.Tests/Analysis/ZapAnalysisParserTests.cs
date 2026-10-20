@@ -21,6 +21,22 @@ public sealed class ZapAnalysisParserTests
     }
 
     [Fact]
+    public void Parse_AlertWithoutInstances_YieldsOneFindingWithoutLocation()
+    {
+        const string json = """
+            {"site":[{"alerts":[{"pluginid":"10202","alert":"Absence of Anti-CSRF Tokens","riskcode":"2","confidence":"2","cweid":"352"}]}]}
+            """;
+
+        var finding = Assert.Single(ZapAnalysisParser.Parse(json));
+
+        Assert.Equal("10202", finding.RuleId);
+        Assert.Equal("CWE-352", finding.Cwe);
+        Assert.Equal(AnalysisSeverity.Medium, finding.Severity);
+        Assert.Null(finding.FilePath);
+        Assert.Null(finding.Symbol);
+    }
+
+    [Fact]
     public void Parse_DropsInformationalNoiseButKeepsLowAndAbove()
     {
         const string json = """

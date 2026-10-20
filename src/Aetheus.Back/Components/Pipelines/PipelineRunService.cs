@@ -35,12 +35,12 @@ public class PipelineRunService(
     internal const string SystemPrepareStage = "System:Prepare";
     internal const string SystemCleanupStage = PipelineSystemStages.Cleanup;
     internal const string CancellationRequestedVariable = "__AETHEUS_CANCEL_REQUESTED";
-    // Recette R2-103: who cancelled the run and why, kept beside the request marker for the run page.
+    // Who cancelled the run and why, kept beside the request marker for the run page.
     internal const string CancelledByVariable = "__AETHEUS_CANCELLED_BY";
     internal const string CancellationReasonVariable = "__AETHEUS_CANCEL_REASON";
     internal const string SourceCommitVariable = "AETHEUS_SOURCE_COMMIT";
     internal const string SourceBranchVariable = "AETHEUS_RUN_BRANCH";
-    // Recette R-534: set only on a run whose workspace comes from another repository (source: block).
+    // Set only on a run whose workspace comes from another repository (source: block).
     internal const string DefinitionCommitVariable = "AETHEUS_DEFINITION_COMMIT";
     internal const string DefinitionBranchVariable = "AETHEUS_DEFINITION_BRANCH";
     internal const string ResumeSourceRunVariable = "AETHEUS_RESUME_SOURCE_RUN_ID";
@@ -54,6 +54,12 @@ public class PipelineRunService(
     public Task<PipelineRunPreparation?> PrepareRunAsync(int pipelineId, string? sourceBranch = null,
         CancellationToken ct = default)
         => preparations.PrepareRunAsync(pipelineId, sourceBranch, yamlOverride: null, commitOverride: null, ct);
+
+    public Task<PipelineRunPreparation?> PrepareRunAtCommitAsync(int pipelineId, string? sourceBranch, string commitHash,
+        CancellationToken ct = default)
+        => IsGitCommitHash(commitHash)
+            ? preparations.PrepareRunAsync(pipelineId, sourceBranch, yamlOverride: null, commitOverride: commitHash, ct)
+            : throw new BadRequestException("A run can only be pinned to a full commit hash.");
 
 
     public Task<List<PipelineRunParameterDto>> GetRunParametersAsync(
@@ -257,7 +263,7 @@ public class PipelineRunService(
     // them with the same resolver the real trigger uses, and merge the effective (supplied ?? default)
     // values back at highest precedence so the preview reflects them. Returns human-readable warnings
     // for any validation failure (preview is non-destructive, so we warn instead of throwing).
-    private static List<string> ValidateAndApplyParameters(PipelineYamlDefinition definition, ref Dictionary<string, string>? additionalVars)
+    internal static List<string> ValidateAndApplyParameters(PipelineYamlDefinition definition, ref Dictionary<string, string>? additionalVars)
     {
         if (definition.Parameters.Count == 0) return [];
 
@@ -383,6 +389,10 @@ public class PipelineRunService(
 
     public Task<bool> IsServerAssignedToRunAsync(int runId, int serverId, CancellationToken ct = default)
         => repo.IsServerAssignedToRunAsync(runId, serverId, ct);
+
+    public async Task<bool> HasRunToEndFailureAsync(int runId, CancellationToken ct = default) =>
+        (await repo.GetContinuableFailedStepsInRunAsync(runId, ct).ConfigureAwait(false) ?? [])
+            .Any(step => step.ContinueOnErrorForced);
 
     public async Task<List<string>> GetActiveWorkspaceSlotsAsync(CancellationToken ct = default)
     {

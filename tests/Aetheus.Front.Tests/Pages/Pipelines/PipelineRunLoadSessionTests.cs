@@ -3,11 +3,8 @@ using Aetheus.Front.Components.Pipelines;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// Recette R2-100: "ObjectDisposedException - CancellationTokenSource_Disposed" reached the error
-/// boundary. Leaving the run page disposed its load session; an Approve, Reject, Cancel or Retry whose
-/// HTTP call returned afterwards read the session's Token, the disposed source's, and threw.
-/// </summary>
+/// <summary>After page disposal, pending action continuations must receive a cancelled token
+/// without accessing a disposed source.</summary>
 public sealed class PipelineRunLoadSessionTests
 {
     [Fact]

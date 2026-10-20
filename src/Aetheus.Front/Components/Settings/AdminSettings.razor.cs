@@ -21,7 +21,7 @@ public partial class AdminSettings : IAsyncDisposable
     private List<RegistrationTokenDto> _tokens = [];
     private OmniDataGrid<RegistrationTokenDto>? _tokensGrid;
 
-    // Recette R-210: the Used filter shows the same words as the cells, built once for a stable delegate.
+    // The Used filter shows the same words as the cells, built once for a stable delegate.
     private Func<string, string>? _usedText;
     private Func<string, string> UsedText => _usedText ??= value =>
         bool.TryParse(value, out var used) ? (used ? L["Used"] : L["Available"]).Value : value;
@@ -30,6 +30,12 @@ public partial class AdminSettings : IAsyncDisposable
     private readonly HashSet<int> _revealedTokens = [];
     private string _newSecretKey = string.Empty;
     private string _newSecretValue = string.Empty;
+    private bool _allowRunToEnd;
+    private bool _savingRunToEnd;
+
+    // The "run to end" permission has its own switch below the free-form settings.
+    private IEnumerable<AppSettingDto> TextSettings =>
+        _settings.Where(setting => setting.Key != PipelineRunToEndSetting.Key);
 
     protected override async Task OnInitializedAsync()
     {
@@ -54,6 +60,8 @@ public partial class AdminSettings : IAsyncDisposable
             _secrets = await secretsTask;
             _tokens = await tokensTask;
             _editBuffer = _settings.ToDictionary(s => s.Key, s => s.Value);
+            _allowRunToEnd = PipelineRunToEndSetting.IsAllowed(
+                _settings.FirstOrDefault(s => s.Key == PipelineRunToEndSetting.Key)?.Value);
         }
         catch (HttpRequestException)
         {
@@ -76,7 +84,7 @@ public partial class AdminSettings : IAsyncDisposable
             try
             {
                 var tokens = await Api.Auth.GetRegistrationTokensAsync();
-                // Recette R-227: told before the new list arrives, the grid marks the tokens it did not hold.
+                // Told before the new list arrives, the grid marks the tokens it did not hold.
                 if (_tokensGrid is not null) await _tokensGrid.RefreshAsync();
                 _tokens = tokens;
             }
@@ -102,6 +110,31 @@ public partial class AdminSettings : IAsyncDisposable
         finally
         {
             _savingKeys.Remove(key);
+        }
+    }
+
+    // Saved on change. A refused save puts the switch back where the server still has it.
+    private async Task SaveRunToEndAsync(bool allowed)
+    {
+        if (_savingRunToEnd) return;
+        _savingRunToEnd = true;
+        try
+        {
+            var saved = await Api.Settings.UpdateSettingAsync(
+                PipelineRunToEndSetting.Key, allowed ? "true" : "false");
+            if (saved)
+            {
+                _allowRunToEnd = allowed;
+                Toast.Success("Saved", "SettingSaved", L["AllowRunToEnd"].Value);
+            }
+            else
+            {
+                Toast.Error("Error", "SaveFailed");
+            }
+        }
+        finally
+        {
+            _savingRunToEnd = false;
         }
     }
 

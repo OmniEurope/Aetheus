@@ -59,56 +59,20 @@ public sealed class PipelineSystemTaskFactory(
         // hosted by GitLight, even though this run has a valid source workspace.
         var hasRepo = !string.IsNullOrWhiteSpace(run.RepositoryUrl);
 
-        // Use run affinity if available - cleanup should run on the same server as prepare
-        var affinityServerId = await repo.GetRunAffinityServerIdAsync(runId, ct).ConfigureAwait(false);
-        var isCleanup = systemSteps.All(step => step.StageName == PipelineRunService.SystemCleanupStage);
-        var deferredCleanup = false;
-        Server? server = null;
-        if (affinityServerId is not null)
-            server = await repo.FindOnlineServerByIdAsync(affinityServerId.Value, ct: ct).ConfigureAwait(false);
-        if (isCleanup && affinityServerId is not null && server is null)
-        {
-            server = await repo.FindServerByIdAsync(affinityServerId.Value, ct).ConfigureAwait(false);
-            if (server is null)
-                return false;
-            deferredCleanup = true;
-            logger.LogWarning(
-                "Run {RunId} cleanup is queued durably for its offline affinity runner {ServerId}.",
-                runId, affinityServerId.Value);
-        }
-        if (server is null)
-        {
-            var firstStageDef = YamlParsingHelper.FlattenJobs(definition).FirstOrDefault();
-            server = firstStageDef is not null
-                ? await dispatchServers.ResolveServerForTargetAsync(firstStageDef, resolvedVars, organizationId, false, projectId, ct).ConfigureAwait(false)
-                : await repo.FindAnyOnlineRunnerAsync(organizationId, ct: ct).ConfigureAwait(false);
-        }
+        var (server, deferredCleanup) = await ResolveSystemServerAsync(
+            runId, systemSteps, resolvedVars, definition, organizationId, projectId, ct).ConfigureAwait(false);
         if (server is null) return false;
 
-        var targetViolation = PipelineDeploymentTargetGuard.ValidateServer(resolvedVars, server);
-        if (targetViolation is not null)
-        {
-            await finalizer.FailRunWithUnmatchedStagesAsync(runId, [targetViolation], systemSteps, ct).ConfigureAwait(false);
-            return false;
-        }
-
-        var isWindows = OsTypeHelper.IsWindows(server.OsType, server.OsDescription);
         // Phase 2: the whole run executes in containers when isolation is set at the run level.
         // Container execution is Linux-only - the system scripts use the Linux variants and the
         // workspace is the in-container mount point (/w); the agent bind-mounts the run's host dir.
         var runIsolation = definition.Isolation;
+        if (await RejectsServerAsync(runId, systemSteps, resolvedVars, server, runIsolation, ct).ConfigureAwait(false))
+            return false;
+
+        var isWindows = OsTypeHelper.IsWindows(server.OsType, server.OsDescription);
         var isContainer = runIsolation?.IsContainer == true;
         var useWindows = isWindows && !isContainer;
-
-        // Fail-closed: never dispatch a container-isolated system task (prepare/clone/cleanup) to a
-        // runner that can't honor the run-level isolation contract. Without this the run would hard-
-        // fail late at the agent instead of being blocked cleanly here with a readable reason.
-        var isolationViolation = CheckRunIsolationPolicy(server, runIsolation);
-        if (isolationViolation is not null)
-        {
-            await finalizer.FailRunWithUnmatchedStagesAsync(runId, [isolationViolation], systemSteps, ct).ConfigureAwait(false);
-            return false;
-        }
 
         foreach (var step in systemSteps)
             CreateSystemTask(
@@ -126,6 +90,54 @@ public sealed class PipelineSystemTaskFactory(
                 ct).ConfigureAwait(false);
         }
         return !deferredCleanup;
+    }
+
+    // Use run affinity if available - cleanup should run on the same server as prepare. A cleanup whose
+    // affinity runner is offline is queued durably for it (DeferredCleanup); without affinity the
+    // first stage's target, or any online runner, takes the system steps.
+    private async Task<(Server? Server, bool DeferredCleanup)> ResolveSystemServerAsync(
+        int runId, List<PipelineStepRun> systemSteps, Dictionary<string, string> resolvedVars,
+        PipelineYamlDefinition definition, int? organizationId, int? projectId, CancellationToken ct)
+    {
+        var affinityServerId = await repo.GetRunAffinityServerIdAsync(runId, ct).ConfigureAwait(false);
+        var isCleanup = systemSteps.All(step => step.StageName == PipelineRunService.SystemCleanupStage);
+        Server? server = null;
+        if (affinityServerId is not null)
+            server = await repo.FindOnlineServerByIdAsync(affinityServerId.Value, ct: ct).ConfigureAwait(false);
+        if (isCleanup && affinityServerId is not null && server is null)
+        {
+            server = await repo.FindServerByIdAsync(affinityServerId.Value, ct).ConfigureAwait(false);
+            if (server is null)
+                return (null, false);
+            logger.LogWarning(
+                "Run {RunId} cleanup is queued durably for its offline affinity runner {ServerId}.",
+                runId, affinityServerId.Value);
+            return (server, true);
+        }
+        if (server is not null)
+            return (server, false);
+
+        var firstStageDef = YamlParsingHelper.FlattenJobs(definition).FirstOrDefault();
+        server = firstStageDef is not null
+            ? await dispatchServers.ResolveServerForTargetAsync(firstStageDef, resolvedVars, organizationId, false, projectId, ct).ConfigureAwait(false)
+            : await repo.FindAnyOnlineRunnerAsync(organizationId, ct: ct).ConfigureAwait(false);
+        return (server, false);
+    }
+
+    // Fail-closed: never dispatch a system task to a runner the deployment target refuses, nor a
+    // container-isolated system task (prepare/clone/cleanup) to a runner that can't honor the run-level
+    // isolation contract. Without this the run would hard-fail late at the agent instead of being
+    // blocked cleanly here with a readable reason.
+    private async Task<bool> RejectsServerAsync(
+        int runId, List<PipelineStepRun> systemSteps, Dictionary<string, string> resolvedVars, Server server,
+        PipelineIsolationDefinition? runIsolation, CancellationToken ct)
+    {
+        var violation = PipelineDeploymentTargetGuard.ValidateServer(resolvedVars, server)
+            ?? CheckRunIsolationPolicy(server, runIsolation);
+        if (violation is null)
+            return false;
+        await finalizer.FailRunWithUnmatchedStagesAsync(runId, [violation], systemSteps, ct).ConfigureAwait(false);
+        return true;
     }
 
     private void CreateSystemTask(

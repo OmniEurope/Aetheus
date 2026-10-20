@@ -1,0 +1,693 @@
+{
+  "node": "v24.7.0",
+  "locale": "fr-FR",
+  "cases": [
+    {
+      "name": "nightly-evidence-test",
+      "description": "nightly-evidence.test.mjs: deterministic evidence, then altered bytes and another source refused.",
+      "files": {
+        "a.bin": "first",
+        "b.bin": "second"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "b.bin",
+            "a.bin"
+          ],
+          "stdout": "Created independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n",
+          "evidence": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 5,\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    },\n    {\n      \"name\": \"b.bin\",\n      \"bytes\": 6,\n      \"sha256\": \"16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4\"\n    }\n  ]\n}\n"
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin",
+            "b.bin"
+          ],
+          "stdout": "Verified independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n"
+        },
+        {
+          "write": {
+            "a.bin": "altered"
+          }
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin",
+            "b.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly payload differs from its independent evidence."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "ffffffffffffffffffffffffffffffffffffffff",
+            "evidence.json",
+            "a.bin",
+            "b.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly evidence belongs to another source commit."
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "locale-order",
+      "description": "Names sorted by localeCompare: case, punctuation, digits, directories dropped from the name.",
+      "files": {
+        "B.bin": "B",
+        "a.bin": "a",
+        "_x.bin": "_",
+        "a-b.bin": "-",
+        "10.bin": "10",
+        "9.bin": "9",
+        "x/Ab.txt": "Ab",
+        "y/ab.dat": "ab",
+        "a~b.bin": " ",
+        "Z": "Z"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "out/evidence.json",
+            "B.bin",
+            "a.bin",
+            "_x.bin",
+            "a-b.bin",
+            "10.bin",
+            "9.bin",
+            "x/Ab.txt",
+            "y/ab.dat",
+            "a~b.bin",
+            "Z"
+          ],
+          "stdout": "Created independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n",
+          "evidence": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"_x.bin\",\n      \"bytes\": 1,\n      \"sha256\": \"d2e2adf7177b7a8afddbc12d1634cf23ea1a71020f6a1308070a16400fb68fde\"\n    },\n    {\n      \"name\": \"10.bin\",\n      \"bytes\": 2,\n      \"sha256\": \"4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5\"\n    },\n    {\n      \"name\": \"9.bin\",\n      \"bytes\": 1,\n      \"sha256\": \"19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7\"\n    },\n    {\n      \"name\": \"a-b.bin\",\n      \"bytes\": 1,\n      \"sha256\": \"3973e022e93220f9212c18d0d0c543ae7c309e46640da93a4a0314de999f5112\"\n    },\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 1,\n      \"sha256\": \"ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb\"\n    },\n    {\n      \"name\": \"a~b.bin\",\n      \"bytes\": 1,\n      \"sha256\": \"36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068\"\n    },\n    {\n      \"name\": \"ab.dat\",\n      \"bytes\": 2,\n      \"sha256\": \"fb8e20fc2e4c3f248c60c39bd652f3c1347298bb977b8b4d5903b85055620603\"\n    },\n    {\n      \"name\": \"Ab.txt\",\n      \"bytes\": 2,\n      \"sha256\": \"025b5573cb68f3af8b09ad8f678555ecb185f7832b0d156800f40c300649a56c\"\n    },\n    {\n      \"name\": \"B.bin\",\n      \"bytes\": 1,\n      \"sha256\": \"df7e70e5021544f4834bbee64a9e3789febc4be81470df629cad6ddb03320a5c\"\n    },\n    {\n      \"name\": \"Z\",\n      \"bytes\": 1,\n      \"sha256\": \"bbeebd879e1dff6918546dc0c179fdde505f2a21591c9a9c96e36b054ec5af83\"\n    }\n  ]\n}\n"
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "out/evidence.json",
+            "Z",
+            "a~b.bin",
+            "y/ab.dat",
+            "x/Ab.txt",
+            "9.bin",
+            "10.bin",
+            "a-b.bin",
+            "_x.bin",
+            "a.bin",
+            "B.bin"
+          ],
+          "stdout": "Verified independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n"
+        }
+      ]
+    },
+    {
+      "name": "uppercase-source",
+      "description": "An uppercase source id is accepted and recorded lowercase; verify accepts either case.",
+      "files": {
+        "a.bin": "first"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789ABCDEF0123456789ABCDEF01234567",
+            "evidence.json",
+            "a.bin"
+          ],
+          "stdout": "Created independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n",
+          "evidence": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 5,\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    }\n  ]\n}\n"
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin"
+          ],
+          "stdout": "Verified independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n"
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789ABCDEF0123456789ABCDEF01234567",
+            "evidence.json",
+            "a.bin"
+          ],
+          "stdout": "Verified independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n"
+        }
+      ]
+    },
+    {
+      "name": "create-overwrites",
+      "description": "A second create replaces the evidence of the first.",
+      "files": {
+        "a.bin": "first",
+        "b.bin": "second"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin",
+            "b.bin"
+          ],
+          "stdout": "Created independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n",
+          "evidence": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 5,\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    },\n    {\n      \"name\": \"b.bin\",\n      \"bytes\": 6,\n      \"sha256\": \"16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4\"\n    }\n  ]\n}\n"
+        },
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin"
+          ],
+          "stdout": "Created independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n",
+          "evidence": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 5,\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    }\n  ]\n}\n"
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin"
+          ],
+          "stdout": "Verified independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n"
+        }
+      ]
+    },
+    {
+      "name": "duplicate-name",
+      "description": "Two artifacts with the same file name are refused.",
+      "files": {
+        "x/a.bin": "x",
+        "y/a.bin": "y"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "x/a.bin",
+            "y/a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Duplicate nightly artifact name: a.bin"
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "empty-artifact",
+      "description": "An empty artifact is refused, the first in argument order.",
+      "files": {
+        "a.bin": "first",
+        "e.bin": "",
+        "f.bin": ""
+      },
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin",
+            "f.bin",
+            "e.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Nightly artifact is empty: f.bin"
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "e.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Nightly artifact is empty: e.bin"
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "directory-artifact",
+      "description": "A directory is not a file, and a trailing slash keeps its name.",
+      "files": {
+        "dir/inner.bin": "inner"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "dir"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Nightly artifact is empty: dir"
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "dir/"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Nightly artifact is empty: dir"
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "missing-artifact",
+      "description": "An artifact that does not exist fails on stat.",
+      "files": {},
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "missing.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "ENOENT: no such file or directory, stat '<workspace>\\missing.bin'",
+            "code": "ENOENT"
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "usage",
+      "description": "The usage refusals: mode, short, long or non-hexadecimal source, no artifact.",
+      "files": {
+        "a.bin": "first"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "check",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Usage: nightly-evidence.mjs <create|verify> <source-sha> <evidence> <artifact>..."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "create",
+            "123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Usage: nightly-evidence.mjs <create|verify> <source-sha> <evidence> <artifact>..."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567a",
+            "evidence.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Usage: nightly-evidence.mjs <create|verify> <source-sha> <evidence> <artifact>..."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "create",
+            "g123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Usage: nightly-evidence.mjs <create|verify> <source-sha> <evidence> <artifact>..."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Usage: nightly-evidence.mjs <create|verify> <source-sha> <evidence> <artifact>..."
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "verify-kind-schema",
+      "description": "Verify refuses another kind, a schema that is not the number 1, and another source.",
+      "files": {
+        "a.bin": "first",
+        "kind.json": "{\n  \"schema\": 1,\n  \"kind\": \"nightly\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 5,\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    }\n  ]\n}\n",
+        "schema.json": "{\n  \"schema\": \"1\",\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 5,\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    }\n  ]\n}\n",
+        "source.json": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789ABCDEF0123456789ABCDEF01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 5,\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    }\n  ]\n}\n"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "kind.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly evidence schema or kind is invalid."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "schema.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly evidence schema or kind is invalid."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "source.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly evidence belongs to another source commit."
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "verify-shapes",
+      "description": "Verify reads JSON: other whitespace and extra fields pass, reordered keys, numbers as text, missing artifacts or null fail.",
+      "files": {
+        "a.bin": "first",
+        "b.bin": "second",
+        "compact.json": "{\"artifacts\":[{\"name\":\"a.bin\",\"bytes\":5,\"sha256\":\"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"},{\"name\":\"b.bin\",\"bytes\":6,\"sha256\":\"16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4\"}],\"extra\":true,\"sourceSha\":\"0123456789abcdef0123456789abcdef01234567\",\"kind\":\"nightly-demo-payload\",\"schema\":1}",
+        "reordered.json": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"bytes\": 5,\n      \"name\": \"a.bin\",\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    },\n    {\n      \"name\": \"b.bin\",\n      \"bytes\": 6,\n      \"sha256\": \"16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4\"\n    }\n  ]\n}\n",
+        "text-bytes.json": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": \"5\",\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    },\n    {\n      \"name\": \"b.bin\",\n      \"bytes\": 6,\n      \"sha256\": \"16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4\"\n    }\n  ]\n}\n",
+        "unsorted.json": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"b.bin\",\n      \"bytes\": 6,\n      \"sha256\": \"16367aacb67a4a017c8da8ab95682ccb390863780f7114dda0a0e0c55644c7c4\"\n    },\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 5,\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    }\n  ]\n}\n",
+        "no-artifacts.json": "{\"schema\":1,\"kind\":\"nightly-demo-payload\",\"sourceSha\":\"0123456789abcdef0123456789abcdef01234567\"}",
+        "null.json": "null",
+        "number.json": "7",
+        "array.json": "[1]"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "compact.json",
+            "b.bin",
+            "a.bin"
+          ],
+          "stdout": "Verified independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n"
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "reordered.json",
+            "a.bin",
+            "b.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly payload differs from its independent evidence."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "text-bytes.json",
+            "a.bin",
+            "b.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly payload differs from its independent evidence."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "unsorted.json",
+            "a.bin",
+            "b.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly payload differs from its independent evidence."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "no-artifacts.json",
+            "a.bin",
+            "b.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly payload differs from its independent evidence."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "null.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "TypeError",
+            "message": "Cannot read properties of null (reading 'schema')"
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "number.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly evidence schema or kind is invalid."
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "array.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "The nightly evidence schema or kind is invalid."
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "verify-unreadable",
+      "description": "Verify on evidence that is not JSON, starts with a byte order mark, or is missing.",
+      "files": {
+        "a.bin": "first",
+        "bad.json": "{",
+        "bom.json": "﻿{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"a.bin\",\n      \"bytes\": 5,\n      \"sha256\": \"a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e\"\n    }\n  ]\n}\n"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "bad.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "SyntaxError",
+            "message": "Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "bom.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "SyntaxError",
+            "message": "Unexpected token '﻿', \"﻿{\n  \"sche\"... is not valid JSON"
+          },
+          "stdout": ""
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "missing.json",
+            "a.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "ENOENT: no such file or directory, open '<workspace>\\missing.json'",
+            "code": "ENOENT"
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "verify-before-evidence",
+      "description": "Verify describes the artifacts before it reads the evidence.",
+      "files": {
+        "e.bin": ""
+      },
+      "steps": [
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "missing.json",
+            "e.bin"
+          ],
+          "error": {
+            "name": "Error",
+            "message": "Nightly artifact is empty: e.bin"
+          },
+          "stdout": ""
+        }
+      ]
+    },
+    {
+      "name": "binary-content",
+      "description": "Binary artifact bytes are digested as they are.",
+      "files": {
+        "bin.dat": {
+          "base64": "AP8NCoAB"
+        }
+      },
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "bin.dat"
+          ],
+          "stdout": "Created independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n",
+          "evidence": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"bin.dat\",\n      \"bytes\": 6,\n      \"sha256\": \"a0ed0f459b2094e0c609f62dfa4da8d4c80172534670ca2220f4f931a4f2c40d\"\n    }\n  ]\n}\n"
+        },
+        {
+          "arguments": [
+            "verify",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "bin.dat"
+          ],
+          "stdout": "Verified independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n"
+        }
+      ]
+    },
+    {
+      "name": "non-ascii-name",
+      "description": "A name outside ASCII, sorted by localeCompare (the port refuses it).",
+      "files": {
+        "é.bin": "e-acute",
+        "f.bin": "f"
+      },
+      "steps": [
+        {
+          "arguments": [
+            "create",
+            "0123456789abcdef0123456789abcdef01234567",
+            "evidence.json",
+            "f.bin",
+            "é.bin"
+          ],
+          "stdout": "Created independent nightly evidence for 0123456789abcdef0123456789abcdef01234567.\n",
+          "evidence": "{\n  \"schema\": 1,\n  \"kind\": \"nightly-demo-payload\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"artifacts\": [\n    {\n      \"name\": \"é.bin\",\n      \"bytes\": 7,\n      \"sha256\": \"2d0e0e9b029bdfc51c8dd94712f73dcb30538721b6e5064151c720d1213ab86b\"\n    },\n    {\n      \"name\": \"f.bin\",\n      \"bytes\": 1,\n      \"sha256\": \"252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111\"\n    }\n  ]\n}\n"
+        }
+      ],
+      "difference": "non-ascii-name"
+    }
+  ]
+}

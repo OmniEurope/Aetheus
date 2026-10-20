@@ -47,7 +47,7 @@ public sealed class AiTaskRepositoryTests : IDisposable
     }
 
     private static AiRunnerProfile Profile(int id, string name, int organizationId = 1) =>
-        new() { Id = id, Name = name, OrganizationId = organizationId, Binary = "claude" };
+        new() { Id = id, Name = name, OrganizationId = organizationId, Model = "claude-sonnet-5-5" };
 
     private static AiTaskDefinition Definition(
         int id, string name, int profileId = 1, int? projectId = null, int? serverId = null,
@@ -74,20 +74,20 @@ public sealed class AiTaskRepositoryTests : IDisposable
             Profile(3, "codex-review"));
         await SaveAsync();
 
-        var (items, total) = await _repository.GetProfilesPageAsync("claude", 1, 1, Ct);
+        var (items, total) = await _repository.GetProfilesPageAsync("claude", 1, 1, Ct, sortBy: "Name");
 
         Assert.Equal(2, total);
         Assert.Equal(["claude-fix"], items.Select(profile => profile.Name));
     }
 
     [Fact]
-    public async Task GetProfilesPageAsync_OrdersByNameAcrossPages()
+    public async Task GetProfilesPageAsync_OrdersByNameAcrossPages_WhenNameIsRequested()
     {
         _db.AiRunnerProfiles.AddRange(Profile(1, "gamma"), Profile(2, "alpha"), Profile(3, "beta"));
         await SaveAsync();
 
-        var first = await _repository.GetProfilesPageAsync(null, 1, 2, Ct);
-        var second = await _repository.GetProfilesPageAsync(null, 2, 2, Ct);
+        var first = await _repository.GetProfilesPageAsync(null, 1, 2, Ct, sortBy: "Name");
+        var second = await _repository.GetProfilesPageAsync(null, 2, 2, Ct, sortBy: "Name");
 
         Assert.Equal(["alpha", "beta"], first.Items.Select(profile => profile.Name));
         Assert.Equal(["gamma"], second.Items.Select(profile => profile.Name));
@@ -95,18 +95,18 @@ public sealed class AiTaskRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task GetProfilesPageAsync_SortsByBinaryBeforePaging()
+    public async Task GetProfilesPageAsync_SortsByModelBeforePaging()
     {
         _db.AiRunnerProfiles.AddRange(
-            new AiRunnerProfile { Id = 1, Name = "alpha", OrganizationId = 1, Binary = "a" },
-            new AiRunnerProfile { Id = 2, Name = "beta", OrganizationId = 1, Binary = "z" },
-            new AiRunnerProfile { Id = 3, Name = "gamma", OrganizationId = 1, Binary = "m" });
+            new AiRunnerProfile { Id = 1, Name = "alpha", OrganizationId = 1, Model = "a" },
+            new AiRunnerProfile { Id = 2, Name = "beta", OrganizationId = 1, Model = "z" },
+            new AiRunnerProfile { Id = 3, Name = "gamma", OrganizationId = 1, Model = "m" });
         await SaveAsync();
 
         var first = await _repository.GetProfilesPageAsync(null, 1, 2, Ct,
-            sortBy: "Binary", sortDescending: true);
+            sortBy: "Model", sortDescending: true);
         var second = await _repository.GetProfilesPageAsync(null, 2, 2, Ct,
-            sortBy: "Binary", sortDescending: true);
+            sortBy: "Model", sortDescending: true);
 
         Assert.Equal(["beta", "gamma"], first.Items.Select(profile => profile.Name));
         Assert.Equal(["alpha"], second.Items.Select(profile => profile.Name));
@@ -127,18 +127,41 @@ public sealed class AiTaskRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task FindProfileByNameAsync_IsScopedToTheOrganization()
+    public async Task GetOrganizationProfilesByPriorityAsync_IsScopedToTheOrganization_LowestPriorityThenIdFirst()
     {
-        _db.AiRunnerProfiles.AddRange(
-            Profile(1, "shared", organizationId: 7),
-            Profile(2, "shared", organizationId: 8));
+        var late = Profile(1, "late", organizationId: 7);
+        late.Priority = 30;
+        var tieB = Profile(3, "tie-b", organizationId: 7);
+        tieB.Priority = 10;
+        var tieA = Profile(2, "tie-a", organizationId: 7);
+        tieA.Priority = 10;
+        var foreign = Profile(4, "foreign", organizationId: 8);
+        foreign.Priority = 1;
+        _db.AiRunnerProfiles.AddRange(late, tieB, tieA, foreign);
         await SaveAsync();
 
-        var found = await _repository.FindProfileByNameAsync("shared", 8, Ct);
-        var missing = await _repository.FindProfileByNameAsync("shared", 9, Ct);
+        var profiles = await _repository.GetOrganizationProfilesByPriorityAsync(7, Ct);
+        var none = await _repository.GetOrganizationProfilesByPriorityAsync(9, Ct);
 
-        Assert.Equal(2, found!.Id);
-        Assert.Null(missing);
+        Assert.Equal(["tie-a", "tie-b", "late"], profiles.Select(profile => profile.Name));
+        Assert.Empty(none);
+    }
+
+    [Fact]
+    public async Task GetProfilesPageAsync_DefaultsToThePriorityOrder_AndSortsOnPriorityOnRequest()
+    {
+        var first = Profile(1, "zulu");
+        first.Priority = 5;
+        var second = Profile(2, "alpha");
+        second.Priority = 20;
+        _db.AiRunnerProfiles.AddRange(second, first);
+        await SaveAsync();
+
+        var byDefault = await _repository.GetProfilesPageAsync(null, 1, 10, Ct);
+        var descending = await _repository.GetProfilesPageAsync(null, 1, 10, Ct, sortBy: "Priority", sortDescending: true);
+
+        Assert.Equal(["zulu", "alpha"], byDefault.Items.Select(profile => profile.Name));
+        Assert.Equal(["alpha", "zulu"], descending.Items.Select(profile => profile.Name));
     }
 
     [Fact]

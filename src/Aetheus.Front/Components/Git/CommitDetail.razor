@@ -11,7 +11,7 @@
 }
 else if (_commit is { } commit)
 {
-    @* Recette R-319: a commit known to the project but held by no internal repository. *@
+    @* A commit known to the project but held by no internal repository. *@
     <OmniPageHeader Title="@DisplayFormatting.ShortSha(commit.Sha)"
         ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("commit")" /></Icon>

@@ -7,10 +7,10 @@
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
             <OmniIcon Name="OmniIconName.ShieldCheck" Class="run-tile-icon" /> @L["AnalysisGateOverview"]
         </OmniText>
-        @* Recette R-145 / R-148: same three slots as the other run tiles, same badge gap as Status. *@
+        @* Same three slots as the other run tiles, same badge gap as Status. *@
         <div class="run-tile-main">
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                @* PLAN-003 lot 22: the word is dropped when the letter carries the same verdict; see
+                @* The word is dropped when the letter carries the same verdict; see
                    PipelineRunGatePresentation.ShowsStatusWord for the blocked and error cases. *@
                 @if (PipelineRunGatePresentation.ShowsStatusWord(Gate))
                 {

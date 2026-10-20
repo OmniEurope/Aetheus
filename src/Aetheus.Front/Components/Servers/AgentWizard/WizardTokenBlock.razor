@@ -1,5 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* The registration token, in OE's OmniCodeBlock (recette R-400): masked on screen until revealed, the
-   copy always takes the full value. A placeholder such as <TOKEN> is not a secret and shows as written. *@
+@* The registration token, in OE's OmniCodeBlock : masked on screen until revealed, the copy always
+   takes the full value. A placeholder such as <TOKEN> is not a secret and shows as written. *@
 <OmniCodeBlock Code="@Token" Title="@L["WizardRegistrationTokenLabel"]" Secret="@(!IsPlaceholder)" VisibleCharacters="5" Wrap="true"
                Class="wizard-token-code" OnCopy="@OnCopied" />

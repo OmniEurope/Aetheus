@@ -12,23 +12,15 @@
     --icon-xl: 1.125rem;
     --icon-2xl: 1.25rem;
 
-    /* PLAN-003 lot 3 / D8: the one height every control outside a table has. Measured in the
-       browser on the reference button ("Manage Dashboards", legacy UIButton default size, icon +
-       text): 28px, so 1.75rem. Never guessed, never tuned by eye. Tables are excluded on purpose:
-       a row action is governed by the grid row height instead (lot 4). Recette R-309: it follows
-       OE's control size setting (--omni-control-scale), and OE's own token is set from it below. */
+    /* Control heights outside tables follow OE's control scale; grid actions use their
+       row-specific token. */
     --aetheus-control-height: calc(1.75rem * var(--omni-control-scale, 1));
 
-    /* PLAN-003 lot 8 / D25: the one corner radius of the site, read in the browser on a project
-       tile (the reference the user named): 4px, which is the previous component own --omni-radius. Aliasing
-       the theme token instead of copying the number keeps cards, buttons and fields on the same
-       corner as every legacy UI component that already uses it. Deliberately round shapes (the dev
-       chip, the counter dots, the login logo, pills) are the written exceptions. */
+    /* Aliasing the theme radius keeps cards, buttons and fields consistent; deliberately round
+       chips, pills and logos remain exceptions. */
     --aetheus-radius: var(--omni-radius);
 
-    /* PLAN-008 lot 4 / D35 (STD-BUSY): the page background, light or dark. legacy UI swaps its whole
-       theme sheet, so aliasing its background token follows the active theme without a second
-       block. The busy veil fades towards this colour, never towards whatever sits behind a button. */
+    /* The busy veil fades toward the active theme's page background. */
     --surface: var(--omni-color-surface);
 
     /* legacy UI Compact data rows use 0.25rem vertical cell padding around content capped at
@@ -36,15 +28,11 @@
        one row taller than the default compact row. */
     --aetheus-grid-row-content-height: 1.25rem;
     --aetheus-grid-row-height: 2.25rem;
-    /* PLAN-003 lot 4 / D9: a row action is a square in the row. Recette R-345: its side is OE's
-       --omni-badge-height, the size OE gives an icon-only button of a grid row and the status badges
-       of the same row; this alias only feeds the cell padding and height caps below. */
+    /* Row-action sizing follows OE's badge-height token, which also determines cell padding and
+       height caps. */
     --aetheus-grid-action-size: var(--omni-badge-height);
 
-    /* Console code-block design tokens (consumed by the console-style classes .task-output /
-       .pipeline-step-output / .server-detail-code and the analysis prompt blocks; the AddAgent wizard now
-       uses OE OmniCodeBlock). Recette R-400: text on the inverse surface is OE's on-inverse colour, so it
-       stays readable in both themes (it was the page text colour, dark on dark in the light theme). */
+    /* Console surfaces use inverse text colours to remain readable in both themes. */
     --wizard-code-bg: var(--omni-color-inverse-surface, #1e1e1e);
     --wizard-code-border: color-mix(in srgb, var(--omni-color-on-inverse) 20%, var(--omni-color-inverse-surface));
     --wizard-code-text: var(--omni-color-on-inverse, #e0e0e0);
@@ -67,12 +55,8 @@
     text-align: center;
 }
 
-/* Recette R-100: the summary tiles that are buttons (Open findings, New, Critical, High, Fixed) fell
-   under the control-height token, 28px for 52px of icon, figure and label, which then overlapped. Two
-   classes, so the tile's own height wins over the button's.
-   Recette R-175: the six tiles (the static "Last analysis" one included) share one anatomy (icon,
-   figure, label, one line each) and one height, 5rem, instead of 154px for a figure and 180px for
-   the static tile. Critical and High keep their own icon and label, so colour is never the only cue. */
+/* Summary tiles share a fixed icon, figure and label layout; tile specificity overrides ordinary
+   button height. Severity also has text and icons. */
 .analysis-summary-row {
     --analysis-summary-tile-height: 5rem;
 }
@@ -90,7 +74,7 @@
     font-size: 1.75rem;
 }
 
-/* Recette R-178: one card fill on the page, the OE surface, and the tile border token (R-055). */
+/* Cards share OE's surface and the tile border token. */
 .analysis-summary-action.omni-button,
 .analysis-summary-static {
     padding: 0.375rem 0.5rem;
@@ -187,7 +171,7 @@
     display: none;
 }
 
-/* Recette R-172: no horizontal padding inside a tab's content, only a gap under the tab rail. */
+/* Tab content has a gap below the rail without horizontal padding. */
 .analysis-workspace-panel {
     min-width: 0;
     padding: 0.75rem 0 0;
@@ -204,9 +188,8 @@
     color: var(--omni-color-warning);
 }
 
-/* Recette R-177: no 24rem floor around a 100px curve. The chart's AspectRatio (4 alone, 2 when two
-   share the row) makes the drawing as wide as the card, its height following from the width; the OE
-   legend has its own column right of the plot, so it never covers the curve. */
+/* Chart height follows its aspect ratio; the legend has its own column to avoid covering the
+   curve. */
 .analysis-chart-card {
     height: 100%;
     background: var(--omni-color-surface);
@@ -228,8 +211,7 @@
     min-height: 28rem;
 }
 
-/* Recette R-174 and R-178: the hero is a plain card, the OE surface and the card border token, without
-   the decorative radial gradient; the card border already sets it apart. */
+/* The hero uses the shared card surface and border. */
 .analysis-grade-overview {
     margin-bottom: 1rem;
     border-color: var(--omni-card-border-color);
@@ -243,7 +225,7 @@
     margin-bottom: 1rem;
 }
 
-/* The letter, then its title; the commit, date and links are tiles beside it (R2-143). */
+/* The letter and title sit beside commit, date and link tiles. */
 .analysis-grade-headline {
     display: flex;
     flex-wrap: wrap;
@@ -252,9 +234,8 @@
     min-width: 0;
 }
 
-/* Recette R-173: the hero letter is a 5.5rem square. The site badge rule (.omni-badge, one badge
-   height, a 0.7rem font) sits later in the sheet with the same weight and won, 88 x 22 px; three
-   classes win without !important. Its colour stays the shared badge scale (GradeBadge). */
+/* The hero grade needs a square larger than ordinary badges; selector specificity preserves that
+   shape without !important. */
 .omni-badge.grade-badge.analysis-grade-letter {
     display: inline-flex;
     align-items: center;
@@ -276,7 +257,7 @@
     font-size: 0.8125rem;
 }
 
-/* Recette R-176: two wide columns instead of four 235px ones. */
+/* Two wide columns leave room for domain details. */
 .analysis-grade-domains {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -303,9 +284,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
 }
 
-/* Recette R-429: every grade badge of the overview ends on the same right edge. The domain title,
-   its measure lines and the lines of the domains with nothing measured are three grids whose last
-   column differed (auto, 2rem, auto), and the badge sat at the start of its cell. */
+/* A shared final column aligns all grade badges on the right. */
 .analysis-grade-domain-heading > .grade-badge,
 .analysis-grade-measure > .grade-badge,
 .analysis-grade-domain-empty > .grade-badge {
@@ -449,15 +428,14 @@
     max-height: none;
 }
 
-/* Recette R2-027: open the finding, and revert its decision when it has one, side by side. */
+/* Finding navigation and decision reversal are adjacent actions. */
 .analysis-finding-row-actions {
     display: inline-flex;
     gap: 0.25rem;
 }
 
-/* Recette R2-053: a findings row is one fixed line (STD-GRID), so the title and the location are one
-   line each, cut with an ellipsis, the whole text on hover. The location is cut at its start: the file
-   name at the end is what tells two findings apart. */
+/* Fixed-height findings rows truncate title and location, exposing full text on hover. Locations
+   truncate at the start to retain the distinguishing filename. */
 .analysis-finding-grid-title {
     display: block;
     min-width: 0;
@@ -484,7 +462,7 @@
     unicode-bidi: isolate;
 }
 
-/* Recette R2-054: the findings export under the table, laid out like OE's grid export bar. */
+/* The findings export uses the grid export-bar layout. */
 .analysis-findings-export {
     display: flex;
     flex: 0 0 auto;
@@ -597,10 +575,8 @@
     }
 }
 
-/* Recette R-411: the quality gate card, its YAML sample and its counters sit on OE's surfaces and take
-   the page's ink. They were drawn on the inverse surface, a mid grey in OE (#555555 light, #4b4b4b
-   dark) that Aetheus had taken for a dark one: page text dark on it in light mode, and the accent-subtle
-   ink dark on it in dark mode. */
+/* Quality-gate content uses OE surfaces with the corresponding page text colour for contrast in
+   both themes. */
 .quality-gate-activation-card {
     border: 0.0625rem solid color-mix(in srgb, var(--omni-color-accent) 42%, var(--omni-color-text));
     background:
@@ -639,7 +615,7 @@
     font-size: 1.65rem;
 }
 
-/* The YAML example is OE's code block (R-516); it only has to shrink inside its grid cell. */
+/* The OE YAML code block must shrink inside its grid cell. */
 .quality-gate-yaml-panel {
     min-width: 0;
 }
@@ -746,7 +722,7 @@ a, .btn-link {
     padding-top: 1.1rem;
 }
 
-.valid.modified:not([type=checkbox]) {
+.valid.modified:not([type=checkbox]):not(.omni-switch) {
     outline: 1px solid var(--omni-color-success);
 }
 
@@ -865,8 +841,7 @@ a, .btn-link {
 .app-splash.is-paused .p-roll,
 .app-splash.is-paused .p-jet { animation-play-state: paused; }
 
-/* PLAN-008 lot 44: the two jets used to carry their delay in a style attribute, which a strict
-   style-src-attr refuses. The delay is a fixed design value, so it belongs in a class. */
+/* Fixed animation delays belong in classes to comply with style-src-attr. */
 .p-jet-left { animation-delay: -0.35s; }
 .p-jet-right { animation-delay: -0.7s; }
 
@@ -876,8 +851,8 @@ a, .btn-link {
 
 @keyframes splash-fade-in { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
 
-/* Recette R-536, R2-075: the loading indicator is the package's OmniLogoLoader holding the animated plane (AetheusLoader); its
-   sizes are OE's, its motion the plane's keyframes above. Centered, it takes the width of its container, the mark in the middle. */
+/* The animated plane uses OE loader sizing and fills its container while keeping the mark
+   centered. */
 .aetheus-loader-centered {
     display: flex;
     width: 100%;
@@ -950,9 +925,8 @@ code {
     min-height: 2.5rem;
 }
 
-/* In a grid row a tag is a label-sized chip, not a square row action: the action rules below would
-   squeeze it to the 1.75rem square and cut the tag name (recette R-031). One class more than those
-   rules, so it wins wherever it is declared. */
+/* Tags need label width rather than square action sizing; a more specific selector preserves their
+   text. */
 .omni-data-grid tr[data-omni-row-index] .omni-button.tag-filter-button {
     width: auto;
     max-width: none;
@@ -965,9 +939,7 @@ code {
     gap: 0.25rem;
 }
 
-/* Only an icon-only button is the square row action. A button that also carries a text keeps its
-   width, or the 1.75rem square cut its label and it spilled over the cell beside it (recette R-079,
-   service names on /servers/{id}/services). */
+/* Only icon-only row buttons are square; labelled actions retain sufficient width. */
 .omni-data-grid tr[data-omni-row-index] .omni-button:has(> .omni-button__content > span:not(.omni-icon)) {
     width: auto;
     max-width: none;
@@ -1016,15 +988,9 @@ code {
     filter: brightness(1.05);
 }
 
-/* Recette R-194: the row hover is OmniEurope's (HighlightRowOnHover, in the grid preset), which paints
-   the row fill over each cell's own background. The former rule set a translucent background-color with
-   !important on every cell: a frozen cell then let the scrolled text show through and the hover stacked
-   on OE's own row states. Only the tint stays Aetheus's. `cursor: pointer` is added only on rows that
-   actually navigate (the `.aetheus-clickable-rows` marker set by lists with a RowClick). */
-/* Recette R-269: one hover everywhere, frozen column included. It applies to every grid (the raw
-   OmniDataGrid ones had none, or the dashboard's own row background, which a frozen cell's opaque
-   background hid) and to both themes; the fill is painted inside each cell, so a frozen cell and the
-   others take the same tint. */
+/* OE owns row-hover painting, including frozen cells. A pointer cursor is reserved for rows marked
+   as navigable. */
+/* The shared hover tint paints each cell consistently, including opaque frozen columns. */
 .omni-data-grid.omni-data-grid tbody > tr[data-omni-row-index]:hover {
     --omni-row-fill: rgba(66, 165, 245, 0.2);
 }
@@ -1033,10 +999,8 @@ code {
     cursor: pointer;
 }
 
-/* E-row: one height for EVERY data row (2.25rem). Detail-template rows are intentionally not
-   targeted: their expanded content must retain its natural height. Cell content is clipped to a
-   single line (ellipsis); icons, togglers and badges keep the 1.25rem content box, and a row action
-   is the badge-height square of D9 and R-345, which the cell padding leaves room for exactly. */
+/* Data rows share a fixed height while detail rows retain natural height. Cell padding
+   accommodates badge-sized actions without enlarging the row. */
 .omni-data-grid tr[data-omni-row-index] > td {
     box-sizing: border-box;
     height: var(--aetheus-grid-row-height);
@@ -1046,8 +1010,7 @@ code {
     overflow: hidden;
 }
 
-/* The header row is as tall as a data row (recette R-025): at the theme's cell padding it was 29px
-   over 36px rows. A table cell's height is a floor, so a wrapped header still grows. */
+/* Header height matches data rows as a minimum, allowing wrapped headings to grow. */
 .omni-data-grid thead > tr > th {
     box-sizing: border-box;
     height: var(--aetheus-grid-row-height);
@@ -1066,10 +1029,8 @@ code {
 .omni-data-grid tr[data-omni-row-index] .omni-data-grid__expand {
     max-height: var(--aetheus-grid-row-content-height);
 }
-/* Recette R-166: a cell holding buttons (a row's actions) had its buttons cut at the bottom: the
-   wrapper was capped at the text height (20px) while a grid button is the action size (the badge height), inside
-   a cell that clips. Such a wrapper takes the action size, centred, and the cell gives back the
-   padding it needs, so the row keeps its height (R-087). */
+/* Action wrappers use badge height rather than text height to avoid clipping inside fixed-height
+   cells. */
 .omni-data-grid tr[data-omni-row-index] > td > *:has(.omni-button, .omni-split-button, .omni-data-grid__icon-button) {
     max-height: var(--aetheus-grid-action-size);
     align-items: center;
@@ -1095,9 +1056,8 @@ code {
     line-height: var(--aetheus-grid-row-content-height);
 }
 
-/* Recette R-345: the square is OE's (an icon-only row button is --omni-badge-height on each side, like
-   the row's badges); this rule reads the same token, read on the button itself, so it never contradicts
-   OE's size, and a labelled row button (R-079 below) keeps that height too. */
+/* Icon-only actions use OE's badge-height token for both dimensions; labelled actions share its
+   height. */
 .omni-data-grid tr[data-omni-row-index] .omni-button {
     display: inline-flex;
     align-items: center;
@@ -1132,8 +1092,7 @@ code {
     height: 100%;
 }
 
-/* The minimums too: the row's icon rule above gives every icon a 1.25rem floor, which kept a 20px glyph
-   inside the 22px badge-height square (R-345), where OE draws it at 0.875rem like a badge's. */
+/* Row-action icon minimums must follow badge sizing rather than the larger generic row-icon floor. */
 .omni-data-grid tr[data-omni-row-index] .omni-button .omni-icon,
 .omni-data-grid tr[data-omni-row-index] .omni-data-grid__icon-button .omni-icon {
     min-width: 0.875rem;
@@ -1145,20 +1104,9 @@ code {
     line-height: 0.875rem;
 }
 
-/* E: full-height list — uniform sizing model for every list grid. The grid has NO minimum height:
-   it sizes exactly to its content (its bottom sits at the last row), and only grows up to the
-   remaining space, then stays there and scrolls its body internally (the pager stays pinned at the
-   bottom). `min-height: 0` (not the flex default `auto`) is what lets it both collapse to content
-   AND shrink to scroll. Two tiers:
-   1. PRIMARY (E-flex, below): when the grid is a direct child of the body wrapper, the wrapper
-      becomes a flex column that exactly fills the scroll viewport, and the grid sizes to the
-      REAL remaining space — no magic number, adapts to any chrome height (filters, toolbars,
-      breadcrumb) above it.
-   2. NESTED (this rule): a grid that is not a direct child of the body wrapper (tabs, a server or
-      project detail layout) is sized by OE, which measures what is left below it in the scrolling
-      area (FillAvailableHeight, attachFill). The former `calc(100vh - 15rem)` cap guessed that
-      height and left vaults and libraries short of the bottom (recette R-081); the floor stays.
-   Opt-in via AetheusDataGrid FullHeight; server-side pagination remains the scale strategy. */
+/* Full-height grids shrink to content or scroll within available space, with min-height: 0
+   allowing flex shrinkage. Direct grids use the parent flex viewport; nested grids use OE's
+   measured remaining height. */
 .aetheus-grid-fullheight {
     display: flex;
     flex-direction: column;
@@ -1214,11 +1162,8 @@ code {
     max-height: none;
 }
 
-/* Recette R-419: a full-height grid keeps its floor when it is also virtualized. OE's fill mode sizes
-   the grid box to the space it measures below it (--omni-grid-fill-height, min-block-size 0); on a
-   phone, under stacked tiles, that space is close to nothing, and the min-height: 0 of the
-   virtualized rule above cancelled the full-height floor, so the grid box shrank to a sliver that cut
-   its own rows. The page scrolls instead, as for every other full-height grid. */
+/* Virtualized full-height grids retain a usable minimum on phones, allowing page scrolling when
+   stacked content leaves too little space. */
 .aetheus-grid-virtualized.aetheus-grid-fullheight {
     min-height: var(--aetheus-grid-floor);
 }
@@ -1231,14 +1176,12 @@ code {
     flex-direction: column;
 }
 
-/* The page starts right under the main area's own padding (recette R-082, titles a little higher):
-   the wrapper's top padding doubled it. Two classes, so it wins over the utility it also carries. */
+/* The main area's padding owns the top gap; the wrapper must not duplicate it. */
 .app-body-wrapper.omni-u-py-md {
     padding-block-start: 0;
 }
 
-/* Recette R-392: on a phone the page keeps only the package's side margin (OmniMain's gutter); the
-   wrapper's own padding doubled it. */
+/* On phones, OmniMain alone supplies the horizontal gutter. */
 @media (max-width: 39.99rem) {
     .app-body-wrapper.omni-u-px-md {
         padding-inline: 0;
@@ -1373,9 +1316,8 @@ code {
     width: 5.5rem;
 }
 
-/* Recette R-516: code, commands, configuration and logs are OE's OmniCodeBlock everywhere (a title, the
-   copy button at the end of the title, then the content), on OE's own surface. Aetheus only bounds the
-   height of the long ones, which scroll inside themselves; a view sets its own bound with the variable. */
+/* OE code blocks own the surface and copy action; views can bound long content through the height
+   variable. */
 .code-block-bounded .omni-code-block__pre {
     max-block-size: var(--code-block-max-height, 25rem);
     overflow-y: auto;
@@ -1391,8 +1333,7 @@ code {
     overflow-anchor: auto;
 }
 
-/* Recette R-411 (as R-400): every console block below keeps OE's inverse surface and takes its
-   on-inverse ink; the page text colour it carried was dark on that mid grey in light mode. */
+/* Console blocks pair OE's inverse surface with its on-inverse text colour. */
 
 /* Docker project zoom dialog */
 .docker-zoom-card {
@@ -1483,8 +1424,7 @@ code {
     padding: 1rem 0;
 }
 
-/* Recette R-411: a placeholder row shimmers between two page surfaces; the inverse surface and the text
-   colour it used were a dark band in light mode. */
+/* Placeholder shimmer uses page surfaces for consistent contrast in both themes. */
 .skeleton-row {
     height: 2.5rem;
     border-radius: var(--aetheus-radius);
@@ -1800,8 +1740,7 @@ code {
     gap: 1rem;
 }
 
-/* Recette R-106: the border no longer takes the text colour (too hard, #424242 / #E0E0E0) while the
-   tile hardly stood out from the page; it takes the tile border token, the tile its own fill. */
+/* Tiles use their dedicated fill and border tokens. */
 .project-card {
     cursor: pointer;
     transition: border-color 0.15s;
@@ -1886,14 +1825,13 @@ code {
     height: 100%;
 }
 
-/* Recette R-450: the header row of both overview cards is one control tall, button or not, so the
-   Information and Repository lines start at the same height. */
+/* Both overview-card headers occupy one control height so their content aligns. */
 .overview-card-heading {
     min-height: var(--omni-control-height);
 }
 
 .project-overview-recent-card {
-    /* Recette R-209: 100% of its column, border included (OmniCard is border-box since OE 1.4.0, R2-006). */
+    /* The card fills its column with border-box sizing. */
     width: 100%;
     min-width: 0;
 }
@@ -1913,8 +1851,7 @@ code {
     overflow-wrap: anywhere;
 }
 
-/* Recette R1-27: the clone address on the project overview, OE's copyable field filling its cell;
-   the field scrolls a long URL inside itself, so the card and the page never scroll sideways. */
+/* The copyable clone field scrolls long URLs internally without widening the card or page. */
 .overview-clone-url {
     inline-size: 100%;
     min-inline-size: 0;
@@ -2055,7 +1992,7 @@ code {
     white-space: nowrap;
     padding: 0.2rem 0.4rem;
     border: 1px solid var(--aetheus-tile-separator);
-    border-radius: var(--omni-radius-sm); /* Recette R-222: square badges, never pills. */
+    border-radius: var(--omni-radius-sm); /* Badges use square corners. */
     background: var(--omni-color-surface-muted);
 }
 
@@ -2065,7 +2002,7 @@ code {
     width: 2.25rem;
     height: 2.25rem;
     border: 1px solid currentColor;
-    border-radius: var(--omni-radius-sm); /* Recette R-280 / R-302: square, like every badge (R-222). */
+    border-radius: var(--omni-radius-sm); /* Badges share square corners. */
     font-weight: 750;
 }
 
@@ -2082,7 +2019,7 @@ code {
     margin-top: 1rem;
 }
 
-/* Recette R1-18 / R1-31: the pipeline architecture types, side by side, then their detail below. */
+/* Architecture choices sit side by side with their details below. */
 .pipeline-setup-architectures {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
@@ -2165,7 +2102,7 @@ code {
     overflow-wrap: anywhere;
 }
 
-/* Recette R1-28: what would make a run fail, above the project's pipelines. */
+/* Pipeline readiness findings precede the project pipeline list. */
 .project-pipelines-readiness {
     margin-bottom: 1rem;
 }
@@ -2174,17 +2111,14 @@ code {
     margin-top: 0.25rem;
 }
 
-/* Recette R-339: the header centres the margin box, so the star is pulled in by the same amount at
-   the top and the bottom: centred on the name, and the same 0.375rem taken off its height as before,
-   so the header keeps its height. */
+/* Symmetric vertical margins center the star on the name without increasing header height. */
 .project-card-action {
     flex: 0 0 auto;
     margin: -0.1875rem -0.375rem -0.1875rem 0;
 }
 
-/* Recette R-410 (user decision 2026-09-28): a favourite star is an icon button without background
-   (Ghost), a grey outline star when the item is not a favourite, a filled blue star when it is. The
-   .omni-button prefix outweighs the dark theme's ghost text colour further down. */
+/* The ghost favourite button uses an outlined grey star when inactive and a filled blue star when
+   active. Selector specificity preserves these colours in dark mode. */
 .omni-button:is(.project-favorite, .pipeline-favorite-button).omni-button--ghost {
     --omni-button-ink: var(--omni-color-text-muted);
     color: var(--omni-button-ink);
@@ -2199,8 +2133,7 @@ code {
     margin: 0.75rem 0;
 }
 
-/* PLAN-003 lot 8: no frame. The block is two lines ruled exactly like the activity lines below it,
-   so the tile reads as one list: label on the left, value on the right. */
+/* Label-value lines share the activity list's alignment without an extra frame. */
 .project-production {
     border-top: 1px solid var(--aetheus-tile-separator);
 }
@@ -2230,7 +2163,7 @@ code {
     align-items: center;
     gap: 0.35rem;
     padding: 0.15rem 0.45rem;
-    border-radius: var(--omni-radius-sm); /* Recette R-222: square badges, never pills. */
+    border-radius: var(--omni-radius-sm); /* Badges use square corners. */
     font-size: 0.75rem;
     font-weight: 600;
     white-space: nowrap;
@@ -2286,7 +2219,7 @@ code {
     border-bottom: 1px solid var(--aetheus-tile-separator);
 }
 
-/* PLAN-005 lot 7 / D43: a two-line label starts on the baseline of its value's first line. */
+/* Multiline labels align with the first value line. */
 .project-activity-row {
     display: grid;
     grid-template-columns: 5.25rem minmax(0, 1fr);
@@ -2332,8 +2265,7 @@ code {
     min-width: 0;
 }
 
-/* PLAN-003 lot 7: a badge is never cut. At 375px the run's status badge shrank beside the run name
-   ("SUCC…"); it keeps its width and the name takes the ellipsis. */
+/* Status badges retain their width; adjacent names truncate when space is limited. */
 .project-activity-run > .omni-badge {
     flex: 0 0 auto;
 }
@@ -2383,8 +2315,7 @@ code {
     min-width: 58rem;
 }
 
-/* Recette R-411: the header of the grids (OmniDataGrid's header fill and muted ink) in both themes.
-   The inverse surface it used is a mid grey in OE, dark in light mode, under grey text. */
+/* Grid headers pair OE's header fill and muted text in both themes. */
 .project-dense-header {
     min-height: 2.25rem;
     padding: 0 0.75rem;
@@ -2535,9 +2466,7 @@ code {
     min-width: 15rem;
 }
 
-/* Recette R-416: no top margin of its own. On Git repositories it added to the toolbar's bottom gap
-   (the header gap), and on Releases to a toolbar that held only a help link: the grid stood further
-   from the header than any other list. The block above owns the gap, as the Headings rule says. */
+/* The preceding block owns the grid's top gap. */
 .pipeline-list-grid {
     margin-top: 0;
 }
@@ -2598,9 +2527,8 @@ code {
     padding: 0;
 }
 
-/* Recette R-118 to R-122, R-215: the pipelines list is two views, Catalogue and Runs. Each view is a filter
-   row, the summary strip and one grid; the grid takes the height left on the screen (OE
-   FillAvailableHeight) and is the view's only scroll area, so the page itself does not scroll. */
+/* Catalogue and Runs each use filters, summary and a grid that fills remaining space and owns
+   scrolling. */
 
 .pipeline-catalog-panel {
     display: flex;
@@ -2632,13 +2560,12 @@ code {
 
 .pipeline-catalog-filters > .omni-text-box {
     flex: 1 1 16rem;
-    /* Recette R-308: the search keeps a reading width instead of taking the row. */
+    /* Search retains a readable width without occupying the whole row. */
     max-inline-size: 22rem;
 }
 
-/* R-122: the summary strip. A chip reads by its icon, its label and its count; its colour only
-   repeats that. The active chip is also told apart without colour: a thicker border and bold text,
-   on top of aria-pressed for assistive technology. */
+/* Summary chips expose icon, label and count; active state also uses border weight and bold text
+   in addition to aria-pressed. */
 .pipeline-status-summary {
     min-width: 0;
 }
@@ -2668,23 +2595,21 @@ code {
     white-space: nowrap;
 }
 
-/* Recette R-120: a pipelines grid that ends its tab takes the height left on the screen (OE
-   FillAvailableHeight sizes it) and its body is the one scroll area. The former rule here made the
-   body overflow visible, which let the page scroll instead and stacked a scrollbar per panel. */
+/* OE sizes the terminal pipeline grid to available height, with scrolling confined to its body. Its height
+   floor is OE's (min-content since OE 1.8.0: the bars and a viewport of MinHeight): a min-height of 0 here
+   squeezed the grid to what was left of a short window and clipped its rows, with nothing left to scroll. */
 .pipeline-grid-fill {
     display: flex;
     flex-direction: column;
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    min-height: 0;
 }
 
 .pipeline-grid-virtualized {
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    min-height: 0;
 }
 
 .pipeline-project-context {
@@ -2839,8 +2764,7 @@ a.pipeline-relation-card:hover {
     text-align: center;
 }
 
-/* Recette R-297: with no linked runs on the page the toggler column holds nothing, yet it took a full
-   column width and read as an odd empty first column. Collapse it until a row can expand. */
+/* The expansion column collapses when no row has linked runs. */
 .pipeline-runs-grid:not(.pipeline-runs-grouped) .omni-data-grid__col--expand,
 .pipeline-runs-grid:not(.pipeline-runs-grouped) .omni-data-grid__control--expand {
     width: 0 !important;
@@ -3056,7 +2980,7 @@ a.pipeline-relation-card:hover {
         flex: 1 1 14rem;
     }
 
-    /* Recette R-308: the trigger and model filters share their line half and half. */
+    /* Trigger and model filters divide their row equally. */
     .pipeline-catalog-filters > .pipeline-filter-multi {
         flex: 1 1 calc(50% - 0.25rem);
         min-width: 0;
@@ -3112,9 +3036,7 @@ a.pipeline-relation-card:hover {
     font-size: 0.875rem;
     vertical-align: middle;
 }
-/* Recette R-339: an icon beside a label sits on the middle of the text line, not on its baseline.
-   Audited 2026-09-27: no baseline-aligned container holds an icon; the other icon + label pairs are
-   already centred flex rows (run timeline chips, durations) or use .run-tile-icon. */
+/* Icons align to the middle of the text line. */
 :is(.omni-text, .run-tile-sublabel):has(> .run-tile-icon) {
     display: inline-flex;
     align-items: center;
@@ -3199,8 +3121,7 @@ a.pipeline-relation-card:hover {
     text-decoration: underline;
 }
 
-/* Recette R-366/R-367: release uses and build inputs wrap on a narrow screen; a package URL breaks
-   anywhere rather than widening the card. */
+/* Release references wrap on narrow screens and package URLs can break without widening cards. */
 .release-provenance-row {
     flex-wrap: wrap;
 }
@@ -3233,7 +3154,7 @@ a.pipeline-relation-card:hover {
     white-space: normal;
 }
 
-/* Run history dots, and the grade of the newest run beside them (PLAN-007 lot 3) */
+/* History dots accompany the newest run's grade. */
 .pipeline-run-history-cell {
     display: flex;
     align-items: center;
@@ -3281,7 +3202,7 @@ a.pipeline-relation-card:hover {
 }
 
 .pipeline-run-dot-cancelled {
-    /* PLAN-003 D13: amber belongs to Partial now; a cancelled run is a non-event, so it is grey. */
+    /* Amber denotes partial results; cancelled runs use neutral grey. */
     background-color: var(--omni-color-text-muted, #6c757d);
 }
 
@@ -3319,6 +3240,15 @@ a.pipeline-relation-card:hover {
 /* Pipeline edit tab: compact meta row (name + description inline) + inline toolbar, and the editor
    flexes to fill the remaining viewport height (full-height chain below, scoped to .pipeline-edit-form). */
 .pipeline-edit-form { display: flex; flex-direction: column; gap: 0.5rem; min-height: 0; }
+/* Recette R3-19: OE's template form puts a block <form> between the wrapper and its rows, so the column,
+   its gap and the editor's flex-fill never reached them (measured: rows 0 px apart, editor 217 of 1054 px). */
+.pipeline-edit-form .omni-template-form__form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--omni-space-md);
+    flex: 1 1 auto;
+    min-height: 0;
+}
 .pipeline-edit-meta { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
 .pipeline-edit-meta .pipeline-edit-name { flex: 1 1 16rem; }
 .pipeline-edit-meta .pipeline-edit-desc { flex: 2 1 22rem; }
@@ -3689,13 +3619,10 @@ a.pipeline-relation-card:hover {
     .run-split-logs { min-height: 20rem; max-height: 70vh; }
 }
 
-/* --- PLAN-006 lot 12.1: the run on a time axis ---
-   The list below this strip is ordered but not scaled: it says a stage ran "in parallel" because the
-   graph allowed it, and says nothing about where the run's minutes actually went. These bars share
-   one axis, so overlap and cost are both visible at a glance.
-   Geometry is rendered as SVG attributes, while colours and typography stay here. */
+/* The shared time axis makes actual stage overlap and duration visible. SVG attributes carry
+   geometry; CSS owns colours and typography. */
 .run-gantt {
-    /* Recette R-162: detached from the Progress block above it. */
+    /* The time axis is visually separated from the progression block. */
     margin-top: 1.25rem;
     margin-bottom: 1rem;
     font-size: 0.8125rem;
@@ -3703,8 +3630,7 @@ a.pipeline-relation-card:hover {
 /* The hatch pattern's carrier: present in the layout tree (a display:none SVG drops its patterns in
    some engines) but taking no room. */
 .run-gantt-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
-/* Recette R-158: the axis in quarters. Four equal cells; each tick label sits on its cell's left
-   edge (centred on it for the inner ones), the end label on the last cell's right edge. */
+/* Quarter ticks align on equal-width cells, with the final label at the right edge. */
 .run-gantt-scale {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3718,8 +3644,7 @@ a.pipeline-relation-card:hover {
 .run-gantt-tick[data-tick="75"] { grid-column: 4; grid-row: 1; justify-self: start; }
 .run-gantt-tick[data-tick="100"] { grid-column: 4; grid-row: 1; justify-self: end; }
 .run-gantt-head { margin-bottom: 0.25rem; color: var(--omni-color-text-muted, #c0c6cd); }
-/* PLAN-003 lot 20 / D26: the figures beside each bar. Every column has the same fixed width in every
-   row, so they line up without a table; a column no stage fills is not rendered at all. */
+/* Fixed metric-column widths align stage rows; columns with no values are omitted. */
 .run-gantt-cols {
     display: grid;
     grid-auto-flow: column;
@@ -3737,8 +3662,7 @@ a.pipeline-relation-card:hover {
     grid-template-columns: minmax(0, 10rem) 1fr auto;
     align-items: center;
     column-gap: 0.5rem;
-    /* Recette R-162: a little air between rows. It comes from the row height, not from padding, so
-       the track cells touch and the quarter lines run unbroken from the first row to the last. */
+    /* Row height supplies spacing while touching track cells keep quarter lines continuous. */
     min-height: 1.375rem;
 }
 .run-gantt-label {
@@ -3750,18 +3674,19 @@ a.pipeline-relation-card:hover {
 }
 .run-gantt-label-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .run-gantt-system { color: var(--omni-color-text-muted, #c0c6cd); font-style: italic; }
-/* Recette R-155: the status is also a shape (tick, cross, no-entry sign, play, hourglass). */
+/* Status uses distinct shapes as well as colours. */
 .run-gantt-status-icon { flex-shrink: 0; width: 0.875rem; height: 0.875rem; }
 .run-gantt-status-success { color: var(--omni-color-success); }
 .run-gantt-status-failed { color: var(--omni-color-danger); }
 .run-gantt-status-running { color: var(--omni-color-accent); }
+.run-gantt-status-rejected { color: var(--omni-color-warning); }
 .run-gantt-status-cancelled,
 .run-gantt-status-other { color: var(--omni-color-text-muted); }
 .run-gantt-track {
     align-self: stretch;
     display: flex;
     align-items: center;
-    /* R-158: the quarter lines between the bars, drawn on the cell so they continue across rows. */
+    /* Quarter lines belong to cells so they remain continuous across rows. */
     background-image:
         linear-gradient(var(--aetheus-tile-separator), var(--aetheus-tile-separator)),
         linear-gradient(var(--aetheus-tile-separator), var(--aetheus-tile-separator)),
@@ -3779,8 +3704,8 @@ a.pipeline-relation-card:hover {
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
 }
-/* Recette R-155: the wait before a stage, hatched and dimmed, thinner than the bar it leads into, so
-   it differs from the run time by its pattern and not by a hue alone. */
+/* Waiting time uses a thinner hatched segment, distinguishable from execution without colour
+   alone. */
 .run-gantt-wait { opacity: 0.75; }
 .run-gantt-hatch path {
     stroke: var(--omni-color-text-muted);
@@ -3792,21 +3717,21 @@ a.pipeline-relation-card:hover {
 }
 .run-gantt-success { fill: var(--omni-color-success, #4caf50); }
 .run-gantt-failed { fill: var(--omni-color-danger, #ef5350); }
+/* Recette R1-80: a control that ran and found failures, neither a success nor a technical error. */
+.run-gantt-rejected { fill: var(--omni-color-warning); }
 .run-gantt-cancelled { fill: var(--omni-color-text-muted, #3a424b); }
 .run-gantt-other { fill: var(--omni-color-border, #2b3138); }
 .run-gantt-running { fill: var(--omni-color-accent, #29b6f6); }
-/* PLAN-003 lot 20 / D26: a running stage fills up to its usual duration; past it, a stronger layer
-   restarts from the left over the first, "longer than usual, still going". No fill on a finished
-   stage. */
+/* Running stages fill toward usual duration; excess time overlays a stronger fill. Completed
+   stages have no progress fill. */
 .run-gantt-progress,
 .run-gantt-overrun {
     pointer-events: none;
 }
 .run-gantt-progress { fill: var(--omni-color-on-accent); opacity: 0.28; }
 .run-gantt-overrun { fill: var(--omni-color-warning, #ffa726); opacity: 0.8; }
-/* Recette R-160: a stage row unfolds into its steps. The toggle keeps the page control height (the
-   one token, never a second size); a stage without steps gets an empty box of the same width so every
-   status icon and name still start on the same x. */
+/* Stage toggles use the shared control height; an equal-width placeholder aligns stages without
+   steps. */
 .run-gantt-toggle.omni-button,
 .run-gantt-toggle-spacer {
     flex-shrink: 0;
@@ -3838,7 +3763,7 @@ a.pipeline-relation-card:hover {
     font-style: italic;
     margin-top: 0.375rem;
 }
-/* Recette R-157: cumulative execution, cumulative wait and run duration under the strip. */
+/* Cumulative execution, waiting and total run duration appear below the time axis. */
 .run-gantt-total {
     display: flex;
     flex-wrap: wrap;
@@ -3883,9 +3808,7 @@ a.pipeline-relation-card:hover {
 }
 
 @media (max-width: 39.99rem) {
-    /* Recette R-425 (measured 2026-09-28): stacked, the timeline sizes to its content and never
-       scrolls, but it stayed a scroll container with overscroll containment, so the wheel over the
-       steps went nowhere instead of scrolling the page. After the rule above, so it wins. */
+    /* In the stacked layout, timeline content grows naturally and wheel input scrolls the page. */
     .run-split-timeline { overflow-y: visible; overscroll-behavior: auto; }
 }
 
@@ -3926,9 +3849,7 @@ a.pipeline-relation-card:hover {
     transition: background 0.15s;
     position: relative;
 }
-/* Recette R-139: these rules were written for the legacy tokens, whose fallbacks (#252525, #333) were
-   the design; the OE tokens of the same names are the TEXT colours, which turned the hover and the
-   selection into light slabs. Back to a faint hover and a slightly stronger selection. */
+/* Timeline hover is faint and selection slightly stronger. */
 .run-tl-row:hover { background: var(--omni-color-surface-hover); }
 .run-tl-row.selected { background: var(--omni-color-surface-highlight); }
 .run-tl-stage-header { cursor: default; }
@@ -3956,7 +3877,7 @@ a.pipeline-relation-card:hover {
     text-align: center;
     flex-shrink: 0;
     font-size: 0.6875rem;
-    /* Recette R-139 / R-141: the small capitals the Progress list and the log header had before. */
+    /* Progress labels and log headings use small capitals. */
     text-transform: uppercase;
     letter-spacing: 0.02em;
 }
@@ -3980,10 +3901,7 @@ a.pipeline-relation-card:hover {
 .run-progress-timeline .run-tl-dur { min-width: 2.75rem; text-align: right; }
 .run-progress-timeline .run-tl-name { flex: 1 1 auto; }
 
-/* Recette R-141: the log panel is the dark terminal it was (the legacy fallbacks #121212 / #252525
-   were the design). The OE tokens behind these names are a mid grey and the text colour, which is
-   what turned the panel into a light grey slab. The page shade is the terminal, the tile surface
-   the header. */
+/* The log terminal uses page shade for content and tile surface for its header. */
 .run-split-logs {
     display: flex;
     flex-direction: column;
@@ -4005,9 +3923,8 @@ a.pipeline-relation-card:hover {
    each link flexes to fill and passes min-height:0 down so the terminal is the single scroll box.
    Mobile (<=768px, single column) keeps normal document flow — see the max-width media query. */
 @media (min-width: 40rem) {
-    /* No rule on .omni-body any more (recette R-051): since the OE migration it holds the sidebar
-       beside the main area, and turning it into a column stacked the menu above the page. The OE
-       scrollable main is already a flex column of definite height, so the chain starts there. */
+    /* The flex-height chain begins at OE's scrollable main area; the body also contains the
+       sidebar. */
     .app-body-wrapper:has(.run-split-layout, .run-yaml-split, .analysis-quality-findings) {
         flex: 1 1 auto;
         min-height: 0;
@@ -4028,12 +3945,8 @@ a.pipeline-relation-card:hover {
     /* YAML definition tab fills the same shell; panes take full height, code scrolls internally. */
     .run-yaml-split { height: 100%; min-height: 0; }
 
-    /* Recette R-500: no rule for the Gate tab here any more. Its card was a column of the panel's
-       height, but OE's card puts its content in .omni-card__body, so the grid never was a child of
-       that column: it kept its own cap (100vh - 18rem), which knows nothing of the heading and the
-       tiles above it, and ended 101px under the card. The grid is now a full-height grid sized by OE
-       (FillAvailableHeight), which measures what is left under it and leaves room for the card's own
-       padding and border; the card takes the height of its content. */
+    /* OE measures the Gate grid's remaining height, including surrounding card padding and
+       borders. */
 
     .app-body-wrapper:has(.analysis-quality-findings) > .blade-content {
         display: flex;
@@ -4098,7 +4011,7 @@ a.pipeline-relation-card:hover {
     background: var(--aetheus-tile-background);
     flex-shrink: 0;
 }
-/* Recette R-141: status and system badges of the log header in small capitals, as before. */
+/* Log status and system badges use small capitals. */
 .run-step-logs-heading .omni-badge { text-transform: uppercase; letter-spacing: 0.02em; }
 /* The Command / Result toggles keep a frame when off, so they read as buttons and not as labels. */
 .run-logs-toggle.omni-button--ghost { border-color: var(--aetheus-tile-border); }
@@ -4146,16 +4059,13 @@ a.pipeline-relation-card:hover {
 }
 
 @container (max-width: 32rem) {
-    /* Recette R-323: only the label hides on a narrow log pane; the icon stays, so no button turns
-       into an empty rectangle. */
+    /* Narrow log panes hide button labels while retaining their icons. */
     .run-step-logs-toolbar > .omni-button .omni-button__content > span:not(.omni-icon),
     .run-step-logs-actions .omni-button__content > span:not(.omni-icon) {
         display: none;
     }
 
-    /* Recette R-425: a button reduced to its icon is the square of an icon-only button (OE: the
-       control height, no side padding). Command, Output and Copy kept their label's padding and stood
-       wider than Top, Bottom and Follow beside them. */
+    /* Buttons reduced to icons use the control-height square without label padding. */
     .run-step-logs-toolbar > .omni-button,
     .run-step-logs-actions > .omni-button {
         inline-size: var(--omni-button-size, var(--omni-control-height));
@@ -4221,10 +4131,7 @@ a.pipeline-relation-card:hover {
     min-height: 28rem;
 }
 .run-yaml-split:has(.run-yaml-peek) { grid-template-columns: 1fr 1fr; }
-/* Recette R-426: the definition pane is the log panel's twin (R-141): the page shade under the code,
-   the tile surface under its header, the tile border and separator. It sat on OE's inverse surface,
-   a mid grey (#555555 light, #4b4b4b dark) that Aetheus had taken for a dark one, framed in the text
-   colour. */
+/* Definition and log panes share page-shade content, tile-surface headers and tile borders. */
 .run-yaml-pane {
     display: flex;
     flex-direction: column;
@@ -4370,9 +4277,8 @@ a.pipeline-relation-card:hover {
    of its content (badge, value, link), instead of flex items that stretched unevenly per row. */
 .run-overview-tiles {
     display: grid;
-    /* Recette R-150: 11rem so a branch or a parent pipeline name is not cut at a normal width.
-       Recette R-498: auto-fill keeps the tiles at that width on a wide screen (a few tiles no longer
-       stretch across the page), and they wrap when the row is full. */
+    /* Auto-filled tiles retain a readable minimum width and wrap instead of stretching across wide
+       screens. */
     grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
     grid-auto-rows: 1fr;
     gap: 0.75rem;
@@ -4386,7 +4292,7 @@ a.pipeline-relation-card:hover {
    scrollbar. Pinning the minimum to 0 keeps the grid inside its container. */
 .run-overview-tiles > * { min-width: 0; }
 .run-overview-tiles > .run-tile-link { height: 100%; }
-/* Recette R2-048: the lineage tile takes two columns when it names a run (PipelineRunLineageTile.IsWide). */
+/* The lineage tile spans two columns when it names a run. */
 .run-overview-tiles > .run-lineage-tile--wide { grid-column: span 2; }
 /* Keyboard focus ring for the tiles that act as buttons (jump-to-tab), matching the hover affordance. */
 .run-tile-link[role="button"]:focus-visible { outline: 2px solid var(--omni-color-accent, #7c4dff); outline-offset: 2px; border-radius: var(--aetheus-radius); }
@@ -4420,13 +4326,10 @@ a.pipeline-relation-card:hover {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-/* Recette R-149: one behaviour for every sub-row, label on the left and value on the right (it was
-   the Source tile's alone). */
+/* Sub-rows align labels left and values right. */
 .run-tile-subrow { justify-content: space-between; }
-/* Recette R-145 to R-147: on the run page every tile is three fixed slots, label, value, footer. The
-   value is centred in its slot and the footer sits at the bottom, so labels, values and footers line
-   up from one tile to the next. A tile without a footer keeps the slot, empty. Scoped to the run
-   tiles: the release and artifact pages reuse .run-overview-card with their own content. */
+/* Run tiles reserve label, value and footer slots for cross-tile alignment, including empty
+   footers. Other pages retain their own card layouts. */
 .run-overview-tiles .run-overview-card { display: flex; flex-direction: column; }
 .run-overview-tiles .run-overview-card > .omni-card__body {
     flex: 1 1 auto;
@@ -4440,8 +4343,7 @@ a.pipeline-relation-card:hover {
     align-items: center;
     gap: 0.375rem;
     min-width: 0;
-    /* R-146: one text size and weight for every value, and the height of a badge, so a date, a
-       name or a percentage sits on the same line as the Status, Gate and Lint badges. */
+    /* Values share typography and badge-height alignment. */
     min-height: var(--aetheus-badge-height);
     font-size: 1rem;
     font-weight: 500;
@@ -4457,8 +4359,7 @@ a.pipeline-relation-card:hover {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-/* Recette R2-049: an artifact name is long (ApplicationPayload-artifacts) and wrapped over several lines
-   at the value size, growing the whole row of tiles. One line at the sub-row size, full name on hover. */
+/* Artifact names remain on one line at sub-row size, with full text available on hover. */
 .run-tile-main > .run-artifact-name {
     min-width: 0;
     overflow: hidden;
@@ -4475,8 +4376,7 @@ a.pipeline-relation-card:hover {
     font-size: inherit;
     font-weight: inherit;
 }
-/* Recette R2-025: the candidate verdict sits under the run status, and a badge wider than a narrow
-   tile wraps inside the tile instead of overflowing it. */
+/* Candidate verdict badges wrap inside narrow status tiles. */
 .run-status-badges { min-width: 0; max-width: 100%; }
 .run-status-badges > .omni-badge { max-width: 100%; }
 .run-status-badges > .run-candidate-verdict-badge { white-space: normal; text-align: start; }
@@ -4538,9 +4438,7 @@ a.pipeline-relation-card:hover {
 /* A1-A4: recursive collapsible run tree (logs-tab left panel). The top-level tree is a bordered,
    rounded card with row separators (run-timeline mockup); nested child runs stay indented + railed. */
 .run-tree { display: flex; flex-direction: column; gap: 0.125rem; }
-/* Recette R-139: the tile surface, its border and its row separators, as before the OE tokens took
-   over the legacy names (the text colour had become the frame and the separators, the inverse
-   surface the background). */
+/* Tiles share their surface, border and separator tokens. */
 .run-tree:not(.run-tree-nested) {
     flex: 0 0 auto;
     gap: 0;
@@ -4670,10 +4568,7 @@ a.pipeline-relation-card:hover {
     --omni-color-border: var(--omni-color-text-muted);
 }
 
-/* Q2BV: the release changelog now renders through legacy UITimeline (ProjectOverviewSection,
-   reusing the .project-activity-timeline class), so it inherits the shared rail-lock above
-   alongside project activity, run progress and run logs — all four read identically. The old
-   custom .release-cl-* markup CSS was removed as dead leftover of the pre-legacy UI changelog. */
+/* The shared activity timeline rail also applies to release activity. */
 
 /* Clickable grid cell — replaces inline style="cursor:pointer" */
 .clickable-cell { cursor: pointer; }
@@ -4685,10 +4580,8 @@ a.pipeline-relation-card:hover {
 }
 
 .dialog-footer { margin-top: 0.75rem; }
-/* Recette R-406: in a dialog with an intention, the shared DialogFooter (rendered at the end of the
-   dialog body, not in OE's footer slot) reads as OE's footer: the same rule and padding, reaching the
-   dialog's edges through the body's padding. Recette R2-029: no tint any more; since OE 1.4.0 the
-   header and the footer of a dialog stay neutral, only the mark before the title carries the intention. */
+/* The shared dialog footer extends through body padding to align with OE's footer edges. Header
+   and footer remain neutral while the title mark carries intention. */
 .omni-dialog:is(.omni-dialog--intent-accent, .omni-dialog--intent-warning, .omni-dialog--intent-danger) > .omni-dialog__content .dialog-footer {
     border-top: var(--omni-border-width) solid var(--omni-color-border);
     margin: 0.75rem calc(-1 * (var(--omni-card-pad) + 2px)) calc(-1 * (var(--omni-card-pad) + 2px));
@@ -4703,18 +4596,10 @@ a.pipeline-relation-card:hover {
 .omni-sidebar.sidebar-width { width: auto; }
 .omni-main:has(> .app-body-wrapper) { flex: 1 1 auto; }
 
-/* The content area sits on its own shade, apart from the app bar and the sidebar, so the cards, grids
-   and the login card stand out from it as they did in production (recette R-039, R-009): a light grey
-   in light mode, darker than the surface in dark mode. */
-/* Recette R-055 and R-106 (values given by the user, checked for >= 4.5:1 text contrast): the page a
-   touch cooler in light mode, tiles and cards with a softer border than the text colour, their inner
-   separators lighter still, and tile titles darker than the body text. Applied to every OE card
-   through its border token, so grids, tiles and cards share one frame. */
-/* Decision of 2026-10-06: these shades are derived from the theme and palette picked in the appearance
-   window instead of fixed values, so every palette repaints the page, the tiles and their borders. The
-   page is handed to the scope as OE's --omni-scope-page, which OE paints under the content: a theme that
-   brings its own page (Trou noir) writes that token on the scope itself and wins, and nothing paints over
-   its field (Givre's gradient, Trou noir's canvas), which an opaque .omni-main used to hide. */
+/* Content shade distinguishes cards and grids from the application chrome in both themes. */
+/* Cards, tiles and grids share a softer border token, with lighter internal separators. */
+/* Page shades derive from the selected theme and palette through OE scope tokens. The main area
+   must not cover a theme's own background. */
 :root,
 .omni-theme-scope {
     --aetheus-page-background: color-mix(in srgb, var(--omni-color-surface) 92%, var(--omni-color-text));
@@ -4724,18 +4609,14 @@ a.pipeline-relation-card:hover {
     --aetheus-tile-title: color-mix(in srgb, var(--omni-color-text) 65%, #000000);
     --omni-scope-page: var(--aetheus-page-background);
 }
-/* Recette R2-112: keyed on the mode OE resolved (data-omni-theme-resolved, carried by the theme scope,
-   and by the document root while omni-boot.js paints the boot splash), "system" included. */
+/* Theme mode follows OE's resolved-mode attribute, including system mode and the boot splash. */
 [data-omni-theme-resolved="dark"] {
     --aetheus-page-background: color-mix(in srgb, var(--omni-color-surface) 62%, #000000);
     --aetheus-tile-title: color-mix(in srgb, var(--omni-color-text) 60%, #ffffff);
 }
 
-/* A neutral (secondary) button in the dark theme: the theme's own neutral fill sank into the dark
-   surfaces (recette R-005, R-037), so it stays a grey lighter than the tiles. Recette R-384 (user
-   decision 2026-09-28): white ink on every filled button in dark mode, so the grey is the lightest one
-   that keeps the package's white ink (--omni-color-on-deep) at 4.5:1 or more (4.7:1 at rest, 5.7:1
-   hovered, 6.6:1 pressed), and about 3:1 at rest against the dark tiles. */
+/* Dark neutral buttons use a lighter grey fill with white text to remain legible against dark
+   surfaces. */
 [data-omni-theme-resolved="dark"] .omni-button--secondary {
     --omni-button-fill: #6e6e74;
     --omni-button-fill-hover: #626268;
@@ -4757,11 +4638,11 @@ a.pipeline-relation-card:hover {
     box-sizing: border-box;
 }
 
-/* The password eye fills the inside of the shared field border (recette R-003). */
+/* The password visibility action fills the shared field border. */
 :root, .omni-theme-scope { --omni-password-toggle-size: calc(var(--aetheus-control-height) - 2 * var(--omni-border-width)); }
 
-/* Recette R-309: every password field, not only the login one, is one control height border included;
-   the input inside it gives up its own height (the vault secret field measured 30px beside 28px). */
+/* Password fields include their border in the shared control height; the inner input does not add
+   another height. */
 .omni-password {
     box-sizing: border-box;
     height: var(--aetheus-control-height);
@@ -4777,8 +4658,8 @@ a.pipeline-relation-card:hover {
     max-width: 100%;
 }
 
-/* The change-password card on a phone. The login page is an OmniLoginShell (recette R-376), which sets
-   its own phone margins and card padding: padding its card again squeezed the form (recette R-379). */
+/* Only the change-password card needs phone padding here; the login shell supplies its own
+   spacing. */
 @media (max-width: 39.99rem) {
     .login-container:not(.omni-login-shell) {
         margin-block: 0.75rem;
@@ -4833,7 +4714,7 @@ a.pipeline-relation-card:hover {
     font-size: 0.85rem;
 }
 
-/* Recette R-403: the explanation and the task field sit under the page title, above the panel. */
+/* The explanation and task field sit between the title and panel. */
 .live-logs-watch {
     flex-wrap: wrap;
 }
@@ -5069,10 +4950,8 @@ a.pipeline-relation-card:hover {
     padding-right: 0;
 }
 
-/* Shared URL-synchronised tabs keep one stable, single-line navigation rail, left-aligned, each tab
-   sized to its own label (PLAN-003 D12). When labels no longer
-   fit, the rail remains keyboard/touch scrollable without introducing a horizontal scrollbar that
-   would change its height between renders. */
+/* URL-synchronized tabs keep a stable single-line rail sized to labels. Overflow remains keyboard
+   and touch scrollable without changing rail height. */
 .url-synced-tabs,
 .url-synced-tabs > .omni-tabs__strip {
     box-sizing: border-box;
@@ -5115,22 +4994,14 @@ a.pipeline-relation-card:hover {
     min-width: max-content;
 }
 
-/* A tab is as wide as its label (recette R-080, R-101). The former width: 100% sized it to its item
-   wrapper; OE renders that wrapper display: contents now, so every tab took the whole strip and the
-   others hid behind the scroll arrows. */
-/* Recette R-503: OE gives the tab row 0.25rem of padding for the focus ring and takes it back with a
-   negative margin, so the row ends 0.25rem past its strip. Inside .blade-content, which scrolls
-   sideways, that was a 4px overflow and a scrollbar on every page made of tabs (measured in production:
-   837px of content for 833px visible; reproduced, then gone with this rule: 598 for 598). Only the end
-   side is given up: the start side does not scroll, and the tabs keep their place. */
+/* Tabs size to their labels rather than filling the strip. */
+/* Remove only the tab rail's end-side negative margin to avoid overflow inside horizontally
+   scrollable content while retaining focus-ring space. */
 .omni-tabs > .omni-tabs__strip .omni-tabs__viewport {
     margin-inline-end: 0;
 }
 
-/* Recette R2-125: the same 0.1875rem bleed on every horizontally scrolling OmniStack (OmniStackScroll),
-   such as the status chips above the pipeline lists: a second horizontal scrollbar under the grid's own
-   (measured in production on /projects/1/pipelines: 954px of content for 951px visible; gone with this
-   rule). Same answer as R-503, to drop once OE stops the bleed itself. */
+/* Constrain scrolling stack margins to avoid an extra horizontal overflow outside the stack. */
 .omni-stack-scroll > .omni-stack--overflow-scroll {
     margin-inline-end: 0;
 }
@@ -5160,10 +5031,8 @@ a.pipeline-relation-card:hover {
     overflow: hidden;
 }
 
-/* OE declares a column's Width as --omni-col-width on the col, not as an inline width, so those cols
-   are excluded too: this default used to override every OE width, and every column came out the same
-   size whatever its Width (measured 2026-09-21 on /servers, nine columns of 172px). A MinWidth-only
-   column (--omni-col-min) takes its minimum when that is larger than the default. */
+/* Explicit OE column-width tokens take precedence over defaults; minimum-only columns retain their
+   declared floor. */
 .omni-data-grid .omni-data-grid__table > colgroup > col:not([style^="width:"]):not([style*=";width:"]):not([style*="; width:"]):not([style*="--omni-col-width"]) {
     width: max(10rem, var(--omni-col-min, 0px));
 }
@@ -5244,9 +5113,7 @@ a.pipeline-relation-card:hover {
     }
 }
 
-/* Recette R-326 / R-342: a badge keeps its whole text on one line; the group around it wraps
-   instead of the badge being squeezed or cut with an ellipsis, at every width (a dashboard tile is
-   narrow on a wide screen too). */
+/* Badge groups wrap while each badge retains its full single-line label. */
 .omni-badge {
     flex-shrink: 0;
     vertical-align: middle;
@@ -5257,14 +5124,10 @@ a.pipeline-relation-card:hover {
     justify-content: flex-start;
 }
 
-/* ─── Wizard ───
-   Recette R-396 / R-397: the assistant is OE's OmniWizard (progress, steps, body and actions are the
-   package's own); Aetheus styles only the content of its steps. */
+/* OE owns wizard structure and actions; these rules style step content. */
 
 /* ─── Add Agent Page ─── */
-/* Recette R-398: the wizard's buttons stay at the bottom of the window whatever the height of the
-   step. The page fills the scrolling main area as a flex column (as the full-height grids do), the
-   wizard grows into it and OE pushes its sticky foot down; a longer step scrolls under the foot. */
+/* The wizard fills the main viewport and keeps actions at its bottom while long steps scroll. */
 .app-body-wrapper:has(> .add-agent-page),
 .app-body-wrapper:has(> .wizard-dialog) {
     box-sizing: border-box;
@@ -5277,7 +5140,7 @@ a.pipeline-relation-card:hover {
     flex-direction: column;
 }
 
-/* Recette R-397: once stuck over a long step, the band takes the page shade, not a white surface. */
+/* The sticky action band uses the page shade. */
 .add-agent-page > .wizard-dialog,
 .app-body-wrapper > .wizard-dialog {
     --omni-wizard-actions-background: var(--aetheus-page-background);
@@ -5286,7 +5149,7 @@ a.pipeline-relation-card:hover {
     flex-direction: column;
 }
 
-/* Commands and token are OE OmniCodeBlock (recette R-400); only their spacing is Aetheus'. */
+/* OE code blocks own commands and token presentation; Aetheus supplies spacing. */
 .wizard-code-block,
 .wizard-token-code {
     margin-bottom: 0.5rem;
@@ -5329,8 +5192,7 @@ a.pipeline-relation-card:hover {
     border-color: var(--wizard-code-border-error);
 }
 
-/* Verify polling (recette R-401): the page's muted surface and its own text colour, readable in both
-   themes, instead of the dark inverse panel. */
+/* Polling feedback uses a muted surface with its corresponding text colour. */
 .wizard-polling {
     padding: 0.75rem 1rem;
     background: var(--omni-color-surface-muted);
@@ -5356,8 +5218,7 @@ a.pipeline-relation-card:hover {
 
 .vp-edge {
     fill: none;
-    /* Recette R-411: the muted ink, readable on the canvas in both themes (the border grey it had was
-       drawn for the dark canvas and faded to 1.5:1 on the light one). */
+    /* Muted text must remain legible on the canvas in both themes. */
     stroke: var(--omni-color-text-muted);
     stroke-width: 2.5;
     transition: d 0.3s ease, stroke 0.2s ease, stroke-width 0.2s ease;
@@ -5497,8 +5358,7 @@ a.pipeline-relation-card:hover {
     min-height: 0;
 }
 
-/* Recette R-097: the tiles wrap with the screen width instead of scrolling sideways in a fixed
-   seven-by-two block, and keep a visible gap between them. */
+/* Tiles wrap to available width with visible gaps. */
 .project-section-grid-scroll {
     max-width: 100%;
     padding: 0.125rem;
@@ -5734,7 +5594,7 @@ a.pipeline-relation-card:hover {
     border-bottom: none;
 }
 
-/* Recette R-339: the icon sits on the middle of its label and value, not at their top. */
+/* Icons center vertically beside their labels and values. */
 .essential-item {
     display: flex;
     align-items: center;
@@ -5774,10 +5634,8 @@ a.pipeline-relation-card:hover {
     word-break: break-word;
 }
 
-/* A tile is as tall as its list, never a box that scrolls inside the scrolling page (recette R-017,
-   R-015): the fixed 25rem height cut the Servers and Projects grids off at the bottom and gave the
-   runs grid its own scrollbar. Tiles of a row still end level, the row stretching them to the
-   tallest, and the 25rem stays a floor. */
+/* Dashboard tiles grow with their lists instead of introducing nested scrolling; a row stretches
+   tiles to equal height with a minimum floor. */
 .dashboard-tile-row > .omni-column > .dashboard-tile,
 .dashboard-tile-row > [class*="omni-column--"] > .dashboard-tile {
     flex: 1 1 auto;
@@ -5788,9 +5646,7 @@ a.pipeline-relation-card:hover {
     flex: 1 1 auto;
 }
 
-/* Recette R-065: while it loads, a tile's grid already fills the tile (the 25rem floor) and the
-   loading plane is centred over it, instead of a header-high strip with the loader squeezed in. The
-   grid host relays the tile's flex column down to the grid. */
+/* The grid host propagates the tile's flex sizing so loading content and indicator fill the tile. */
 .dashboard-tile .aetheus-grid-host {
     display: flex;
     flex: 1 1 auto;
@@ -6054,10 +5910,6 @@ textarea:focus-visible,
         width: 100%;
     }
 
-    .pipeline-grid-fill {
-        min-height: 0;
-    }
-
     .pipeline-dependency-grid .pipeline-name-link,
     .pipeline-runs-grid .pipeline-name-link {
         white-space: normal;
@@ -6100,8 +5952,7 @@ textarea:focus-visible,
         max-width: 100%;
     }
 
-    /* The application name stays beside the logo on a phone too, in the bar and in the open drawer
-       (recette R-380); only the user name gives up its room. */
+    /* The application name remains beside the logo on phones; user names yield space first. */
     .omni-app-menu__trigger-name,
     .dev-env-chip-env:has(+ .dev-env-chip-label) {
         display: none;
@@ -6155,12 +6006,11 @@ textarea:focus-visible,
     box-sizing: border-box;
     position: relative;
     height: 100%;
-    /* No inline padding of its own: OmniHeader already pads the bar, and adding more pushed the burger
-       and the logo well right of where the sidebar entries start (recette R-001). */
+    /* OmniHeader supplies bar padding. */
 }
 
-/* The burger sits in the sidebar's icon column (recette R-056): it cancels the app bar's start padding
-   and is as wide as the rail, so its glyph is centred on the menu icons below it; the logo follows. */
+/* The burger aligns with the sidebar icon column by offsetting header padding and using rail
+   width. */
 .header-bar > .omni-sidebar-toggle:first-child {
     margin-inline-start: -12px;
     inline-size: calc(22px + 1.25rem);
@@ -6168,8 +6018,7 @@ textarea:focus-visible,
     flex: none;
 }
 
-/* The phone drawer's own top row (recette R-042): same padding and height as the app bar it covers,
-   so the cross lands exactly where the burger was. */
+/* The drawer header matches the app bar so its close action replaces the burger in place. */
 .sidebar-drawer-header {
     box-sizing: content-box;
     height: 2.25rem;
@@ -6177,8 +6026,7 @@ textarea:focus-visible,
     border-block-end: var(--omni-border-width) solid var(--omni-color-border);
 }
 
-/* Recette R-391: the drawer's close cross is the package's square toggle (its hover fills a square),
-   not the widened burger; shifted so its glyph stays centred where the burger's was. */
+/* The square drawer-close toggle is offset to align its glyph with the burger. */
 .sidebar-drawer-header > .omni-sidebar-toggle:first-child {
     inline-size: var(--omni-control-height);
     block-size: var(--omni-control-height);
@@ -6192,8 +6040,7 @@ textarea:focus-visible,
     display: flex;
     align-items: center;
     gap: 0.375rem;
-    /* Recette R-380: on a narrow phone bar crowded with indicators, the name yields (ellipsis) rather
-       than pushing the header buttons out of the screen. */
+    /* The application name truncates before displacing narrow-screen header actions. */
     min-width: 0;
 }
 
@@ -6217,7 +6064,7 @@ textarea:focus-visible,
 }
 
 .header-action-btn {
-    /* PLAN-003 lot 3: was 2rem, the only control on the page that was not the token. */
+    /* The control uses the shared height token. */
     min-height: var(--aetheus-control-height);
     min-width: var(--aetheus-control-height);
     height: var(--aetheus-control-height);
@@ -6230,8 +6077,7 @@ textarea:focus-visible,
     font-size: 1.25rem;
     padding: 0 0.25rem;
     cursor: default;
-    /* PLAN-003 lot 3: a bare glyph has no box of its own, so it never lined up with the buttons
-       around it. Give it the token height and centre the glyph inside. */
+    /* Bare glyphs need a control-height box to align with adjacent buttons. */
     display: inline-flex;
     align-items: center;
     height: var(--aetheus-control-height);
@@ -6279,7 +6125,7 @@ textarea:focus-visible,
     align-items: center;
     gap: 0.25rem;
     max-width: 18rem;
-    /* PLAN-003 lot 3: sits in the top bar next to the action buttons, so it stands at the token. */
+    /* The top-bar element shares adjacent action-button height. */
     height: var(--aetheus-control-height);
     box-sizing: border-box;
     padding: 0.125rem 0.5rem;
@@ -6331,9 +6177,7 @@ textarea:focus-visible,
     }
 }
 
-/* Recette R-191/R-192: the header menus are OmniPopovers. Their panel carries the frame (background,
-   border, shadow) and closes on a click outside, so no veil covers the page any more; the content
-   brings its own padding. */
+/* OE popovers own menu frames and outside-click dismissal; content supplies padding. */
 .header-popover .omni-popover__panel {
     padding: 0;
     min-inline-size: 0;
@@ -6350,8 +6194,7 @@ textarea:focus-visible,
    Admin Tile Cards
    ========================================================================== */
 
-/* Recette R-456: compact OE settings tiles (icon, title, description under it), as many per row as
-   the width holds; the whole tile is the link. */
+/* Settings tiles fill each row as space permits, with the whole tile acting as a link. */
 .admin-tile-grid {
     display: grid;
     gap: var(--omni-space-sm);
@@ -6421,11 +6264,7 @@ textarea:focus-visible,
 .omni-badge {
     font-size: 0.7rem;
     padding: 0.15rem 0.45rem;
-    /* One badge height everywhere, page headers, tiles and grids alike (recette R-078): the OE badge
-       height. The control token (28px) made header badges taller than the 22px grid ones, and an
-       icon badge landed at 26.8px. It centres its own text instead of being sized by its font.
-       Recette R-345: that height is OE's --omni-badge-height, read on the badge itself, the token
-       OE also gives the icon-only buttons of a grid row, so a row's badges and actions stay equal. */
+    /* Badges and icon-only grid actions share OE's badge-height token, independent of text size. */
     height: var(--omni-badge-height);
     min-height: var(--omni-badge-height);
     min-width: var(--omni-badge-height);
@@ -6531,10 +6370,8 @@ textarea:focus-visible,
     max-width: 30rem;
 }
 
-/* Recette R-232: the appearance settings, one section for the look and one for the language; the
-   selects keep one width so the tiles line up. Recette R-448: the sections take the whole width (the
-   former 48rem cap is gone) and their tiles go two per row, each half the card, stacked when a half
-   no longer holds 24rem; the notification preferences follow the same grid. */
+/* Settings sections fill available width, with tiles in two columns when space permits and a
+   single column on narrow screens. */
 .settings-pair {
     display: grid;
     gap: var(--omni-space-sm);
@@ -6545,14 +6382,9 @@ textarea:focus-visible,
     min-width: 12rem;
 }
 
-/* Recette R-232, STD-SHELL: the density of the whole site is OmniThemeScope's (data-omni-density on the
-   scope element, comfortable as shipped). The two others move the Aetheus sizes (PLAN-003 lot 3 and
-   lot 4) by one step each way, beside OE's own spacing on the same element. */
-/* Recette R-309: one control height. OE sizes the controls this sheet does not name (selects, split
-   buttons, pickers, pager...) from --omni-control-height; it now reads the Aetheus height, so no OE
-   control stands taller than the button beside it. html:root outweighs OE's :root (measured: a bare
-   html selector lost, the bell stayed 36px wide); the theme scope declares OE's density tokens on its
-   own element, so the alias is declared there too, one class above OE's [data-omni-density] rule. */
+/* Density follows OmniThemeScope, with Aetheus size tokens adjusted alongside OE spacing. */
+/* OE control height aliases Aetheus height at both root and density scope, with sufficient
+   specificity to keep all controls aligned. */
 html:root,
 .omni-theme-scope[data-omni-density] {
     --omni-control-height: var(--aetheus-control-height);
@@ -7042,8 +6874,7 @@ html:root,
     box-sizing: border-box;
 }
 .omni-button.omni-button--medium { padding-top: 0.25rem; padding-bottom: 0.25rem; }
-/* Recette R-215 / R-231 / R-232: a select bar (theme mode, density, pipelines views) is a row of
-   controls, so each option keeps the one control height of the site; OE draws it half a rem taller. */
+/* Select-bar options use the shared control height. */
 .omni-select-bar__item {
     min-height: var(--aetheus-control-height);
     height: var(--aetheus-control-height);
@@ -7062,10 +6893,7 @@ html:root,
 .omni-input,
 .omni-input input,
 .omni-combo {
-    /* Was a floor only, so the theme padding still rendered these at 40px: twelve pixels taller
-       than the reference button standing next to them. The token is now the height itself. The
-       numeric wrapper is listed too: the theme sizes it 2.5rem, and an input at the token inside a
-       40px wrapper still made the field 40px (port registry form, measured 2026-09-11). */
+    /* Controls and numeric wrappers use the token as their height, not merely a minimum. */
     min-height: var(--aetheus-control-height);
     height: var(--aetheus-control-height);
     box-sizing: border-box;
@@ -7086,9 +6914,7 @@ textarea.omni-text-box,
 .omni-text-area__input {
     height: auto;
 }
-/* The native dropdown (select.omni-drop-down) is listed too: it kept the theme's 7px padding inside
-   the 28px token, 12px of box for a 14px line, and every filter select was drawn cut (recette R-026).
-   The password field had the same 7px and the same cut (login page, 2026-09-21). */
+/* Field padding must fit within the shared height without clipping select or password text. */
 .omni-text-box,
 .omni-input input,
 .omni-drop-down,
@@ -7136,9 +6962,8 @@ textarea.omni-text-box,
     border-start-end-radius: var(--omni-radius, 0.25rem);
     border-end-end-radius: var(--omni-radius, 0.25rem);
     border-inline-start: 1px solid var(--omni-color-text-muted, #444);
-    /* Recette R-309 / R-320: the chevron is an icon-only button, so a square of the control height. */
-    /* Recette R-413: in a grid row OE sets the split button to the badge height (--omni-button-size),
-       and the chevron stays a square of that height beside the other row actions. */
+    /* Split-button chevrons use an icon-only control square. */
+    /* Grid split-button chevrons follow OE's row-action size. */
     inline-size: var(--omni-button-size, var(--aetheus-control-height));
     min-width: var(--omni-button-size, var(--aetheus-control-height));
     padding-inline: 0;
@@ -7199,7 +7024,7 @@ textarea.omni-text-box,
     text-decoration: underline;
 }
 
-/* PLAN-005 lot 2 / D32: the detail of a toast stops at four lines; the title above it is whole. */
+/* Toast details are capped at four lines while titles remain complete. */
 .notification-body-text {
     display: -webkit-box;
     -webkit-box-orient: vertical;
@@ -7215,8 +7040,7 @@ textarea.omni-text-box,
    header, shows the number of in-flight tasks in place of its icon, opens a fixed-width popover on
    click. The backdrop covers the viewport so a click anywhere outside closes the popover. */
 .task-tracker-container { position: relative; }
-/* PLAN-005 lot 1 / D31: the same square as every header button (.header-action-btn sets it to the
-   token); the number replaces the icon inside it and is sized so "99+" fits without widening it. */
+/* Header counts fit the shared action square, including the maximum displayed count. */
 .task-tracker-btn.omni-button { padding: 0; justify-content: center; }
 .task-tracker-count {
     font-size: 0.8125rem;
@@ -7251,10 +7075,8 @@ textarea.omni-text-box,
     border-bottom: 1px solid var(--omni-color-surface-highlight);
 }
 .task-tracker-row:last-child { border-bottom: none; }
-/* Recette R-193/R-206: rows alternate like the grids, and the hover is the surface hover token in both
-   themes (dark mode used the text colour as a background, light grey under grey text). */
-/* Recette R-298: every row alternates (the rule named only links, so a task row that is not a link
-   never took it), with a tint read from the text colour so it shows in the dark theme too. */
+/* Rows share grid alternation and the surface-hover token in both themes. */
+/* Alternation applies to every row, including non-link tasks. */
 .task-tracker-row:nth-of-type(even) { background: color-mix(in srgb, var(--omni-color-text) 6%, transparent); }
 .task-tracker-row:hover,
 .task-tracker-row:nth-of-type(even):hover { background: var(--omni-color-surface-hover); }
@@ -7298,20 +7120,17 @@ textarea.omni-text-box,
 
 .omni-task-tracker .task-tracker-btn.omni-button { padding: 0; justify-content: center; }
 .omni-task-tracker .task-tracker-btn .omni-button__content { display: flex; align-items: center; justify-content: center; gap: 0.25rem; }
-/* Recette R-170: the count follows the icon in the button's own ink, and the button doubles its width
-   while it has one, instead of the number replacing the icon in a fixed square. */
+/* The count accompanies the icon in the button's colour, with extra width when present. */
 .omni-task-tracker .task-tracker-count { color: inherit; }
 .omni-task-tracker .header-action-btn.task-tracker-btn-wide { width: calc(2 * var(--aetheus-control-height)); }
 .omni-task-tracker .task-tracker-header { padding: 0.75rem 1rem; border-color: var(--omni-color-border); }
-/* The count is a square badge of the common badge height (recette R-076): a narrow side padding, the
-   minimum width being the height, so one digit is 22x22 and more digits only widen it. */
+/* Count badges have a square minimum based on badge height and widen for additional digits. */
 .omni-task-tracker .task-tracker-header .omni-badge { padding-inline: 0.25rem; }
 .omni-task-tracker .task-tracker-footer { padding: 0.5rem 1rem; border-color: var(--omni-color-border); }
 .omni-task-tracker .task-tracker-footer a { color: var(--omni-color-accent); }
 .omni-task-tracker .task-tracker-row { border-color: var(--omni-color-border); }
-/* Recette R-020: while tasks are in flight the button pulses (a ring breathing out), so the count is
-   noticed without opening the list. Off for readers who ask for reduced motion. Recette R-386: the
-   ring is the button's own fill, so the approvals twin pulses in its own colour, not with the tasks' blue. */
+/* Pending-task buttons pulse using their own fill colour; reduced-motion preferences disable the
+   animation. */
 .omni-task-tracker .task-tracker-btn-busy { animation: task-tracker-pulse 1.6s ease-out infinite; }
 @keyframes task-tracker-pulse {
     0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--omni-button-fill, var(--omni-color-accent)) 55%, transparent); }
@@ -7331,13 +7150,11 @@ textarea.omni-text-box,
 .nav-alert-item .omni-panel-menu__link { padding-right: 3.5rem; }
 .nav-alert-count { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); pointer-events: none; }
 
-/* Recette R-188: toasts start under the top bar (53px high) instead of covering it and the header
-   popovers. */
+/* Toasts begin below the top bar and its popovers. */
 :root { --omni-notification-top: calc(3.3125rem + 0.5rem); }
 
-/* Recette R2-061: the catch-up when the page comes back to the foreground is a full veil over the page
-   (the plane and "Synchronisation en cours…"), under the connection-lost overlay (z-index 130). It
-   catches every click until the data is current again. */
+/* Foreground synchronization blocks interaction until data is current, beneath the connection-lost
+   overlay. */
 .realtime-sync-indicator {
     position: fixed; inset: 0; z-index: 120;
     display: flex; align-items: center; justify-content: center; padding: 1rem;
@@ -7354,21 +7171,19 @@ textarea.omni-text-box,
 }
 .realtime-sync-text { font-weight: 500; }
 
-/* R-112 to R-116: user notifications. The bell reuses the task tracker's button and popover rules
-   above; only its footer (mark all read + see all) and the followed-projects list need their own. */
+/* Notification controls share tracker styles; their footer and followed-project list have specific
+   layouts. */
 .omni-task-tracker .notification-bell-footer {
     display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
 }
 .omni-task-tracker .notification-bell-footer:has(> .task-tracker-see-all:only-child) { justify-content: center; }
-/* Recette R2-034: a user who follows no project is told why nothing arrives, above the list; the
-   list then takes no room of its own when it is empty. */
+/* Empty followed-project lists take no space beneath their explanatory message. */
 .omni-task-tracker .notification-bell-no-subscription {
     padding: 1rem; border-bottom: 1px solid var(--omni-color-border);
 }
 .omni-task-tracker .notification-bell-no-subscription + .task-tracker-list:empty { min-height: 0; }
 .notification-subscriptions-actions { display: flex; justify-content: flex-end; margin-block-end: 0.75rem; }
-/* Recette R-169: the event and the subject wrap on two lines at most instead of being cut, and the
-   row never scrolls sideways; the status is an icon at the end of the row. */
+/* Event and subject text can wrap to two lines without horizontal scrolling. */
 .omni-task-tracker .task-tracker-list { overflow-x: hidden; }
 .omni-task-tracker .notification-bell-row .task-tracker-row-name,
 .omni-task-tracker .notification-bell-row .task-tracker-row-meta {
@@ -7376,7 +7191,7 @@ textarea.omni-text-box,
     white-space: normal; overflow-wrap: anywhere;
 }
 .notification-status-icon { flex: 0 0 auto; }
-/* Recette R-193: the event icon on the left is the only icon of a bell row; unread reads in bold. */
+/* Unread bell rows use bold text and a single event icon. */
 .notification-event-icon { flex: 0 0 auto; color: var(--omni-color-text-muted); }
 .omni-task-tracker .notification-bell-row .task-tracker-row-name { font-weight: 400; }
 .omni-task-tracker .notification-bell-row--unread .task-tracker-row-name { font-weight: 700; }
@@ -7384,13 +7199,6 @@ textarea.omni-text-box,
 .notification-status-failed { color: var(--omni-color-danger); }
 .notification-status-not-configured { color: var(--omni-color-warning); }
 .notification-status-pending { color: var(--omni-color-text-muted); }
-.notification-subscriptions { list-style: none; margin: 0; padding: 0; }
-.notification-subscription {
-    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
-    padding: 0.25rem 0;
-    border-bottom: 1px solid var(--omni-color-border);
-}
-.notification-subscription:last-child { border-bottom: none; }
 /* End R-112 to R-116. */
 
 /* Rendered markdown README inside git repository detail pages. */
@@ -7465,18 +7273,16 @@ textarea.omni-text-box,
 .bulk-perm-select { width: 10rem; }
 .role-edit-stack { max-width: 32rem; }
 
-/* Recette R2-095: nothing runs past the run page's approval banner on a phone. OE's alert body is a
-   one-column grid whose auto track grew to the width of the buttons' row, so the text and the buttons
-   went past the banner; the track is held to the banner, long words break, the buttons wrap. */
+/* Approval-banner tracks shrink to the container; long text breaks and actions wrap on phones. */
 .run-approval-banner .omni-alert__body { grid-template-columns: minmax(0, 1fr); overflow-wrap: anywhere; }
-/* Recette R1-24: the environment's instructions keep the line breaks they were written with. */
+/* Environment instructions retain authored line breaks. */
 .run-approval-banner .approval-instructions { white-space: pre-line; }
 .run-approval-banner .approval-instructions-label { font-weight: 600; }
-/* Recette R1-34: where a pipeline definition is kept, one muted line with its icon. */
+/* Definition storage is presented as a muted line with an icon. */
 .pipeline-definition-storage { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.375rem; }
 @media (max-width: 39.99rem) {
-    /* Below phone width Approve and Reject show their icon alone (named by Label, explained by their
-       tooltip); Comment keeps its text. Same square as the run logs' reduced buttons (R-425). */
+    /* Phone approval actions retain accessible names when rendered as icons; Comment keeps its
+       label. */
     .run-approval-banner .approval-decision .omni-button__content > span:not(.omni-icon) { display: none; }
     .run-approval-banner .approval-decision {
         inline-size: var(--omni-button-size, var(--omni-control-height));
@@ -7511,7 +7317,7 @@ textarea.omni-text-box,
     background: color-mix(in srgb, var(--omni-color-accent) 14%, transparent);
 }
 
-/* Recette R-316: the section links on the left, the search shared by the three sections on the right. */
+/* Section links align left and their shared search aligns right. */
 .iam-section-bar {
     display: flex;
     flex-wrap: wrap;
@@ -7617,9 +7423,7 @@ textarea.omni-text-box,
     min-height: 0;
 }
 
-/* Recette R-411: the IAM grids keep OE's header fill (the rule that painted their header cells on the
-   inverse surface never matched, .omni-data-grid__header being the cell's inner block, and is gone);
-   their pager sits on the muted page surface under the page's ink. */
+/* IAM grids use OE header styling and muted pager surfaces. */
 .iam-grid-surface .omni-pager {
     border-top-color: var(--omni-color-text);
     background: var(--omni-color-surface-muted);
@@ -7811,7 +7615,7 @@ textarea.omni-text-box,
 .scan-status-warning { color: var(--omni-color-warning); }
 .scan-status-unknown { color: var(--omni-color-text-muted); }
 
-/* R2-002: the copyable clone URL field (OE's wrapper: input and its welded Copy button). */
+/* The clone URL field combines an input with its copy action. */
 .clone-url-input { width: min(100%, 48rem); min-width: 0; max-width: 48rem; }
 
 /* Diagnostic meta row — small, secondary-colored chips of metadata under the
@@ -7828,7 +7632,7 @@ textarea.omni-text-box,
 .diagnostic-token-row { display: inline-flex; align-items: center; gap: 0.5rem; }
 .diagnostic-token-progress { display: inline-flex; width: 4rem; }
 
-/* Recette R-440: the 24 h availability bars of the supervision list, on the OE status tokens. */
+/* Availability bars use OE status tokens. */
 .availability-sparkline { vertical-align: middle; }
 .availability-sparkline-bar--up { fill: var(--omni-color-success); }
 .availability-sparkline-bar--down { fill: var(--omni-color-danger); }
@@ -7859,11 +7663,11 @@ textarea.omni-text-box,
 .status-dot-danger { background-color: var(--omni-color-danger); }
 .status-dot-success { background-color: var(--omni-color-success); }
 
-/* R-517: the wrapper is a column without a gap, so the banner keeps its own space above the page. */
+/* The gap-free wrapper lets the banner own its spacing above the page. */
 .version-alert-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
 .version-alert-bar-text { flex: 1; }
 
-/* R-510: the state of the action launched on a service, under its status badge. */
+/* Service-action progress appears below its status badge. */
 .service-action-state { font-size: 0.8125rem; line-height: 1.2; }
 .service-action-state--failed a { color: var(--omni-color-danger); }
 .service-action-state--succeeded a { color: var(--omni-color-success); }
@@ -7912,14 +7716,6 @@ textarea.omni-text-box,
 .run-params-dialog { display: flex; flex-direction: column; gap: 1rem; }
 .run-params-field { display: flex; flex-direction: column; gap: 0.25rem; }
 .run-params-input { width: 100%; }
-/* PLAN-005 lot 6 / D42: a parameter label or field and its help icon on one row, the icon pushed to the right. */
-.param-help-row { display: flex; align-items: center; gap: 0.5rem; }
-.param-help-content { flex: 1 1 auto; min-width: 0; }
-.param-help { display: inline-flex; color: var(--omni-color-text-muted); cursor: help; border-radius: 50%; }
-.param-help:focus-visible { outline: 2px solid var(--omni-color-accent); outline-offset: 2px; }
-.param-help .omni-icon { font-size: 1.125rem; }
-/* Read by screen readers through aria-describedby, never shown: the tooltip is the visible form. */
-.param-help-description { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .run-params-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem; }
 
 .pipeline-branch-dialog-intro {
@@ -7946,7 +7742,7 @@ textarea.omni-text-box,
 
 .pipeline-branch-dialog-icon .omni-icon { font-size: 1.35rem; }
 .pipeline-branch-dialog-hint { color: var(--omni-color-text-muted, #a0a0b0); }
-/* PLAN-003 lot 3: this dropdown carried its own 2.75rem, the tallest control in the app. */
+/* The dropdown shares the standard control height. */
 .pipeline-branch-dropdown { min-height: var(--aetheus-control-height); }
 .pipeline-branch-option { width: 100%; min-height: 2rem; }
 .pipeline-branch-name { flex: 1 1 auto; font-weight: 500; }
@@ -8084,8 +7880,7 @@ textarea.omni-text-box,
     min-width: 0;
 }
 
-/* Recette R2-132: the choices share one pair of columns (subgrid), so every button has the width of
-   the widest one and every description starts on the same line, whatever the labels' lengths. */
+/* Subgrid aligns choice buttons to the widest label and descriptions to a shared column. */
 .analysis-decision-choices {
     display: grid;
     grid-template-columns: max-content minmax(0, 1fr);
@@ -8103,8 +7898,7 @@ textarea.omni-text-box,
     padding: 0.625rem;
     border: 0.0625rem solid var(--omni-color-border);
     border-radius: var(--aetheus-radius);
-    /* Recette R-434: the OE muted surface, readable in both themes. The former fill mixed in the TEXT
-       colour (55 %, 91 % when selected): grey then almost white in dark, dark grey in light. */
+    /* Choice surfaces use OE's muted fill in both themes. */
     background: var(--omni-color-surface-muted);
     transition: border-color 120ms ease, background 120ms ease;
 }
@@ -8131,7 +7925,7 @@ textarea.omni-text-box,
     padding: 1rem;
     border: 0.0625rem solid var(--omni-color-border);
     border-radius: var(--aetheus-radius);
-    /* Recette R-434: the OE muted surface, not a mix of the text colour. */
+    /* Muted fill comes from the surface token rather than text colour. */
     background: var(--omni-color-surface-muted);
 }
 
@@ -8162,7 +7956,7 @@ textarea.omni-text-box,
     padding-top: 1rem;
     border-top: 0.0625rem solid color-mix(in srgb, var(--omni-color-text) 18%, transparent);
 }
-/* Recette R2-027: "Revert the decision" sits beside the save button, on the right. */
+/* Decision reversal sits beside Save on the right. */
 .analysis-decision-actions > .analysis-decision-revert { margin-inline-start: auto; }
 
 .analysis-decision-selected {
@@ -8234,7 +8028,7 @@ textarea.omni-text-box,
     overflow-wrap: anywhere;
 }
 
-/* Recette R-433: the line is an OE badge and "Open the file" an OE button at the end of the row. */
+/* Source-line badges and file-opening actions share a row. */
 .analysis-source-location > .omni-badge {
     flex: 0 0 auto;
 }
@@ -8292,8 +8086,7 @@ textarea.omni-text-box,
 }
 
 @media (max-width: 39.99rem) {
-    /* These two rails used to fold into a two-column grid here. Every tab rail now stays a single
-       scrolling row on phones (see the 767.98px block), so only the button padding is kept. */
+    /* Phone tab rails remain single scrolling rows with compact button padding. */
     .analysis-finding-tabs > .omni-tabs__strip .omni-tabs__viewport .omni-tabs__tab,
     .analysis-workspace-tabs > .omni-tabs__strip .omni-tabs__viewport .omni-tabs__tab {
         justify-content: center;
@@ -8482,9 +8275,7 @@ textarea.omni-text-box,
     background: color-mix(in srgb, var(--omni-color-warning) 8%, transparent);
 }
 
-/* A real table cell, not a flex box (recette R-095): as a flex box the cell stopped at its own
-   height, so on a taller row (step 2 wraps its description on three lines) its rule sat above the
-   rules of the cells beside it. The icon and the label line up inline instead. */
+/* Table cells retain table layout so borders align on wrapped rows; icons and labels align inline. */
 .onboarding-step-title {
     font-weight: 600;
     white-space: nowrap;
@@ -8583,8 +8374,7 @@ textarea.omni-text-box,
     max-width: 34rem;
 }
 
-/* PLAN-003 D12: one tab strip everywhere. Only the selected tab carries the accent colour on its
-   icon; every other tab icon reads in the text colour, whatever the page set on it. */
+/* Only selected tab icons use the accent colour. */
 .omni-tabs > .omni-tabs__strip .omni-tabs__viewport .omni-tabs__tab .omni-icon {
     color: var(--omni-color-text);
 }
@@ -8618,11 +8408,8 @@ textarea.omni-text-box,
     padding-inline: 0.5rem;
 }
 
-/* PLAN-003 lot 1 / recette R-395: THE page header is OE's OmniPageHeader, two lines of fixed height on
-   every route, drawn straight on the page (not framed). What Aetheus keeps on top of it: the title
-   size (recette R-014 / R-204, the OE H2 size; the heading level is OE's h1), the icon as tall as the
-   title's capitals, and one vertical gap between the header, the subtitle, the filters and the content
-   (recette R-196). */
+/* OE's page header supplies consistent route structure; Aetheus sets title typography, icon
+   alignment and shared vertical gaps. */
 :root { --aetheus-header-gap: 0.75rem; }
 
 .omni-page-header {
@@ -8668,25 +8455,19 @@ textarea.omni-text-box,
     }
 }
 
-/* PLAN-003 lot 18: the single grade rendering. The quality page hero keeps its presence through
-   analysis-grade-letter, which already sizes it; its colour comes from the same badge scale as every
-   other grade on the site, so a letter cannot read healthy on one page and alarming on the next. */
+/* Grades share a colour scale across pages, while the quality hero retains its larger size. */
 .grade-badge {
     font-weight: 600;
     letter-spacing: 0.02em;
 }
 
-/* PLAN-003 lot 7: the letter is as tall as the text line it annotates. The theme's badge line
-   (16px) plus its padding made it 20.8px beside a 16.5px "Grade" label, measured 2026-09-11; one
-   line of its own font and 2px of padding bring it to 15.2px. The quality page hero keeps its size. */
+/* Inline grade letters align to the text line; the quality hero retains its own dimensions. */
 .grade-badge:not(.analysis-grade-letter) {
     line-height: 1;
     padding-block: 0.125rem;
 }
 
-/* Recette R-096 / R-310: beside the other badges (Active, D) the letter is one of them, so it takes the
-   one badge height and is a square, never a pill or an oval: fixed width, no side padding, the site
-   radius. The quality page hero keeps its own (square) size. */
+/* Grades beside status badges use the shared square badge size and radius. */
 .omni-badge.grade-badge:not(.analysis-grade-letter) {
     height: var(--aetheus-badge-height);
     width: var(--aetheus-badge-height);
@@ -8694,21 +8475,17 @@ textarea.omni-text-box,
     padding-inline: 0;
     border-radius: var(--aetheus-radius);
     justify-content: center;
-    /* Recette R2-050: centred in its square on both axes, not on a padded line box. */
+    /* Grade letters center on both axes within their squares. */
     align-items: center;
     padding-block: 0;
 }
 
-/* Recette R2-050: the "recent runs" cell holds a 22px grade badge in a wrapper the grid caps at the
-   text height (20px): the badge overflowed it and sat lower than the dots. Same release as R-166. */
+/* Recent-run wrappers allow badge height so grades align with history dots. */
 .omni-data-grid tr[data-omni-row-index] > td > .pipeline-run-history-cell {
     max-height: var(--aetheus-badge-height);
 }
 
-/* PLAN-003 lot 19: on a run page the tab rail stays put while the tab content scrolls, so switching
-   tab or reading a long log never costs a scroll back up. Recette R-136: the header no longer sticks
-   with it, because a sticky header needs a background of its own and no page header paints one; it
-   scrolls away and the rail sticks to the top of the page's scroll container. */
+/* The run tab rail sticks to its scroll container while the transparent page header scrolls away. */
 .pipeline-run-tabs > .omni-tabs__tab {
     position: sticky;
     top: 0;
@@ -8716,24 +8493,21 @@ textarea.omni-text-box,
     background: var(--omni-color-surface);
 }
 
-/* The host every Aetheus grid sits in (AetheusDataGrid, PipelineRunsGrid, MonitoredAppsStatusGrid). It no
-   longer holds a loading veil: every grid shows OE's loading bar on the table (recette R-432). */
+/* Grid hosts rely on OE's table loading bar. */
 .aetheus-grid-host {
     position: relative;
 }
 
 .grid-load-alert { margin-block-end: 0.5rem; }
 
-/* R-260: loading and empty states stay visible, including on grids using OE directly. */
+/* Grid loading and empty states remain visible. */
 .omni-data-grid__state {
     display: table-cell;
 }
 
 
 
-/* PLAN-003 lot 7: inside a table a badge is never cut. The mobile ellipsis rule below made "3 en
-   service" read as "3 en ser…" in a column that had room on the row next to it; a badge is one short
-   token, so it wraps the column rather than truncating itself. */
+/* Badge labels remain intact; table columns accommodate them rather than truncating the badge. */
 .omni-data-grid .omni-badge,
 .omni-data-grid__viewport .omni-badge {
     max-inline-size: none;
@@ -8742,21 +8516,18 @@ textarea.omni-text-box,
     white-space: nowrap;
 }
 
-/* PLAN-003 lot 26: a tab's content starts where the page's content starts. legacy UI pads its panel on
-   both sides, so everything inside a tab sat inset from the cards above it and the page read as two
-   different left margins. */
+/* Tab content aligns to the page's content margin. */
 .omni-tabs__panel {
     padding-inline: 0;
 }
 
-/* PLAN-003 lot 4 / D9: a row action is filled but flat; the shadow belonged to a labelled button. */
+/* Row actions use a filled surface without a labelled-button shadow. */
 .omni-data-grid tr[data-omni-row-index] .omni-button:not(.omni-button--ghost) {
     box-shadow: none;
 }
 
-/* PLAN-005 lot 4 / D35 - STD-BUSY, the veil. A button whose action runs keeps exactly its size and
-   content; the surface-coloured ::after breathes over it. No spinner, no label swap, no Disabled for
-   the busy state, no opacity on the button itself. Kit reference implementation, unchanged. */
+/* The STD-BUSY veil preserves button size and content while a surface-coloured pseudo-element
+   pulses over it. */
 .btn-busy { position: relative; overflow: hidden; pointer-events: none; cursor: progress; }
 .btn-busy::after {
     content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
@@ -8765,7 +8536,7 @@ textarea.omni-text-box,
 @keyframes btn-veil { 0%, 100% { opacity: 0; } 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .btn-busy::after { animation-duration: 4s; } }
 
-/* PLAN-007 lot 7: approvals waiting for a decision (home panel) */
+/* Pending approvals on the home panel. */
 .pending-approvals-list {
     margin: 0;
     padding-left: 1.25rem;
@@ -8775,10 +8546,8 @@ textarea.omni-text-box,
     margin-top: 0.25rem;
 }
 
-/* Library entry form: the key's validation message has a reserved line under the row, so neither
-   the row nor the entries grid below moves when it appears. Recette R-313: that line IS the page's
-   block gap (0.75rem), the message written small inside it, instead of a 1.25rem line plus a margin
-   that left 36px between the row and the grid. */
+/* A reserved validation line doubles as the library form's block gap, preventing layout movement
+   when errors appear. */
 .library-entry-validation {
     height: 0.75rem;
     font-size: 0.75rem;
@@ -8787,8 +8556,7 @@ textarea.omni-text-box,
     white-space: nowrap;
 }
 
-/* PLAN-008 lot 11 (OE-13): the widths of a dialog opened through AppDialogs. OE's dialog is 40rem
-   wide at most (AppDialogWidth.Default); the content wrapper names one of the others. */
+/* Dialog content wrappers select widths within the AppDialogs size contract. */
 .omni-dialog:has(.aetheus-dialog--narrow) {
     max-width: 32rem;
 }
@@ -8810,13 +8578,10 @@ textarea.omni-text-box,
 
 .aetheus-badge-dot { display: inline-block; inline-size: 0.5rem; block-size: 0.5rem; border-radius: var(--omni-radius-circle); }
 
-/* PLAN-008 lot 44: AetheusVirtualList. The spacers take their height from a custom property that
-   Aetheus.sizeVirtualSpacer writes through the CSSOM, so no style attribute appears in the markup
-   and the production policy can keep refusing style-src-attr 'unsafe-inline'. */
-/* Recette R-425: no scroll anchoring inside the list, as Blazor's own <Virtualize> sets on its
-   spacers. Each scroll re-renders the window: the top spacer grows and the same row elements get
-   other lines, so the browser's anchoring moved scrollTop to compensate and could undo the wheel's
-   step over the log lines. Hypothesis read in the code, not yet confirmed in a browser. */
+/* Virtual-list spacers receive height through CSSOM custom properties, keeping inline style
+   attributes out of markup under the strict CSP. */
+/* Scroll anchoring is disabled so virtual spacer updates do not counteract user scrolling; this
+   rationale still requires browser confirmation. */
 .aetheus-vlist {
     display: flex;
     flex-direction: column;
@@ -8829,10 +8594,8 @@ textarea.omni-text-box,
     overflow-anchor: none;
 }
 
-/* Recette R-223, then R2-050 (2026-10-02): one colour per grade letter, the same on every page, on a
-   scale the user chose: A green, B a lighter, yellower green, C yellow turning orange, D orange, E red
-   turning orange, F red. Each letter keeps WCAG AA contrast (R-223): white on the dark fills (A, E, F),
-   a near-black on the light ones (B, C, D), where white would not reach 4.5:1. */
+/* Grade colours progress from green to red, pairing dark text with light fills and white text with
+   dark fills for contrast. */
 :root {
     --aetheus-grade-a: #15803d;
     --aetheus-grade-a-text: #ffffff;
@@ -8854,10 +8617,10 @@ textarea.omni-text-box,
 .omni-badge.omni-badge--solid.grade-badge--e { background: var(--aetheus-grade-e); color: var(--aetheus-grade-e-text); }
 .omni-badge.omni-badge--solid.grade-badge--f { background: var(--aetheus-grade-f); color: var(--aetheus-grade-f-text); }
 
-/* Recette R-228: on /notifications an unread row reads in bold until it is read. */
+/* Unread notification rows use bold text. */
 .omni-data-grid tr.notification-row--unread > td { font-weight: 700; }
 
-/* Recette R-300: a notification opened from its row, label and value on one line each. */
+/* Notification details pair labels and values on individual lines. */
 .notification-detail-facts {
     display: grid;
     grid-template-columns: max-content minmax(0, 1fr);
@@ -8874,7 +8637,7 @@ textarea.omni-text-box,
     overflow-wrap: anywhere;
 }
 
-/* Recette R-292: the key and the value each carry a copy button, kept on the same line and centred. */
+/* Key and value copy actions stay centered on their respective lines. */
 .library-cell {
     display: inline-flex;
     align-items: center;
@@ -8894,13 +8657,12 @@ textarea.omni-text-box,
     flex: none;
 }
 
-/* Recette R-285: an inline-edited row keeps its fields and buttons centred on the row's height. */
+/* Inline-edit fields and actions center within the row. */
 .aetheus-grid td {
     vertical-align: middle;
 }
 
-/* Recette R-289: the add-a-secret line, every control on one baseline; the value field takes the free
-   width, the validation messages sit under the line. */
+/* The secret-entry row aligns controls, lets the value field grow and places validation below. */
 .vault-add-row {
     display: flex;
     align-items: center;
@@ -8922,7 +8684,7 @@ textarea.omni-text-box,
     display: none;
 }
 
-/* Recette R-437: the value field of the update and rotate dialog, with its Generate button beside it. */
+/* Secret update and rotation fields share a row with Generate. */
 .secret-value-row {
     display: flex;
     align-items: center;
@@ -8935,14 +8697,12 @@ textarea.omni-text-box,
     min-width: 0;
 }
 
-/* Recette R-298: alternate rows read in both themes; the dark theme's own alternate fill was too close
-   to its surface to see. */
+/* Alternating rows remain distinguishable in both themes. */
 .omni-data-grid.omni-data-grid--striped tbody > .omni-data-grid__row--alternate {
     --omni-row-fill: color-mix(in srgb, var(--omni-color-text) 6%, transparent);
 }
 
-/* Recette R-272: every column header reads from the start, a numeric one included; its values may
-   still align to the end. OmniDataGrid puts the column's alignment on the header too. */
+/* Column headers align to the start even when numeric values align to the end. */
 .omni-data-grid th.omni-data-grid__column--align-end,
 .omni-data-grid th.omni-data-grid__column--align-center {
     text-align: start;
@@ -8958,7 +8718,7 @@ textarea.omni-text-box,
     margin-inline: 0;
 }
 
-/* Recette R-276: a shortened identifier and its copy button, on one line that never overflows. */
+/* Short identifiers and copy actions stay on a single bounded line. */
 .short-id {
     display: inline-flex;
     align-items: center;
@@ -8973,7 +8733,7 @@ textarea.omni-text-box,
     white-space: nowrap;
 }
 
-/* Recette R-373: a short identifier is the link to its object, styled like every value link. */
+/* Identifier links share value-link styling. */
 a.short-id__text {
     color: var(--omni-color-accent-strong);
     text-decoration: none;
@@ -8992,8 +8752,7 @@ a.short-id__text:hover {
     justify-content: center;
 }
 
-/* Recette R-273 / R-296: the unmet-requirements warning; its title and dismiss button share the first
-   line, and the fix button and its explanation wrap rather than overlap. */
+/* Requirement warnings align title and dismissal while their resolution actions wrap. */
 .unmet-requirements-head {
     display: flex;
     align-items: flex-start;
@@ -9021,29 +8780,22 @@ a.short-id__text:hover {
     min-width: 0;
 }
 
-/* Recette R-274 (decision 2026-09-24): on a phone the page never narrows below 20rem (320px), the
-   smallest common phone width, so every usual phone (360 to 430px) shows it without horizontal
-   scrolling, and a narrower screen scrolls instead of crushing the layout. The mobile switch stays
-   at 40rem. Custom for now; to move into OmniEurope once its current changes are merged. */
+/* A 20rem page minimum preserves layout on very narrow screens; mobile layout switches at 40rem. */
 @media (max-width: 39.99rem) {
     body {
         min-width: 20rem;
     }
 }
 
-/* Recette R-328 / R-343 / R-344: Runs tab of a pipeline. The summary tiles sit close under the tabs,
-   stay compact for their one or two lines, keep the label apart from its badge, and leave a clear gap
-   above the runs table. */
-/* Recette R-416: the tabs panel already pads its top (OE); the summary adds no margin of its own. */
+/* Run-summary tiles keep compact content, distinct label and value spacing, and a gap before the
+   grid. */
+/* The tab panel supplies the summary's top spacing. */
 .pipeline-runs-summary-card.analysis-summary-card {
-    /* Recette R-416 / R-418: the tile takes its column's height (100%); OmniCard counts its padding and
-       border in it since OE 1.4.0 (R2-006), so it no longer runs over the runs table. */
+    /* Tiles fill their columns with padding and borders included. */
     min-height: 0;
     padding-block: 0.5rem;
 }
-/* Recette R-417: OmniCard puts the content in .omni-card__body, so the card's own gap never reached
-   the label and the grade badge, which sat glued on one line. The body holds two lines: icon and
-   label, then the value (a figure or the grade badge), one gap between them. */
+/* Spacing belongs on the card body, which holds the label and value lines. */
 .pipeline-runs-summary-card > .omni-card__body {
     display: flex;
     flex-direction: column;
@@ -9071,22 +8823,17 @@ a.short-id__text:hover {
 .pipeline-runs-grid {
     margin-top: 1rem;
 }
-/* R-495: in a dashboard tile the title row already spaces the grid, like the Servers grid beside it;
-   the extra margin started the recent runs 16 px lower and made their grid 16 px shorter. */
+/* The dashboard title row supplies spacing above the recent-runs grid. */
 .dashboard-tile .pipeline-runs-grid {
     margin-top: 0;
 }
 
-/* Recette R-346: the pulsing dot of a running run is centred on its step name, not offset by the
-   timeline's top margin. */
+/* Running indicators center on their step names. */
 .pipeline-run-current-step > .run-tl-dot {
     margin-top: 0;
 }
 
-/* Recette R-275: a slot can be declared yet render nothing (a project or server section that
-   contributes no action), and then the toggle opened an empty panel. No element to fold: no toggle.
-   A single element: it shows directly, a toggle for one entry is one tap too many. OmniPageHeader
-   folds its badges and actions on a phone; Aetheus keeps these two exceptions. */
+/* Empty header slots need no fold toggle; a single action remains directly visible. */
 .omni-page-header__row:not(:has(> .omni-page-header__details > * > *)) > .omni-page-header__toggle,
 .omni-page-header__row:has(> .omni-page-header__details:not(:has(> .omni-page-header__badges > *)):has(> .omni-page-header__actions > :only-child)) > .omni-page-header__toggle,
 .omni-page-header__row:has(> .omni-page-header__details:not(:has(> .omni-page-header__actions > *)):has(> .omni-page-header__badges > :only-child)) > .omni-page-header__toggle {
@@ -9098,18 +8845,14 @@ a.short-id__text:hover {
     display: flex;
 }
 
-/* Recette R2-035: OmniPageHeader 1.3.0 draws a loading trail segment as a block skeleton inside a
-   list-item <li>, so the skeleton fell to a second line under the "/" and the fixed-height trail clipped
-   it: "Servers / (empty) / Services", the slash out of line. The segment is laid out in line, as the
-   other segments are. Custom Aetheus until OE ships the same rule; then this block goes. */
+/* Loading breadcrumb segments use inline layout to align with separators inside the fixed-height
+   trail. */
 .omni-page-header__crumb-loading {
     align-items: center;
     display: inline-flex;
 }
 
-/* Recette R-324: the phone fold, applied at any width once the header content no longer fits beside
-   the title (layout.js sets data-compact). Same rules as OmniPageHeader's phone block, keyed on the
-   attribute. */
+/* The compact-header attribute applies folding whenever content no longer fits beside the title. */
 .omni-page-header__frame[data-compact] .omni-page-header__title {
     flex: 1 1 auto;
 }
@@ -9136,22 +8879,18 @@ a.short-id__text:hover {
     margin-inline-start: 0;
 }
 
-/* Recette R-326: in a header row a split button keeps its full label on one line too (OE does it for
-   buttons and badges); the row folds (R-324) rather than squeezing them. */
+/* Split-button labels remain intact while the surrounding header folds. */
 .omni-page-header__row .omni-split-button {
     flex-shrink: 0;
     white-space: nowrap;
 }
 
-/* Recettes R-356 and R-472: the audience summary tiles are the OE key-figure tile, a third of the row
-   from the small breakpoint; each fills its column so a row of tiles has one height. Recette R2-006:
-   OmniStatTile counts its padding and border in that height since OE 1.4.0, so it no longer runs
-   about 14px into the block below. */
+/* Audience tiles fill their stretched columns for equal-height rows. */
 .web-analytics-summary-tile {
     height: 100%;
 }
 
-/* Recette R-361: facts of one app error group in its detail dialog, label then value on one line. */
+/* Error-group details pair labels and values on individual lines. */
 .app-error-detail-facts {
     display: grid;
     grid-template-columns: max-content minmax(0, 1fr);
@@ -9166,13 +8905,13 @@ a.short-id__text:hover {
     overflow-wrap: anywhere;
 }
 
-/* Recette R-350: the telemetry heading closes the monitored applications table with a block gap. */
+/* The telemetry heading follows the monitored-applications table with a block gap. */
 .monitoring-telemetry-heading {
     margin-top: 1.5rem;
     margin-bottom: 0.75rem;
 }
 
-/* Recette R-358: text cells of the app log grid stay on one line; the full text is in the title. */
+/* Log cells stay on one line with full text in their title. */
 .app-log-cell-text {
     display: block;
     overflow: hidden;
@@ -9185,8 +8924,7 @@ a.short-id__text:hover {
     color: var(--omni-color-text-muted);
 }
 
-/* Recette R-333: the page-load bar runs along the bottom edge of the top bar, over the seam between the
-   bar and the content, without taking any height from either. */
+/* The page-load bar overlays the top-bar seam without consuming layout height. */
 .omni-header:has(.page-load-progress) {
     position: relative;
 }
@@ -9198,11 +8936,8 @@ a.short-id__text:hover {
     margin: 0;
 }
 
-/* Recette R-363: the run timeline scrolls sideways in its frame when a label needs more width than the
-   panel gives, instead of cutting it with an ellipsis. The frame moves from the tree to its scroll
-   wrapper, the tree takes the width of its longest row so every row (sub-steps and child runs
-   included) ends on the same edge, and each row's times block stays pinned to the right edge while the
-   labels scroll under it, like a frozen column. Same behaviour on a phone. */
+/* The timeline scrolls wide labels within its frame while duration blocks remain pinned to a
+   common right edge. */
 .run-tree-scroll {
     flex: 0 0 auto;
     overflow-x: auto;
@@ -9247,11 +8982,8 @@ a.short-id__text:hover {
     padding-left: 0.5rem;
     background: linear-gradient(var(--run-tl-row-tint), var(--run-tl-row-tint)), var(--aetheus-tile-background);
 }
-/* Recette R-424: the pinned times keep a small margin from the frame's right edge. Pinned at right: 0,
-   they sat against the edge while the tree was wider than the panel and only found the row's own
-   padding at the end of the scroll. The margin is the block's padding, painted with its background,
-   so the labels still pass under it; the rows give up their right padding so a row that fits keeps
-   the same spacing. */
+/* Pinned duration blocks include their own painted end padding so spacing stays constant during
+   horizontal scrolling. */
 .run-tree-scroll .run-tree .run-tl-row {
     padding-right: 0;
 }
@@ -9259,8 +8991,7 @@ a.short-id__text:hover {
     padding-right: 0.75rem;
 }
 
-/* Recette R-364: the overview blocks after the timeline no longer touch it, and the compatibility
-   attestation is a tile of its own, label, then one row per fact with its explanation (R-374). */
+/* Overview blocks have a gap after the timeline; compatibility facts use a dedicated tile. */
 .run-overview > .run-tree-scroll { margin-bottom: var(--omni-space-lg, 1rem); }
 .run-attestation-card { margin-bottom: var(--omni-space-lg, 1rem); }
 .run-attestation-card > .omni-card__body {
@@ -9289,8 +9020,38 @@ a.short-id__text:hover {
     .run-attestation-hint { grid-column: 1; }
 }
 
-/* Recette R-444: Metric, Series and Period share one line, each label beside its field; the fields take
-   the width they are given instead of fixed widths. A phone stacks them, one field per line. */
+/* R1-43: the expand/contract gate verdicts; one timeline item per migrate step, migrations listed under it. */
+.run-migration-gate-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+.run-migration-gate-head > .run-attestation-hint { grid-column: auto; }
+.run-migration-gate-detail { margin: 0.25rem 0 0; }
+.run-migration-gate-list {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+.run-migration-gate-id {
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+.run-migration-gate-violations {
+    margin: 0.25rem 0 0;
+    padding-left: 1.25rem;
+    font-size: 0.75rem;
+    color: var(--omni-color-text-muted, #a0a0a0);
+    overflow-wrap: anywhere;
+}
+
+/* Metric, series and period share a flexible row, stacking fields on phones. */
 .app-metrics-filter {
     flex: 1 1 16rem;
     min-width: 0;
@@ -9306,7 +9067,7 @@ a.short-id__text:hover {
     .app-metrics-filter-period { flex-basis: 100%; }
 }
 
-/* Recette R-468: the totals of the supervision page, as many tiles per row as fit. */
+/* Supervision summary tiles wrap to the available width. */
 .supervision-totals {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
@@ -9316,20 +9077,17 @@ a.short-id__text:hover {
     display: block;
 }
 
-/* R-455, R-472: the Performance tab's overview tiles, the same OE key-figure tile as the audience
-   summary (the slowest route's name is the tile's detail line, which wraps anywhere); each fills its
-   column, which the row stretches, so the four share one height (border-box since OE 1.4.0, R2-006). */
+/* Performance tiles fill equal-height columns; long route details wrap. */
 .app-performance-tile {
     height: 100%;
 }
 
-/* Recette R2-030: the bar of a running service action is thick enough to be seen (OE draws 2px). */
+/* Running service actions use a visible progress-bar thickness. */
 .service-actions-in-flight .omni-progress {
     --omni-progress-thickness: 4px;
 }
 
-/* Recette R2-080: what follows the mail setup, in the assistant; R2-083: what "Réinstaller la messagerie"
-   erases, listed the same way; R1-11: the record kinds and steps of the mail DNS help too. */
+/* Mail setup guidance, reinstall effects and DNS steps share list styling. */
 .mail-dns-help-list,
 .mail-after-setup,
 .mail-reinstall-erased {
@@ -9339,8 +9097,7 @@ a.short-id__text:hover {
     padding-left: 1.25rem;
 }
 
-/* Recette R2-080 / R2-090: a checked mail line keeps its details (addresses, host names, DNS answers)
-   inside a phone-width screen: long words break instead of running past the card. */
+/* Mail-check details break long addresses and hostnames to remain within phone-width cards. */
 .mail-check-line {
     min-width: 0;
 }
@@ -9350,8 +9107,7 @@ a.short-id__text:hover {
     min-width: 0;
 }
 
-/* Recette R1-15: the domain of a new account ("@example.com", or its picker) sits after the name field,
-   on the same line; the field takes the room left. */
+/* The account-domain suffix follows the flexible account-name field on the same line. */
 .mail-account-address .omni-form-field__control {
     display: flex;
     align-items: center;
@@ -9371,7 +9127,7 @@ a.short-id__text:hover {
     overflow-wrap: anywhere;
 }
 
-/* Recette R2-090: the fix of the first red line sits under it, set in from the list. */
+/* The first failing mail check displays its resolution beneath the item. */
 .mail-status-fix {
     margin: 0.25rem 0 0.5rem 1rem;
 }
@@ -9382,15 +9138,13 @@ a.short-id__text:hover {
     }
 }
 
-/* Recette R2-071: a run warning carries commit hashes and release names with no break point; on a
-   phone they ran past the alert. Long words wrap, so the whole message stays readable. */
+/* Run warnings wrap long hashes and release names to remain readable on phones. */
 .run-warning-line {
     overflow-wrap: anywhere;
 }
 
-/* Recette R2-109: a status count badge (StatusCountBadge) reads "20 Succeeded" when there is room. On a
-   phone the status name gives way to the status icon, so a row of them stays on the title line: the name
-   is visually hidden, not removed, and remains the badge's accessible text, with the tooltip. */
+/* Phone status-count badges replace visible names with icons while retaining accessible text and
+   tooltips. */
 .status-count-badge .status-count-badge__icon { display: none; }
 @media (max-width: 39.99rem) {
     .status-count-badge { position: relative; }
@@ -9405,12 +9159,12 @@ a.short-id__text:hover {
     }
 }
 
-/* Recette R2-139: every domain that sets the grade reads in bold, several when they tie. */
+/* All domains tied for the determining grade use bold text. */
 .analysis-grade-domain-limiting {
     font-weight: 700;
 }
 
-/* Recette R2-138: one line per rule alert, its outcome badge before what crossed the rule. */
+/* Rule alerts display outcome badges before the crossed criterion. */
 .analysis-run-gate-violation {
     display: flex;
     align-items: center;
@@ -9420,7 +9174,7 @@ a.short-id__text:hover {
     overflow-wrap: anywhere;
 }
 
-/* Recette R2-143: commit, date, latest run and latest release as aligned tiles beside the letter. */
+/* Commit, date, latest run and release form aligned tiles beside the grade. */
 .analysis-grade-primary {
     flex-wrap: wrap;
 }
@@ -9439,7 +9193,7 @@ a.short-id__text:hover {
     }
 }
 
-/* Recette R2-126: the erase banner, one line: the small Aetheus loader, the text, the elapsed time. */
+/* Erasure progress aligns its loader, text and elapsed time on one line. */
 .mail-reinstall-running__line {
     display: flex;
     flex-wrap: wrap;
@@ -9452,7 +9206,7 @@ a.short-id__text:hover {
     font-variant-numeric: tabular-nums;
 }
 
-/* Recette R1-13: the banner of the mail page's running tasks, laid out as the reinstall one (R2-126). */
+/* Mail-task progress shares the reinstall banner layout. */
 .mail-task-running__line {
     display: flex;
     flex-wrap: wrap;
@@ -9500,8 +9254,8 @@ a.short-id__text:hover {
     overflow-wrap: anywhere;
 }
 
-/* Recette R1-17: the integrated mailbox. A received HTML message is written for a light page, whatever
-   the theme: its sandboxed frame keeps a light surface of its own and scrolls inside its box. */
+/* Received HTML mail uses a light sandboxed frame with its own scrolling, independent of the
+   application theme. */
 .mailbox-html {
     display: block;
     width: 100%;
@@ -9522,9 +9276,185 @@ a.short-id__text:hover {
 
 .mailbox-folder {
     justify-content: flex-start;
+    width: 100%;
 }
+
+/* Recette R3-52: the mailbox reads like a mail client. The folders are a plain column of full-width
+   entries, the count at the end; a message row shows the sender and the date on one line, the subject
+   below; an unread row is bold, the open one is tinted (never a side stripe). */
+.mailbox-folders { display: flex; flex-direction: column; gap: var(--omni-space-xs); }
+.mailbox-folder__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: start; }
+.mailbox-message { min-width: 0; padding-block: var(--omni-space-xs); }
+.mailbox-message > * { min-width: 0; }
+.mailbox-message__from, .mailbox-message__subject { flex: 1 1 auto; min-width: 0; }
+.mailbox-message__date { flex: 0 0 auto; white-space: nowrap; }
+.omni-data-grid tr.mailbox-row--unread > td { font-weight: 700; }
+.omni-data-grid tr.mailbox-row--open > td { background-color: var(--omni-color-accent-subtle); }
 
 .mailbox-address,
 .mailbox-reader-subject {
+    overflow-wrap: anywhere;
+}
+
+/* Recette R3-17: an AI task's results page. Four OE key-figure tiles of one height, then the runs as a
+   timeline beside the selected run's report; one column on a phone. Spacing comes from OE's scale. */
+.ai-results-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: var(--omni-space-md);
+    margin-block-end: var(--omni-space-lg);
+}
+.ai-results-tiles > * { height: 100%; }
+.ai-results-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--omni-space-lg);
+    align-items: start;
+}
+@media (min-width: 64rem) {
+    .ai-results-layout { grid-template-columns: minmax(18rem, 1fr) minmax(0, 2.4fr); }
+}
+.ai-results-section-title { margin: 0 0 var(--omni-space-md); }
+.ai-results-run {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--omni-space-sm);
+    width: 100%;
+    padding: var(--omni-space-sm);
+    border: 1px solid transparent;
+    border-radius: var(--omni-radius-sm);
+    background-color: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+.ai-results-run:hover { background-color: var(--omni-color-neutral-fill-hover); }
+.ai-results-run:focus-visible { outline: 2px solid var(--omni-color-accent); outline-offset: 2px; }
+.ai-results-run--selected {
+    border-color: var(--omni-color-accent);
+    background-color: var(--omni-color-accent-subtle);
+}
+.ai-results-run-duration { margin-inline-start: auto; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.ai-results-detail-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--omni-space-sm);
+    margin-block-end: var(--omni-space-md);
+}
+.ai-results-facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--omni-space-xs) var(--omni-space-lg);
+    margin: 0 0 var(--omni-space-lg);
+}
+.ai-results-facts dt { opacity: 0.7; }
+.ai-results-facts dd { margin: 0; overflow-wrap: anywhere; }
+.ai-results-report { padding-block-start: var(--omni-space-sm); }
+
+/* Recette R3-69: a grid wider than its card scrolls sideways, and the empty state spanning the whole
+   table was centred on that full width, so it sat off to the right and was cut ("Auc…"). While the
+   grid shows a state element, its viewport is the size container and the element sticks to the visible
+   area at exactly its width. Only then: a container query on every grid would size shrink-to-fit grids
+   from nothing. Generic to OmniDataGrid, candidate for OE. */
+.omni-data-grid__viewport:has(.omni-data-grid__state > *) {
+    container-type: inline-size;
+}
+
+.omni-data-grid__state:has(> *) {
+    padding: 0;
+}
+
+.omni-data-grid__state > * {
+    box-sizing: border-box;
+    inset-inline-start: 0;
+    padding: var(--omni-space-lg);
+    position: sticky;
+    width: 100cqi;
+}
+
+/* Recette R3-30/R3-34: the output of a failed task read keeps its lines. */
+.task-output-error {
+    font-family: var(--omni-font-family-monospace);
+    margin: 0;
+    max-height: 12rem;
+    overflow: auto;
+    white-space: pre-wrap;
+}
+
+/* Recette R1-62: the gate's actions sit on its title row, at its end. */
+.analysis-run-gate-heading > .analysis-run-gate-actions {
+    margin-left: auto;
+}
+
+/* Recette R1-60: the grade and the one measure that sets it, as the first tile of the summary row. */
+.analysis-run-gate-headline {
+    align-items: center;
+    border: 0.0625rem solid var(--aetheus-tile-separator);
+    border-radius: var(--omni-radius);
+    display: flex;
+    flex: 0 1 22rem;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 0.5rem 0.75rem;
+}
+
+.analysis-run-gate-cause {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Recette R1-59: room under the gate card before the page ends. */
+.analysis-run-gate-page {
+    margin-bottom: var(--omni-space-lg);
+}
+
+/* Recette R1-78: long test names and the title row break inside the card instead of widening the page. */
+.run-blocking-test,
+.run-blocking-test-failures,
+.analysis-run-gate-violation > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.analysis-run-gate-heading > div {
+    min-width: 0;
+}
+
+/* Recette R1-78, measured at 320 and 375 px: on a phone the title row is a grid, and the actions (a div)
+   matched ".analysis-run-gate-heading > div" and sat in the title's cell, over the title. They take their
+   own row under it, the full width of the card. */
+@media (max-width: 39.99rem) {
+    .analysis-run-gate-heading > .analysis-run-gate-actions {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        margin-left: 0;
+        margin-top: 0.5rem;
+    }
+}
+
+/* R3-13: the context files of an AI task, one row per path with its remove button. */
+.ai-context-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--omni-space-xs, 0.25rem);
+}
+
+.ai-context-item {
+    display: flex;
+    align-items: center;
+    gap: var(--omni-space-sm, 0.5rem);
+    min-width: 0;
+}
+
+.ai-context-path {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow-wrap: anywhere;
 }

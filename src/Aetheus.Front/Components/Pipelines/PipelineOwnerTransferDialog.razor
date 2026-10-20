@@ -1,0 +1,71 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* The ownership-transfer preview identifies servers where the new owner lacks Server.Admin before
+   applying the transfer, since chained runs require that permission. *@
+<OmniStack Gap="OmniSpacing.Medium">
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Description</OmniText>
+    }
+    <OmniFormField Label="@L["NewPipelineOwner"]" For="pipeline-owner-transfer-target">
+        <OmniDropDown Id="pipeline-owner-transfer-target" TValue="string" Filterable="true" AllowEmpty="true"
+            Options="@(Candidates.ToOptions(item => item.Username, item => item.Username))"
+            Value="@_selected" ValueExpression="@(() => _selected)" ValueChanged="@OnTargetChangedAsync"
+            Placeholder="@L["SelectUser"]" />
+    </OmniFormField>
+    @if (ProjectId is not null)
+    {
+        <OmniCheckBox TValue="bool" Value="@_wholeProject" ValueExpression="@(() => _wholeProject)" ValueChanged="@OnWholeProjectChangedAsync">@string.Format(L["TransferAllProjectPipelines"].Value, ProjectName)</OmniCheckBox>
+    }
+    @if (_loadingPreview)
+    {
+        <AetheusLoader />
+    }
+    else if (_preview is not null)
+    {
+        @if (_preview.Items.Count == 0)
+        {
+            <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["NoPipelinesToTransfer"]</OmniText>
+        }
+        else
+        {
+            @if (MissingAdmin.Count > 0)
+            {
+                <OmniAlert Severity="OmniSeverity.Warning" Title="@L["PipelineOwnerLacksServerAdminTitle"]">
+                    <OmniStack Gap="OmniSpacing.XSmall">
+                        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["PipelineOwnerLacksServerAdmin"].Value, _preview.NewOwnerUsername)</OmniText>
+                        @foreach (var item in MissingAdmin)
+                        {
+                            <OmniText Element="OmniTextElement.Small" Class="omni-u-m-0 pipeline-owner-missing-admin">@item.PipelineName : @string.Join(", ", item.ServersMissingAdmin)</OmniText>
+                        }
+                    </OmniStack>
+                </OmniAlert>
+            }
+            @if (Unresolved.Count > 0)
+            {
+                <OmniAlert Severity="OmniSeverity.Info" Title="@L["PipelineOwnerTargetsUnresolvedTitle"]">
+                    <OmniStack Gap="OmniSpacing.XSmall">
+                        @foreach (var item in Unresolved)
+                        {
+                            <OmniText Element="OmniTextElement.Small" Class="omni-u-m-0">@item.PipelineName : @item.TargetsUnresolvedReason</OmniText>
+                        }
+                    </OmniStack>
+                </OmniAlert>
+            }
+            <OmniStack Gap="OmniSpacing.XSmall" Class="pipeline-owner-transfer-list">
+                <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@string.Format(L["PipelinesToTransfer"].Value, _preview.Items.Count)</OmniText>
+                @foreach (var item in _preview.Items)
+                {
+                    <OmniText Element="OmniTextElement.Small" Class="omni-u-m-0 pipeline-owner-transfer-item">@item.PipelineName (@(item.PreviousOwnerUsername ?? L["PipelineOwnerMissing"].Value) &#8594; @_preview.NewOwnerUsername)</OmniText>
+                }
+            </OmniStack>
+        }
+    }
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <OmniAlert Severity="OmniSeverity.Danger">@_error</OmniAlert>
+    }
+    <DialogFooter OnCancel="@(() => Dialog.Close())">
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnConfirmAsync" Disabled="@(!CanConfirm)" Busy="@_transferring"
+                    Class="@(_transferring ? "btn-busy" : null)"><OmniIcon Name="OmniIconName.Check" /> <span>@L["TransferOwnership"]</span></OmniButton>
+    </DialogFooter>
+</OmniStack>

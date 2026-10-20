@@ -19,6 +19,7 @@ public class ServersController(
     IAgentUpdateService agentUpdate,
     IResourceAuthorizationService authz,
     IAuthService authService,
+    TimeProvider timeProvider,
     ILogger<ServersController> logger) : ControllerBase
 {
     [HttpGet]
@@ -35,7 +36,7 @@ public class ServersController(
             request, type, status, compatibility, accessibleIds, ct));
     }
 
-    /// <summary>Recette R-211: the OS, agent versions and tags the servers list's column filters offer.</summary>
+    /// <summary>The OS, agent versions and tags the servers list's column filters offer.</summary>
     [HttpGet("filter-values")]
     public async Task<ActionResult<ServerFilterValuesDto>> GetServerFilterValues(CancellationToken ct)
     {
@@ -82,8 +83,8 @@ public class ServersController(
         return Ok(server);
     }
 
-    // PLAN-004 R-11: DELETE retires the server. Its row and links stay, its agent tokens are revoked,
-    // it leaves every list and dispatch, and reinstalling the agent on the same machine revives it.
+    // DELETE retires the server, preserving its row and links while revoking agent tokens and
+    // excluding it from lists and dispatch. Re-enrolling the same machine revives it.
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> RetireServer(int id, CancellationToken ct)
     {
@@ -104,8 +105,8 @@ public class ServersController(
         return Ok(await retirement.GetRetiredServersAsync(request, accessibleIds, ct));
     }
 
-    // The former hard delete, only for a server already retired (409 otherwise). Irreversible: it
-    // also deletes the server's backup policies, which could not outlive their target host.
+    // Permanently delete only an already retired server, including its backup policies; otherwise
+    // return 409.
     [HttpDelete("{id:int}/permanent")]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> PurgeServer(int id, CancellationToken ct)
@@ -175,6 +176,10 @@ public class ServersController(
         if (claim is null || !int.TryParse(claim, out var agentServerId) || agentServerId != id)
             return Forbid();
 
+        // T2 of the agent's clock measure (ClockSampleDto): read before any processing. Where it is
+        // read between the request's arrival and the reply does not bias the estimate, only the
+        // interval it excludes from the round trip.
+        var receivedAt = timeProvider.GetUtcNow().UtcDateTime;
         await heartbeats.ProcessHeartbeatAsync(id, heartbeat, ct);
 
         // Roll the agent's token while it's authenticated and healthy so a
@@ -190,7 +195,11 @@ public class ServersController(
         {
             logger.LogWarning(ex, "Agent token auto-renewal failed for server {ServerId}", id);
         }
-        return Ok(renewal ?? new ServerHeartbeatResponseDto());
+        return Ok((renewal ?? new ServerHeartbeatResponseDto()) with
+        {
+            ReceivedAtUtc = receivedAt,
+            RepliedAtUtc = timeProvider.GetUtcNow().UtcDateTime
+        });
     }
 
     /// <summary>
@@ -240,6 +249,23 @@ public class ServersController(
             return Forbid();
 
         return Ok(await agentUpdate.QueueUpdateAsync(id, User.Identity?.Name ?? "unknown", ct));
+    }
+
+    /// <summary>
+    /// Queues an agent self-update that also grants the named capabilities on the host (R3-58,
+    /// ADR-051). Only the whitelist of <see cref="AgentEnableableCapabilities"/> is accepted: any
+    /// other elevation stays reserved to the installer's own flags. Requires
+    /// <see cref="Permission.Admin"/>, like the plain update.
+    /// </summary>
+    [HttpPost("{id:int}/agent/enable-capabilities")]
+    public async Task<ActionResult<AgentUpdateResponse>> EnableAgentCapabilities(
+        int id, [FromBody] AgentEnableCapabilitiesRequest request, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Admin, ct))
+            return Forbid();
+
+        return Ok(await agentUpdate.QueueUpdateWithCapabilitiesAsync(
+            id, User.Identity?.Name ?? "unknown", request.Capabilities, ct));
     }
 
     /// <summary>
@@ -329,6 +355,18 @@ public class ServersController(
             return Forbid();
 
         var taskId = await services.UninstallServiceAsync(id, request.ServiceName, ct);
+        return Ok(new ServiceTaskResponse { TaskId = taskId });
+    }
+
+    /// <summary>Recette R3-59: queues the read-only list of every installed package. Read is enough, like the
+    /// port scan: the agent only reads the package database and changes nothing on the host.</summary>
+    [HttpPost("{id:int}/packages/inventory")]
+    public async Task<IActionResult> ListInstalledPackages(int id, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Read, ct))
+            return Forbid();
+
+        var taskId = await services.ListInstalledPackagesAsync(id, ct);
         return Ok(new ServiceTaskResponse { TaskId = taskId });
     }
 

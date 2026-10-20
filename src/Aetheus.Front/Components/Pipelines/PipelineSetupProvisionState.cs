@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// Recette R1-26: the libraries and vaults the setup wizard created for a project, and which of them
-/// the user has opened to check. Held in a scoped service (memory of this browser tab, never storage)
+/// <summary> The libraries and vaults the setup wizard created for a project, and which of them the
+/// user has opened to check. Held in a scoped service (memory of this browser tab, never storage)
 /// so the list survives the user leaving the wizard to open one and coming back to its summary.
 /// </summary>
 public sealed class PipelineSetupProvisionState

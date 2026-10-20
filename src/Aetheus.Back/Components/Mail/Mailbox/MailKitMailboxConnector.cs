@@ -88,7 +88,7 @@ public sealed class MailKitMailboxConnector : IMailboxConnector
             var max = total - 1 - skip;
             var min = Math.Max(0, max - take + 1);
             var summaries = await opened.FetchAsync(min, max, ListItems, ct).ConfigureAwait(false);
-            return new MailboxPage(total, summaries.OrderByDescending(summary => summary.Index).Select(ToSummary).ToList());
+            return new MailboxPage(total, summaries.OrderByDescending(summary => summary.Index).Select(MailboxSummaryMapper.ToSummary).ToList());
         });
 
         public Task<long?> GetMessageSizeAsync(string folder, uint uid, CancellationToken ct) => RunAsync(async () =>
@@ -106,7 +106,7 @@ public sealed class MailKitMailboxConnector : IMailboxConnector
             var flags = await opened.FetchAsync([id], MessageSummaryItems.UniqueId | MessageSummaryItems.Flags, ct).ConfigureAwait(false);
             if (flags.Count == 0) return null;
             var message = await opened.GetMessageAsync(id, ct).ConfigureAwait(false);
-            return new MailboxFetchedMessage(uid, message, IsSeen(flags[0]));
+            return new MailboxFetchedMessage(uid, message, MailboxSummaryMapper.IsSeen(flags[0]));
         });
 
         public Task SetSeenAsync(string folder, uint uid, bool seen, CancellationToken ct) => RunAsync(async () =>
@@ -191,18 +191,5 @@ public sealed class MailKitMailboxConnector : IMailboxConnector
                 throw;
             }
         }
-
-        private static MailboxSummary ToSummary(IMessageSummary summary) => new(
-            summary.UniqueId.Id,
-            MailboxAddresses.Format(summary.Envelope?.From),
-            MailboxAddresses.Format(summary.Envelope?.To),
-            summary.Envelope?.Subject ?? string.Empty,
-            summary.Envelope?.Date ?? summary.InternalDate ?? DateTimeOffset.MinValue,
-            IsSeen(summary),
-            summary.Attachments?.Any() == true,
-            (long)(summary.Size ?? 0));
-
-        private static bool IsSeen(IMessageSummary summary) =>
-            summary.Flags is { } flags && (flags & MessageFlags.Seen) != 0;
     }
 }

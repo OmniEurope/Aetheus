@@ -4,8 +4,8 @@ using OmniEurope.Performance;
 
 namespace Aetheus.Back.Components.SystemLogs;
 
-/// <summary>PLAN-003 lot 27 / D27: the API's own timings, for the administration Performance page.
-/// Admin only: route templates and timings describe the platform, not one project.</summary>
+/// <summary>Expose platform API timings to administrators only because route and timing data are
+/// not project-scoped.</summary>
 [ApiController]
 [Route(ApiPerformanceReport.ReportRoute)]
 [Authorize(Roles = "Admin")]

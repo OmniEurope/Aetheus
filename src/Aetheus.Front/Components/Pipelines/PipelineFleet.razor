@@ -3,11 +3,8 @@
 
 <PageTitle>@L["PipelineFleet"] - Aetheus</PageTitle>
 
-@* Filters live in the header's Filters slot: they belong to the page, not to the fixed chrome.
-   Recette R-224: the search box and the template and status dropdowns became the grid's column header
-   filters. The project picker stays: it keeps every pipeline of a project, including the ones an
-   environment or a server of that project owns, which no column shows (the Owner column names the
-   environment or the server, not its project). *@
+@* The project picker includes pipelines owned by the project's environments and servers, which the
+   Owner column alone cannot filter. Other filters belong to the grid headers. *@
 <OmniPageHeader Title="@L["PipelineFleet"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon>
     <Filters>
@@ -15,7 +12,7 @@
                         Value="@_projectId" ValueChanged="OnProjectChanged"
                         ValueExpression="@(() => _projectId)"
                         Placeholder="@L["AllProjects"]" AllowEmpty="true" />
-        @* Recette R-181: no Refresh, a pipeline or model change reloads the fleet (entities hub). *@
+        @* No Refresh, a pipeline or model change reloads the fleet (entities hub). *@
     </Filters>
 </OmniPageHeader>
 
@@ -31,7 +28,7 @@
         <OmniAlert Severity="OmniSeverity.Danger">@L["LoadError"]</OmniAlert>
     }
 
-    <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_items" TItem="PipelineFleetItemDto" Count="@_totalCount"
+    <AetheusDataGrid FullHeight="true" @ref="_grid" RowClick="@(item => Nav.NavigateTo($"/pipelines/{item.PipelineId}"))" Data="@_items" TItem="PipelineFleetItemDto" Count="@_totalCount"
                 LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" IsLoading="@_loading" PageSize="25"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<PipelineFleetItemDto>(_items, _totalCount))"
@@ -39,7 +36,7 @@
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="PipelineFleetItemDto" Property="PipelineName" Title="@L["Pipeline"]" MinWidth="14rem" Filterable="true" >
                 <Template Context="item">
-                    <OmniLink Href="@($"pipelines/{item.PipelineId}")">@item.PipelineName</OmniLink>
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"pipelines/{item.PipelineId}")">@item.PipelineName</OmniLink></span>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="OwnerName" Title="@L["Owner"]" MinWidth="12rem" Filterable="true" />
@@ -59,7 +56,9 @@
                 <Template Context="item">
                     @if (item.Freshness == PipelineFleetFreshness.Outdated && item.LatestVersion is not null && CanUpdate(item))
                     {
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenUpdateAsync(item))" title="@L["Update"]" Label="@L["Update"]"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenUpdateAsync(item))" title="@L["Update"]" Label="@L["Update"]"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
+                        </span>
                     }
                 </Template>
             </OmniDataGridColumn>

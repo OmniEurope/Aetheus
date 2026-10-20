@@ -121,8 +121,8 @@ public sealed class RequestErrorLoggingMiddlewareTests
     [InlineData("/api/ingest/visitors")]
     public async Task R2_013_AnIngestKeyRefusal_IsNotAnExpectedRefusal_ItsLineIsDebug(string path)
     {
-        // The warning is IngestKeyRejectionLog's, once per key and period; the request line no longer
-        // says "information" about a deployed application that holds an invalid key.
+        // IngestKeyRejectionLog emits one warning per key and period for invalid ingestion
+        // credentials.
         var logger = new RecordingLogger<RequestErrorLoggingMiddleware>();
         var context = Context(StatusCodes.Status401Unauthorized, matchedRoute: true, path);
 

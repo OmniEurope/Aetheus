@@ -1,9 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* The catch-up after the page comes back to the foreground. Recette R2-061 (2026-10-02, user decision):
-   a full veil with the animated plane and "Synchronisation en cours…", instead of the small notification
-   at the bottom of the screen, so nobody reads or clicks a page that is not current yet. It lifts as soon
-   as the catch-up ends (or after RealtimeSyncStatus.SafetyTimeout). The connection-lost overlay wins
-   whenever it is up. *@
+@* Cover the page while foreground catch-up is running so stale content cannot be used. End the
+   overlay on completion or SafetyTimeout, and give the connection-lost overlay precedence. *@
 @if (Visible)
 {
     <div class="realtime-sync-indicator" data-testid="realtime-sync-indicator" role="status" aria-live="polite" aria-busy="true">

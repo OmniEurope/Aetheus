@@ -11,8 +11,8 @@ public partial class AppWebAnalyticsView : AppWebAnalyticsSummaryViewBase, IAsyn
     /// <summary>The app's project: the scope of the <c>AppTelemetryChanged</c> push that reloads this view.</summary>
     [Parameter] public int ProjectId { get; set; }
 
-    // R-469: the audience figures and the date of the last event follow the ingestion live. A stored
-    // batch pushes AppTelemetryChanged for the app's project, as for the Logs and Errors tabs (R-181).
+    // Refresh audience figures and the last-event date on project telemetry events so the overview
+    // follows ingested batches.
     private EntityOperationalFeed? _liveFeed;
     internal EntityOperationalFeed? LiveFeed => _liveFeed;
 
@@ -53,8 +53,8 @@ public partial class AppWebAnalyticsView : AppWebAnalyticsSummaryViewBase, IAsyn
     protected IReadOnlyList<OmniChartPoint> DailyVisitorPoints => OmniChartData.Indexed(DailyPoints, point => point.UniqueVisitors, point => point.Label);
     protected IReadOnlyList<OmniChartPoint> DailyPageViewPoints => OmniChartData.Indexed(DailyPoints, point => point.PageViews, point => point.Label);
 
-    /// <summary>Recette R-353: a rounded top for the shared value axis (1, 2 or 5 times a power of ten,
-    /// at least 5), so its ticks read as round counts instead of the raw daily maximum.</summary>
+    /// <summary>A rounded top for the shared value axis (1, 2 or 5 times a power of ten, at least
+    /// 5), so its ticks read as round counts instead of the raw daily maximum.</summary>
     protected double AudienceAxisMaximum => RoundedAxisMaximum(
         DailyPoints.Select(point => (double)Math.Max(point.UniqueVisitors, point.PageViews)).DefaultIfEmpty(0).Max());
 
@@ -67,7 +67,7 @@ public partial class AppWebAnalyticsView : AppWebAnalyticsSummaryViewBase, IAsyn
         return 10 * magnitude;
     }
 
-    /// <summary>R-469: the date of the last stored event, local and readable, in its own tile.</summary>
+    /// <summary>The date of the last stored event, local and readable, in its own tile.</summary>
     protected string LastEventText => _summary?.LastIngestAtUtc is { } receivedAt
         ? receivedAt.ToLocalTime().ToString("g")
         : L["Never"];

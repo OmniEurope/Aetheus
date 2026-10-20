@@ -64,7 +64,7 @@ public class VaultEditTemplateCoverageTests : BunitContext
     public void Template_NewVault_ShowsCreateForm()
     {
         var cut = Render<VaultEdit>();
-        cut.WaitForState(() => cut.Markup.Length > 0, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 0);
 
         // _isNew = true when no Id parameter provided
         var isNew = (bool)typeof(VaultEdit).GetProperty("_isNew",
@@ -80,7 +80,7 @@ public class VaultEditTemplateCoverageTests : BunitContext
     public void Template_VaultIdZero_IsNewTrue()
     {
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => cut.Markup.Length > 0, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 0);
 
         var isNew = (bool)typeof(VaultEdit).GetProperty("_isNew",
             BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -117,7 +117,7 @@ public class VaultEditTemplateCoverageTests : BunitContext
                 BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(cut.Instance);
             return detail is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         // Existing-vault branch renders the secrets section with each loaded secret key.
         Assert.Contains("DB_PASSWORD", cut.Markup);
@@ -151,7 +151,7 @@ public class VaultEditTemplateCoverageTests : BunitContext
                 BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(cut.Instance);
             return detail is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         // All three expiring secrets are rendered in the grid by key.
         Assert.Contains("EXPIRED_KEY", cut.Markup);
@@ -169,7 +169,7 @@ public class VaultEditTemplateCoverageTests : BunitContext
         _handler.SetResponse("api/vaults/3", System.Net.HttpStatusCode.OK);
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 3));
-        cut.WaitForState(() => cut.Markup.Length > 0, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 0);
 
         // Drive the loading state deterministically: Id=3 makes _isNew false, but a 200 {} body
         // deserialises to a NON-null empty DTO, so the load alone won't reproduce the null-detail
@@ -229,7 +229,7 @@ public class VaultEditTemplateCoverageTests : BunitContext
                 BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(cut.Instance);
             return detail is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var isNew = (bool)typeof(VaultEdit).GetProperty("_isNew",
             BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -267,7 +267,7 @@ public class VaultEditTemplateCoverageTests : BunitContext
         });
 
         var cut = Render<VaultEdit>();
-        cut.WaitForState(() => cut.Markup.Length > 0, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 0);
 
         // New-vault mode loads the project list (for the owner selector) and never fetches a vault detail.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/projects"));

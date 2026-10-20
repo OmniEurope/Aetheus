@@ -215,8 +215,8 @@ public class ArtifactRepositoryTests : IDisposable
     [Fact]
     public async Task GetExpiredAsync_KeepsTheLastThreeDeployedReleasesAndFreesTheFourth()
     {
-        // PLAN-007 lot 5: N-1 must stay redeployable. After a fourth deployment, the deployed release
-        // and the two it superseded keep their payloads; only the oldest superseded one ages out.
+        // N-1 must stay redeployable. After a fourth deployment, the deployed release and the two
+        // it superseded keep their payloads; only the oldest superseded one ages out.
         var expired = new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Utc);
         var artifacts = new List<PipelineArtifact>();
         for (var index = 0; index < 4; index++)
@@ -438,6 +438,25 @@ public class ArtifactRepositoryTests : IDisposable
         var otherProject = await _repo.FindLatestSuccessfulPipelineArtifactAsync(
             10, "aetheus-nightly", "evidence", ct: TestContext.Current.CancellationToken);
         Assert.Equal(11, otherProject?.PipelineRunId);
+    }
+
+    [Fact]
+    public async Task TheSuccessOnlyLookups_NeverReturnTheArtifactOfARejectedRun()
+    {
+        // A Rejected run is readable through the lineage of the pipeline that triggered it, never through
+        // the two lookups that name no triggered run.
+        const string commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        _db.Projects.Add(new Project { Id = 12, Name = "Rejected project" });
+        _db.Pipelines.Add(new Pipeline { Id = 12, Name = "aetheus-ci", ProjectId = 12 });
+        _db.PipelineRuns.Add(new PipelineRun { Id = 12, PipelineId = 12, CommitHash = commit, Status = PipelineStatus.Rejected });
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        await _repo.AddAsync(MakeArtifact(pipelineId: 12, projectId: 12, runId: 12, name: "payload"), ct: TestContext.Current.CancellationToken);
+
+        Assert.Null(await _repo.FindSuccessfulPipelineArtifactByCommitAsync(
+            12, "aetheus-ci", commit, "payload", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.FindLatestSuccessfulPipelineArtifactAsync(
+            12, "aetheus-ci", "payload", ct: TestContext.Current.CancellationToken));
+        Assert.NotNull(await _repo.FindRunArtifactByNameAsync(12, "payload", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -801,10 +820,9 @@ public class ArtifactRepositoryTests : IDisposable
         Assert.Equal(expected, required);
     }
 
-    /// <summary>
-    /// Recette R2-121: a project onboarded through the setup wizard names its pipelines after itself
-    /// (portfolio-candidate, portfolio-release-fast); what makes them a candidate or a fast release is
-    /// the shipped template they extend, not the aetheus-* name of the self-deploy pipelines.
+    /// <summary> A project onboarded through the setup wizard names its pipelines after itself
+    /// (portfolio-candidate, portfolio-release-fast); what makes them a candidate or a fast release
+    /// is the shipped template they extend, not the aetheus-* name of the self-deploy pipelines.
     /// </summary>
     [Theory]
     [InlineData("portfolio-candidate", "application-candidate", "QaRuntime-artifacts", true)]

@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R1-28: on the project's pipelines page, what is not configured and would make a run fail,
-   each with its fix. Nothing is drawn when nothing is found or the verdict could not be read. *@
+@* On the project's pipelines page, what is not configured and would make a run fail, each with its
+   fix. Nothing is drawn when nothing is found or the verdict could not be read. *@
 @if (_readiness is { Checks.Count: > 0 } readiness)
 {
     <section class="project-pipelines-readiness" data-testid="project-pipelines-readiness">

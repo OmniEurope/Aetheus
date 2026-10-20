@@ -24,9 +24,16 @@ public partial class ServerFirewallSection
     private int _loadGeneration;
 
     private readonly NewRuleModel _rule = new();
-    private FirewallRuleAction _ruleAction = FirewallRuleAction.Allow;
-
     private enum FirewallRuleAction { Allow, Deny }
+
+    private IReadOnlyList<OmniOption<FirewallRuleAction>> RuleActionOptions =>
+    [
+        new(FirewallRuleAction.Allow, L["FirewallAllow"]),
+        new(FirewallRuleAction.Deny, L["FirewallDeny"]),
+    ];
+
+    private static OmniIconName? RuleActionIcon(FirewallRuleAction action) =>
+        action == FirewallRuleAction.Allow ? OmniIconName.LockOpen : OmniIconName.Prohibit;
 
     private static readonly string[] Protocols = ["tcp", "udp"];
 
@@ -40,13 +47,15 @@ public partial class ServerFirewallSection
         [Required]
         [StringLength(64)]
         public string Source { get; set; } = "any";
+
+        public FirewallRuleAction Action { get; set; } = FirewallRuleAction.Allow;
     }
 
     private bool CanManage => FirewallManagementAvailable == true;
 
     private OmniDataGrid<FirewallRuleDto>? _grid;
 
-    // Recette R-210: the Action filter shows the same words as the cells.
+    // The Action filter shows the same words as the cells.
     private Func<string, string>? _actionText;
     private Func<string, string> ActionText => _actionText ??= LocalizeAction;
 
@@ -57,11 +66,9 @@ public partial class ServerFirewallSection
         await LoadAsync();
     }
 
-    /// <summary>
-    /// Reads the firewall state. <paramref name="live"/> is the task-completion path: the grid stays on
-    /// screen (no loader) and is told before the new rules arrive, so the rules it did not hold read bold
-    /// (recette R-227).
-    /// </summary>
+    /// <summary> Reads the firewall state. <paramref name="live"/> is the task-completion path: the
+    /// grid stays on screen (no loader) and is told before the new rules arrive, so the rules it
+    /// did not hold read bold. </summary>
     private async Task LoadAsync(bool live = false)
     {
         var serverId = ServerId;
@@ -94,7 +101,7 @@ public partial class ServerFirewallSection
         StateHasChanged();
     }
 
-    private Task SubmitRuleAsync(NewRuleModel _) => _ruleAction == FirewallRuleAction.Allow
+    private Task SubmitRuleAsync(NewRuleModel rule) => rule.Action == FirewallRuleAction.Allow
         ? RunAsync(() => Api.Security.FirewallAllowAsync(ServerId, BuildRequest()), "FirewallRuleQueued")
         : RunAsync(() => Api.Security.FirewallDenyAsync(ServerId, BuildRequest()), "FirewallRuleQueued");
 

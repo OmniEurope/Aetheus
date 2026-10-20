@@ -1,9 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Projects
-@* S-UX-SPKL: compact 24 h availability sparkline - one bar per sample bucket, green=up / red=down.
-   Recette R-440: the colours come from app.css classes on the OE status tokens (the former
-   var(--omni-u-text-*) values named tokens that exist nowhere, so every bar fell back to black), and
-   the tooltip says what the bar is. *@
+@* Show one bar per sample bucket for 24-hour availability, using app.css classes backed by OE
+   status colours. Tooltips explain each bar. *@
 @if (_bars.Count == 0)
 {
     <span class="omni-u-text-muted">@L["NotAvailable"]</span>

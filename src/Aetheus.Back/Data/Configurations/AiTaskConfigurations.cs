@@ -13,6 +13,16 @@ internal sealed class AiRunnerProfileConfiguration : IEntityTypeConfiguration<Ai
         builder.Property(profile => profile.Binary).HasMaxLength(260).IsRequired();
         builder.Property(profile => profile.ArgsTemplateJson).HasMaxLength(32_000).IsRequired();
         builder.Property(profile => profile.EnvironmentJsonEncrypted).HasMaxLength(64_000).IsRequired();
+        // API profile columns (ADR-023, amendment 2026-10-11). The expand migration gives them database
+        // defaults, so the previous blue-green colour, which does not know them, can still insert.
+        builder.Property(profile => profile.Provider).HasMaxLength(32).IsRequired();
+        builder.Property(profile => profile.BaseUrl).HasMaxLength(500).IsRequired();
+        builder.Property(profile => profile.Model).HasMaxLength(200).IsRequired();
+        builder.Property(profile => profile.ApiKeyEncrypted).HasMaxLength(16_000).IsRequired();
+        builder.Property(profile => profile.ReasoningEffort).HasMaxLength(16).IsRequired();
+        // Recette R3-7, nightly model list: nullable (expand-only) for the previous blue-green colour.
+        builder.Property(profile => profile.AvailableModelsJson).HasMaxLength(120_000);
+        builder.Property(profile => profile.ModelListError).HasMaxLength(1000);
         builder.HasIndex(profile => new { profile.OrganizationId, profile.Name }).IsUnique();
         builder.HasOne(profile => profile.Organization)
             .WithMany()
@@ -28,6 +38,9 @@ internal sealed class AiTaskDefinitionConfiguration : IEntityTypeConfiguration<A
         builder.Property(definition => definition.Name).HasMaxLength(120).IsRequired();
         builder.Property(definition => definition.PromptTemplate).HasMaxLength(20_000).IsRequired();
         builder.Property(definition => definition.Schedule).HasMaxLength(120);
+        // Nullable, so the previous blue-green colour, which does not map them, still inserts (expand-only).
+        builder.Property(definition => definition.ContextPathsJson).HasMaxLength(16_000);
+        builder.Property(definition => definition.GitRange).HasMaxLength(200);
         builder.HasIndex(definition => definition.ProfileId);
         builder.HasIndex(definition => new { definition.Enabled, definition.Schedule });
         builder.HasOne(definition => definition.Profile)

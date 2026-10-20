@@ -42,9 +42,13 @@ public partial class RunParameterFields
     /// </summary>
     private readonly Dictionary<string, bool?> _bools = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>The id of a parameter's visually hidden description, read by screen readers through the field's <c>aria-describedby</c>; <c>null</c> without a description.</summary>
+    /// <summary>The id of a parameter's field, whose Help text OE renders as <c>{id}-help-content</c>.</summary>
+    internal static string FieldId(string parameterName) => $"run-param-{parameterName}-field";
+
+    /// <summary>The id of a parameter's description behind the "?" of its field, named by the control's
+    /// <c>aria-describedby</c>; <c>null</c> without a description.</summary>
     internal static string? DescriptionId(string parameterName, string? description) =>
-        ParameterHelpRow.DescribedBy("run-param", parameterName, description);
+        string.IsNullOrWhiteSpace(description) ? null : $"{FieldId(parameterName)}-help-content";
 
     private bool BoolValue(string name) => _bools.GetValueOrDefault(name) ?? false;
     private string? StringValue(string name) => _strings.GetValueOrDefault(name);

@@ -30,7 +30,7 @@ public class AlertsDeepTests : BunitContext
     {
         SetupAlerts();
         var cut = Render<AlertsPage>();
-        cut.WaitForState(() => cut.Markup.Contains("CPU High"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("CPU High"));
         // All three stubbed rules are rendered in the grid.
         Assert.Contains("CPU High", cut.Markup);
         Assert.Contains("Mem High", cut.Markup);

@@ -15,11 +15,8 @@ public abstract class ProjectPagedSectionBase<TItem> : ComponentBase
     protected int _pageSize = 25;
     protected string _sortBy = string.Empty;
     protected bool _sortDescending;
-    /// <summary>
-    /// Recette R-183 / R-184 / R-212: no search box above the grid; each header filter is a real column
-    /// filter the section's endpoint applies (the former "first typed value becomes the search term"
-    /// fallback is gone, every section now sends column filters).
-    /// </summary>
+    /// <summary>Each header filter is transmitted as a column filter to the section
+    /// endpoint.</summary>
     protected List<Aetheus.Shared.Components.Shared.GridFilter> _columnFilters = [];
     protected AetheusDataGrid<TItem>? _grid;
     protected bool _loading;
@@ -47,11 +44,10 @@ public abstract class ProjectPagedSectionBase<TItem> : ComponentBase
         await LoadAsync();
     }
 
-    /// <summary>
-    /// Recette R2-124: one page of the section's export, the grid's sort and column filters read from the
-    /// request OE sends, through the same endpoint as <see cref="LoadAsync"/> and without touching the
-    /// rows the section shows. A page that cannot be read throws, so the export fails and says so.
-    /// </summary>
+    /// <summary> One page of the section's export, the grid's sort and column filters read from the
+    /// request OE sends, through the same endpoint as <see cref="LoadAsync"/> and without touching
+    /// the rows the section shows. A page that cannot be read throws, so the export fails and says
+    /// so. </summary>
     protected Task<PaginatedResult<TItem>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();

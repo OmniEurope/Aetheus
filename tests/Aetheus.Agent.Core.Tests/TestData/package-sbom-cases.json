@@ -1,0 +1,1005 @@
+{
+  "node": "v24.7.0",
+  "locale": "fr-FR",
+  "cases": [
+    {
+      "name": "nuget-test-case",
+      "description": "generate-package-sbom.test.js: one NuGet dependency.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":[{\"topLevelPackages\":[{\"id\":\"OpenTelemetry\",\"resolvedVersion\":\"1.17.0\"}],\"transitivePackages\":[]}]}]}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"OpenTelemetry\",\n      \"SPDXID\": \"SPDXRef-Package-OpenTelemetry-1.17.0\",\n      \"versionInfo\": \"1.17.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/OpenTelemetry@1.17.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-OpenTelemetry-1.17.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "nuget-mixed",
+      "description": "NuGet: mixed-case duplicates (first place, last value), requested version fallback, the package itself, ids and versions sorting differently by locale.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"version\":1,\"projects\":[{\"path\":\"a.csproj\",\"frameworks\":[{\"framework\":\"net10.0\",\"topLevelPackages\":[{\"id\":\"Newtonsoft.Json\",\"requestedVersion\":\"13.0.1\",\"resolvedVersion\":\"13.0.3\"},{\"id\":\"zeta.Lib\",\"requestedVersion\":\"[1.0.0, )\"},{\"id\":\"Aetheus.Telemetry\",\"resolvedVersion\":\"0.1.0\"},{\"id\":\"A_B\",\"resolvedVersion\":\"1.0.0\"},{\"id\":\"a-b\",\"resolvedVersion\":\"1.0.0\"},{\"id\":\"a.b\",\"resolvedVersion\":\"1.0.0+build.7\"},{\"id\":\"NoVersion\"},{\"resolvedVersion\":\"9.9.9\"},{\"id\":\"\",\"resolvedVersion\":\"1\"}],\"transitivePackages\":[{\"id\":\"newtonsoft.json\",\"resolvedVersion\":\"13.0.3\"},{\"id\":\"System.Text.Json\",\"resolvedVersion\":\"10.0.0\"},{\"id\":\"Zeta.Lib\",\"resolvedVersion\":\"2.0.0\"}]},{\"framework\":\"net8.0\",\"topLevelPackages\":[{\"id\":\"System.Text.Json\",\"resolvedVersion\":\"8.0.5\"}]}]},{\"path\":\"b.csproj\",\"frameworks\":[{\"transitivePackages\":[{\"id\":\"NEWTONSOFT.JSON\",\"resolvedVersion\":\"13.0.3\"},{\"id\":\"a-b\",\"resolvedVersion\":\"1.0.0\"}]}]},{\"path\":\"c.csproj\"}]}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"a-b\",\n      \"SPDXID\": \"SPDXRef-Package-a-b-1.0.0\",\n      \"versionInfo\": \"1.0.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/a-b@1.0.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"A_B\",\n      \"SPDXID\": \"SPDXRef-Package-A-B-1.0.0\",\n      \"versionInfo\": \"1.0.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/A_B@1.0.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"a.b\",\n      \"SPDXID\": \"SPDXRef-Package-a.b-1.0.0-build.7\",\n      \"versionInfo\": \"1.0.0+build.7\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/a.b@1.0.0%2Bbuild.7\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"NEWTONSOFT.JSON\",\n      \"SPDXID\": \"SPDXRef-Package-NEWTONSOFT.JSON-13.0.3\",\n      \"versionInfo\": \"13.0.3\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/NEWTONSOFT.JSON@13.0.3\"\n        }\n      ]\n    },\n    {\n      \"name\": \"System.Text.Json\",\n      \"SPDXID\": \"SPDXRef-Package-System.Text.Json-10.0.0\",\n      \"versionInfo\": \"10.0.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/System.Text.Json@10.0.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"System.Text.Json\",\n      \"SPDXID\": \"SPDXRef-Package-System.Text.Json-8.0.5\",\n      \"versionInfo\": \"8.0.5\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/System.Text.Json@8.0.5\"\n        }\n      ]\n    },\n    {\n      \"name\": \"zeta.Lib\",\n      \"SPDXID\": \"SPDXRef-Package-zeta.Lib--1.0.0---\",\n      \"versionInfo\": \"[1.0.0, )\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/zeta.Lib@%5B1.0.0%2C%20)\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Zeta.Lib\",\n      \"SPDXID\": \"SPDXRef-Package-Zeta.Lib-2.0.0\",\n      \"versionInfo\": \"2.0.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Zeta.Lib@2.0.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-a-b-1.0.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-A-B-1.0.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-a.b-1.0.0-build.7\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-NEWTONSOFT.JSON-13.0.3\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-System.Text.Json-10.0.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-System.Text.Json-8.0.5\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-zeta.Lib--1.0.0---\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Zeta.Lib-2.0.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "nuget-odd-values",
+      "description": "NuGet: values of other types (numeric version, string iterables, an object version).",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":[{\"topLevelPackages\":[{\"id\":\"Num\",\"resolvedVersion\":2},{\"id\":\"Obj\",\"resolvedVersion\":{\"a\":1}},{\"id\":\"Arr\",\"resolvedVersion\":[\"1\",2]},{\"id\":\"Falsy\",\"resolvedVersion\":0}]},\"text-framework\",{\"topLevelPackages\":\"abc\",\"transitivePackages\":[\"x\"]}]},\"text-project\"]}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Arr\",\n      \"SPDXID\": \"SPDXRef-Package-Arr-1-2\",\n      \"versionInfo\": [\n        \"1\",\n        2\n      ],\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Arr@1%2C2\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Num\",\n      \"SPDXID\": \"SPDXRef-Package-Num-2\",\n      \"versionInfo\": 2,\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Num@2\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Obj\",\n      \"SPDXID\": \"SPDXRef-Package-Obj--object-Object-\",\n      \"versionInfo\": {\n        \"a\": 1\n      },\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Obj@%5Bobject%20Object%5D\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Arr-1-2\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Num-2\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Obj--object-Object-\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "nuget-empty",
+      "description": "NuGet: no projects.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "nuget-uppercase-commit-64",
+      "description": "A 64-character uppercase commit.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "nuget-null-input",
+      "description": "NuGet: null-input fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "null"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "Cannot read properties of null (reading 'projects')"
+      }
+    },
+    {
+      "name": "nuget-projects-number",
+      "description": "NuGet: projects-number fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":5}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "number 5 is not iterable (cannot read property Symbol(Symbol.iterator))"
+      }
+    },
+    {
+      "name": "nuget-projects-object",
+      "description": "NuGet: projects-object fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":{\"a\":1}}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "object is not iterable (cannot read property Symbol(Symbol.iterator))"
+      }
+    },
+    {
+      "name": "nuget-frameworks-true",
+      "description": "NuGet: frameworks-true fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":true}]}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "boolean true is not iterable (cannot read property Symbol(Symbol.iterator))"
+      }
+    },
+    {
+      "name": "nuget-project-null",
+      "description": "NuGet: project-null fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[null]}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "Cannot read properties of null (reading 'frameworks')"
+      }
+    },
+    {
+      "name": "nuget-top-level-object",
+      "description": "NuGet: top-level-object fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":[{\"topLevelPackages\":{}}]}]}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "(framework.topLevelPackages ?? []) is not iterable"
+      }
+    },
+    {
+      "name": "nuget-transitive-number",
+      "description": "NuGet: transitive-number fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":[{\"topLevelPackages\":[],\"transitivePackages\":7}]}]}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "(framework.transitivePackages ?? []) is not iterable"
+      }
+    },
+    {
+      "name": "nuget-item-null",
+      "description": "NuGet: item-null fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":[{\"topLevelPackages\":[null]}]}]}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "Cannot read properties of null (reading 'resolvedVersion')"
+      }
+    },
+    {
+      "name": "nuget-id-number",
+      "description": "NuGet: id-number fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":[{\"topLevelPackages\":[{\"id\":5,\"resolvedVersion\":\"1\"}]}]}]}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "item.id.toLowerCase is not a function"
+      }
+    },
+    {
+      "name": "nuget-version-tostring",
+      "description": "NuGet: version-tostring fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":[{\"topLevelPackages\":[{\"id\":\"X\",\"resolvedVersion\":{\"toString\":1}}]}]}]}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "Cannot convert object to primitive value"
+      }
+    },
+    {
+      "name": "nuget-lone-surrogate",
+      "description": "NuGet: lone-surrogate fails like the script.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":[{\"topLevelPackages\":[{\"id\":\"X\\ud800\",\"resolvedVersion\":\"1\"}]}]}]}"
+      },
+      "error": {
+        "kind": "URIError",
+        "message": "URI malformed"
+      }
+    },
+    {
+      "name": "nuget-non-ascii-id",
+      "description": "A non-ASCII NuGet id: the script lowercases it, the port refuses it.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"projects\":[{\"frameworks\":[{\"topLevelPackages\":[{\"id\":\"Ünïcode\",\"resolvedVersion\":\"1\"}]}]}]}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Ünïcode\",\n      \"SPDXID\": \"SPDXRef-Package--n-code-1\",\n      \"versionInfo\": \"1\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/%C3%9Cn%C3%AFcode@1\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package--n-code-1\"\n    }\n  ]\n}\n",
+      "difference": "The port refuses a NuGet id outside ASCII (its JavaScript lowercase is not reproduced)."
+    },
+    {
+      "name": "npm-package",
+      "description": "npm: dependencies, optional and peer dependencies merged like an object spread, ranges stripped, scoped names encoded.",
+      "parameters": {
+        "ecosystem": "npm",
+        "input": "dependencies.json",
+        "name": "@aetheus/web-analytics",
+        "version": "1.2.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"name\":\"@aetheus/web-analytics\",\"dependencies\":{\"123\":\"1\",\"zod\":\"^3.22.0\",\"@scope/pkg\":\"~1.0.0\",\"Left-Pad\":\"1.3.0\",\"dup\":\"^1.0.0\"},\"optionalDependencies\":{\"fsevents\":\">=2\",\"dup\":\"^^1.1.0\",\"a_b\":\"1\"},\"peerDependencies\":{\"react\":\"^18 || ^19\",\"dup\":\"~1.2.0\",\"a-b\":\"*\",\"@aetheus/web-analytics\":\"1.2.0\",\"ünï\":\"1\",\"emoji😀\":\"1.0.0\"}}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"@aetheus/web-analytics-1.2.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/%40aetheus%2Fweb-analytics/1.2.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"@aetheus/web-analytics\",\n      \"SPDXID\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"versionInfo\": \"1.2.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/%40aetheus%2Fweb-analytics@1.2.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"ünï\",\n      \"SPDXID\": \"SPDXRef-Package--n--1\",\n      \"versionInfo\": \"1\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/%C3%BCn%C3%AF@1\"\n        }\n      ]\n    },\n    {\n      \"name\": \"@scope/pkg\",\n      \"SPDXID\": \"SPDXRef-Package--scope-pkg-1.0.0\",\n      \"versionInfo\": \"1.0.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/%40scope%2Fpkg@1.0.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"123\",\n      \"SPDXID\": \"SPDXRef-Package-123-1\",\n      \"versionInfo\": \"1\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/123@1\"\n        }\n      ]\n    },\n    {\n      \"name\": \"a-b\",\n      \"SPDXID\": \"SPDXRef-Package-a-b--\",\n      \"versionInfo\": \"*\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/a-b@*\"\n        }\n      ]\n    },\n    {\n      \"name\": \"a_b\",\n      \"SPDXID\": \"SPDXRef-Package-a-b-1\",\n      \"versionInfo\": \"1\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/a_b@1\"\n        }\n      ]\n    },\n    {\n      \"name\": \"dup\",\n      \"SPDXID\": \"SPDXRef-Package-dup-1.2.0\",\n      \"versionInfo\": \"1.2.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/dup@1.2.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"emoji😀\",\n      \"SPDXID\": \"SPDXRef-Package-emoji---1.0.0\",\n      \"versionInfo\": \"1.0.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/emoji%F0%9F%98%80@1.0.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"fsevents\",\n      \"SPDXID\": \"SPDXRef-Package-fsevents---2\",\n      \"versionInfo\": \">=2\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/fsevents@%3E%3D2\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Left-Pad\",\n      \"SPDXID\": \"SPDXRef-Package-Left-Pad-1.3.0\",\n      \"versionInfo\": \"1.3.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/Left-Pad@1.3.0\"\n        }\n      ]\n    },\n    {\n      \"name\": \"react\",\n      \"SPDXID\": \"SPDXRef-Package-react-18-----19\",\n      \"versionInfo\": \"18 || ^19\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/react@18%20%7C%7C%20%5E19\"\n        }\n      ]\n    },\n    {\n      \"name\": \"zod\",\n      \"SPDXID\": \"SPDXRef-Package-zod-3.22.0\",\n      \"versionInfo\": \"3.22.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/zod@3.22.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package--n--1\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package--scope-pkg-1.0.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-123-1\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-a-b--\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-a-b-1\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-dup-1.2.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-emoji---1.0.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-fsevents---2\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Left-Pad-1.3.0\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-react-18-----19\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package--aetheus-web-analytics-1.2.0\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-zod-3.22.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "npm-odd-values",
+      "description": "npm: versions of other types and dependency maps that are arrays or strings.",
+      "parameters": {
+        "ecosystem": "npm",
+        "input": "dependencies.json",
+        "name": "p",
+        "version": "1",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"dependencies\":[\"^1.0.0\",\"x\"],\"optionalDependencies\":\"ab\",\"peerDependencies\":{\"n\":5,\"z\":null,\"t\":true,\"o\":{\"a\":1},\"l\":[1,[2]]}}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"p-1\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/p/1/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"0\",\n      \"SPDXID\": \"SPDXRef-Package-0-a\",\n      \"versionInfo\": \"a\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/0@a\"\n        }\n      ]\n    },\n    {\n      \"name\": \"1\",\n      \"SPDXID\": \"SPDXRef-Package-1-b\",\n      \"versionInfo\": \"b\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/1@b\"\n        }\n      ]\n    },\n    {\n      \"name\": \"l\",\n      \"SPDXID\": \"SPDXRef-Package-l-1-2\",\n      \"versionInfo\": \"1,2\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/l@1%2C2\"\n        }\n      ]\n    },\n    {\n      \"name\": \"n\",\n      \"SPDXID\": \"SPDXRef-Package-n-5\",\n      \"versionInfo\": \"5\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/n@5\"\n        }\n      ]\n    },\n    {\n      \"name\": \"o\",\n      \"SPDXID\": \"SPDXRef-Package-o--object-Object-\",\n      \"versionInfo\": \"[object Object]\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/o@%5Bobject%20Object%5D\"\n        }\n      ]\n    },\n    {\n      \"name\": \"p\",\n      \"SPDXID\": \"SPDXRef-Package-p-1\",\n      \"versionInfo\": \"1\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/p@1\"\n        }\n      ]\n    },\n    {\n      \"name\": \"t\",\n      \"SPDXID\": \"SPDXRef-Package-t-true\",\n      \"versionInfo\": \"true\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/t@true\"\n        }\n      ]\n    },\n    {\n      \"name\": \"z\",\n      \"SPDXID\": \"SPDXRef-Package-z-null\",\n      \"versionInfo\": \"null\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/z@null\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-p-1\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-p-1\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-0-a\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-p-1\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-1-b\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-p-1\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-l-1-2\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-p-1\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-n-5\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-p-1\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-o--object-Object-\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-p-1\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-t-true\"\n    },\n    {\n      \"spdxElementId\": \"SPDXRef-Package-p-1\",\n      \"relationshipType\": \"DEPENDS_ON\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-z-null\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "npm-empty",
+      "description": "npm: no dependencies.",
+      "parameters": {
+        "ecosystem": "npm",
+        "input": "dependencies.json",
+        "name": "p",
+        "version": "1",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"dependencies\":4}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"p-1\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/p/1/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"p\",\n      \"SPDXID\": \"SPDXRef-Package-p-1\",\n      \"versionInfo\": \"1\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:npm/p@1\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-p-1\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "npm-null-input",
+      "description": "npm: null-input fails like the script.",
+      "parameters": {
+        "ecosystem": "npm",
+        "input": "dependencies.json",
+        "name": "p",
+        "version": "1",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "null"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "Cannot read properties of null (reading 'dependencies')"
+      }
+    },
+    {
+      "name": "npm-version-tostring",
+      "description": "npm: version-tostring fails like the script.",
+      "parameters": {
+        "ecosystem": "npm",
+        "input": "dependencies.json",
+        "name": "p",
+        "version": "1",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"dependencies\":{\"x\":{\"toString\":1}}}"
+      },
+      "error": {
+        "kind": "TypeError",
+        "message": "Cannot convert object to primitive value"
+      }
+    },
+    {
+      "name": "npm-lone-surrogate",
+      "description": "npm: lone-surrogate fails like the script.",
+      "parameters": {
+        "ecosystem": "npm",
+        "input": "dependencies.json",
+        "name": "p",
+        "version": "1",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{\"dependencies\":{\"x\":\"1\\udc00\"}}"
+      },
+      "error": {
+        "kind": "URIError",
+        "message": "URI malformed"
+      }
+    },
+    {
+      "name": "invalid-ecosystem",
+      "description": "An ecosystem other than nuget or npm.",
+      "parameters": {
+        "ecosystem": "maven",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "Usage: generate-package-sbom.mjs <nuget|npm> <input> <name> <version> <source-commit> <output>"
+      }
+    },
+    {
+      "name": "invalid-ecosystem-case",
+      "description": "Ecosystem names are case-sensitive.",
+      "parameters": {
+        "ecosystem": "NuGet",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "Usage: generate-package-sbom.mjs <nuget|npm> <input> <name> <version> <source-commit> <output>"
+      }
+    },
+    {
+      "name": "invalid-commit-short",
+      "description": "A source commit that is not 40 or 64 hexadecimal characters (short).",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "Usage: generate-package-sbom.mjs <nuget|npm> <input> <name> <version> <source-commit> <output>"
+      }
+    },
+    {
+      "name": "invalid-commit-long",
+      "description": "A source commit that is not 40 or 64 hexadecimal characters (long).",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef012345670",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "Usage: generate-package-sbom.mjs <nuget|npm> <input> <name> <version> <source-commit> <output>"
+      }
+    },
+    {
+      "name": "invalid-commit-newline",
+      "description": "A source commit that is not 40 or 64 hexadecimal characters (newline).",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567\n",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "Usage: generate-package-sbom.mjs <nuget|npm> <input> <name> <version> <source-commit> <output>"
+      }
+    },
+    {
+      "name": "invalid-commit-not-hex",
+      "description": "A source commit that is not 40 or 64 hexadecimal characters (not-hex).",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "123456789abcdef0123456789abcdef01234567g",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "Usage: generate-package-sbom.mjs <nuget|npm> <input> <name> <version> <source-commit> <output>"
+      }
+    },
+    {
+      "name": "invalid-commit-48",
+      "description": "A source commit that is not 40 or 64 hexadecimal characters (48).",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef0123456701234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "Usage: generate-package-sbom.mjs <nuget|npm> <input> <name> <version> <source-commit> <output>"
+      }
+    },
+    {
+      "name": "epoch-unset",
+      "description": "SOURCE_DATE_EPOCH unset.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {},
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "SOURCE_DATE_EPOCH must contain the immutable source commit timestamp."
+      }
+    },
+    {
+      "name": "epoch-zero",
+      "description": "SOURCE_DATE_EPOCH zero.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "0"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "SOURCE_DATE_EPOCH must contain the immutable source commit timestamp."
+      }
+    },
+    {
+      "name": "epoch-minus-zero",
+      "description": "SOURCE_DATE_EPOCH minus-zero.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "-0"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "SOURCE_DATE_EPOCH must contain the immutable source commit timestamp."
+      }
+    },
+    {
+      "name": "epoch-empty",
+      "description": "SOURCE_DATE_EPOCH empty.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": ""
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "RangeError",
+        "message": "Invalid time value"
+      }
+    },
+    {
+      "name": "epoch-text",
+      "description": "SOURCE_DATE_EPOCH text.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "abc"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "RangeError",
+        "message": "Invalid time value"
+      }
+    },
+    {
+      "name": "epoch-space-prefix",
+      "description": "SOURCE_DATE_EPOCH space-prefix.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": " \t1784793600xyz"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"2026-07-23T08:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "epoch-fraction",
+      "description": "SOURCE_DATE_EPOCH fraction.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1.9"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"1970-01-01T00:00:01.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "epoch-plus",
+      "description": "SOURCE_DATE_EPOCH plus.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "+5"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"1970-01-01T00:00:05.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "epoch-exponent",
+      "description": "SOURCE_DATE_EPOCH exponent.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1e3"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"1970-01-01T00:00:01.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "epoch-negative",
+      "description": "SOURCE_DATE_EPOCH negative.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "-1"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"1969-12-31T23:59:59.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "epoch-year-minus-one",
+      "description": "SOURCE_DATE_EPOCH year-minus-one.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "-62198755200"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"-000001-01-01T00:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "epoch-year-10000",
+      "description": "SOURCE_DATE_EPOCH year-10000.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "253402300800"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"+010000-01-01T00:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "epoch-max",
+      "description": "SOURCE_DATE_EPOCH max.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "8640000000000"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"+275760-09-13T00:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "epoch-beyond-max",
+      "description": "SOURCE_DATE_EPOCH beyond-max.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "8640000000001"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "RangeError",
+        "message": "Invalid time value"
+      }
+    },
+    {
+      "name": "epoch-min",
+      "description": "SOURCE_DATE_EPOCH min.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "-8640000000000"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"-271821-04-20T00:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "epoch-huge",
+      "description": "SOURCE_DATE_EPOCH huge.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "RangeError",
+        "message": "Invalid time value"
+      }
+    },
+    {
+      "name": "epoch-year-0",
+      "description": "SOURCE_DATE_EPOCH year-0.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "out/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "-62167219200"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "output": "{\n  \"spdxVersion\": \"SPDX-2.3\",\n  \"dataLicense\": \"CC0-1.0\",\n  \"SPDXID\": \"SPDXRef-DOCUMENT\",\n  \"name\": \"Aetheus.Telemetry-0.1.0\",\n  \"documentNamespace\": \"https://aetheus.local/sbom/Aetheus.Telemetry/0.1.0/0123456789abcdef0123456789abcdef01234567\",\n  \"creationInfo\": {\n    \"created\": \"0000-01-01T00:00:00.000Z\",\n    \"creators\": [\n      \"Tool: Aetheus deterministic package SBOM generator 1.0\"\n    ]\n  },\n  \"packages\": [\n    {\n      \"name\": \"Aetheus.Telemetry\",\n      \"SPDXID\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\",\n      \"versionInfo\": \"0.1.0\",\n      \"downloadLocation\": \"NOASSERTION\",\n      \"filesAnalyzed\": false,\n      \"licenseConcluded\": \"NOASSERTION\",\n      \"licenseDeclared\": \"NOASSERTION\",\n      \"externalRefs\": [\n        {\n          \"referenceCategory\": \"PACKAGE-MANAGER\",\n          \"referenceType\": \"purl\",\n          \"referenceLocator\": \"pkg:nuget/Aetheus.Telemetry@0.1.0\"\n        }\n      ]\n    }\n  ],\n  \"relationships\": [\n    {\n      \"spdxElementId\": \"SPDXRef-DOCUMENT\",\n      \"relationshipType\": \"DESCRIBES\",\n      \"relatedSpdxElement\": \"SPDXRef-Package-Aetheus.Telemetry-0.1.0\"\n    }\n  ]\n}\n"
+    },
+    {
+      "name": "missing-output-directory",
+      "description": "The output directory is not created.",
+      "parameters": {
+        "ecosystem": "nuget",
+        "input": "dependencies.json",
+        "name": "Aetheus.Telemetry",
+        "version": "0.1.0",
+        "source_commit": "0123456789abcdef0123456789abcdef01234567",
+        "output": "absent/package.spdx.json"
+      },
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1784793600"
+      },
+      "files": {
+        "dependencies.json": "{}"
+      },
+      "error": {
+        "kind": "Error",
+        "message": "ENOENT: no such file or directory, open '<workspace>\\absent\\package.spdx.json'",
+        "code": "ENOENT"
+      }
+    }
+  ]
+}

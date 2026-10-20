@@ -7,6 +7,8 @@ namespace Aetheus.E2E;
 [Category("Servers")]
 public class ServersTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     [SetUp]
     public async Task SetUp()
     {
@@ -14,6 +16,7 @@ public class ServersTests : E2ETestBase
     }
 
     [Test]
+    [RollbackRelevant]
     public async Task Servers_PageRendersExpectedControlsAndColumns()
     {
         await NavigateToAsync("servers");
@@ -24,7 +27,7 @@ public class ServersTests : E2ETestBase
 
         var grid = Page.Locator(".server-list-grid");
         await Expect(grid).ToBeVisibleAsync(new() { Timeout = 10000 });
-        // Recette R-211: no filter bar above the list; each column filters from its header.
+        // No filter bar above the list; each column filters from its header.
         await Expect(Page.Locator(".server-list-search")).ToHaveCountAsync(0);
         // The overflow menu "Tools" carries Update all agents, Port check and Retired servers.
         var toolsMenu = Page.Locator("button[title='Tools']");
@@ -59,7 +62,7 @@ public class ServersTests : E2ETestBase
         await Expect(grid.Locator("a.server-name-link").Filter(new() { HasText = "build-01" }))
             .ToBeVisibleAsync(new() { Timeout = 5000 });
 
-        // Recette R-210: the Type column is a checkable list of the server types.
+        // The Type column is a checkable list of the server types.
         var typeHeader = grid.Locator("th[data-omni-col='Type']");
         await typeHeader.Locator(".omni-data-grid__filter-menu-toggle").ClickAsync();
         await typeHeader.Locator(".omni-multi-select__option", new() { HasText = "Build" })
@@ -69,18 +72,8 @@ public class ServersTests : E2ETestBase
         await Expect(grid.Locator("a.server-name-link").Filter(new() { HasText = "web-01" }))
             .ToHaveCountAsync(0);
 
-        // Recette R-181: Refresh left the Tools menu, the list follows the servers hub.
+        // The server hub refreshes the list; Tools has no manual Refresh action.
         await toolsMenu.ClickAsync();
         await Expect(Page.GetByText("Refresh", new() { Exact = true })).ToHaveCountAsync(0);
-    }
-
-    [Test]
-    public async Task Servers_NavigateFromSidebar_Works()
-    {
-        await NavigateToAsync("");
-        var nav = Page.Locator(".omni-panel-menu");
-        await nav.GetByText("Servers").ClickAsync();
-
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/servers"), new() { Timeout = 5000 });
     }
 }

@@ -82,7 +82,7 @@ public sealed class ServerDockerAdminGatingTests : BunitContext
     private static bool ShellOffered(IRenderedComponent<ServerDockerSection> cut)
     {
         var tab = cut.FindComponent<DockerContainersTab>();
-        tab.Find("[aria-label='MoreActions']").Click();
+        tab.Find("tbody [aria-label='MoreActions']").Click();
         return tab.Markup.Contains("DockerShell", StringComparison.Ordinal);
     }
 
@@ -93,9 +93,11 @@ public sealed class ServerDockerAdminGatingTests : BunitContext
     private static bool ComposeDeployOffered(IRenderedComponent<ServerDockerSection> cut)
     {
         var tab = cut.FindComponent<DockerComposeTab>();
-        tab.Find("button[title='EditCompose']").Click();
+        // Edit compose sits in the stack row's "More actions" menu (STD-BTN detection 11).
+        tab.Find(".omni-overflow-menu__trigger").Click();
+        tab.Find(".omni-menu__item[title='EditCompose']").Click();
         tab.InvokeAsync(() => tab.Instance.HandleTaskOutput(DockerTaskNames.ComposeFile("monitoring"), "services: {}"));
-        tab.WaitForAssertion(() => Assert.Contains("Cancel", tab.Markup, StringComparison.Ordinal), TimeSpan.FromSeconds(2));
+        tab.WaitForAssertion(() => Assert.Contains("Cancel", tab.Markup, StringComparison.Ordinal));
         return tab.FindAll("button").Any(button => button.TextContent.Contains("Deploy", StringComparison.Ordinal));
     }
 

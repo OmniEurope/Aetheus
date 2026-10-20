@@ -34,14 +34,14 @@ public partial class Roles : IAsyncDisposable
         if (!AdminPageEntry.TryEnter(Auth, Nav, Breadcrumb, L, "Roles"))
             return;
 
-        // Recette R-316: the search shared with Users and Organizations, in the section bar.
+        // The search shared with Users and Organizations, in the section bar.
         Search.Changed += ResetSearchAsync;
 
         // Realtime: refresh the roles list on any create/update/delete/clone/permission change. RT4M.
         _adminRt = new AdminEntitySubscription(HubFactory);
         await _adminRt.StartAsync(AdminEntities.Role, () => InvokeAsync(async () =>
         {
-            // Recette R-226: a pushed change refreshes the grid quietly (rows, page, filters kept).
+            // A pushed change refreshes the grid quietly (rows, page, filters kept).
             try { await RefreshLiveAsync(); } catch (HttpRequestException) { } // hub-triggered refresh - silent on auth failure
             StateHasChanged();
         }));
@@ -68,7 +68,7 @@ public partial class Roles : IAsyncDisposable
         _pageSize = args.Top ?? 20;
         _page = ((args.Skip ?? 0) / _pageSize) + 1;
         (_sortBy, _sortDescending) = ResolveSort(args);
-        // Recette R-210: the header filters, applied by the API.
+        // The header filters, applied by the API.
         _columnFilters = args.ToApiFilters();
         await LoadPageAsync();
     }
@@ -79,7 +79,8 @@ public partial class Roles : IAsyncDisposable
         return _grid is not null ? _grid.GoToPage(0, forceReload: true) : LoadPageAsync();
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// grid.</summary>
     private Task<PaginatedResult<RoleDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(20);

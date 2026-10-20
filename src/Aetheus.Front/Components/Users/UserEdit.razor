@@ -57,7 +57,7 @@ else if (_isNew)
 }
 else
 {
-    <UrlSyncedTabs Change="@OnTabChanged" Slugs="@(new[] { "general", "roles", "organizations", "security", "audit" })">
+    <UrlSyncedTabs Change="@OnTabChanged" Slugs="@(new[] { "general", "roles", "organizations", "security", "pipelines", "audit" })">
         <Tabs>
             <OmniTabsItem Key="general" Title="@L["General"]">
                 <OmniCard Class="iam-detail-card">
@@ -72,8 +72,12 @@ else
                             <OmniTextBox @bind-Value="_model.Email" Id="oe-pages-users-useredit-5" />
                             <ValidationMessage For="@(() => _model.Email)" />
                         </ChildContent></OmniFormField>
-                        <OmniSwitch TValue="bool" Value="@_model.IsActive" ValueExpression="@(() => _model.IsActive)" ValueChanged="@OnActiveChangedAsync" Disabled="@_savingFlags">@L["Active"]</OmniSwitch>
-                        <OmniSwitch TValue="bool" Value="@_model.MustChangePassword" ValueExpression="@(() => _model.MustChangePassword)" ValueChanged="@OnMustChangePasswordChangedAsync" Disabled="@_savingFlags">@L["MustChangePassword"]</OmniSwitch>
+                        <OmniSwitch TValue="bool" Value="@_model.IsActive" ValueExpression="@(() => _model.IsActive)" ValueChanged="@OnActiveChangedAsync">@L["Active"]</OmniSwitch>
+                        <OmniSwitch TValue="bool" Value="@_model.MustChangePassword" ValueExpression="@(() => _model.MustChangePassword)" ValueChanged="@OnMustChangePasswordChangedAsync">@L["MustChangePassword"]</OmniSwitch>
+                        @if (_savingFlags)
+                        {
+                            <div role="status" aria-live="polite"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["UserHandoverSaving"]</OmniText></div>
+                        }
                     </OmniStack>
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
                         <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
@@ -100,7 +104,7 @@ else
                 <OmniCard Class="iam-detail-card omni-u-mt-md">
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
                         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["EffectivePermissions"]</OmniText>
-                        @* Recette R-181: no Refresh, a change to users, roles or organizations reloads them. *@
+                        @* No Refresh, a change to users, roles or organizations reloads them. *@
                     </OmniStack>
                     @if (_effectivePermissions is not null)
                     {
@@ -225,6 +229,13 @@ else
                     </OmniCard>
                 }
                 </div>
+            </OmniTabsItem>
+
+            <OmniTabsItem Key="pipelines" Title="@L["OwnedPipelines"]">
+                @if (_user is not null)
+                {
+                    <UserOwnedPipelines Username="@_user.Username" />
+                }
             </OmniTabsItem>
 
             <OmniTabsItem Key="audit" Title="@L["AuditTrail"]">

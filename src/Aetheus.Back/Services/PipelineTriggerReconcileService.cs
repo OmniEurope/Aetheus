@@ -85,12 +85,8 @@ public sealed class PipelineTriggerReconcileService(
         await ResolveStrandedApprovalsAsync(scope, repo, ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// PLAN-005 lot 3 / D34. The finalizer closes a run's pending approvals when it ends the run, but
-    /// not every path that ends a run goes through it (a cancellation, a launch failure), and runs
-    /// that ended before this existed, run 2323 among them, still carry one. This sweep closes every
-    /// approval still Pending on an ended run, whichever way it ended.
-    /// </summary>
+    /// <summary>Closes pending approvals on ended runs, including cancellation and launch-failure
+    /// paths that do not pass through the finalizer.</summary>
     private async Task CloseApprovalsOfEndedRunsAsync(IPipelineRepository repo, DateTime now, CancellationToken ct)
     {
         var closed = await repo.CloseApprovalsOfEndedRunsAsync(null, now, EndedRunApprovals.Reason, ct).ConfigureAwait(false);
@@ -269,7 +265,7 @@ public sealed class PipelineTriggerReconcileService(
 
             var transitioned = await runService.ResolveCompletedTriggerStepAsync(
                 step,
-                resolved == TaskExecutionStatus.Success ? PipelineStatus.Success : PipelineStatus.Failed,
+                resolved == TaskExecutionStatus.Success ? childStatus : PipelineStatus.Failed,
                 outputs,
                 ct).ConfigureAwait(false);
             if (!transitioned) continue;
@@ -283,7 +279,8 @@ public sealed class PipelineTriggerReconcileService(
     private TaskExecutionStatus? ResolveTriggerStatus(
         PipelineStepRun step, int childId, bool childExists, PipelineStatus childStatus, DateTime now)
     {
-        if (childExists && childStatus == PipelineStatus.Success) return TaskExecutionStatus.Success;
+        // A Rejected child ran to the end (recette R1-80): its trigger step completes, as on the live path.
+        if (childExists && childStatus is PipelineStatus.Success or PipelineStatus.Rejected) return TaskExecutionStatus.Success;
         // A Partial child finished with a failure inside it, so the waiting trigger step fails too:
         // the same rule ResolveCompletedTriggerStepAsync applies on the live path.
         if (childExists && childStatus.IsUnsuccessful()) return TaskExecutionStatus.Failed;

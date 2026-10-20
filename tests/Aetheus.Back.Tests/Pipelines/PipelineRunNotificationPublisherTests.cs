@@ -34,7 +34,9 @@ public sealed class PipelineRunNotificationPublisherTests
         await _userNotifications.Received(1).RecordProjectEventAsync(
             expectedType,
             Arg.Is<string>(json => UserNotificationService.ReadProjectId(json) == 10),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            null,
+            PipelineRunNotificationPublisher.EmailOnceMarker(9));
     }
 
     [Theory]
@@ -90,6 +92,61 @@ public sealed class PipelineRunNotificationPublisherTests
     }
 
     [Fact]
+    public async Task R177_ARunStartedByAnotherPipeline_IsMailedOnlyToTheSubscribersWhoAskedForChildResults()
+    {
+        _repo.GetRootRunReferencesAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, PipelineRunRootReference> { [9] = new(3, 1, "nightly") });
+
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Failed, TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            NotificationEventTypes.PipelineFailed,
+            Arg.Is<string>(json => json.Contains("\"IsChildRun\":true") && json.Contains("\"RootRunId\":3")),
+            Arg.Any<CancellationToken>(),
+            NotificationEventTypes.PipelineChildResults,
+            PipelineRunNotificationPublisher.EmailOnceMarker(9));
+    }
+
+    [Fact]
+    public async Task R177_ARootRun_IsMailedLikeBefore_AndNeverGatedByTheChildOption()
+    {
+        _repo.GetRootRunReferencesAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, PipelineRunRootReference> { [9] = new(9, 4, "build") });
+
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Success, TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            NotificationEventTypes.PipelineSucceeded,
+            Arg.Is<string>(json => json.Contains("\"IsChildRun\":false")),
+            Arg.Any<CancellationToken>(),
+            null,
+            PipelineRunNotificationPublisher.EmailOnceMarker(9));
+    }
+
+    [Fact]
+    public async Task R177_ARejectedRun_IsRecordedAsItsOwnResult()
+    {
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Rejected, TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            NotificationEventTypes.PipelineRejected,
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>(),
+            null,
+            PipelineRunNotificationPublisher.EmailOnceMarker(9));
+    }
+
+    [Fact]
+    public void R177_TheChildResultsOption_IsOffByDefault_AndIsNotAnEventNobodyIsMailedFor()
+    {
+        var option = NotificationEventTypes.Find(NotificationEventTypes.PipelineChildResults);
+
+        Assert.NotNull(option);
+        Assert.False(option.DefaultEnabled);
+        Assert.False(option.SentByEmail);
+    }
+
+    [Fact]
     public async Task CompletedHandler_QueuesOnlyRecordedStatuses()
     {
         var queue = Substitute.For<IBackgroundTaskQueue>();
@@ -99,5 +156,53 @@ public sealed class PipelineRunNotificationPublisherTests
         await handler.HandleAsync(new PipelineRunCompletedEvent(9, PipelineStatus.Cancelled), TestContext.Current.CancellationToken);
 
         queue.Received(1).Enqueue(Arg.Any<Func<IServiceProvider, CancellationToken, Task>>());
+    }
+
+    [Fact]
+    public async Task R177_AChildResult_NamesTheRootRun_ItsMailLinksTo()
+    {
+        _repo.GetRootRunReferencesAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, PipelineRunRootReference> { [9] = new(3, 1, "nightly") });
+
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Failed, TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            NotificationEventTypes.PipelineFailed,
+            Arg.Is<string>(json => json.Contains("\"RootRunId\":3") && json.Contains("\"RootPipelineName\":\"nightly\"")),
+            Arg.Any<CancellationToken>(),
+            NotificationEventTypes.PipelineChildResults,
+            Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task R177_TheOnceMarker_MatchesThePayloadTheRunResultIsRecordedWith()
+    {
+        string? payload = null;
+        string? marker = null;
+        await _userNotifications.RecordProjectEventAsync(
+            Arg.Any<string>(), Arg.Do<string>(json => payload = json), Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(), Arg.Do<string?>(value => marker = value));
+
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Success, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(marker);
+        Assert.Equal(PipelineRunNotificationPublisher.EmailOnceMarker(9), marker);
+        Assert.StartsWith(marker, payload, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task R177_ARootRun_CarriesNoRootPipelineName()
+    {
+        _repo.GetRootRunReferencesAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, PipelineRunRootReference> { [9] = new(9, 4, "build") });
+
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Success, TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            NotificationEventTypes.PipelineSucceeded,
+            Arg.Is<string>(json => json.Contains("\"RootRunId\":9") && json.Contains("\"RootPipelineName\":null")),
+            Arg.Any<CancellationToken>(),
+            Arg.Is<string?>(value => value == null),
+            Arg.Any<string?>());
     }
 }

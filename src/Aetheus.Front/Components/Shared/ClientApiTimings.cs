@@ -7,12 +7,9 @@ namespace Aetheus.Front.Components.Shared;
 /// <summary>One API call as this browser lived it: network and server together.</summary>
 public sealed record ClientApiCall(DateTime At, string Method, string Path, int StatusCode, double DurationMs, long? Bytes);
 
-/// <summary>
-/// PLAN-003 lot 27 / D27: every API call of this browser session, timed from the moment the page
-/// asked to the moment the answer was there, so the Performance page can put what the user waited
-/// for beside what the server measured. Identifiers in the path become <c>{id}</c> and the query is
-/// dropped: calls to the same endpoint group together and no value is kept.
-/// </summary>
+/// <summary>Measure browser API wait time so the Performance page can compare it with server
+/// timing; normalize path identifiers and discard the query to group endpoints without retaining
+/// values.</summary>
 public sealed partial class ClientApiTimings
 {
     /// <summary>A session is short; the last few hundred calls say where the waiting went.</summary>

@@ -19,7 +19,7 @@ public class ServerModulesSectionTests : BunitContext
     {
         _handler.SetJsonResponse("api/servers/1/modules", new List<ServerModuleDto>());
         var cut = Render<ServerModulesSection>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup));
         // The title heading is gone: the page header already shows it.
         Assert.DoesNotContain(">Modules<", cut.Markup, StringComparison.Ordinal);
     }
@@ -33,7 +33,7 @@ public class ServerModulesSectionTests : BunitContext
             new() { Id = 2, Name = "Docker", Type = ServerModuleType.Docker, Version = "24.0", Status = ServerModuleStatus.Active }
         });
         var cut = Render<ServerModulesSection>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForAssertion(() => Assert.Contains(".NET SDK", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains(".NET SDK", cut.Markup));
         Assert.Contains("Docker", cut.Markup);
         // The Type column renders the enum name as a badge (template uses m.Type.ToString()).
         Assert.Contains("DotNet", cut.Markup);
@@ -72,7 +72,7 @@ public class ServerModulesSectionTests : BunitContext
             new() { Id = 5, Name = "Redis", Type = ServerModuleType.Redis, Version = "7.0" }
         });
         var cut = Render<ServerModulesSection>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForAssertion(() => Assert.Contains("PostgreSQL", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("PostgreSQL", cut.Markup));
         Assert.Contains("Node.js", cut.Markup);
         Assert.Contains("Redis", cut.Markup);
     }

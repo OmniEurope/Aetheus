@@ -2,12 +2,8 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Single entry point for "copy to clipboard" across the app: one <c>navigator.clipboard.writeText</c>
-/// call, one success toast, and a single graceful warning when the Clipboard API is unavailable
-/// (insecure context / permission denied) instead of the per-call try/catch + silent
-/// <c>Debug.WriteLine</c> that used to be duplicated at every copy button.
-/// </summary>
+/// <summary>Centralizes Clipboard API writes with one success toast or a graceful warning for
+/// unavailable or denied clipboard access.</summary>
 public class ClipboardService(IJSRuntime js, NotifyHelper toast)
 {
     /// <summary>

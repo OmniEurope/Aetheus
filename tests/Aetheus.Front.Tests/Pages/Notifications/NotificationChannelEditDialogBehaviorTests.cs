@@ -65,7 +65,7 @@ public sealed class NotificationChannelEditDialogBehaviorTests : BunitContext
     [InlineData(HttpStatusCode.NotFound, "NotificationChannelNotFound")]
     public async Task Edit_LoadFailure_ShowsTheFailure_AndNeverOverwritesTheChannel(HttpStatusCode status, string message)
     {
-        // FRONT-004: the blank model ("{}", enabled) used to be submittable after a failed GET.
+        // A failed load must leave the blank notification-channel model unsubmitted.
         _handler.SetResponse(HttpMethod.Get, "api/notifications/channels/4", status);
         _handler.SetJsonResponse(HttpMethod.Put, "api/notifications/channels/4", new NotificationChannelDto { Id = 4 });
 

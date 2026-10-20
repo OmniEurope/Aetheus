@@ -18,9 +18,8 @@ internal static class ArchitectureAnalysisPublisher
         CancellationToken ct)
     {
         var startedAt = timeProvider.GetUtcNow().UtcDateTime;
-        // Candidate #2328 spent 130 s here while ingesting the same report takes about 8 s on a local
-        // PostgreSQL (PLAN-007 lot 6). Each phase now reports its own duration as a run metric, so the
-        // next run says where the time goes before anything is changed on the strength of a guess.
+        // Publish each architecture-analysis phase duration as a run metric to locate slow
+        // processing.
         var phase = Stopwatch.StartNew();
         async Task PhaseAsync(string key)
         {

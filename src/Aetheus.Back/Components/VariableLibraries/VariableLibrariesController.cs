@@ -17,7 +17,7 @@ public class VariableLibrariesController(IVariableLibraryService service, IResou
         return Ok(await service.GetLibrariesAsync(projectId, environmentId, projectServerId, request, accessibleIds, ct));
     }
 
-    /// <summary>Recette R-210: the project names the variable libraries list's column filter offers.</summary>
+    /// <summary>The project names the variable libraries list's column filter offers.</summary>
     [HttpGet("filter-values")]
     public async Task<ActionResult<VariableLibraryFilterValuesDto>> GetFilterValues(CancellationToken ct)
     {

@@ -27,52 +27,54 @@ public static class ScannerCapabilityProbe
         foreach (var scanner in ScannerManifestCatalog.Default.Scanners)
         {
             ct.ThrowIfCancellationRequested();
-            if (scanner.Execution == "container")
-            {
-                if (!dockerAvailable)
-                {
-                    diagnostics.Add($"scanner:{scanner.Key}:{scanner.Version}:unavailable:docker daemon or socket unavailable");
-                    continue;
-                }
-                try
-                {
-                    var result = await shell.RunExecAsync(
-                        "docker", ["image", "inspect", scanner.Image!], ct,
-                        AgentRuntimeDefaults.CapabilityProbeTimeout).ConfigureAwait(false);
-                    diagnostics.Add(result.ExitCode == 0
-                        ? $"scanner:{scanner.Key}:{scanner.Version}:ready:immutable image cached"
-                        : $"scanner:{scanner.Key}:{scanner.Version}:available-on-demand:immutable image pull required");
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    diagnostics.Add($"scanner:{scanner.Key}:{scanner.Version}:unavailable:container image probe failed");
-                }
-                continue;
-            }
-
-            if (!OperatingSystem.IsLinux() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
-            {
-                diagnostics.Add($"scanner:{scanner.Key}:{scanner.Version}:unavailable:verified binary supports Linux x64 only");
-                continue;
-            }
-            if (!dockerAvailable)
-            {
-                diagnostics.Add($"scanner:{scanner.Key}:{scanner.Version}:unavailable:container runtime required for binary confinement");
-                continue;
-            }
-            var path = Path.Combine(workDirectory, "scanners", scanner.Key, scanner.Version, scanner.Key);
-            if (!File.Exists(path))
-            {
-                diagnostics.Add($"scanner:{scanner.Key}:{scanner.Version}:available-on-demand:verified binary download required");
-                continue;
-            }
-            await using var stream = File.OpenRead(path);
-            var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, ct).ConfigureAwait(false));
-            diagnostics.Add(string.Equals(hash, scanner.Sha256LinuxAmd64, StringComparison.OrdinalIgnoreCase)
-                ? $"scanner:{scanner.Key}:{scanner.Version}:ready:verified binary cached"
-                : $"scanner:{scanner.Key}:{scanner.Version}:degraded:cached binary hash mismatch; redownload required");
+            diagnostics.Add(scanner.Execution == "container"
+                ? await ContainerDiagnosticAsync(shell, scanner, dockerAvailable, ct).ConfigureAwait(false)
+                : await BinaryDiagnosticAsync(scanner, workDirectory, IsLinuxX64, dockerAvailable, ct).ConfigureAwait(false));
         }
         return diagnostics;
+    }
+
+    private static bool IsLinuxX64 => OperatingSystem.IsLinux() && RuntimeInformation.ProcessArchitecture == Architecture.X64;
+
+    /// <summary>A container scanner: ready when its immutable image is cached, pulled on demand
+    /// otherwise, unavailable without Docker or when the image probe fails.</summary>
+    internal static async Task<string> ContainerDiagnosticAsync(
+        IShellRunner shell, ScannerManifestEntry scanner, bool dockerAvailable, CancellationToken ct)
+    {
+        if (!dockerAvailable)
+            return $"scanner:{scanner.Key}:{scanner.Version}:unavailable:docker daemon or socket unavailable";
+        try
+        {
+            var result = await shell.RunExecAsync(
+                "docker", ["image", "inspect", scanner.Image!], ct,
+                AgentRuntimeDefaults.CapabilityProbeTimeout).ConfigureAwait(false);
+            return result.ExitCode == 0
+                ? $"scanner:{scanner.Key}:{scanner.Version}:ready:immutable image cached"
+                : $"scanner:{scanner.Key}:{scanner.Version}:available-on-demand:immutable image pull required";
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return $"scanner:{scanner.Key}:{scanner.Version}:unavailable:container image probe failed";
+        }
+    }
+
+    /// <summary>A verified binary scanner: Linux x64 only, confined by the container runtime, ready
+    /// when the cached binary matches its manifest hash.</summary>
+    internal static async Task<string> BinaryDiagnosticAsync(
+        ScannerManifestEntry scanner, string workDirectory, bool linuxX64, bool dockerAvailable, CancellationToken ct)
+    {
+        if (!linuxX64)
+            return $"scanner:{scanner.Key}:{scanner.Version}:unavailable:verified binary supports Linux x64 only";
+        if (!dockerAvailable)
+            return $"scanner:{scanner.Key}:{scanner.Version}:unavailable:container runtime required for binary confinement";
+        var path = Path.Combine(workDirectory, "scanners", scanner.Key, scanner.Version, scanner.Key);
+        if (!File.Exists(path))
+            return $"scanner:{scanner.Key}:{scanner.Version}:available-on-demand:verified binary download required";
+        await using var stream = File.OpenRead(path);
+        var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, ct).ConfigureAwait(false));
+        return string.Equals(hash, scanner.Sha256LinuxAmd64, StringComparison.OrdinalIgnoreCase)
+            ? $"scanner:{scanner.Key}:{scanner.Version}:ready:verified binary cached"
+            : $"scanner:{scanner.Key}:{scanner.Version}:degraded:cached binary hash mismatch; redownload required";
     }
 
     private static async Task AddTrivyDatabaseDiagnosticAsync(

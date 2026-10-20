@@ -69,12 +69,9 @@ public partial class UrlSyncedTabs : ComponentBase, IDisposable
         var urlChanged = !_tabInitialized || !string.Equals(Tab, _lastTab, StringComparison.Ordinal);
         if (urlChanged)
         {
-            // A bound parent may compute a non-zero default from the loaded content before this
-            // wrapper's first parameter pass (for example, skip an empty first catalog tab). Honour
-            // that initial programmatic default when the URL carries no explicit tab. Subsequent
-            // navigation back to a clean URL still resets to the first tab. A tab slug that belongs to
-            // an enclosing tab set (the pipelines hub's ?tab=used around the pipelines list) names no
-            // tab here either, so it counts as "no tab" too (recette R-120).
+            // Honor the parent's initial default when no URL tab belongs to this set, including a
+            // slug owned by an enclosing set; subsequent navigation to a clean URL resets to the
+            // first tab.
             target = !_tabInitialized && !IsKnownSlug(Tab) && SelectedIndex != 0
                 ? SelectedIndex
                 : IndexForSlug(Tab);

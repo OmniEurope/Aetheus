@@ -3,23 +3,9 @@ using static Aetheus.Back.Components.Pipelines.PipelineRunHelpers;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Expands <c>$(NAME)</c> references between run variables, at the two moments the run learns
-/// something new.
-/// <para>
-/// The first is resolution (<see cref="ExpandResolved"/>): declared, library, vault and system values
-/// are merged and expanded. A reference to a name that is not known yet stays literal, and so does a
-/// <c>$(NAME:-default)</c> whose NAME the run may still provide (a step output, a control-plane
-/// variable injected later): applying the default there would bake it in before the real value exists.
-/// </para>
-/// <para>
-/// The second is output injection (<see cref="ApplyStepOutputs"/>), before each dispatch pass: the
-/// values published by completed steps join the map, and the declared values that reference them are
-/// expanded again. Without it a <c>variables:</c> entry could never name a value a previous stage
-/// publishes, because expansion used to happen once, before the run started. Defaults apply there,
-/// except for the names only injected once a runner is picked for a stage.
-/// </para>
-/// </summary>
+/// <summary>Expands merged variables during resolution while preserving references to values not
+/// yet available. Each dispatch incorporates step outputs and re-expands declared values, delaying
+/// defaults for runner-scoped names until runner selection.</summary>
 internal static class PipelineVariableExpansion
 {
     /// <summary>Enough for a chain of three references, the depth resolution always allowed.</summary>

@@ -49,7 +49,7 @@ public class SystemLogsExtendedTests : BunitContext
     private IRenderedComponent<SystemLogs> RenderPage()
     {
         var cut = Render<SystemLogs>();
-        cut.WaitForState(() => cut.Markup.Length > 100, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 100);
         return cut;
     }
 
@@ -88,7 +88,8 @@ public class SystemLogsExtendedTests : BunitContext
 
     // ── OnFilterChangedAsync ──────────────────────────────────────────────────
 
-    /// <summary>Recette R-453: a filter of the bar sends the grid back to its first block, with the filter.</summary>
+    /// <summary>A filter of the bar sends the grid back to its first block, with the
+    /// filter.</summary>
     [Fact]
     public async Task OnFilterChangedAsync_ReloadsTheGridFromItsFirstBlock()
     {
@@ -200,8 +201,7 @@ public class SystemLogsExtendedTests : BunitContext
     [Fact]
     public async Task Dispose_ReleasesTheLiveSubscription_AndIsSafeTwice()
     {
-        // Recette R-181: the page follows the log files over the admin hub; there is no polling
-        // toggle any more, and disposing twice must not throw.
+        // The page follows log files through the admin hub, and repeated disposal must be safe.
         var cut = RenderPage();
 
         await cut.Instance.DisposeAsync();

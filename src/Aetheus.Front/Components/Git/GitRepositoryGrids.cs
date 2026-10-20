@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Git;
 
-/// <summary>
-/// Recette R-224 / R-226: the repository page's server-paged grids, their header filters and the values
-/// those filters offer. The filters are kept so a reload after an action or a live event (page 1, no grid
-/// arguments) still honours what the headers show; a live event refreshes a grid in place once it exists.
-/// </summary>
+/// <summary> The repository page's server-paged grids, their header filters and the values those
+/// filters offer. The filters are kept so a reload after an action or a live event (page 1, no grid
+/// arguments) still honours what the headers show; a live event refreshes a grid in place once it
+/// exists. </summary>
 internal sealed class GitRepositoryGrids
 {
     public AetheusDataGrid<GitLightCommitDto>? Commits { get; set; }
@@ -24,11 +23,12 @@ internal sealed class GitRepositoryGrids
 
     public GitRepositoryDetailFilterValuesDto Values { get; set; } = new();
 
-    /// <summary>R2-004: the commits grid's Message column is git's --grep, which only answers "contains".</summary>
+    /// <summary>The commits grid's Message column is git's --grep, which only answers
+    /// "contains".</summary>
     public static IReadOnlyList<OmniDataGridFilterOperator> MessageOperators { get; } = [OmniDataGridFilterOperator.Contains];
 
-    /// <summary>R2-004: a <c>?search=</c> link's text as the commits grid's Message filter (the column shows it
-    /// as its default filter), or no filter without one.</summary>
+    /// <summary>A <c>?search=</c> link's text as the commits grid's Message filter (the column
+    /// shows it as its default filter), or no filter without one.</summary>
     public static List<GridFilter> MessageFilter(string? search) => string.IsNullOrWhiteSpace(search)
         ? []
         : [new GridFilter { Field = nameof(GitLightCommitDto.Message), Operator = GridFilterOperator.Contains, Value = search }];
@@ -64,12 +64,11 @@ internal sealed class GitRepositoryGrids
     public static Task RefreshOrLoadAsync<T>(AetheusDataGrid<T>? grid, Func<Task> load) where T : notnull =>
         grid is not null ? grid.Refresh() : load();
 
-    /// <summary>
-    /// Recette R-327: after a user action (another ref, a search, a folder, a row created or deleted) a
-    /// mounted grid reloads from its first row through its own loader, sort and header filters kept. The
-    /// grids scroll (remote virtualization) and ignore rows the page fetched on its own, so a direct load
-    /// alone would leave the blocks fetched before on screen. Before the grid exists the direct load stands in.
-    /// </summary>
+    /// <summary> After a user action (another ref, a search, a folder, a row created or deleted) a
+    /// mounted grid reloads from its first row through its own loader, sort and header filters
+    /// kept. The grids scroll (remote virtualization) and ignore rows the page fetched on its own,
+    /// so a direct load alone would leave the blocks fetched before on screen. Before the grid
+    /// exists the direct load stands in. </summary>
     public static Task ReloadOrLoadAsync<T>(AetheusDataGrid<T>? grid, Func<Task> load) where T : notnull =>
         grid is not null ? grid.GoToPage(0, forceReload: true) : load();
 

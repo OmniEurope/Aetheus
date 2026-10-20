@@ -4,10 +4,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// BACK-021: a stage selector that still holds a parameter expression (prepared before the parameters
-/// are known) used to match no server by name, so the caller was authorized against an empty set.
-/// </summary>
+/// <summary>Resolves parameterized stage selectors before checking server authorization so an
+/// unresolved expression cannot produce an empty authorization set.</summary>
 public sealed class PipelineRunParameterResolverTargetTests
 {
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();

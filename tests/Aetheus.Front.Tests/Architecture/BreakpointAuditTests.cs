@@ -3,12 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R-007 (PLAN-008 lot 45): Aetheus uses the breakpoints of OmniEurope and no others. OE
-/// sizes its columns at 40rem (sm), 64rem (md) and 80rem (lg); a width query in Aetheus is one of
-/// those thresholds, written as min-width N or max-width N-0.01rem. Before this rule the stylesheet
-/// carried fifteen different thresholds (576px, 768px, 767.98px, 48rem, 37.5rem, 992px...).
-/// </summary>
+/// <summary>Width queries use OE breakpoints at 40, 64 and 80rem, with upper bounds offset by
+/// 0.01rem.</summary>
 public class BreakpointAuditTests
 {
     private static readonly HashSet<string> Allowed =

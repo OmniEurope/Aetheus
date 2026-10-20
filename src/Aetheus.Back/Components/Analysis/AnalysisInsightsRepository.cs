@@ -71,11 +71,8 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
                 item.OrganizationId, item.ProjectId, item.SyncStatus, item.LastSyncAt, item.LastError))
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        // Only servers whose report is still current. The capabilities column holds whatever the agent
-        // last said, and it is never cleared: without this, a runner that has been offline for weeks -
-        // or retired from the fleet - keeps raising the same operational alert forever, on a workspace
-        // that may no longer exist. An alert about a machine nobody is running is noise, and the
-        // operator has no way to make it stop.
+        // Use only current reports because stored capabilities persist after a server goes offline
+        // or retires and must not generate ongoing workspace alerts.
         var servers = await db.Servers.AsNoTracking()
             .Where(server => server.ScannerCapabilitiesJson != null && server.LastHeartbeat >= since)
             .Select(server => new AnalysisServerHealthRow(
@@ -104,8 +101,8 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
         var candidates = await db.AnalysisFindings
             .Where(finding => finding.ProjectId == projectId
                 && finding.Category == category
-                // Recette R2-135: a finding the scanner no longer sees is fixed whatever was decided on
-                // it (accepted, false positive, mitigated); its decisions stay in its history.
+                // A finding the scanner no longer sees is fixed whatever was decided on it
+                // (accepted, false positive, mitigated); its decisions stay in its history.
                 && finding.Status != AnalysisFindingStatus.Fixed
                 && !observedFingerprints.Contains(finding.Fingerprint)
                 && finding.Occurrences.Any(occurrence => occurrence.ScannerKey == scannerKey
@@ -256,9 +253,9 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
         return (await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct).ConfigureAwait(false), total);
     }
 
-    /// <param name="findingLimit">Recette R-485: when set, only the most severe findings are listed and
-    /// the counts are worked out by the database over all of them (the run page reads the rest page by
-    /// page); unset, every finding is listed, as the agent's gate report needs.</param>
+    /// <param name="findingLimit">when set, only the most severe findings are listed and the counts
+    /// are worked out by the database over all of them (the run page reads the rest page by page);
+    /// unset, every finding is listed, as the agent's gate report needs.</param>
     public async Task<AnalysisRunGateDto> GetRunGateAsync(
         int runId,
         string? scope,
@@ -348,18 +345,15 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
             evaluationSnapshots.Select(snapshot => snapshot.GradeSnapshotJson),
             pipelineRunId: runId);
 
-        var missingProducers = FindMissingProducers(expectedProducers, reports);
+        var missingProducers = AnalysisProducerMatcher.FindMissingProducers(expectedProducers, reports);
         var status = ResolveGateStatus(reports, missingProducers, grade);
         return new AnalysisRunGateDto
         {
             PipelineRunId = runId,
             Status = status,
             ReportCount = reports.Count,
-            // The gate grid materializes findings, not occurrences. A finding can be reported by
-            // several producers in the same run, so report-level totals would overstate the number
-            // of rows visible to the user. Occurrences remain available from the finding detail.
-            // Recette R-527: a finding someone decided on (accepted, false positive, mitigated) is not
-            // something left to do; it is counted apart and the page hides it until asked.
+            // Count findings rather than report occurrences so multiple producers cannot inflate
+            // grid totals. Count decided findings separately and hide them unless requested.
             FindingCount = findingCounts.Open,
             NewFindingCount = findingCounts.NewOpen,
             DecidedFindingCount = findingCounts.Decided,
@@ -435,66 +429,6 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
             .ConfigureAwait(false);
         return new DependencyTrackGateState(hasSbom, statuses);
     }
-
-    private static List<string> FindMissingProducers(
-        IReadOnlyCollection<ExpectedAnalysisProducer> expectedProducers,
-        IReadOnlyCollection<AnalysisRunGateReportDto> reports)
-    {
-        var missing = new List<string>();
-        var remainingReports = reports.ToList();
-        foreach (var producer in expectedProducers)
-        {
-            IReadOnlyList<string> expectedKeys = producer.Operation switch
-            {
-                OperationKind.PipelineRunScanner => [producer.Command],
-                OperationKind.PipelinePublishLint => ["pipeline-sarif-lint"],
-                OperationKind.PipelinePublishComplexity =>
-                    ["roslyn-metrics", "dotnet-architecture-metrics", "dotnet-architecture"],
-                OperationKind.PipelinePublishCoverage => [],
-                OperationKind.PipelinePublishMutation => ["stryker-mutation"],
-                _ => []
-            };
-            if (producer.Operation == OperationKind.PipelinePublishCoverage)
-            {
-                var coverage = remainingReports.FirstOrDefault(report => report.Category == AnalysisCategory.Coverage);
-                if (coverage is null) missing.Add($"coverage-task:{producer.Id}");
-                else remainingReports.Remove(coverage);
-                continue;
-            }
-            foreach (var key in expectedKeys)
-            {
-                var requiresExactStep = producer.Operation == OperationKind.PipelineRunScanner
-                    && string.Equals(
-                        ScannerManifestCatalog.Find(producer.Command)?.Category,
-                        nameof(AnalysisCategory.Dast),
-                        StringComparison.OrdinalIgnoreCase);
-                var report = remainingReports.FirstOrDefault(item =>
-                    string.Equals(item.ScannerKey, key, StringComparison.OrdinalIgnoreCase)
-                    && (!requiresExactStep
-                        || string.Equals(item.StepName, producer.StepName, StringComparison.Ordinal)));
-                if (report is null) missing.Add($"{key}:task:{producer.Id}");
-                else remainingReports.Remove(report);
-            }
-        }
-        if (expectedProducers.Any(producer =>
-                producer.Operation == OperationKind.PipelineRunScanner
-                && string.Equals(
-                    ScannerManifestCatalog.Find(producer.Command)?.Category,
-                    nameof(AnalysisCategory.Dast),
-                    StringComparison.OrdinalIgnoreCase)))
-        {
-            missing.AddRange(remainingReports
-                .Where(report => report.Category == AnalysisCategory.Dast)
-                .Select(report => $"unexpected-report:{report.ReportId}"));
-        }
-        return missing;
-    }
-
-    private sealed record ExpectedAnalysisProducer(
-        int Id,
-        OperationKind Operation,
-        string Command,
-        string StepName);
 }
 
 public sealed record DependencyTrackGateState(bool HasSbom, IReadOnlyList<string> Statuses);

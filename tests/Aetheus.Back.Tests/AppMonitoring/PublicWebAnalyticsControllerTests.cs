@@ -91,6 +91,60 @@ public sealed class PublicWebAnalyticsControllerTests
             controller.Response.Headers.AccessControlAllowOrigin);
     }
 
+    [Theory]
+    [InlineData("Sec-GPC")]
+    [InlineData("DNT")]
+    public async Task Options_APrivacySignalAnswersWithoutCorsOrLookup(string header)
+    {
+        var controller = Controller();
+        controller.Request.Headers[header] = "1";
+        controller.Request.Headers.Origin = "https://portfolio.example";
+
+        var result = await controller.Options("portfolio", TestContext.Current.CancellationToken);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.False(controller.Response.Headers.ContainsKey("Access-Control-Allow-Origin"));
+        await _configuration.DidNotReceiveWithAnyArgs().ResolvePublicContextAsync(default!, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Options_WithoutOriginOrReferer_IsForbidden()
+    {
+        var result = await Controller().Options("portfolio", TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result);
+        await _configuration.DidNotReceiveWithAnyArgs().ResolvePublicContextAsync(default!, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Options_AnOriginTheSiteDoesNotAllow_IsForbiddenWithoutCors()
+    {
+        var controller = Controller();
+        controller.Request.Headers.Origin = "https://attacker.example";
+
+        var result = await controller.Options("portfolio", TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result);
+        Assert.False(controller.Response.Headers.ContainsKey("Access-Control-Allow-Origin"));
+    }
+
+    [Fact]
+    public async Task Options_AnAllowedRefererOrigin_GetsTheCorsHeaders()
+    {
+        var controller = Controller();
+        controller.Request.Headers.Referer = "https://portfolio.example/orders/42?x=1";
+        _configuration.ResolvePublicContextAsync("portfolio", "https://portfolio.example", Arg.Any<CancellationToken>())
+            .Returns(new PublicAnalyticsContext(new MonitoredApp { Id = 7, AnalyticsSiteId = "portfolio" }, "secret"));
+
+        var result = await controller.Options("portfolio", TestContext.Current.CancellationToken);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal("https://portfolio.example", controller.Response.Headers.AccessControlAllowOrigin);
+        Assert.Equal("POST, OPTIONS", controller.Response.Headers.AccessControlAllowMethods);
+        Assert.Equal("content-type", controller.Response.Headers.AccessControlAllowHeaders);
+        Assert.Equal("Origin", controller.Response.Headers.Vary);
+    }
+
     private PublicWebAnalyticsController Controller()
     {
         var context = new DefaultHttpContext();

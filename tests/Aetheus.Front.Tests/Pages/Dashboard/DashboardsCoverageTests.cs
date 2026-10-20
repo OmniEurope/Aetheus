@@ -44,7 +44,7 @@ public class DashboardsCoverageTests : BunitContext
     {
         SetupDashboards();
         var cut = Render<Dashboards>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var loading = (bool)typeof(Dashboards).GetField("_loading", Priv)!.GetValue(cut.Instance)!;
         Assert.False(loading);
@@ -72,7 +72,7 @@ public class DashboardsCoverageTests : BunitContext
     {
         SetupDashboards();
         var cut = Render<Dashboards>();
-        cut.WaitForState(() => cut.Markup.Contains("Overview") || !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("Overview") || !cut.Markup.Contains("rz-progressbar"));
         Assert.Contains("Overview", cut.Markup);
     }
 
@@ -83,7 +83,7 @@ public class DashboardsCoverageTests : BunitContext
     {
         SetupDashboards([]);
         var cut = Render<Dashboards>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // CreateDashboard awaits Dialog.OpenAsync<DashboardNameDialog>; start it without
         // awaiting, then close the dialog returning null to simulate a cancel.
@@ -110,7 +110,7 @@ public class DashboardsCoverageTests : BunitContext
     {
         SetupDashboards();
         var cut = Render<Dashboards>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var method = typeof(Dashboards).GetMethod("EditDashboard", Priv)!;
         method.Invoke(cut.Instance, [new DashboardDto { Id = 15, Name = "NewDb", Widgets = [] }]);
@@ -127,7 +127,7 @@ public class DashboardsCoverageTests : BunitContext
     {
         _handler.SetResponse("api/dashboards", System.Net.HttpStatusCode.Unauthorized);
         var cut = Render<Dashboards>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var loading = (bool)typeof(Dashboards).GetField("_loading", Priv)!.GetValue(cut.Instance)!;
         Assert.False(loading);

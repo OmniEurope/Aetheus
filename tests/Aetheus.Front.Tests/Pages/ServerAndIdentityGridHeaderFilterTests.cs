@@ -11,10 +11,9 @@ using UsersPage = Aetheus.Front.Components.Users.Users;
 
 namespace Aetheus.Front.Tests.Pages;
 
-/// <summary>
-/// Recette R-210 / R-224: a header filter of the server detail sections and of the identity pages is
-/// sent to the API as a column filter (<c>Filters[i].Field</c>...), which the endpoint applies before
-/// counting. Each test sets the filter the way the column header does and reads the request it causes.
+/// <summary> A header filter of the server detail sections and of the identity pages is sent to the
+/// API as a column filter (<c>Filters[i].Field</c>...), which the endpoint applies before counting.
+/// Each test sets the filter the way the column header does and reads the request it causes.
 /// </summary>
 public sealed class ServerAndIdentityGridHeaderFilterTests : BunitContext
 {
@@ -197,7 +196,7 @@ public sealed class ServerAndIdentityGridHeaderFilterTests : BunitContext
         });
 
         var cut = Render<UsersPage>();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The user link and the edit button.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);

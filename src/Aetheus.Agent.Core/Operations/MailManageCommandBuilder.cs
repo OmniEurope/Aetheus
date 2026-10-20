@@ -6,12 +6,9 @@ namespace Aetheus.Agent.Core.Operations;
 /// <summary>Full <c>sudo</c> argv for one mail helper call, plus the optional stdin payload (secrets, messages).</summary>
 internal sealed record MailHelperCommand(IReadOnlyList<string> Argv, string? Stdin = null);
 
-/// <summary>
-/// PLAN-005: maps every Mail <see cref="OperationKind"/> to an exact argv for the root-owned helpers
-/// (<c>mail-setup</c>, <c>mail-manage</c>). Each field is re-validated here as a last-line defence before
-/// the helper, which validates again and is the security boundary. Returns null for invalid input so the
-/// executor fails honestly without spawning anything. Secrets and messages travel over stdin, never argv.
-/// </summary>
+/// <summary>Build exact argv for root-owned mail helpers and reject invalid fields before process
+/// launch; helpers validate again at the privilege boundary. Send secrets and messages over
+/// stdin.</summary>
 internal static class MailManageCommandBuilder
 {
     // Root-owned helpers deposited by install-agent-linux.sh (--enable-mail-setup); the matching
@@ -54,7 +51,10 @@ internal static class MailManageCommandBuilder
         [OperationKind.MailSendTest] = SendTest,
         [OperationKind.MailQueueDelete] = (target, _) => MailValidation.IsValidQueueId(target) ? Manage("queue-delete", target) : null,
         [OperationKind.MailQuotaReport] = (target, _) => target == "-" ? Manage("quota-report") : null,
-        [OperationKind.MailPurge] = (target, _) => target == "-" ? Manage("purge") : null
+        [OperationKind.MailRetryTuning] = (target, _) => target == "-" ? Manage("retry-tuning") : null,
+        [OperationKind.MailPurge] = (target, _) => target == "-" ? Manage("purge") : null,
+        [OperationKind.MailMasterAccess] = MasterAccess,
+        [OperationKind.MailSetQuota] = SetQuota
     };
 
     public static MailHelperCommand? Build(OperationKind kind, string target, IReadOnlyDictionary<string, string> env) =>
@@ -80,9 +80,25 @@ internal static class MailManageCommandBuilder
             || !MailValidation.IsValidPassword(password)
             || spam is not ("rspamd" or "none"))
             return null;
+        // Recette R1-41: the optional second stdin line is the Dovecot master user's password; mail-setup
+        // hands it to mail-manage master-set once the stack runs. Present but invalid refuses the setup.
+        var stdin = password + "\n";
+        if (env.TryGetValue(MailSetupEnv.MasterPassword, out var master) && !string.IsNullOrEmpty(master))
+        {
+            if (!MailValidation.IsValidPassword(master)) return null;
+            stdin += master + "\n";
+        }
         return new MailHelperCommand(
             ["-n", SetupHelperPath, hostname!, domain, selector!, email!, quota.ToString(CultureInfo.InvariantCulture), spam],
-            password + "\n");
+            stdin);
+    }
+
+    private static MailHelperCommand? MasterAccess(string target, IReadOnlyDictionary<string, string> env)
+    {
+        env.TryGetValue(MailSetupEnv.MasterPassword, out var password);
+        return target == "-" && MailValidation.IsValidPassword(password)
+            ? new MailHelperCommand(["-n", ManageHelperPath, "master-set"], password + "\n")
+            : null;
     }
 
     private static MailHelperCommand? Logs(string unit, IReadOnlyDictionary<string, string> env)
@@ -120,6 +136,16 @@ internal static class MailManageCommandBuilder
         return new MailHelperCommand(
             ["-n", ManageHelperPath, "add-account", email, domain!, quota.ToString(CultureInfo.InvariantCulture)],
             password + "\n");
+    }
+
+    private static MailHelperCommand? SetQuota(string email, IReadOnlyDictionary<string, string> env)
+    {
+        env.TryGetValue(MailSetupEnv.QuotaMb, out var quotaRaw);
+        return MailValidation.IsValidEmail(email)
+            && int.TryParse(quotaRaw, NumberStyles.None, CultureInfo.InvariantCulture, out var quota)
+            && MailValidation.IsValidQuotaMb(quota)
+            ? Manage("set-quota", email, quota.ToString(CultureInfo.InvariantCulture))
+            : null;
     }
 
     private static MailHelperCommand? AddAlias(string source, IReadOnlyDictionary<string, string> env)

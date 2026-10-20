@@ -15,11 +15,9 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
         CancellationToken ct = default) =>
         EvaluateAsync(report, context, now, flaggedMetrics: null, ct);
 
-    /// <summary>
-    /// Evaluates the report and, when <paramref name="flaggedMetrics"/> is given, adds to it every metric
-    /// that made a policy warn or block: the per-file and per-symbol rows over a threshold, which an
-    /// analysis keeps even outside its 50 worst (PLAN-013 lot 3, <see cref="AnalysisMetricRetention"/>).
-    /// </summary>
+    /// <summary>Evaluates the report and adds threshold-breaking per-file and per-symbol metrics to
+    /// <paramref name="flaggedMetrics"/> when supplied. These rows remain eligible for retention
+    /// beyond the worst-per-key selection.</summary>
     public async Task<AnalysisEvaluation> EvaluateAsync(
         AnalysisReport report,
         AnalysisRunContext context,
@@ -156,7 +154,7 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
             return default;
         }
         var counts = default(PolicyCounts);
-        foreach (var policy in matched.Where(policy => MetricThresholdMatches(policy.Policy, metric)))
+        foreach (var policy in SupersedeCatchAllDegradation(matched).Where(policy => MetricThresholdMatches(policy.Policy, metric)))
         {
             var scoped = PolicyException(matchingExceptions, policy);
             if (scoped is not null)
@@ -168,11 +166,34 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
             counts = counts.Add(policy.Policy.Behavior);
             decisions.AddMetric(Source(policy), metric.Key, policy.Policy.Behavior.ToString(), null,
                 AnalysisPolicySnapshot.Serialize(policy), MetricText(metric.Value),
-                policy.Policy.Threshold.HasValue ? MetricText(policy.Policy.Threshold.Value) : null,
+                EvidenceThreshold(policy.Policy, metric),
                 policy.Policy.Operator?.ToString());
         }
         return counts;
     }
+
+    /// <summary>The value the metric was held against. A degradation policy has no threshold of its own:
+    /// it compares with the previous analysis, so that previous value is what the evidence records and
+    /// what the gate shows next to the observed one.</summary>
+    private static string? EvidenceThreshold(AnalysisPolicy policy, AnalysisMetric metric)
+    {
+        if (policy.Operator == AnalysisPolicyOperator.Degraded && metric.BaselineValue.HasValue)
+            return MetricText(metric.BaselineValue.Value);
+        return policy.Threshold.HasValue ? MetricText(policy.Threshold.Value) : null;
+    }
+
+    /// <summary>A degradation policy naming the metric (no wildcard) replaces the catch-all one for it, so a
+    /// metric that got worse is one alert and not one per degradation policy.</summary>
+    private static IEnumerable<ResolvedAnalysisPolicy> SupersedeCatchAllDegradation(
+        IReadOnlyList<ResolvedAnalysisPolicy> matched)
+    {
+        var namesTheMetric = matched.Any(policy => IsDegradation(policy.Policy) && policy.Policy.MetricKey != "*");
+        return namesTheMetric
+            ? matched.Where(policy => !IsDegradation(policy.Policy) || policy.Policy.MetricKey != "*")
+            : matched;
+    }
+
+    private static bool IsDegradation(AnalysisPolicy policy) => policy.Operator == AnalysisPolicyOperator.Degraded;
 
     private static AnalysisPolicyException? PolicyException(
         IReadOnlyList<AnalysisPolicyException> matchingExceptions, ResolvedAnalysisPolicy policy) =>

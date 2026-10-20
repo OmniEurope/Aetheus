@@ -5,6 +5,7 @@ namespace Aetheus.Front.Components.AiTasks;
 public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisposable
 {
     [Inject] private NotifyHelper Notify { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private PermissionService Permissions { get; set; } = default!;
     [Inject] private TaskTrackerService TaskTracker { get; set; } = default!;
 
@@ -15,7 +16,7 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
     private string _search = string.Empty;
     private int? _runningTaskId;
 
-    // Recette R-224: the profile names the profile column's checkable filter offers, and the status texts.
+    // The profile names the profile column's checkable filter offers, and the status texts.
     private IReadOnlyList<string> _profileNames = [];
     private Func<string, string>? _enabledText;
     private Func<string, string> EnabledText => _enabledText ??= value =>
@@ -77,7 +78,8 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
 
     internal Task LoadDataAsync(GridLoadArgs args) => LoadPageFromArgsAsync(args);
 
-    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// grid.</summary>
     internal Task<PaginatedResult<AiTaskDefinitionDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(25);
@@ -94,8 +96,8 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
             var resultTask = Api.Ai.GetAiTasksAsync(
                 page: page, pageSize: pageSize, search: _search, projectId: ProjectId,
                 filters: filters, sortBy: _sortBy, sortDescending: _sortDescending);
-            // Recette R-327: the grid scrolls and fetches further blocks as it goes; the consumption
-            // summary does not depend on the block, so only the first one (a load or a reload) reads it.
+            // The grid scrolls and fetches further blocks as it goes; the consumption summary does
+            // not depend on the block, so only the first one (a load or a reload) reads it.
             if (page > 1) return await resultTask;
             var consumptionTask = Api.Ai.GetAiConsumptionAsync(ProjectId);
             await Task.WhenAll(resultTask, consumptionTask);
@@ -152,11 +154,8 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
                     return;
                 }
 
-                await Dialog.OpenAsync<AiResultDialog>(
-                    L["AiRunResult"],
-                    new Dictionary<string, object?> { ["InitialResult"] = result },
-                    new OmniDialogOptions { Width = "920px", Height = "80vh", AutoFocusFirstElement = false });
-                await ReloadAsync();
+                // Recette R3-17: the finished run opens on the task's results page, selected.
+                Nav.NavigateTo($"{ResultsUrl(definition)}?result={result.Id}");
             }
             finally
             {
@@ -175,13 +174,11 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
         return results.Items.FirstOrDefault(item => item.ServerTaskId == taskId);
     }
 
-    private async Task OpenResultsAsync(AiTaskDefinitionDto definition)
-    {
-        await Dialog.OpenAsync<AiResultDialog>(
-            $"{L["Results"]} - {definition.Name}",
-            new Dictionary<string, object?> { ["DefinitionId"] = definition.Id },
-            new OmniDialogOptions { Width = "920px", Height = "80vh", AutoFocusFirstElement = false });
-    }
+    // Recette R3-15/R3-17: a task's runs live on their own page, reached from the row or Results.
+    private void OpenResults(AiTaskDefinitionDto definition) => Nav.NavigateTo(ResultsUrl(definition));
+
+    private string ResultsUrl(AiTaskDefinitionDto definition) =>
+        ProjectId is { } projectId ? $"/projects/{projectId}/ai-tasks/{definition.Id}" : $"/ai-tasks/{definition.Id}";
 
     private async Task DeleteAsync(AiTaskDefinitionDto definition)
     {
@@ -223,7 +220,7 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
 
     private void OnTaskCompleted(TaskCompletedNotification notification)
     {
-        // Recette R-226: a finished run refreshes the rows in place, page, sort and filters kept.
+        // A finished run refreshes the rows in place, page, sort and filters kept.
         if (ShouldReloadFor(notification))
             _ = InvokeAsync(RefreshPageAsync);
     }
@@ -237,7 +234,7 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
         TaskTracker.OnTaskCompleted -= OnTaskCompleted;
     }
 
-    /// <summary>Recette R2-124: the export writes the source the cell links to.</summary>
+    /// <summary>The export writes the source the cell links to.</summary>
     private Func<AiTaskDefinitionDto, object?> SourceExport => _sourceExport ??= task =>
         task.ProjectId is { } projectId ? $"{L["Project"]}: {task.ProjectName ?? $"#{projectId}"}"
         : task.ServerId is { } serverId ? $"{L["Server"]}: {task.ServerName ?? $"#{serverId}"}"

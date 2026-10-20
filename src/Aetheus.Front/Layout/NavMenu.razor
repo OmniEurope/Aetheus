@@ -4,8 +4,8 @@
     @if (Permissions.CanReadAny(ResourceType.Server))
     {
     <OmniPanelMenuItem Text="@L["Servers"]" Icon="@IconFor("dns")" Href="servers" Expanded="@IsOnSection("servers")">
-        @* Recette R-012: a group is open inside its section and closed elsewhere, and its entries are
-           always there, so its chevron opens and closes a real list wherever the user is. *@
+        @* A group is open inside its section and closed elsewhere, and its entries are always
+           there, so its chevron opens and closes a real list wherever the user is. *@
         @if (GetSpecificServerId() is { } serverId)
         {
             @* Item #1 - migrated from legacy `?section=` query strings to real routes. *@
@@ -37,6 +37,8 @@
             </div>
         }
     </OmniPanelMenuItem>
+    @* Recette R1-41: the mailboxes of every server the reader sees, one click from the menu. *@
+    <OmniPanelMenuItem Text="@L["MailboxDirectory"]" Icon="@IconFor("inbox")" Href="mail" />
     }
 
     @if (CanReadProjectArea())
@@ -57,8 +59,8 @@
                 <OmniPanelMenuItem Text="@L["Pipelines"]" Icon="@IconFor("account_tree")" Href="pipelines" />
             }
             <OmniPanelMenuItem Text="@L["AnalysisPortfolio"]" Icon="@IconFor("shield")" Href="analysis" />
-            @* Recette R-408: the supervised applications of every project (PLAN-003 lot 28), formerly a
-               button of the projects list. Inside a project, its own supervision is in the project menu. *@
+            @* Lists monitored applications across projects; project-specific supervision stays in
+               the project menu. *@
             @if (Permissions.CanReadAny(ResourceType.Project))
             {
                 <OmniPanelMenuItem Text="@L["Supervision"]" Icon="@IconFor("monitor_heart")" Href="monitoring" />
@@ -82,7 +84,7 @@
         }
     </OmniPanelMenuItem>
     }
-    @* R-113: notifications, for every signed-in user, between Projects and Settings. *@
+    @* Notifications, for every signed-in user, between Projects and Settings. *@
     <Aetheus.Front.Components.Notifications.NotificationsNavItem />
     <OmniPanelMenuItem Text="@L["Settings"]" Icon="@IconFor("settings")" Href="settings" />
     <OmniPanelMenuItem Text="@L["HelpCenter"]" Icon="@IconFor("help")" Href="help" />
@@ -92,11 +94,12 @@
             <OmniPanelMenuItem Text="@L["Users"]" Icon="@IconFor("group")" Href="admin/users" />
             <OmniPanelMenuItem Text="@L["Organizations"]" Icon="@IconFor("apartment")" Href="admin/organizations" />
             <OmniPanelMenuItem Text="@L["Roles"]" Icon="@IconFor("admin_panel_settings")" Href="admin/roles" />
-            <OmniPanelMenuItem Text="@L["AuditLogs"]" Icon="@IconFor("policy")" Href="admin/audit" />
             <OmniPanelMenuItem Text="@L["NotificationRules"]" Icon="@IconFor("notifications_active")" Href="admin/notifications" />
+            <OmniPanelMenuItem Text="@L["MailTemplates"]" Icon="@IconFor("mail")" Href="admin/mail-templates" />
             <OmniPanelMenuItem Text="@L["AiRunnerProfiles"]" Icon="@IconFor("smart_toy")" Href="admin/ai-profiles" />
             <OmniPanelMenuItem Text="@L["PackageFeeds"]" Icon="@IconFor("inventory")" Href="admin/package-feeds" />
             <OmniPanelMenuItem Text="@L["PackageRegistry"]" Icon="@IconFor("deployed_code")" Href="admin/package-registry" />
+            <OmniPanelMenuItem Text="@L["AuditLogs"]" Icon="@IconFor("policy")" Href="admin/audit" />
             <OmniPanelMenuItem Text="@L["SystemLogs"]" Icon="@IconFor("description")" Href="admin/system-logs" />
             <OmniPanelMenuItem Text="@L["Performance"]" Icon="@IconFor("speed")" Href="admin/performance" />
             <OmniPanelMenuItem Text="@L["Plugins"]" Icon="@IconFor("extension")" Href="admin/plugins" />

@@ -52,7 +52,7 @@ public class ChangePasswordRequiredTests : BunitContext
     [InlineData("ConfirmPassword")]
     public void EachPasswordField_HasASingleRevealToggle(string fieldId)
     {
-        // Recette R-002: the page added its own eye beside the package's one, two buttons on a field.
+        // Use only the package password reveal control.
         var cut = Render<ChangePasswordRequired>();
         var toggle = Assert.Single(cut.FindAll($"button[aria-controls='{fieldId}']"));
         Assert.Equal("password", cut.Find($"#{fieldId}").GetAttribute("type"));
@@ -85,7 +85,8 @@ public class ChangePasswordRequiredTests : BunitContext
         Assert.EndsWith("/login", nav.Uri);
     }
 
-    /// <summary>PLAN-005 lot 8 / D47: the page asked for before the forced change is kept for the new sign-in.</summary>
+    /// <summary>Preserve the requested page through forced password change and subsequent
+    /// sign-in.</summary>
     [Fact]
     public async Task OnSubmit_Success_KeepsTheRequestedPageForTheNewSignIn()
     {
@@ -130,12 +131,12 @@ public class ChangePasswordRequiredTests : BunitContext
         var factory = (CountingHubConnectionFactory)Services.GetRequiredService<HubConnectionFactory>();
 
         var cut = Render<ChangePasswordRequired>();
-        cut.FindAll("button").Single(button => button.GetAttribute("aria-label") == "Logout").Click();
+        cut.FindMenuItem("Logout")!.Click();
 
         Assert.Null(auth.Token);
         Assert.Equal(1, factory.StopAllCount);
         Assert.EndsWith("/login", nav.Uri);
-        // Recette R1-37: the server is told, so it forgets the held mailbox passwords.
+        // The server is told, so it forgets the held mailbox passwords.
         Assert.Contains(_handler.Requests, request =>
             request.Method == "POST" && request.Url.EndsWith("api/auth/logout", StringComparison.Ordinal));
     }

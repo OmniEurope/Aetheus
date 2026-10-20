@@ -101,6 +101,30 @@ internal static class ProcessRunner
         }
     }
 
+    /// <summary>Runs a read-only query (no shell, argv only) and hands back its result with every output line
+    /// it printed, stderr lines prefixed <c>[stderr]</c>, for executors that parse an answer rather than
+    /// stream it to the task log.</summary>
+    public static async Task<(ExecutorResult Result, IReadOnlyList<string> Lines)> CaptureAsync(
+        string fileName, IReadOnlyList<string> argv, int timeoutSeconds, ILogger logger, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var arg in argv) psi.ArgumentList.Add(arg);
+        var lines = new List<string>();
+        var result = await RunAsync(psi, timeoutSeconds, (line, _) =>
+        {
+            lock (lines) lines.Add(line);
+            return Task.CompletedTask;
+        }, logger, ct).ConfigureAwait(false);
+        return (result, lines);
+    }
+
     private static async Task KillTreeAsync(Process process, ILogger logger)
     {
         // Runs in the finally of RunAsync: a refusal (EPERM on a sudo child) is logged, never thrown over

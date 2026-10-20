@@ -2,15 +2,10 @@
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>
-/// Recette R2-080: the first configuration of the mail stack as a step-by-step assistant on the page (OE's
-/// <see cref="OmniWizard"/>, like the other Aetheus assistants). Each step says what to do; the three
-/// prerequisites are really checked before "Configurer" can be pressed: the A record and the reverse DNS by
-/// the backend's resolver, outbound port 25 by the server's own agent (a queued <c>MailOutboundProbe</c>
-/// task whose <c>CHECK</c> line is read back). The domain prefills the host name (<c>mx.&lt;domain&gt;</c>)
-/// and the administrator address (<c>admin@&lt;domain&gt;</c>) for as long as the user has not changed them.
-/// </summary>
-public partial class ServerMailSetupAssistant
+/// <summary>The mail wizard verifies DNS through the backend and outbound port 25 through an agent
+/// probe before allowing setup. Derived hostname and administrator defaults follow the domain only
+/// until edited by the user.</summary>
+public partial class ServerMailSetupAssistant : IDisposable
 {
     internal const int StepDomain = 0;
     internal const int StepARecord = 1;
@@ -22,6 +17,7 @@ public partial class ServerMailSetupAssistant
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private ILogger<ServerMailSetupAssistant> Logger { get; set; } = default!;
+    [Inject] private TaskTrackerService Tracker { get; set; } = default!;
 
     [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter, EditorRequired] public int ServerId { get; set; }
@@ -49,7 +45,7 @@ public partial class ServerMailSetupAssistant
     private bool _checkingMx;
     private bool _mxCheckFailed;
 
-    // Recette R2-085: from the click until the queued setup task completes, a second Configure starts nothing.
+    // From the click until the queued setup task completes, a second Configure starts nothing.
     private bool _setupStarting;
     private int? _setupTaskId;
     private TaskExecutionStatus? _setupFailure;
@@ -113,15 +109,42 @@ public partial class ServerMailSetupAssistant
             await CheckDnsAsync();
     }
 
-    /// <summary>Recette R2-060: the fields each step owns, validated by the model's own rules.</summary>
+    /// <summary>The fields each step owns, validated by the model's own rules.</summary>
     internal static readonly IReadOnlyDictionary<int, string[]> StepMembers = new Dictionary<int, string[]>
     {
         [StepDomain] = [nameof(MailDialogModel.Hostname), nameof(MailDialogModel.Domain), nameof(MailDialogModel.DkimSelector)],
         [StepConfigure] = [nameof(MailDialogModel.Email), nameof(MailDialogModel.Password)]
     };
 
-    // Recette R1-5: the model writes its messages through the page's localizer.
-    protected override void OnInitialized() => _model.L = L;
+    // The model writes its messages through the page's localizer.
+    protected override void OnInitialized()
+    {
+        _model.L = L;
+        // Recette R3-46: a setup queued before the user left the page is still running on the agent;
+        // the assistant finds it again in the live task feed and shows it running under its veil.
+        AdoptOpenSetupTask();
+        Tracker.OnChanged += OnTrackerChanged;
+    }
+
+    private void OnTrackerChanged()
+    {
+        if (AdoptOpenSetupTask()) _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Binds to an in-flight setup task of this server, when the assistant follows none.</summary>
+    internal bool AdoptOpenSetupTask()
+    {
+        if (SetupBusy) return false;
+        var open = Tracker.Tasks.FirstOrDefault(task => task.ServerId == ServerId
+            && task.Status is TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned or TaskExecutionStatus.Running
+            && task.Name.StartsWith(MailTaskNames.SetupPrefix, StringComparison.Ordinal));
+        if (open is null) return false;
+        _setupTaskId = open.Id;
+        _setupFailure = null;
+        return true;
+    }
+
+    public void Dispose() => Tracker.OnChanged -= OnTrackerChanged;
 
     internal IReadOnlyList<string> StepErrors(int step)
     {
@@ -257,7 +280,7 @@ public partial class ServerMailSetupAssistant
         if (notification.TaskId == _probeTaskId)
         {
             _probeTaskId = null;
-            var output = await MailTaskOutputLoader.ReadAsync(Api, notification.TaskId);
+            var output = await ServerTaskOutputLoader.ReadAsync(Api, notification.TaskId);
             // No CHECK line (agent refused the target, task timed out) is a failure, never a pass.
             _outbound = MailTaskOutputParser.ParseChecks(output)
                     .FirstOrDefault(check => check.Component == MailOutboundProbe.CheckComponent)

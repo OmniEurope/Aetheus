@@ -3,19 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Every table in the product offers the same four affordances: sort, resize, advanced filtering and
-/// scrolling through every row. A user who learns one table has learnt them all, and none of them
-/// silently caps what it will show.
-///
-/// <para>The shared <c>AetheusDataGrid</c> carries all four by default, so a grid built on it needs no
-/// declaration. A raw <c>OmniDataGrid</c> takes them from the default OmniEurope preset registered by
-/// <c>AetheusGridPresets</c> (PLAN-012); this guard reads the markup so that no grid turns one off or
-/// leaves the preset.</para>
-///
-/// <para>Recette R-327: no table shows a pager; every one scrolls. The last exception, the five-row
-/// pager of <c>ReleasePickerGrid</c> (decision R-10), was lifted by the same recette: none is left.</para>
-/// </summary>
+/// <summary>Every product table supports sorting, resizing, advanced filtering and scrolling
+/// through all rows through the shared wrapper or registered OE preset.</summary>
 public sealed class GridCapabilityAuditTests
 {
     private static readonly string FrontRoot = Path.Combine(RepositoryScan.Root, "src", "Aetheus.Front");
@@ -24,8 +13,8 @@ public sealed class GridCapabilityAuditTests
     /// by its own dedicated test below rather than by the sweep.</summary>
     private const string WrapperFile = "AetheusDataGrid.razor";
 
-    /// <summary>Recette R-327: the grids that still page, each with its reason. Empty: every table
-    /// scrolls. An entry needs the user's approval, like any guard exception.</summary>
+    /// <summary>Paging exceptions require explicit user approval and a reason; the list is empty
+    /// because all tables scroll.</summary>
     private static readonly Dictionary<string, string> PagedGrids = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Finds the opening wrapper element (AetheusDataGridColumn does not exist, but the guard
@@ -140,10 +129,8 @@ public sealed class GridCapabilityAuditTests
             + "product. Filtering is disabled or uses another mode in:\n" + string.Join("\n", offenders));
     }
 
-    /// <summary>
-    /// PLAN-012: the shared settings live in the default grid preset, so a raw grid that named another
-    /// preset, or "none", would lose sorting and filtering without writing a single "false".
-    /// </summary>
+    /// <summary>Raw grids must retain the shared preset so capabilities cannot disappear through an
+    /// alternate preset.</summary>
     [Fact]
     public void EveryRawGrid_KeepsTheDefaultPreset()
     {
@@ -158,14 +145,8 @@ public sealed class GridCapabilityAuditTests
             + string.Join("\n", offenders));
     }
 
-    /// <summary>
-    /// Recette R-327: every table scrolls instead of showing a pager. A raw grid declares its
-    /// <c>ScrollMode</c> (OE merged AllowPaging and AllowVirtualization into it) without ever choosing
-    /// <c>Paged</c>, and bounds its height (FillAvailableHeight when it ends the page, MaxHeight when it
-    /// sits among other content or in a dialog), so it renders only its window. Deciding the mode from
-    /// <c>AetheusGrid.Virtualization</c> is refused: that switch is off in production, so such a grid
-    /// rendered every row in one tall block.
-    /// </summary>
+    /// <summary>Raw grids declare a non-paged scroll mode and a bounded height so only their window
+    /// renders. Production-disabled virtualization switches cannot determine that mode.</summary>
     [Fact]
     public void EveryRawGrid_ScrollsInsteadOfPaging()
     {
@@ -192,14 +173,8 @@ public sealed class GridCapabilityAuditTests
         return match.Success ? match.Groups["value"].Value : null;
     }
 
-    /// <summary>
-    /// Recette R-327, the wrapper side: <c>AetheusDataGrid</c> pages unless it virtualizes, and its
-    /// default follows <c>AetheusGrid.Virtualization</c>, off in production. So every caller declares how
-    /// it scrolls: remote virtualization (<c>VirtualData</c> with <c>AetheusGrid.RemoteVirtualization</c>)
-    /// for a server-paged list, or <c>Virtualize</c> for a fully loaded collection (always, or once it
-    /// outgrows one page, which then never shows a pager). A <c>LoadData</c> grid without
-    /// <c>VirtualData</c> pages whatever it declares, so it is refused too.
-    /// </summary>
+    /// <summary>Wrapper grids explicitly enable appropriate local or remote virtualization;
+    /// server-loaded grids require VirtualData to avoid paging.</summary>
     [Fact]
     public void EveryWrapperGrid_ScrollsInsteadOfPaging()
     {
@@ -228,8 +203,7 @@ public sealed class GridCapabilityAuditTests
             + string.Join("\n", offenders.Distinct()));
     }
 
-    /// <summary>Recette R-327: the release picker, the last paged table, scrolls through the virtual
-    /// window like the other lists; its five-row pager (decision R-10) must not come back.</summary>
+    /// <summary>The release picker uses a scrolling window like other tables.</summary>
     [Fact]
     public void TheReleasePicker_Scrolls()
     {

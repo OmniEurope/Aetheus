@@ -16,12 +16,13 @@
     </OmniAlert>
 }
 
-@* Recette R-285: an Aetheus page starts and ends inline edits with its own buttons (it fills the edit
-   fields first); the grid's built-in edit column doubled them and edited with empty fields. *@
+@* Let page-owned buttons initialize and finish inline edits so the grid does not expose a second
+   edit path with uninitialized fields. *@
 <div class="aetheus-grid-host">
-    @* Recette R-432: OE draws its loading bar between the headers and the first row for every load, on the
-       table alone: every request the grid makes (first load included, a page, a sort, a filter, a block of
-       rows) and every load the page runs itself, signalled through Busy. The rows already there stay. *@
+    @* OE draws its loading bar between the headers and the first row for every load, on the table
+       alone: every request the grid makes (first load included, a page, a sort, a filter, a block
+       of rows) and every load the page runs itself, signalled through Busy. The rows already there
+       stay. *@
     <OmniDataGrid @ref="Grid" TItem="TItem"
                   Items="@EffectiveItems" Load="@EffectiveLoad" Count="@EffectiveCount"
                   ShowLoadingBar="true" Busy="@EffectiveBusy"
@@ -37,7 +38,7 @@
                   OnRowClick="@EffectiveRowClick" OnRowUpdate="@RowUpdate" RowRender="@RowRender"
                   EditMode="@EditMode" ShowEditColumn="false" FillAvailableHeight="@FullHeight" VirtualBlockSize="@PageSize"
                   KeyOf="@EffectiveKeyOf" NewRowHighlight="@NewRowHighlight"
-                  ShowFooterBar="@Exports" FooterBarExport="OmniDataGridBarExport.End"
+                  ShowFooterBar="@Exports" BarButtonSize="OmniControlSize.Medium" FooterBarExport="OmniDataGridBarExport.End"
                   ExportMarkdown="@ExportMarkdown" ExportCsv="false" ExportExcel="false" ExportPdf="false"
                   ExportTitle="@EffectiveExportTitle"
                   ExportFields="@EffectiveExportFields" ExportFileName="@EffectiveExportFileName" ExportVariants="@ExportVariants" ExportLoad="@EffectiveExportLoad"

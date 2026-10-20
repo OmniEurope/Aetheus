@@ -52,12 +52,12 @@ public sealed class PipelineRunPreflightChainTests
         new PipelineChildPipelineResolver(_templates, _variables),
         Substitute.For<IPipelineRequirementsChecker>(),
         new PipelineScannerManifestPreflight(_repo, new PipelineDispatchServerResolver(_repo)),
-        new PipelineReleaseArtifactPreflight(Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactRepository>()),
+        new PipelineReleaseArtifactPreflight(Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactRepository>(), Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactStorageService>()),
+        new PipelineAiProfilePreflight(Substitute.For<Aetheus.Back.Components.AiTasks.IAiTaskService>()),
         Substitute.For<ILogger<PipelineRunPreflightService>>());
 
-    /// <summary>A registry with nothing to say: these tests are about the chain walk, and an
-    /// unconfigured substitute returns a null report instead of an empty one (PLAN-005 made
-    /// FindPortConflictsAsync return blocking conflicts and non-blocking observations).</summary>
+    /// <summary>The port-registry substitute returns an empty report so these tests isolate chain
+    /// traversal.</summary>
     private static IPipelinePortRegistryGuard SilentPortGuard()
     {
         var guard = Substitute.For<IPipelinePortRegistryGuard>();
@@ -143,8 +143,8 @@ public sealed class PipelineRunPreflightChainTests
         Assert.Contains("environment 'qa'", problem, StringComparison.Ordinal);
     }
 
-    /// <summary>PLAN-004 R-02: a template triggers "$(APPLICATION_QA_PIPELINE)". The chain followed is
-    /// the pipeline the dispatcher will start, not a lookup of the raw text that finds nothing.</summary>
+    /// <summary>Triggered names resolve through variables to the same pipeline the dispatcher will
+    /// launch.</summary>
     [Fact]
     public async Task ATemplatedTriggerNameIsFollowedToThePipelineItExpandsTo()
     {
@@ -368,7 +368,7 @@ public sealed class PipelineRunPreflightChainTests
         Assert.Contains("application-candidate@9", problem, StringComparison.Ordinal);
     }
 
-    // --- Lot 12.4: what the preflight verified, kept so an accepted launch is not silent. ---
+    // Preflight evidence retained on accepted launches.
 
     [Fact]
     public async Task AnAcceptedLaunch_RecordsTheChildPipelineItWalked()

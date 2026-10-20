@@ -67,8 +67,8 @@ public class CommitDetailTests : BunitContext
     [Fact]
     public void CommitFromAnotherRepository_ExplainsAndLinksToTheProvider_InsteadOfTheOnlyInternalRepository()
     {
-        // Recette R-319: the project's only internal repository does not hold a commit its runs took from
-        // an external repository; the page says so and links to the provider, it never opens a 404.
+        // The project's only internal repository does not hold a commit its runs took from an
+        // external repository; the page says so and links to the provider, it never opens a 404.
         _handler.SetJsonResponse("api/gitgraph/commits/5", Sample(5, "https://github.com/acme/shop.git"));
         SetRepositories(new GitLightRepoDto { Id = 2, ProjectId = 1, Name = "Internal", CloneUrl = "https://localhost:5302/git/1/internal.git" });
 

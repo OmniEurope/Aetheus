@@ -93,7 +93,7 @@ public class PersonalAccessTokensPageTests : BunitContext
     [Fact]
     public async Task HeaderFilters_AreSentAsColumnFilters()
     {
-        // Recette R-224: the scope list and the three date ranges are column filters of the endpoint.
+        // The scope list and the three date ranges are column filters of the endpoint.
         var handler = BunitTestHelper.RegisterServices(this);
         handler.SetPaginatedJsonResponse(HttpMethod.Get, "personal-access-tokens", new[] { Active(1, "ci") });
         var cut = Render<PersonalAccessTokens>();

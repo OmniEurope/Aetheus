@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 6: which table this backend is giving space back from, if any, and the last results. A
-/// singleton, so one « Récupérer la place » runs at a time and the page can follow it after its request
-/// returned; the vacuum itself outlives the request (a large table takes minutes).
+/// <summary> Which table this backend is giving space back from, if any, and the last results. A
+/// singleton, so one « Récupérer la place » runs at a time and the page can follow it after its
+/// request returned; the vacuum itself outlives the request (a large table takes minutes).
 /// </summary>
 public sealed class ReclaimSpaceTracker
 {

@@ -17,8 +17,9 @@ public partial class EnvironmentEdit
 
     [SupplyParameterFromQuery] public int? ProjectId { get; set; }
 
-    /// <summary>Recette R1-25: the page that sent the user here to create an environment (the pipeline
-    /// setup wizard's summary, with its choices); "Create" and Back return to it when it is local.</summary>
+    /// <summary>The page that sent the user here to create an environment (the pipeline setup
+    /// wizard's summary, with its choices); "Create" and Back return to it when it is
+    /// local.</summary>
     [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
 
     private EnvironmentDto? _detail;
@@ -166,7 +167,7 @@ public partial class EnvironmentEdit
             _model = new EnvironmentModel
             {
                 Name = source.ProjectId == targetProjectId ? $"{source.Name} (copy)" : source.Name,
-                // Recette R1-23: the source's description describes the source, not the new environment.
+                // The source's description describes the source, not the new environment.
                 Description = string.Empty,
                 Type = source.Type,
                 ProjectId = targetProjectId,

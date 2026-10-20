@@ -5,11 +5,9 @@ using Aetheus.Telemetry;
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
-/// <summary>
-/// R-455: turns the latest per-route gauges an application exported through <c>Aetheus.Telemetry</c>
-/// (<see cref="RequestPerformanceMetrics"/>) into the table of its Performance tab. Pure, so the
-/// grouping is tested without a database.
-/// </summary>
+/// <summary> Turns the latest per-route gauges an application exported through
+/// <c>Aetheus.Telemetry</c> (<see cref="RequestPerformanceMetrics"/>) into the table of its
+/// Performance tab. Pure, so the grouping is tested without a database. </summary>
 public static class AppRoutePerformance
 {
     /// <summary>The five gauges, one series each per route and method, and the window's length.</summary>
@@ -23,9 +21,8 @@ public static class AppRoutePerformance
         RequestPerformanceMetrics.WindowMetric
     ];
 
-    /// <summary>Recette R2-082: a route's gauges are exported only for a minute in which it was called, so
-    /// each route's newest point is searched within the package's default window (24 hours) of the newest
-    /// sample: a route idle for longer has left the window and the table, as before.</summary>
+    /// <summary>Each route's latest gauge is found within the default lookback of the newest sample
+    /// because idle routes do not export points.</summary>
     public static readonly TimeSpan LatestPointLookback = RequestPerformanceMetrics.DefaultWindow;
 
     public static AppPerformanceReportDto Build(IReadOnlyList<AppMetricSample> latestSamples)

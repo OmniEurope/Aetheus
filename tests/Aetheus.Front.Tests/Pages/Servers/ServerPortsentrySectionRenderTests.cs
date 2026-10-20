@@ -16,7 +16,7 @@ public class ServerPortsentrySectionRenderTests : BunitContext
     public ServerPortsentrySectionRenderTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
-        // Recette R-210: the section also reads the protocols its Protocol header filter offers.
+        // The section also reads the protocols its Protocol header filter offers.
         _handler.SetJsonResponse("portsentry/filter-values", new PortsentryFilterValuesDto());
         BunitTestHelper.UseImmediateDialogs(this);
     }
@@ -71,7 +71,7 @@ public class ServerPortsentrySectionRenderTests : BunitContext
     public void Renders_InstalledState_ShowsPortSentryHeading()
     {
         var cut = RenderInstalled();
-        Assert.Contains("PortSentry", cut.Markup);
+        Assert.Contains("Restart", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]

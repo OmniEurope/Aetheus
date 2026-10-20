@@ -63,7 +63,7 @@ RUN if [ "$INSTALL_DOTNET" = "1" ]; then \
         && rm -rf /var/lib/apt/lists/* \
         && curl -fsSL "$DOTNET_INSTALLER_URL" -o /tmp/dotnet-install.sh \
         && echo "$DOTNET_INSTALLER_SHA256  /tmp/dotnet-install.sh" | sha256sum -c - \
-        && bash /tmp/dotnet-install.sh --version 10.0.100 --install-dir /usr/share/dotnet \
+        && bash /tmp/dotnet-install.sh --version 10.0.402 --install-dir /usr/share/dotnet \
         && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet \
         && rm -f /tmp/dotnet-install.sh \
         && /usr/local/bin/dotnet --version; \

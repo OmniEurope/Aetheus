@@ -182,7 +182,7 @@ public class PipelineRepositoryTests : IDisposable
     [Fact]
     public async Task R2093_PagedLists_PutPipelinesInProgressFirst_MostRecentlyStartedFirst_ThenByName()
     {
-        // Recette R2-093: a running pipeline stayed at its alphabetical place.
+        // Prioritize running pipelines over alphabetical ordering.
         var at = new DateTime(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);
         var alpha = new Pipeline { Name = "Alpha" };
         var beta = new Pipeline { Name = "Beta" };
@@ -1094,6 +1094,40 @@ public class PipelineRepositoryTests : IDisposable
         Assert.Equal(0, deleted);
         Assert.Equal(1, await _db.PipelineRuns.CountAsync(
             cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Decision D2: deleting a run cascades to its artifacts, so the 90-day purge leaves the runs
+    /// of a release that is not archived (it names them, or links one of their artifacts) to the release
+    /// retention, and deletes those of an archived release.</summary>
+    [Fact]
+    public async Task DeleteRunsOlderThanAsync_KeepsTheRunsAndArtifactsOfALiveRelease()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var old = DateTime.UtcNow.AddDays(-120);
+        var pipeline = new Pipeline { Name = "P" };
+        _db.Pipelines.Add(pipeline);
+        await _db.SaveChangesAsync(ct);
+        var named = new PipelineRun { PipelineId = pipeline.Id, StartedAt = old };
+        var payload = new PipelineRun { PipelineId = pipeline.Id, StartedAt = old };
+        var ofArchived = new PipelineRun { PipelineId = pipeline.Id, StartedAt = old };
+        var unrelated = new PipelineRun { PipelineId = pipeline.Id, StartedAt = old };
+        _db.PipelineRuns.AddRange(named, payload, ofArchived, unrelated);
+        await _db.SaveChangesAsync(ct);
+        var artifact = new PipelineArtifact { PipelineId = pipeline.Id, PipelineRunId = payload.Id, Name = "payload" };
+        _db.Releases.AddRange(
+            new Release { ProjectId = 1, Version = "1.0.0", Status = ReleaseStatus.Deployed, CreatedByPipelineRunId = named.Id, Artifacts = [artifact] },
+            new Release { ProjectId = 1, Version = "0.9.0", Status = ReleaseStatus.Archived, CreatedByPipelineRunId = ofArchived.Id });
+        await _db.SaveChangesAsync(ct);
+
+        var deleted = await _repo.DeleteRunsOlderThanAsync(DateTime.UtcNow.AddDays(-90), ct: ct);
+
+        Assert.Equal(2, deleted);
+        var left = await _db.PipelineRuns.Select(run => run.Id).ToListAsync(ct);
+        Assert.Contains(named.Id, left);
+        Assert.Contains(payload.Id, left);
+        Assert.DoesNotContain(ofArchived.Id, left);
+        Assert.DoesNotContain(unrelated.Id, left);
+        Assert.True(await _db.PipelineArtifacts.AnyAsync(a => a.Id == artifact.Id, ct));
     }
 
     // --- Webhook / Scheduled queries ---

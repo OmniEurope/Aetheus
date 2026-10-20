@@ -10,8 +10,7 @@ public interface IAppTelemetryChangePublisher
     Task PublishAsync(int appId, CancellationToken ct = default);
 }
 
-/// <summary>
-/// R-181: the Logs and Errors tabs of a monitored app reload when an OTLP batch stored new rows,
+/// <summary> The Logs and Errors tabs of a monitored app reload when an OTLP batch stored new rows,
 /// instead of waiting for a Refresh click. The event rides the scoped EntityHub feed on the owning
 /// Project (the id carried is the project id), so only connections allowed to read that project -
 /// the same permission the telemetry endpoints check - receive it; the payload holds no telemetry.

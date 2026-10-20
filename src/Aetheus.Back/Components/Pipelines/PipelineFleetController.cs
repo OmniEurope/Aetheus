@@ -24,7 +24,8 @@ public sealed class PipelineFleetController(
             request, organizationIds, accessiblePipelineIds, ct));
     }
 
-    /// <summary>Recette R-224: the template names the fleet's Template column filter offers, in the fleet's scope.</summary>
+    /// <summary>The template names the fleet's Template column filter offers, in the fleet's
+    /// scope.</summary>
     [HttpGet("fleet/filter-values")]
     public async Task<ActionResult<PipelineFleetFilterValuesDto>> GetFleetFilterValues(CancellationToken ct)
     {

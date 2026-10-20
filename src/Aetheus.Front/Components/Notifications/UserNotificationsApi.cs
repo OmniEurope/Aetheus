@@ -46,12 +46,12 @@ public sealed class UserNotificationsApi(HttpClient http) : ApiClientBase(http)
         if (!string.IsNullOrWhiteSpace(request.EventType)) query["eventType"] = request.EventType;
         if (!string.IsNullOrWhiteSpace(request.Subject)) query["subject"] = request.Subject;
         if (!string.IsNullOrWhiteSpace(request.SortBy)) query["sortBy"] = request.SortBy;
-        // Recette R-224: the grid's column header filters.
+        // The grid's column header filters.
         var url = GridColumnFilters.AddTo(QueryHelpers.AddQueryString(Root, query), request.Filters);
         return await GetJsonAsync<PaginatedResult<NotificationDeliveryDto>>(url, ct).ConfigureAwait(false) ?? new();
     }
 
-    /// <summary>Recette R-224: the event types the /notifications Event filter offers.</summary>
+    /// <summary>The event types the /notifications Event filter offers.</summary>
     public async Task<UserNotificationFilterValuesDto> GetFilterValuesAsync(CancellationToken ct = default) =>
         await GetJsonAsync<UserNotificationFilterValuesDto>($"{Root}/filter-values", ct).ConfigureAwait(false) ?? new();
 
@@ -91,10 +91,8 @@ public sealed class UserNotificationsApi(HttpClient http) : ApiClientBase(http)
         return await response.Content.ReadFromJsonAsync<ProjectSubscriptionDto>(JsonOptions.Web, ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Recette R2-034: follows every project the user can read; all of the user's subscriptions
-    /// afterwards, or null when the call failed.
-    /// </summary>
+    /// <summary> Follows every project the user can read; all of the user's subscriptions
+    /// afterwards, or null when the call failed. </summary>
     public async Task<List<ProjectSubscriptionDto>?> FollowAllProjectsAsync(CancellationToken ct = default)
     {
         var response = await Http.PostAsync($"{Root}/subscriptions/all", null, ct).ConfigureAwait(false);

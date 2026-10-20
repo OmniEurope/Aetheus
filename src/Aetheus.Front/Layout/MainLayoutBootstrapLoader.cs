@@ -4,11 +4,6 @@ namespace Aetheus.Front.Layout;
 
 internal static class MainLayoutBootstrapLoader
 {
-    internal readonly record struct SessionBootstrapResult(
-        Microsoft.AspNetCore.SignalR.Client.HubConnectionState SignalRState,
-        bool WasConnected,
-        bool BackendLive);
-
     public static async Task LoadPermissionsAsync(
         ApiClient api,
         PermissionService permissions,
@@ -41,7 +36,13 @@ internal static class MainLayoutBootstrapLoader
         }
     }
 
-    public static async Task<SessionBootstrapResult> StartAuthenticatedSessionAsync(
+    /// <summary>
+    /// Loads what the routed page needs (permissions, organizations), then starts the task tracker's hub
+    /// without waiting for it. The hub reports its state itself (header icon, connection-lost overlay), so
+    /// a realtime server slow to answer no longer holds the splash: on a loaded machine the page waited for
+    /// the hub's 10 s deadline, then for a liveness probe (PLAN-010 lot 4, sub-lot C, 2026-10-17).
+    /// </summary>
+    public static async Task StartAuthenticatedSessionAsync(
         ApiClient api,
         PermissionService permissions,
         AuthStateProvider auth,
@@ -54,10 +55,12 @@ internal static class MainLayoutBootstrapLoader
         if (!organizations.IsLoaded) bootstrap.Add(LoadOrganizationsAsync(organizations, logger));
         if (bootstrap.Count > 0) await Task.WhenAll(bootstrap);
 
+        _ = StartRealtimeAsync(taskTracker, logger);
+    }
+
+    private static async Task StartRealtimeAsync(TaskTrackerService taskTracker, ILogger logger)
+    {
         try { await taskTracker.StartAsync(); }
         catch (Exception exception) { logger.LogWarning(exception, "[MainLayout] TaskTracker start after login failed"); }
-        var state = taskTracker.ConnectionState;
-        var connected = state == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected;
-        return new(state, connected, connected || await api.Auth.IsBackendLiveAsync());
     }
 }

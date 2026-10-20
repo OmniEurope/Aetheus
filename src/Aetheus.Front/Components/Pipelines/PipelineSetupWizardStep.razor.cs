@@ -15,19 +15,19 @@ public partial class PipelineSetupWizardStep
     [Parameter] public EventCallback<int?> ProjectIdChanged { get; set; }
     [Parameter] public string Prefix { get; set; } = string.Empty;
     [Parameter] public EventCallback<string> PrefixChanged { get; set; }
-    /// <summary>Recette R1-18 / R1-31: the type of what is built and checked, asked before its detail.</summary>
+    /// <summary>The type of what is built and checked, asked before its detail.</summary>
     [Parameter] public PipelineArchitecture? Architecture { get; set; }
     [Parameter] public EventCallback<PipelineArchitecture?> ArchitectureChanged { get; set; }
 
     /// <summary>The key of the chosen <see cref="PipelineSetupStack"/>.</summary>
     [Parameter] public string Stack { get; set; } = PipelineSetupStack.DotNet.Key;
     [Parameter] public EventCallback<string> StackChanged { get; set; }
-    /// <summary>Recette R1-31 decision: for an application, whether the interface is served by the same
-    /// project as the server; null until answered.</summary>
+    /// <summary>Whether the same project serves the server and interface remains null until
+    /// explicitly answered.</summary>
     [Parameter] public bool? SameProject { get; set; }
     [Parameter] public EventCallback<bool?> SameProjectChanged { get; set; }
 
-    /// <summary>Recette R1-33: the one pipeline an external repository gets.</summary>
+    /// <summary>The one pipeline an external repository gets.</summary>
     [Parameter] public bool ExternalSecurity { get; set; }
     [Parameter] public EventCallback<bool> ExternalSecurityChanged { get; set; }
     [Parameter] public bool Frontend { get; set; }
@@ -68,12 +68,13 @@ public partial class PipelineSetupWizardStep
     [Parameter] public PipelineSetupReadinessDto? Readiness { get; set; }
     [Parameter] public bool ReadinessLoading { get; set; }
 
-    /// <summary>PLAN-003 lot 30: raised once the project changed from the summary (required libraries
-    /// and vaults created, a repository created), so the wizard can re-run its readiness check and drop
-    /// the findings that no longer hold.</summary>
+    /// <summary>Raised once the project changed from the summary (required libraries and vaults
+    /// created, a repository created), so the wizard can re-run its readiness check and drop the
+    /// findings that no longer hold.</summary>
     [Parameter] public EventCallback OnReadinessChanged { get; set; }
 
-    /// <summary>Recette R1-19: the summary with the user's choices, where the pages it opens come back to.</summary>
+    /// <summary>The summary with the user's choices, where the pages it opens come back
+    /// to.</summary>
     [Parameter] public string? ReturnUrl { get; set; }
 
     private static OmniIconName ArchitectureIcon(PipelineArchitecture architecture) => architecture switch

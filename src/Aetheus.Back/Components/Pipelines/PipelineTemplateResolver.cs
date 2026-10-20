@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-public sealed class PipelineTemplateResolver(IPipelineRepository repo) : IPipelineTemplateResolver
+public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) : IPipelineTemplateResolver
 {
     private const int MaxInheritanceDepth = 32;
     private const int MaxResolvedYamlLength = 1_000_000;
@@ -50,9 +50,9 @@ public sealed class PipelineTemplateResolver(IPipelineRepository repo) : IPipeli
         var reference = parsedReference ?? ParseReference(child.Extends);
         if (reference is null) return child;
 
-        // Recette R2-121: an organization's own template wins; otherwise the shipped delivery template
-        // the platform shares with every organization, so a new organization's projects can use the
-        // setup wizard without a copy of the catalog.
+        // An organization's own template wins; otherwise the shipped delivery template the platform
+        // shares with every organization, so a new organization's projects can use the setup wizard
+        // without a copy of the catalog.
         var template = await repo.FindTemplateByNameAsync(reference.Name, organizationId, ct).ConfigureAwait(false)
             ?? await repo.FindSharedTemplateByNameAsync(reference.Name, ct).ConfigureAwait(false)
             ?? throw new BadRequestException(
@@ -104,11 +104,8 @@ public sealed class PipelineTemplateResolver(IPipelineRepository repo) : IPipeli
         };
     }
 
-    /// <summary>
-    /// PLAN-003 lot 30: a pipeline that extends a template needs what the template needs, plus its
-    /// own. Without this the launch preflight never saw a template's <c>requires:</c> for a pipeline
-    /// created by the wizard (<c>extends:</c> only), and launched it without the library it reads.
-    /// </summary>
+    /// <summary>Template requirements are merged with the extending pipeline's requirements so
+    /// launch preflight verifies both.</summary>
     private static PipelineRequiresDefinition? MergeRequires(
         PipelineRequiresDefinition? parent,
         PipelineRequiresDefinition? child)

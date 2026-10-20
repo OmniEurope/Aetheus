@@ -4,7 +4,9 @@ using System.ComponentModel.DataAnnotations;
 namespace Aetheus.Shared.Components.Notifications;
 
 /// <summary>One catalogue entry of <see cref="NotificationEventTypes"/>.</summary>
-public sealed record NotificationEventTypeDescriptor(string EventType, bool DefaultEnabled, bool CarriesProjectId);
+/// <param name="SentByEmail">Recette R3-16: false for an event shown only in the inbox, never e-mailed.</param>
+public sealed record NotificationEventTypeDescriptor(
+    string EventType, bool DefaultEnabled, bool CarriesProjectId, bool SentByEmail = true);
 
 /// <summary>A notification addressed to the current user.</summary>
 public sealed record NotificationDeliveryDto
@@ -21,7 +23,7 @@ public sealed record NotificationDeliveryDto
     public DateTime? SentAt { get; init; }
     public DateTime? ReadAt { get; init; }
 
-    /// <summary>Read or not, as a column the /notifications grid can filter on (recette R-189).</summary>
+    /// <summary>Read or not, as a column the /notifications grid can filter on.</summary>
     public bool IsRead => ReadAt is not null;
 }
 
@@ -58,15 +60,14 @@ public sealed record UserNotificationPageRequest
     /// <summary>Direction of <see cref="SortBy"/>; descending unless false.</summary>
     public bool SortDescending { get; init; } = true;
 
-    /// <summary>
-    /// Recette R-224: the grid's header filters (status list, read yes/no, event list, subject, date
+    /// <summary> The grid's header filters (status list, read yes/no, event list, subject, date
     /// range), applied next to the typed parameters above, which older callers still send.
     /// </summary>
     [MaxLength(PaginationRequest.MaxFilters)]
     public List<GridFilter>? Filters { get; init; }
 }
 
-/// <summary>Recette R-224: the event types the /notifications grid's checkable Event filter offers.</summary>
+/// <summary>The event types the /notifications grid's checkable Event filter offers.</summary>
 public sealed record UserNotificationFilterValuesDto
 {
     public List<string> EventTypes { get; init; } = [];

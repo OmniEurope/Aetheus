@@ -15,9 +15,9 @@ public static class AdminEntities
     public const string RegistrationToken = "RegistrationToken";
     public const string PackageFeed = "PackageFeed";
     public const string PackageRegistry = "PackageRegistry";
-    /// <summary>A new audit entry (recette R-181: the audit page follows it live).</summary>
+    /// <summary>A new audit entry for live audit-page updates.</summary>
     public const string AuditLog = "AuditLog";
-    /// <summary>The system log files changed (recette R-181: the system logs page follows them live).</summary>
+    /// <summary>Changed system log files for live log-page updates.</summary>
     public const string SystemLog = "SystemLog";
 
     /// <summary>New API timing samples reached the Performance page's recorder (the id is always 0).</summary>

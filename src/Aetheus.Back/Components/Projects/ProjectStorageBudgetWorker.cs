@@ -3,8 +3,7 @@ using Aetheus.Back.Configuration;
 
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 5: enforces the project storage budgets once an hour, on the leader backend only. The
+/// <summary> Enforces the project storage budgets once an hour, on the leader backend only. The
 /// first sweep waits one interval after startup, so a restart never starts with the row counts.
 /// </summary>
 public sealed class ProjectStorageBudgetWorker(

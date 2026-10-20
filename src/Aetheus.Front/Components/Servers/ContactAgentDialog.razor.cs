@@ -100,33 +100,11 @@ public partial class ContactAgentDialog : IAsyncDisposable
                 _attempt = attempt;
                 await InvokeAsync(StateHasChanged);
 
-                var probe = Api.Servers.ContactAgentAsync(ServerId, token);
-                var countdown = RunCountdownAsync(token);
-
-                // Race: if the agent answers Reachable=true, succeed immediately -
-                // there is no reason to sit on the countdown after the answer has
-                // come in. On a not-yet-reachable answer we still drain the
-                // countdown to keep the rhythm between attempts.
-                ContactAgentResultDto? result;
-                var first = await Task.WhenAny(probe, countdown).ConfigureAwait(false);
-                if (first == probe)
+                var result = await ProbeOnceAsync(token).ConfigureAwait(false);
+                if (result is { Reachable: true })
                 {
-                    result = await probe.ConfigureAwait(false);
-                    if (result is { Reachable: true })
-                    {
-                        await EnterSuccessAsync(result);
-                        return;
-                    }
-                    await countdown.ConfigureAwait(false);
-                }
-                else
-                {
-                    result = await probe.ConfigureAwait(false);
-                    if (result is { Reachable: true })
-                    {
-                        await EnterSuccessAsync(result);
-                        return;
-                    }
+                    await EnterSuccessAsync(result);
+                    return;
                 }
 
                 _result = result;
@@ -145,6 +123,22 @@ public partial class ContactAgentDialog : IAsyncDisposable
         {
             // Dialog closed or a new run started - nothing to surface.
         }
+    }
+
+    /// <summary>
+    /// One attempt: the probe races the countdown. A reachable answer is returned at once, there is
+    /// no reason to sit on the countdown after the answer has come in; a not-yet-reachable answer
+    /// still drains the countdown to keep the rhythm between attempts.
+    /// </summary>
+    private async Task<ContactAgentResultDto?> ProbeOnceAsync(CancellationToken token)
+    {
+        var probe = Api.Servers.ContactAgentAsync(ServerId, token);
+        var countdown = RunCountdownAsync(token);
+        var first = await Task.WhenAny(probe, countdown).ConfigureAwait(false);
+        var result = await probe.ConfigureAwait(false);
+        if (first == probe && result is not { Reachable: true })
+            await countdown.ConfigureAwait(false);
+        return result;
     }
 
     /// <summary>

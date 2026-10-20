@@ -5,9 +5,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Users;
 
-/// <summary>
-/// Recette R-210 / R-224: the column filters of the users list. The keys are the grid's column keys; the
-/// Roles column is a checkable list of role names, a user matching when it holds any ticked role.
+/// <summary> The column filters of the users list. The keys are the grid's column keys; the Roles
+/// column is a checkable list of role names, a user matching when it holds any ticked role.
 /// </summary>
 internal static class UserListQuery
 {

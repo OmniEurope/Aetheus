@@ -1,0 +1,19 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+
+@* A "run to end" run went on past its failures: the page says so, and which steps failed, so a run
+   that reached its last stage is never read as one that passed. *@
+@if (Run.RunToEnd)
+{
+    <OmniAlert Severity="@(FailedSteps.Count > 0 ? OmniSeverity.Warning : OmniSeverity.Info)"
+               Title="@L["RunToEndRunTitle"]" Class="omni-u-mt-sm">
+        <div>@L["RunToEndRunDetail"]</div>
+        @if (FailedSteps.Count > 0)
+        {
+            <div class="run-warning-line">@string.Format(L["RunToEndFailedSteps"], string.Join(", ", FailedSteps))</div>
+        }
+        else if (Run.Status.IsTerminal())
+        {
+            <div class="run-warning-line">@L["RunToEndNoFailure"]</div>
+        }
+    </OmniAlert>
+}

@@ -36,7 +36,7 @@ public class ConnectionLostDialogTests : BunitContext
         var atZero = Render<ConnectionLostDialog>(ps => ps
             .Add(p => p.Visible, true)
             .Add(p => p.ReconnectCountdown, 0));
-        // Recette R-129: the slot stays so the card does not move; at zero it holds no text.
+        // The slot stays so the card does not move; at zero it holds no text.
         var slot = atZero.Find(".omni-connection-overlay__countdown");
         Assert.Equal("true", slot.GetAttribute("aria-hidden"));
         Assert.DoesNotContain("0", slot.TextContent, StringComparison.Ordinal);

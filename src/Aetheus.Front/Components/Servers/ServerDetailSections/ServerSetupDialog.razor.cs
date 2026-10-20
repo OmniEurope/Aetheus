@@ -10,8 +10,7 @@ public partial class ServerSetupDialog
     [Parameter, EditorRequired] public ServerSetupDialogModel Model { get; set; } = new();
 
     private ServerSetupDialogModel _model = new();
-    // R-511: OmniDialog listens to the keyboard, so every key press re-renders the dialog and hands it the
-    // same parameters again. Copying the model there wiped what had just been typed: it is copied once.
+    // Copy the model once so repeated keyboard-driven dialog updates preserve typed input.
     protected override void OnInitialized() => _model = new ServerSetupDialogModel
     {
         Kind = Kind,

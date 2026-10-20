@@ -4,7 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Plugins;
 
-/// <summary>Recette R-224: the column header filters of the plugins list; each key is the grid column's key.</summary>
+/// <summary>The column header filters of the plugins list; each key is the grid column's
+/// key.</summary>
 internal static class PluginListQuery
 {
     internal static readonly GridQueryMap<PluginRegistration> Columns = new GridQueryMap<PluginRegistration>()

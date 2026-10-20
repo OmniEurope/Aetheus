@@ -8,10 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Projects;
 
-/// <summary>
-/// PLAN-013 lot 6: « Récupérer la place » runs one purged table at a time, never while a pipeline runs,
-/// measured before and after and written to the audit log at its start and its end.
-/// </summary>
+/// <summary> « Récupérer la place » runs one purged table at a time, never while a pipeline runs,
+/// measured before and after and written to the audit log at its start and its end. </summary>
 public sealed class ReclaimSpaceServiceTests
 {
     private readonly IReclaimSpaceRepository _repository = Substitute.For<IReclaimSpaceRepository>();

@@ -56,7 +56,7 @@ else
                     </div>
 
                     <OmniFormField Label="@L["DailyRecapRecipients"]" For="daily-recap-new-recipient" Required="true"
-                                   Description="@RecipientsHint" Error="@_recipientError" Class="omni-u-w-100 daily-recap-recipients">
+                                   Help="@RecipientsHint" Error="@_recipientError" Class="omni-u-w-100 daily-recap-recipients">
                         <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                             <OmniTextBox Id="daily-recap-new-recipient" Type="OmniTextBoxType.Email" @bind-Value="_model.NewRecipient"
                                          Placeholder="@L["DailyRecapRecipientPlaceholder"]" Autocomplete="off" Class="daily-recap-new-recipient" />
@@ -96,10 +96,13 @@ else
                     <OmniIcon Name="OmniIconName.PaperPlaneRight" />
                     <span>@L["DailyRecapSendNow"]</span>
                 </OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="TogglePreviewAsync" Busy="@_previewLoading" Class="daily-recap-preview-toggle">
-                    <OmniIcon Name="@(_preview is null ? OmniIconName.Eye : OmniIconName.EyeSlash)" />
-                    <span>@(_preview is null ? L["DailyRecapShowPreview"] : L["DailyRecapHidePreview"])</span>
-                </OmniButton>
+                @* STD-BTN detection 11: DailyRecapSendNow visible, the other actions in the menu. *@
+                <OmniOverflowMenu Label="@L["MoreActions"]">
+                    <OmniMenuItem OnClick="TogglePreviewAsync" Disabled="@_previewLoading" Class="daily-recap-preview-toggle">
+                        <Icon><OmniIcon Name="@(_preview is null ? OmniIconName.Eye : OmniIconName.EyeSlash)" /></Icon>
+                        <ChildContent>@(_preview is null ? L["DailyRecapShowPreview"] : L["DailyRecapHidePreview"])</ChildContent>
+                    </OmniMenuItem>
+                </OmniOverflowMenu>
             </OmniStack>
 
             @if (_sendResult is { } result)

@@ -4,13 +4,9 @@ using Aetheus.Back.Services.DomainEvents;
 
 namespace Aetheus.Back.Components.Tasks;
 
-/// <summary>
-/// Recette R2-034: a release now live is notified to the subscribers of its project
-/// (<see cref="NotificationEventTypes.ReleaseDeployed"/>). It hangs off <see cref="ReleaseDeployedEvent"/>,
-/// which both ways a release goes live raise: a deploy task's closure and a <c>type: release</c> step
-/// with <c>deployed: true</c>. User deliveries only, like the pipeline outcomes: nothing is sent to the
-/// admin channels. Dispatched non-strictly, so a failure here never turns a deployment into a failure.
-/// </summary>
+/// <summary>Notify project subscribers when ReleaseDeployedEvent signals a deployed release,
+/// without sending admin-channel deliveries. Non-strict dispatch prevents notification failure from
+/// changing the deployment result.</summary>
 public sealed class ReleaseDeployedNotificationHandler(IUserNotificationService userNotifications)
     : IDomainEventHandler<ReleaseDeployedEvent>
 {

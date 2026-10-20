@@ -74,12 +74,4 @@ public class AddAgentMethodTests : BunitContext
         // Step 0: platform is set by default → true
         Assert.True((bool)m.Invoke(cut.Instance, null)!);
     }
-
-    [Fact]
-    public void HasCopiedToken_InitiallyFalse()
-    {
-        _handler.SetJsonResponse("api/settings/agent-server-url", "");
-        var cut = Render<AddAgent>();
-        Assert.False(cut.Instance.HasCopiedToken);
-    }
 }

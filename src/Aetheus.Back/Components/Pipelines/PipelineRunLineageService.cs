@@ -5,14 +5,12 @@ namespace Aetheus.Back.Components.Pipelines;
 
 public interface IPipelineRunLineageService
 {
-    /// <summary>Recette R-498: who launched the run and which runs it started; null for an unknown run.</summary>
+    /// <summary>Who launched the run and which runs it started; null for an unknown run.</summary>
     Task<PipelineRunLineageDto?> GetLineageAsync(int runId, CancellationToken ct = default);
 }
 
-/// <summary>
-/// Recette R-498: the lineage tile of a run's page. Read on its own, once, when the page opens: the run
-/// itself is refreshed at every step change and does not pay for these two lookups.
-/// </summary>
+/// <summary> The lineage tile of a run's page. Read on its own, once, when the page opens: the run
+/// itself is refreshed at every step change and does not pay for these two lookups. </summary>
 public sealed class PipelineRunLineageService(
     IPipelineRunLineageReader lineage,
     IAuditService audit,

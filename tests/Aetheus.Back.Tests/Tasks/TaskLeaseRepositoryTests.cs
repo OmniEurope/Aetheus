@@ -112,13 +112,8 @@ public sealed class TaskLeaseRepositoryTests : IDisposable
         Assert.Equal(NowUtc.AddMinutes(2), server.AgentSessionLeaseExpiresAt);
     }
 
-    /// <summary>
-    /// The token used to be bumped here, and that is what orphaned an agent's own running work: every
-    /// lease check demands the task's token still equal the server's, so a poll loop starved past the
-    /// two-minute lease by a long local build came back to find its task parked as "restarted with a
-    /// new session", its log batches refused and its completion answered 409. The same session id is
-    /// the same process - AgentState mints a new GUID per process - so there is nothing to fence off.
-    /// </summary>
+    /// <summary>A renewed lease for the same process session must preserve its fencing token so the
+    /// agent retains ownership of running work.</summary>
     [Fact]
     public async Task AcquireAgentSessionLeaseAsync_KeepsTheTokenWhenTheSameSessionCameBackAfterExpiry()
     {
@@ -355,6 +350,61 @@ public sealed class TaskLeaseRepositoryTests : IDisposable
         Assert.False(completed);
         Assert.Equal(TaskExecutionStatus.Running, task.Status);
         Assert.Null(task.CompletedAt);
+    }
+
+    // ---------- handing a never-started task back to the queue ----------
+
+    [Fact]
+    public async Task TryReleaseAssignedTaskWithLeaseAsync_ReturnsAnAssignedTaskToThePendingQueueAndClearsItsAssignment()
+    {
+        AddServer(sessionId: "session-a", leaseExpiresAt: NowUtc.AddMinutes(1), fencingToken: 1);
+        var task = AddTask();
+        task.AssignedAt = NowUtc.AddSeconds(-5);
+        await SaveAsync();
+
+        var released = await _repository.TryReleaseAssignedTaskWithLeaseAsync(task, "session-a", 1, Ct);
+
+        Assert.True(released);
+        Assert.Equal(TaskExecutionStatus.Pending, task.Status);
+        Assert.Null(task.AssignedAt);
+        Assert.Null(task.AssignedAgentSessionId);
+        Assert.Null(task.AssignedAgentSessionFencingToken);
+    }
+
+    [Fact]
+    public async Task TryReleaseAssignedTaskWithLeaseAsync_RefusesATaskThatAlreadyStartedExecuting()
+    {
+        AddServer(sessionId: "session-a", leaseExpiresAt: NowUtc.AddMinutes(1), fencingToken: 1);
+        var task = AddTask();
+        task.StartedAt = NowUtc.AddSeconds(-1);
+        await SaveAsync();
+
+        Assert.False(await _repository.TryReleaseAssignedTaskWithLeaseAsync(task, "session-a", 1, Ct));
+        Assert.Equal(TaskExecutionStatus.Assigned, task.Status);
+        Assert.Equal("session-a", task.AssignedAgentSessionId);
+    }
+
+    [Fact]
+    public async Task TryReleaseAssignedTaskWithLeaseAsync_RefusesATaskThatIsNotAssigned()
+    {
+        AddServer(sessionId: "session-a", leaseExpiresAt: NowUtc.AddMinutes(1), fencingToken: 1);
+        var task = AddTask(status: TaskExecutionStatus.Running);
+        await SaveAsync();
+
+        Assert.False(await _repository.TryReleaseAssignedTaskWithLeaseAsync(task, "session-a", 1, Ct));
+        Assert.Equal(TaskExecutionStatus.Running, task.Status);
+    }
+
+    [Fact]
+    public async Task TryReleaseAssignedTaskWithLeaseAsync_RefusesAnAgentWhoseLeaseWasTakenOver()
+    {
+        AddServer(sessionId: "session-b", leaseExpiresAt: NowUtc.AddMinutes(1), fencingToken: 2);
+        var task = AddTask();
+        await SaveAsync();
+
+        Assert.False(await _repository.TryReleaseAssignedTaskWithLeaseAsync(task, "session-a", 1, Ct));
+        Assert.Equal(TaskExecutionStatus.Assigned, task.Status);
+        Assert.Equal("session-a", task.AssignedAgentSessionId);
     }
 
     public void Dispose() => _db.Dispose();

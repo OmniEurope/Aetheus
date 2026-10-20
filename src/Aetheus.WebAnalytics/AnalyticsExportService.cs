@@ -13,7 +13,7 @@ internal sealed class AnalyticsExportService(
     AetheusWebAnalyticsOptions options,
     ILogger<AnalyticsExportService> logger) : BackgroundService
 {
-    private static readonly Meter Meter = new("Aetheus.WebAnalytics.Exporter", "1.0.0");
+    private static readonly Meter Meter = new("Aetheus.WebAnalytics.Exporter", "1.1.0");
     private static readonly Counter<long> Failed = Meter.CreateCounter<long>("aetheus.analytics.export.failed");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

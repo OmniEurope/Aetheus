@@ -203,6 +203,12 @@ public sealed class ServerHeartbeatRepository(AppDbContext db) : IServerHeartbea
 
     public async Task ReplaceMailDataAsync(int serverId, MailState? state, CancellationToken ct = default)
     {
+        // The row is rewritten on each change; the quota resync mark must survive that, and clears while the
+        // helper is older than the quota version so the next upgrade resyncs again.
+        var resyncedAt = await db.MailStates.AsNoTracking().Where(s => s.ServerId == serverId)
+            .Select(s => s.QuotaResyncedAt).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (state is not null)
+            state.QuotaResyncedAt = state.HelperVersion >= Mail.MailService.QuotaMinimumHelperVersion ? resyncedAt : null;
         if (db.Database.IsRelational())
             await db.MailStates.Where(s => s.ServerId == serverId).ExecuteDeleteAsync(ct).ConfigureAwait(false);
         else
@@ -270,12 +276,9 @@ public sealed class ServerHeartbeatRepository(AppDbContext db) : IServerHeartbea
             db.PortsentryBlockedIps.AddRange(blockedIps);
     }
 
-    /// <summary>
-    /// Updates the reported RKHunter state IN PLACE rather than deleting and reinserting it: the row also
-    /// carries the operator's scan schedule (<see cref="RkhunterState.ScanScheduleCron"/>) and the
-    /// scheduler's <see cref="RkhunterState.LastScheduledScanAt"/>, which no heartbeat reports and which a
-    /// delete-and-reinsert used to wipe on every beat. A report without RKHunter still removes the row.
-    /// </summary>
+    /// <summary>Update reported RKHunter state in place to preserve the operator schedule and
+    /// scheduler timestamp, which the heartbeat does not carry. Remove the row when RKHunter is
+    /// absent from the report.</summary>
     public async Task ReplaceRkhunterDataAsync(int serverId, RkhunterState? state, List<RkhunterWarning> warnings, CancellationToken ct = default)
     {
         var existing = await db.RkhunterStates
@@ -322,11 +325,9 @@ public sealed class ServerHeartbeatRepository(AppDbContext db) : IServerHeartbea
             db.SecurityUpdatesStates.Add(state);
     }
 
-    /// <summary>
-    /// Recette R-479: a beat whose security-updates report did not change still proves a fresh check, so
-    /// it moves <see cref="SecurityUpdatesState.CheckedAt"/> alone (one UPDATE, no delete and reinsert).
-    /// No-op when the server keeps no security-updates row.
-    /// </summary>
+    /// <summary> A beat whose security-updates report did not change still proves a fresh check, so
+    /// it moves <see cref="SecurityUpdatesState.CheckedAt"/> alone (one UPDATE, no delete and
+    /// reinsert). No-op when the server keeps no security-updates row. </summary>
     public async Task TouchSecurityUpdatesCheckedAtAsync(int serverId, DateTime checkedAt, CancellationToken ct = default)
     {
         if (db.Database.IsRelational())

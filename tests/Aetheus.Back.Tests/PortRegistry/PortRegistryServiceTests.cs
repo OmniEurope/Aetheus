@@ -116,8 +116,8 @@ public sealed class PortRegistryServiceTests : IDisposable
     {
         await _sut.DeclareAsync(7, [10031], "project:4", "portfolio-prod-front", 4, Ct);
 
-        // PLAN-005 D10: this used to be a warning on a successful path, so a run that lost the race
-        // with the conflict gate carried on with a port it had not obtained. It now refuses out loud.
+        // Refuse a declaration that loses the conflict race instead of allowing a run without its
+        // reservation.
         await Assert.ThrowsAsync<ConflictException>(() =>
             _sut.DeclareAsync(7, [10031], "project:9", "aetheus-demo", 9, Ct));
 

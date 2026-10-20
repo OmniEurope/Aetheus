@@ -81,11 +81,8 @@ public sealed class ServerRemovalCascadeIntegrationTests(PostgresFixture fixture
         }
     }
 
-    /// <summary>
-    /// PLAN-004 R-11: a backup policy targets its server through a RESTRICT foreign key, so the former
-    /// hard delete failed with 23503 on any server that had one. The purge of a retired server now
-    /// deletes the server's policies (and, by cascade, their runs) in the same transaction.
-    /// </summary>
+    /// <summary>Retired-server purging removes backup policies and their dependent runs in the same
+    /// transaction to satisfy the restrictive server foreign key.</summary>
     [Fact]
     public async Task PurgeServerAsync_OfARetiredServerWithABackupPolicy_DeletesThePolicyInsteadOfFailing()
     {

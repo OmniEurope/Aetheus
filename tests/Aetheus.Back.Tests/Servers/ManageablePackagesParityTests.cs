@@ -8,7 +8,7 @@ namespace Aetheus.Back.Tests;
 /// S-FEAT-W8KN: the shared service vocabulary, the backend service map, the resolved apt package set
 /// and the agent's argv-exact sudoers drop-in must stay in lockstep. A drift here means an installable
 /// service the agent cannot sudo, or vice-versa. (The sudoers ↔ allow-list parity is covered by
-/// <see cref="ManageablePackagesSudoersAuditTests"/>.)
+/// <see cref="SudoersAuditTests"/>.)
 /// </summary>
 public class ManageablePackagesParityTests
 {

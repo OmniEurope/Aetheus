@@ -19,5 +19,11 @@ public enum ReleaseStatus
 
     /// <summary>The release was deployed successfully and was later replaced by a newer deployment.
     /// Keeping this distinct from Published preserves the authoritative V-1 deployment lineage.</summary>
-    Superseded = 7
+    Superseded = 7,
+
+    /// <summary>Decision D2 (PLAN-002 lot 3): older than the retention window and needed by nothing, the
+    /// release lost its artifacts, their files and its runs, but it stays, with its commit, so a complete
+    /// pipeline can run again from that commit. Set only by <c>ReleaseRetentionRepository</c>; a new
+    /// publication of the same version (what that relaunch produces) makes it Published again.</summary>
+    Archived = 8
 }

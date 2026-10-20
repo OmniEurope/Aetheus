@@ -68,6 +68,39 @@ public class ArtifactServiceTests
     }
 
     [Fact]
+    public async Task PublishVerifiedArtifactAsync_AdoptsTheFile_KeepsItsDigest_AndNeverStreamsIt()
+    {
+        // Recette R1-91: a completed chunked upload is moved into the store, not read and hashed again.
+        var file = new VerifiedArtifactFile("/data/artifacts/.uploads/x/assembled", 900, new string('d', 64));
+        _repoMock.GetRunPipelineContextAsync(1, Arg.Any<CancellationToken>())
+            .Returns((PipelineId: 10, ProjectId: (int?)5));
+        _storageMock.AdoptVerifiedArtifactAsync(5, 10, 1, "build-1.zip", file, Arg.Any<CancellationToken>())
+            .Returns("5/10/1/build-1.ddd.zip");
+        _storageMock.GetArtifactSize("5/10/1/build-1.ddd.zip").Returns(900L);
+
+        var result = await _sut.PublishVerifiedArtifactAsync(1, "build", "package", file, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(file.Sha256, result.Sha256);
+        Assert.Equal(900, result.SizeBytes);
+        await _storageMock.DidNotReceiveWithAnyArgs().SaveArtifactAsync(default, default, default, default!, default!, TestContext.Current.CancellationToken);
+        await _repoMock.Received(1).AddAsync(Arg.Any<PipelineArtifact>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PublishVerifiedArtifactAsync_QuotaReached_ThrowsConflict_AndDoesNotAdopt()
+    {
+        _repoMock.GetRunPipelineContextAsync(1, Arg.Any<CancellationToken>())
+            .Returns((PipelineId: 10, ProjectId: (int?)5));
+        _repoMock.GetProjectTotalSizeBytesAsync(5, Arg.Any<CancellationToken>()).Returns(1500L);
+
+        await Assert.ThrowsAsync<ConflictException>(() => _sut.PublishVerifiedArtifactAsync(
+            1, "build", null, new VerifiedArtifactFile("/x", 100, new string('d', 64)), TestContext.Current.CancellationToken));
+
+        await _storageMock.DidNotReceiveWithAnyArgs().AdoptVerifiedArtifactAsync(default, default, default, default!, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task PublishArtifactAsync_QuotaReached_ThrowsConflict_AndDoesNotSave()
     {
         _repoMock.GetRunPipelineContextAsync(1, Arg.Any<CancellationToken>())
@@ -118,6 +151,45 @@ public class ArtifactServiceTests
         await _repoMock.Received(1).RemoveAsync(oldest, Arg.Any<CancellationToken>());
         await _storageMock.DidNotReceive().DeleteArtifactAsync("new.zip", Arg.Any<CancellationToken>());
         await _repoMock.DidNotReceive().RemoveAsync(newest, Arg.Any<CancellationToken>());
+        Received.InOrder(() =>
+        {
+            _repoMock.RemoveAsync(oldest, Arg.Any<CancellationToken>());
+            _storageMock.DeleteArtifactAsync("old.zip", Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task PublishArtifactAsync_QuotaPressure_RowDeleteRefused_KeepsTheEvictionCandidateFile()
+    {
+        _repoMock.GetRunPipelineContextAsync(1, Arg.Any<CancellationToken>())
+            .Returns((PipelineId: 10, ProjectId: (int?)5));
+        _repoMock.GetProjectTotalSizeBytesAsync(5, Arg.Any<CancellationToken>()).Returns(1500L);
+        var refused = new PipelineArtifact
+        {
+            Id = 1,
+            PipelineId = 10,
+            ProjectId = 5,
+            FilePath = "sbom.zip",
+            SizeBytes = 600,
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        };
+        var newest = new PipelineArtifact
+        {
+            Id = 2,
+            PipelineId = 10,
+            ProjectId = 5,
+            FilePath = "new.zip",
+            SizeBytes = 900,
+            CreatedAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)
+        };
+        _repoMock.GetProjectBuildArtifactsAsync(5, Arg.Any<CancellationToken>()).Returns([refused, newest]);
+        // A delivery still pointing at the row refuses its delete (RESTRICT foreign key).
+        _repoMock.RemoveAsync(refused, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<bool>(new InvalidOperationException("23503 foreign key violation")));
+
+        await Assert.ThrowsAsync<ConflictException>(() => _sut.PublishArtifactAsync(1, "build", null, 100, Stream.Null, ct: TestContext.Current.CancellationToken));
+
+        await _storageMock.DidNotReceive().DeleteArtifactAsync("sbom.zip", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -190,8 +262,7 @@ public class ArtifactServiceTests
     [Fact]
     public async Task PublishArtifactAsync_NoOwningProject_RefusedBeforeAnyByteOrRowIsWritten()
     {
-        // BACK-009: this used to store the file and the row, then fail in retention with a null
-        // ProjectId, leaving an orphan behind a 500.
+        // Rejects a project-less artifact before persistence can leave an orphan.
         _repoMock.GetRunPipelineContextAsync(1, Arg.Any<CancellationToken>())
             .Returns((PipelineId: 10, ProjectId: (int?)null));
 

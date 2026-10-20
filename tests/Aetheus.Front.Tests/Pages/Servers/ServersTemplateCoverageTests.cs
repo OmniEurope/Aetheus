@@ -113,7 +113,7 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-1"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-1"));
 
         // Online → green status dot class, and no offline dot for this row.
         Assert.Contains("server-status-online", cut.Markup);
@@ -135,7 +135,7 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-2"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-2"));
 
         // Offline → offline status dot class is present (online branch not taken).
         Assert.Contains("server-status-offline", cut.Markup);
@@ -156,9 +156,9 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-3"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-3"));
 
-        // PLAN-003 lot 6: the Type column is plain localized text, no badge and no icon.
+        // The Type column uses localized plain text.
         Assert.DoesNotContain("inventory_2", cut.Markup);
         Assert.Contains("Enum_ServerType_Docker", cut.Markup);
     }
@@ -177,7 +177,7 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-4"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-4"));
 
         // Build type → the localized Build enum key renders in the Type badge.
         Assert.Contains("Enum_ServerType_Build", cut.Markup);
@@ -199,7 +199,7 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-5"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-5"));
 
         // First 3 tags render; the 4th/5th collapse into a "+2" overflow badge.
         Assert.Contains("prod", cut.Markup);
@@ -221,7 +221,7 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-6"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-6"));
 
         // Exactly 3 tags → all shown, no "+N" overflow badge.
         Assert.Contains("eu-west", cut.Markup);
@@ -243,7 +243,7 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-7"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-7"));
 
         // Heartbeat within the last hour → relative-time branch, not the "Never" fallback.
         Assert.DoesNotContain(">Never<", cut.Markup);
@@ -264,14 +264,14 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-8"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-8"));
 
         // Server with a never-set heartbeat (year 0001) still renders its row.
         Assert.Contains("server-8", cut.Markup);
     }
 
-    /// <summary>Recette R-211: no filter bar above the list any more; the columns filter from their
-    /// headers, the ones with few values through a checkable list.</summary>
+    /// <summary>Column headers own server filters, with checkable lists for bounded value
+    /// sets.</summary>
     [Fact]
     public void Toolbar_IsGone_AndTheColumnsFilterFromTheirHeaders()
     {
@@ -293,7 +293,7 @@ public class ServersTemplateCoverageTests : BunitContext
     [Fact]
     public async Task Template_NoWritePermission_ShowsLockIcon()
     {
-        using var ctx = new BunitContext();
+        await using var ctx = new BunitContext();
         var handler = BunitTestHelper.RegisterServices(ctx, authenticated: false);
         handler.SetJsonResponse("api/servers", new PaginatedResult<ServerDto>
         {
@@ -306,7 +306,7 @@ public class ServersTemplateCoverageTests : BunitContext
             BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(async () =>
             await (Task)load.Invoke(cut.Instance, [new GridLoadArgs()])!);
-        cut.WaitForState(() => cut.Markup.Contains("server-9"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-9"));
 
         // No write permission → read-only "lock" icon renders next to the server name.
         Assert.Contains(cut.FindComponents<OmniIcon>(), icon => icon.Instance.Name == OmniIconName.Lock);
@@ -328,18 +328,21 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-5"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-5"));
 
         var controls = cut.FindAll("button.tag-filter-button").Cast<AngleSharp.Dom.IElement>()
             .Append(cut.Find(".tag-more-details summary"))
-            .Concat(cut.FindAll("button[title='ContactAgent'], button[title='RetireServer']"))
+            .Append(cut.Find("button[title='ContactAgent']"))
+            // STD-BTN detection 11: RetireServer sits in the row's "More actions" menu, beside ContactAgent.
+            .Append(cut.Find("button[title='ContactAgent']").ParentElement!.QuerySelector(".omni-overflow-menu__trigger")!)
             .ToList();
         Assert.Equal(6, controls.Count);
         foreach (var control in controls)
             Aetheus.Front.Tests.TestDoubles.RowEventIsolation.AssertRowDoesNotReceive(control, "onclick", "onkeydown");
     }
 
-    /// <summary>Recette R-211: a tag clicked in a row becomes the Tags column's own filter, sent to the API.</summary>
+    /// <summary>A tag clicked in a row becomes the Tags column's own filter, sent to the
+    /// API.</summary>
     [Fact]
     public async Task FilterByTag_SetsTheTagsColumnFilter()
     {
@@ -388,7 +391,7 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForState(() => cut.Markup.Contains("server-10"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("server-10"));
 
         Assert.Contains("server-10", cut.Markup);
         Assert.Contains("server-11", cut.Markup);
@@ -408,7 +411,7 @@ public class ServersTemplateCoverageTests : BunitContext
 
         var cut = Render<ServersPage>();
         await LoadServers(cut);
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }

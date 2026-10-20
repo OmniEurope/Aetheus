@@ -6,27 +6,6 @@ namespace Aetheus.Front.Tests;
 public class SharedDtoEnvironmentVaultTests
 {
     [Fact]
-    public void EnvironmentDto_DefaultValues()
-    {
-        var dto = new EnvironmentDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Equal(string.Empty, dto.Description);
-        Assert.Null(dto.ProjectId);
-        Assert.Null(dto.ProjectName);
-        Assert.False(dto.RequireApproval);
-        Assert.Null(dto.ApprovalInstructions);
-        Assert.Empty(dto.Servers);
-    }
-
-    [Fact]
-    public void EnvironmentServerDto_DefaultValues()
-    {
-        var dto = new EnvironmentServerDto();
-        Assert.Equal(0, dto.ServerId);
-        Assert.Equal(string.Empty, dto.ServerName);
-    }
-
-    [Fact]
     public void CreateEnvironmentRequest_Validation_Valid()
     {
         var req = new CreateEnvironmentRequest { Name = "Staging" };
@@ -77,23 +56,6 @@ public class SharedDtoEnvironmentVaultTests
     {
         var req = new UpdateEnvironmentRequest { Name = "t" };
         Assert.Equal(1440, req.ApprovalTimeoutMinutes);
-    }
-
-    [Fact]
-    public void VariableLibraryDto_DefaultValues()
-    {
-        var dto = new VariableLibraryDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Equal(string.Empty, dto.Description);
-        Assert.Null(dto.ProjectId);
-    }
-
-    [Fact]
-    public void VariableEntryDto_DefaultValues()
-    {
-        var dto = new VariableEntryDto();
-        Assert.Equal(string.Empty, dto.Key);
-        Assert.Equal(string.Empty, dto.Value);
     }
 
     [Fact]

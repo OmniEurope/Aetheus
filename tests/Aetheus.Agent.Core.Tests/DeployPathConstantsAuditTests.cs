@@ -67,7 +67,7 @@ public sealed class DeployPathConstantsAuditTests
         var helperPath = ResolveVar(script, "DEPLOY_RESTART_HELPER_PATH").Replace("$AETHEUS_HELPER_DIR", helperDir, StringComparison.Ordinal);
 
         Assert.Equal(DeployOperationExecutor.RestartHelperPath, helperPath);
-        // R-249: the drop-in is the deploy/sudoers.d/aetheus-deploy template the installer renders.
+        // The drop-in is the deploy/sudoers.d/aetheus-deploy template the installer renders.
         Assert.Contains(
             "render_host_config deploy/sudoers.d/aetheus-deploy \"$DEPLOY_MANAGE_SUDOERS_FILE\"",
             script,
@@ -86,7 +86,7 @@ public sealed class DeployPathConstantsAuditTests
         Assert.Contains("setfacl -m \"g:$DEPLOY_READ_GROUP:--x\" \"$WORK_DIR\"", script, StringComparison.Ordinal);
         Assert.Contains("STATE_DIRECTORY_MODE=\"0700\"", script, StringComparison.Ordinal);
         Assert.Contains("STATE_DIRECTORY_MODE=\"0710\"", script, StringComparison.Ordinal);
-        // R-249: the unit is the agent/aetheus-agent.service template the installer renders.
+        // The unit is the agent/aetheus-agent.service template the installer renders.
         Assert.Contains(
             "StateDirectoryMode=#{STATE_DIRECTORY_MODE}#",
             LinuxHostConfigTemplates.Read("agent/aetheus-agent.service"),

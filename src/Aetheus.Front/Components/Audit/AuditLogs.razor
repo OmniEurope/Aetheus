@@ -19,16 +19,15 @@
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["AuditIntegrityUnavailable"]</OmniBadge>
         }
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@VerifyChainAsync" Class="@(_verifyingChain ? "btn-busy" : null)" Busy="@(_verifyingChain)"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["AuditVerifyChain"]</span></OmniButton>
-        @* Recette R-181: no Refresh, new entries arrive over the admin hub. *@
+        @* No Refresh, new entries arrive over the admin hub. *@
     </Actions>
 </OmniPageHeader>
-<AetheusDataGrid @ref="_grid" TItem="AuditLogDto" Data="@_logs" Count="@_count" LoadData="@LoadData" ExportRead="@ReadExportAsync"
+<AetheusDataGrid @ref="_grid" TItem="AuditLogDto" RowClick="@(log => ShowDetailsDialogAsync(log))" Data="@_logs" Count="@_count" LoadData="@LoadData" ExportRead="@ReadExportAsync"
     PageSize="20" AllowSorting="true" IsLoading="@_loading" Density="OmniDensity.Compact" FullHeight="true"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<AuditLogDto>(_logs, _count))">
     <Columns>
-        @* Recette R-238: every filter is a column header filter sent to the server, the date range
-           included (the two date pickers above the grid are gone). *@
+        @* Send all column header filters, including the date range, to the server. *@
         <OmniDataGridColumn Frozen="true" TItem="AuditLogDto" Property="Timestamp" Title="@L["Timestamp"]" Width="180px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" >
             <Template Context="log">
                 <span title="@log.Timestamp.ToString("F")">@RelativeTime.FormatAgo(L, log.Timestamp)</span>
@@ -44,11 +43,13 @@
         <OmniDataGridColumn TItem="AuditLogDto" Property="EntityId" Title="@L["ID"]" Width="80px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
         <OmniDataGridColumn TItem="AuditLogDto" Title="@L["Actions"]" MinWidth="15rem" Sortable="false" Filterable="false">
             <Template Context="log">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDetailsDialogAsync(log))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
                 @if (!string.IsNullOrWhiteSpace(log.Details))
                 {
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => CopyDetailsAsync(log.Details))" title="@L["CopyDetails"]" Label="@L["CopyDetails"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
                 }
+                </span>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="AuditLogDto" Property="Details" Title="@L["Details"]" Filterable="true" />

@@ -2,13 +2,7 @@
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 lot 18: one rendering for an analysis grade. Project tiles drew a coloured
-/// <c>&lt;strong&gt;</c> through a <c>GradeCss</c> helper whose scale said C is informational, while
-/// the pipeline pages drew a badge whose scale says C is a warning: the same letter read differently
-/// depending on the page. Everything goes through the <c>GradeBadge</c> component now, the only
-/// caller of <c>GetGradeBadge</c>, and the old colour scale is gone.
-/// </summary>
+/// <summary>All analysis grades render through GradeBadge and its shared colour mapping.</summary>
 public sealed class GradeBadgeAuditTests
 {
     /// <summary>Markers of a grade drawn outside the shared component.</summary>

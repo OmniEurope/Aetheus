@@ -3,11 +3,8 @@ using Aetheus.Back.Components.Shared;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R-224: the column header filters of the pipeline fleet, which replace the template and
-/// status dropdowns that sat above the grid. The fleet row is a projection (owner and freshness are
-/// computed), so the map reads the projected row; each key is the grid column's key.
-/// </summary>
+/// <summary>Fleet filters use projected rows because owner and freshness are computed; each map key
+/// matches a grid column.</summary>
 internal static class PipelineFleetQuery
 {
     internal static readonly GridQueryMap<PipelineFleetItemDto> Columns = new GridQueryMap<PipelineFleetItemDto>()

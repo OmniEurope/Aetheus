@@ -28,14 +28,18 @@
     }
     else
     {
-        <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@L["PortSentry"]" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Restart))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
-            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(PortsentryAction.Start))">@L["Start"]</OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(PortsentryAction.Stop))">@L["Stop"]</OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(PortsentryAction.Restart))">@L["Restart"]</OmniMenuItem>
-        </ChildContent></OmniSplitButton>
-        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@GetLogsAsync"><OmniIcon Name="OmniIconName.Document" /> <span>@L["ViewLogs"]</span></OmniButton>
+        @* Recette R3-41: Restart is the zone's one visible action; Start, Stop and the logs sit in the
+           "More actions" menu. *@
+        <OmniButton Disabled="@(AgentOffline || _actionRunning)" Variant="OmniButtonVariant.Primary" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Restart))" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@_actionRunning"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniButton>
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Start))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["Start"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem Tone="OmniTone.Danger" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Stop))"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["Stop"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem Disabled="@AgentOffline" OnClick="@GetLogsAsync"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent>@L["ViewLogs"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
     }
 </OmniRow>
+
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="PortSentry" />
 
 @if (Ps.IsInstalled)
 {

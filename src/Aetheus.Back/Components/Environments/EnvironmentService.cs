@@ -66,8 +66,8 @@ public class EnvironmentService(
         await repo.AddEnvironmentAsync(env, ct).ConfigureAwait(false);
         await audit.LogAsync("Created", "Environment", env.Id, env.Name, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.Environment, env.Id, EntityChangeOps.Created, ct).ConfigureAwait(false);
-        // Recette R1-29: an environment created by copy brings its pipelines; they are written into the
-        // project's repository the same way as when an environment is linked on update.
+        // An environment created by copy brings its pipelines; they are written into the project's
+        // repository the same way as when an environment is linked on update.
         PublishCopiedPipelines(env);
 
         var result = await repo.GetEnvironmentWithServersAsync(env.Id, ct).ConfigureAwait(false);
@@ -143,7 +143,7 @@ public class EnvironmentService(
         var clone = new Environment
         {
             Name = name,
-            // Recette R1-23: a description names the environment it was written for, never its copy.
+            // A description names the environment it was written for, never its copy.
             Description = string.Empty,
             Type = source.Type,
             ProjectId = projectId,
@@ -183,23 +183,18 @@ public class EnvironmentService(
     private static Data.Entities.EnvironmentProjectServer CloneProjectServerLink(
         Data.Entities.EnvironmentProjectServer link) => new() { ProjectServerId = link.ProjectServerId };
 
-    /// <summary>
-    /// Recette R1-29: the pipelines a copy brings are written into the linked project's repository by
+    /// <summary> The pipelines a copy brings are written into the linked project's repository by
     /// <c>EnvironmentPipelinesCopyHandler</c>, in the background, as on update. Nothing to write
-    /// without a project or without pipelines.
-    /// </summary>
+    /// without a project or without pipelines. </summary>
     private void PublishCopiedPipelines(Environment env)
     {
         if (env.ProjectId is { } projectId && env.Pipelines.Count > 0)
             domainEvents.Publish(new EnvironmentLinkedToProjectEvent(env.Id, env.Name, projectId));
     }
 
-    /// <summary>
-    /// Recette R1-29 decision: a copy takes the structure, never the values. The library keeps the
-    /// names of its variables with empty values and its description says they are to fill in: a value
-    /// copied from another environment (a host, a port, a connection string) would give the copy a
-    /// working-looking configuration pointing at somebody else's machine.
-    /// </summary>
+    /// <summary>Copies library variable names with empty values to preserve structure without
+    /// reusing another environment's hosts, ports or credentials. The description identifies values
+    /// that require configuration.</summary>
     private static Data.Entities.VariableLibrary CloneLibrary(Data.Entities.VariableLibrary library, string sourceName) => new()
     {
         Name = library.Name,

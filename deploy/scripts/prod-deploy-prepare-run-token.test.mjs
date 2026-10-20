@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
-// R-464: prod-deploy-prepare.sh draws GIT_RUN_TOKEN_KEY into the production environment file once and
-// keeps it. The back-fill block is cut out of the real script (between its two marker comments) and
-// run on a disposable environment file, so this cannot drift from what production executes. openssl
-// is replaced by a shell function that records its arguments and prints a known key.
+// Exercise the real key back-fill block on a disposable environment file so the test follows
+// production code; the openssl stand-in records arguments and supplies a known key. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

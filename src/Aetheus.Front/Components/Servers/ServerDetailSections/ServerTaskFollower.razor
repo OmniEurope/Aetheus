@@ -1,0 +1,30 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Servers.ServerDetailSections
+@implements IDisposable
+
+@* Recette R3-37: what became of the task a server page just launched, in place of a lone "Task created"
+   toast: waiting, running, done or failed with the cause, and a link to the task itself. *@
+@if (_state != ServerTaskFollowState.Idle)
+{
+    <OmniAlert Severity="@Severity" Class="server-task-follower" aria-live="polite">
+        <Icon><OmniIcon Name="@Icon" /></Icon>
+        <ChildContent>
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
+                <OmniText Element="OmniTextElement.Strong">@_title</OmniText>
+                <OmniText Element="OmniTextElement.Span">@L[StatusKey]</OmniText>
+                @if (_group is { } group)
+                {
+                    <OmniText Element="OmniTextElement.Span" Class="server-task-group-progress">@L["ServerTaskGroupProgress", group.Finished, group.Count]</OmniText>
+                }
+                @if (_taskId is { } taskId)
+                {
+                    <OmniLink Href="@($"/tasks/{taskId}")">@L["ServerTaskOpen", taskId]</OmniLink>
+                }
+            </OmniStack>
+            @if (!string.IsNullOrWhiteSpace(_cause))
+            {
+                <OmniText Element="OmniTextElement.Paragraph" Class="task-output-error">@_cause</OmniText>
+            }
+        </ChildContent>
+    </OmniAlert>
+}

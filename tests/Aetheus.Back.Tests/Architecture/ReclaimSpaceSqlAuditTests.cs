@@ -4,11 +4,8 @@ using Aetheus.Back.Components.Projects;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-013 lot 6: the raw-SQL exception of « Récupérer la place » stays what AGENTS.md says it is, one
-/// fixed <c>VACUUM (FULL, ANALYZE)</c> per purged table and one size read, never text built from input;
-/// and nothing but the administrator endpoint can start it, so it never runs on its own.
-/// </summary>
+/// <summary>The reclamation SQL exception permits only fixed per-table vacuum statements and a size
+/// read, callable solely from the administrator endpoint as documented in AGENTS.md.</summary>
 public sealed class ReclaimSpaceSqlAuditTests
 {
     private static string Source(params string[] path) =>

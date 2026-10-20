@@ -10,6 +10,8 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 const script = resolve("deploy/scripts/deploy.sh");
+// The keys load_env_file reads from the env file (deploy.sh).
+const DEPLOY_ENV_KEYS = new Set(["DB_PASSWORD", "ADMIN_PASSWORD", "JWT_KEY", "ENCRYPTION_KEY", "ENCRYPTION_SALT", "APP_VERSION"]);
 const separator = process.platform === "win32" ? ";" : ":";
 
 function setUp() {
@@ -35,7 +37,10 @@ exit 0`);
     input,
     encoding: "utf8",
     env: {
-      ...process.env,
+      // The values deploy.sh reads from its env file are dropped from the inherited environment: a
+      // pipeline exports some of them (APP_VERSION=…-nightly in the nightly made increment_patch
+      // fail with "Illegal number"), and the test is about the file, not the caller's shell.
+      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !DEPLOY_ENV_KEYS.has(key))),
       PATH: `${bin}${separator}${process.env.PATH}`,
       SERVERNAME: "example.com",
       GITREMOTE: "https://git.example.com/aetheus.git"
@@ -49,7 +54,8 @@ exit 0`);
 
 const healthy = ["aetheus-prod-database\tUp 2 hours (healthy)", "aetheus-prod-back\tUp 2 hours (healthy)", "aetheus-prod-front\tUp 2 hours"];
 
-// ---- DEP-016: the env file holds data, read back byte for byte, never run --------------------------
+// Treat environment files as data and preserve values byte for byte without executing them. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 test("passwords with shell syntax round-trip exactly and run nothing", () => {
   const env = setUp();
@@ -123,7 +129,8 @@ test("a missing secret is generated and appended, the existing values stay byte 
   } finally { env.cleanup(); }
 });
 
-// ---- DEP-017: the diagnostics say OK only when Docker shows the whole stack healthy ----------------
+// Report healthy only when Docker answers and every required stack container is healthy. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 for (const [label, prepare, status, verdict] of [
   ["docker cannot be reached", env => writeFileSync(`${env.root}/ps-fail`, ""), 2, /HEALTH: UNKNOWN - docker ps failed[\s\S]*Cannot connect/],

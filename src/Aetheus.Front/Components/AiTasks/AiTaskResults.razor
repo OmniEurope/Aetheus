@@ -1,0 +1,124 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@page "/ai-tasks/{TaskId:int}"
+@page "/projects/{ProjectId:int}/ai-tasks/{TaskId:int}"
+
+<PageTitle>@(_task?.Name ?? L["AiTasks"]) - Aetheus</PageTitle>
+
+<OmniPageHeader Title="@(_task?.Name ?? L["AiTasks"])" Subtitle="@Breadcrumb.Subtitle()">
+    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("psychology")" /></Icon>
+    <Actions>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@RunAsync" Busy="@(_starting || _runningServerTaskId is not null)"
+                    Disabled="@(!CanWrite)"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Run"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo(ListUrl))"><OmniIcon Name="OmniIconName.ArrowLeft" /> <span>@L["GoBack"]</span></OmniButton>
+    </Actions>
+    @* STD-BTN detection 11: Run visible, the other actions in the menu. *@
+    <MenuContent>
+        <OmniMenuItem OnClick="@EditAsync" Disabled="@(!CanWrite)"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+    </MenuContent>
+</OmniPageHeader>
+
+@if (_loadFailed)
+{
+    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
+        @L["LoadFailed"]
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => LoadAsync(_selected?.Id))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+    </OmniAlert>
+}
+
+<div class="ai-results-tiles">
+    <OmniStatTile Value="@_totalCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Label="@L["AiTaskRuns"]">
+        <Icon><OmniIcon Name="OmniIconName.ListBullets" /></Icon>
+    </OmniStatTile>
+    <OmniStatTile Value="@SuccessRateText" Label="@L["SuccessRate"]" Detail="@L["AiTaskOnThisPage"]">
+        <Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon>
+    </OmniStatTile>
+    <OmniStatTile Value="@AverageDurationText" Label="@L["AverageDuration"]" Detail="@L["AiTaskOnThisPage"]">
+        <Icon><OmniIcon Name="OmniIconName.Timer" /></Icon>
+    </OmniStatTile>
+    <OmniStatTile Value="@LastRunText" Label="@L["LastRun"]" Detail="@_task?.ProfileName">
+        <Icon><OmniIcon Name="OmniIconName.Hourglass" /></Icon>
+    </OmniStatTile>
+</div>
+
+@if (_loading && _runs.Count == 0)
+{
+    <AetheusLoader />
+}
+else if (_runs.Count == 0)
+{
+    <EmptyState Icon="description" Title="@L["NoAiResults"]" Description="@L["NoAiResultsDescription"]" />
+}
+else
+{
+    <div class="ai-results-layout">
+        <OmniCard Class="ai-results-runs">
+            <OmniHeading Level="OmniHeadingLevel.H5" Class="ai-results-section-title">@L["AiTaskRuns"]</OmniHeading>
+            <OmniTimeline Label="@L["AiTaskRuns"]">
+                @foreach (var run in _runs)
+                {
+                    var current = run.Id == _selected?.Id;
+                    <OmniTimelineItem DateText="@RunDate(run)" Level="OmniHeadingLevel.H6">
+                        <button type="button" class="@($"ai-results-run {(current ? "ai-results-run--selected" : null)}")"
+                                aria-pressed="@(current ? "true" : "false")" @onclick="@(() => Select(run))">
+                            <OmniBadge Fill="OmniFill.Solid" Tone="@AiVerdictText.Tone(run.Verdict)">@AiVerdictText.Label(L, run.Verdict)</OmniBadge>
+                            <OmniBadge Fill="OmniFill.Tonal" Tone="@(run.Succeeded ? OmniTone.Success : OmniTone.Danger)">@(run.Succeeded ? L["AiRunSucceeded"] : L["AiRunFailed"])</OmniBadge>
+                            <span class="ai-results-run-duration">@FormatDuration(run.DurationMs)</span>
+                        </button>
+                    </OmniTimelineItem>
+                }
+            </OmniTimeline>
+            @if (_totalCount > PageSize)
+            {
+                <OmniPager Page="@_page" PageCount="@Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize))"
+                           PageChanged="@OnPageChangedAsync" PageSize="@PageSize" Class="omni-u-mt-md" />
+            }
+        </OmniCard>
+
+        @if (_selected is { } run)
+        {
+            <OmniCard Class="ai-results-detail">
+                <div class="ai-results-detail-head">
+                    <OmniBadge Fill="OmniFill.Solid" Tone="@AiVerdictText.Tone(run.Verdict)">@AiVerdictText.Label(L, run.Verdict)</OmniBadge>
+                    @if (run.SendsDataExternally)
+                    {
+                        <OmniBadge Fill="OmniFill.Tonal" Tone="OmniTone.Warning">@L["ExternalData"]</OmniBadge>
+                    }
+                    @if (run.Truncated)
+                    {
+                        <OmniBadge Fill="OmniFill.Tonal" Tone="OmniTone.Warning">@L["Truncated"]</OmniBadge>
+                    }
+                </div>
+                <dl class="ai-results-facts">
+                    <dt>@L["Date"]</dt><dd>@RunDate(run)</dd>
+                    <dt>@L["AiRunnerProfile"]</dt><dd>@run.ProfileName</dd>
+                    <dt>@L["Duration"]</dt><dd>@FormatDuration(run.DurationMs)</dd>
+                    <dt>@L["Status"]</dt><dd>@(run.Succeeded ? L["AiRunSucceeded"] : L["AiRunFailed"])</dd>
+                </dl>
+                @if (string.IsNullOrWhiteSpace(run.DiffPatch))
+                {
+                    <div class="markdown-content ai-results-report">@((MarkupString)_reportHtml)</div>
+                }
+                else
+                {
+                    <UrlSyncedTabs Slugs="@(new[] { "report", "diff" })">
+                        <Tabs>
+                        <OmniTabsItem Key="report" Title="@L["Report"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("description")" /></Icon><ChildContent>
+                            <div class="markdown-content ai-results-report">@((MarkupString)_reportHtml)</div>
+                        </ChildContent></OmniTabsItem>
+                        <OmniTabsItem Key="diff" Title="@L["Diff"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("difference")" /></Icon><ChildContent>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadPatchAsync" Class="omni-u-mb-sm"><OmniIcon Name="OmniIconName.Download" /> <span>@L["DownloadPatch"]</span></OmniButton>
+                            @if (!string.IsNullOrWhiteSpace(run.ProposedBranchName))
+                            {
+                                <OmniAlert Severity="OmniSeverity.Success" Class="omni-u-mb-sm">
+                                    @L["ProposedBranchCreated"]: <a href="/git-repositories/@run.ProposedRepositoryId">@run.ProposedBranchName</a>
+                                </OmniAlert>
+                            }
+                            <MonacoDiffViewer OriginalValue="" ModifiedValue="@run.DiffPatch" />
+                        </ChildContent></OmniTabsItem>
+                        </Tabs>
+                    </UrlSyncedTabs>
+                }
+            </OmniCard>
+        }
+    </div>
+}

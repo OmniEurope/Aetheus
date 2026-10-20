@@ -3,8 +3,7 @@ using Aetheus.Back.Services.Email;
 
 namespace Aetheus.Back.Components.Notifications;
 
-/// <summary>
-/// Recette R1-16: turns notifications into e-mails (plain text and HTML) and sends them through the
+/// <summary> Turns notifications into e-mails (plain text and HTML) and sends them through the
 /// platform sender. Every result says what really happened, the SMTP text verbatim on a failure.
 /// </summary>
 public interface INotificationEmailer

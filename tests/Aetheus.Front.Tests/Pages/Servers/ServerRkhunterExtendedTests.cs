@@ -162,7 +162,7 @@ public class ServerRkhunterExtendedTests : BunitContext
         var notification = new TaskCompletedNotification { TaskName = "Run RKHunter Scan", ServerId = 50 };
         await cut.Instance.HandleTaskCompletedAsync(notification);
 
-        // A RKHunter task triggers a refresh: scan-history is fetched again (R-181: also loaded on init).
+        // Task completion refreshes scan history, which also loads initially.
         Assert.Equal(before + 1, _handler.Requests.Count(r => r.Url.Contains("api/servers/50/rkhunter/history")));
     }
 

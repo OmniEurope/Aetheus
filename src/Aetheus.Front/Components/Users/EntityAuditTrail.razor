@@ -2,13 +2,13 @@
 @namespace Aetheus.Front.Components.Users
 
 <OmniCard Class="iam-detail-card">
-    <AetheusDataGrid TItem="AuditLogDto" Data="@_logs" Count="@_count"
+    <AetheusDataGrid TItem="AuditLogDto" RowClick="@(log => ShowDetailsAsync(log))" Data="@_logs" Count="@_count"
         LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="25" IsLoading="@_loading"
         AllowSorting="true" Density="OmniDensity.Compact"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<AuditLogDto>(_logs, _count))">
         <Columns>
-            @* Recette R-238: the header filters are sent to the audit endpoint, the timestamp as a range. *@
+            @* The header filters are sent to the audit endpoint, the timestamp as a range. *@
             <OmniDataGridColumn Frozen="true" TItem="AuditLogDto" Property="Timestamp" Title="@L["Timestamp"]" Width="180px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" >
                 <Template Context="log">
                     <span title="@log.Timestamp.ToString("F")">@RelativeTime.FormatAgo(L, log.Timestamp)</span>
@@ -23,7 +23,9 @@
             <OmniDataGridColumn TItem="AuditLogDto" Property="Details" Title="@L["Details"]" Filterable="true" />
             <OmniDataGridColumn TItem="AuditLogDto" Title="@L["Actions"]" Width="150px" Sortable="false" Filterable="false">
                 <Template Context="log">
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDetailsAsync(log))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
+                    </span>
                 </Template>
             </OmniDataGridColumn>
         </Columns>

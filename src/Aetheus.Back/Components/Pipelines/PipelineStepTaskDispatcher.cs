@@ -46,6 +46,7 @@ public sealed class PipelineStepTaskDispatcher(
     IPipelineBranchAdvanceStep branchAdvanceSteps,
     IPipelineAnalysisTaskFactory analysisTasks,
     IPipelineDotnetTestTaskFactory dotnetTestTasks,
+    IPipelineFunctionTaskFactory functionTasks,
     IPipelineGateStatusTaskFactory gateStatusTasks,
     IPipelineDeploymentTaskFactory deploymentTasks,
     IPipelineHostOperationTaskFactory hostTasks,
@@ -65,6 +66,8 @@ public sealed class PipelineStepTaskDispatcher(
         public int? ReleaseProjectId { get; set; }
         public string? ReleasePattern { get; set; }
         public bool ReleasePatternFetched { get; set; }
+        public int? PipelineAiProfileId { get; set; }
+        public bool PipelineAiProfileFetched { get; set; }
     }
 
     // Returns true when this stage ALREADY finalized the run (a fail-closed matrix-leg / isolation
@@ -123,7 +126,7 @@ public sealed class PipelineStepTaskDispatcher(
         return stageVars;
     }
 
-    private async Task AddDeployObservabilityVariablesAsync(
+    internal async Task AddDeployObservabilityVariablesAsync(
         int runId, IDictionary<string, string> stageVars, CancellationToken ct)
     {
         var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
@@ -272,52 +275,49 @@ public sealed class PipelineStepTaskDispatcher(
                 return StepDispatchResult.Handled;
             case "ai":
                 return await CreateAiTaskAsync(
-                    runId, legServer, stepRun, stepDef, legVars, stageDef, organizationId, ct)
+                    runId, legServer, stepRun, stepDef, legVars, stageDef, organizationId, creationState, ct)
                     .ConfigureAwait(false);
             case "scanner":
                 return await scannerTasks.CreateScannerTaskAsync(
                     runId, legServer, stepRun, stepDef, legVars, stageDef, stageIsContainer, ct)
                     .ConfigureAwait(false);
-            case "analysis-gate":
-                {
-                    // The factory validates and builds; finalizing a run stays here, with the engine.
-                    var gateError = analysisTasks.CreateAnalysisGateTask(
-                        runId, legServer, stepRun, stepDef, legVars, stageDef);
-                    if (gateError is null) return StepDispatchResult.Handled;
-                    await finalizer.FailRunWithUnmatchedStagesAsync(runId, [gateError], [stepRun], ct).ConfigureAwait(false);
-                    return StepDispatchResult.RunFinalized;
-                }
-            case "dotnet-test":
-                {
-                    // Same shape as analysis-gate: the factory validates and builds, failing the run
-                    // stays here with the engine.
-                    var testError = dotnetTestTasks.CreateDotnetTestTask(
-                        runId, legServer, stepRun, stepDef, legVars, stageDef);
-                    if (testError is null) return StepDispatchResult.Handled;
-                    await finalizer.FailRunWithUnmatchedStagesAsync(runId, [testError], [stepRun], ct)
-                        .ConfigureAwait(false);
-                    return StepDispatchResult.RunFinalized;
-                }
-            case "gate-status":
-                {
-                    var gateError = gateStatusTasks.CreateGateStatusTask(
-                        runId, legServer, stepRun, stepDef, legVars, stageDef);
-                    if (gateError is null) return StepDispatchResult.Handled;
-                    await finalizer.FailRunWithUnmatchedStagesAsync(runId, [gateError], [stepRun], ct)
-                        .ConfigureAwait(false);
-                    return StepDispatchResult.RunFinalized;
-                }
             case "publish-observability":
                 analysisTasks.CreateObservabilityTask(runId, legServer, stepRun, stepDef, legVars, secretKeys);
                 return StepDispatchResult.Handled;
             case "coverage":
                 analysisTasks.CreateCoverageTask(runId, legServer, stepRun, stepDef, legVars, stageDef);
                 return StepDispatchResult.Handled;
-            default:
-                return await DispatchExtendedStepAsync(
-                    type, runId, legServer, stepRun, stepDef, legVars, stageDef, stageIsContainer,
-                    secretKeys, launcher, ct).ConfigureAwait(false);
         }
+        var (handled, factoryError) = CreateFactoryTask(type, runId, legServer, stepRun, stepDef, legVars, stageDef);
+        if (handled)
+            return await FailRunOnFactoryErrorAsync(runId, stepRun, factoryError, ct).ConfigureAwait(false);
+        return await DispatchExtendedStepAsync(
+            type, runId, legServer, stepRun, stepDef, legVars, stageDef, stageIsContainer,
+            secretKeys, launcher, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The step types whose factory validates and builds the task, returning the refusal it found:
+    /// <c>Handled</c> false for any other type. Finalizing a run on a refusal stays with the engine.
+    /// </summary>
+    private (bool Handled, string? Error) CreateFactoryTask(
+        string? type, int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
+        Dictionary<string, string> legVars, PipelineStageDefinition stageDef) => type switch
+        {
+            "analysis-gate" => (true, analysisTasks.CreateAnalysisGateTask(runId, legServer, stepRun, stepDef, legVars, stageDef)),
+            "dotnet-test" => (true, dotnetTestTasks.CreateDotnetTestTask(runId, legServer, stepRun, stepDef, legVars, stageDef)),
+            "gate-status" => (true, gateStatusTasks.CreateGateStatusTask(runId, legServer, stepRun, stepDef, legVars, stageDef)),
+            PipelineFunctionCatalog.StepType => (true, functionTasks.CreateFunctionTask(runId, legServer, stepRun, stepDef, legVars, stageDef)),
+            _ => (false, null)
+        };
+
+    /// <summary>A factory that refused its step returns the reason; the run fails with it, here.</summary>
+    private async Task<StepDispatchResult> FailRunOnFactoryErrorAsync(
+        int runId, PipelineStepRun stepRun, string? factoryError, CancellationToken ct)
+    {
+        if (factoryError is null) return StepDispatchResult.Handled;
+        await finalizer.FailRunWithUnmatchedStagesAsync(runId, [factoryError], [stepRun], ct).ConfigureAwait(false);
+        return StepDispatchResult.RunFinalized;
     }
 
     private async Task<StepDispatchResult> DispatchExtendedStepAsync(
@@ -390,8 +390,8 @@ public sealed class PipelineStepTaskDispatcher(
         PipelineStepDefinition stepDef, Dictionary<string, string> legVars,
         PipelineStageDefinition stageDef, bool stageIsContainer, HashSet<string> secretKeys)
     {
-        // Recette R2-041: a type written for a newer backend validates with a warning; with no
-        // command of its own it would reach the agent empty, so it fails here, by name.
+        // A type written for a newer backend validates with a warning; with no command of its own
+        // it would reach the agent empty, so it fails here, by name.
         if (!string.IsNullOrWhiteSpace(stepDef.Type)
             && !PipelineDefinitionValidator.IsKnownStepType(stepDef.Type)
             && string.IsNullOrWhiteSpace(stepDef.Shell) && !stepDef.Checkout)
@@ -500,22 +500,25 @@ public sealed class PipelineStepTaskDispatcher(
     private async Task<StepDispatchResult> CreateAiTaskAsync(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
         Dictionary<string, string> legVars, PipelineStageDefinition stageDef, int? organizationId,
-        CancellationToken ct)
+        StageTaskCreationState state, CancellationToken ct)
     {
+        // The gate's VERDICT convention and the findings format are in the agent's system prompt
+        // (AiPromptAssembler), the same for every provider.
         var inlinePrompt = SubstituteVariables(stepDef.Prompt ?? string.Empty, legVars);
-        var preamble = stepDef.Gate
-            ? "Return a report ending with exactly one line: VERDICT: PASS or VERDICT: FAIL.\n\n"
-            : string.Empty;
-        var spec = organizationId is null || string.IsNullOrWhiteSpace(stepDef.Profile)
+        // The step's profile name, then the pipeline's assigned profile, then the organization's most
+        // preferred usable one (AiProfileResolver); the choice is written to the step log by the agent.
+        var execution = organizationId is null
             ? null
             : await aiTaskService.BuildPipelineExecutionAsync(
-                stepDef.Profile, organizationId.Value, preamble + inlinePrompt, stepDef.Gate, runId,
+                stepDef.Profile, await GetPipelineAiProfileIdAsync(runId, state, ct).ConfigureAwait(false),
+                organizationId.Value, inlinePrompt, stepDef.Gate, runId,
                 legVars.GetValueOrDefault("WORKSPACE", string.Empty), ct).ConfigureAwait(false);
+        var spec = execution?.Spec;
         if (spec is null)
         {
-            var reason = organizationId is null || string.IsNullOrWhiteSpace(stepDef.Profile)
-                ? $"Step '{stepDef.Name}': AI runner profile or organization is missing."
-                : $"Step '{stepDef.Name}': AI runner profile '{stepDef.Profile}' was not found in the pipeline's organization.";
+            var reason = execution is null
+                ? $"Step '{stepDef.Name}': the pipeline belongs to no organization, so no AI runner profile can be resolved."
+                : $"Step '{stepDef.Name}': {execution.Problem ?? "no AI runner profile could be resolved."}";
             // An advisory step informs and never decides: its own setup failing is recorded on the step,
             // and the run carries on as if it had not been there.
             if (stepDef.Advisory)
@@ -528,12 +531,19 @@ public sealed class PipelineStepTaskDispatcher(
             await finalizer.FailRunWithUnmatchedStagesAsync(runId, [reason], [stepRun], ct).ConfigureAwait(false);
             return StepDispatchResult.RunFinalized;
         }
+        // Never silent: a profile picked by fallback is also recorded on the run, so it shows even when the
+        // agent that runs the step predates the step-log line.
+        if (execution!.IsFallback)
+            await repo.AppendRunWarningsAsync(
+                runId, [$"AI step '{stepDef.Name}': {execution.Resolution}"], ct).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(stepDef.PromptFile))
             spec.EnvironmentVariables["AETHEUS_AI_PROMPT_FILE"] = stepDef.PromptFile;
         if (stepDef.ContextPaths.Count > 0)
             spec.EnvironmentVariables["AETHEUS_AI_CONTEXT_PATHS_JSON"] =
                 JsonSerializer.Serialize(stepDef.ContextPaths);
         AddAiPublicationVariables(spec.EnvironmentVariables, runId, stageDef.Name, stepDef);
+        if (!string.IsNullOrWhiteSpace(stepDef.GitRange))
+            spec.EnvironmentVariables["AETHEUS_AI_GIT_RANGE"] = SubstituteVariables(stepDef.GitRange, legVars).Trim();
 
         stepRun.ServerId = legServer.Id;
         var task = new ServerTask
@@ -555,15 +565,27 @@ public sealed class PipelineStepTaskDispatcher(
         return StepDispatchResult.Handled;
     }
 
-    /// <summary>What the agent needs to publish an AI step's findings and honour its advisory and
-    /// diff-capture switches. Internal to the executor: AETHEUS_* never reaches the CLI.</summary>
+    /// <summary>The profile assigned to the run's pipeline, read once per stage (null: automatic).</summary>
+    private async Task<int?> GetPipelineAiProfileIdAsync(int runId, StageTaskCreationState state, CancellationToken ct)
+    {
+        if (!state.PipelineAiProfileFetched)
+        {
+            state.PipelineAiProfileId = (await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false))
+                ?.Pipeline?.AiRunnerProfileId;
+            state.PipelineAiProfileFetched = true;
+        }
+        return state.PipelineAiProfileId;
+    }
+
+    /// <summary>What the agent needs to honour an AI step's advisory switch and to publish its
+    /// findings under the run and stage.</summary>
     internal static void AddAiPublicationVariables(
         Dictionary<string, string> environment, int runId, string stageName, PipelineStepDefinition stepDef)
     {
         if (stepDef.Advisory) environment["AETHEUS_AI_ADVISORY"] = "true";
-        if (stepDef.CaptureDiff == false) environment["AETHEUS_AI_CAPTURE_DIFF"] = "false";
-        if (string.IsNullOrWhiteSpace(stepDef.FindingsSarif)) return;
-        environment["AETHEUS_AI_FINDINGS_SARIF"] = stepDef.FindingsSarif;
+        if (!stepDef.Findings) return;
+        environment["AETHEUS_AI_FINDINGS"] = "true";
+        if (stepDef.FindingsPlaceholder) environment["AETHEUS_AI_FINDINGS_PLACEHOLDER"] = "true";
         environment["AETHEUS_RUN_ID"] = runId.ToString(System.Globalization.CultureInfo.InvariantCulture);
         environment["AETHEUS_STAGE_NAME"] = stageName;
     }

@@ -1,6 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* PLAN-005 lot 5: the one way a release status is drawn. Five pages printed the raw enum name
-   (Superseded, Deployed) although localized Enum_ReleaseStatus_* keys existed; the two statuses a
-   reader cannot guess also say what they mean on hover. *@
+@* Localize release statuses through one badge and explain ambiguous states on hover so all pages
+   use the same meaning. *@
 <OmniBadge Fill="OmniFill.Solid" Tone="@Variant" title="@Help" Class="@Class">@L.Localize(Status)</OmniBadge>

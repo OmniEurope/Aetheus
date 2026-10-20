@@ -261,10 +261,11 @@ public sealed class PipelineSetupReadinessServiceTests
                 scanner: trivy-iac
         """;
 
-    /// <summary>Recette R2-121: Gitleaks reads .gitleaks.toml from the repository and fails without it;
-    /// the readiness check names it. Trivy's ignore file is optional and is not asked for.</summary>
+    /// <summary>Recette R3-63, option 3: Gitleaks reads .gitleaks.toml when the repository has one and
+    /// its built-in rules otherwise, so a repository without it is ready. Trivy's ignore file is
+    /// optional too: nothing is asked for.</summary>
     [Fact]
-    public async Task ScannerConfigurationTheRepositoryMustCarry_IsReportedWhenAbsent()
+    public async Task GitleaksConfigurationAbsent_IsNotAskedFor()
     {
         Template(1, "application-security", SecurityTemplate);
         Runners(11);
@@ -274,10 +275,9 @@ public sealed class PipelineSetupReadinessServiceTests
 
         var readiness = await RunAsync("application-security");
 
-        var check = Assert.Single(readiness.Checks);
-        Assert.Equal(PipelineSetupReadinessKind.MissingScannerConfiguration, check.Kind);
-        Assert.Equal([".gitleaks.toml"], check.Items);
-        Assert.True(readiness.HasBlocking);
+        Assert.Empty(readiness.Checks);
+        Assert.False(readiness.HasBlocking);
+        Assert.True(readiness.RepositoryInspected);
     }
 
     [Fact]
@@ -294,8 +294,9 @@ public sealed class PipelineSetupReadinessServiceTests
         Assert.Empty(readiness.Checks);
     }
 
-    /// <summary>Recette R1-32: a project whose source is an external address has a repository; Aetheus
-    /// cannot read it, so the files are announced as not checkable, never as missing nor "no repository".</summary>
+    /// <summary>A project whose source is an external address has a repository; Aetheus cannot read
+    /// it, so the files are announced as not checkable, never as missing nor "no
+    /// repository".</summary>
     [Fact]
     public async Task ExternalAddressWithoutAReadableCopy_IsNotNoRepository_ButFilesThatCannotBeChecked()
     {
@@ -361,8 +362,8 @@ public sealed class PipelineSetupReadinessServiceTests
         Assert.Equal(PipelineSetupReadinessKind.NoRepository, Assert.Single(readiness.Checks).Kind);
     }
 
-    /// <summary>Recette R1-28: the project's existing pipelines are read as a run reads them, their
-    /// template expanded, so a pipeline extending application-ci requires ci.sh.</summary>
+    /// <summary>The project's existing pipelines are read as a run reads them, their template
+    /// expanded, so a pipeline extending application-ci requires ci.sh.</summary>
     [Fact]
     public async Task ProjectReadiness_ExpandsEachPipelinesTemplate_AndReportsItsMissingAdapter()
     {

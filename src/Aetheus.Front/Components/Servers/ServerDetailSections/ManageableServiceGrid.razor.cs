@@ -29,8 +29,8 @@ public partial class ManageableServiceGrid
     internal static OmniTone GetStatusBadgeStyle(string status, bool isRunning) =>
         ServiceStatusPresentation.Tone(status, isRunning);
 
-    /// <summary>Recette R-507: the status in the reader's language; a word the page does not know is
-    /// shown as the host wrote it.</summary>
+    /// <summary>The status in the reader's language; a word the page does not know is shown as the
+    /// host wrote it.</summary>
     private string StatusText(string status, bool isRunning) =>
         ServiceStatusPresentation.LabelKey(status, isRunning) is { } key ? L[key] : status;
 
@@ -58,23 +58,16 @@ public partial class ManageableServiceGrid
     /// root-owned helper (not apt), so its Install button gates on this rather than CanManagePackages.</summary>
     [Parameter] public bool CanInstallTeamspeak { get; set; }
 
-    /// <summary>Recette R-510: the action in flight or just finished on a service, by its name.</summary>
+    /// <summary>The action in flight or just finished on a service, by its name.</summary>
     [Parameter] public Func<string, ServiceActionState?>? ActionStateOf { get; set; }
 
     private ServiceActionState? ActionOf(string serviceName) => ActionStateOf?.Invoke(serviceName);
 
     private bool IsBusy(string serviceName) => ActionOf(serviceName) is { InFlight: true };
 
-    /// <summary>Recette R2-030: the actions still running on this grid's services, in list order.</summary>
-    private IReadOnlyList<(string Service, ServiceActionState Action)> InFlightActions =>
-        [.. Services.Select(service => (Service: service.Name, Action: ActionOf(service.Name)))
-            .Where(item => item.Action is { InFlight: true })
-            .Select(item => (item.Service, item.Action!))];
-
-    /// <summary>"Installation de « nginx » en cours…", or "en attente de l'agent" before it starts.</summary>
-    internal string InFlightText(string service, ServiceActionState action) => string.Format(
-        L[action.Phase == ServiceActionPhase.Queued ? "ServiceActionQueuedBanner" : "ServiceActionRunningBanner"],
-        L[$"ServiceActionNoun{action.ActionKey}"], service);
+    /// <summary>Recette R3-22: false when the page shows one banner for all its grids. A service being
+    /// uninstalled moves from the installed grid to the available one, and a banner per grid moved with it.</summary>
+    [Parameter] public bool ShowInFlightBanner { get; set; } = true;
 
     private string ActionText(ServiceActionState action) => action.Phase switch
     {
@@ -86,7 +79,7 @@ public partial class ManageableServiceGrid
             : string.Format(L["ServiceActionFailed"], L[action.ActionKey])
     };
 
-    /// <summary>Recette R-509: on the grid of installed services with a module, the row opens it.</summary>
+    /// <summary>On the grid of installed services with a module, the row opens it.</summary>
     private bool OpensModuleOnRowClick => Installed && ShowModuleLink;
 
     private Task OnRowClickedAsync(OmniDataGridRowMouseEventArgs<ServiceInfoDto> args) =>
@@ -108,11 +101,11 @@ public partial class ManageableServiceGrid
 
     private readonly HashSet<string> _selected = new(StringComparer.Ordinal);
 
-    // Recette R-210: the Type filter lists the translated service types.
+    // The Type filter lists the translated service types.
     private Func<string, string>? _typeText;
     private Func<string, string> TypeText => _typeText ??= GridFilterText.ForEnum<ServiceType>(L);
 
-    // Recette R-227: each heartbeat brings a new service list; services that were not there read bold.
+    // Each heartbeat brings a new service list; services that were not there read bold.
     private OmniDataGrid<ServiceInfoDto>? _grid;
     private readonly LiveGridRows _liveRows = new();
 
@@ -136,10 +129,8 @@ public partial class ManageableServiceGrid
 
     private void ClearSelection() => _selected.Clear();
 
-    // Most managed services install via apt (the package-manage capability). A couple of dedicated
-    // modules are NOT apt packages: teamspeak installs through its own root-owned setup helper (gated on
-    // the teamspeak-setup capability). Anything that is neither apt-installable nor a module install
-    // (e.g. certbot used to be) is not offered for install at all.
+    // Package-managed services and dedicated module helpers have distinct install capabilities.
+    // Services supporting neither route are not offered for installation.
     internal static bool IsAptInstallable(string serviceName) =>
         Aetheus.Shared.Components.Servers.ManageablePackages.IsManageableService(serviceName);
 
@@ -149,11 +140,22 @@ public partial class ManageableServiceGrid
 
     // Whether the Install action can be offered for this service given the server's capabilities.
     private bool CanInstall(string serviceName) =>
-        IsModuleInstallable(serviceName) ? CanInstallTeamspeak
-        : CanManagePackages && IsAptInstallable(serviceName);
+        !IsMailStackLocked(serviceName)
+        && (IsModuleInstallable(serviceName) ? CanInstallTeamspeak : CanManagePackages && IsAptInstallable(serviceName));
+
+    /// <summary>Recette R3-24/R3-25/R3-43: Postfix and Dovecot of a mail stack Aetheus manages are set up and
+    /// removed whole from the Mail page; the backend refuses them here as well.</summary>
+    [Parameter] public bool MailStackManaged { get; set; }
+
+    internal bool IsMailStackLocked(string serviceName) =>
+        MailStackManaged
+        && (serviceName.Equals("postfix", StringComparison.OrdinalIgnoreCase)
+            || serviceName.Equals("dovecot", StringComparison.OrdinalIgnoreCase));
 
     private string InstallTitle(string serviceName)
     {
+        if (IsMailStackLocked(serviceName))
+            return L["MailStackManagedServiceHint"];
         if (IsModuleInstallable(serviceName))
             return CanInstallTeamspeak ? L["Install"] : L["TeamspeakSetupCapabilityDisabled"];
         if (!CanManagePackages)

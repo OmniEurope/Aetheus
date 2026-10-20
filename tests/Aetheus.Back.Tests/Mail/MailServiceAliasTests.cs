@@ -24,7 +24,8 @@ public class MailServiceAliasTests
         // tests pass the gate; the negative tests short-circuit (validation/NotFound) before it.
         _serverRepo.FindServerAsync(1, Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 1, MailSetupAvailable = true });
-        _sut = new MailService(_repo, _audit, _encryption, _serverRepo, Substitute.For<Aetheus.Back.Components.Tasks.ITaskService>());
+        _sut = new MailService(_repo, _audit, _encryption, _serverRepo, Substitute.For<Aetheus.Back.Components.Tasks.ITaskService>(),
+            Substitute.For<IMailMasterSecrets>());
     }
 
     private static MailDomain Domain(int id = 1, int serverId = 1) =>

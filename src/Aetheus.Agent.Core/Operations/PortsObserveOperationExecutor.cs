@@ -3,13 +3,8 @@ using Aetheus.Agent.Core.Collectors;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// PLAN-005 lot 2: the on-demand port scan. The periodic path rides the heartbeat; this one exists so
-/// an operator who just stopped a service does not have to wait a slow-inventory period to see it.
-///
-/// It reports through the agent's own token rather than waiting for the next heartbeat, otherwise the
-/// "Refresh" button would return without refreshing anything - a green result for work not done.
-/// </summary>
+/// <summary>Run and report an on-demand port scan with the agent token so refresh completes without
+/// waiting for periodic heartbeat inventory.</summary>
 public sealed class PortsObserveOperationExecutor(
     IListeningPortsCollector collector,
     IServerApiClient apiClient,

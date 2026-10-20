@@ -217,11 +217,7 @@ public sealed class BlueGreenStepBindingTests
         Assert.Equal(["AETHEUS_BACK_IMAGE"], binding.SkippedComposeEnv);
     }
 
-    /// <summary>
-    /// PLAN-003 2.1: a library may define a value as empty on purpose (a host prefix, a version
-    /// suffix). Defined-and-empty is forwarded as such on every step, the starting ones included;
-    /// only a name the run does not define at all is refused there.
-    /// </summary>
+    /// <summary>Explicitly empty values are forwarded; only undefined names are refused.</summary>
     [Theory]
     [InlineData(OperationKind.BlueGreenUp)]
     [InlineData(OperationKind.BlueGreenMigrate)]
@@ -277,7 +273,7 @@ public sealed class BlueGreenStepBindingTests
         Assert.Contains("AETHEUS_TELEMETRY_ENABLED", upError, StringComparison.Ordinal);
     }
 
-    /// <summary>PLAN-003 2.7: the switch arms the host-side confirmation window, nothing else does.</summary>
+    /// <summary>Only the switch arms a host confirmation window.</summary>
     [Fact]
     public void ConfirmMinutes_OnTheSwitch_ReachesTheAgent()
     {

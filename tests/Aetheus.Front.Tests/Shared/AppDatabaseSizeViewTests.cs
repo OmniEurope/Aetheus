@@ -6,10 +6,8 @@ using Microsoft.Extensions.Localization;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// PLAN-013 lot 1 (R2-113): the Database tab of a supervised application shows the size its Aetheus.Telemetry
-/// package measured, the largest tables with their estimated rows, and what changed over 24 hours.
-/// </summary>
+/// <summary>The Database tab presents measured size, largest tables, estimated rows and change over
+/// 24 hours.</summary>
 public sealed class AppDatabaseSizeViewTests : BunitContext
 {
     private const long Mb = 1024 * 1024;

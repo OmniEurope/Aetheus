@@ -16,8 +16,7 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
     /// ordinary retention: the deployed one and the two it superseded, the redeployable window.</summary>
     private const int RetainedDeployedReleases = 3;
 
-    /// <summary>
-    /// Recette R-210 / R-224: the header filters of a project's artifacts grid. The size column shows a
+    /// <summary> The header filters of a project's artifacts grid. The size column shows a
     /// formatted size and the release column a list of links, so the grid offers no filter on them.
     /// </summary>
     internal static readonly GridQueryMap<PipelineArtifact> ProjectColumns = new GridQueryMap<PipelineArtifact>()
@@ -70,7 +69,7 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
         return (items, totalCount);
     }
 
-    /// <summary>Recette R-210: the pipeline and environment names present across a project's artifacts.</summary>
+    /// <summary>The pipeline and environment names present across a project's artifacts.</summary>
     public async Task<ProjectArtifactFilterValuesDto> GetProjectFilterValuesAsync(int projectId, CancellationToken ct = default)
     {
         var rows = await db.PipelineArtifacts.AsNoTracking()
@@ -123,11 +122,8 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
         await db.PipelineArtifacts
             .Where(a => a.RetentionExpiresAt <= cutoff
                 && (a.RetentionLeaseExpiresAt == null || a.RetentionLeaseExpiresAt <= cutoff)
-                // The factually deployed release is the rollback baseline. Its payload must survive
-                // ordinary retention even when its original deadline has passed. So do the payloads of
-                // the releases deployed just before it (PLAN-007 lot 5): the last three releases a
-                // project ever deployed stay redeployable, and a fourth deployment makes the oldest
-                // of them eligible again. Without this, N-1 was purged the day after N shipped.
+                // Protect the live deployed release and the two preceding deployments from ordinary
+                // payload retention. A fourth deployment makes the oldest payload eligible again.
                 && !a.Releases.Any(release => release.Status == ReleaseStatus.Deployed
                     || (release.Status == ReleaseStatus.Superseded
                         && db.Releases.Count(newer => newer.ProjectId == release.ProjectId
@@ -151,6 +147,12 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
                     && artifact.RetentionLeaseExpiresAt != null
                     && artifact.RetentionLeaseExpiresAt > at,
                 ct);
+
+    public Task<List<string>> GetAllFilePathsAsync(CancellationToken ct = default) =>
+        db.PipelineArtifacts.AsNoTracking().Select(artifact => artifact.FilePath).Distinct().ToListAsync(ct);
+
+    public Task<bool> IsFilePathReferencedAsync(string filePath, CancellationToken ct = default) =>
+        db.PipelineArtifacts.AsNoTracking().AnyAsync(artifact => artifact.FilePath == filePath, ct);
 
     public async Task<List<PipelineArtifact>> GetProjectBuildArtifactsAsync(
         int projectId, CancellationToken ct = default) =>
@@ -186,13 +188,22 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
     public async Task<bool> RemoveAsync(PipelineArtifact artifact, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(artifact);
-        // R-463: removing the tracked entity expected exactly one row and threw
-        // DbUpdateConcurrencyException when another path had deleted it first, which also stopped the
-        // rest of the cleanup batch. A delete by identifier that touches no row means "already done".
+        // Delete by identifier so an already removed row is a successful idempotent outcome rather
+        // than a concurrency error.
         if (db.Database.IsRelational())
         {
+            // One transaction: a completed Dependency-Track delivery no longer needs its payload, but
+            // its foreign key refuses the delete (ON DELETE RESTRICT), so the history row stays without
+            // the link, exactly as the release retention does. An unfinished delivery keeps the link
+            // and still refuses the delete: its payload is not released.
+            await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            await db.DependencyTrackOutboxItems
+                .Where(item => item.PipelineArtifactId == artifact.Id && item.CompletedAt != null)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.PipelineArtifactId, (int?)null), ct)
+                .ConfigureAwait(false);
             var deleted = await db.PipelineArtifacts.Where(a => a.Id == artifact.Id)
                 .ExecuteDeleteAsync(ct).ConfigureAwait(false);
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
             if (db.Entry(artifact).State != EntityState.Detached)
                 db.Entry(artifact).State = EntityState.Detached;
             return deleted > 0;
@@ -200,10 +211,21 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
 
         var current = await db.PipelineArtifacts.FirstOrDefaultAsync(a => a.Id == artifact.Id, ct).ConfigureAwait(false);
         if (current is null) return false;
+        var completedDeliveries = await db.DependencyTrackOutboxItems
+            .Where(item => item.PipelineArtifactId == artifact.Id && item.CompletedAt != null)
+            .ToListAsync(ct).ConfigureAwait(false);
+        foreach (var delivery in completedDeliveries) delivery.PipelineArtifactId = null;
         db.PipelineArtifacts.Remove(current);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return true;
     }
+
+    public Task<string?> FindNewestReleaseVersionAsync(int artifactId, CancellationToken ct = default) =>
+        db.Releases.AsNoTracking()
+            .Where(release => release.Artifacts.Any(artifact => artifact.Id == artifactId))
+            .OrderByDescending(release => release.PublishedAt ?? release.DetectedAt)
+            .Select(release => (string?)release.Version)
+            .FirstOrDefaultAsync(ct);
 
     public async Task<int> GetNextBuildNumberAsync(int projectId, int pipelineId, CancellationToken ct = default)
     {
@@ -411,12 +433,8 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
 
     private const string LegacyFastReleasePipeline = "aetheus-release-fast";
 
-    /// <summary>
-    /// Recette R2-121: a release honours the rollback contract when the pipeline that published it is
-    /// a candidate or a fast release. The self-deploy pipelines are recognised by their historical
-    /// names, unchanged; any other project's pipeline by the shipped template it extends, which is how
-    /// the setup wizard creates them (<c>portfolio-candidate</c> extends <c>application-candidate@N</c>).
-    /// </summary>
+    /// <summary>Recognize rollback-contract publishers by canonical self-deploy pipeline names or
+    /// the shipped candidate and fast-release templates they extend.</summary>
     private static readonly Expression<Func<Release, bool>> ProducedByRollbackContractPipeline = release =>
         release.PipelineRun != null
         && (release.PipelineRun.Pipeline.Name == "aetheus-candidate"
@@ -432,14 +450,9 @@ public sealed class ArtifactRepository(AppDbContext db) : IArtifactRepository
             .Select(s => (int?)s.OrganizationId)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
 
-    // --- Own-reads over shared entities -----------------------------------------------------------
-    // Four queries this module used to obtain by injecting the Pipelines and Releases services. Those
-    // injections put Artifacts inside a module cycle for what is, in every case, a read of an entity
-    // both modules already share. Reading them here removes the dependency without moving ownership:
-    // the writes still belong to Pipelines and Releases.
-    //
-    // Each query below is a copy of the canonical one, deliberately: a shared query would reinstate
-    // the dependency it removes. If the canonical shape changes, these must follow.
+    // Read shared entities locally to avoid module dependencies on Pipelines and Releases while
+    // leaving their write ownership intact. Keep query shapes aligned with their canonical
+    // counterparts.
 
     /// <summary>
     /// Pipeline and project a run belongs to. Canonical shape:

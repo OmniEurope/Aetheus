@@ -9,13 +9,13 @@
         <HelpLink PageKey="git-repositories" />
     </Badges>
     <Actions>
-        @* Recette R-181 / R-185: no Refresh, the list follows the git hub (RepositoryChanged...). *@
+        @* Repository hub events keep the list current. *@
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ShowCreateDialog" Disabled="@(!_projectFilter.HasValue || !_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
     </Actions>
 </OmniPageHeader>
 
-@* Recette R-185: inside a project the project is known and the grid's header filters search, so
-   neither the project picker nor the search box show there. *@
+@* Inside a project the project is known and the grid's header filters search, so neither the
+   project picker nor the search box show there. *@
 @if (!ProjectId.HasValue)
 {
 <div class="pipeline-list-toolbar">
@@ -32,8 +32,7 @@
 </div>
 }
 
-@* Recette R-318: inside a project, its internal repositories and its external repository are two
-   tabs (?tab=internal|external) instead of a grid followed by a section further down. *@
+@* Project Git views separate internal and external sources through URL-synchronized tabs. *@
 @if (_projectFilter.HasValue)
 {
     <UrlSyncedTabs Slugs="@RepositoryTabSlugs" @bind-SelectedIndex="_repositoryTab" class="git-repository-tabs">
@@ -96,7 +95,7 @@ else
             <OmniDataGridColumn TItem="GitLightRepoDto" Title="@L["Actions"]" MinWidth="14rem" Sortable="false" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
                 <Template Context="r">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                        @* R2-037 (2026-10-01): Ouvrir is the row's main action, blue by the user's choice (R-533). *@
+                        @* Open is the row's primary action. *@
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo($"git-repositories/{r.Id}?projectId={r.ProjectId}"))" title="@L["View"]" Label="@L["View"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRepo(r))" Disabled="@(!_canWrite)" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                     </span>
@@ -110,7 +109,7 @@ else
     <EmptyState Icon="commit" Title="@(ExternalRepositoryUrl is null ? L["NoRepositoriesFound"] : L["ExternalRepositoryOnly"])"
         Description="@(ExternalRepositoryUrl is not null ? L["ExternalRepositoryOnlyHint"] : _projectFilter.HasValue ? L["EmptyRepositoriesHint"] : L["SelectProjectToCreateRepository"])">
         <ActionContent>
-            @* Recette R-296: a project built from an external repository says so and links to it. *@
+            @* A project built from an external repository says so and links to it. *@
             @if (ExternalRepositoryUrl is { } externalUrl)
             {
                 <OmniLink Href="@externalUrl" NewTab="true" Class="git-external-repository-link">@externalUrl</OmniLink>

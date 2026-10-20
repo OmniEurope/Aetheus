@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Services.Email;
 
-/// <summary>
-/// Recette R1-16: sends e-mails through the platform sender (the no-reply account of the managed mail
+/// <summary> Sends e-mails through the platform sender (the no-reply account of the managed mail
 /// domain by default, or the custom SMTP server of the platform settings). Never throws for an SMTP
-/// failure: each message gets its own <see cref="EmailSendResult"/>, with the server's text verbatim.
-/// </summary>
+/// failure: each message gets its own <see cref="EmailSendResult"/>, with the server's text
+/// verbatim. </summary>
 public interface IEmailSender
 {
     Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken ct = default);

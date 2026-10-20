@@ -1,5 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
+<ServerMailDeliveryPanel Delivery="@Delivery" HostIpv4="@HostIpv4" />
 <OmniRow Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
     <OmniBadge Fill="OmniFill.Solid" Tone="@(QueueSize > 0 ? OmniTone.Warning : OmniTone.Success)">@QueueSize.ToString()</OmniBadge>
     @if (_pendingTaskId is not null)
@@ -8,10 +9,14 @@
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailWaitingForTask"]</OmniText>
     }
     <div class="blade-content-spacer"></div>
+    @* STD-BTN detection 11: Load visible, the other actions in the menu. *@
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadAsync" Disabled="@(_pendingTaskId is not null)"><OmniIcon Name="OmniIconName.Eye" /> <span>@L["MailQueueLoad"]</span></OmniButton>
     @if (CanManage)
     {
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@FlushAsync"><OmniIcon Name="OmniIconName.PaperPlaneRight" /> <span>@L["FlushQueue"]</span></OmniButton>
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem OnClick="@FlushAsync"><Icon><OmniIcon Name="OmniIconName.PaperPlaneRight" /></Icon><ChildContent>@L["FlushQueue"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@ApplyRetryTuningAsync" Disabled="@(HelperVersion < RetryTuningMinimumHelperVersion)"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["MailApplyRetryTuning"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
     }
 </OmniRow>
 @if (_loaded && _items.Count == 0)

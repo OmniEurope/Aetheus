@@ -56,22 +56,9 @@ for (const [name, expected] of Object.entries(candidate.artifacts ?? {})) {
     throw new Error(`Candidate artifact '${name}' differs from the validated digest.`);
 }
 
-// The gate: production must stand on one of the two schema states this delivery was proven against.
-//
-//   schemaBefore - the state the forward migration was actually run from; a normal migrating deploy.
-//   schemaAfter  - the state that migration produces, on which both V and V-1 binaries were exercised;
-//                  the migration is a no-op and only binaries move. This covers redeploying the
-//                  current release, retrying after a switch, deploying across releases that carry no
-//                  migration, and rolling back to any release whose schemaAfter is the live state.
-//
-//   previous release - production runs release N, whose forward migration started exactly from the
-//                  candidate's schemaAfter and ended on the live state (PLAN-007 lot 5). N's own QA ran
-//                  the release deployed before it, V-1, on that live state: the candidate is that V-1,
-//                  or a release sharing its schema (ADR-042 treats those as interchangeable for the
-//                  database). The proof is N's sealed contract, read from the release production runs,
-//                  never from anything the candidate declares about itself.
-//
-// Anything else means crossing a migration path no QA ever ran, which stays refused.
+// Accept only live schema states proven by this candidate or the current release's sealed rollback
+// evidence so deployment never crosses an untested migration path (ADR-042). See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 const { baseline } = candidate;
 const describe = state => `${state.hash} (${state.migrations.length} migrations)`;
 

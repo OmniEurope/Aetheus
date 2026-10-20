@@ -9,14 +9,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// The dispatch planner reads the completed stages and the "is anything still running" flag in two
-/// separate queries. A step that finishes between them used to satisfy both halves of the deadlock
-/// test at once - its stage was not complete in the first read, and nothing was running by the
-/// second - and the run was failed with a reason that contradicted its own data: it named a stage
-/// that had succeeded milliseconds earlier. Production run 1989 died exactly this way, 21ms after
-/// its last dependency completed.
-/// </summary>
+/// <summary>Verifies that separately read stage and task states cannot falsely declare a deadlock
+/// when a step completes between the queries.</summary>
 public class PipelineDeadlockRecheckTests
 {
     private static PipelineYamlDefinition Definition() => new()

@@ -2,10 +2,9 @@
 
 namespace Aetheus.Front.Layout;
 
-/// <summary>
-/// Recette R-431: the actions a project section adds to the "..." menu of the project header, next
-/// to Follow and Edit (the findings export of the quality page), instead of a row of its own above
-/// its content. <see cref="ProjectDetailLayout"/> owns one and cascades it to the section it hosts.
+/// <summary> The actions a project section adds to the "..." menu of the project header, next to
+/// Follow and Edit (the findings export of the quality page), instead of a row of its own above its
+/// content. <see cref="ProjectDetailLayout"/> owns one and cascades it to the section it hosts.
 /// </summary>
 public sealed class ProjectSectionMenu
 {

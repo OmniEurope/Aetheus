@@ -405,11 +405,9 @@ public sealed class ScannerOperationExecutorTests
         finally { context.Dispose(); }
     }
 
-    /// <summary>
-    /// Recette R2-099: the eight OpenAPI partitions are one step. The agent scans each definition in
+    /// <summary> The eight OpenAPI partitions are one step. The agent scans each definition in
     /// order, each with its share of the step's timeout, and publishes ONE report holding every
-    /// partition's sites, with one raw artifact.
-    /// </summary>
+    /// partition's sites, with one raw artifact. </summary>
     [Fact]
     public async Task R2099_ZapApiWithSeveralDefinitions_ScansThemInOrder_AndPublishesOneMergedReport()
     {
@@ -478,7 +476,7 @@ public sealed class ScannerOperationExecutorTests
         finally { context.Dispose(); }
     }
 
-    /// <summary>R2-099: every definition of the list passes the host check, not only the first.</summary>
+    /// <summary>Every definition of the list passes the host check, not only the first.</summary>
     [Fact]
     public void R2099_ADefinitionOnAnotherHost_RefusesTheWholeList()
     {
@@ -531,9 +529,8 @@ public sealed class ScannerOperationExecutorTests
     [InlineData("syft", "aetheus-back.tar")]
     [InlineData("trivy-image-front", "aetheus-front.tar")]
     [InlineData("syft-front", "aetheus-front.tar")]
-    // A project that names its archives after itself reaches the SAME refusal, on provenance. The
-    // archive name is no longer what blocks it: before the fix these two rows failed on a missing
-    // file while reporting a revision mismatch, a cause that was not the real one.
+    // Archive naming does not bypass provenance checks: mismatched revisions are refused for
+    // project-named archives too.
     [InlineData("trivy-image", "atlas-back.tar")]
     [InlineData("syft-front", "atlas-front.tar")]
     public async Task ExecuteAsync_BuiltArtifactFromAnotherCommit_IsRejectedBeforeProcessStart(

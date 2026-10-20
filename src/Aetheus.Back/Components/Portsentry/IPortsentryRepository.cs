@@ -14,7 +14,8 @@ public interface IPortsentryRepository
     Task<(List<PortsentryWhitelistIp> Items, int Total)> GetWhitelistPagedAsync(
         int serverId, string? search, int page, int pageSize, string? sortBy, bool sortDescending,
         CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null);
-    /// <summary>Recette R-210: the distinct protocols of a server's blocked IPs, for the Protocol filter.</summary>
+    /// <summary>The distinct protocols of a server's blocked IPs, for the Protocol
+    /// filter.</summary>
     Task<List<string>> GetBlockedProtocolsAsync(int serverId, CancellationToken ct = default);
     Task<PortsentryWhitelistIp> AddWhitelistIpAsync(PortsentryWhitelistIp entry, CancellationToken ct = default);
     Task<bool> RemoveWhitelistIpAsync(int id, int serverId, CancellationToken ct = default);

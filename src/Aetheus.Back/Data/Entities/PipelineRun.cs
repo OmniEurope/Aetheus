@@ -49,14 +49,20 @@ public class PipelineRun
     /// </summary>
     public int BuildNumber { get; set; }
 
-    /// <summary>
-    /// Recette R2-110: the project release number this run builds with, exposed to steps as
-    /// <c>BUILD_RELEASENUMBER</c>. Taken at launch from <see cref="Project.ReleaseCounter"/>: the next
-    /// one when the pipeline declares <c>release_number: allocate</c>, the run it was started by when
-    /// it has one in the same project (a candidate's CI inherits the candidate's number), the latest
-    /// otherwise. Null for a pipeline without a project and for runs created before it existed.
-    /// </summary>
+    /// <summary> The project release number this run builds with, exposed to steps as
+    /// <c>BUILD_RELEASENUMBER</c>. Taken at launch from the counter of the run's
+    /// <see cref="ReleaseSeries"/> (<see cref="ProjectReleaseSeries"/>): the
+    /// next one when the pipeline declares <c>release_number: allocate</c>, the run it was started
+    /// by when it has one in the same project (a candidate's CI inherits the candidate's number),
+    /// the latest otherwise. Null for a pipeline without a project and for runs created before it
+    /// existed. </summary>
     public int? ReleaseNumber { get; set; }
+
+    /// <summary>The version series (<c>major.minor</c> of the commit's <c>VersionPrefix</c>) the
+    /// <see cref="ReleaseNumber"/> counts in, exposed to steps as <c>BUILD_RELEASESERIES</c>: the
+    /// application version is this series, a dot and the number. Empty when the code declares no
+    /// <c>VersionPrefix</c>; null for a run without a release number.</summary>
+    public string? ReleaseSeries { get; set; }
 
     /// <summary>
     /// Why the last scheduling pass dispatched nothing, in one human sentence per blocked stage
@@ -85,6 +91,14 @@ public class PipelineRun
     /// </summary>
     public string? PreflightJson { get; set; }
 
+    /// <summary>
+    /// Launched in "run to end" mode, chosen at manual launch when the platform setting allows it: every
+    /// step continues on error so one run exercises everything that can still run. A failure still
+    /// ends the run Failed (<see cref="PipelineStepRun.ContinueOnErrorForced"/>), and once a step has
+    /// failed the run may not publish a release.
+    /// </summary>
+    public bool RunToEnd { get; set; }
+
     // Navigation
     public Pipeline Pipeline { get; set; } = null!;
     public List<PipelineStepRun> StepRuns { get; set; } = [];
@@ -93,6 +107,7 @@ public class PipelineRun
     public List<CoverageResult> CoverageResults { get; set; } = [];
     public List<LintResult> LintResults { get; set; } = [];
     public List<RunMetric> RunMetrics { get; set; } = [];
+    public List<PipelineMigrationGateVerdict> MigrationGateVerdicts { get; set; } = [];
     public List<PipelineArtifact> Artifacts { get; set; } = [];
 
     /// <summary>Analysis evaluations recorded against this run. The inverse of an existing foreign key,

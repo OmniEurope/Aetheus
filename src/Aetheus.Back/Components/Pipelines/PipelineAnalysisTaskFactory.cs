@@ -117,7 +117,7 @@ public sealed class PipelineAnalysisTaskFactory(IPipelineStepTaskBuilder taskBui
             runId, legServer, stepRun, stepDef, command, variables, OperationKind.PipelinePublishLint);
     }
 
-    /// <summary>PLAN-003 2.4: the Stryker mutation score, published as a metric.</summary>
+    /// <summary>Publishes the Stryker mutation score as a metric.</summary>
     public void CreateMutationTask(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
         Dictionary<string, string> legVars, PipelineStageDefinition stageDef)
@@ -129,11 +129,8 @@ public sealed class PipelineAnalysisTaskFactory(IPipelineStepTaskBuilder taskBui
             runId, legServer, stepRun, stepDef, command, variables, OperationKind.PipelinePublishMutation);
     }
 
-    /// <summary>
-    /// PLAN-003 2.2 (4.5): one artifact per step. It is the same collection the stage-level
-    /// <c>artifacts:</c> dispatches after a stage, run as a step instead, so the stage only completes
-    /// once its artifacts are uploaded and a consumer downstream can never race the collection.
-    /// </summary>
+    /// <summary>Artifact collection runs as a step so the stage cannot finish before upload and
+    /// downstream consumers cannot race it.</summary>
     public void CreateCollectArtifactsTask(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
         Dictionary<string, string> legVars, PipelineStageDefinition stageDef)

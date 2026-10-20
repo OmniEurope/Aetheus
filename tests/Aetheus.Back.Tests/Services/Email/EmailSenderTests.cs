@@ -6,7 +6,7 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-16: the sender reports every outcome, with the SMTP text verbatim.</summary>
+/// <summary>The sender reports every outcome, with the SMTP text verbatim.</summary>
 public sealed class EmailSenderTests
 {
     private static readonly EmailSenderConfiguration Configuration =

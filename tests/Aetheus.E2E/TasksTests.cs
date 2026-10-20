@@ -3,8 +3,11 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Tasks")]
+[RollbackRelevant]
 public class TasksTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     [SetUp]
     public async Task SetUp()
     {
@@ -40,16 +43,5 @@ public class TasksTests : E2ETestBase
         await Expect(buildDiagnostic).ToBeVisibleAsync(new() { Timeout = 5000 });
         await Expect(buildDiagnostic.GetByText("Cancelled", new() { Exact = true }))
             .ToBeVisibleAsync(new() { Timeout = 5000 });
-    }
-
-    [Test]
-    public async Task Tasks_NavigateFromSidebar_Works()
-    {
-        // "Tasks" is a contextual sub-item of the Servers section, only rendered
-        // while inside that section. Start from /servers so it is in the sidebar.
-        await NavigateToAsync("servers");
-        await ClickSidebarNavItemAsync("Tasks");
-
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/tasks"), new() { Timeout = 5000 });
     }
 }

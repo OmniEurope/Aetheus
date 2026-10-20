@@ -22,6 +22,44 @@ public sealed class DailyRecapSettingsPanelTests : BunitContext
     };
 
     [Fact]
+    public void ALastDelivery_IsReported_AsASuccessWithoutAnError()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "api/settings/daily-recap", Defaults() with
+        {
+            LastSentAt = new DateTime(2026, 10, 15, 6, 0, 0, DateTimeKind.Utc),
+            LastSentDate = new DateOnly(2026, 10, 15),
+            LastRecipientCount = 3,
+            LastDeliveredCount = 3
+        });
+
+        var cut = Render<DailyRecapSettingsPanel>();
+
+        cut.WaitForAssertion(() => Assert.Contains("DailyRecapLastDelivered", cut.Find(".daily-recap-last").TextContent));
+        Assert.DoesNotContain("DailyRecapLastError", cut.Find(".daily-recap-last").TextContent);
+        Assert.DoesNotContain("DailyRecapLastNever", cut.Find(".daily-recap-last").TextContent);
+        Assert.Contains("omni-alert--success", cut.Find(".daily-recap-last").ClassName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ALastDeliveryThatFailed_ShowsTheRefusalAfterTheSummary_AsAWarning()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "api/settings/daily-recap", Defaults() with
+        {
+            LastSentAt = new DateTime(2026, 10, 15, 6, 0, 0, DateTimeKind.Utc),
+            LastRecipientCount = 2,
+            LastDeliveredCount = 1,
+            LastError = "550 mailbox unavailable"
+        });
+
+        var cut = Render<DailyRecapSettingsPanel>();
+
+        cut.WaitForAssertion(() => Assert.Contains("DailyRecapLastDelivered", cut.Find(".daily-recap-last").TextContent));
+        var text = cut.Find(".daily-recap-last").TextContent;
+        Assert.True(text.IndexOf("DailyRecapLastError", StringComparison.Ordinal) > text.IndexOf("DailyRecapLastDelivered", StringComparison.Ordinal));
+        Assert.Contains("omni-alert--warning", cut.Find(".daily-recap-last").ClassName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Defaults_AreShown_EverySectionTicked_AndTheAdministratorsPrefilledAsRecipients()
     {
         _handler.SetJsonResponse(HttpMethod.Get, "api/settings/daily-recap", Defaults());
@@ -135,7 +173,9 @@ public sealed class DailyRecapSettingsPanelTests : BunitContext
         });
 
         var cut = Render<DailyRecapSettingsPanel>();
-        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".daily-recap-preview-toggle")));
+        // STD-BTN detection 11: the preview toggle sits in the actions' "More actions" menu.
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".daily-recap-actions .omni-overflow-menu__trigger")));
+        cut.Find(".daily-recap-actions .omni-overflow-menu__trigger").Click();
 
         cut.Find(".daily-recap-preview-toggle").Click();
 

@@ -39,14 +39,9 @@ public sealed record AnalyticsBrowserEvent
     /// </summary>
     public bool? SignedIn { get; init; }
 
-    /// <summary>
-    /// Recette R-471: the opaque identifier the host application holds for the signed-in visitor (the
-    /// <c>authenticatedUserId</c> of the v1 contract). Never an account name or an e-mail address, and
-    /// never stored: it only feeds the pseudonym derivation, so two signed-in people behind one
-    /// network count as two. Read only when the host enables
-    /// <see cref="AetheusWebAnalyticsOptions.AcceptDeclaredUserId"/> and does not authenticate the
-    /// visitor itself. Like <see cref="SignedIn"/>, a declaration and not a proof.
-    /// </summary>
+    /// <summary>Optional opaque visitor identifier used only for pseudonym derivation when the host
+    /// opts in and lacks its own authenticated identity. It is neither stored nor proof of
+    /// authentication and must not contain an account name or email address.</summary>
     [StringLength(256, MinimumLength = 1)]
     [RegularExpression("^[A-Za-z0-9_-]+$")]
     public string? AuthenticatedUserId { get; init; }

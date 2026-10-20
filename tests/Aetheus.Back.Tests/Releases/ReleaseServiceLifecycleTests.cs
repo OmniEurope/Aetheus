@@ -191,10 +191,8 @@ public sealed class ReleaseServiceLifecycleTests
         Assert.Empty(await _service.GetReleasesByRunAsync(5, Ct));
     }
 
-    /// <summary>
-    /// A release a pipeline publishes records when it came to be: DetectedAt used to stay at its
-    /// default, and the run dialog's release grid showed 01/01/0001 (seen 2026-09-11).
-    /// </summary>
+    /// <summary>Published releases record their detection time instead of retaining an unset
+    /// timestamp.</summary>
     [Fact]
     public async Task CreateReleaseFromPipelineAsync_DatesTheReleaseItCreates()
     {
@@ -235,12 +233,8 @@ public sealed class ReleaseServiceLifecycleTests
         await _repository.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    /// <summary>
-    /// R-10: deploy-prod 2367 failed at its TLS stage, before production changed, and turned the
-    /// candidate it was deploying into a Failed release that the launch dialog then hid. A run that
-    /// ends badly decides only for a release it was still building; one already published keeps its
-    /// status, and the failed attempt stays visible as the status of the run it points at.
-    /// </summary>
+    /// <summary>A failed deployment attempt must not change a previously published release into
+    /// Failed; only releases still being built take that outcome.</summary>
     [Theory]
     [InlineData(ReleaseStatus.Published, PipelineStatus.Failed)]
     [InlineData(ReleaseStatus.Published, PipelineStatus.Cancelled)]
@@ -356,7 +350,7 @@ public sealed class ReleaseServiceLifecycleTests
             TargetRelease = Release(2, "0.9.0")
         };
 
-    // --- PLAN-006 lot 7.3: a rollback must be able to demote the release it just undid. ---
+    // Rollback can demote the release deployed by its own attempt.
 
     [Fact]
     public async Task RecordingAnAlreadyDeployedVersionAsNotDeployed_DemotesIt()

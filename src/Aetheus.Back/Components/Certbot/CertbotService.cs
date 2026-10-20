@@ -66,10 +66,9 @@ public class CertbotService(ICertbotRepository repo, IAuditService audit, ITaskS
         if (!string.IsNullOrWhiteSpace(request.Email) && !CertbotCommandHelper.IsValidEmail(request.Email))
             throw new BadRequestException("Invalid email address.");
 
-        // Route to the typed CertbotObtain op (same path as the pipeline `type: certbot` step): the
-        // root-owned issue helper performs real ACME through the Aetheus web root and fails honestly
-        // when validation cannot complete (PLAN-007: never the Apache plugin). Domains/email travel in
-        // env (off the process argv).
+        // Uses the typed CertbotObtain operation and root-owned ACME web-root helper, with domains
+        // and email passed through the environment rather than argv. Validation failures propagate
+        // to the caller.
         var domains = request.Domains
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var env = new Dictionary<string, string>

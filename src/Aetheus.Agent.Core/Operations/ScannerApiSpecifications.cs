@@ -4,11 +4,9 @@ using System.Text.Json.Nodes;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// Recette R2-099: one <c>zap-api</c> step may name several API definitions, scanned one after the
-/// other on this agent (M-021: no parallelism here) and published as one report. The partitions
-/// exist to bound each scan, not to save time, so each keeps its own share of the step's timeout.
-/// </summary>
+/// <summary> One <c>zap-api</c> step may name several API definitions, scanned one after the other
+/// on this agent (M-021: no parallelism here) and published as one report. The partitions exist to
+/// bound each scan, not to save time, so each keeps its own share of the step's timeout. </summary>
 internal static class ScannerApiSpecifications
 {
     internal const string ListVariable = "AETHEUS_SCANNER_API_SPECIFICATION_URLS";

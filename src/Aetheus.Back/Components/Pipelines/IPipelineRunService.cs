@@ -25,6 +25,12 @@ public interface IPipelineRunService
     Task<PipelineRunPreparation?> PrepareRunAsync(int pipelineId, string? sourceBranch = null,
         CancellationToken ct = default);
 
+    /// <summary>The same resolution pinned to <paramref name="commitHash"/> instead of the branch head:
+    /// the definition is read and the workspace checked out at that commit (an archived release's
+    /// relaunch, decision D2).</summary>
+    Task<PipelineRunPreparation?> PrepareRunAtCommitAsync(int pipelineId, string? sourceBranch, string commitHash,
+        CancellationToken ct = default);
+
     /// <summary>Applies queue-time parameters to every YAML field and recomputes the exact target
     /// servers. Callers authorize the returned preparation before launching it.</summary>
     Task<PipelineRunPreparation> ResolveRunParametersAsync(
@@ -84,11 +90,9 @@ public interface IPipelineRunService
     /// </summary>
     Task<PipelineRunDto?> TriggerAutomatedRunAsync(int pipelineId, string triggerSource, Dictionary<string, string>? additionalVariables = null, CancellationToken ct = default);
 
-    /// <summary>
-    /// Launches a run prepared by <see cref="PrepareAutomatedRunAsync"/> for an automated trigger. A
-    /// refusal is recorded as a failed run carrying the reason and told to the project's subscribers
-    /// (recette R-522), then thrown again.
-    /// </summary>
+    /// <summary> Launches a run prepared by <see cref="PrepareAutomatedRunAsync"/> for an automated
+    /// trigger. A refusal is recorded as a failed run carrying the reason and told to the project's
+    /// subscribers, then thrown again. </summary>
     Task<PipelineRunDto?> TriggerPreparedAutomatedRunAsync(
         PipelineRunPreparation preparation, string triggerSource,
         Dictionary<string, string>? additionalVariables = null, CancellationToken ct = default);
@@ -135,8 +139,8 @@ public interface IPipelineRunService
     /// completion callback. Used by the scheduler self-heal after a lost advancement signal.</summary>
     Task ReconcileRunAsync(int pipelineRunId, CancellationToken ct = default);
 
-    /// <summary>Cancels a run and every run it triggered; <paramref name="cancellation"/> names who and why
-    /// (audited and kept on each run, recette R2-103).</summary>
+    /// <summary>Cancellation records the actor and reason named by <paramref name="cancellation"/>
+    /// on the run and its triggered children.</summary>
     Task<bool> CancelRunAsync(int runId, PipelineRunCancellation cancellation, CancellationToken ct = default);
 
     /// <summary>Force-completes a run wedged in Running as Failed (reconcile backstop). Used by the
@@ -179,4 +183,8 @@ public interface IPipelineRunService
     Task<int?> GetPipelineIdForRunAsync(int runId, CancellationToken ct = default);
     Task<int?> GetPipelineIdForApprovalAsync(int approvalId, CancellationToken ct = default);
     Task<bool> IsServerAssignedToRunAsync(int runId, int serverId, CancellationToken ct = default);
+
+    /// <summary>True when a step of this "run to end" run failed and only went on because of that
+    /// mode. Such a run may produce no release: it is past a failure a normal run would have stopped at.</summary>
+    Task<bool> HasRunToEndFailureAsync(int runId, CancellationToken ct = default);
 }

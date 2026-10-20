@@ -1,9 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Reusable task list: server-side paginated grid whose column headers are the filters (localized status
-   badge, offline badge, detail navigation) + live SignalR refresh. Hosted by the global /tasks page (no
-   scope) and by the per-server tasks section (ServerId set), so both share the exact same feature set.
-   Recette R-221: no filter row above the grid; the former search box and status list duplicated the
-   Name and Status column filters. *@
+@* Share a server-paged, column-filtered task grid with SignalR refresh between global and
+   server-scoped pages. Column headers provide filtering without a duplicate filter row. *@
 
 @if (_loadFailed)
 {

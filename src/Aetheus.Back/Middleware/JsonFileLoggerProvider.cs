@@ -15,6 +15,7 @@ namespace Aetheus.Back.Middleware;
 public sealed class JsonFileLoggerProvider : ILoggerProvider
 {
     private readonly string _directory;
+    private readonly string _stem;
     private readonly LogLevel _minLevel;
     private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<string, JsonFileLogger> _loggers = new();
@@ -24,8 +25,12 @@ public sealed class JsonFileLoggerProvider : ILoggerProvider
 
     public long DroppedEntries => Interlocked.Read(ref _dropCounter.Total);
 
-    public JsonFileLoggerProvider(string directory, LogLevel minLevel = LogLevel.Information, TimeProvider? timeProvider = null)
-        : this(directory, minLevel, timeProvider, 8192, null)
+    public JsonFileLoggerProvider(
+        string directory,
+        LogLevel minLevel = LogLevel.Information,
+        TimeProvider? timeProvider = null,
+        string? instance = null)
+        : this(directory, minLevel, timeProvider, 8192, null, instance)
     {
     }
 
@@ -34,10 +39,12 @@ public sealed class JsonFileLoggerProvider : ILoggerProvider
         LogLevel minLevel,
         TimeProvider? timeProvider,
         int capacity,
-        Task? drainGate)
+        Task? drainGate,
+        string? instance = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
         _directory = directory;
+        _stem = FileStem(instance);
         _minLevel = minLevel;
         _timeProvider = timeProvider ?? TimeProvider.System;
         Directory.CreateDirectory(_directory);
@@ -107,6 +114,16 @@ public sealed class JsonFileLoggerProvider : ILoggerProvider
         }
     }
 
+    /// <summary>The file name prefix: <c>aetheus</c>, or <c>aetheus-{instance}</c> so two processes sharing one
+    /// log volume (the blue and the green back-end) never append to the same file.</summary>
+    internal static string FileStem(string? instance)
+    {
+        var clean = new string((instance ?? string.Empty)
+            .Where(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
+            .ToArray()).Trim('.', '-', '_');
+        return clean.Length == 0 ? "aetheus" : $"aetheus-{clean}";
+    }
+
     private const long MaxFileSizeBytes = 100 * 1024 * 1024; // 100 MB
     private const int RetentionDays = 30;
     private DateTime _lastCleanup = DateTime.MinValue;
@@ -131,12 +148,12 @@ public sealed class JsonFileLoggerProvider : ILoggerProvider
     private string ResolveLogFilePath()
     {
         var dateStr = _timeProvider.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd");
-        var basePath = Path.Combine(_directory, $"aetheus-{dateStr}.json");
+        var basePath = Path.Combine(_directory, $"{_stem}-{dateStr}.json");
         if (!File.Exists(basePath) || new FileInfo(basePath).Length < MaxFileSizeBytes)
             return basePath;
         for (var i = 1; i < 100; i++)
         {
-            var rotated = Path.Combine(_directory, $"aetheus-{dateStr}.{i}.json");
+            var rotated = Path.Combine(_directory, $"{_stem}-{dateStr}.{i}.json");
             if (!File.Exists(rotated) || new FileInfo(rotated).Length < MaxFileSizeBytes)
                 return rotated;
         }

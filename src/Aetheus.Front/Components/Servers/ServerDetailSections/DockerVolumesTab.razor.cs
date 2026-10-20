@@ -15,7 +15,7 @@ public partial class DockerVolumesTab
 
     private string _volumeSearch = string.Empty;
 
-    // Recette R-227: each heartbeat brings a new volume list; volumes that were not there read bold.
+    // Each heartbeat brings a new volume list; volumes that were not there read bold.
     private OmniDataGrid<DockerVolumeDto>? _grid;
     private readonly LiveGridRows _liveRows = new();
 

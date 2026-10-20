@@ -62,38 +62,21 @@ public sealed class PipelineRunPreparationService(
         var pipeline = await repo.FindPipelineAsync(id, ct).ConfigureAwait(false);
         if (pipeline is null) return null;
         var mirroredDefinition = YamlParsingHelper.ParseAndValidate(pipeline.YamlDefinition, logger);
-        var branch = sourceBranch
-            ?? mirroredDefinition?.SourceBranch
-            ?? pipeline.SourceBranch
-            ?? pipeline.Project?.DefaultBranch;
-        if (!string.IsNullOrWhiteSpace(branch) && !PipelineBranchValidator.IsValid(branch))
-            throw new BadRequestException("The selected source branch is invalid.");
+        var selectedBranch = SelectBranch(sourceBranch, mirroredDefinition, pipeline);
         var effectiveProjectId = pipeline.ProjectId
             ?? await repo.GetPipelineProjectIdAsync(pipeline, ct).ConfigureAwait(false);
-        var source = await ResolvePipelineSourceAsync(pipeline, effectiveProjectId, branch, ct).ConfigureAwait(false);
-        var commitHash = commitOverride ?? source?.CommitHash;
-        if (source is null && pipeline.Project?.RepositoryUrl is { Length: > 0 } externalUrl
-            && commitOverride is null)
-        {
-            // A project may point straight at a public HTTPS repository without an internal mirror.
-            // Pin its selected branch before creating a run; the agent then checks out this exact SHA.
-            var remote = await gitCli.ResolveBranchCommitAsync(externalUrl, branch, ct).ConfigureAwait(false);
-            branch = remote.Branch;
-            commitHash = remote.Commit;
-        }
+        var source = await ResolvePipelineSourceAsync(pipeline, effectiveProjectId, selectedBranch, ct).ConfigureAwait(false);
+        var (branch, commitHash) = await PinRevisionAsync(pipeline, source, selectedBranch, commitOverride, ct)
+            .ConfigureAwait(false);
         var repositoryUrl = ResolveRepositoryUrl(source, pipeline);
         var definitionYaml = await ResolveDefinitionYamlAsync(
             pipeline, effectiveProjectId, branch, commitHash, yamlOverride, source is null, ct).ConfigureAwait(false);
-        // Recette R2-041: keys this backend does not know are skipped by the parser; the run says so.
+        // Keys this backend does not know are skipped by the parser; the run says so.
         var definitionWarnings = PipelineYamlDiagnostics.UnknownPropertyWarnings(definitionYaml, logger);
-        // A misspelled known key (a guard such as approval_timeout_minutes) is refused, never skipped.
-        var nearMissKeys = PipelineYamlDiagnostics.NearMissKeyErrors(definitionYaml, logger);
-        if (nearMissKeys.Count > 0)
-            throw new BadRequestException(string.Join(" ", nearMissKeys));
+        RejectNearMissKeys(definitionYaml);
         var organizationId = await repo.GetPipelineOrganizationIdAsync(id, ct).ConfigureAwait(false);
         var resolution = await templateResolver.ResolveAsync(definitionYaml, organizationId ?? 0, parameters: null, ct)
             .ConfigureAwait(false);
-        definitionYaml = resolution.Yaml;
         var definition = resolution.Definition;
         var effectiveStages = YamlParsingHelper.FlattenJobs(definition);
         ValidatePreparedDefinition(definition, effectiveStages);
@@ -106,7 +89,7 @@ public sealed class PipelineRunPreparationService(
             BranchName = branch,
             CommitHash = commitHash,
             RepositoryUrl = repositoryUrl,
-            YamlSnapshot = definitionYaml,
+            YamlSnapshot = resolution.Yaml,
             Definition = definition,
             EffectiveStages = effectiveStages,
             EffectiveProjectId = effectiveProjectId,
@@ -114,15 +97,71 @@ public sealed class PipelineRunPreparationService(
             DefinitionWarnings = definitionWarnings
         }, source?.RepositoryId, workspaceCommitOverride, ct).ConfigureAwait(false);
         ValidateWorkspaceRequirements(definition, preparation.RepositoryUrl, preparation.CommitHash);
-        return preparation;
+        return preparation with
+        {
+            ReleaseSeries = await ReadReleaseSeriesAsync(preparation, source?.RepositoryId, ct).ConfigureAwait(false)
+        };
     }
 
     /// <summary>
-    /// Recette R-534: a <c>source:</c> block moves the workspace to another repository of the project.
-    /// The definition keeps the repository and the revision it was read at, now recorded beside the
-    /// workspace's; the branch, commit and clone URL of the run become those of what it checks out.
-    /// Without the block the preparation is returned as it is.
+    /// The series of the commit the run releases: the <c>major.minor</c> of the <c>VersionPrefix</c> of
+    /// its <c>Directory.Build.props</c>, read at the pinned commit so the number is counted in the same
+    /// series the app-version function composes from the same file. A workspace taken from another
+    /// repository (<c>source:</c> block) is not read here and counts in the empty series.
     /// </summary>
+    private async Task<string> ReadReleaseSeriesAsync(
+        PipelineRunPreparation preparation, int? sourceRepositoryId, CancellationToken ct)
+    {
+        if (preparation.EffectiveProjectId is not { } projectId
+            || preparation.Definition.Source is not null
+            || !IsGitCommitHash(preparation.CommitHash))
+            return ReleaseSeries.None;
+        var props = await pipelineGit.ReadVersionPropsAtRevisionAsync(
+            projectId, preparation.CommitHash!, ct, sourceRepositoryId ?? preparation.Pipeline.SourceRepositoryId)
+            .ConfigureAwait(false);
+        return ReleaseSeries.FromVersionProps(props);
+    }
+
+    /// <summary>The branch asked for, else the one the mirrored definition, the pipeline or its project
+    /// names, in that order; refused when it is not a valid branch name.</summary>
+    private static string? SelectBranch(string? sourceBranch, PipelineYamlDefinition? mirroredDefinition, Pipeline pipeline)
+    {
+        var branch = sourceBranch
+            ?? mirroredDefinition?.SourceBranch
+            ?? pipeline.SourceBranch
+            ?? pipeline.Project?.DefaultBranch;
+        if (!string.IsNullOrWhiteSpace(branch) && !PipelineBranchValidator.IsValid(branch))
+            throw new BadRequestException("The selected source branch is invalid.");
+        return branch;
+    }
+
+    /// <summary>The branch and commit the run is pinned to: the commit override, else the mirrored
+    /// source's commit. A project may point straight at a public HTTPS repository without an internal
+    /// mirror: its selected branch is then pinned before creating a run, and the agent checks out this
+    /// exact SHA.</summary>
+    private async Task<(string? Branch, string? CommitHash)> PinRevisionAsync(
+        Pipeline pipeline, PipelineSourceDto? source, string? branch, string? commitOverride, CancellationToken ct)
+    {
+        if (source is null && pipeline.Project?.RepositoryUrl is { Length: > 0 } externalUrl
+            && commitOverride is null)
+        {
+            var remote = await gitCli.ResolveBranchCommitAsync(externalUrl, branch, ct).ConfigureAwait(false);
+            return (remote.Branch, remote.Commit);
+        }
+        return (branch, commitOverride ?? source?.CommitHash);
+    }
+
+    /// <summary>A misspelled known key (a guard such as approval_timeout_minutes) is refused, never skipped.</summary>
+    private void RejectNearMissKeys(string definitionYaml)
+    {
+        var nearMissKeys = PipelineYamlDiagnostics.NearMissKeyErrors(definitionYaml, logger);
+        if (nearMissKeys.Count > 0)
+            throw new BadRequestException(string.Join(" ", nearMissKeys));
+    }
+
+    /// <summary>A source block separates the definition repository and revision from the
+    /// checked-out workspace repository and commit. Without a source block, preparation is
+    /// unchanged.</summary>
     private async Task<PipelineRunPreparation> ApplyWorkspaceSourceAsync(
         PipelineRunPreparation preparation, int? definitionRepositoryId, string? workspaceCommit, CancellationToken ct)
     {

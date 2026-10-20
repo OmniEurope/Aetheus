@@ -3,22 +3,9 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// The only way the front raises a toast (guarded by <c>NotificationAuditTests</c>). Since PLAN-008
-/// lot 11 the toast is an OmniEurope.Blazor notification, shown by the host in <c>App.razor</c>.
-/// <list type="bullet">
-/// <item>each toast lasts by severity: 5 s for information and success, 7 s for a warning, 10 s for
-/// an error. The bar that counts that time down, and the pile that keeps errors out of the count,
-/// are options of the host;</item>
-/// <item>the summary is the toast's title and the detail its message. A toast with no detail shows
-/// its summary as the message, with no title: OE refuses an empty message;</item>
-/// <item>an error is reported to the backend under a correlation id. For an administrator the toast
-/// carries the system logs filtered on that id as its details link, which OE offers only for a
-/// message longer than 2,000 characters.</item>
-/// </list>
-/// Accepted losses (PLAN-008 verification, section D): no cap of three toasts with a waiting list,
-/// and no detail dialog.
-/// </summary>
+/// <summary>Route toasts through the shared OE host and use the summary as the message when detail
+/// is absent because OE requires a nonempty message; report errors with a correlation identifier so
+/// administrators can locate their system-log context.</summary>
 public class NotifyHelper(
     OmniOverlayService overlay,
     IStringLocalizer<AppStrings> localizer,

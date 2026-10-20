@@ -4,8 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.ServiceConnections;
 
-/// <summary>Recette R-224: the column header filters of the service connections list; each key is the
-/// grid column's key.</summary>
+/// <summary>The column header filters of the service connections list; each key is the grid
+/// column's key.</summary>
 internal static class ServiceConnectionListQuery
 {
     internal static readonly GridQueryMap<ServiceConnection> Columns = new GridQueryMap<ServiceConnection>()

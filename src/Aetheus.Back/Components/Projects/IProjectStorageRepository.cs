@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>PLAN-013 lot 5: rows per project in the detail tables, the budgets, and the oldest-first purges.</summary>
+/// <summary>Rows per project in the detail tables, the budgets, and the oldest-first
+/// purges.</summary>
 public interface IProjectStorageRepository
 {
     /// <summary>The name of the database Aetheus is connected to, to find its own size measurement.</summary>

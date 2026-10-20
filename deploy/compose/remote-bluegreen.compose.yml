@@ -72,9 +72,8 @@ services:
         # leak into two. Provisioned by prod-deploy-prepare.sh, which back-fills it when an older
         # environment file predates the requirement.
         - Deployment__BootstrapIdentityKey=${DEPLOYMENT_BOOTSTRAP_IDENTITY_KEY}
-        # The dedicated key pipeline clone tokens are signed with (R-464), back-filled once by
-        # prod-deploy-prepare.sh. An environment file without it gives an empty value, which the
-        # backend treats as absent: it keeps signing with the Auth__EncryptionKey fallback.
+        # Uses the dedicated clone-token signing key backfilled by prod-deploy-prepare.sh. An absent
+        # value retains the backend's Auth__EncryptionKey fallback.
         - GitLight__RunTokenKey=${GIT_RUN_TOKEN_KEY:-}
         - Cors__Origins__0=${FRONT_URL}
         - Cors__Origins__1=${FRONT_URL_ACCEPT}
@@ -105,6 +104,9 @@ services:
         - dp-keys:/app/data/dp-keys
         - artifacts:/app/data/artifacts
         - packages:/app/data/packages
+        # System logs survive a recreation of the container. Each color writes its own file there (the
+        # file name carries the container host name), so the two never append to the same file.
+        - logs:/app/logs
       depends_on:
         database:
           condition: service_healthy
@@ -121,6 +123,7 @@ services:
         - backend
       restart: unless-stopped
     container_name: ${APPNAME}-${ENV}-blue-back
+    hostname: ${APPNAME}-${ENV}-blue-back
     ports:
       - "127.0.0.1:${PORT_BACK_BLUE:-10026}:8080"
     profiles: ["blue"]
@@ -128,6 +131,7 @@ services:
   back-green:
     <<: *back-common
     container_name: ${APPNAME}-${ENV}-green-back
+    hostname: ${APPNAME}-${ENV}-green-back
     ports:
       - "127.0.0.1:${PORT_BACK_GREEN:-10028}:8080"
     profiles: ["green"]
@@ -195,3 +199,5 @@ volumes:
     name: ${APPNAME}-${ENV}-artifacts
   packages:
     name: ${APPNAME}-${ENV}-packages
+  logs:
+    name: ${APPNAME}-${ENV}-logs

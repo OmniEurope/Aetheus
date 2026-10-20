@@ -107,7 +107,7 @@ public class ProjectServiceTests
 
         var result = await _sut.GetProjectDetailAsync(1, ct: TestContext.Current.CancellationToken);
 
-        // Recette R-482: the detail reads the grade alone, not the list's whole insight.
+        // The detail reads the grade alone, not the list's whole insight.
         await _repo.DidNotReceiveWithAnyArgs().GetProjectListInsightsAsync(default!, default, TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);

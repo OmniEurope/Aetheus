@@ -8,8 +8,7 @@ public class PipelineHelperTests
     [InlineData(PipelineStatus.Success, OmniTone.Success)]
     [InlineData(PipelineStatus.Failed, OmniTone.Danger)]
     [InlineData(PipelineStatus.Running, OmniTone.Accent)]
-    // PLAN-003 D13: amber is now Partial (finished with a swallowed failure); a cancelled run is a
-    // non-event, so it takes the neutral grey.
+    // Partial runs use amber to indicate a tolerated failure; cancelled runs use neutral grey.
     [InlineData(PipelineStatus.Cancelled, OmniTone.Info)]
     [InlineData(PipelineStatus.Partial, OmniTone.Warning)]
     [InlineData(PipelineStatus.RolledBack, OmniTone.Warning)]

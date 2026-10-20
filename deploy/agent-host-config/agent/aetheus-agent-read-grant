@@ -1,0 +1,139 @@
+#!/bin/sh
+# SPDX-License-Identifier: EUPL-1.2
+# Root-owned helper that aetheus-agent-read-grant.service runs before every start of
+# aetheus-agent.service. It gives the agent account READ access, by POSIX ACL, to the few files the
+# SSH configuration monitor needs and the agent cannot otherwise see:
+#   - /etc/ssh/sshd_config and /etc/ssh/sshd_config.d/*.conf   (cloud-init writes 50-cloud-init.conf 0600)
+#   - each login user's ~/.ssh                                  (traverse only: x)
+#   - ~/.ssh/authorized_keys and ~/.ssh/authorized_keys2        (read: r)
+# The login users are root plus the /etc/passwd users with uid >= 1000 and a login shell, the same set
+# the agent's AuthorizedKeysReader walks. Nothing here grants write access, a capability, a group or a
+# sudo rule, and it never touches a file that is not owned by the user it belongs to.
+#
+# Re-run on every start so a file recreated since (cloud-init, a package, an editor that replaces
+# authorized_keys) gets its grant back. The installer calls it with --list-ssh-dirs to bind exactly those
+# .ssh directories into the unit (BindReadOnlyPaths=), and the purge calls it with --revoke.
+#
+#   (no argument)      grant read access
+#   --revoke           remove the agent account's ACL entries from the same files
+#   --list-ssh-dirs    print the .ssh directory of each login user, one per line (changes nothing)
+#
+# Every grant is made on a file opened once: the kind (regular file or directory) and the owner are
+# checked on the open file, and setfacl is pointed at that same open file (/proc/self/fd/3), so a path a
+# local user swaps for a symlink between the check and the change cannot send the grant elsewhere. A
+# symbolic link is refused outright. The open itself runs in a child under timeout(1): a user-controlled
+# FIFO swapped in after the kind check would otherwise block an open for ever. Failures are reported and
+# skipped: this helper never keeps the agent from starting.
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+LC_ALL=C
+export LC_ALL
+
+AGENT="#{AGENT_USER}#"
+PASSWD=/etc/passwd
+SSHD_CONFIG=/etc/ssh/sshd_config
+SSHD_DROPIN_DIR=/etc/ssh/sshd_config.d
+MAX_USERS=32
+OPEN_TIMEOUT=5
+NAME=aetheus-agent-read-grant
+
+case "${1:-}" in
+    "") ACTION=set ;;
+    --revoke) ACTION=remove ;;
+    --list-ssh-dirs) ACTION=list ;;
+    --change) ACTION=change ;; # internal: one file, run by change() under timeout(1)
+    *) echo "$NAME: usage: $NAME [--revoke | --list-ssh-dirs]" >&2; exit 2 ;;
+esac
+
+# "uid home" for root, then for each /etc/passwd user the agent reads: uid >= 1000, not 65534, with a
+# login shell, at most MAX_USERS in all.
+login_users() {
+    echo "0 /root"
+    awk -F: -v max="$MAX_USERS" '
+        BEGIN { n = 1 }
+        $1 == "root" || $3 !~ /^[0-9]+$/ { next }
+        $3 + 0 < 1000 || $3 + 0 == 65534 { next }
+        $7 ~ /nologin$/ || $7 ~ /\/false$/ { next }
+        { print $3 " " $6; if (++n >= max) exit }
+    ' "$PASSWD" 2>/dev/null
+}
+
+# A home goes into a unit file and a mount table: plain absolute paths only.
+valid_home() {
+    case "$1" in
+        *..*|*[!A-Za-z0-9._/-]*) return 1 ;;
+        /?*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# The one file of a grant, on the open file. $1 set|remove, $2 path, $3 f|d (what it must be), $4 owner
+# uid, $5 permission to grant (r or x). Run as "sh $0 --change ..." by change(), never directly.
+change_open_file() {
+    exec 3< "$2" || exit 1
+    kind="$(stat -L -c %F /proc/self/fd/3)"
+    case "$3:$kind" in
+        f:"regular file"|f:"regular empty file"|d:directory) ;;
+        *) exit 0 ;;
+    esac
+    [ "$(stat -L -c %u /proc/self/fd/3)" = "$4" ] || { echo "$NAME: $2 is not owned by uid $4, left alone" >&2; exit 0; }
+    if [ "$1" = set ]; then
+        # Already open to everyone for this purpose: no entry needed.
+        mode="$(stat -L -c %A /proc/self/fd/3)"
+        case "$5:$mode" in
+            r:???????r??|x:?????????x|x:?????????t) exit 0 ;;
+        esac
+        if setfacl -m "u:$AGENT:$5" /proc/self/fd/3; then
+            echo "$NAME: $AGENT may now read $2 ($5)"
+        else
+            echo "$NAME: could not grant $AGENT access to $2" >&2
+        fi
+    else
+        setfacl -x "u:$AGENT" /proc/self/fd/3 2>/dev/null || true
+    fi
+    exit 0
+}
+
+# Same arguments. The kind is read without opening (a FIFO or a device is never opened here) and a
+# symbolic link is refused; the file is then opened by a child that timeout(1) kills if the open hangs.
+change() {
+    [ -L "$2" ] && { echo "$NAME: $2 is a symbolic link, left alone" >&2; return 0; }
+    kind="$(stat -L -c %F "$2" 2>/dev/null)" || return 0
+    case "$3:$kind" in
+        f:"regular file"|f:"regular empty file"|d:directory) ;;
+        *) return 0 ;;
+    esac
+    timeout -k 1 "$OPEN_TIMEOUT" sh "$0" --change "$@"
+    [ $? -eq 124 ] && echo "$NAME: $2 did not open within ${OPEN_TIMEOUT}s, skipped" >&2
+    return 0
+}
+
+if [ "$ACTION" = change ]; then
+    shift
+    change_open_file "$@"
+fi
+
+if [ "$ACTION" = list ]; then
+    login_users | while read -r uid home; do
+        valid_home "$home" && echo "${home%/}/.ssh"
+    done
+    exit 0
+fi
+
+command -v setfacl >/dev/null 2>&1 || { echo "$NAME: setfacl is not installed (package acl): nothing granted" >&2; exit 0; }
+command -v timeout >/dev/null 2>&1 || { echo "$NAME: timeout is not installed (coreutils): nothing granted" >&2; exit 0; }
+id "$AGENT" >/dev/null 2>&1 || exit 0
+
+for f in "$SSHD_CONFIG" "$SSHD_DROPIN_DIR"/*.conf; do
+    change "$ACTION" "$f" f 0 r
+done
+login_users | while read -r uid home; do
+    valid_home "$home" || continue
+    ssh_dir="${home%/}/.ssh"
+    change "$ACTION" "$ssh_dir" d "$uid" x
+    for key_file in authorized_keys authorized_keys2; do
+        change "$ACTION" "$ssh_dir/$key_file" f "$uid" r
+    done
+done
+exit 0

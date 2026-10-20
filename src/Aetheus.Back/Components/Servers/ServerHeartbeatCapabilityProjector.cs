@@ -11,6 +11,25 @@ internal static class ServerHeartbeatCapabilityProjector
         if (server.AgentProtocolVersion != heartbeat.AgentProtocolVersion)
             server.AgentProtocolVersion = heartbeat.AgentProtocolVersion;
 
+        ApplyCapabilityList(server, heartbeat);
+        ApplySudoersGrants(server, heartbeat);
+
+        // Not gated on the sudoers inventory: the scan needs no grant, only an agent recent enough to
+        // publish the capability, so the flag must self-heal from the capability list alone.
+        var portObservation = HasCapability(heartbeat, AgentCapabilities.PortObservation);
+        if (server.PortObservationAvailable != portObservation)
+            server.PortObservationAvailable = portObservation;
+
+        if (server.DockerAvailable != heartbeat.DockerAvailable)
+            server.DockerAvailable = heartbeat.DockerAvailable;
+        if (!IsPipelineRunnerEligible(heartbeat) && server.PipelineRunnerEnabled)
+            server.PipelineRunnerEnabled = false;
+        if (server.InsecureTls != heartbeat.InsecureTls)
+            server.InsecureTls = heartbeat.InsecureTls;
+    }
+
+    private static void ApplyCapabilityList(Server server, ServerHeartbeatDto heartbeat)
+    {
         var normalizedCapabilities = heartbeat.AgentCapabilities?
             .Where(capability => !string.IsNullOrWhiteSpace(capability))
             .Distinct(StringComparer.Ordinal)
@@ -19,39 +38,29 @@ internal static class ServerHeartbeatCapabilityProjector
         var capabilitiesJson = JsonSerializer.Serialize(normalizedCapabilities);
         if (server.AgentCapabilitiesJson != capabilitiesJson)
             server.AgentCapabilitiesJson = capabilitiesJson;
+    }
 
+    private static void ApplySudoersGrants(Server server, ServerHeartbeatDto heartbeat)
+    {
         var sudoersInventoryAuthoritative = heartbeat.SudoersInventoryAvailable == true
             || heartbeat.SudoersHashes.Count > 0;
-        if (sudoersInventoryAuthoritative)
-        {
-            server.PackageManagementAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-package");
-            server.DeploymentTargetAvailable = heartbeat.AgentCapabilities?.Contains(
-                AgentCapabilities.Deployment,
-                StringComparer.Ordinal) == true;
-            server.MailSetupAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-mail");
-            server.TeamspeakSetupAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-teamspeak");
-            server.PatchManagementAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-patch");
-            server.FirewallManagementAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-firewall");
-        }
+        if (!sudoersInventoryAuthoritative)
+            return;
 
-        // Not gated on the sudoers inventory: the scan needs no grant, only an agent recent enough to
-        // publish the capability, so the flag must self-heal from the capability list alone.
-        var portObservation = heartbeat.AgentCapabilities?.Contains(
-            AgentCapabilities.PortObservation, StringComparer.Ordinal) == true;
-        if (server.PortObservationAvailable != portObservation)
-            server.PortObservationAvailable = portObservation;
-
-        if (server.DockerAvailable != heartbeat.DockerAvailable)
-            server.DockerAvailable = heartbeat.DockerAvailable;
-        var pipelineRunnerEligible = heartbeat.PipelineRunnerAvailable == true
-            && heartbeat.AgentProtocolVersion is { } protocol
-            && AgentProtocol.IsSupported(protocol)
-            && heartbeat.AgentCapabilities?.Contains(
-                AgentCapabilities.PipelineBuild,
-                StringComparer.Ordinal) == true;
-        if (!pipelineRunnerEligible && server.PipelineRunnerEnabled)
-            server.PipelineRunnerEnabled = false;
-        if (server.InsecureTls != heartbeat.InsecureTls)
-            server.InsecureTls = heartbeat.InsecureTls;
+        server.PackageManagementAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-package");
+        server.DeploymentTargetAvailable = HasCapability(heartbeat, AgentCapabilities.Deployment);
+        server.MailSetupAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-mail");
+        server.TeamspeakSetupAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-teamspeak");
+        server.PatchManagementAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-patch");
+        server.FirewallManagementAvailable = heartbeat.SudoersHashes.ContainsKey("aetheus-firewall");
     }
+
+    private static bool IsPipelineRunnerEligible(ServerHeartbeatDto heartbeat) =>
+        heartbeat.PipelineRunnerAvailable == true
+        && heartbeat.AgentProtocolVersion is { } protocol
+        && AgentProtocol.IsSupported(protocol)
+        && HasCapability(heartbeat, AgentCapabilities.PipelineBuild);
+
+    private static bool HasCapability(ServerHeartbeatDto heartbeat, string capability) =>
+        heartbeat.AgentCapabilities?.Contains(capability, StringComparer.Ordinal) == true;
 }

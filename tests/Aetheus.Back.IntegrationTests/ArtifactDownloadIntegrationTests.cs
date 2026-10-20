@@ -37,10 +37,8 @@ public sealed class ArtifactDownloadIntegrationTests(PostgresFixture fixture)
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var storage = scope.ServiceProvider.GetRequiredService<IArtifactStorageService>();
 
-            // The pipeline needs a real owning project: authorization resolves the artifact's owner
-            // transitively through it (ArtifactRepository.GetArtifactOwningProjectIdAsync), and an
-            // owner that cannot be named is refused. Before F-003 a null owner skipped the permission
-            // check entirely, which is what this fixture used to rely on.
+            // Gives the pipeline a real owning project because artifact authorization resolves
+            // ownership transitively and refuses unresolved owners.
             var organizationId = await db.Organizations.OrderBy(o => o.Id).Select(o => o.Id)
                 .FirstAsync(cancellationToken: TestContext.Current.CancellationToken);
             var project = new Project { Name = "dl-project", OrganizationId = organizationId };
@@ -79,6 +77,55 @@ public sealed class ArtifactDownloadIntegrationTests(PostgresFixture fixture)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("application/zip", response.Content.Headers.ContentType?.MediaType);
         Assert.Equal(payload, await response.Content.ReadAsByteArrayAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Recette R1-91: a chunked upload is published by moving its verified assembled file
+    /// into the store. The row, the stored bytes and the download must still be exactly the
+    /// announced artifact, against real PostgreSQL and the real file system.</summary>
+    [Fact]
+    public async Task ChunkedUpload_PublishedByAdoption_IsDownloadedByteForByte()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await LoginAsync(client));
+
+        var first = Encoding.UTF8.GetBytes("first part of the payload|");
+        var second = Encoding.UTF8.GetBytes("second part of the payload");
+        var whole = first.Concat(second).ToArray();
+        static string Sha(byte[] bytes) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        PipelineArtifactDto? published;
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var organizationId = await db.Organizations.OrderBy(o => o.Id).Select(o => o.Id).FirstAsync(ct);
+            var project = new Project { Name = "chunked-project", OrganizationId = organizationId };
+            db.Projects.Add(project);
+            await db.SaveChangesAsync(ct);
+            var pipeline = new Pipeline { Name = "chunked-pipeline", ProjectId = project.Id, YamlDefinition = "stages: []" };
+            db.Pipelines.Add(pipeline);
+            await db.SaveChangesAsync(ct);
+            var run = new PipelineRun { PipelineId = pipeline.Id, Status = PipelineStatus.Running };
+            db.PipelineRuns.Add(run);
+            await db.SaveChangesAsync(ct);
+
+            var uploads = scope.ServiceProvider.GetRequiredService<IChunkedArtifactUploadService>();
+            var artifacts = scope.ServiceProvider.GetRequiredService<IArtifactService>();
+            var session = await uploads.BeginAsync(run.Id, "payload", "Build", 2, Sha(whole), ct);
+            Assert.True((await uploads.AcceptPartAsync(run.Id, session.UploadId, 0, Sha(first), new MemoryStream(first), ct)).Accepted);
+            Assert.True((await uploads.AcceptPartAsync(run.Id, session.UploadId, 1, Sha(second), new MemoryStream(second), ct)).Accepted);
+
+            published = await uploads.CompleteAsync(run.Id, session.UploadId,
+                verified => artifacts.PublishVerifiedArtifactAsync(run.Id, "payload", "Build", verified, ct), ct);
+        }
+
+        Assert.NotNull(published);
+        Assert.Equal(Sha(whole), published.Sha256);
+        Assert.Equal(whole.Length, published.SizeBytes);
+        var response = await client.GetAsync($"/api/artifacts/{published.Id}/download", ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(whole, await response.Content.ReadAsByteArrayAsync(ct));
     }
 
     [Fact]

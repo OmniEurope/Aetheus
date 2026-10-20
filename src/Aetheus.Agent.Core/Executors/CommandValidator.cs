@@ -57,15 +57,9 @@ public sealed partial class CommandValidator(IOptions<AetheusAgentOptions> optio
         }
     }
 
-    // A command is either a single allow-listed invocation or several joined by `&&`
-    // (sequential AND - the only chaining operator permitted, so multi-step provisioning
-    // tasks can be expressed). Every segment must INDEPENDENTLY be metacharacter-free and
-    // match an allow-list pattern, so the blast radius of a chain is just the union of
-    // individually-allowed commands. Every other shell metacharacter (`;`, `|`, a lone
-    // `&`, `$()`, backticks, redirections) stays blocked inside every segment.
-    // Single point of truth: IsAllowed and GetRejectionReason previously diverged (the
-    // multi-line short-circuit lived only in IsAllowed), so a caller relying on
-    // "GetRejectionReason == null" applied a different policy than IsAllowed.
+    // Accepts only individually allow-listed commands joined by sequential &&, rejecting other
+    // shell metacharacters in every segment. IsAllowed and GetRejectionReason share this policy so
+    // their authorization decisions agree.
     public bool IsAllowed(string command) => GetRejectionReason(command) is null;
 
     public string? GetRejectionReason(string command)

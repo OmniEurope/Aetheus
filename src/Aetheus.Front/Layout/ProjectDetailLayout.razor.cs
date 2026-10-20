@@ -4,15 +4,19 @@ namespace Aetheus.Front.Layout;
 
 public partial class ProjectDetailLayout : IDisposable
 {
-    /// <summary>Recette R-431: the section's own entries of the header "..." menu.</summary>
+    /// <summary>The section's own entries of the header "..." menu.</summary>
     private readonly ProjectSectionMenu _sectionMenu = new();
 
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
 
-    /// <summary>Recette R-431: the follow state of the project, loaded with the project rather than by
-    /// the menu entry at each opening of the menu.</summary>
+    /// <summary>The follow state of the project, loaded with the project rather than by the menu
+    /// entry at each opening of the menu.</summary>
     private Aetheus.Front.Components.Notifications.ProjectSubscriptionState _subscription = default!;
+
+    /// <summary>The header's back arrow: the logical parent (R3-29). The project crumb links to the
+    /// overview, so on the overview itself the arrow leads to the list instead of to the same page.</summary>
+    internal string? BackHref => LogicalParentRoute.Of(Nav.ToBaseRelativePath(Nav.Uri), Breadcrumb.Items);
 
     protected override void OnInitialized()
     {
@@ -20,8 +24,8 @@ public partial class ProjectDetailLayout : IDisposable
         _sectionMenu.Changed += OnSectionMenuChanged;
         Loader.OnChanged += OnLoaderChanged;
         Nav.LocationChanged += OnLocationChanged;
-        // PLAN-003 lot 1: the project name now lives ONLY in the trail, so it has to be set on mount
-        // too - a loader that already holds the project fires no change event to trigger it later.
+        // Set the project breadcrumb name on mount because an already populated loader emits no
+        // later change event.
         ReassertBreadcrumb();
         LoadSubscription();
     }
@@ -50,7 +54,7 @@ public partial class ProjectDetailLayout : IDisposable
         _ = InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>Recette R-219: every project section shows its own icon before the title.</summary>
+    /// <summary>Every project section shows its own icon before the title.</summary>
     private string? SectionIcon
     {
         get

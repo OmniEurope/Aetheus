@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>Recette R-160: one step under an expanded stage row, on the run's own time axis.</summary>
-/// <param name="Step">The step this row describes.</param>
-/// <param name="Label">The step name, followed by its matrix leg when it has one, so the legs of one
-/// matrix step can be told apart.</param>
-/// <param name="HasBar">False for a step with no recorded start: it is listed with its status and
-/// gets no bar, since it occupied no time the run can show.</param>
-/// <param name="OffsetPercent">Distance from the left edge of the axis, 0 to 100.</param>
-/// <param name="WidthPercent">Bar width, never below <see cref="RunGanttChart.MinimumBarWidthPercent"/>
-/// for a step that started.</param>
-/// <param name="IsRunning">Started but not finished: its right edge is "now".</param>
-/// <param name="Duration">Start to end (or to now while running); zero without a start.</param>
+/// <summary>One step under an expanded stage row, on the run's own time axis.</summary> <param
+/// name="Step">The step this row describes.</param> <param name="Label">The step name, followed by
+/// its matrix leg when it has one, so the legs of one matrix step can be told apart.</param> <param
+/// name="HasBar">False for a step with no recorded start: it is listed with its status and gets no
+/// bar, since it occupied no time the run can show.</param> <param name="OffsetPercent">Distance
+/// from the left edge of the axis, 0 to 100.</param> <param name="WidthPercent">Bar width, never
+/// below <see cref="RunGanttChart.MinimumBarWidthPercent"/> for a step that started.</param> <param
+/// name="IsRunning">Started but not finished: its right edge is "now".</param> <param
+/// name="Duration">Start to end (or to now while running); zero without a start.</param>
 internal sealed record RunGanttStepBar(
     PipelineStepRunDto Step,
     string Label,
@@ -21,11 +19,9 @@ internal sealed record RunGanttStepBar(
     bool IsRunning,
     TimeSpan Duration);
 
-/// <summary>
-/// Recette R-160: places a stage's steps on the SAME axis as the stage bars, so an expanded stage
-/// reads as its own bar broken down into what ran inside it. Pure, like <see cref="RunGanttChart"/>:
-/// the clock is a parameter and nothing is rendered here.
-/// </summary>
+/// <summary> Places a stage's steps on the SAME axis as the stage bars, so an expanded stage reads
+/// as its own bar broken down into what ran inside it. Pure, like <see cref="RunGanttChart"/>: the
+/// clock is a parameter and nothing is rendered here. </summary>
 internal static class RunGanttStepChart
 {
     /// <summary>Lays out <paramref name="stage"/>'s steps, in the order the stage holds them.</summary>

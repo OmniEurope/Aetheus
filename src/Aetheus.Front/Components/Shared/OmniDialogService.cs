@@ -46,9 +46,9 @@ public class OmniDialogService(AppDialogs dialogs, OmniOverlayService overlay)
             builder.CloseElement();
         })
         {
-            // Recette R-406: every dialog carries an intention; a message to read is the accent one.
+            // Every dialog carries an intention; a message to read is the accent one.
             Intent = OmniTone.Accent,
-            // Recette R1-35: nothing looks selected when the message opens.
+            // Nothing looks selected when the message opens.
             InitialFocus = OmniDialogInitialFocus.Panel,
             Footer = builder =>
             {
@@ -132,12 +132,8 @@ public sealed record OmniDialogOptions
     public string? Width { get; init; }
     public string? Height { get; init; }
     public bool CloseDialogOnOverlayClick { get; init; }
-    /// <summary>
-    /// Recette R1-35: not forwarded. Since OmniEurope.Blazor 1.7.0 every dialog opened through
-    /// <see cref="AppDialogs"/> or <see cref="OmniDialogService.Alert"/> puts the focus on its panel
-    /// (<c>OmniDialogInitialFocus.Panel</c>), so no field is ever selected on opening.
-    /// Kept so the existing calls compile; setting it changes nothing.
-    /// </summary>
+    /// <summary>Keep this parameter for call-site compatibility but do not forward it; focus the
+    /// dialog panel so opening a message or form does not select a field.</summary>
     public bool AutoFocusFirstElement { get; init; }
     public bool CloseDialogOnEsc { get; init; } = true;
     public bool ShowClose { get; init; } = true;

@@ -35,7 +35,8 @@ public static class VaultSecretGenerator
 
     private static readonly Profile[] KnownProfiles =
     [
-        // openssl rand -hex 24 (#{SECRET_HEX_24}# in deploy/env/prod.env.sample, R-248)
+        // Generates the 24-byte hexadecimal secret used by #{SECRET_HEX_24}# in
+        // deploy/env/prod.env.sample.
         new("DB_PASSWORD", 24, Encoding.Hex, "PostgreSQL password"),
         // head -c 48 /dev/urandom | base64 | tr -d "/+=" (deploy.sh)
         new("JWT_KEY", 48, Encoding.Base64UrlSafeStripped, "JWT signing key"),
@@ -94,11 +95,9 @@ public static class VaultSecretGenerator
     /// <summary>The letters and digits of <see cref="GenerateCharacters"/>: safe in any shell, URL or file.</summary>
     private const string Alphanumeric = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-    /// <summary>
-    /// Recette R-437: a value of exactly <paramref name="length"/> letters and digits, drawn uniformly
-    /// by <see cref="RandomNumberGenerator"/>, for a secret whose consumer wants a set length rather
-    /// than one of the key recipes.
-    /// </summary>
+    /// <summary> A value of exactly <paramref name="length"/> letters and digits, drawn uniformly
+    /// by <see cref="RandomNumberGenerator"/>, for a secret whose consumer wants a set length
+    /// rather than one of the key recipes. </summary>
     public static string GenerateCharacters(int length)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(length, 1);

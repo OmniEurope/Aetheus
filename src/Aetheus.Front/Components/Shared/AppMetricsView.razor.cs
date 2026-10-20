@@ -14,9 +14,8 @@ public partial class AppMetricsView
     private sealed record ChartPoint(DateTime Timestamp, double Value, double? P95, double? Min, double? Max);
     private sealed record BandPoint(DateTime Timestamp, double Min, double Max);
     private sealed record P95Point(DateTime Timestamp, double P95);
-    /// <summary>One series of the selected metric. Recette R-357: <see cref="Key"/> is never null (the
-    /// series without attributes is the empty key), because OmniDropDown reads a null value property
-    /// as "no value property" and tried to cast the whole option to string, which crashed the tab.</summary>
+    /// <summary>Use an empty key for an attribute-free series because a null dropdown value makes
+    /// OE treat the whole option as its value.</summary>
     private sealed record GroupOption(string Key, string Label)
     {
         public string? AttributesJson => Key.Length == 0 ? null : Key;
@@ -28,8 +27,8 @@ public partial class AppMetricsView
     private List<GroupOption> _groups = [];
     private string _selectedGroupKey = string.Empty;
     private bool _namesLoadFailed;
-    // Recette R-444: the metric list and the series list each say they are loading instead of showing
-    // "no metric yet" or an empty picker while their call is in flight.
+    // The metric list and the series list each say they are loading instead of showing "no metric
+    // yet" or an empty picker while their call is in flight.
     private bool _namesLoading = true;
     private bool _groupsLoading;
     private int _hours = 24;
@@ -67,7 +66,7 @@ public partial class AppMetricsView
 
     private async Task LoadNamesAsync()
     {
-        // Recette R-357: a failed call is an error, never "no metrics yet".
+        // A failed call is an error, never "no metrics yet".
         _namesLoadFailed = false;
         _namesLoading = true;
         try { _names = await Api.Monitoring.GetAppMetricNamesAsync(AppId); }

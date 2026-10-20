@@ -2,35 +2,35 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Aetheus.Front.Tests.TestDoubles;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.JSInterop;
 using NSubstitute;
 
 namespace Aetheus.Front.Tests;
 
-/// <summary>
-/// A token renewal that never answers used to wedge the whole browser session. A tab left alone for
-/// longer than the 30-minute access token renews before its next request, and every request after
-/// that - the SignalR negotiate, the liveness probe behind the connection-lost dialog, the reconnect
-/// button - awaited that one shared renewal with no deadline, ignoring its own cancellation. The
-/// overlay then stayed up with no countdown and no reason, backend online (2026-09-13).
-/// </summary>
+/// <summary>A stalled token renewal must have a deadline and respect cancellation so subsequent
+/// requests and reconnection controls remain responsive. The deadline runs on a simulated clock and the
+/// callers give up when the test says so: nothing here depends on how fast the machine is.</summary>
 public class AuthDelegatingHandlerHungRenewalTests
 {
-    private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
+    private readonly FakeTimeProvider _clock = new();
 
     [Fact]
     public async Task SendAsync_RenewalNeverAnswers_CallerCancellationStillEndsTheRequest()
     {
         var inner = new RefreshHangsHandler(honourCancellation: false);
         var (handler, client) = CreateExpiredSession(inner, renewalTimeout: TimeSpan.FromHours(1));
-        using var callerTimeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        using var caller = new CancellationTokenSource();
 
-        var sending = client.GetAsync("http://localhost/hubs/servers/negotiate", callerTimeout.Token);
+        var sending = client.GetAsync("http://localhost/hubs/servers/negotiate", caller.Token);
+        await inner.RefreshesAsync(1);
+        await caller.CancelAsync();
 
-        // Before the fix this awaited the hung renewal forever: the guard turns that into a failure.
+        // Before the fix this awaited the hung renewal forever: the hang guard turns that into a failure.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => sending.WaitAsync(HangGuard, Xunit.TestContext.Current.CancellationToken));
+            () => HangGuard.AwaitAsync(sending, "the cancelled request ending"));
         client.Dispose();
         handler.Dispose();
     }
@@ -41,8 +41,10 @@ public class AuthDelegatingHandlerHungRenewalTests
         var inner = new RefreshHangsHandler(honourCancellation: true);
         var (handler, client) = CreateExpiredSession(inner, renewalTimeout: TimeSpan.FromMilliseconds(200));
 
-        var response = await client.GetAsync("http://localhost/health/live", Xunit.TestContext.Current.CancellationToken)
-            .WaitAsync(HangGuard, Xunit.TestContext.Current.CancellationToken);
+        var sending = client.GetAsync("http://localhost/health/live", Xunit.TestContext.Current.CancellationToken);
+        await inner.RefreshesAsync(1);
+        _clock.Advance(TimeSpan.FromMilliseconds(200));
+        var response = await HangGuard.AwaitAsync(sending, "the request after the abandoned renewal");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(1, inner.RefreshCalls);
@@ -56,10 +58,13 @@ public class AuthDelegatingHandlerHungRenewalTests
         var inner = new RefreshHangsHandler(honourCancellation: true);
         var (handler, client) = CreateExpiredSession(inner, renewalTimeout: TimeSpan.FromMilliseconds(200));
 
-        await client.GetAsync("http://localhost/health/live", Xunit.TestContext.Current.CancellationToken)
-            .WaitAsync(HangGuard, Xunit.TestContext.Current.CancellationToken);
-        await client.GetAsync("http://localhost/health/live", Xunit.TestContext.Current.CancellationToken)
-            .WaitAsync(HangGuard, Xunit.TestContext.Current.CancellationToken);
+        for (var request = 1; request <= 2; request++)
+        {
+            var sending = client.GetAsync("http://localhost/health/live", Xunit.TestContext.Current.CancellationToken);
+            await inner.RefreshesAsync(request);
+            _clock.Advance(TimeSpan.FromMilliseconds(200));
+            await HangGuard.AwaitAsync(sending, $"request {request} after its abandoned renewal");
+        }
 
         // A renewal that timed out must not stay parked as the in-flight one.
         Assert.Equal(2, inner.RefreshCalls);
@@ -74,20 +79,25 @@ public class AuthDelegatingHandlerHungRenewalTests
         // refresh token again, which the server reads as a replay and answers by revoking the sessions.
         var inner = new RefreshHangsHandler(honourCancellation: true);
         var (handler, client) = CreateExpiredSession(inner, renewalTimeout: TimeSpan.FromSeconds(2));
-        using var impatient = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        using var impatient = new CancellationTokenSource();
 
         var first = client.GetAsync("http://localhost/api/a", impatient.Token);
+        await inner.RefreshesAsync(1);
+        await impatient.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => first.WaitAsync(HangGuard, Xunit.TestContext.Current.CancellationToken));
-        await client.GetAsync("http://localhost/api/b", Xunit.TestContext.Current.CancellationToken)
-            .WaitAsync(HangGuard, Xunit.TestContext.Current.CancellationToken);
+            () => HangGuard.AwaitAsync(first, "the impatient request ending"));
+        // The second caller joins the renewal still in flight (its handler runs synchronously up to that
+        // wait), then the renewal reaches its deadline and both are done with it.
+        var second = client.GetAsync("http://localhost/api/b", Xunit.TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromSeconds(2));
+        await HangGuard.AwaitAsync(second, "the patient request");
 
         Assert.Equal(1, inner.RefreshCalls);
         client.Dispose();
         handler.Dispose();
     }
 
-    private static (AuthDelegatingHandler Handler, HttpClient Client) CreateExpiredSession(
+    private (AuthDelegatingHandler Handler, HttpClient Client) CreateExpiredSession(
         HttpMessageHandler inner, TimeSpan renewalTimeout)
     {
         var auth = new AuthStateProvider(Substitute.For<IJSRuntime>(), NullLogger<AuthStateProvider>.Instance);
@@ -96,9 +106,11 @@ public class AuthDelegatingHandlerHungRenewalTests
         var handler = new AuthDelegatingHandler(auth, NullLogger<AuthDelegatingHandler>.Instance)
         {
             InnerHandler = inner,
-            RenewalTimeout = renewalTimeout
+            RenewalTimeout = renewalTimeout,
+            Clock = _clock
         };
-        return (handler, new HttpClient(handler));
+        // The HttpClient's own 100 s timeout is not under test, and a loaded run must not trip it.
+        return (handler, new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan });
     }
 
     private static string CreateJwt(DateTimeOffset exp)
@@ -116,14 +128,20 @@ public class AuthDelegatingHandlerHungRenewalTests
     /// </summary>
     private sealed class RefreshHangsHandler(bool honourCancellation) : HttpMessageHandler
     {
+        private readonly StateSignal _refreshed = new();
         private int _refreshCalls;
         public int RefreshCalls => Volatile.Read(ref _refreshCalls);
+
+        /// <summary>Completes once <paramref name="count"/> refreshes reached the endpoint.</summary>
+        public Task RefreshesAsync(int count) =>
+            _refreshed.WhenAsync(() => RefreshCalls >= count, $"{count} refresh(es) sent");
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (request.RequestUri!.AbsolutePath.EndsWith("/api/auth/token/refresh", StringComparison.Ordinal))
             {
                 Interlocked.Increment(ref _refreshCalls);
+                _refreshed.Pulse();
                 await Task.Delay(Timeout.Infinite, honourCancellation ? cancellationToken : CancellationToken.None);
             }
             return new HttpResponseMessage(HttpStatusCode.OK);

@@ -2,8 +2,7 @@
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-// 0-a: thin wrapper around the shared PipelinesList (server scope). Data fetch + rendering live in
-// the shared component, so the server detail no longer keeps its own diverged grid.
+// Delegates server-scoped pipeline fetching and rendering to PipelinesList.
 public partial class ServerPipelinesSection
 {
     [Parameter, EditorRequired] public int ServerId { get; set; }

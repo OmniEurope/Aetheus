@@ -42,6 +42,40 @@ public sealed class ObservabilityPackageOperationExecutorTests
         Assert.Equal("https://packages.example", startInfo.Environment["AETHEUS_PACKAGE_BASE_URL"]);
         Assert.False(startInfo.Environment.ContainsKey("DOTNET"));
         Assert.False(startInfo.Environment.ContainsKey("UNRELATED_SECRET"));
+        // A legacy set-wide version is still forwarded, so the harness can hold every candidate to it.
+        Assert.Equal("1.2.3", startInfo.Environment["PACKAGE_VERSION"]);
+    }
+
+    private static Dictionary<string, string> PerPackageEnvironment() => new()
+    {
+        ["AETHEUS_WORKING_DIR"] = "/work/candidate",
+        ["AETHEUS_NUGET_SIGNING_PFX_BASE64"] = "cGZ4",
+        ["AETHEUS_NUGET_SIGNING_PFX_PASSWORD"] = "password",
+        ["AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT"] = new('A', 64),
+        ["AETHEUS_PACKAGE_TOKEN"] = "token"
+    };
+
+    [Fact]
+    public void HasRequiredEnvironment_DoesNotRequireASetWideVersion()
+    {
+        var environment = PerPackageEnvironment();
+
+        Assert.True(ObservabilityPackageOperationExecutor.HasRequiredEnvironment(environment));
+        environment.Remove("AETHEUS_PACKAGE_TOKEN");
+        Assert.False(ObservabilityPackageOperationExecutor.HasRequiredEnvironment(environment));
+    }
+
+    [Fact]
+    public void BuildStartInfo_WithoutASetWideVersion_PassesNoneToTheHarness()
+    {
+        var startInfo = ObservabilityPackageOperationExecutor.BuildStartInfo(
+            "/agent-owned/promote.sh",
+            "/agent-owned/publish.sh",
+            "https://packages.example",
+            PerPackageEnvironment());
+
+        Assert.False(startInfo.Environment.ContainsKey("PACKAGE_VERSION"));
+        Assert.Equal("/work/candidate", startInfo.Environment["AETHEUS_WORKING_DIR"]);
     }
 
     [Fact]
@@ -92,6 +126,10 @@ public sealed class ObservabilityPackageOperationExecutorTests
             await File.WriteAllTextAsync(
                 Path.Combine(output, "SHA256SUMS"),
                 $"{digest}  Aetheus.Telemetry.{version}.nupkg\n",
+                TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(
+                Path.Combine(output, "provenance.json"),
+                $"{{\n  \"packageKind\": \"telemetry\",\n  \"packageVersion\": \"{version}\"\n}}\n",
                 TestContext.Current.CancellationToken);
 
             var fakeCurl = Path.Combine(fakeBin, "curl");

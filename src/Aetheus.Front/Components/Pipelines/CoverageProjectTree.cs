@@ -2,10 +2,9 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// Recette R-428: the run's per-file coverage as a tree, projects first, then each project's files.
-/// Projects are grouped by <see cref="CoverageProjectName"/>, the rule the per-project table of the API
-/// uses, and both levels list the least covered first, as the report stores its files.
+/// <summary> The run's per-file coverage as a tree, projects first, then each project's files.
+/// Projects are grouped by <see cref="CoverageProjectName"/>, the rule the per-project table of the
+/// API uses, and both levels list the least covered first, as the report stores its files.
 /// </summary>
 internal static class CoverageProjectTree
 {

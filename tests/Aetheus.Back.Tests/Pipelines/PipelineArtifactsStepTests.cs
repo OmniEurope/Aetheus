@@ -4,10 +4,7 @@ using Aetheus.Back.Services;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// PLAN-003 2.2 (4.5): artifact_name on a step. A stage of five artifacts steps replaces five
-/// artifact stages; the names share one namespace with the stages' own bundles.
-/// </summary>
+/// <summary>Step artifact names share one namespace with stage bundles.</summary>
 public sealed class PipelineArtifactsStepTests
 {
     private static List<string> Errors(string yaml)

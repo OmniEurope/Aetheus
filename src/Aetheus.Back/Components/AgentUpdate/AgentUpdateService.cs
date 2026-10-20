@@ -29,15 +29,62 @@ internal sealed class AgentUpdateService(
         if (server is null)
             throw new NotFoundException($"Server {serverId} not found.");
 
+        return await QueueForServerAsync(server, requestedBy, null, ct).ConfigureAwait(false);
+    }
+
+    public async Task<AgentUpdateResponse> QueueUpdateWithCapabilitiesAsync(
+        int serverId,
+        string requestedBy,
+        IReadOnlyCollection<string> capabilities,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(capabilities);
+        // The whitelist is the whole point of this entry: anything else, an empty list included, is a
+        // malformed request, and it is refused here before the server is even read.
+        if (!AgentEnableableCapabilities.TryNormalize(capabilities, out var enable, out var rejected))
+            throw new BadRequestException(
+                $"Capability '{rejected}' cannot be enabled from an agent update. Allowed: "
+                + string.Join(", ", AgentEnableableCapabilities.Whitelist) + ".");
+        if (enable.Count == 0)
+            throw new BadRequestException("At least one capability to enable is required.");
+
+        var server = await updateRepo.FindServerAsync(serverId, ct).ConfigureAwait(false);
+        if (server is null)
+            throw new NotFoundException($"Server {serverId} not found.");
+        // Only the Linux installer has the --enable-* flags; the Windows updater has nothing to map to.
+        if (server.OsType != OsType.Linux)
+            throw new BadRequestException("Capabilities can only be enabled on a Linux agent.");
+        // An agent that predates the field would run the update and drop the request without a word: the
+        // operator would be told the grant happened. Refuse by name instead and ask for a plain update.
+        if (!AgentCapabilities.IsDeclared(server.AgentCapabilitiesJson, AgentCapabilities.EnableCapabilitiesOnUpdate))
+            throw new ConflictException(
+                "This agent cannot enable capabilities yet: update it first with the plain agent update.");
+
+        return await QueueForServerAsync(server, requestedBy, enable, ct).ConfigureAwait(false);
+    }
+
+    private async Task<AgentUpdateResponse> QueueForServerAsync(
+        Server server,
+        string requestedBy,
+        IReadOnlyList<string>? enable,
+        CancellationToken ct)
+    {
+        var serverId = server.Id;
+
         // Deliberately no "already up to date, nothing to do" short-circuit. This method has exactly one
         // caller, the per-server Update agent action, which someone chose on one named server: they want
         // that agent reinstalled, and an agent reporting the target version is one of the reasons to want
         // it, not a reason to refuse. Skipping made the click do nothing on precisely the server the
         // operator was trying to repair. The fleet-wide sweep below still skips current agents, because
         // there nobody named the server.
-        var (request, created) = await updateRepo
-            .ReserveAsync(server, releases.Current, requestedBy, ct)
-            .ConfigureAwait(false);
+        var (request, created) = enable is null
+            ? await updateRepo.ReserveAsync(server, releases.Current, requestedBy, ct).ConfigureAwait(false)
+            : await updateRepo.ReserveAsync(server, releases.Current, requestedBy, ct, enable).ConfigureAwait(false);
+        // A reused request that already produced its task has a fixed environment: never answer
+        // "queued" for a grant that update will not make.
+        if (enable is not null && !CarriesAll(request, enable))
+            throw new ConflictException(
+                "An agent update is already running on this server without these capabilities. Retry once it has finished.");
         var (_, task, blockingCount) = await updateRepo.TryQueueAsync(request.Id, ct).ConfigureAwait(false);
         if (task is not null)
         {
@@ -51,8 +98,22 @@ internal sealed class AgentUpdateService(
             serverId,
             $"Agent update to {request.TargetVersion}; blocking tasks: {blockingCount}",
             ct).ConfigureAwait(false);
+        if (enable is not null)
+            await audit.LogAsync(
+                "AgentCapabilityEnableRequested",
+                "Server",
+                serverId,
+                $"Capabilities requested with the agent update to {request.TargetVersion}: "
+                + AgentEnableableCapabilities.Join(enable),
+                ct).ConfigureAwait(false);
 
         return ToResponse(request, task, blockingCount, !created);
+    }
+
+    private static bool CarriesAll(AgentUpdateRequest request, IReadOnlyList<string> requested)
+    {
+        AgentEnableableCapabilities.TryParse(request.EnableCapabilities, out var carried, out _);
+        return requested.All(carried.Contains);
     }
 
     public async Task<AgentUpdateAllResponse> QueueUpdateAllAsync(

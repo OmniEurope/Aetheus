@@ -4,11 +4,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// Recette R-210 / R-224: the columns of a server's task log grid. The grid reads the log page by page
-/// from the API, so its header filters and sorts are applied here, to every entry of the server, and
-/// not to the entries already on screen.
-/// </summary>
+/// <summary> The columns of a server's task log grid. The grid reads the log page by page from the
+/// API, so its header filters and sorts are applied here, to every entry of the server, and not to
+/// the entries already on screen. </summary>
 internal static class ServerLogQuery
 {
     internal static readonly GridQueryMap<TaskLog> Columns = new GridQueryMap<TaskLog>()

@@ -1,8 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* R-455 / R-444: the Performance tab of a supervised application. The overview first (how many routes and
-   requests, the slowest route), then every route's timings as the application's Aetheus.Telemetry
-   package measured them, then, on demand only, the metric explorer. *@
+@* Show the route summary before individual timings and load the metric explorer only on demand so
+   the overview stays focused and inexpensive. *@
 @if (_loading)
 {
     <AetheusLoader Size="OmniControlSize.Small" />
@@ -17,11 +16,8 @@ else if (_report is null || _report.MeasuredAt is null)
 }
 else
 {
-    @* The same tiles as the audience summary (R-356, R-472): the OE key-figure tile, half the row from the
-       small breakpoint, a quarter from the large one, one per line on a phone; each fills its column,
-       which the row stretches, so the four share one height. Recette R2-010: when the application last
-       sent its figures is the fourth tile (the date as its value, the window the figures cover as its
-       detail), like the "Last event" tile of the Visitors tab, instead of a sentence above the tiles. *@
+    @* Use equal-height responsive tiles so the summary remains readable on phones; show the last
+       export time with its measurement window to make freshness explicit. *@
     <OmniRow Gap="OmniSpacing.Medium" Class="omni-u-mb-md">
         <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
             <OmniStatTile Class="app-performance-tile" Value="@LastSentText" Label="@L["AppPerformanceLastSent"]" Detail="@WindowText" data-testid="app-performance-window" />
@@ -37,10 +33,8 @@ else
         </OmniColumn>
     </OmniRow>
 
-    @* Recette R-474, then R2-009 and R2-011: everything the tab shows (the window and the figures as the
-       header, every route the column filters keep) exported by the grid's own bar under the table, in
-       Markdown and CSV, each button with its file icon; Markdown blue, the user's choice (R2-009), set
-       for every export bar by AetheusDataGrid. *@
+    @* Export the displayed measurement context and every filtered route through the grid's footer
+       so the file remains interpretable outside the page. *@
     <AetheusDataGrid Data="@_report.Routes" TItem="AppRouteTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg"
                      ShowFooterBar="true" ExportTitle="@ExportTitle"
                      ExportFields="@ExportFields" ExportFileName="@ExportFileName">
@@ -55,7 +49,8 @@ else
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AppRouteTimingDto" Property="P95Ms" Title="@L["PerformanceP95"]" ExportValue="@P95Export" Width="6rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                 <Template Context="route">
-                    @* R-476: a percentile taken on too few calls is the maximum; it reads as an order of magnitude. *@
+                    @* A percentile taken on too few calls is the maximum; it reads as an order of
+                       magnitude. *@
                     @if (IsOrderOfMagnitude(route, P95MinimumCalls))
                     {
                         <OmniText Tone="OmniTextTone.Muted" title="@FewCallsHint(P95MinimumCalls)" data-testid="app-performance-few-calls">@Milliseconds(route.P95Ms)</OmniText>

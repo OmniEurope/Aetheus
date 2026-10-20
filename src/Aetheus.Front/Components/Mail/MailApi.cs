@@ -22,7 +22,7 @@ public sealed class MailApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<MailDomainDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/servers/{serverId}/mail/domains", query), filters), JsonOptions.Web) ?? new();
     }
@@ -64,7 +64,7 @@ public sealed class MailApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<MailAccountDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/servers/{serverId}/mail/accounts", query), filters), JsonOptions.Web) ?? new();
     }
@@ -129,7 +129,7 @@ public sealed class MailApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<MailAliasDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/servers/{serverId}/mail/aliases", query), filters), JsonOptions.Web) ?? new();
     }
@@ -163,7 +163,7 @@ public sealed class MailApi(HttpClient http) : ApiClientBase(http)
     public Task<DkimRotationResultDto?> RotateMailDkimKeyAsync(int serverId, int domainId, DkimRotationRequest request, CancellationToken ct = default)
         => PostJsonAsync<DkimRotationRequest, DkimRotationResultDto>($"api/servers/{serverId}/mail/domains/{domainId}/dkim/rotate", request, ct);
 
-    // --- PLAN-005: TLS, spam filter, delivery, queue, usage, DNS verification, diagnostics ---
+    // Mail TLS, spam filtering, delivery, queues, usage, DNS and diagnostics.
 
     public Task<MailCertificateDto?> GetMailCertificateAsync(int serverId, CancellationToken ct = default)
         => GetJsonAsync<MailCertificateDto>($"api/servers/{serverId}/mail/certificate", ct);
@@ -203,6 +203,15 @@ public sealed class MailApi(HttpClient http) : ApiClientBase(http)
         => PostJsonAsync<MailPurgeRequest, MailTaskQueuedDto>($"api/servers/{serverId}/mail/purge", request, ct);
 
 
+    /// <summary>Recette R1-41 / R3-50: queues "Préparer l'accès administrateur" (administrators only).</summary>
+    public Task<MailTaskQueuedDto?> PrepareMasterAccessAsync(int serverId, CancellationToken ct = default)
+        => PostNoBodyAsync<MailTaskQueuedDto>($"api/servers/{serverId}/mail/master-access", ct);
+
+    /// <summary>Recette R3-49: deletes the Aetheus mailbox rows the server no longer reports.</summary>
+    public Task<MailAccountPurgeResultDto?> PurgeMissingMailAccountsAsync(int serverId, CancellationToken ct = default)
+        => PostNoBodyAsync<MailAccountPurgeResultDto>($"api/servers/{serverId}/mail/accounts/purge-missing", ct);
+
+
     public Task<MailTaskQueuedDto?> RefreshMailQueueAsync(int serverId, CancellationToken ct = default)
         => PostNoBodyAsync<MailTaskQueuedDto>($"api/servers/{serverId}/mail/queue/refresh", ct);
 
@@ -229,11 +238,15 @@ public sealed class MailApi(HttpClient http) : ApiClientBase(http)
     public Task<MailMxPreviewDto?> PreviewMailMxAsync(int serverId, string domain, CancellationToken ct = default)
         => GetJsonAsync<MailMxPreviewDto>($"api/servers/{serverId}/mail/mx-preview?domain={Uri.EscapeDataString(domain)}", ct);
 
-    /// <summary>Recette R2-080: A record and reverse DNS of the host name the setup assistant proposes.</summary>
+    /// <summary>A record and reverse DNS of the host name the setup assistant proposes.</summary>
     public Task<MailDiagnosticsDto?> CheckMailPrerequisitesAsync(int serverId, string hostname, CancellationToken ct = default)
         => GetJsonAsync<MailDiagnosticsDto>($"api/servers/{serverId}/mail/prerequisites?hostname={Uri.EscapeDataString(hostname)}", ct);
 
-    /// <summary>Recette R2-080: queues the outbound port 25 check on the server agent.</summary>
+    /// <summary>Queues the outbound port 25 check on the server agent.</summary>
     public Task<MailTaskQueuedDto?> ProbeMailOutboundSmtpAsync(int serverId, CancellationToken ct = default)
         => PostNoBodyAsync<MailTaskQueuedDto>($"api/servers/{serverId}/mail/prerequisites/outbound-smtp", ct);
+
+    /// <summary>Recette R3-23: queues the check of what a mail stack left on the server.</summary>
+    public Task<MailTaskQueuedDto?> CheckMailLeftoversAsync(int serverId, CancellationToken ct = default)
+        => PostNoBodyAsync<MailTaskQueuedDto>($"api/servers/{serverId}/mail/leftovers-check", ct);
 }

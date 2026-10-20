@@ -83,7 +83,7 @@ public class InboundStringBoundsAuditTests
         }
     }
 
-    /// <summary>One property of an inbound DTO; recette R2-107 moved it out of <see cref="Inspect"/>, under the grade-A cyclomatic threshold.</summary>
+    /// <summary>Inspects one inbound DTO property.</summary>
     private static void InspectProperty(PropertyInfo property, string propertyPath, ISet<string> failures, HashSet<Type> ancestry)
     {
         if (property.PropertyType == typeof(string))

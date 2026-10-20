@@ -1,6 +1,9 @@
 [extend]
 useDefault = true
 
+# The current tree takes no exception (PLAN-002 decision D3): a secret-shaped value is changed in the
+# code, never allowlisted. Reviewed history findings are exact fingerprints in .gitleaksignore.
+
 [[allowlists]]
 description = "Generated outputs and pinned third-party frontend assets"
 paths = [
@@ -14,15 +17,3 @@ paths = [
   # scans only: the path no longer exists in the tree). Recette R2-055, finding #793.
   '''(^|/)Prometheus\.Front/wwwroot/lib/'''
 ]
-
-[[allowlists]]
-description = "Agent registration token committed in a53b733c1 (2026-04-05), dead: registration tokens are single-use, expire after 24 h by default and are looked up in the database, whose oldest token is from 2026-07-10 (checked 2026-10-02, recette R2-055). Scoped to that commit and file so any other leak is still reported."
-condition = "AND"
-commits = ["a53b733c1153dca57a1f97dea812ae0fc4642acc"]
-paths = ['''(^|/)Prometheus\.Agent\.Linux/appsettings\.json$''']
-
-[[allowlists]]
-description = "Dovecot names its password hashing scheme, not a credential"
-targetRules = ["generic-api-key"]
-regexTarget = "line"
-regexes = ['''^\s*default_password_scheme\s*=\s*[A-Z0-9-]+\s*$''']

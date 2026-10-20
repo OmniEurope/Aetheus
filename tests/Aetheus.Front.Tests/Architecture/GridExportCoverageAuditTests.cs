@@ -3,32 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R2-124 (second decision of 2026-10-05): the export only serves to hand a table to an AI, so it
-/// is Markdown alone, under the tables of <see cref="MarkdownTables"/>; the other tables show no bar. Their
-/// export wiring stays (title, source, page-by-page reader) and this guard keeps checking it on every table
-/// that is not opted out, so that adding one to the list is one attribute: no table exports only the rows
-/// on screen or a file that says nothing of its origin.
-///
-/// <list type="bullet">
-/// <item>A table that does not export writes <c>ExportMarkdown="false"</c> and is in
-/// <see cref="OptOuts"/>, with its reason. An entry needs the user's approval, like any guard
-/// exception.</item>
-/// <item>Markdown is opt-in: a grid, wrapper or raw, writes <c>ShowFooterBar="true"</c> (OE 1.6.0: a bar
-/// under the rows, inside the table's frame, its buttons at its end), and the table is in
-/// <see cref="MarkdownTables"/> with the reason an AI needs it. No table picks a format: CSV, Excel and
-/// PDF are off in the preset and the wrapper, and the obsolete <c>ExportFormats</c> is never written.</item>
-/// <item>A wrapper grid fed by <c>LoadData</c> reads its export through <c>ExportRead</c> (or
-/// <c>ExportLoad</c>): <c>LoadData</c> replaces the rows the page shows, and the rows it keeps are a
-/// page, not the list.</item>
-/// <item>A raw <c>OmniDataGrid</c> says where its rows come from (<c>ExportTitle</c>, from
-/// <c>GridExportContext</c>); the wrapper does it by default.</item>
-/// <item>Two exporting tables of one file do not share a title (<c>ExportName</c> or
-/// <c>ExportTitle</c>).</item>
-/// <item>An exporting table has a column the export can write (a <c>Property</c>, a <c>Value</c> or an
-/// <c>ExportValue</c>): OE refuses to export a table of template-only columns, at the click.</item>
-/// </list>
-/// </summary>
+/// <summary>Approved exporting tables use Markdown with source metadata and all filtered rows;
+/// exceptions require user approval and a recorded reason. Guards retain paged export readers,
+/// distinct titles and writable columns rather than relying on displayed rows.</summary>
 public sealed class GridExportCoverageAuditTests
 {
     private static readonly string FrontRoot = Path.Combine(RepositoryScan.Root, "src", "Aetheus.Front");
@@ -38,10 +15,8 @@ public sealed class GridExportCoverageAuditTests
 
     private const string OptOut = "ExportMarkdown=\"false\"";
 
-    /// <summary>
-    /// The tables that do not export, by file and row type, each with its reason. Approval pending:
-    /// proposed with recette R2-124 (2026-10-05).
-    /// </summary>
+    /// <summary>Tables without export are listed by file and row type with their reasons; approval
+    /// of these exceptions remains pending.</summary>
     private static readonly Dictionary<string, string> OptOuts = new(StringComparer.Ordinal)
     {
         [Key("Components/Servers/ServerDetailSections/DockerContainersTab.razor", "DockerEnvVarDto")] =
@@ -54,10 +29,8 @@ public sealed class GridExportCoverageAuditTests
             "A picker inside a form (roles ticked for a user or a token), not a list; the Roles page exports the roles.",
     };
 
-    /// <summary>
-    /// The only tables with an export bar (Markdown), by file and row type, each with what an AI does with
-    /// it. User decision of 2026-10-05 (recette R2-124, second feedback): logs, findings and performance.
-    /// </summary>
+    /// <summary>Tables with Markdown export bars are listed with their purposes: logs, findings and
+    /// performance.</summary>
     private static readonly Dictionary<string, string> MarkdownTables = new(StringComparer.Ordinal)
     {
         [Key("Components/Projects/ProjectDetailSections/ProjectQualitySection.razor", "AnalysisFindingDto")] =
@@ -76,6 +49,8 @@ public sealed class GridExportCoverageAuditTests
             "Useful for AI: the slowest API calls, with the server window in the header, to find what to optimize.",
         [Key("Components/Logs/Performance.razor", "ApiEndpointTimingDto")] =
             "Useful for AI: per-route percentiles, with the server window in the header, to find what to optimize.",
+        [Key("Components/Servers/ServerDetailSections/ManageableServiceGrid.razor", "ServiceInfoDto")] =
+            "Useful for AI: a server's services and their status, to diagnose a host (recette R3-53, user request of 2026-10-12).",
         [Key("Components/Logs/Performance.razor", "ClientApiCall")] =
             "Useful for AI: what this browser waited for, to tell the network from the server.",
     };
@@ -220,6 +195,27 @@ public sealed class GridExportCoverageAuditTests
         Assert.True(offenders.Count == 0,
             "A grid fed by LoadData reads its export through ExportRead (or ExportLoad), every page from the "
             + "API; without it the wrapper throws at render. Missing in:\n" + string.Join("\n", offenders));
+    }
+
+    /// <summary>R3-54: the export buttons, their cancel and the column chooser are drawn as OmniButtons
+    /// of the page's size (OE 1.8.1); left null they are 16 px tall, out of step with the other buttons.</summary>
+    [Fact]
+    public void EveryGridWithABar_SizesItsBarButtonsLikeThePageButtons()
+    {
+        const string Size = "BarButtonSize=\"OmniControlSize.Medium\"";
+        string[] barSwitches = ["ShowFooterBar", "ShowHeaderBar", "AllowColumnHide"];
+        var offenders = Grids()
+            .Where(grid => !grid.Wrapper && barSwitches.Any(attribute => DeclaresAny(grid.Tag, attribute)))
+            .Where(grid => !grid.Tag.Contains(Size, StringComparison.Ordinal))
+            .Select(grid => grid.Key)
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            $"A raw OmniDataGrid with a header or footer bar or a column chooser must set {Size} (recette R3-54). Missing in:\n"
+            + string.Join("\n", offenders));
+
+        var wrapper = File.ReadAllText(Path.Combine(FrontRoot, "Components", "Shared", WrapperFile));
+        Assert.Contains(Size, wrapper, StringComparison.Ordinal);
     }
 
     [Fact]

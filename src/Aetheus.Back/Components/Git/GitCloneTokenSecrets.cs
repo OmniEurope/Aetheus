@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Git;
 
-/// <summary>
-/// The server secrets the clone tokens (<see cref="GitRunCloneToken"/>, <see cref="GitAiCloneToken"/>)
-/// are keyed by: a dedicated <c>GitLight:RunTokenKey</c>, else the <c>Auth:EncryptionKey</c> fallback.
-/// Recette R-464: an empty value is the same as an absent one. Compose writes an unset
-/// <c>${VAR:-}</c> as an empty string, and the <c>??</c> fallback took that empty string as the key and
-/// threw, so a host whose environment file lacked the dedicated key could mint no clone token at all.
-/// </summary>
+/// <summary>Signs clone tokens with GitLight:RunTokenKey, falling back to Auth:EncryptionKey. Treat
+/// empty configuration values as absent because Compose can emit empty strings for unset
+/// variables.</summary>
 internal static class GitCloneTokenSecrets
 {
     /// <summary>The secret new tokens are signed with.</summary>

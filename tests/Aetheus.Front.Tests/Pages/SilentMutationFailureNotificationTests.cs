@@ -28,7 +28,7 @@ public sealed class SilentMutationFailureNotificationTests : BunitContext
             new UserPermissionSummaryDto { UserId = 1, Username = "alice" });
         var cut = Render<UserEdit>(parameters => parameters.Add(component => component.Id, 1));
         cut.WaitForState(() => !(bool)typeof(UserEdit).GetField("_loading", PrivateInstance)!
-            .GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+            .GetValue(cut.Instance)!);
         typeof(UserEdit).GetField("_selectedOrgId", PrivateInstance)!.SetValue(cut.Instance, 7);
         handler.SetResponse(HttpMethod.Post, "api/organizations/7/members", HttpStatusCode.BadRequest);
 
@@ -56,7 +56,7 @@ public sealed class SilentMutationFailureNotificationTests : BunitContext
         handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto>());
         var cut = Render<OrganizationDetail>(parameters => parameters.Add(component => component.Id, 2));
         cut.WaitForState(() => !(bool)typeof(OrganizationDetail).GetField("_loading", PrivateInstance)!
-            .GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+            .GetValue(cut.Instance)!);
         handler.SetResponse(HttpMethod.Put, "api/organizations/2", HttpStatusCode.BadRequest);
 
         await cut.InvokeAsync(() => (Task)typeof(OrganizationDetail)
@@ -74,7 +74,7 @@ public sealed class SilentMutationFailureNotificationTests : BunitContext
         handler.SetJsonResponse("api/audit", new PaginatedResult<AuditLogDto>());
         var cut = Render<RoleEdit>(parameters => parameters.Add(component => component.Id, 3));
         cut.WaitForState(() => !(bool)typeof(RoleEdit).GetField("_loading", PrivateInstance)!
-            .GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+            .GetValue(cut.Instance)!);
         typeof(RoleEdit).GetField("_selectedUserId", PrivateInstance)!.SetValue(cut.Instance, 42);
         handler.SetResponse(HttpMethod.Post, "api/roles/3/users", HttpStatusCode.Conflict);
 

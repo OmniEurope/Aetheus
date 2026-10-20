@@ -55,13 +55,21 @@
 
     <DialogFooter CancelText="@L["Close"]" OnCancel="@(() => Dialog.Close())">
         <SecondaryContent>
-            @if (Release.Artifacts.Count > 0)
-            {
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/projects/{Release.ProjectId}/artifacts"))"><OmniIcon Name="OmniIconName.Archive" /> <span>@L["Artifact"]</span></OmniButton>
-            }
+            @* STD-BTN detection 11: Execution visible, the other actions in the menu; Artifact is the visible
+               action when the release has no run. *@
             @if (Release.PipelineRunId.HasValue)
             {
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/pipelines/runs/{Release.PipelineRunId}"))" title="@L["PipelineRun"]"><OmniIcon Name="OmniIconName.Eye" /> <span>@L["Execution"]</span></OmniButton>
+                @if (Release.Artifacts.Count > 0)
+                {
+                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniMenuItem OnClick="@(() => Nav.NavigateTo($"/projects/{Release.ProjectId}/artifacts"))"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent>@L["Artifact"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
+                }
+            }
+            else if (Release.Artifacts.Count > 0)
+            {
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/projects/{Release.ProjectId}/artifacts"))"><OmniIcon Name="OmniIconName.Archive" /> <span>@L["Artifact"]</span></OmniButton>
             }
         </SecondaryContent>
     </DialogFooter>

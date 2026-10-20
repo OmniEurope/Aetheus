@@ -4,7 +4,8 @@ namespace Aetheus.Back.Components.Monitoring;
 
 public class MonitoringService(IMonitoringRepository repo, TimeProvider timeProvider) : IMonitoringService
 {
-    /// <summary>Recette R-480: the run groups the dashboard tile shows (<c>MaxGroups</c> on the Home page).</summary>
+    /// <summary>The run groups the dashboard tile shows (<c>MaxGroups</c> on the Home
+    /// page).</summary>
     private const int RecentRunGroups = 10;
 
     public Task<DashboardOverviewDto> GetDashboardAsync(
@@ -47,13 +48,11 @@ public class MonitoringService(IMonitoringRepository repo, TimeProvider timeProv
             PendingTasks = pendingTasks,
             RunningPipelines = runningPipelines,
             TotalProjects = totalProjects,
-            // Same RunListProjection + HydrateListWarnings + grade aggregation as every other run grid
-            // (see MonitoringRepository.GetRecentRunsAsync), so the dashboard's "recent runs" tile shows
-            // GateGrade, Branch, Commit, Server and Project instead of the bespoke, partial mapping this
-            // used to build by hand.
+            // Use shared run projection, warning hydration and grade aggregation for consistent
+            // fields across run grids.
             RecentRuns = recentRuns,
-            // Recette R-480: projected and ordered by the database (online first, then most recently
-            // active). The tile lists every readable server, so the counts come from those same rows.
+            // Projected and ordered by the database (online first, then most recently active). The
+            // tile lists every readable server, so the counts come from those same rows.
             Servers = servers,
             Projects = recentProjects.Select(project =>
                 ProjectDtoMapper.ToDto(project, includePipelineSummary: true)).ToList()

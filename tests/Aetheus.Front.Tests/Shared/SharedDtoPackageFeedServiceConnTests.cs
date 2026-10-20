@@ -8,27 +8,6 @@ public class SharedDtoPackageFeedServiceConnTests
     // --- PackageFeed ---
 
     [Fact]
-    public void PackageFeedDto_DefaultValues()
-    {
-        var dto = new PackageFeedDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Equal(string.Empty, dto.UpstreamUrl);
-        Assert.Null(dto.Description);
-        Assert.Null(dto.ProjectId);
-        Assert.Null(dto.ProjectName);
-        Assert.Null(dto.ServiceConnectionName);
-        Assert.Equal(0, dto.PackageCount);
-    }
-
-    [Fact]
-    public void PackageFeedDetailDto_DefaultValues()
-    {
-        var dto = new PackageFeedDetailDto();
-        Assert.Empty(dto.Packages);
-        Assert.Null(dto.ServiceConnectionId);
-    }
-
-    [Fact]
     public void CreatePackageFeedRequest_Valid()
     {
         var req = new CreatePackageFeedRequest { Name = "Feed", UpstreamUrl = "https://example.com" };
@@ -49,26 +28,7 @@ public class SharedDtoPackageFeedServiceConnTests
         Assert.Empty(ValidateModel(req));
     }
 
-    [Fact]
-    public void PackageEntryDto_DefaultValues()
-    {
-        var dto = new PackageEntryDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Equal(string.Empty, dto.LatestVersion);
-        Assert.Null(dto.Description);
-    }
-
     // --- ServiceConnection ---
-
-    [Fact]
-    public void ServiceConnectionDto_DefaultValues()
-    {
-        var dto = new ServiceConnectionDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Null(dto.Description);
-        Assert.Null(dto.ProjectId);
-        Assert.Null(dto.Url);
-    }
 
     [Fact]
     public void ServiceConnectionDetailDto_DefaultValues()

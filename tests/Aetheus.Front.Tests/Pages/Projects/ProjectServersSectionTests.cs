@@ -62,8 +62,7 @@ public class ProjectServersSectionExtendedTests : BunitContext
         SetupEmptyServers();
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 10));
         cut.WaitForState(
-            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null);
 
         // OnInitializedAsync fetches the project servers; an empty API payload yields an empty list.
         Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/projects/10/servers"));
@@ -78,7 +77,7 @@ public class ProjectServersSectionExtendedTests : BunitContext
     {
         SetupWithServers();
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 10));
-        cut.WaitForState(() => cut.Markup.Contains("Server 1"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Server 1"));
 
         // The two seeded project servers are loaded and their display names rendered.
         Assert.Contains("Server 1", cut.Markup);
@@ -217,7 +216,7 @@ public class ProjectServersSectionExtendedTests : BunitContext
         {
             var f = typeof(ProjectServersSection).GetField("_servers", Priv)!;
             return f.GetValue(cut.Instance) is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var servers = (List<ProjectServerDto>?)typeof(ProjectServersSection)
             .GetField("_servers", Priv)!
@@ -230,11 +229,10 @@ public class ProjectServersSectionExtendedTests : BunitContext
     [Fact]
     public async Task HeaderFilters_AreColumnFilters_NotASearchTerm()
     {
-        // Recette R-212: the Type list, the Name and Host texts and the Port number are real column
-        // filters of the project's servers endpoint; the first typed value is no longer a search term.
+        // Send Type, Name, Host and Port as column filters to the project servers endpoint.
         SetupWithServers();
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 10));
-        cut.WaitForState(() => cut.Markup.Contains("Server 1"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Server 1"));
         var grid = cut.FindComponent<AetheusDataGrid<ProjectServerDto>>();
 
         await cut.InvokeAsync(() => grid.Instance.LoadData.InvokeAsync(new GridLoadArgs

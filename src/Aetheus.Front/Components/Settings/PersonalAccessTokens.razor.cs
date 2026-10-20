@@ -21,7 +21,7 @@ public partial class PersonalAccessTokens
     private bool _loading = true;
     private bool _creating;
 
-    // Recette R-224: the column header filters, each a real column filter of the endpoint.
+    // The column header filters, each a real column filter of the endpoint.
     private List<Aetheus.Shared.Components.Shared.GridFilter> _columnFilters = [];
     private Func<string, string>? _scopeText;
     private Func<string, string> ScopeText => _scopeText ??= GridFilterText.ForEnum<PatScope>(L);
@@ -56,8 +56,8 @@ public partial class PersonalAccessTokens
         await LoadPageAsync();
     }
 
-    /// <summary>Recette R2-124: one page of the export (the token's prefix, never the token), with the
-    /// grid's sort and column filters.</summary>
+    /// <summary>One page of the export (the token's prefix, never the token), with the grid's sort
+    /// and column filters.</summary>
     private Task<PaginatedResult<PersonalAccessTokenDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -172,7 +172,7 @@ public partial class PersonalAccessTokens
 
     private static bool IsRevocable(PersonalAccessTokenDto t) => t.RevokedAt is null;
 
-    /// <summary>Recette R2-124: the export writes the state the badge shows.</summary>
+    /// <summary>The export writes the state the badge shows.</summary>
     private Func<PersonalAccessTokenDto, object?> StatusExport => _statusExport ??= token => StatusLabel(token);
     private Func<PersonalAccessTokenDto, object?>? _statusExport;
 }

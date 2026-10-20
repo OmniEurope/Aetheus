@@ -1,10 +1,21 @@
 # SPDX-License-Identifier: EUPL-1.2
+# Builds the package set through the three package pipelines, then publishes it with the project's
+# publication commands: shell written in its pipeline in APPLICATION_PUBLISH_PACKAGES_COMMANDS (run with
+# `sh -eu -c` from the workspace). Nothing is required in its repository (ADR-050, recette R3-64); without
+# commands the step fails and says so.
 name: publish-observability-packages-template
 trigger: manual
 variables:
+  APPLICATION_PUBLISH_PACKAGES_COMMANDS: ""
   APPLICATION_PACKAGE_TELEMETRY_PIPELINE: package-telemetry
   APPLICATION_PACKAGE_DOTNET_ANALYTICS_PIPELINE: package-web-analytics-dotnet
   APPLICATION_PACKAGE_BROWSER_ANALYTICS_PIPELINE: package-web-analytics-browser
+
+# Recette R3-67: the publication credentials, in a Vault named like the platform's own (`<project>.package`);
+# `${{ project.slug }}` is the project's slug, so the setup wizard creates it in the project under the name
+# its runs read.
+vaults:
+  - "${{ project.slug }}.package"
 
 stages:
   - name: BuildPackages
@@ -56,6 +67,9 @@ stages:
         working_directory: "$(WORKSPACE)"
         shell: |
           set -eu
-          test -f .pipeline/scripts/publish-packages.sh
-          sh .pipeline/scripts/publish-packages.sh
+          if test -z "${APPLICATION_PUBLISH_PACKAGES_COMMANDS:-}"; then
+            echo "No publication command declared: set APPLICATION_PUBLISH_PACKAGES_COMMANDS in this pipeline." >&2
+            exit 1
+          fi
+          sh -eu -c "$APPLICATION_PUBLISH_PACKAGES_COMMANDS"
         timeout_seconds: 3600

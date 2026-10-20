@@ -2,12 +2,11 @@
 # Static security evidence for an external application, where the platform deploys nothing and writes nothing
 # into the repository (recette R1-33): the minimum the platform can run on a repository as it is.
 #
-# Only the scanners that read nothing from the analysed repository but its source run here: OpenGrep
-# (its rules are the platform's own, mounted beside the source), the dependency scan and the IaC scan
-# (an ignore file is honoured when present, never required). The secret scan of application-security
-# is left out on purpose: Gitleaks reads its rules from .gitleaks.toml at the repository root, a file
-# an external repository does not have to carry. No project adapter is called. The three scans are
-# independent, so they share a stage; the grade reads all three and sits in the stage after them
+# Only the scanners that read nothing from the analysed repository but its source run here: Gitleaks
+# (the repository's .gitleaks.toml when it has one, Gitleaks' built-in rules otherwise, recette R3-63),
+# OpenGrep (its rules are the platform's own, mounted beside the source), the dependency scan and the IaC
+# scan (an ignore file is honoured when present, never required). No project command is run. The four
+# scans are independent, so they share a stage; the grade reads all four and sits in the stage after them
 # (ADR-012: the steps of a stage run together).
 name: application-security-external-template
 trigger: manual
@@ -18,6 +17,10 @@ stages:
     execution_role: build
     os: linux
     steps:
+      - name: Scan secrets
+        type: scanner
+        scanner: gitleaks
+        timeout_seconds: 600
       - name: Scan code (SAST)
         type: scanner
         scanner: opengrep

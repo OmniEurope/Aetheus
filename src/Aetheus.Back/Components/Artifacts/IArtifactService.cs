@@ -6,6 +6,12 @@ public interface IArtifactService
 {
     Task<PipelineArtifactDto?> PublishArtifactAsync(
         int runId, string name, string? stageName, long contentLength, Stream fileContent, CancellationToken ct = default);
+
+    /// <summary>Publishes an assembled chunked upload whose digest is already verified: same quota and
+    /// retention as <see cref="PublishArtifactAsync"/>, but the file is moved into the store rather
+    /// than streamed and hashed again (recette R1-91).</summary>
+    Task<PipelineArtifactDto?> PublishVerifiedArtifactAsync(
+        int runId, string name, string? stageName, VerifiedArtifactFile file, CancellationToken ct = default);
     Task<PaginatedResult<PipelineArtifactDto>> GetProjectArtifactsAsync(int projectId, ProjectArtifactsRequest request, CancellationToken ct = default);
     Task<ProjectArtifactFilterValuesDto> GetProjectArtifactFilterValuesAsync(int projectId, CancellationToken ct = default);
     Task<PipelineArtifactDto?> GetArtifactAsync(int id, CancellationToken ct = default);

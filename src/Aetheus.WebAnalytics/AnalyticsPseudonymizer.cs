@@ -15,6 +15,7 @@ internal sealed class AnalyticsPseudonymizer(AetheusWebAnalyticsOptions options)
     {
         var instant = source.OccurredAtUtc.UtcDateTime;
         var identity = ResolveIdentity(context, source, out var authenticated);
+        var place = "network-prefix:" + NetworkPrefix(context.Connection.RemoteIpAddress ?? IPAddress.None);
         return new AnalyticsExportEvent
         {
             ApplicationId = options.ApplicationId,
@@ -31,8 +32,11 @@ internal sealed class AnalyticsPseudonymizer(AetheusWebAnalyticsOptions options)
                 $"{ISOWeek.GetYear(instant):0000}-W{ISOWeek.GetWeekOfYear(instant):00}",
                 identity),
             MonthlyPseudonym = DerivePeriodPseudonym("month", $"{instant:yyyy-MM}", identity),
+            // Recette R1-68: one person signed in at two places is two sessions of Current visitors, so
+            // the session of an account is also keyed on the network it comes from. The visitor and
+            // authenticated pseudonyms stay per account: the person is still counted once.
             SessionPseudonym = authenticated
-                ? DeriveStablePseudonym("session", identity)
+                ? DeriveStablePseudonym("session", $"{identity}|{place}")
                 : DerivePeriodPseudonym("session-day", $"{instant:yyyy-MM-dd}", identity),
             AuthenticatedPseudonym = authenticated
                 ? DeriveStablePseudonym("authenticated", identity)
@@ -51,8 +55,8 @@ internal sealed class AnalyticsPseudonymizer(AetheusWebAnalyticsOptions options)
         var userId = context.User.Identity?.IsAuthenticated == true
             ? options.AuthenticatedUserIdResolver(context)
             : null;
-        // R-471: a host that never sees the session takes the opaque identifier the application
-        // declares. The host's own authentication always wins when it has one.
+        // A host that never sees the session takes the opaque identifier the application declares.
+        // The host's own authentication always wins when it has one.
         if (string.IsNullOrWhiteSpace(userId) && options.AcceptDeclaredUserId)
             userId = source.AuthenticatedUserId;
         authenticated = !string.IsNullOrWhiteSpace(userId);

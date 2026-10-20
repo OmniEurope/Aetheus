@@ -1,0 +1,30 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
+@* Why mail is deferred, read from the host without a shell: IP policy, retry timings, IPv6 and the deferred entries. *@
+<OmniCard Class="omni-u-mb-md mail-delivery">
+    <OmniStack Gap="OmniSpacing.Small">
+        <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["MailDeliveryTitle"]</OmniHeading>
+        <OmniStack Gap="OmniSpacing.XSmall" Class="mail-delivery-lines">
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailDeliveryIpv4"] : <OmniText Element="OmniTextElement.Strong">@Display(HostIpv4)</OmniText></OmniText>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailDeliveryIpv6"] : <OmniText Element="OmniTextElement.Strong" Tone="@(Ipv6.Count == 0 ? OmniTextTone.Muted : OmniTextTone.Neutral)">@Ipv6Text</OmniText></OmniText>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailDeliveryInetProtocols"] : <OmniText Element="OmniTextElement.Strong">@Display(Delivery.InetProtocols)</OmniText></OmniText>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailDeliveryAddressPreference"] : <OmniText Element="OmniTextElement.Strong">@Display(Delivery.SmtpAddressPreference)</OmniText></OmniText>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailDeliveryRetry"] : <OmniText Element="OmniTextElement.Strong">@RetryText</OmniText></OmniText>
+        </OmniStack>
+        <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@L["MailDeferredTitle"]</OmniHeading>
+        @if (Delivery.Deferred.Count == 0)
+        {
+            <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailDeferredEmpty"]</OmniText>
+        }
+        else
+        {
+            <OmniDataGrid TItem="MailDeferredMessageDto" Items="@Delivery.Deferred" KeyOf="@(row => $"{row.QueueId}|{row.Recipient}")" ExportTitle="@ExportContext.Title(L["MailDeferredTitle"])" ExportFields="@ExportContext.Fields()" MaxHeight="20rem" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                <Columns>
+                    <OmniDataGridColumn TItem="MailDeferredMessageDto" Property="QueueId" Title="ID" Width="7.5rem" />
+                    <OmniDataGridColumn TItem="MailDeferredMessageDto" Property="Recipient" Title="@L["Recipient"]" Width="13.75rem" />
+                    <OmniDataGridColumn TItem="MailDeferredMessageDto" Property="Reason" Title="@L["MailDeferredReason"]" Width="40rem" />
+                </Columns>
+            </OmniDataGrid>
+        }
+    </OmniStack>
+</OmniCard>

@@ -21,11 +21,10 @@ internal static class AuthTokenHelper
         return Convert.ToBase64String(bytes);
     }
 
-    /// <summary>
-    /// Recette R-471: the opaque audience identifier of an account (<see cref="AetheusClaimTypes.AnalyticsVisitor"/>):
-    /// 128 bits of a keyed hash of the account identifier, under its own label so it shares nothing
-    /// with the other values derived from the signing key. URL-safe characters only.
-    /// </summary>
+    /// <summary> The opaque audience identifier of an account (<see
+    /// cref="AetheusClaimTypes.AnalyticsVisitor"/>): 128 bits of a keyed hash of the account
+    /// identifier, under its own label so it shares nothing with the other values derived from the
+    /// signing key. URL-safe characters only. </summary>
     public static string AnalyticsVisitorId(string signingKey, string accountId)
     {
         var bytes = HMACSHA256.HashData(

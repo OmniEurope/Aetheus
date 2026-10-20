@@ -422,10 +422,10 @@ public sealed class AppWebAnalyticsServiceTests : IDisposable
     [Fact]
     public async Task Ingest_AnonymousThenSignedInSameMonth_CountsOneAuthenticatedVisitor()
     {
-        // Recette R-351: the first page view of a visit is sent before the app knows the visitor is
-        // signed in (and /login is anonymous by nature), so the network-keyed monthly identity already
-        // exists when the signed-in events arrive. They share that identity; only their
-        // AuthenticatedPseudonym differs, and it must still be counted once.
+        // The first page view of a visit is sent before the app knows the visitor is signed in (and
+        // /login is anonymous by nature), so the network-keyed monthly identity already exists when
+        // the signed-in events arrive. They share that identity; only their AuthenticatedPseudonym
+        // differs, and it must still be counted once.
         await _service.IngestAsync(
             1,
             [Event(Guid.NewGuid(), "a", "week-a", "month-a", "session-a")],

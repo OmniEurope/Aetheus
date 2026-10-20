@@ -13,9 +13,9 @@ public interface IPortRegistryService
 {
     Task<List<PortReservationDto>> GetServerReservationsAsync(int serverId, CancellationToken ct = default);
 
-    /// <summary>One verdict per requested port. Never throws on an unknown port, only on an unknown
-    /// server. <paramref name="contextProjectId"/> is the project the answer is relative to (PLAN-003
-    /// lot 24 / D14): a port that project declared for itself reads as its own, not as taken.</summary>
+    /// <summary>Returns one verdict per requested port, relative to <paramref
+    /// name="contextProjectId"/> so its own declared ports are recognized. Throws only for an
+    /// unknown server, not an unknown port.</summary>
     Task<PortCheckResultDto> CheckPortsAsync(
         int serverId, IReadOnlyCollection<int> ports, int? contextProjectId = null, CancellationToken ct = default);
 
@@ -67,17 +67,9 @@ public interface IPortRegistryService
     /// </summary>
     Task<int> ReleaseProjectPortsAsync(int projectId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Makes the registry state one owner's single port (PLAN-005 lot 6). Used by the descriptors that
-    /// used to carry a port field of their own - a server app, a project server - so their port stops
-    /// being invisible to the registry and starts being defended like any other.
-    /// <para>
-    /// Idempotent per <paramref name="ownerKey"/>: the owner's previous manual rows are released first,
-    /// so clearing the port or moving it to another server leaves nothing behind. A null server or port
-    /// therefore means "this owner claims nothing". Throws when the port belongs to somebody else,
-    /// because silently skipping would leave a descriptor claiming a port the registry says is taken.
-    /// </para>
-    /// </summary>
+    /// <summary>Synchronizes an owner’s single port, releasing previous manual rows when it moves
+    /// or clears its claim. Conflicting ownership throws so the descriptor cannot silently claim an
+    /// unavailable port.</summary>
     Task SyncOwnedPortAsync(
         int? serverId, int? port, string ownerKey, string ownerLabel, int? projectId,
         CancellationToken ct = default);

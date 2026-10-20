@@ -279,7 +279,12 @@ public sealed class DockerStorageMaintenanceService(
     {
         if (!File.Exists(_pendingCompletionPath))
             return;
-        await _exclusiveGate.WaitAsync(ct).ConfigureAwait(false);
+        // The loop starts asynchronously: a build of this process may already hold the lock and have
+        // queued its own completion, which only this loop can read. Waiting for that lock here would
+        // deadlock; the queued completion releases it, and a marker left by a previous process is
+        // recovered by the next build under its lock.
+        if (!await _exclusiveGate.WaitAsync(TimeSpan.Zero, ct).ConfigureAwait(false))
+            return;
         _buildGateHeld = true;
         var marker = await ReadPendingCompletionMarkerAsync(_pendingCompletionPath, ct).ConfigureAwait(false);
         if (marker is null)
@@ -476,19 +481,7 @@ public sealed class DockerStorageMaintenanceService(
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
             return new PathSizeMeasurement(0, true);
         if (!OperatingSystem.IsWindows())
-        {
-            var result = await shell.RunExecAsync("du", ["-sb", "--", path], ct, TimeSpan.FromMinutes(2)).ConfigureAwait(false);
-            // IShellRunner implementations return a result, but test doubles and a defensive
-            // third-party implementation may still violate that contract. Diagnostics must
-            // degrade to an unknown size instead of taking the whole agent heartbeat down.
-            if (result is { ExitCode: 0 })
-            {
-                var token = result.StdOut.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-                if (long.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out var bytes))
-                    return new PathSizeMeasurement(bytes, true);
-            }
-            return new PathSizeMeasurement(0, false);
-        }
+            return await MeasureWithDuAsync(path, ct).ConfigureAwait(false);
 
         var measurement = MeasureManagedPathSize(path, MaxDiagnosticFiles, ct);
         if (!measurement.IsComplete)
@@ -496,6 +489,22 @@ public sealed class DockerStorageMaintenanceService(
                 "Storage measurement for {Path} is partial (enumeration failure or {Limit}-file safety limit)",
                 path, MaxDiagnosticFiles);
         return measurement;
+    }
+
+    /// <summary>The Linux measurement: <c>du -sb</c>, whose first token is the size in bytes.</summary>
+    internal async Task<PathSizeMeasurement> MeasureWithDuAsync(string path, CancellationToken ct)
+    {
+        var result = await shell.RunExecAsync("du", ["-sb", "--", path], ct, TimeSpan.FromMinutes(2)).ConfigureAwait(false);
+        // IShellRunner implementations return a result, but test doubles and a defensive
+        // third-party implementation may still violate that contract. Diagnostics must
+        // degrade to an unknown size instead of taking the whole agent heartbeat down.
+        if (result is { ExitCode: 0 })
+        {
+            var token = result.StdOut.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (long.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out var bytes))
+                return new PathSizeMeasurement(bytes, true);
+        }
+        return new PathSizeMeasurement(0, false);
     }
 
     internal static PathSizeMeasurement MeasureManagedPathSize(

@@ -4,18 +4,19 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace Aetheus.Back.Components.Mail.Mailbox;
 
-/// <summary>
-/// Recette R1-17: the integrated mailbox of a mail account of the server. Rights follow the mail
-/// page: reading needs Read on the server, changing the mailbox (send, delete, mark, create a folder)
-/// needs Write. On top of that, nothing is read without the mailbox password the signed-in user typed.
-/// </summary>
+/// <summary> The integrated mailbox of a mail account of the server. Rights follow the mail page:
+/// reading needs Read on the server, changing the mailbox (send, delete, mark, create a folder)
+/// needs Write. On top of that, nothing is read without the mailbox password the signed-in user
+/// typed. </summary>
 [ApiController]
 [Route("api/servers/{serverId:int}/mail")]
 [Authorize]
 [ServiceFilter(typeof(ValidateServerExistsFilter))]
-public class MailboxController(IMailboxService mailbox, IResourceAuthorizationService authz) : ControllerBase
+public class MailboxController(
+    IMailboxService mailbox, IMailboxAdministratorAccess administratorAccess, IResourceAuthorizationService authz) : ControllerBase
 {
     private const string Base = "accounts/{accountId:int}/mailbox";
+    private const string AdministratorRole = "Admin";
 
     [HttpGet("client-settings")]
     public async Task<ActionResult<MailClientSettingsDto>> GetClientSettings(int serverId, CancellationToken ct)
@@ -28,7 +29,24 @@ public class MailboxController(IMailboxService mailbox, IResourceAuthorizationSe
     public async Task<ActionResult<MailboxAccessDto>> GetAccess(int serverId, int accountId, CancellationToken ct)
     {
         if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
-        return Ok(await mailbox.GetAccessAsync(key, ct));
+        var access = await mailbox.GetAccessAsync(key, ct);
+        // Recette R1-41: only an administrator is offered the opening without password.
+        if (User.IsInRole(AdministratorRole))
+            access = access with { CanOpenAsAdministrator = await administratorAccess.IsPreparedAsync(serverId, ct) };
+        return Ok(access);
+    }
+
+    /// <summary>
+    /// Recette R1-41 / R3-50: an administrator opens the mailbox without its password, through the server's
+    /// Dovecot master user; the opening is written to the audit log. Anyone else keeps the password dialog.
+    /// </summary>
+    [HttpPost(Base + "/open-as-administrator")]
+    [EnableRateLimiting("auth-token")]
+    public async Task<ActionResult<MailboxAccessDto>> OpenAsAdministrator(int serverId, int accountId, CancellationToken ct)
+    {
+        if (!User.IsInRole(AdministratorRole)) return Forbid();
+        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        return Ok(await administratorAccess.OpenAsync(key, isAdministrator: true, ct));
     }
 
     [HttpPost(Base + "/unlock")]
@@ -118,11 +136,9 @@ public class MailboxController(IMailboxService mailbox, IResourceAuthorizationSe
         return Ok(await mailbox.DeleteAsync(key, folder, uid, ct));
     }
 
-    /// <summary>
-    /// Recette R1-38: the attached files travel as base64 in the body, so the send reads up to
-    /// <see cref="MailboxLimits.MaxSendRequestBytes"/> instead of the 10 MB default; the service checks the
-    /// count and sizes of the files themselves.
-    /// </summary>
+    /// <summary> The attached files travel as base64 in the body, so the send reads up to <see
+    /// cref="MailboxLimits.MaxSendRequestBytes"/> instead of the 10 MB default; the service checks
+    /// the count and sizes of the files themselves. </summary>
     [HttpPost(Base + "/send")]
     [RequestSizeLimit(MailboxLimits.MaxSendRequestBytes)]
     public async Task<ActionResult<MailboxSendResultDto>> Send(

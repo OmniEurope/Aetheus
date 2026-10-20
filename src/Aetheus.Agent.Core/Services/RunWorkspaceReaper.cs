@@ -1,22 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Agent.Core.Services;
 
-/// <summary>
-/// Reclaims the disk of run workspaces nobody will come back for.
-///
-/// Run workspaces used to live under /tmp, where systemd's <c>PrivateTmp=true</c> emptied them on
-/// every agent restart. That was free cleanup, and it was also the bug: a self-update landing between
-/// two jobs of a live run destroyed the sources the next job needed (production run 2185). Moving the
-/// workspace under the durable work directory fixes the run, and hands us the disk that /tmp used to
-/// reclaim for free. This service is the replacement, and it has to be careful in one direction only:
-/// deleting a live run's workspace re-creates the very bug we just fixed, while keeping a dead one
-/// for another hour costs some disk.
-///
-/// So the backend is asked which runs are still in flight and everything else is deleted. When it
-/// cannot be reached the answer is unknown, not empty: nothing is deleted on that pass, and only a
-/// workspace untouched for <see cref="FallbackRetention"/> is reclaimed, which is the safety net for
-/// an agent that stays disconnected long enough to fill its disk.
-/// </summary>
+/// <summary>Reclaims inactive run workspaces while preserving active work reported by the backend.
+/// When backend state is unavailable, only workspaces older than FallbackRetention may be
+/// removed.</summary>
 public sealed class RunWorkspaceReaper(
     IServerApiClient api,
     IOptions<AetheusAgentOptions> options,

@@ -1,9 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* Answers "is 10041 free on vps2577917?" from the UI, and since PLAN-005 lot 3 it answers with the
-   two facts that matter separately: nobody claims it in the registry, and nothing is listening on it.
-   Merging them would hide the case that broke the nightly pipeline six times - a port free in the
-   registry and occupied by something launched outside Aetheus. *@
+@* Report registry claims and actual listeners separately so an unregistered process cannot make an
+   occupied port appear free. *@
 <OmniStack Gap="OmniSpacing.Large">
     <OmniText Element="OmniTextElement.Paragraph">@L["PortCheckHint"]</OmniText>
 

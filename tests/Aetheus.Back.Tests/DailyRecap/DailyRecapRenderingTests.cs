@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Globalization;
 using Aetheus.Back.Components.DailyRecap;
+using Aetheus.Back.Components.Notifications.MailTemplates;
+using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Back.Tests;
 
@@ -59,7 +61,32 @@ public sealed class DailyRecapRenderingTests
     {
         var culture = language == DailyRecapLanguage.English ? CultureInfo.GetCultureInfo("en") : CultureInfo.GetCultureInfo("fr-FR");
         var document = DailyRecapComposer.Compose(report, new DailyRecapText(culture));
-        return (document, DailyRecapHtmlRenderer.Render(document, culture.Name), DailyRecapTextRenderer.Render(document));
+        var mail = RenderMail(document, culture.Name);
+        return (document, mail.Html, mail.Text);
+    }
+
+    /// <summary>The recap as it is sent: its default template rendered with the recap's values and blocks (recette R1-75).</summary>
+    internal static OmniMailRenderResult RenderMail(RecapDocument document, string languageTag)
+    {
+        var language = MailTemplateLanguages.Normalize(languageTag);
+        var (subject, body) = MailTemplateDefaults.For(MailTemplateKind.DailyRecap, language);
+        return MailTemplateRenderer.Render(subject, body, DailyRecapHtmlRenderer.Data(document),
+            MailRecipientStyle.Default with { Language = language });
+    }
+
+    [Fact]
+    public void RunAndServerLinks_OpenTheReportedResources_InBothAlternatives()
+    {
+        var document = DailyRecapComposer.Compose(SampleReport(),
+            new DailyRecapText(CultureInfo.GetCultureInfo("fr-FR")), "https://app.example.org");
+        var html = RenderMail(document, "fr-FR").Html;
+        var text = RenderMail(document, "fr-FR").Text;
+
+        foreach (var url in new[] { "https://app.example.org/pipelines/runs/4821", "https://app.example.org/servers/1/overview" })
+        {
+            Assert.Contains(url, html);
+            Assert.Contains(url, text);
+        }
     }
 
     [Fact]
@@ -98,8 +125,8 @@ public sealed class DailyRecapRenderingTests
         Assert.Contains(">Espace critique</span>", html);
         Assert.Contains(">Mise à jour conseillée</span>", html);
         Assert.Contains(">Hors ligne</span>", html);
-        Assert.Contains("[Échec] exemple-release-candidate", text);
-        Assert.Contains("[Espace critique]", text);
+        Assert.Contains("Échec exemple-release-candidate", text);
+        Assert.Contains("Espace critique 6,2 Go libres", text);
     }
 
     [Fact]
@@ -194,12 +221,12 @@ public sealed class DailyRecapRenderingTests
         var culture = CultureInfo.GetCultureInfo("fr-FR");
         var document = DailyRecapComposer.Compose(SampleReport(), new DailyRecapText(culture), "https://app.example.org/");
 
-        var html = DailyRecapHtmlRenderer.Render(document, culture.Name);
-        var text = DailyRecapTextRenderer.Render(document);
+        var html = RenderMail(document, culture.Name).Html;
+        var text = RenderMail(document, "fr-FR").Text;
 
-        Assert.Contains("<a href=\"https://app.example.org/admin/settings?tab=daily-recap\"", html);
+        Assert.Contains("href=\"https://app.example.org/admin/settings?tab=daily-recap\"", html);
         Assert.Contains(">Régler le récap</a>", html);
-        Assert.Contains("Régler le récap : https://app.example.org/admin/settings?tab=daily-recap", text);
+        Assert.Contains("Régler le récap (https://app.example.org/admin/settings?tab=daily-recap)", text);
     }
 
     [Theory]
@@ -207,12 +234,13 @@ public sealed class DailyRecapRenderingTests
     [InlineData("")]
     [InlineData("app.example.org")]
     [InlineData("javascript:alert(1)")]
+    [InlineData("https://user:password@app.example.org")]
     public void SettingsLink_IsLeftOut_WithoutAnHttpFront(string? front)
     {
         var document = DailyRecapComposer.Compose(SampleReport(), new DailyRecapText(CultureInfo.GetCultureInfo("fr-FR")), front);
 
         Assert.Null(document.SettingsLink);
-        Assert.DoesNotContain("<a ", DailyRecapHtmlRenderer.Render(document, "fr-FR"));
+        Assert.DoesNotContain("href=", RenderMail(document, "fr-FR").Html);
     }
 
     [Fact]
@@ -254,10 +282,12 @@ public sealed class DailyRecapRenderingTests
     [Fact]
     public void Sample_RendersAndCanBeSavedForReview()
     {
-        var (_, html, _) = Render(SampleReport());
+        var document = DailyRecapComposer.Compose(SampleReport(),
+            new DailyRecapText(CultureInfo.GetCultureInfo("fr-FR")), "https://aetheus.example.org");
+        var html = RenderMail(document, "fr-FR").Html;
         const string Banner = "<div style=\"background:#fff3d6;color:#7a4b00;font-family:Arial,sans-serif;font-size:13px;padding:8px 12px;text-align:center;\">EXEMPLE - données fictives, généré par DailyRecapRenderingTests</div>";
-        var sample = html.Replace("<body style=\"margin:0;padding:0;background:#f3f4f6;\">",
-            "<body style=\"margin:0;padding:0;background:#f3f4f6;\">" + Banner, StringComparison.Ordinal);
+        var bodyEnd = html.IndexOf('>', html.IndexOf("<body", StringComparison.Ordinal)) + 1;
+        var sample = html.Insert(bodyEnd, Banner);
         Assert.Contains("EXEMPLE - données fictives", sample);
 
         var path = Environment.GetEnvironmentVariable("AETHEUS_DAILY_RECAP_SAMPLE");

@@ -95,7 +95,7 @@ public class MainLayoutTemplateCoverageTests : BunitContext
     private void OpenMenu(IRenderedComponent<MainLayout> cut)
     {
         cut.Find(MenuTrigger).Click();
-        cut.WaitForElement(MenuCard, TimeSpan.FromSeconds(10));
+        cut.WaitForElement(MenuCard);
     }
 
     // ── Admin user, orgs loaded, no available orgs → "AllOrganizations" badge ──
@@ -105,16 +105,14 @@ public class MainLayoutTemplateCoverageTests : BunitContext
     [Fact]
     public void AdminUser_OrgsLoadedEmpty_RendersAllOrganizationsBadge()
     {
-        RegisterWithAuth(authenticated: true, isAdmin: true);
+        var handler = RegisterWithAuth(authenticated: true, isAdmin: true);
+        // The layout's own organizations load answers "no organization": the state comes from the page's
+        // bootstrap instead of a private setter written beside it, which that load could overtake.
+        handler.SetJsonResponse(HttpMethod.Get, "api/organizations/me", new List<MyOrganizationDto>());
         var orgs = Services.GetRequiredService<ActiveOrganizationService>();
 
         var cut = Render<MainLayout>();
-
-        // Force the "loaded but empty" state so the admin badge branch renders.
-        // (IsLoaded has a private setter; opening the menu re-renders it.)
-        typeof(ActiveOrganizationService)
-            .GetProperty("IsLoaded")!
-            .SetValue(orgs, true);
+        cut.WaitForState(() => orgs.IsLoaded);
         OpenMenu(cut);
 
         // The application's own row sits in OE's slot for it, under the identity.
@@ -177,9 +175,8 @@ public class MainLayoutTemplateCoverageTests : BunitContext
         // The menu closes, then raises OnSettings; observe the navigation it produces rather than racing
         // the dispatch under the full parallel suite.
         cut.WaitForAssertion(
-            () => Assert.Contains("settings", nav.Uri),
-            TimeSpan.FromSeconds(10));
-        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(MenuCard)), TimeSpan.FromSeconds(10));
+            () => Assert.Contains("settings", nav.Uri));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(MenuCard)));
     }
 
     // ── Sign-out button click → navigates to /login ───────────────────────────
@@ -193,7 +190,7 @@ public class MainLayoutTemplateCoverageTests : BunitContext
 
         OpenMenu(cut);
 
-        // Recette R-389, kept by OE: a grey button on the menu's last line, beside the version.
+        // Use a neutral sign-out button beside the version in the application menu.
         var lastLine = cut.Find(MenuCard).Children.Last();
         Assert.Contains("omni-app-menu__footer", lastLine.ClassList);
         var signOut = lastLine.QuerySelector("button.omni-app-menu__sign-out")!;
@@ -203,8 +200,7 @@ public class MainLayoutTemplateCoverageTests : BunitContext
         // The sign-out awaits the realtime stop and two localStorage removals before navigating; observe
         // the user-visible navigation instead of racing that continuation.
         cut.WaitForAssertion(
-            () => Assert.Contains("login", nav.Uri),
-            TimeSpan.FromSeconds(10));
+            () => Assert.Contains("login", nav.Uri));
     }
 
     // ── The menu is OE's popover: trigger toggles, dismiss closes ─────────────
@@ -231,8 +227,7 @@ public class MainLayoutTemplateCoverageTests : BunitContext
         cut.Find(MenuTrigger).Click();
 
         cut.WaitForAssertion(
-            () => Assert.Empty(cut.FindAll(MenuCard)),
-            TimeSpan.FromSeconds(10));
+            () => Assert.Empty(cut.FindAll(MenuCard)));
         Assert.Equal("false", cut.Find(MenuTrigger).GetAttribute("aria-expanded"));
     }
 
@@ -251,8 +246,7 @@ public class MainLayoutTemplateCoverageTests : BunitContext
         await cut.InvokeAsync(() => popover.Instance.OnDismissRequestedAsync(fromKeyboard));
 
         cut.WaitForAssertion(
-            () => Assert.Empty(cut.FindAll(MenuCard)),
-            TimeSpan.FromSeconds(10));
+            () => Assert.Empty(cut.FindAll(MenuCard)));
     }
 
     // ── Navigation closes the menu the layout holds open ─────────────────────
@@ -267,6 +261,6 @@ public class MainLayoutTemplateCoverageTests : BunitContext
 
         cut.InvokeAsync(() => nav.NavigateTo("/servers"));
 
-        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(MenuCard)), TimeSpan.FromSeconds(10));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(MenuCard)));
     }
 }

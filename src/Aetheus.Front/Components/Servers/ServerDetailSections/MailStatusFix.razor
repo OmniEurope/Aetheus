@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R2-090 / R1-9: under every red line of the mail status, what fixes it: what the record is and why
-   it matters, an action Aetheus can run or the exact DNS record to publish (to copy), and the effect of the
+@* Under every red line of the mail status, what fixes it: what the record is and why it matters,
+   an action Aetheus can run or the exact DNS record to publish (to copy), and the effect of the
    change. The line turns green on a later heartbeat. *@
 <OmniCard Class="mail-status-fix" data-key="@Item.Key">
     <OmniStack Gap="OmniSpacing.Small">
@@ -29,7 +29,7 @@
         }
         else if (Kind == FixKind.Certificate && CanManage && HostnameKnown)
         {
-            @* User decision (2026-09-28): Obtain and Install the mail certificate are both blue. *@
+            @* Both mail-certificate actions use primary blue buttons. *@
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnObtainCertificate" Busy="@ObtainCertificateBusy" Disabled="@InstallCertificateBusy"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["MailObtainCertificate"]</span></OmniButton>
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnInstallCertificate" Busy="@InstallCertificateBusy" Disabled="@ObtainCertificateBusy"><OmniIcon Name="OmniIconName.Monitor" /> <span>@L["MailInstallCertificate"]</span></OmniButton>

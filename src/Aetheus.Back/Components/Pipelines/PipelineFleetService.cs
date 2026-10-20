@@ -7,7 +7,7 @@ namespace Aetheus.Back.Components.Pipelines;
 
 internal sealed class PipelineFleetService(
     IPipelineFleetRepository fleetRepository,
-    IPipelineRepository pipelineRepository,
+    IPipelineTemplateRepository pipelineRepository,
     IPipelineService pipelineService,
     IPipelineTemplateService templateService,
     IPipelineTemplateResolver templateResolver,
@@ -246,7 +246,8 @@ internal sealed class PipelineFleetService(
             ProjectId = row.OwnerProjectId,
             EnvironmentId = row.EnvironmentId,
             ProjectServerId = row.ProjectServerId,
-            SourceBranch = row.SourceBranch
+            SourceBranch = row.SourceBranch,
+            AiRunnerProfileId = row.AiRunnerProfileId
         }, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Pipeline {row.PipelineId} was not found.");
     }

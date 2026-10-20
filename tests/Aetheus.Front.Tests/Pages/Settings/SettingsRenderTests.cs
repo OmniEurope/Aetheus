@@ -33,7 +33,7 @@ public class SettingsRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<SettingsPage>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // OnInitializedAsync loads the current user (GetCurrentUserAsync → api/users/me) and
         // renders the localized page heading.
@@ -47,7 +47,7 @@ public class SettingsRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<SettingsPage>(p => p.Add(x => x.Tab, "profile"));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // The profile tab was removed (the display name cannot be changed), so an old "profile"
         // link lands on the first tab, appearance, instead of an empty panel.
@@ -64,7 +64,7 @@ public class SettingsRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<SettingsPage>(p => p.Add(x => x.Tab, "appearance"));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var index = (int)typeof(SettingsPage)
             .GetField("_selectedTabIndex", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -78,7 +78,7 @@ public class SettingsRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<SettingsPage>(p => p.Add(x => x.Tab, "security"));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // "security" is index 2 in TabNames (appearance, notifications, security, tokens, about).
         var index = (int)typeof(SettingsPage)
@@ -93,7 +93,7 @@ public class SettingsRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<SettingsPage>(p => p.Add(x => x.Tab, "about"));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // "about" is index 4 (last) in TabNames, after the tokens tab.
         var index = (int)typeof(SettingsPage)
@@ -122,7 +122,7 @@ public class SettingsRenderTests : BunitContext
             new List<NotificationPreferenceDto> { failed with { IsEnabled = false, IsSaved = true } });
 
         var cut = Render<SettingsPage>(p => p.Add(x => x.Tab, "notifications"));
-        // Recette R-233: each event is a settings tile whose switch carries the preference text.
+        // Each event is a settings tile whose switch carries the preference text.
         cut.WaitForElement(".notification-preference-toggle button[role='switch']").Click();
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, request =>
@@ -141,7 +141,7 @@ public class SettingsRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<SettingsPage>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var method = typeof(SettingsPage).GetMethod("OnTabChange", BindingFlags.NonPublic | BindingFlags.Instance)!;
         cut.InvokeAsync(() => method.Invoke(cut.Instance, ["security"]));
@@ -166,7 +166,7 @@ public class SettingsRenderTests : BunitContext
         });
 
         var cut = Render<SettingsPage>(p => p.Add(x => x.Tab, "security"));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var totpEnabled = (bool)typeof(SettingsPage)
             .GetField("_totpEnabled", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -186,7 +186,7 @@ public class SettingsRenderTests : BunitContext
         });
 
         var cut = Render<SettingsPage>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var method = typeof(SettingsPage).GetMethod("SetupTotp", BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);

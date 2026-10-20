@@ -1,6 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* The breadcrumb leaf already reads "Artifacts" - no need to repeat it as a section title.
-       Recette R-181: no Refresh, a finished pipeline run reloads the list (pipelines hub). *@
+@* The breadcrumb identifies artifacts; completed pipeline runs refresh the list through the hub. *@
 
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mb-md">
         <OmniDropDown aria-label="@L["AllTypes"]" TValue="ArtifactRetentionPolicy?" @bind-Value="@_selectedPolicy" @bind-Value:after="OnPolicyChangedAsync"

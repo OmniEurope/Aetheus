@@ -12,8 +12,9 @@ public sealed record PipelineApprovalDto
     /// <summary>The stage's environment, when it has one; null for an environment-less pipeline approval.</summary>
     public int? EnvironmentId { get; init; }
     public string? EnvironmentName { get; init; }
-    /// <summary>Recette R1-24: the environment's approval instructions, shown to the person deciding an
-    /// environment approval; null for a pipeline approval or an environment without instructions.</summary>
+    /// <summary>The environment's approval instructions, shown to the person deciding an
+    /// environment approval; null for a pipeline approval or an environment without
+    /// instructions.</summary>
     public string? EnvironmentInstructions { get; init; }
     public ApprovalStatus Status { get; init; }
     public DateTime RequestedAt { get; init; }
@@ -32,7 +33,7 @@ public sealed record ApprovalDecisionRequest
     public string? Comments { get; init; }
 }
 
-/// <summary>PLAN-007 lot 7: an approval nobody has decided yet, for the home page and the top bar.</summary>
+/// <summary>An approval nobody has decided yet, for the home page and the top bar.</summary>
 public sealed record PendingApprovalDto
 {
     public int ApprovalId { get; init; }

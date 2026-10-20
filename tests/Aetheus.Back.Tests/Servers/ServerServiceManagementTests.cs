@@ -254,6 +254,59 @@ public class ServerServiceManagementTests
         await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 
+    // --- Recette R3-59: read-only installed package list ---
+
+    [Fact]
+    public async Task ListInstalledPackages_CapableLinuxAgent_QueuesTheReadOnlyOperation_WithoutThePackageGrant()
+    {
+        _repo.FindServerAsync(1, Arg.Any<CancellationToken>()).Returns(new Server
+        {
+            Id = 1,
+            Status = ServerStatus.Online,
+            OsType = OsType.Linux,
+            PackageManagementAvailable = false,
+            AgentCapabilitiesJson = $"[\"{AgentCapabilities.PackageInventory}\",\"shell.execute\"]"
+        });
+
+        await _sut.ListInstalledPackagesAsync(1, TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(task =>
+            task.ServerId == 1 && task.Operation == OperationKind.PackageInventory && task.Command == "-"
+            && task.Name == InstalledPackages.TaskName && task.TimeoutSeconds == 120),
+            Arg.Any<CancellationToken>());
+        await _taskService.Received(1).NotifyTaskQueuedAsync(Arg.Any<ServerTask>(), ct: Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(ServerStatus.Offline, OsType.Linux, true, typeof(ConflictException))]
+    [InlineData(ServerStatus.Online, OsType.Windows, true, typeof(BadRequestException))]
+    [InlineData(ServerStatus.Online, OsType.Linux, false, typeof(BadRequestException))]
+    public async Task ListInstalledPackages_OfflineWindowsOrOldAgent_RejectsBeforeQueue(
+        ServerStatus status, OsType os, bool capability, Type expected)
+    {
+        _repo.FindServerAsync(1, Arg.Any<CancellationToken>()).Returns(new Server
+        {
+            Id = 1,
+            Name = "srv",
+            Status = status,
+            OsType = os,
+            AgentCapabilitiesJson = capability ? $"[\"{AgentCapabilities.PackageInventory}\"]" : "[\"shell.execute\"]"
+        });
+
+        var error = await Record.ExceptionAsync(() => _sut.ListInstalledPackagesAsync(1, TestContext.Current.CancellationToken));
+
+        Assert.IsType(expected, error);
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ListInstalledPackages_UnknownServer_ThrowsNotFound()
+    {
+        _repo.FindServerAsync(99, Arg.Any<CancellationToken>()).Returns((Server?)null);
+
+        await Assert.ThrowsAsync<NotFoundException>(() => _sut.ListInstalledPackagesAsync(99, TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task GetSecurityUpdates_ProbeState_MapsHonestKnownFlagAndPackageList()
     {
@@ -366,5 +419,35 @@ public class ServerServiceManagementTests
         Assert.Empty(result.CollectionDiagnostics);
         Assert.True(result.FirewallManagementAvailable);
         Assert.Equal(443, Assert.Single(result.Rules).Port);
+    }
+
+    // --- Recette R3-24/R3-25/R3-43: a mail stack Aetheus manages is installed and removed whole ---
+
+    [Theory]
+    [InlineData("postfix")]
+    [InlineData("dovecot")]
+    public async Task UninstallingPartOfAManagedMailStack_IsRefused_AndQueuesNothing(string service)
+    {
+        _repo.FindServerAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Server { Id = 1, Status = ServerStatus.Online, PackageManagementAvailable = true });
+        _repo.IsMailStackManagedAsync(1, Arg.Any<CancellationToken>()).Returns(true);
+
+        var refusal = await Assert.ThrowsAsync<BadRequestException>(
+            () => _sut.UninstallServiceAsync(1, service, ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("Mail page", refusal.Message, StringComparison.Ordinal);
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task InstallingDovecotOnAServerWithoutAManagedMailStack_StillQueues()
+    {
+        _repo.FindServerAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Server { Id = 1, Status = ServerStatus.Online, PackageManagementAvailable = true });
+        _repo.IsMailStackManagedAsync(1, Arg.Any<CancellationToken>()).Returns(false);
+
+        await _sut.InstallServiceAsync(1, "dovecot", ct: TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 }

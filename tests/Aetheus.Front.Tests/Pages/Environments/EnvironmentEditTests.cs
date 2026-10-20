@@ -63,7 +63,8 @@ public class EnvironmentEditTests : BunitContext
     [Fact]
     public void EditMode_UnknownEnvironment_ShowsNotFoundInsteadOfTheLoader()
     {
-        // FRONT-001: a 404 used to leave _detail null, so the page spun on the loader forever.
+        // A missing environment must display the not-found state instead of remaining in the
+        // loading state.
         SetupDefaultResponses();
         _handler.SetResponse(HttpMethod.Get, "api/environments/404", System.Net.HttpStatusCode.NotFound);
 
@@ -100,8 +101,8 @@ public class EnvironmentEditTests : BunitContext
         Assert.Contains("Type", cut.Markup);
     }
 
-    /// <summary>Recette R1-25: after "Create", the page the user came from (the pipeline setup wizard's
-    /// summary) is shown again, not the new environment; without a local return address, as before.</summary>
+    /// <summary>Creation returns to a supplied local return address, such as the pipeline setup
+    /// summary.</summary>
     [Theory]
     [InlineData("/pipelines/setup?projectId=1&step=summary", "http://localhost/pipelines/setup?projectId=1&step=summary")]
     [InlineData("https://evil.example/x", "http://localhost/environments/9")]
@@ -263,7 +264,7 @@ public class EnvironmentEditTests : BunitContext
         await cut.InvokeAsync(() => sourceDropdown.Instance.ValueChanged.InvokeAsync(77));
 
         Assert.Equal("Reference staging", cut.Find("input#Name").GetAttribute("value"));
-        // Recette R1-23: the source's description is not carried over to the new environment.
+        // The source's description is not carried over to the new environment.
         Assert.True(string.IsNullOrEmpty(cut.Find("textarea#Description").GetAttribute("value")));
         var projectDropdown = cut.FindComponents<OmniDropDown<int?>>()
             .Single(dropdown => dropdown.Instance.Placeholder == "NoProject");

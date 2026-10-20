@@ -25,7 +25,8 @@
                                      ProvisionOffered="true" OnChanged="@OnChanged" />
         }
 
-        @* PLAN-003 lot 30 / D22: the two findings a click can fix get their fix here. *@
+        @* Missing required libraries and vaults can be created directly from their readiness
+           findings. *@
         @if (CanProvision)
         {
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium"
@@ -42,8 +43,8 @@
                 @_provisionError
             </OmniAlert>
         }
-        @* Recette R1-26: each created library or vault stays listed as created, and is checked only
-           once the user has opened it. *@
+        @* Each created library or vault stays listed as created, and is checked only once the user
+           has opened it. *@
         @if (Provisioned.Count > 0)
         {
             <OmniAlert Severity="@(AllChecked ? OmniSeverity.Success : OmniSeverity.Info)"

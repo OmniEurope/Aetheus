@@ -31,12 +31,9 @@ public class DevController(
     {
         if (!env.IsDevelopment()) return NotFound();
 
-        // FAIL-SAFE (incident 2026-06-26): this endpoint DROPS the entire database. It must ONLY run
-        // against an isolated, disposable E2E sandbox - never the shared dev/prod DB (named
-        // "aetheus"). A mis-wired E2E backend that silently fell back to the dev connection string
-        // (Port=15432;Database=aetheus) once wiped real data here. We now refuse unless the
-        // connected database name marks it as an E2E sandbox (ends with "_e2e"), making it
-        // structurally impossible for this endpoint to destroy the dev/prod database.
+        // This endpoint drops the entire database and is restricted to isolated, disposable E2E
+        // sandboxes. Refuse any connected database whose name does not end in _e2e, protecting
+        // shared development and production databases from a misconfigured connection string.
         var connectedDb = db.Database.GetDbConnection().Database ?? string.Empty;
         if (!connectedDb.EndsWith("_e2e", StringComparison.OrdinalIgnoreCase))
         {

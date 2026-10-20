@@ -1,10 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* Recette R-536 (decision of 2026-10-01), R2-075 (2026-10-03): the product's one loading indicator is the
-   package's logo loader holding the Aetheus plane, the boot splash's own animated plane. AnimatedMark
-   (OE 1.5.0) plays the plane's keyframes (p-ship, p-drift, p-roll, p-jet in app.css) instead of floating
-   it; under reduced motion OE and app.css hold it still. This wrapper gives the logo, the words and the
-   layout. *@
+@* Use the shared logo loader with the Aetheus plane so loading has one product identity;
+   AnimatedMark plays its keyframes while reduced-motion settings hold it still. *@
 <OmniLogoLoader AnimatedMark="true" Size="Size" Label="@L["Loading"]" Class="@CssClass">
     <svg class="aetheus-loader-logo" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
         <g class="p-ship">

@@ -3,10 +3,8 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Recette R-210: a multi-valued column filter reaches the API as one query key repeated per value
-/// (<c>statuses=Open&amp;statuses=Fixed</c>), which ASP.NET binds to a list parameter.
-/// </summary>
+/// <summary> A multi-valued column filter reaches the API as one query key repeated per value
+/// (<c>statuses=Open&amp;statuses=Fixed</c>), which ASP.NET binds to a list parameter. </summary>
 public static class QueryValues
 {
     /// <summary>Appends <paramref name="key"/> once per value; nothing when there is none.</summary>

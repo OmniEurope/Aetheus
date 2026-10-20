@@ -4,6 +4,7 @@ using Aetheus.Back.Components.Certbot;
 using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Components.Servers.Events;
+using Aetheus.Back.Components.Shared;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Hubs;
 using Aetheus.Back.Services;
@@ -14,8 +15,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>PLAN-007: the heartbeat persists how each lineage renews and the last renewal rehearsal, and
-/// reports a newly recorded failed rehearsal exactly once.</summary>
+/// <summary>Persist renewal conventions and rehearsal results, reporting each new failed rehearsal
+/// once.</summary>
 public sealed class ServerHeartbeatCertbotConventionTests
 {
     private static readonly DateTime CheckedAt = new(2026, 9, 18, 12, 8, 8, DateTimeKind.Utc);
@@ -63,6 +64,41 @@ public sealed class ServerHeartbeatCertbotConventionTests
         await _sut.ProcessHeartbeatAsync(1, Heartbeat(succeeded: false), ct: TestContext.Current.CancellationToken);
 
         _events.Received(1).Publish(Arg.Is<CertbotRenewalCheckFailedEvent>(e => e.ServerId == 1 && e.CheckedAt == CheckedAt));
+    }
+
+    [Fact]
+    public async Task R3_56_TheFailedLineagesAndTheirReasons_AreStoredWithTheState_AndReadBackForThePage()
+    {
+        var heartbeat = Heartbeat(succeeded: false);
+        heartbeat = heartbeat with
+        {
+            Certbot = heartbeat.Certbot with
+            {
+                RenewalCheckFailures = [new CertbotRenewalFailureDto { Name = "shop.example.com", Reason = "Some challenges have failed." }]
+            }
+        };
+        CertbotState? stored = null;
+        await _heartbeatRepo.ReplaceCertbotStateAsync(1, Arg.Do<CertbotState?>(state => stored = state), Arg.Any<CancellationToken>());
+
+        await _sut.ProcessHeartbeatAsync(1, heartbeat, ct: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(stored);
+        var mapped = ServerDataMapper.MapCertbotDataDto(new Server { CertbotState = stored });
+        var failure = Assert.Single(mapped.RenewalCheckFailures);
+        Assert.Equal("shop.example.com", failure.Name);
+        Assert.Equal("Some challenges have failed.", failure.Reason);
+    }
+
+    [Fact]
+    public async Task R3_56_APassedCheck_StoresNoFailureList()
+    {
+        CertbotState? stored = null;
+        await _heartbeatRepo.ReplaceCertbotStateAsync(1, Arg.Do<CertbotState?>(state => stored = state), Arg.Any<CancellationToken>());
+
+        await _sut.ProcessHeartbeatAsync(1, Heartbeat(succeeded: true), ct: TestContext.Current.CancellationToken);
+
+        Assert.Null(stored!.RenewalCheckFailuresJson);
+        Assert.Empty(ServerDataMapper.MapCertbotDataDto(new Server { CertbotState = new CertbotState { RenewalCheckFailuresJson = "{not json" } }).RenewalCheckFailures);
     }
 
     [Fact]

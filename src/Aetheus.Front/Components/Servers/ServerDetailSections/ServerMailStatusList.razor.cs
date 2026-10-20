@@ -3,19 +3,12 @@ using System.Globalization;
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>
-/// Recette R2-090: the state of the mail stack the page opens on. The backend checklist (PLAN-005 lot 7) is
-/// reduced to what makes mail work, in the order a fix depends on: services, the host name's A record, its
-/// reverse DNS, the certificate (which needs the A record), then MX, SPF, DKIM and DMARC of each domain.
-/// Each line is green or red; every red line shows its fix (<see cref="MailStatusFix"/>, recette R1-9). The server
-/// check (<c>CHECK</c> lines), the delivery test (<c>DELIVERY</c> line) and the usage measurement are read
-/// from the task they queued, as the former Diagnostics tab did. Recette R1-7 / R1-8 / R1-13: every task
-/// the page queues is followed by its id until it completes: its button stays busy, one banner names it,
-/// and its completion reads the state again at once.
-/// </summary>
+/// <summary>Mail checks follow dependency order and each failure exposes its <see
+/// cref="MailStatusFix"/>. Queued tasks are tracked by ID through completion, then their output and
+/// refreshed status are read.</summary>
 public partial class ServerMailStatusList : IAsyncDisposable
 {
-    internal const int CurrentHelperVersion = 3;
+    internal const int CurrentHelperVersion = 6;
 
     private static readonly string[] s_serverKeys = ["services", "hostname-dns", "reverse-dns", "tls"];
     private static readonly string[] s_domainPrefixes = ["mx:", "spf:", "dkim:", "dmarc:"];
@@ -41,13 +34,14 @@ public partial class ServerMailStatusList : IAsyncDisposable
     private readonly HashSet<MailTaskKind> _queuing = [];
     private readonly Dictionary<int, RunningMailTask> _running = [];
     private string? _failure;
+    private string? _failureLog;
     private MailDeliveryResultDto? _delivery;
     private List<MailComponentCheckDto> _checks = [];
 
     internal MailDeliveryResultDto? Delivery => _delivery;
     internal IReadOnlyList<MailComponentCheckDto> Checks => _checks;
 
-    // R-181: no Refresh button; reading the checklist queues no agent task (inventory + DNS), so completed
+    // No Refresh button; reading the checklist queues no agent task (inventory + DNS), so completed
     // tasks can trigger a reload as safely as heartbeats.
     private ServerLiveFeed? _liveFeed;
     internal ServerLiveFeed? LiveFeed => _liveFeed;
@@ -59,10 +53,11 @@ public partial class ServerMailStatusList : IAsyncDisposable
         .. _diagnostics.Items.Where(item => s_domainPrefixes.Any(prefix => item.Key.StartsWith(prefix, StringComparison.Ordinal)))
     ];
 
-    /// <summary>Recette R1-11: the domain the DNS help names, the first one checked; null without a mail domain.</summary>
+    /// <summary>The domain the DNS help names, the first one checked; null without a mail
+    /// domain.</summary>
     internal string? HelpDomain => StatusItems.Select(item => item.Key).FirstOrDefault(key => key.StartsWith("mx:", StringComparison.Ordinal))?[3..];
 
-    /// <summary>The first line that is not green (every red line shows its fix, recette R1-9).</summary>
+    /// <summary>The first failing status line, with its resolution.</summary>
     internal MailDiagnosticItemDto? FirstRed => StatusItems.FirstOrDefault(item => item.Verdict != MailCheckVerdict.Ok);
 
     protected override async Task OnInitializedAsync()
@@ -169,7 +164,7 @@ public partial class ServerMailStatusList : IAsyncDisposable
             .OfType<MailAction>()
     ];
 
-    // ── Recette R1-7 / R1-8 / R1-13: every task the page queues is followed until it completes ──────
+    // Track every queued task through completion.
 
     /// <summary>What a followed task does: which button stays busy, and how its completion is read.</summary>
     internal enum MailTaskKind { Postfix, Dovecot, StartServices, OpenDkim, ObtainCertificate, InstallCertificate, ServerCheck, DeliveryTest, Usage }
@@ -183,6 +178,9 @@ public partial class ServerMailStatusList : IAsyncDisposable
     /// <summary>The outcome of the last failed action task (services, OpenDKIM, certificate), or null.</summary>
     internal string? Failure => _failure;
 
+    /// <summary>The end of the failed task's log, shown under <see cref="Failure"/>.</summary>
+    internal string? FailureLog => _failureLog;
+
     /// <summary>The task kind is being queued or runs: its button is busy.</summary>
     internal bool IsBusy(MailTaskKind kind) => _queuing.Contains(kind) || _running.Values.Any(task => task.Kind == kind);
 
@@ -193,8 +191,22 @@ public partial class ServerMailStatusList : IAsyncDisposable
     private void Follow(int taskId, MailTaskKind kind, string label)
     {
         _failure = null;
+        _failureLog = null;
         _running[taskId] = new RunningMailTask(kind, label, Clock.GetUtcNow());
     }
+
+    /// <summary>The services and actions of the services button's menu, in their listed order.</summary>
+    private static readonly string[] MailServiceUnits = ["postfix", "dovecot"];
+
+    private static readonly string[] MailServiceVerbs = ["restart", "start", "stop", "reload"];
+
+    private static OmniIconName ServiceVerbIcon(string verb) => verb switch
+    {
+        "start" => OmniIconName.Play,
+        "stop" => MaterialIconMap.Resolve("stop"),
+        "reload" => MaterialIconMap.Resolve("sync"),
+        _ => OmniIconName.Refresh,
+    };
 
     private string ServiceLabel(string unit, string verb) =>
         string.Format(CultureInfo.CurrentCulture, L["MailTaskServiceAction"], L[unit == "postfix" ? "Postfix" : "Dovecot"],
@@ -299,7 +311,8 @@ public partial class ServerMailStatusList : IAsyncDisposable
             new Dictionary<string, object?>
             {
                 { "Mode", MailDialogMode.TestDelivery },
-                { "Model", new MailDialogModel { Source = DefaultSender } }
+                { "Model", new MailDialogModel { Source = DefaultSender } },
+                { "Accounts", await ReadAccountsAsync() }
             },
             new OmniDialogOptions { Width = "32rem", AutoFocusFirstElement = false });
         if (result is not MailDialogModel model) return;
@@ -308,6 +321,20 @@ public partial class ServerMailStatusList : IAsyncDisposable
         if (await QueueTaskAsync(MailTaskKind.DeliveryTest, L["MailSendTest"],
             () => Api.Mail.SendMailTestAsync(ServerId, new MailTestDeliveryRequest { From = model.Source, To = model.Destination })))
             Toast.Info("TaskQueued", "MailWaitingForTask");
+    }
+
+    // Recette R3-47: the accounts of the server are the senders of the delivery test; unread, the dialog falls back to a typed address.
+    private async Task<IReadOnlyList<MailAccountDto>> ReadAccountsAsync()
+    {
+        try
+        {
+            return await Api.Mail.GetMailAccountsAsync(ServerId);
+        }
+        catch (HttpRequestException ex)
+        {
+            Logger.LogWarning(ex, "Mail accounts read failed for the delivery test of server {ServerId}", ServerId);
+            return [];
+        }
     }
 
     private async Task MeasureUsageAsync()
@@ -328,12 +355,12 @@ public partial class ServerMailStatusList : IAsyncDisposable
         switch (task.Kind)
         {
             case MailTaskKind.ServerCheck:
-                _checks = MailTaskOutputParser.ParseChecks(await MailTaskOutputLoader.ReadAsync(Api, notification.TaskId));
+                _checks = MailTaskOutputParser.ParseChecks(await ServerTaskOutputLoader.ReadAsync(Api, notification.TaskId));
                 if (_checks.Count == 0) Toast.Error(L["ActionFailed"]);
                 break;
             case MailTaskKind.DeliveryTest:
                 // The helper exits non-zero for deferred/bounced mail but still prints the DELIVERY line.
-                _delivery = MailTaskOutputParser.ParseDelivery(await MailTaskOutputLoader.ReadAsync(Api, notification.TaskId))
+                _delivery = MailTaskOutputParser.ParseDelivery(await ServerTaskOutputLoader.ReadAsync(Api, notification.TaskId))
                     ?? new MailDeliveryResultDto { Status = notification.Status.ToString(), Detail = L["ActionFailed"] };
                 break;
             case MailTaskKind.Usage when notification.Status == TaskExecutionStatus.Success:
@@ -346,18 +373,22 @@ public partial class ServerMailStatusList : IAsyncDisposable
                 break;
             default:
                 if (notification.Status != TaskExecutionStatus.Success)
-                    _failure = string.Format(CultureInfo.CurrentCulture, L["MailTaskFailed"], task.Label,
-                        L.Localize(notification.Status), await LastLineAsync(notification.TaskId));
+                {
+                    _failure = string.Format(CultureInfo.CurrentCulture, L["MailTaskFailedHeadline"], task.Label,
+                        L.Localize(notification.Status));
+                    // Recette R3-44: the end of the log, where the helper prints why a service did not start.
+                    _failureLog = await TailAsync(notification.TaskId);
+                }
                 break;
         }
         await InvokeAsync(ReloadFromPushAsync);
     }
 
-    private async Task<string> LastLineAsync(int taskId)
+    private async Task<string> TailAsync(int taskId)
     {
         try
         {
-            return await MailTaskOutputLoader.LastLineAsync(Api, taskId) ?? L["MailReinstallNoLog"].Value;
+            return await ServerTaskOutputLoader.TailAsync(Api, taskId, ServerTaskFollower.CauseLines) ?? L["MailReinstallNoLog"].Value;
         }
         catch (HttpRequestException ex)
         {

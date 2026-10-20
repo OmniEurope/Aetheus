@@ -2,11 +2,9 @@
 
 namespace Aetheus.Front.Components.Projects.ProjectDetailSections;
 
-/// <summary>
-/// Recette R-221: the filters the findings grid's columns open with. Open findings by default, or
-/// what a summary shortcut asked for; either way they sit in the column headers, where the user
-/// sees and lifts them, rather than in a hidden query parameter.
-/// </summary>
+/// <summary> The filters the findings grid's columns open with. Open findings by default, or what a
+/// summary shortcut asked for; either way they sit in the column headers, where the user sees and
+/// lifts them, rather than in a hidden query parameter. </summary>
 public sealed record FindingColumnDefaults(AnalysisFindingStatus? StatusValue, AnalysisSeverity? SeverityValue, bool? IsNewValue)
 {
     /// <summary>Key of the "new" column: the flag is read from the latest occurrence.</summary>

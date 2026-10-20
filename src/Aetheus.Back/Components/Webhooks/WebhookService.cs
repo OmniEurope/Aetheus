@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -15,7 +14,8 @@ public class WebhookService(
     IConfiguration config,
     ILogger<WebhookService> logger,
     IEncryptionService encryption,
-    TimeProvider timeProvider) : IWebhookService
+    TimeProvider timeProvider,
+    PublicHostCheck? hostCheck = null) : IWebhookService
 {
     private const int MaxFailuresBeforeDisable = 10;
 
@@ -95,81 +95,12 @@ public class WebhookService(
             if (!await IsTargetUrlSafeAsync(sub.TargetUrl, ct).ConfigureAwait(false))
             {
                 logger.LogWarning("Webhook {Id} skipped: target {Url} resolves to a forbidden address", sub.Id, sub.TargetUrl);
-                sub.FailureCount++;
-                if (sub.FailureCount >= MaxFailuresBeforeDisable)
-                    sub.IsEnabled = false;
-                await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+                await RecordSkippedDeliveryAsync(sub, ct).ConfigureAwait(false);
                 continue;
             }
 
-            try
-            {
-                using var client = httpClientFactory.CreateClient("webhooks");
-                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, sub.TargetUrl);
-                httpRequest.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-                httpRequest.Headers.Add("X-Aetheus-Event", eventType);
-
-                if (!string.IsNullOrEmpty(sub.Secret))
-                {
-                    // Secrets are encrypted at rest; any residual plaintext was converted by the
-                    // one-shot WebhookSecretReencryption startup pass, so decrypt strictly here. An
-                    // undecryptable secret (e.g. written under a since-rotated Auth:EncryptionKey)
-                    // must not abort delivery to every other subscription - isolate the failure.
-                    string decryptedSecret;
-                    try
-                    {
-                        decryptedSecret = encryption.DecryptValue(sub.Secret);
-                    }
-                    catch (Exception ex) when (ex is CryptographicException or FormatException)
-                    {
-                        logger.LogWarning(ex, "Webhook {Id} secret could not be decrypted; skipping delivery.", sub.Id);
-                        sub.FailureCount++;
-                        if (sub.FailureCount >= MaxFailuresBeforeDisable)
-                            sub.IsEnabled = false;
-                        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
-                        continue;
-                    }
-                    var signature = WebhookSignatureValidator.Compute(decryptedSecret, jsonPayload);
-                    httpRequest.Headers.Add("X-Aetheus-Signature", $"sha256={signature}");
-                }
-
-                var response = await client.SendAsync(httpRequest, ct).ConfigureAwait(false);
-
-                sub.LastTriggeredAt = timeProvider.GetUtcNow().UtcDateTime;
-
-                if (response.IsSuccessStatusCode)
-                {
-                    sub.FailureCount = 0;
-                }
-                else
-                {
-                    var status = (int)response.StatusCode;
-                    var isPermanent = status is >= 400 and < 500 && status != 408 && status != 429;
-                    if (isPermanent)
-                    {
-                        sub.FailureCount++;
-                        logger.LogWarning(
-                            "Webhook {Id} to {Url} returned permanent failure {StatusCode}",
-                            sub.Id, sub.TargetUrl, response.StatusCode);
-                    }
-                    else
-                    {
-                        logger.LogWarning(
-                            "Webhook {Id} to {Url} returned transient failure {StatusCode}",
-                            sub.Id, sub.TargetUrl, response.StatusCode);
-                    }
-                }
-            }
-            catch (HttpRequestException ex)
-            {
-                // Treat network-level errors as transient - do not count toward auto-disable.
-                logger.LogWarning(ex, "Webhook {Id} to {Url} failed (transient network error)", sub.Id, sub.TargetUrl);
-            }
-            catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
-            {
-                // Timeout - transient.
-                logger.LogWarning(ex, "Webhook {Id} to {Url} timed out (transient)", sub.Id, sub.TargetUrl);
-            }
+            if (!await DeliverAsync(sub, eventType, jsonPayload, ct).ConfigureAwait(false))
+                continue;
 
             if (sub.FailureCount >= MaxFailuresBeforeDisable)
             {
@@ -178,6 +109,96 @@ public class WebhookService(
             }
 
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    // A delivery that never left: it counts as a failure, and the tenth one disables the subscription.
+    private async Task RecordSkippedDeliveryAsync(WebhookSubscription sub, CancellationToken ct)
+    {
+        sub.FailureCount++;
+        if (sub.FailureCount >= MaxFailuresBeforeDisable)
+            sub.IsEnabled = false;
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Posts the event to one subscription and records the answer on it. Returns false when the
+    /// delivery was skipped and already recorded (an undecryptable secret).</summary>
+    private async Task<bool> DeliverAsync(WebhookSubscription sub, string eventType, string jsonPayload, CancellationToken ct)
+    {
+        try
+        {
+            using var client = httpClientFactory.CreateClient("webhooks");
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, sub.TargetUrl);
+            httpRequest.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+            httpRequest.Headers.Add("X-Aetheus-Event", eventType);
+
+            if (!string.IsNullOrEmpty(sub.Secret) && !TrySign(httpRequest, sub, jsonPayload))
+            {
+                await RecordSkippedDeliveryAsync(sub, ct).ConfigureAwait(false);
+                return false;
+            }
+
+            var response = await client.SendAsync(httpRequest, ct).ConfigureAwait(false);
+            sub.LastTriggeredAt = timeProvider.GetUtcNow().UtcDateTime;
+            RecordResponse(sub, response);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Treat network-level errors as transient - do not count toward auto-disable.
+            logger.LogWarning(ex, "Webhook {Id} to {Url} failed (transient network error)", sub.Id, sub.TargetUrl);
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            // Timeout - transient.
+            logger.LogWarning(ex, "Webhook {Id} to {Url} timed out (transient)", sub.Id, sub.TargetUrl);
+        }
+        return true;
+    }
+
+    // Secrets are encrypted at rest; any residual plaintext was converted by the one-shot
+    // WebhookSecretReencryption startup pass, so decrypt strictly here. An undecryptable secret (e.g.
+    // written under a since-rotated Auth:EncryptionKey) must not abort delivery to every other
+    // subscription - isolate the failure.
+    private bool TrySign(HttpRequestMessage httpRequest, WebhookSubscription sub, string jsonPayload)
+    {
+        string decryptedSecret;
+        try
+        {
+            decryptedSecret = encryption.DecryptValue(sub.Secret!);
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException)
+        {
+            logger.LogWarning(ex, "Webhook {Id} secret could not be decrypted; skipping delivery.", sub.Id);
+            return false;
+        }
+        var signature = WebhookSignatureValidator.Compute(decryptedSecret, jsonPayload);
+        httpRequest.Headers.Add("X-Aetheus-Signature", $"sha256={signature}");
+        return true;
+    }
+
+    // A success clears the failure count; a permanent 4xx (not 408 or 429) adds one; anything else is
+    // transient and only logged.
+    private void RecordResponse(WebhookSubscription sub, HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            sub.FailureCount = 0;
+            return;
+        }
+        var status = (int)response.StatusCode;
+        var isPermanent = status is >= 400 and < 500 && status != 408 && status != 429;
+        if (isPermanent)
+        {
+            sub.FailureCount++;
+            logger.LogWarning(
+                "Webhook {Id} to {Url} returned permanent failure {StatusCode}",
+                sub.Id, sub.TargetUrl, response.StatusCode);
+        }
+        else
+        {
+            logger.LogWarning(
+                "Webhook {Id} to {Url} returned transient failure {StatusCode}",
+                sub.Id, sub.TargetUrl, response.StatusCode);
         }
     }
 
@@ -206,31 +227,14 @@ public class WebhookService(
     /// Async fire-time validation. Resolves the host and rejects any address that falls into a
     /// loopback / private / link-local / multicast range, mitigating SSRF against internal services.
     /// </summary>
-    private async Task<bool> IsTargetUrlSafeAsync(string targetUrl, CancellationToken ct)
+    private Task<bool> IsTargetUrlSafeAsync(string targetUrl, CancellationToken ct)
     {
-        if (!Uri.TryCreate(targetUrl, UriKind.Absolute, out var uri)) return false;
-        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return false;
+        if (!Uri.TryCreate(targetUrl, UriKind.Absolute, out var uri)) return Task.FromResult(false);
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return Task.FromResult(false);
 
-        if (config.GetValue("Webhooks:AllowPrivateTargets", false)) return true;
+        if (config.GetValue("Webhooks:AllowPrivateTargets", false)) return Task.FromResult(true);
 
-        IPAddress[] addresses;
-        if (IPAddress.TryParse(uri.Host, out var literal))
-        {
-            addresses = [literal];
-        }
-        else
-        {
-            try
-            {
-                addresses = await Dns.GetHostAddressesAsync(uri.Host, ct).ConfigureAwait(false);
-            }
-            catch (SocketException)
-            {
-                return false;
-            }
-        }
-
-        return addresses.Length > 0 && !addresses.Any(IsForbiddenAddress);
+        return (hostCheck ?? PublicHostCheck.Default).IsPublicAsync(uri.Host, ct);
     }
 
     private static bool IsForbiddenAddress(IPAddress address)

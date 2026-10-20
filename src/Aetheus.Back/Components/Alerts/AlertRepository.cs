@@ -135,7 +135,7 @@ public class AlertRepository(AppDbContext db, TimeProvider timeProvider) : IAler
         return inserted;
     }
 
-    private static bool IsPotentialProvisioningConflict(DbUpdateException exception) =>
+    internal static bool IsPotentialProvisioningConflict(DbUpdateException exception) =>
         exception.InnerException is PostgresException
         {
             SqlState: PostgresErrorCodes.UniqueViolation,

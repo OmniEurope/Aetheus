@@ -37,11 +37,9 @@ public sealed class AppMonitoringService(
         return dto with { HostingServer = HostingServerFor(app, hostingServers) };
     }
 
-    /// <summary>
-    /// Recette R-441: an app registered without a server is probed by the backend, but it usually
-    /// still runs on a fleet server. That server is read from the Apache virtual host serving the
-    /// probe URL's host, for display only: the probe keeps running from the backend.
-    /// </summary>
+    /// <summary> An app registered without a server is probed by the backend, but it usually still
+    /// runs on a fleet server. That server is read from the Apache virtual host serving the probe
+    /// URL's host, for display only: the probe keeps running from the backend. </summary>
     private async Task<Dictionary<string, AppHostingServer>> GetHostingServersAsync(
         int projectId,
         IEnumerable<MonitoredApp> apps,
@@ -310,8 +308,9 @@ public sealed class AppMonitoringService(
         };
     }
 
-    /// <summary>Recette R-468: the audience of the visible applications added up, from the aggregates the
-    /// ingestion already keeps per day, week and month. Null when no application measures its audience.</summary>
+    /// <summary>The audience of the visible applications added up, from the aggregates the
+    /// ingestion already keeps per day, week and month. Null when no application measures its
+    /// audience.</summary>
     private async Task<AppAudienceTotalsDto?> GetAudienceTotalsAsync(
         List<int> analyticsAppIds, Dictionary<int, int> activeVisitorCounts, CancellationToken ct)
     {

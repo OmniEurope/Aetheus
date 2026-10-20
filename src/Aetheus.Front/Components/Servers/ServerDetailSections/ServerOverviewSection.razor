@@ -11,6 +11,7 @@
                 <span class="essential-value">
                     <OmniBadge Fill="OmniFill.Solid" Tone="@(Server.Status == ServerStatus.Online ? OmniTone.Success : Server.Status == ServerStatus.Offline ? OmniTone.Danger : OmniTone.Neutral)">@L.Localize(Server.Status)</OmniBadge>
                 </span>
+                <ServerReachabilityBadge Server="Server" ShowDetail="true" />
             </div>
         </div>
         <div class="essential-item">
@@ -48,7 +49,7 @@
             <div class="essential-text">
                 <span class="essential-label">@L["AgentVersion"]</span>
                 <span class="essential-value">@FormatAgentVersionWithTarget()</span>
-                @* Recette R2-033: the update is asked where its need is read, under the version. *@
+                @* The update is asked where its need is read, under the version. *@
                 @{ var agentUpdate = AgentUpdateState; }
                 @if (ShowAgentUpdateButton)
                 {
@@ -56,7 +57,8 @@
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UpdateAgentAsync" Disabled="@AgentOffline" Busy="@(_agentUpdateBusy || agentUpdate.InProgress)" title="@L["UpdateAgent"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Update"]</span></OmniButton>
                     </OmniStack>
                 }
-                @* Recette R2-111: from the confirmation until the agent reports the new version, or the failure and its reason. *@
+                @* From the confirmation until the agent reports the new version, or the failure
+                   and its reason. *@
                 @if (agentUpdate.InProgress)
                 {
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="agent-update-overview-state" role="status">@string.Format(L["AgentUpdateInProgressTo"], agentUpdate.InProgressTarget)</OmniText>
@@ -85,6 +87,13 @@
             <div class="essential-text">
                 <span class="essential-label">@L["LastHeartbeat"]</span>
                 <span class="essential-value">@(Server.LastHeartbeat == default ? "-" : Server.LastHeartbeat.ToString("g"))</span>
+            </div>
+        </div>
+        <div class="essential-item">
+            <OmniIcon Name="OmniIconName.Timer" Class="essential-icon" />
+            <div class="essential-text">
+                <span class="essential-label">@L["ClockOffset"]</span>
+                <span class="essential-value clock-offset-value" title="@L["ClockOffsetHint"]">@ClockOffsetText</span>
             </div>
         </div>
         <div class="essential-item">
@@ -137,6 +146,7 @@
             <OmniHeading Level="OmniHeadingLevel.H5" Class="metric-value">@((Server.MemoryUsedMb / 1024).ToString("F1")) / @((Server.MemoryTotalMb / 1024).ToString("F1")) GB</OmniHeading>
             <OmniProgressBar Value="@Server.MemoryUsedMb" Maximum="@Math.Max(1, Server.MemoryTotalMb)" ShowValue="false"
                 Class="@($"metric-bar metric-bar-thin {MetricThresholdHelper.BarClass(MetricThresholdHelper.Percent(Server.MemoryUsedMb, Server.MemoryTotalMb))}")" />
+            <OmniText Element="OmniTextElement.Small" Tone="@OomKillTone" Class="omni-u-m-0">@OomKillText</OmniText>
         }
         else if (MetricsLoadCompleted)
         {
@@ -155,6 +165,7 @@
             <OmniHeading Level="OmniHeadingLevel.H5" Class="metric-value">@(Server.DiskUsedGb.ToString("F1")) / @(Server.DiskTotalGb.ToString("F1")) GB</OmniHeading>
             <OmniProgressBar Value="@Server.DiskUsedGb" Maximum="@Math.Max(1, Server.DiskTotalGb)" ShowValue="false"
                 Class="@($"metric-bar metric-bar-thin {MetricThresholdHelper.BarClass(MetricThresholdHelper.Percent(Server.DiskUsedGb, Server.DiskTotalGb))}")" />
+            <OmniText Element="OmniTextElement.Small" Tone="@InodeTone" Class="omni-u-m-0">@InodeText</OmniText>
         }
         else if (MetricsLoadCompleted)
         {
@@ -261,7 +272,8 @@
                    that failed) so an operator sees WHY a capability is OFF, without SSHing to the box. *@
                 @if (Server.CapabilityDiagnostics.Count > 0)
                 {
-                    @* Recette R-339: the icon sits on the middle of the hint it marks, the diagnostics under them. *@
+                    @* The icon sits on the middle of the hint it marks, the diagnostics under
+                       them. *@
                     <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XLarge">
                         <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                             <OmniIcon Name="OmniIconName.Info" Class="omni-u-text-warning" />
@@ -326,6 +338,9 @@
         </OmniDataGrid>
     }
 </OmniCard>
+
+@* PLAN-010 lot 1: SSH configuration watch. *@
+<ServerSshConfigCard Status="@Server.SshConfig" />
 
 @* H / E2: fill the bottom of the overview with the server's most recent tasks (was empty space). *@
 <OmniCard Class="omni-u-mb-lg">

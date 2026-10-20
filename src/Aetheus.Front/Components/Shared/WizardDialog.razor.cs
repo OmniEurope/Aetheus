@@ -3,12 +3,10 @@ using Microsoft.AspNetCore.Components.Web;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Aetheus' steps in OE's <see cref="OmniWizard"/> (recette R-396): the wizard draws the progress, the
-/// step list, the body and the navigation; this component maps <see cref="WizardStep"/> onto
-/// <see cref="OmniWizardStep"/>, lets the host move forward in code (<see cref="NextStep"/>) and keeps
-/// Escape as Cancel on a page.
-/// </summary>
+/// <summary> Aetheus' steps in OE's <see cref="OmniWizard"/> : the wizard draws the progress, the
+/// step list, the body and the navigation; this component maps <see cref="WizardStep"/> onto <see
+/// cref="OmniWizardStep"/>, lets the host move forward in code (<see cref="NextStep"/>) and keeps
+/// Escape as Cancel on a page. </summary>
 public partial class WizardDialog
 {
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -33,8 +31,8 @@ public partial class WizardDialog
     [Parameter] public EventCallback OnFinishClicked { get; set; }
     [Parameter] public EventCallback OnCancelClicked { get; set; }
 
-    /// <summary>The step shown first (recette R1-19: the pipeline setup wizard comes back on its summary).
-    /// Read once, when the wizard is created.</summary>
+    /// <summary>Read the initial step once when constructing the wizard so callers can reopen
+    /// directly on their selected summary.</summary>
     [Parameter] public int InitialStep { get; set; }
 
     private int _currentStep;

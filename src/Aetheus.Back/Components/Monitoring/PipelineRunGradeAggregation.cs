@@ -66,11 +66,9 @@ public static class PipelineRunGradeAggregation
         }).ToList();
     }
 
-    /// <summary>
-    /// PLAN-007 lot 3: the pipelines table shows the same grade as the run grids. A summary carries no
+    /// <summary> The pipelines table shows the same grade as the run grids. A summary carries no
     /// steps, so the shell each run needs for <see cref="ApplyAsync"/> is rebuilt from two narrow
-    /// queries (its own evaluations, its trigger steps) rather than by loading the runs.
-    /// </summary>
+    /// queries (its own evaluations, its trigger steps) rather than by loading the runs. </summary>
     public static async Task<List<PipelineDto>> ApplyToRecentRunsAsync(
         AppDbContext db, List<PipelineDto> pipelines, CancellationToken ct)
     {
@@ -179,12 +177,9 @@ public static class PipelineRunGradeAggregation
             .Select(rel => new { rel.ProjectId, rel.Version, rel.AssuranceGrade, rel.PipelineRunId })
             .ToListAsync(ct).ConfigureAwait(false);
 
-        // The release row carries the grade its candidate sealed (ReleaseService copies
-        // CANDIDATE_ASSURANCE_GRADE when the candidate publishes it), and that is the answer. Its
-        // PipelineRunId is not: a `type: release` step with `deployed: true` rewrites it to the deploy
-        // run, so following it from a deploy run led back to the deploy itself and found no grade
-        // (runs 2325, 2327 and 2334, PLAN-007 lot 3). The run is only a fallback for a release
-        // recorded before it carried a grade, and never the asking run itself.
+        // Prefer the grade sealed on the release because PipelineRunId can point to a later
+        // deployment instead of its build. Fall back to the recorded run only when no grade exists,
+        // never to the asking run itself.
         var result = new Dictionary<int, AnalysisGrade>();
         var candidateRunIdByRun = new Dictionary<int, int>();
         foreach (var (runId, projectId) in runs)

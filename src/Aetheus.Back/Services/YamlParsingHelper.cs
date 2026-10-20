@@ -6,14 +6,10 @@ namespace Aetheus.Back.Services;
 
 public static class YamlParsingHelper
 {
-    /// <summary>
-    /// The pipeline deserializer is forward compatible (recette R2-041): a key the running backend does
-    /// not know yet is skipped instead of refusing the whole definition, because the production backend
-    /// reads the delivery YAML from the branch that brings the code for that key. The skipped key is not
-    /// silent: <c>PipelineYamlDiagnostics.AppendUnknownPropertyWarnings</c> names it in the editor's
-    /// validation result and in the run's warnings. A real shape error (a scalar where a list is expected,
-    /// a value that does not convert to the property type, broken YAML) still throws.
-    /// </summary>
+    /// <summary>Skips unknown YAML keys so delivery definitions can reach a backend that does not
+    /// yet implement them, while reporting those keys through
+    /// PipelineYamlDiagnostics.AppendUnknownPropertyWarnings. Invalid shapes, conversions and YAML
+    /// syntax still throw.</summary>
     public static readonly IDeserializer Deserializer = new DeserializerBuilder()
         .WithNamingConvention(UnderscoredNamingConvention.Instance)
         .IgnoreUnmatchedProperties()
@@ -133,6 +129,7 @@ public static class YamlParsingHelper
             ExecutionRole = job.ExecutionRole ?? stage.ExecutionRole,
             Environment = job.Environment ?? stage.Environment,
             ApprovalTimeoutMinutes = stage.ApprovalTimeoutMinutes,
+            DeploymentRole = stage.DeploymentRole,
             Pool = job.Pool ?? stage.Pool,
             Condition = job.Condition ?? stage.Condition,
             DependsOn = dependencies,

@@ -1,11 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Pipelines
-@* PLAN-005 lot 5 / D38, R-10: the releases a version parameter can take, as a table: short name,
-   date, status with its explanation, and the outcome of the last run that recorded it ("Published"
-   beside "Failed" is a deployment that failed). Sortable and filterable like every grid, and since
-   recette R-327 it scrolls like every other table: no pager, the rows of the window are cut from the
-   loaded list as the reader scrolls. Clicking a row fills the version field, when there is exactly
-   one to fill. *@
+@* The release grid exposes version, publication status and the associated run result separately.
+   Selecting a row fills the version field only when exactly one target field exists. *@
 <div class="release-picker" data-testid="release-picker">
     <AetheusDataGrid Data="@_page" Count="@_count" LoadData="@LoadPage" TItem="ReleaseDto" PageSize="@PageSize" ExportMarkdown="false"
                      Virtualize="@AetheusGrid.RemoteVirtualization"

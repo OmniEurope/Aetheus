@@ -58,8 +58,8 @@ internal sealed class PipelineCancellationRepository(
 
         var variables = PipelineRunHelpers.DeserializeResolvedVariables(run.AdditionalVariablesJson);
         variables[PipelineRunService.CancellationRequestedVariable] = "true";
-        // Recette R2-103: the first request names the author; a repeated click or the recovery that
-        // re-applies a stalled cancellation does not rename it.
+        // The first request names the author; a repeated click or the recovery that re-applies a
+        // stalled cancellation does not rename it.
         variables.TryAdd(PipelineRunService.CancelledByVariable, cancellation.By);
         variables.TryAdd(PipelineRunService.CancellationReasonVariable, cancellation.Reason);
         run.AdditionalVariablesJson = JsonSerializer.Serialize(variables);

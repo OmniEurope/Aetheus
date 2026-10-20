@@ -81,7 +81,7 @@ public class PortsentryController(IPortsentryService portsentryService, IResourc
         return Ok(await portsentryService.GetBlockedIpsAsync(serverId, request, ct));
     }
 
-    // Recette R-210: the protocols the blocked IPs grid's checkable Protocol filter offers.
+    // The protocols the blocked IPs grid's checkable Protocol filter offers.
     [HttpGet("filter-values")]
     public async Task<ActionResult<PortsentryFilterValuesDto>> GetFilterValues(int serverId, CancellationToken ct)
     {

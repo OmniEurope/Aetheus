@@ -55,7 +55,7 @@ public class EnvironmentEditRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // Edit mode fetches environment 1 and populates the detail with its name.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/environments/1"));
@@ -72,7 +72,7 @@ public class EnvironmentEditRenderTests : BunitContext
         _handler.SetJsonResponse("api/servers", BuildServers());
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // New-environment mode loads projects and servers but never fetches an environment detail.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/projects"));
@@ -87,7 +87,7 @@ public class EnvironmentEditRenderTests : BunitContext
         _handler.SetJsonResponse("api/servers", BuildServers());
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var isNew = (bool)typeof(EnvironmentEdit)
             .GetProperty("_isNew", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -101,7 +101,7 @@ public class EnvironmentEditRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var isNew = (bool)typeof(EnvironmentEdit)
             .GetProperty("_isNew", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -126,7 +126,7 @@ public class EnvironmentEditRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var detail = (EnvironmentDto?)typeof(EnvironmentEdit)
             .GetField("_detail", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -135,10 +135,8 @@ public class EnvironmentEditRenderTests : BunitContext
         Assert.True(detail.RequireApproval);
     }
 
-    /// <summary>
-    /// Recette R2-001: advancing a branch is an explicit <c>type: advance-branch</c> step of the deploy
-    /// pipeline; the environment form no longer offers the hidden switch that did it.
-    /// </summary>
+    /// <summary>Branch advancement is an explicit <c>type: advance-branch</c> deployment step
+    /// rather than an environment-form setting (ADR-044).</summary>
     [Fact]
     public void DoesNotOfferTheRetiredBranchAdvanceSetting()
     {
@@ -147,25 +145,24 @@ public class EnvironmentEditRenderTests : BunitContext
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
         // The approval instructions field only renders once the loaded environment is bound, so the
         // assertions below run against the populated form, not an empty shell.
-        cut.WaitForState(() => cut.Markup.Contains("ApprovalInstructions", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("ApprovalInstructions", StringComparison.Ordinal));
 
         Assert.DoesNotContain("AdvanceBranch", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("Advance a branch", cut.Markup, StringComparison.Ordinal);
     }
 
-    /// <summary>Recette R1-24: the approval instructions field says what it is for, and the field is
-    /// described by that explanation for assistive technologies.</summary>
+    /// <summary>The approval instructions field says what it is for, and the field is described by
+    /// that explanation for assistive technologies.</summary>
     [Fact]
     public void R1_24_ApprovalInstructions_ExplainWhoReadsThem()
     {
         SetupStubs();
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.FindAll("textarea#ApprovalInstructions").Count == 1, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.FindAll("textarea#ApprovalInstructions").Count == 1);
 
-        Assert.Contains("ApprovalInstructionsHelp", cut.Find("#ApprovalInstructionsField-description").TextContent, StringComparison.Ordinal);
-        Assert.Equal("ApprovalInstructionsField-description",
+        Assert.Contains("ApprovalInstructionsHelp", cut.Find("#ApprovalInstructionsField-help-content").TextContent, StringComparison.Ordinal);
+        Assert.Equal("ApprovalInstructionsField-help-content",
             cut.Find("textarea#ApprovalInstructions").GetAttribute("aria-describedby"));
     }
 
@@ -181,7 +178,7 @@ public class EnvironmentEditRenderTests : BunitContext
         navManager.NavigateTo("http://localhost/?ProjectId=1");
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // The ?ProjectId=1 query matches a loaded project, so the new model pre-selects it.
         var model = typeof(EnvironmentEdit)

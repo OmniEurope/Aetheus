@@ -4,6 +4,7 @@ using Aetheus.Back.Components.Git;
 using Aetheus.Back.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
 namespace Aetheus.Back.Tests;
@@ -531,5 +532,57 @@ public class GitLightControllerTests
         var result = await _sut.DeleteBranchProtectionRule(1, 99, TestContext.Current.CancellationToken);
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    // --- Commit messages ---
+
+    [Fact]
+    public async Task GetCommitMessages_ValidShas_ReturnsTheMessagesTheServiceRead()
+    {
+        var sha = new string('a', 40);
+        var messages = new Dictionary<string, string> { [sha] = "fix: something" };
+        _serviceMock.GetCommitMessagesAsync(1, Arg.Is<IReadOnlyCollection<string>>(s => s.Single() == sha), Arg.Any<CancellationToken>())
+            .Returns(messages);
+
+        var result = await _sut.GetCommitMessages(1, new GitCommitMessagesRequest { Shas = [sha] }, TestContext.Current.CancellationToken);
+
+        Assert.Same(messages, Assert.IsType<OkObjectResult>(result.Result).Value);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(201)]
+    [InlineData(-1)]
+    public async Task GetCommitMessages_NoneTooManyOrNonHexShas_IsAValidationProblem(int count)
+    {
+        _sut.ControllerContext.HttpContext.RequestServices = new ServiceCollection()
+            .AddLogging().AddMvcCore().Services.BuildServiceProvider();
+        List<string> shas = count < 0 ? ["not-a-sha"] : [.. Enumerable.Repeat(new string('b', 40), count)];
+
+        var result = await _sut.GetCommitMessages(1, new GitCommitMessagesRequest { Shas = shas }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        await _serviceMock.DidNotReceiveWithAnyArgs().GetCommitMessagesAsync(default, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task GetCommitMessages_UnknownRepository_ReturnsNotFound()
+    {
+        _serviceMock.GetProjectIdForRepoAsync(9, Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        var result = await _sut.GetCommitMessages(9, new GitCommitMessagesRequest { Shas = [new string('c', 40)] }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetCommitMessages_WithoutReadPermission_ReturnsForbid()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 1, Permission.Read, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _sut.GetCommitMessages(1, new GitCommitMessagesRequest { Shas = [new string('d', 40)] }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
     }
 }

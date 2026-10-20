@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R-300: one notification opened from its row: the subject, when and how it went, then the
-   elements the event carried (its payload), one line each. *@
+@* One notification opened from its row: the subject, when and how it went, then the elements the
+   event carried (its payload), one line each. *@
 <OmniStack Gap="OmniSpacing.Medium" Class="notification-detail">
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@Notification.Subject</OmniHeading>
     <dl class="notification-detail-facts">
@@ -11,7 +11,7 @@
         <dt>@L["NotificationChannel"]</dt>
         <dd>@(Notification.ChannelName ?? L["NotificationChannelNone"].Value)</dd>
         <dt>@L["Status"]</dt>
-        <dd><OmniBadge Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(Notification.Status)">@NotificationLabels.StatusLabel(L, Notification.Status)</OmniBadge></dd>
+        <dd><OmniBadge Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(Notification)">@NotificationLabels.StatusLabel(L, Notification)</OmniBadge></dd>
         @if (!string.IsNullOrWhiteSpace(Notification.ErrorMessage))
         {
             <dt>@L["Error"]</dt>
@@ -33,5 +33,10 @@
     {
         <OmniText Tone="OmniTextTone.Muted">@L["NotificationNoContent"]</OmniText>
     }
-    <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]" />
+    <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]">
+        @if (Target is not null)
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Open"><OmniIcon Name="OmniIconName.ArrowRight" /> <span>@L["Open"]</span></OmniButton>
+        }
+    </DialogFooter>
 </OmniStack>

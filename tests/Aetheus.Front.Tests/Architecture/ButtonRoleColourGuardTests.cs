@@ -3,32 +3,12 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// STD-BTN (revised 2026-09-28, docs/contracts/ui-patterns.md): a button's colour follows its importance.
-/// Blue (Primary) is the main action of its zone, one per zone; grey (Secondary) the other actions; Ghost
-/// a minor action; red (Danger) a destructive one; never green (Success) on a button. It replaces the
-/// 2026-09-27 mapping (blue opens, green performs), and with it the rule that two actions of one grid row
-/// never share a colour. An action repeated on each grid row is grey unless the user names it the row's
-/// main action, which is then blue (R-533, 2026-09-30: the colour of a row action is the user's choice,
-/// recorded beside its markup, and no list of exceptions gates it any more). This guard enforces the
-/// parts of the rule a source scan can decide on its own:
-/// <list type="bullet">
-/// <item>no button is green, the user's documented exceptions aside;</item>
-/// <item>no button is Info or Warning, the contract's exceptions aside (R-293, the per-state selectors);</item>
-/// <item>a dismiss button (Cancel, GoBack, Close, Previous) is Secondary;</item>
-/// <item>a zone (the element that directly holds its buttons: a header's actions, a dialog footer, a
-/// toolbar, one grid row) has at most one blue button rendered at a time (mutually exclusive
-/// <c>@if</c>/<c>else</c> branches never render together);</item>
-/// <item>a button whose label or handler names a destructive role is red, the button that confirms it
-/// in a dialog included;</item>
-/// <item>a destructive confirmation (triggered by a red button, or confirmed by a destructive verb) is
-/// red and names its verb, never "Valider";</item>
-/// <item>a confirmation of a cancellation is not dismissed by a second "Annuler" but by "Revenir".</item>
-/// </list>
-/// Roles are read from the label key first (a Cancel wired to a lambda has no "Cancel" in its handler),
-/// the handler name only adding what a label cannot say. Which action of a zone is its main one stays an
-/// audit judgment; the guard only refuses a second blue button beside it.
-/// </summary>
+/// <summary>Enforces role-based button colours, specific destructive confirmation verbs and at most
+/// one simultaneously visible primary action per zone, preserving documented exceptions, and one
+/// visible action per zone besides its dismiss action and menu trigger, at most two on a grid row
+/// (detection 11, owner decision of 2026-10-12). Labels
+/// establish roles before handler names, while main-action selection remains an audit
+/// judgment.</summary>
 public class ButtonRoleColourGuardTests
 {
     private const string Danger = "OmniButtonVariant.Danger";
@@ -43,6 +23,10 @@ public class ButtonRoleColourGuardTests
             "R-170, confirmed by R-385 (2026-09-28): the notification bell is green, the tasks button blue"),
         ("Components/VariableLibraries/VariableLibraryEdit.razor", @"Variant=""OmniButtonVariant.Success"" OnClick=""@(() => EditEntry(entry))""",
             "R2-066 (2026-10-02): a library entry's Edit is green, its History blue"),
+        ("Components/AiTasks/AiTasks.razor", @"Variant=""OmniButtonVariant.Success"" OnClick=""@(() => OpenDialogAsync(task))""",
+            "R3-12/R3-14 (2026-10-12): Edit is green where Run is the row's blue action"),
+        ("Components/AppBackups/Backups.razor", @"Variant=""OmniButtonVariant.Success"" OnClick=""@(() => EditPolicy(p))""",
+            "R3-12/R3-14 (2026-10-12): Edit is green where Run is the row's blue action"),
     ];
 
     /// <summary>
@@ -224,6 +208,252 @@ public class ButtonRoleColourGuardTests
             + "are Secondary (or Ghost when minor):\n  " + string.Join("\n  ", violations.Distinct()));
     }
 
+    /// <summary>
+    /// The zones and grid rows the user chose to keep with several visible actions (decision of 2026-10-17),
+    /// each named by its file and the exact actions it shows (a button's label key, read from its Text, Label,
+    /// title, aria-label or content, else its click handler). A zone of the same file showing other actions,
+    /// or one action more, is still refused.
+    /// </summary>
+    private static readonly (string File, string[] Actions, string Decision)[] UserChosenCrowdedZones =
+    [
+        ("Components/AiTasks/AiTasks.razor", ["RunNow", "Results", "Edit", "Delete"],
+            "R3-12/R3-14, kept on 2026-10-17: an AI task row shows Run blue, Results, Edit green and Delete"),
+        ("Components/AppBackups/Backups.razor", ["BackupRuns", "BackupRunNow", "Edit", "Delete"],
+            "R3-12/R3-14, kept on 2026-10-17: a backup policy row shows Runs, Run blue, Edit green and Delete"),
+        ("Components/VariableLibraries/VariableLibraryEdit.razor", ["CopyKey", "CopyValue", "History", "Edit", "Delete"],
+            "R2-066 and R-435, kept on 2026-10-17: a library entry row shows its cell copy buttons, History blue, Edit green and Delete"),
+        ("Components/Vaults/VaultEdit.razor", ["Generate", "Add"],
+            "R-436, kept on 2026-10-17: the add row shows Generate blue beside Add"),
+        ("Components/Vaults/VaultEdit.razor", ["CopyKey", "CopyValue", "CopyKeyReference", "History", "Edit", "Rotate", "Delete"],
+            "R-293 and R-436, kept on 2026-10-17: a secret row shows its copy buttons, History, Edit, Rotate orange and Delete"),
+        ("Components/Servers/ServerDetailSections/MailStatusFix.razor", ["MailObtainCertificate", "MailInstallCertificate"],
+            "User decision of 2026-09-28, kept on 2026-10-17: Obtain and Install the mail certificate are both shown, both blue"),
+        ("Components/Pipelines/PipelineRunApprovalPanel.razor", ["Approve", "Reject", "ApprovalAddComment"],
+            "User decision of 2026-10-17: Approve and Reject both stay visible, with Add a comment beside them"),
+    ];
+
+    [Fact]
+    public void AZone_ShowsOneMainAction_AndAGridRowAtMostTwo()
+    {
+        var violations = new List<string>();
+        var used = new HashSet<int>();
+        var scanned = 0;
+
+        foreach (var file in FrontFiles("*.razor"))
+        {
+            var buttons = ButtonZoneScanner.Buttons(File.ReadAllText(file));
+            scanned += buttons.Count;
+            violations.AddRange(UnexcusedCrowdedActions(Rel(file), buttons, UserChosenCrowdedZones, used)
+                .Select(lines => $"{Rel(file)}: lines {lines}"));
+        }
+
+        var stale = UserChosenCrowdedZones.Where((_, i) => !used.Contains(i)).ToList();
+        Assert.True(scanned >= 500, $"Expected the app's buttons, found {scanned}: the scan is broken.");
+        Assert.True(stale.Count == 0,
+            "A recorded crowded-zone decision no longer matches its zone; update or remove it:\n  "
+            + string.Join("\n  ", stale.Select(e => $"{e.File}: {string.Join(", ", e.Actions)} ({e.Decision})")));
+        Assert.True(violations.Count == 0,
+            "STD-BTN (detection 11, owner decision of 2026-10-12): one visible main action per zone (plus its dismiss "
+            + "action and menu trigger), at most two actions on a grid row; the other actions go into a menu "
+            + "(OmniSplitButton or OmniOverflowMenu):\n  " + string.Join("\n  ", violations));
+    }
+
+    [Fact]
+    public void CrowdedScan_FlagsSideBySideActionsAndCrowdedRows_AndSparesDismissMenuAndBranches()
+    {
+        const string sample = """
+            <div class="header">
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Export"><OmniIcon Name="download" />@L["Export"]</OmniButton>
+                <OmniButton OnClick="@Create"><OmniIcon Name="add" />@L["Create"]</OmniButton>
+            </div>
+            <div class="footer">
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Close"><OmniIcon Name="close" />@L["Cancel"]</OmniButton>
+                <OmniButton OnClick="@Save"><OmniIcon Name="save" />@L["Save"]</OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" Label="@L["MoreActions"]"><OmniIcon Name="more_vert" /></OmniButton>
+            </div>
+            <div class="toolbar">
+                @if (_editing)
+                {
+                    <OmniButton OnClick="@Save"><OmniIcon Name="save" />@L["Save"]</OmniButton>
+                }
+                else
+                {
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Edit"><OmniIcon Name="edit" />@L["Edit"]</OmniButton>
+                }
+                <OmniButton Variant="@(_grid ? OmniButtonVariant.Primary : OmniButtonVariant.Secondary)" OnClick="@Toggle"><OmniIcon Name="view_list" />@L["View"]</OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Ghost" title="@L["FullScreen"]" OnClick="@Full"><OmniIcon Name="fullscreen" /></OmniButton>
+            </div>
+            <OmniDataGrid TItem="Item">
+                <OmniDataGridColumn TItem="Item">
+                    <Template Context="item">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Label="@L["Details"]"><OmniIcon Name="visibility" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Label="@L["Edit"]"><OmniIcon Name="edit" /></OmniButton>
+                    </Template>
+                    <EditTemplate Context="item">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Label="@L["Save"]"><OmniIcon Name="check" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Label="@L["Cancel"]"><OmniIcon Name="close" /></OmniButton>
+                    </EditTemplate>
+                </OmniDataGridColumn>
+                <OmniDataGridColumn TItem="Item">
+                    <Template Context="item">
+                        <OmniButton Variant="OmniButtonVariant.Danger" Label="@L["Delete"]"><OmniIcon Name="delete" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Label="@L["MoreActions"]"><OmniIcon Name="more_horiz" /></OmniButton>
+                    </Template>
+                </OmniDataGridColumn>
+            </OmniDataGrid>
+            <OmniDataGrid TItem="Item">
+                <OmniDataGridColumn TItem="Item">
+                    <Template Context="item">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Label="@L["Edit"]"><OmniIcon Name="edit" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Danger" Label="@L["Delete"]"><OmniIcon Name="delete" /></OmniButton>
+                    </Template>
+                </OmniDataGridColumn>
+            </OmniDataGrid>
+            """;
+
+        var crowded = CrowdedActions(ButtonZoneScanner.Buttons(sample)).ToList();
+
+        Assert.Equal(["2, 3", "25, 26, 35 (grid row)"], crowded);
+    }
+
+    [Fact]
+    public void CrowdedDecision_CoversOnlyItsExactZone_InItsOwnFile()
+    {
+        const string sample = """
+            <div class="decisions">
+                <OmniButton OnClick="@Approve" Label="@L["Approve"]"><OmniIcon Name="check" /> <span>@L["Approve"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@Reject" Label="@L["Reject"]"><OmniIcon Name="block" /> <span>@L["Reject"]</span></OmniButton>
+            </div>
+            <div class="header">
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Export"><OmniIcon Name="download" />@L["Export"]</OmniButton>
+                <OmniButton OnClick="@Create"><OmniIcon Name="add" />@L["Create"]</OmniButton>
+            </div>
+            <div class="grown">
+                <OmniButton OnClick="@Approve" Label="@L["Approve"]"><OmniIcon Name="check" /> <span>@L["Approve"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@Reject" Label="@L["Reject"]"><OmniIcon Name="block" /> <span>@L["Reject"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Defer"><OmniIcon Name="schedule" />@L["Defer"]</OmniButton>
+            </div>
+            """;
+        (string File, string[] Actions, string Decision)[] decisions = [("A.razor", ["Reject", "Approve"], "test decision")];
+        var buttons = ButtonZoneScanner.Buttons(sample);
+
+        var used = new HashSet<int>();
+        var inItsFile = UnexcusedCrowdedActions("A.razor", buttons, decisions, used).ToList();
+        var elsewhere = UnexcusedCrowdedActions("B.razor", buttons, decisions, []).ToList();
+
+        // The decided zone passes; the other zone of the same file, and the zone with one action more, do not.
+        Assert.Equal(["6, 7", "10, 11, 12"], inItsFile);
+        Assert.Equal([0], used);
+        Assert.Equal(["2, 3", "6, 7", "10, 11, 12"], elsewhere);
+    }
+
+    /// <summary>
+    /// The lines of every zone that shows more than one action besides its dismiss action and menu trigger,
+    /// and of every grid row that shows more than two actions besides its menu trigger. A toggle (its variant
+    /// computed per state) is not an action, and neither is, off a grid row, an icon-only button named by
+    /// its <c>Label</c> or title (window chrome or toolbar icon, allowed by the text-and-icon rule).
+    /// </summary>
+    private static IEnumerable<string> CrowdedActions(List<ButtonZoneScanner.ZoneButton> buttons) =>
+        CrowdedGroups(buttons).Select(Describe);
+
+    private static string Describe((List<ButtonZoneScanner.ZoneButton> Buttons, bool Row) group) =>
+        string.Join(", ", group.Buttons.Select(b => b.Line)) + (group.Row ? " (grid row)" : string.Empty);
+
+    private static IEnumerable<(List<ButtonZoneScanner.ZoneButton> Buttons, bool Row)> CrowdedGroups(List<ButtonZoneScanner.ZoneButton> buttons)
+    {
+        var actions = buttons.Where(b => !IsMenuTrigger(b) && !IsToggle(b)).ToList();
+
+        foreach (var zone in actions.Where(b => b.Row == 0 && !IsDismiss(b) && !IsIconOnly(b)).GroupBy(b => b.Zone))
+        {
+            var together = ButtonZoneScanner.RenderedTogether(zone.ToList());
+            if (together.Count > 1)
+                yield return (together, false);
+        }
+
+        foreach (var row in actions.Where(b => b.Row != 0).GroupBy(b => b.Row))
+        {
+            var together = ButtonZoneScanner.RenderedTogether(row.ToList());
+            if (together.Count > 2)
+                yield return (together, true);
+        }
+    }
+
+    /// <summary>
+    /// The crowded zones and rows of <paramref name="file"/> that no recorded decision names: a decision
+    /// covers a zone only when the file matches and the zone shows exactly its actions. The index of each
+    /// decision that covered a zone is added to <paramref name="used"/>.
+    /// </summary>
+    private static IEnumerable<string> UnexcusedCrowdedActions(string file, List<ButtonZoneScanner.ZoneButton> buttons,
+        (string File, string[] Actions, string Decision)[] decisions, HashSet<int> used)
+    {
+        foreach (var group in CrowdedGroups(buttons))
+        {
+            var shown = group.Buttons.Select(ActionName).Order(StringComparer.Ordinal).ToList();
+            var decision = Array.FindIndex(decisions, d => d.File == file
+                && d.Actions.Order(StringComparer.Ordinal).SequenceEqual(shown, StringComparer.Ordinal));
+            if (decision >= 0)
+            {
+                used.Add(decision);
+                continue;
+            }
+
+            yield return Describe(group);
+        }
+    }
+
+    /// <summary>
+    /// The name of a button's action: the label key of its Text, Label, title or aria-label, else the first
+    /// label key of its content, else its click handler.
+    /// </summary>
+    private static string ActionName(ButtonZoneScanner.ZoneButton button)
+    {
+        var open = OpeningTag(button.Markup);
+        foreach (var name in new[] { "Text", "Label", "title", "aria-label" })
+        {
+            var key = Regex.Match(open, $@"\b{Regex.Escape(name)}\s*=\s*""@?L\[""(?<key>\w+)""\]""");
+            if (key.Success) return key.Groups["key"].Value;
+        }
+
+        var content = Regex.Match(button.Markup[open.Length..], @"\bL\[""(?<key>\w+)""\]");
+        if (content.Success) return content.Groups["key"].Value;
+        var handler = Regex.Match(open, @"OnClick=""[^""]*?(?<name>\w+)\s*\(|OnClick=""@?(?<name>\w+)""");
+        return handler.Success ? handler.Groups["name"].Value : $"line {button.Line}";
+    }
+
+    /// <summary>Localized label keys and icons of a button that only opens a menu of the zone's other actions.</summary>
+    private static readonly Regex MenuTriggerLabelKey = new(@"^(MoreActions|OtherActions)$", RegexOptions.CultureInvariant);
+
+    private static readonly Regex MenuTriggerIcon = new(@"<OmniIcon\b[^>]*\bName\s*=\s*""(more_vert|more_horiz)""", RegexOptions.CultureInvariant);
+
+    // Role keyed by the label key the button displays (its content, Label, title or aria-label).
+    private static bool IsDismiss(ButtonZoneScanner.ZoneButton button) =>
+        LabelKeys(button.Markup) is [var key] && DismissLabelKey.IsMatch(key);
+
+    private static bool IsMenuTrigger(ButtonZoneScanner.ZoneButton button) =>
+        (LabelKeys(button.Markup) is [var key] && MenuTriggerLabelKey.IsMatch(key)) || MenuTriggerIcon.IsMatch(button.Markup);
+
+    // A toggle or selector: its variant computed per state, or its pressed state announced (aria-pressed).
+    private static bool IsToggle(ButtonZoneScanner.ZoneButton button)
+    {
+        var open = OpeningTag(button.Markup);
+        return (Attribute(open, "Variant") ?? string.Empty).TrimStart().StartsWith('@')
+               || Attribute(open, "aria-pressed") is not null;
+    }
+
+    private static bool IsIconOnly(ButtonZoneScanner.ZoneButton button)
+    {
+        var open = OpeningTag(button.Markup);
+        if (open.StartsWith("<OmniSplitButton", StringComparison.Ordinal)) return false;
+        var content = button.Markup[open.Length..];
+        content = Regex.Replace(content, @"</OmniButton>\s*$", string.Empty);
+        var text = Regex.Replace(content, @"<(?:""[^""]*""|[^>""])*>", string.Empty);
+        var named = Attribute(open, "Label") ?? Attribute(open, "title") ?? Attribute(open, "aria-label");
+        return string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(named);
+    }
+
+    private static string OpeningTag(string markup) =>
+        Regex.Match(markup, @"^<\w+\b(?:""[^""]*""|[^>""])*>").Value;
+
     /// <summary>Localized label keys that name a destructive or interrupting action.</summary>
     private static readonly Regex DestructiveLabelKey = new(
         @"^(Delete\w*|Remove|RemoveFrom(?!Favorites)\w*|CancelRun|CancelTask|\w*Revoke\w*|Stop|StopAll|StopApache|Uninstall|Unregister|Unlink|Reject|Ban|Kick|Rollback|Purge\w*|Retire\w*|Restore|RestoreVersion|PortRelease|Detach|Deactivate|DisableModule|Disable2FA|FirewallDeny|FirewallDisable|Unsubscribe|DockerPrune|Regenerate\w*)$",
@@ -248,8 +478,8 @@ public class ButtonRoleColourGuardTests
             if (!IsDestructive(tag, out var reason)) continue;
             checkedCount++;
             var variant = Attribute(tag, "Variant");
-            // Every destructive action is red, a second one in the same grid row included: the former
-            // fourth-role Warning existed only for the retired "a row never shares a colour" rule.
+            // Every destructive action uses Danger, including multiple destructive actions in one
+            // row.
             if (string.Equals(variant, Danger, StringComparison.Ordinal)) continue;
             violations.Add($"{file}: {reason} must be {Danger}, found {variant ?? "(none)"}");
         }
@@ -274,11 +504,7 @@ public class ButtonRoleColourGuardTests
             + string.Join("\n  ", violations));
     }
 
-    /// <summary>
-    /// The confirmation dialogs opened from code: the destructive ones found, their violations added.
-    /// Recette R2-107: the two scans of the test above are their own methods, under the grade-A
-    /// cyclomatic threshold.
-    /// </summary>
+    /// <summary>Scans code-opened confirmation dialogs for destructive-action violations.</summary>
     private static int CheckDestructiveConfirmCalls(List<string> violations)
     {
         var dangerHandlers = DangerButtonHandlers();

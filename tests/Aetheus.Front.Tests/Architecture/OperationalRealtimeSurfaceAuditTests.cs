@@ -15,7 +15,7 @@ public sealed class OperationalRealtimeSurfaceAuditTests
         {
             ["Components/Dashboards/Home.razor.cs"] =
                 ["ServerHeartbeat", "PipelineRunStarted", "EntityChanged", "RejoinOnReconnect"],
-            // Recette R2-056: an agent update refreshes the update count and the task chip.
+            // An agent update refreshes the update count and the task chip.
             ["Components/Servers/Servers.razor.cs"] =
                 ["ServerHeartbeat", "ServerOffline", "AgentUpdateConfirmed", "AgentUpdateFailed", "RejoinOnReconnect"],
             ["Components/Shared/TaskTrackerService.cs"] =
@@ -36,6 +36,9 @@ public sealed class OperationalRealtimeSurfaceAuditTests
                 ["ApprovalRequired", "ApprovalResolved", "PipelineRunCompleted", "RejoinOnReconnect"],
             ["Components/Git/GitRepositoryRealtimeSubscription.cs"] =
                 ["BranchesChanged", "CommitsChanged", "RejoinOnReconnect"],
+            // R1-69: the Supervision follows project changes and covers the rest with a bounded periodic reload.
+            ["Components/Monitoring/Supervision.razor.cs"] =
+                ["FollowEntitiesAsync", "ResourceType.Project", "TrailingReloadCoalescer", "PeriodicTimer"],
             ["Components/Projects/MonitoredAppsList.razor.cs"] =
                 ["EntityChanged", "ResourceType.Project", "RejoinOnReconnect"],
             ["Components/Analysis/AnalysisPortfolio.razor.cs"] =
@@ -66,7 +69,7 @@ public sealed class OperationalRealtimeSurfaceAuditTests
                 ["ReleaseStatusChanged", "RejoinOnReconnect"],
             ["Components/Logs/Logs.razor.cs"] =
                 ["LogReceived", "LogsReceived", "RejoinOnReconnect"],
-            // Recette R-181: pushed over the admin hub now, no polling loop.
+            // Administrative updates arrive through the hub rather than polling.
             ["Components/Logs/SystemLogs.razor.cs"] =
                 ["AdminEntitySubscription", "AdminEntities.SystemLog", "TrailingReloadCoalescer"],
             ["Components/Projects/ProjectDetailSections/ProjectQualitySection.razor.cs"] =
@@ -87,7 +90,7 @@ public sealed class OperationalRealtimeSurfaceAuditTests
                 ["EntityChanged", "ResourceType.VariableLibrary", "RejoinOnReconnect"],
             ["Components/Shared/VaultsList.razor.cs"] =
                 ["FollowEntitiesAsync", "ResourceType.Vault"],
-            // R-181: the views whose Refresh button was replaced by server-pushed events.
+            // Views refreshed by server-pushed events.
             ["Components/Shared/ServerLiveFeed.cs"] =
                 ["ServerHeartbeat", "TaskCompleted", "JoinServerGroup", "RejoinOnReconnect", "TrailingReloadCoalescer"],
             ["Components/Shared/EntityOperationalFeed.cs"] =

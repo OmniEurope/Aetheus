@@ -3,14 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R2-008: the audience measurement of Aetheus only counts pages whose path segments the
-/// analytics bootstrap knows (<c>wwwroot/js/aetheus-analytics-bootstrap.js</c>); an unknown top-level
-/// segment is not measured at all, an unknown nested one is reported as <c>{value}</c>. The lists had
-/// fallen behind the routes (<c>monitoring</c>, <c>notifications</c>, <c>ports</c>...), so those pages
-/// were never counted. Every static segment of every <c>@page</c> route must be in the lists, the
-/// sign-in page aside (R-471: deliberately not measured).
-/// </summary>
+/// <summary>Analytics bootstrap lists must cover static route segments except deliberately
+/// unmeasured sign-in routes. Unknown segments otherwise disappear or become generic
+/// values.</summary>
 public sealed partial class AnalyticsRouteSegmentCoverageTests
 {
     private static readonly HashSet<string> NotMeasuredTopLevel = new(StringComparer.Ordinal) { "login" };

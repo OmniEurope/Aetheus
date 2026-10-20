@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>Recette R-498: the lineage tile of a run's page, read by those who may read its pipeline.</summary>
+/// <summary>The lineage tile of a run's page, read by those who may read its pipeline.</summary>
 [ApiController]
 [Route("api/pipelines")]
 [Authorize]

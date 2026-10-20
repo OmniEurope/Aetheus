@@ -50,6 +50,4 @@ public class DbTransactionScopeTests : IAsyncDisposable
     }
 }
 
-// Note: real-transaction semantics (Begin/Commit/Rollback) used to be covered by an
-// in-memory SQLite DbContext here. SQLite was removed from the project; transaction
-// behaviour is now exercised by integration tests against the live PostgreSQL dev DB.
+// Real transaction semantics are covered by PostgreSQL integration tests.

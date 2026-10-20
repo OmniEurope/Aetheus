@@ -1,7 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* A command of the AddAgent wizard, in OE's OmniCodeBlock (recette R-400): the package's code surface and
-   copy button, readable in the light and the dark theme. Recette R-516: a labelled command is a titled
-   block (the title, the copy button at its end, then the command); only one without a label stays on
-   OE's one-line form. *@
+@* Render commands through OmniCodeBlock with a title when labelled and the compact one-line form
+   otherwise. *@
 <OmniCodeBlock Code="@Code" Title="@Label" Inline="@(InlineLine && Label is null)" Wrap="@(!InlineLine)"
                Class="wizard-code-block" OnCopy="@OnCopied" />

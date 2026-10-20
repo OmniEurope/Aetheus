@@ -18,12 +18,8 @@ public sealed class AppIngestGate
 
     private readonly ConcurrentDictionary<int, SemaphoreSlim> _analyticsLocks = new();
 
-    /// <summary>
-    /// Recette R-487: the audience ingestion of an app has its own lock. It shared the metrics one, so
-    /// a page view waited behind every slow metrics batch of the same app (p95 562 ms in production for
-    /// a median of 52 ms). The two protect different things: the metric-name budget there, the route
-    /// budget and the storage quota here.
-    /// </summary>
+    /// <summary>Use an independent audience-ingestion lock because it protects route and storage
+    /// budgets, while metrics ingestion protects metric-name limits.</summary>
     public SemaphoreSlim ForAnalytics(int appId) =>
         _analyticsLocks.GetOrAdd(appId, static _ => new SemaphoreSlim(1, 1));
 }

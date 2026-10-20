@@ -27,10 +27,8 @@ public sealed class AgentEnrollmentCompatibilityIntegrationTests(PostgresFixture
             TestContext.Current.CancellationToken);
         Assert.NotNull(registrationToken);
 
-        // The agent this test enrols must be THE current one, so its version is read from the same
-        // catalogue the compatibility policy compares against. Hard-coding it (it used to say
-        // "1.0.1294") silently turned into UpdateRecommended/OlderSoftware the first time the agent
-        // version moved past that literal - the test then asserted a version bump, not enrolment.
+        // Reads the current agent version from the compatibility catalogue so enrollment assertions
+        // do not depend on a fixed release number.
         var currentAgentVersion = factory.Services
             .GetRequiredService<IAgentReleaseCatalog>().Current.SoftwareVersion;
 

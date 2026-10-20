@@ -8,11 +8,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Recette R2-094 on real PostgreSQL: the one-time renumbering of the shipped delivery templates runs
-/// when both blue-green colours start together. The advisory lock makes one colour renumber and the
-/// other find the marker; the unique (TemplateId, Version) index sees the old rows go before the new v1.
-/// </summary>
+/// <summary>Concurrent startup serializes shipped-template renumbering through the advisory lock,
+/// removing previous rows before inserting version one under the uniqueness constraint.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class DeliveryTemplateVersionResetIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)

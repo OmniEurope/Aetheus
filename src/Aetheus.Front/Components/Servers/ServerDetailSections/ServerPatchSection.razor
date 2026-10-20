@@ -7,8 +7,11 @@
             <OmniIcon Name="OmniIconName.ShieldCheck" />
         </OmniStack>
         <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckAsync" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Search" /> <span>@L["PatchCheck"]</span></OmniButton>
+            @* STD-BTN detection 11: Apply visible, the other actions in the menu. *@
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ApplyAsync" Disabled="@(!CanApply)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["PatchApply"]</span></OmniButton>
+            <OmniOverflowMenu Label="@L["MoreActions"]">
+                <OmniMenuItem OnClick="@CheckAsync" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>@L["PatchCheck"]</ChildContent></OmniMenuItem>
+            </OmniOverflowMenu>
         </OmniStack>
     </OmniStack>
 

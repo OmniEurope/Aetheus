@@ -23,7 +23,6 @@ public partial class AiResultDialog
     private int _selectedId;
     private string _reportHtml = string.Empty;
     private bool _loading;
-    private bool _applying;
     private int _totalCount;
     private int _page = 1;
 
@@ -61,7 +60,7 @@ public partial class AiResultDialog
             _totalCount = result.TotalCount;
         }
         _results = items.Select(item => new ResultRow(
-            item.Id, $"{item.CreatedAt.ToLocalTime():g} - {item.Verdict}", item)).ToList();
+            item.Id, $"{item.CreatedAt.ToLocalTime():g} - {AiVerdictText.Label(L, item.Verdict)}", item)).ToList();
         if (_results.FirstOrDefault() is { } first)
         {
             _selectedId = first.Id;
@@ -86,13 +85,6 @@ public partial class AiResultDialog
         _reportHtml = Markdown.ToHtml(_selected?.ReportMarkdown ?? string.Empty, MarkdownPipeline);
     }
 
-    private static OmniTone VerdictStyle(AiRunResultDto result) => result.Verdict switch
-    {
-        AiVerdict.Pass => OmniTone.Success,
-        AiVerdict.Fail => OmniTone.Danger,
-        _ => result.Succeeded ? OmniTone.Accent : OmniTone.Warning
-    };
-
     private static string FormatDuration(long durationMs) =>
         TimeSpan.FromMilliseconds(durationMs).ToString(@"mm\:ss");
 
@@ -103,28 +95,6 @@ public partial class AiResultDialog
             ? Js.InvokeVoidAsync(
                 "downloadFile", $"ai-proposed-{_selected.Id}.patch", patch, "text/x-diff").AsTask()
             : Task.CompletedTask;
-
-    private async Task ApplyPatchAsync()
-    {
-        if (_selected is null) return;
-        _applying = true;
-        try
-        {
-            var applied = await Api.Ai.ApplyAiPatchAsync(_selected.Id);
-            if (applied is null) return;
-            _selected = _selected with
-            {
-                ProposedRepositoryId = applied.RepositoryId,
-                ProposedBranchName = applied.BranchName,
-                ProposedCommitSha = applied.CommitSha
-            };
-            Notify.Success("Created", "ProposedBranchCreated");
-        }
-        finally
-        {
-            _applying = false;
-        }
-    }
 
     private sealed record ResultRow(int Id, string DisplayName, AiRunResultDto Result);
 }

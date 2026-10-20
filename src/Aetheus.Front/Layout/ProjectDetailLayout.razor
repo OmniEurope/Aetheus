@@ -20,8 +20,8 @@
 
 
 <CascadingValue Value="Loader" Name="ProjectLoader">
-    @* PLAN-003 D4: the header frame is rendered immediately, loading or not, so the page content
-       never jumps when the project arrives. Only what depends on the entity waits. *@
+    @* Render the header frame immediately to keep page content stable while the project loads.
+       Only entity-dependent content waits. *@
     @if (Loader.Project is null && Loader.InitialLoadCompleted)
     {
         <OmniStack Align="OmniAlignment.Center" Gap="OmniSpacing.Medium" Class="detail-not-found">
@@ -32,13 +32,10 @@
     }
     else
     {
-        @* D7: the title is the section (breadcrumb leaf); the project name is an ancestor. D5: no
-           project folder icon (recette R-219: the section's own icon instead), and a status badge only when the project is NOT active. Recette R-180: no project
-           description in the header of a project section. *@
-        @* Recette R-124: on the pipelines section the pipelines list adds its New button to the
-           header actions. Recette R-180: Follow and Edit in one "..." menu on every project section,
-           the header's own menu (R-395). Recette R-431: the section's own actions come first in the
-           same menu (the quality findings export), rather than as a row of their own. *@
+        @* Use the section name and icon in the title, with the project as a breadcrumb ancestor.
+           Show project status only when inactive. *@
+        @* Combine section-specific actions with Follow and Edit in the header menu, placing
+           section actions first. *@
         RenderFragment? projectMenu = Loader.Project is { } project
             ? @<text>
                 @foreach (var action in _sectionMenu.Actions)
@@ -46,10 +43,10 @@
                     <OmniMenuItem OnClick="@action.Run" Disabled="@action.Disabled" title="@action.Title"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(action.Icon)" /></Icon><ChildContent>@action.Text</ChildContent></OmniMenuItem>
                 }
                 <Aetheus.Front.Components.Notifications.ProjectSubscriptionMenuItem State="@_subscription" />
-                <OmniMenuItem OnClick="@(() => Nav.NavigateTo($"/projects/{project.Id}/edit"))"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+                <OmniMenuItem OnClick="@(() => Nav.NavigateTo($"/projects/{project.Id}/edit"))"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Settings"]</ChildContent></OmniMenuItem>
               </text>
             : null;
-        <OmniPageHeader ShowBack="true" Subtitle="@Breadcrumb.Subtitle()" MenuContent="@projectMenu" Icon="@MaterialIconMap.HeaderIcon(SectionIcon)">
+        <OmniPageHeader ShowBack="true" BackHref="@BackHref" Subtitle="@Breadcrumb.Subtitle()" MenuContent="@projectMenu" Icon="@MaterialIconMap.HeaderIcon(SectionIcon)">
             <Badges>
                 @if (Loader.Project is { Status: not ProjectStatus.Active } inactive)
                 {

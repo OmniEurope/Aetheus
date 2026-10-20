@@ -38,6 +38,12 @@ public sealed record PipelineDotnetTestRequest
 
     public required string DotnetPath { get; init; }
 
+    /// <summary>Absolute directories prepended to the test host's PATH, in order.</summary>
+    public IReadOnlyList<string> ToolPaths { get; init; } = [];
+
+    /// <summary>Time between two progress lines while the suite runs.</summary>
+    public TimeSpan ProgressInterval { get; init; } = PipelineDotnetTestToolchain.DefaultProgressInterval;
+
     public static bool TryCreate(
         string target,
         IReadOnlyDictionary<string, string> envVars,
@@ -115,9 +121,8 @@ public sealed record PipelineDotnetTestRequest
             runSettings = Path.Combine(workspace, runSettingsValue);
         }
 
-        var dotnetPath = envVars.GetValueOrDefault(
-            PipelineDotnetTestVariables.DotnetPath);
-        if (string.IsNullOrWhiteSpace(dotnetPath)) dotnetPath = "dotnet";
+        if (!PipelineDotnetTestToolchain.TryRead(envVars, out var toolchain, out rejection))
+            return false;
 
         request = new PipelineDotnetTestRequest
         {
@@ -132,7 +137,9 @@ public sealed record PipelineDotnetTestRequest
                 StringComparison.OrdinalIgnoreCase),
             RunSettings = runSettings,
             Configuration = configuration,
-            DotnetPath = dotnetPath
+            DotnetPath = toolchain.DotnetPath,
+            ToolPaths = toolchain.ToolPaths,
+            ProgressInterval = toolchain.ProgressInterval
         };
         rejection = null;
         return true;

@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.AppMonitoring;
 
-/// <summary>
-/// PLAN-013 lot 4 (recette R2-115): the metric detail, the hourly metric aggregates and the logs of each
-/// application are purged after the durations of its project's « Conservation des données » setting.
-/// Applications sharing a duration are purged together, so a sweep costs one pass per distinct duration.
-/// </summary>
+/// <summary>Purges telemetry according to project retention settings, grouping applications by
+/// duration to bound sweep passes.</summary>
 internal static class AppDataRetentionSweep
 {
     public static async Task<AppDataRetentionPurge> PurgeAsync(

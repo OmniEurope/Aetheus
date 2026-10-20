@@ -57,7 +57,7 @@ public class VaultSecretGeneratorTests
         Assert.InRange(value.Length, 32, 64);
     }
 
-    // nightly-demo-prepare.sh refuses an ENCRYPTION_KEY shorter than 32 characters, and stripping
+    // The demo and QA prepare steps (aetheus-demo.yaml, aetheus-nightly.yaml) refuse an ENCRYPTION_KEY shorter than 32 characters, and stripping
     // is random-dependent, so the floor has to hold for every draw, not just a lucky one.
     [Fact]
     public void Generate_EncryptionKey_AlwaysClearsTheThirtyTwoCharacterFloor()
@@ -111,8 +111,8 @@ public class VaultSecretGeneratorTests
     {
         var repositoryRoot = RepositoryScan.Root;
         var deployScript = File.ReadAllText(Path.Combine(repositoryRoot, "deploy", "scripts", "deploy.sh"));
-        // R-248: the production recipe is declared by the versioned template and executed by the
-        // renderer prod-deploy-prepare.sh calls: #{SECRET_HEX_<N>}# is `openssl rand -hex <N>`.
+        // The production recipe is declared by the versioned template and executed by the renderer
+        // prod-deploy-prepare.sh calls: #{SECRET_HEX_<N>}# is `openssl rand -hex <N>`.
         var productionTemplate = File.ReadAllText(
             Path.Combine(repositoryRoot, "deploy", "env", "prod.env.sample"));
         var renderScript = File.ReadAllText(
@@ -149,8 +149,8 @@ public class VaultSecretGeneratorTests
         Assert.Equal(VaultSecretGenerator.Encoding.Hex, dbPassword.Encoding);
     }
 
-    /// <summary>Recette R-437: "32 characters" in the Generate menu is exactly that many letters and
-    /// digits, a fresh value each time.</summary>
+    /// <summary>"32 characters" in the Generate menu is exactly that many letters and digits, a
+    /// fresh value each time.</summary>
     [Theory]
     [InlineData(32)]
     [InlineData(64)]

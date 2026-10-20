@@ -9,11 +9,12 @@ public partial class AppLogsView : IAsyncDisposable
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
+    [Inject] private OmniDialogService Dialog { get; set; } = default!;
 
     [Parameter] public int AppId { get; set; }
 
-    /// <summary>Recette R-359: the application's name, written in the export's header (its id alone when
-    /// absent); recette R2-036: the start of the exported file's name.</summary>
+    /// <summary>Name the application in the export header and filename so the file identifies its
+    /// source; use its identifier when no name is available.</summary>
     [Parameter] public string? AppName { get; set; }
 
     /// <summary>The period the grid and the export read, in hours back from now.</summary>
@@ -22,20 +23,22 @@ public partial class AppLogsView : IAsyncDisposable
     /// <summary>The app's project: the scope of the <c>AppTelemetryChanged</c> push that reloads this view.</summary>
     [Parameter] public int ProjectId { get; set; }
 
-    /// <summary>
-    /// Recette R-358: the candidates of the severity column's filter, the OTLP severity classes the API
-    /// maps to their severity number ranges. Recette R2-012: listed by gravity, the order the filter keeps
-    /// since OE 1.4.0 (it sorted them alphabetically before).
-    /// </summary>
+    /// <summary>List OTLP severity classes in severity order so the filter matches the API's
+    /// numeric ranges and preserves their meaning.</summary>
     internal static readonly string[] SeverityClasses = ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"];
+
+    // Recette R3-35: clicking a line opens that exact entry, its message with its values as the cell
+    // shows it, and its attributes.
+    private Task OpenEntryAsync(AppLogEntryDto entry) => Logs.LogEntryDialog.OpenAsync(Dialog, L,
+        LogMessageTemplate.Render(entry.Body, entry.AttributesJson), entry.AttributesJson, L["LogAttributes"]);
 
     // What the Message column writes in an export: the message with its values, as the cell shows it.
     // Static, so every render hands the same delegate.
     private static readonly Func<AppLogEntryDto, object?> MessageExport =
         entry => LogMessageTemplate.Render(entry.Body, entry.AttributesJson);
 
-    // Recette R2-012: the badge, the filter and the export name a severity by the localized name of its
-    // class. Built once, so every render hands the grid the same delegates.
+    // Share localized severity names between badges, filters and exports; construct delegates once
+    // so renders retain stable references.
     private Func<AppLogEntryDto, object?> _severityExport = default!;
     private Func<string, string> _severityFilterLabel = default!;
 
@@ -47,8 +50,8 @@ public partial class AppLogsView : IAsyncDisposable
     private readonly PushRefresh _pushRefresh = new();
     private int? _loadedAppId;
 
-    // R-181: replaces the Refresh button. New log records stored by OTLP ingestion push
-    // AppTelemetryChanged for the app's project; the grid re-reads its rows with the current filters.
+    // Subscribe to the project's AppTelemetryChanged events so newly ingested logs refresh the grid
+    // with its current filters.
     private EntityOperationalFeed? _liveFeed;
     internal EntityOperationalFeed? LiveFeed => _liveFeed;
 
@@ -76,8 +79,7 @@ public partial class AppLogsView : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Recette R-358: every block the grid asks for goes to the API with the column sort and the header
+    /// <summary> Every block the grid asks for goes to the API with the column sort and the header
     /// filters, so the count and the rows describe the whole log of the app over the last 24 hours.
     /// </summary>
     private async Task LoadDataAsync(GridLoadArgs args)
@@ -109,11 +111,9 @@ public partial class AppLogsView : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Recette R2-011: the pages of an export, read from the API with the sort and the column filters of
-    /// the grid, without touching the rows it shows (the grid's load replaces them). A failed page fails
-    /// the export: no file, <see cref="OnExportFailed"/> says so.
-    /// </summary>
+    /// <summary> The pages of an export, read from the API with the sort and the column filters of
+    /// the grid, without touching the rows it shows (the grid's load replaces them). A failed page
+    /// fails the export: no file, <see cref="OnExportFailed"/> says so. </summary>
     private async Task<OmniDataGridResult<AppLogEntryDto>> LoadExportPageAsync(OmniDataGridLoadRequest request)
     {
         var result = await ReadAsync(AppId, request.ToGridLoadArgs());
@@ -128,7 +128,8 @@ public partial class AppLogsView : IAsyncDisposable
             sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
     }
 
-    /// <summary>R-181: a push refreshes the grid in place (rows, scroll position and filters kept).</summary>
+    /// <summary>A push refreshes the grid in place (rows, scroll position and filters
+    /// kept).</summary>
     private async Task RefreshFromPushAsync()
     {
         if (_grid is null) return;
@@ -153,7 +154,7 @@ public partial class AppLogsView : IAsyncDisposable
     private IReadOnlyList<OmniTableExportField> ExportFields =>
         AppTelemetryMarkdownExport.LogsFields(AppId, AppName, HistoryHours, key => L[key].Value);
 
-    /// <summary>Recette R2-036: <c>aetheus-logs</c>, then OE's generation time and the extension.</summary>
+    /// <summary><c>aetheus-logs</c>, then OE's generation time and the extension.</summary>
     private string ExportFileName => ExportFileNames.Stem(AppName, $"app-{AppId}", "logs");
 
     /// <summary>A page that could not be read: no file was produced, the toast says so. Any other

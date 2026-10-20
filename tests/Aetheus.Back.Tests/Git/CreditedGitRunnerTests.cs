@@ -4,9 +4,20 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.Tests.Git;
 
-public sealed class CreditedGitRunnerTests
+public sealed class CreditedGitRunnerTests : IDisposable
 {
-    private readonly CreditedGitRunner _runner = new(NullLogger<CreditedGitRunner>.Instance);
+    // Private credential-file directory: the leak assertion observes only this runner, never the shared %TEMP%.
+    private readonly string _credentialRoot =
+        Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"aetheus-credgit-{Guid.NewGuid():N}")).FullName;
+
+    private readonly CreditedGitRunner _runner;
+
+    public CreditedGitRunnerTests()
+    {
+        _runner = new CreditedGitRunner(NullLogger<CreditedGitRunner>.Instance, _credentialRoot);
+    }
+
+    public void Dispose() => Directory.Delete(_credentialRoot, recursive: true);
 
     [Fact]
     public async Task RunAsync_NoCredential_ExecutesGitAndCapturesChannels()
@@ -44,7 +55,6 @@ public sealed class CreditedGitRunnerTests
     [Fact]
     public async Task RunAsync_SshCredential_ShredsAllEphemeralCredentialFiles()
     {
-        var before = Directory.GetFiles(Path.GetTempPath(), "prom-git-*").ToHashSet(StringComparer.OrdinalIgnoreCase);
         var credential = new GitCredentialPayload
         {
             AuthType = GitAuthType.Ssh,
@@ -57,13 +67,10 @@ public sealed class CreditedGitRunnerTests
             Path.GetTempPath(), ["--version"], "git@example.invalid:team/repo.git",
             credential, TestContext.Current.CancellationToken);
 
-        var after = Directory.GetFiles(Path.GetTempPath(), "prom-git-*").ToHashSet(StringComparer.OrdinalIgnoreCase);
         Assert.True(result.Success);
-        // Only what this call ADDED is this test's business. The system temp directory is shared, so a
-        // file present before and gone after is another test cleaning up its own; asserting set
-        // equality made that failure look like a credential leak, with an empty list of leaked files.
-        var leaked = after.Except(before, StringComparer.OrdinalIgnoreCase).ToList();
-        Assert.True(leaked.Count == 0, $"Temporary credential files leaked: {string.Join(", ", leaked)}");
+        // The runner writes its credential files only under the private root, so any entry left is a leak.
+        var leaked = Directory.GetFileSystemEntries(_credentialRoot);
+        Assert.True(leaked.Length == 0, $"Temporary credential files leaked: {string.Join(", ", leaked)}");
     }
 
     [Fact]

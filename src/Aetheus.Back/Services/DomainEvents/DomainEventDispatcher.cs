@@ -36,9 +36,8 @@ public sealed class DomainEventDispatcher(
     {
         ArgumentNullException.ThrowIfNull(domainEvent);
 
-        // No catch, deliberately. This overload exists for events that replaced a direct method call:
-        // the caller used to see the exception, and swallowing it here would turn a broken state
-        // machine into a silent success - the caller would believe the work happened.
+        // Propagates handler failures so the caller cannot report success when an orchestration
+        // transition failed (ADR-039).
         foreach (var handler in services.GetServices<IDomainEventHandler<TEvent>>())
             await handler.HandleAsync(domainEvent, ct).ConfigureAwait(false);
     }

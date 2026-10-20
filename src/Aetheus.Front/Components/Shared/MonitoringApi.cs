@@ -112,30 +112,34 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
             $"api/appmonitoring/apps/{appId}/metrics/series?{query}", JsonOptions.Web);
     }
 
-    /// <summary>R-455: the per-route timings the application last exported through Aetheus.Telemetry.</summary>
+    /// <summary>The per-route timings the application last exported through
+    /// Aetheus.Telemetry.</summary>
     public async Task<AppPerformanceReportDto?> GetAppPerformanceAsync(int appId)
     {
         return await Http.GetFromJsonAsync<AppPerformanceReportDto>(
             $"api/appmonitoring/apps/{appId}/performance", JsonOptions.Web);
     }
 
-    /// <summary>PLAN-013 lot 6: the purged tables, their size now and the « Récupérer la place » results (administrators).</summary>
+    /// <summary>The purged tables, their size now and the « Récupérer la place » results
+    /// (administrators).</summary>
     public async Task<ReclaimSpaceStatusDto?> GetReclaimSpaceStatusAsync()
     {
         return await Http.GetFromJsonAsync<ReclaimSpaceStatusDto>("api/data-storage/reclaim", JsonOptions.Web);
     }
 
-    /// <summary>PLAN-013 lot 6: starts the VACUUM FULL of one purged table; refused (409) while a pipeline runs.</summary>
+    /// <summary>Starts the VACUUM FULL of one purged table; refused (409) while a pipeline
+    /// runs.</summary>
     public Task<ApiStatus> StartReclaimSpaceAsync(string table) =>
         PostJsonNoBodyAsync("api/data-storage/reclaim", new ReclaimSpaceRequest { Table = table });
 
-    /// <summary>PLAN-013 lot 5: what each project the caller can read occupies, against its budget.</summary>
+    /// <summary>What each project the caller can read occupies, against its budget.</summary>
     public async Task<ProjectStorageReportDto?> GetProjectStorageAsync()
     {
         return await Http.GetFromJsonAsync<ProjectStorageReportDto>("api/data-storage/projects", JsonOptions.Web);
     }
 
-    /// <summary>PLAN-013 lot 1: the database size the application last measured through Aetheus.Telemetry.</summary>
+    /// <summary>The database size the application last measured through
+    /// Aetheus.Telemetry.</summary>
     public async Task<AppDatabaseSizeReportDto?> GetAppDatabaseSizeAsync(int appId)
     {
         return await Http.GetFromJsonAsync<AppDatabaseSizeReportDto>(
@@ -246,7 +250,7 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
         var url = $"api/appmonitoring/apps/{appId}/logs?hours={hours}&page={page}&pageSize={pageSize}";
         if (minSeverity is { } ms) url += $"&minSeverity={ms}";
         if (!string.IsNullOrWhiteSpace(search)) url += $"&search={Uri.EscapeDataString(search)}";
-        // Recette R-358: the log grid's sort and header filters, applied by the API to the whole log.
+        // The log grid's sort and header filters, applied by the API to the whole log.
         if (!string.IsNullOrWhiteSpace(sortBy)) url += $"&sortBy={Uri.EscapeDataString(sortBy)}&sortDescending={sortDescending.ToString().ToLowerInvariant()}";
         return await Http.GetFromJsonAsync<PaginatedResult<AppLogEntryDto>>(GridColumnFilters.AddTo(url, filters), JsonOptions.Web) ?? new();
     }
@@ -287,7 +291,7 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
         return await Http.GetFromJsonAsync<List<TaskLogDto>>($"api/logs/task/{taskId}?maxLines={maxLines}", JsonOptions.Web, ct) ?? [];
     }
 
-    /// <summary>Recette R2-104: one page of a task's complete log, from its first line.</summary>
+    /// <summary>One page of a task's complete log, from its first line.</summary>
     public async Task<PaginatedResult<TaskLogDto>> GetTaskLogPageAsync(int taskId, int page, int pageSize, CancellationToken ct = default)
     {
         return await Http.GetFromJsonAsync<PaginatedResult<TaskLogDto>>(
@@ -315,7 +319,7 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
         if (entityId.HasValue) query["entityId"] = entityId.Value.ToString();
         if (dateFrom.HasValue) query["dateFrom"] = dateFrom.Value.ToString("O");
         if (dateTo.HasValue) query["dateTo"] = dateTo.Value.ToString("O");
-        // Recette R-238: the audit grids' column header filters.
+        // The audit grids' column header filters.
         var url = GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/audit", query), filters);
         return await Http.GetFromJsonAsync<PaginatedResult<AuditLogDto>>(url, JsonOptions.Web)
             ?? new PaginatedResult<AuditLogDto>();
@@ -396,7 +400,7 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
         string? sortBy = null, bool sortDescending = false, IReadOnlyList<GridFilter>? filters = null)
     {
         var query = PageQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-224: the channels grid's column header filters.
+        // The channels grid's column header filters.
         return await GetJsonAsync<PaginatedResult<NotificationChannelDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/notifications/channels", query), filters)).ConfigureAwait(false) ?? new();
     }
@@ -450,12 +454,12 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
         string? sortBy = null, bool sortDescending = false, IReadOnlyList<GridFilter>? filters = null)
     {
         var query = PageQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-224: the rules grid's column header filters.
+        // The rules grid's column header filters.
         return await GetJsonAsync<PaginatedResult<NotificationRuleDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/notifications/rules", query), filters)).ConfigureAwait(false) ?? new();
     }
 
-    /// <summary>Recette R-224: the event types and channels the rules grid's column filters offer.</summary>
+    /// <summary>The event types and channels the rules grid's column filters offer.</summary>
     public async Task<NotificationAdminFilterValuesDto> GetNotificationRuleFilterValuesAsync(CancellationToken ct = default) =>
         await GetJsonAsync<NotificationAdminFilterValuesDto>("api/notifications/rules/filter-values", ct).ConfigureAwait(false) ?? new();
 

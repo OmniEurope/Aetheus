@@ -15,7 +15,7 @@ public partial class AnalysisPortfolio : ComponentBase, IAsyncDisposable
     private int _count;
     private HubConnection? _hubConnection;
 
-    // Recette R-224: the column header filters, and only they, filter the grid (the filter bar is gone).
+    // Column header filters are the grid filter source.
     private List<GridFilter> _columnFilters = [];
     private AnalysisPortfolioFilterValuesDto _filterValues = new();
     private Func<string, string>? _categoryText;
@@ -57,7 +57,7 @@ public partial class AnalysisPortfolio : ComponentBase, IAsyncDisposable
         await StartRealtimeAsync();
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort and column filters.</summary>
     internal Task<PaginatedResult<AnalysisPortfolioRowDto>> ReadExportAsync(GridLoadArgs args)
     {
         var size = Math.Clamp(args.Top ?? 25, 1, 200);
@@ -79,7 +79,7 @@ public partial class AnalysisPortfolio : ComponentBase, IAsyncDisposable
         _count = result.TotalCount;
     }
 
-    // Recette R-226: a live change fetches the current page again in place, page, sort and filters kept.
+    // A live change fetches the current page again in place, page, sort and filters kept.
     private Task RefreshAsync() => _grid?.Refresh() ?? Task.CompletedTask;
 
     private async Task StartRealtimeAsync()
@@ -125,8 +125,9 @@ public partial class AnalysisPortfolio : ComponentBase, IAsyncDisposable
         _ => OmniTone.Neutral
     };
 
-    /// <summary>Recette R-373: the commit's page in its internal repository when the backend could tell
-    /// the repository from the report's run; text (null) otherwise, never a list to search in.</summary>
+    /// <summary>The commit's page in its internal repository when the backend could tell the
+    /// repository from the report's run; text (null) otherwise, never a list to search
+    /// in.</summary>
     internal static string? CommitHref(AnalysisPortfolioRowDto row) =>
         row.RepositoryId is { } repositoryId && !string.IsNullOrWhiteSpace(row.CommitHash)
             ? $"/git-repositories/{repositoryId}/commits/{Uri.EscapeDataString(row.CommitHash)}"

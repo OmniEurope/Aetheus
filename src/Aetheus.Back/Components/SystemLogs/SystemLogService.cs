@@ -86,8 +86,8 @@ public class SystemLogService : ISystemLogService
                 "System log query hit the {Cap}-entry in-memory cap; results truncated. Narrow the date range or file filter.",
                 MaxAggregatedEntries);
 
-        // Recette R-453: the grid's header filters and sort apply to every entry kept above, newest
-        // first when the grid names no sort.
+        // The grid's header filters and sort apply to every entry kept above, newest first when the
+        // grid names no sort.
         var query = SystemLogQuery.Columns.ApplyFilters(filtered.AsQueryable(), filters);
         var ordered = SystemLogQuery.Columns.ApplySorts(query, SystemLogQuery.SortsOf(sortBy, sortDescending))
             ?? query.OrderByDescending(entry => entry.Timestamp);
@@ -238,26 +238,34 @@ public class SystemLogService : ISystemLogService
         {
             timestamp = parsed;
             var rest = line[23..].TrimStart();
-            if (rest.StartsWith('[') && rest.IndexOf(']') is var idx and > 0)
-            {
-                var levelCode = rest[1..idx];
-                level = levelCode switch
-                {
-                    "VRB" or "VERBOSE" => "Verbose",
-                    "DBG" or "DEBUG" => "Debug",
-                    "INF" or "INFORMATION" => "Information",
-                    "WRN" or "WARNING" => "Warning",
-                    "ERR" or "ERROR" => "Error",
-                    "FTL" or "FATAL" => "Fatal",
-                    _ => levelCode
-                };
-                message = rest[(idx + 1)..].TrimStart();
-            }
-            else
-            {
-                message = rest;
-            }
+            (level, message) = SplitLevel(rest, level);
         }
         return new SystemLogEntryDto(0, timestamp, level, "", message, null, null);
+    }
+
+    private static readonly Dictionary<string, string> LevelNames = new(StringComparer.Ordinal)
+    {
+        ["VRB"] = "Verbose",
+        ["VERBOSE"] = "Verbose",
+        ["DBG"] = "Debug",
+        ["DEBUG"] = "Debug",
+        ["INF"] = "Information",
+        ["INFORMATION"] = "Information",
+        ["WRN"] = "Warning",
+        ["WARNING"] = "Warning",
+        ["ERR"] = "Error",
+        ["ERROR"] = "Error",
+        ["FTL"] = "Fatal",
+        ["FATAL"] = "Fatal"
+    };
+
+    /// <summary>Reads a leading <c>[LEVEL]</c> tag: a known code is named in full, any other code is kept
+    /// as written. Without a tag the level stays <paramref name="defaultLevel"/> and the whole text is the
+    /// message.</summary>
+    private static (string Level, string Message) SplitLevel(string rest, string defaultLevel)
+    {
+        if (!rest.StartsWith('[') || rest.IndexOf(']') is not (var idx and > 0)) return (defaultLevel, rest);
+        var levelCode = rest[1..idx];
+        return (LevelNames.GetValueOrDefault(levelCode, levelCode), rest[(idx + 1)..].TrimStart());
     }
 }

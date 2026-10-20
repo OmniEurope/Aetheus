@@ -3,11 +3,7 @@ using Aetheus.Back.Services.DomainEvents;
 
 namespace Aetheus.Back.Components.Servers.Events;
 
-/// <summary>
-/// PLAN-005: an agent heartbeat carried the mail inventory of an installed mail stack. Servers owns the
-/// heartbeat and the <c>MailState</c> row; what the inventory means for mail domains, accounts and aliases
-/// is decided by the Mail module (reconciliation), which keeps the module dependency one-way
-/// (Mail depends on Servers, never the reverse). Published to the background queue: a reconciliation
-/// failure must never fail the heartbeat that proved the agent alive.
-/// </summary>
+/// <summary>Carries heartbeat mail inventory from Servers to Mail for reconciliation without a
+/// reverse module dependency. Background dispatch prevents reconciliation failure from failing the
+/// heartbeat (ADR-039).</summary>
 public sealed record MailInventoryReportedEvent(int ServerId, MailDataDto Mail) : IDomainEvent;

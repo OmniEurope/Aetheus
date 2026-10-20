@@ -18,8 +18,8 @@
 
     @if (_kind is OwnerKind.Project or OwnerKind.Environment or OwnerKind.ProjectServer)
     {
-        @* SITE-FUNC-OWNER-001: the context project of an environment or server owner is _selectedProjectId;
-           ProjectId is only the Project owner and stays null for the two scoped kinds. *@
+        @* Use _selectedProjectId for the context of environment and server owners because
+           ProjectId belongs only to project ownership. *@
         <OmniFormField For="owner-project">
             <LabelContent>@L["Project"]</LabelContent>
             <ChildContent>

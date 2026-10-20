@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.Artifacts;
 
-/// <summary>Audit R2-016 follow-up: the persisted growth history of the artifact volume.</summary>
+/// <summary>Persists artifact-volume growth measurements.</summary>
 public interface IArtifactStorageMeasurementRepository
 {
     /// <summary>The kept measurements, oldest first.</summary>

@@ -4,13 +4,13 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
 public partial class ServerOverviewSection : IDisposable
 {
-    // Recette R-210: the three states a scanner diagnostic reads as, which the Status column also filters on.
+    // The three states a scanner diagnostic reads as, which the Status column also filters on.
     private const string ScannerReady = "ready";
     private const string ScannerOnDemand = "on-demand";
     private const string ScannerUnavailable = "unavailable";
     private static readonly IReadOnlyList<string> ScannerStates = [ScannerReady, ScannerOnDemand, ScannerUnavailable];
 
-    private static string ScannerStateOf(string value) => value.Contains(":degraded:", StringComparison.OrdinalIgnoreCase)
+    internal static string ScannerStateOf(string value) => value.Contains(":degraded:", StringComparison.OrdinalIgnoreCase)
         || value.Contains(":unavailable:", StringComparison.OrdinalIgnoreCase)
         ? ScannerUnavailable
         : value.Contains(":available-on-demand:", StringComparison.OrdinalIgnoreCase) ? ScannerOnDemand : ScannerReady;
@@ -29,7 +29,7 @@ public partial class ServerOverviewSection : IDisposable
 
     private string ScannerDiagnosticState(string value) => ScannerStateText(ScannerStateOf(value));
 
-    // Recette R2-124: both columns are templates; the export writes the state and the diagnostic line.
+    // Both columns are templates; the export writes the state and the diagnostic line.
     private Func<string, object?>? _scannerStateExport;
     private Func<string, object?> ScannerStateExport => _scannerStateExport ??= ScannerDiagnosticState;
     private static readonly Func<string, object?> ScannerDetailsExport = diagnostic => diagnostic;
@@ -56,6 +56,40 @@ public partial class ServerOverviewSection : IDisposable
     [Parameter] public bool? PipelineRunnerAvailable { get; set; }
     [Parameter] public DateTime? LastUpdated { get; set; }
     [Parameter] public EventCallback<ServerDetailDto> ServerChanged { get; set; }
+
+    // PLAN-010 lot 1: the fullest inode table under the disk figure. Null means the agent does not
+    // report inodes (Windows, an older agent), shown as unknown rather than as an empty table.
+    private string InodeText => Server.InodeUsedPercent is { } percent
+        ? L["InodesUsedPercent", percent.ToString("0.#", System.Globalization.CultureInfo.CurrentCulture)]
+        : L["InodesUnknown"];
+
+    private OmniTextTone InodeTone => Server.InodeUsedPercent is { } percent
+        && MetricThresholdHelper.BarClass(percent) == "metric-bar-danger"
+            ? OmniTextTone.Danger
+            : OmniTextTone.Muted;
+
+    // PLAN-010 lot 1: the agent's clock against the backend's, with the bound of the measure. When
+    // the bound covers zero no direction is claimed; no measure reads as unknown, never as in sync.
+    private string ClockOffsetText => Server is { ClockOffsetMs: { } offset, ClockOffsetUncertaintyMs: { } uncertainty }
+        ? Math.Abs(offset) <= uncertainty
+            ? L["ClockOffsetInSync", FormatClockDuration(uncertainty)]
+            : L[offset > 0 ? "ClockOffsetAhead" : "ClockOffsetBehind",
+                FormatClockDuration(Math.Abs(offset)), FormatClockDuration(uncertainty)]
+        : L["ClockOffsetUnknown"];
+
+    private static string FormatClockDuration(double milliseconds) => milliseconds < 1000
+        ? string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{milliseconds:0} ms")
+        : string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{milliseconds / 1000:0.0} s");
+    // PLAN-010 lot 1: OOM kills since boot under the memory figure. Windows has no such counter (not
+    // applicable); a Linux agent that does not report it reads unknown, never "none".
+    private string OomKillText => Server.OomKillsSinceBoot switch
+    {
+        { } count => L["OomKillsSinceBoot", count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)],
+        null when OsTypeHelper.FromDescription(Server.OsDescription) == OsType.Windows => L["OomKillsNotApplicable"],
+        null => L["OomKillsUnknown"]
+    };
+
+    private OmniTextTone OomKillTone => Server.OomKillsSinceBoot > 0 ? OmniTextTone.Danger : OmniTextTone.Muted;
 
     private bool _runnerBusy;
     private bool _isolationBusy;
@@ -193,14 +227,14 @@ public partial class ServerOverviewSection : IDisposable
             ? target
             : null;
 
-    /// <summary>Recette R2-033: an update is due, so the Overview offers it under the version.</summary>
+    /// <summary>An update is due, so the Overview offers it under the version.</summary>
     internal bool AgentUpdateAvailable => AgentUpdateTarget is not null;
 
     private bool CanWrite => Permissions.CanWrite(ResourceType.Server, Server.Id);
 
     private bool _agentUpdateBusy;
 
-    // Recette R2-111: the update this view queued, until the agent reports its version or it fails.
+    // The update this view queued, until the agent reports its version or it fails.
     private string? _requestedAgentTarget;
     private int? _requestedAgentUpdateId;
 

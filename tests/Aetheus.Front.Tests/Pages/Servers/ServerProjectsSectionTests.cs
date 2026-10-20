@@ -19,7 +19,7 @@ public class ServerProjectsSectionTests : BunitContext
     {
         _handler.SetJsonResponse("api/servers/1/projects", new PaginatedResult<ProjectDto>());
         var cut = Render<ServerProjectsSection>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup));
         // The title heading is gone: the page header already shows it.
         Assert.DoesNotContain(">Projects<", cut.Markup, StringComparison.Ordinal);
     }
@@ -33,7 +33,7 @@ public class ServerProjectsSectionTests : BunitContext
             TotalCount = 1
         });
         var cut = Render<ServerProjectsSection>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForAssertion(() => Assert.Contains("MyProject", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("MyProject", cut.Markup));
         // The project name renders as a link to the project overview, and the Active status badge shows.
         Assert.Contains("/projects/7/overview", cut.Markup);
         Assert.Contains("Active", cut.Markup);
@@ -75,7 +75,7 @@ public class ServerProjectsSectionTests : BunitContext
         });
 
         var cut = Render<ServerProjectsSection>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }

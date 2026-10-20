@@ -8,10 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.DataSeed;
 
-/// <summary>
-/// Recette R2-094 (decided 2026-10-04, option a): every shipped delivery template restarts at v1 with
-/// its current content, the pipelines extending it are pinned to @1, once per database.
-/// </summary>
+/// <summary>Normalize shipped-template versions and dependent pipeline references once per
+/// database.</summary>
 public sealed class DeliveryTemplateVersionResetTests
 {
     private const string DeployProdYaml =
@@ -38,8 +36,8 @@ public sealed class DeliveryTemplateVersionResetTests
         foreach (var name in new[] { "host-bluegreen-deploy", "application-candidate", "application-promotion", "application-ci" })
         {
             var template = await LoadTemplateAsync(db, organizationId, name);
-            // Renumbered to one v1 holding the v1 file; a template that ships a later file (the
-            // candidate's v2, R2-121) then gets it from the seeding, after the reset.
+            // Reset to the first shipped file as v1; normal seeding adds any later shipped files
+            // afterward.
             var shippedFiles = DeliveryPipelineTemplateSeeder.Definitions[name].Resources;
             Assert.Equal(shippedFiles.Length, template.LatestVersion);
             Assert.Equal(Enumerable.Range(1, shippedFiles.Length), template.Versions.Select(item => item.Version).Order());
@@ -60,17 +58,15 @@ public sealed class DeliveryTemplateVersionResetTests
             "host-bluegreen-deploy: v6 -> v1", Arg.Any<CancellationToken>());
         await audit.Received(1).LogAsync("TemplateVersionRepinned", "Pipeline", Arg.Any<int?>(),
             Arg.Any<string?>(), Arg.Any<CancellationToken>());
-        // A database that never ran R2-094 gets one run, which writes both markers.
+        // A database without either reset marker receives both markers in one run.
         Assert.Equal(1, await db.AppSettings.CountAsync(setting => setting.Key == DeliveryTemplateVersionReset.MarkerKey,
             TestContext.Current.CancellationToken));
         Assert.Equal(1, await db.AppSettings.CountAsync(setting => setting.Key == DeliveryTemplateVersionReset.FirstResetMarkerKey,
             TestContext.Current.CancellationToken));
     }
 
-    /// <summary>
-    /// Recette R1-20: production ran R2-094 on 2026-10-05 and the generic templates grew to v6 since.
-    /// The second reset runs once more on such a database, under its own marker.
-    /// </summary>
+    /// <summary>The current reset runs once under its own marker even when the compatibility reset
+    /// marker exists.</summary>
     [Fact]
     public async Task SeedAsync_DatabaseThatRanOnlyTheFirstReset_IsResetAgain()
     {
@@ -104,7 +100,8 @@ public sealed class DeliveryTemplateVersionResetTests
             TestContext.Current.CancellationToken));
     }
 
-    /// <summary>With the R1-20 marker present nothing is renumbered, however many versions a template holds.</summary>
+    /// <summary>The completion marker prevents renumbering regardless of template version
+    /// count.</summary>
     [Fact]
     public async Task SeedAsync_WithTheMarkerPresent_RenumbersNothing()
     {
@@ -129,10 +126,8 @@ public sealed class DeliveryTemplateVersionResetTests
         Assert.Empty(git.ReceivedCalls());
     }
 
-    /// <summary>
-    /// The candidate ships v1 and v2 (R2-121). Holding exactly those two files, it is left alone:
-    /// renumbering it would hand its v2 pipelines (the wizard's) the v1 content.
-    /// </summary>
+    /// <summary>Leave a template already matching all shipped versions unchanged so its references
+    /// retain the correct content.</summary>
     [Fact]
     public async Task SeedAsync_TemplateHoldingExactlyItsShippedFiles_IsLeftAlone()
     {

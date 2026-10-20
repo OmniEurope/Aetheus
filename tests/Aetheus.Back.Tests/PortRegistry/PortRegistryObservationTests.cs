@@ -8,11 +8,8 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Back.Tests.PortRegistry;
 
-/// <summary>
-/// PLAN-005 lot 2, over the real repository. The rule under test is the one that makes the whole
-/// design safe: an observation is evidence, so it replaces observations and touches nothing a project
-/// declared. Getting this wrong would let a scan silently release another project's port.
-/// </summary>
+/// <summary>Exercise the repository to verify scans replace observed evidence without modifying
+/// project declarations or releasing declared ports.</summary>
 public sealed class PortRegistryObservationTests : IDisposable
 {
     private static readonly DateTime Origin = new(2026, 9, 7, 12, 0, 0, DateTimeKind.Utc);
@@ -178,7 +175,7 @@ public sealed class PortRegistryObservationTests : IDisposable
         Assert.Equal(PortReservationSource.Observed, dto.Source);
     }
 
-    // --- PLAN-005 lot 3: the combined check ---
+    // Combined port checks.
 
     [Fact]
     public async Task CheckPortsAsync_NeverScanned_SaysUnknownInsteadOfFree()
@@ -251,9 +248,8 @@ public sealed class PortRegistryObservationTests : IDisposable
     [Fact]
     public async Task CheckPortsAsync_DeclaredByTheAskingProjectAndListening_ReadsAsItsOwn()
     {
-        // PLAN-003 lot 24 / D14: the ordinary case of a deployed app answering on the port it
-        // declared. Judged without the asking project, the same row read "UNUSABLE - Free - Yes",
-        // three true fragments that together told the reader nothing.
+        // Evaluate a declared listening port in the requesting project context so its own
+        // deployment is distinguished from another owner.
         await _sut.DeclareAsync(7, [10031], "project:4", "portfolio-prod-front", 4, Ct);
         await _sut.ReplaceObservedAsync(7, [Observed(10031, "portfolio-prod-front")], FirstScan, Ct);
 
@@ -337,7 +333,7 @@ public sealed class PortRegistryObservationTests : IDisposable
                 7, new CreatePortReservationRequest { Port = 10031, OwnerLabel = "moi" }, Ct));
     }
 
-    // --- PLAN-005 lot 4: allocation ---
+    // Port allocation.
 
     [Fact]
     public async Task GetPortRangeAsync_WithoutARow_ReportsTheFleetDefaultAsSuch()
@@ -464,7 +460,7 @@ public sealed class PortRegistryObservationTests : IDisposable
             _sut.AllocateAsync(7, count, "project:4", "portfolio", 4, Ct));
     }
 
-    // --- D10: the second barrier is no longer mute ---
+    // Conflict rejection at the registry barrier.
 
     [Fact]
     public async Task DeclareAsync_OnAPortDeclaredByAnother_ThrowsInsteadOfLogging()
@@ -490,7 +486,7 @@ public sealed class PortRegistryObservationTests : IDisposable
         Assert.Equal(1, await _db.ServerPortReservations.CountAsync(row => row.Port == 10031, Ct));
     }
 
-    // --- PLAN-005 lot 6: a deleted project releases its ports ---
+    // Project deletion releases its ports.
 
     [Fact]
     public async Task ReleaseProjectPortsAsync_DropsEveryPortThatProjectHeld()
@@ -525,7 +521,7 @@ public sealed class PortRegistryObservationTests : IDisposable
         Assert.Equal(0, await _sut.ReleaseProjectPortsAsync(4, Ct));
     }
 
-    // --- PLAN-005 lot 6: the two isolated port fields, now carried by the registry ---
+    // Project and server-application port fields are reflected in the registry.
 
     [Fact]
     public async Task SyncOwnedPortAsync_RecordsTheOwnersPortAsAManualReservation()

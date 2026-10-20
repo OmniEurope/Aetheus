@@ -35,34 +35,22 @@ public interface IPipelineCheckpointReuseService
         int sourceRunId, CancellationToken ct = default);
 }
 
-/// <summary>
-/// The checkpoint-reuse gate, extracted from <see cref="PipelineRunService"/>. It comes out whole
-/// because reuse is one decision made of independent refusals: each check below can only ever return
-/// "no, replay it", and the engine's only interest is that single boolean.
-///
-/// It is deliberately fail-closed - any missing evidence (no source run, no artifacts, an agent that
-/// moved version, a byte that no longer hashes) means replay, never silent adoption.
-/// </summary>
+/// <summary>Checkpoint reuse fails closed: missing runs, artifacts, matching agent versions or
+/// valid hashes require replay.</summary>
 public sealed class PipelineCheckpointReuseService(
     IPipelineRepository repo,
 
-    // Deliberate reach-in to the Artifacts repository (not IArtifactService): ArtifactService already
-    // depends on IPipelineRunService (IsServerAssignedToRunAsync), so injecting IArtifactService here
-    // would form a DI cycle. The artifact reads below are verification and lease writes, not artifact
-    // lifecycle; this is the documented cycle-breaker rather than a layering violation. Inherited from
-    // PipelineRunService, which no longer needs it now that checkpoint reuse owns it.
+    // Verification reads and lease writes use the artifact repository directly because
+    // ArtifactService depends on the pipeline run service and would introduce a dependency cycle
+    // (ADR-039).
     IArtifactRepository artifactRepo,
     IArtifactStorageService artifactStorage,
     IAuditService audit,
     IPipelineRunParameterResolver parameterResolver,
     IPostgresLeaderLease operationLock) : IPipelineCheckpointReuseService
 {
-    /// <summary>
-    /// Recette R2-121: the three children a resumed candidate may adopt, by role. A child plays a role
-    /// when it extends the role's shipped template (how the setup wizard creates <c>portfolio-ci</c>)
-    /// or carries the self-deploy pipeline's historical name; the preview names it as the candidate's
-    /// own variable does, which for aetheus-candidate is the historical name again.
-    /// </summary>
+    /// <summary>Candidate children are identified by shipped template role or the recognized
+    /// self-deploy name; preview names follow the candidate's variables.</summary>
     private static readonly CheckpointRole[] ResumableRoles =
     [
         new("aetheus-ci", DeliveryTemplateNames.Ci, "APPLICATION_CI_PIPELINE", "AETHEUS_CHECKPOINT_CI_RUN_ID"),

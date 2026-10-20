@@ -120,7 +120,7 @@ public class PortsentryService(IPortsentryRepository repo, IAuditService audit, 
         };
     }
 
-    /// <summary>Recette R-210: what the blocked IPs grid's checkable Protocol filter offers.</summary>
+    /// <summary>What the blocked IPs grid's checkable Protocol filter offers.</summary>
     public async Task<PortsentryFilterValuesDto> GetFilterValuesAsync(int serverId, CancellationToken ct = default) =>
         new() { Protocols = await repo.GetBlockedProtocolsAsync(serverId, ct).ConfigureAwait(false) };
 

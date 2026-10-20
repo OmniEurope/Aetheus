@@ -10,7 +10,7 @@ public partial class PipelineRunLineageTile
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
 
-    /// <summary>Recette R2-026: the follow-up runs named in the tile; more open in a dialog.</summary>
+    /// <summary>The follow-up runs named in the tile; more open in a dialog.</summary>
     internal const int MaxShown = 3;
 
     [Parameter, EditorRequired] public PipelineRunDto Run { get; set; } = default!;
@@ -23,9 +23,8 @@ public partial class PipelineRunLineageTile
     private string? ParentPipeline => PipelineRunFormatting.UpstreamPipeline(Run.ResolvedVariables);
     private int? ParentRunId => PipelineRunFormatting.UpstreamRunId(Run.ResolvedVariables);
 
-    /// <summary>Recette R2-048: a sub-label beside a pipeline name and run number does not fit one
-    /// 11rem tile ("Pipeline parente aetheus-candidate #2484" was cut), so the tile spans two columns
-    /// whenever it names a run, a parent or a follow-up, or a long account name.</summary>
+    /// <summary>The lineage tile spans two columns when it names a run or a long account, leaving
+    /// room for its label and identifier.</summary>
     internal bool IsWide => ParentPipeline is not null
                             || _lineage is { Downstream.Count: > 0 }
                             || ActorText.Length > WideActorLength;

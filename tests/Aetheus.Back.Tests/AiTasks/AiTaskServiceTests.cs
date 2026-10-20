@@ -4,7 +4,6 @@ using System.Text.Json;
 using Aetheus.Back.Components.AiTasks;
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Git;
-using Aetheus.Back.Components.Organizations;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Exceptions;
@@ -19,13 +18,10 @@ namespace Aetheus.Back.Tests.AiTasks;
 public sealed class AiTaskServiceTests
 {
     private readonly IAiTaskRepository _repo = Substitute.For<IAiTaskRepository>();
-    private readonly IOrganizationRepository _organizations =
-        Substitute.For<IOrganizationRepository>();
     private readonly IAuditService _audit = Substitute.For<IAuditService>();
     private readonly IEncryptionService _encryption = Substitute.For<IEncryptionService>();
     private readonly ISecretMaskingService _masking = Substitute.For<ISecretMaskingService>();
     private readonly ITaskQueueNotifier _notifier = Substitute.For<ITaskQueueNotifier>();
-    private readonly IGitLightService _gitLight = Substitute.For<IGitLightService>();
     private readonly FakeTimeProvider _time = new(
         new DateTimeOffset(2026, 7, 30, 12, 0, 0, TimeSpan.Zero));
     private readonly AiTaskService _sut;
@@ -38,12 +34,10 @@ public sealed class AiTaskServiceTests
             .Returns(call => call.ArgAt<string>(0));
         _sut = new AiTaskService(
             _repo,
-            _organizations,
             _audit,
             _encryption,
             _masking,
             _notifier,
-            _gitLight,
             _time,
             new ConfigurationBuilder().AddInMemoryCollection(
                 new Dictionary<string, string?>
@@ -72,197 +66,6 @@ public sealed class AiTaskServiceTests
         Assert.Equal(5, result.Page);
         Assert.Equal(25, result.PageSize);
         Assert.Equal(101, result.TotalCount);
-    }
-
-    [Fact]
-    public async Task ProfileQueries_MapEncryptedEnvironmentWithoutDisclosingValues()
-    {
-        var profile = Profile();
-        _repo.GetProfilesPageAsync(
-                "review", 2, 10, Arg.Any<CancellationToken>())
-            .Returns(([profile], 11));
-        _repo.FindProfileAsync(profile.Id, Arg.Any<CancellationToken>()).Returns(profile);
-        _repo.GetProfilesForOrganizationsAsync(
-                Arg.Is<List<int>>(ids => ids.SequenceEqual(new[] { 7 })),
-                Arg.Any<CancellationToken>())
-            .Returns([profile]);
-
-        var page = await _sut.GetProfilesAsync(
-            new PaginationRequest { Search = "review", Page = 2, PageSize = 10 },
-            TestContext.Current.CancellationToken);
-        var single = await _sut.GetProfileAsync(
-            profile.Id,
-            TestContext.Current.CancellationToken);
-        var options = await _sut.GetProfileOptionsAsync(
-            [7],
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(11, page.TotalCount);
-        Assert.Equal(2, page.Page);
-        Assert.Equal("***", Assert.Single(page.Items).Environment["TOKEN"]);
-        Assert.Equal(["{prompt_file}", "--quiet"], single!.ArgsTemplate);
-        Assert.Equal(profile.Name, Assert.Single(options).Name);
-    }
-
-    [Fact]
-    public async Task CreateProfileAsync_DefaultOrganization_TrimsClampsAndAudits()
-    {
-        _organizations.GetDefaultOrganizationIdAsync(Arg.Any<CancellationToken>())
-            .Returns(7);
-        _repo.AddProfileAsync(
-                Arg.Any<AiRunnerProfile>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                call.Arg<AiRunnerProfile>().Id = 41;
-                return Task.CompletedTask;
-            });
-
-        var result = await _sut.CreateProfileAsync(
-            new CreateAiRunnerProfileRequest
-            {
-                Name = "  reviewer  ",
-                Description = "  description  ",
-                Binary = "  codex  ",
-                ArgsTemplate = ["{prompt_file}", "--quiet"],
-                Environment = new Dictionary<string, string> { ["TOKEN"] = "secret" },
-                TimeoutSeconds = -10,
-                MaxOutputBytes = 99,
-                SendsDataExternally = true
-            },
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(41, result.Id);
-        Assert.Equal(7, result.OrganizationId);
-        Assert.Equal("reviewer", result.Name);
-        Assert.Equal(1, result.TimeoutSeconds);
-        Assert.Equal(1024, result.MaxOutputBytes);
-        Assert.Equal("***", result.Environment["TOKEN"]);
-        await _audit.Received(1).LogAsync(
-            "Created",
-            "AiRunnerProfile",
-            41,
-            "reviewer",
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task CreateProfileAsync_NoOrganization_RejectsRequest()
-    {
-        _organizations.GetDefaultOrganizationIdAsync(Arg.Any<CancellationToken>())
-            .Returns((int?)null);
-
-        await Assert.ThrowsAsync<BadRequestException>(() => _sut.CreateProfileAsync(
-            ValidCreateProfile() with { OrganizationId = null },
-            TestContext.Current.CancellationToken));
-    }
-
-    [Theory]
-    [InlineData("../codex", "{prompt_file}")]
-    [InlineData("codex", "{prompt_file}:suffix")]
-    [InlineData("codex", "--no-prompt")]
-    public async Task CreateProfileAsync_InvalidExecutionTemplate_IsRejected(
-        string binary,
-        string argument)
-    {
-        await Assert.ThrowsAsync<BadRequestException>(() => _sut.CreateProfileAsync(
-            ValidCreateProfile() with
-            {
-                Binary = binary,
-                ArgsTemplate = [argument]
-            },
-            TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task UpdateProfileAsync_RestoresMaskedSecretsAndReplacesExplicitValues()
-    {
-        var profile = Profile();
-        profile.EnvironmentJsonEncrypted =
-            """{"TOKEN":"keep","OLD":"remove"}""";
-        _repo.FindProfileAsync(profile.Id, Arg.Any<CancellationToken>()).Returns(profile);
-
-        var result = await _sut.UpdateProfileAsync(
-            profile.Id,
-            new UpdateAiRunnerProfileRequest
-            {
-                Name = " updated ",
-                Description = " changed ",
-                Binary = " codex ",
-                ArgsTemplate = ["{prompt_file}", "{output_file}"],
-                Environment = new Dictionary<string, string>
-                {
-                    ["TOKEN"] = "***",
-                    ["NEW"] = "value"
-                },
-                TimeoutSeconds = 120,
-                MaxOutputBytes = 8192,
-                SendsDataExternally = true
-            },
-            TestContext.Current.CancellationToken);
-
-        Assert.NotNull(result);
-        Assert.Equal("updated", result.Name);
-        var stored = JsonSerializer.Deserialize<Dictionary<string, string>>(
-            profile.EnvironmentJsonEncrypted)!;
-        Assert.Equal("keep", stored["TOKEN"]);
-        Assert.Equal("value", stored["NEW"]);
-        Assert.False(stored.ContainsKey("OLD"));
-        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task UpdateProfileAsync_MissingProfile_ReturnsNull()
-    {
-        _repo.FindProfileAsync(404, Arg.Any<CancellationToken>())
-            .Returns((AiRunnerProfile?)null);
-
-        Assert.Null(await _sut.UpdateProfileAsync(
-            404,
-            new UpdateAiRunnerProfileRequest
-            {
-                Name = "reviewer",
-                Binary = "codex",
-                ArgsTemplate = ["{prompt_file}"]
-            },
-            TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task DeleteProfileAsync_EnforcesReferencesAndRemovesUnusedProfile()
-    {
-        var profile = Profile();
-        _repo.FindProfileAsync(profile.Id, Arg.Any<CancellationToken>()).Returns(profile);
-        _repo.ProfileHasDefinitionsAsync(profile.Id, Arg.Any<CancellationToken>())
-            .Returns(true, false);
-
-        await Assert.ThrowsAsync<ConflictException>(() => _sut.DeleteProfileAsync(
-            profile.Id,
-            TestContext.Current.CancellationToken));
-        Assert.True(await _sut.DeleteProfileAsync(
-            profile.Id,
-            TestContext.Current.CancellationToken));
-
-        await _repo.Received(1).RemoveProfileAsync(
-            profile,
-            Arg.Any<CancellationToken>());
-        await _audit.Received(1).LogAsync(
-            "Deleted",
-            "AiRunnerProfile",
-            profile.Id,
-            profile.Name,
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task DeleteProfileAsync_MissingProfile_ReturnsFalse()
-    {
-        _repo.FindProfileAsync(404, Arg.Any<CancellationToken>())
-            .Returns((AiRunnerProfile?)null);
-
-        Assert.False(await _sut.DeleteProfileAsync(
-            404,
-            TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -477,9 +280,9 @@ public sealed class AiTaskServiceTests
         {
             Id = 3,
             Name = "reviewer",
-            Binary = "codex",
-            ArgsTemplateJson = "[]",
-            EnvironmentJsonEncrypted = "{}",
+            Provider = "anthropic",
+            Model = "claude-sonnet-5-5",
+            ApiKeyEncrypted = "sk-key",
             TimeoutSeconds = 90,
             MaxOutputBytes = 4096
         };
@@ -629,48 +432,135 @@ public sealed class AiTaskServiceTests
     public async Task BuildPipelineExecutionAsync_MapsProfileAndPipelineContext()
     {
         var profile = Profile();
-        _repo.FindProfileByNameAsync(
-                profile.Name,
-                profile.OrganizationId,
-                Arg.Any<CancellationToken>())
-            .Returns(profile);
+        OrganizationProfiles(profile.OrganizationId, profile);
 
-        var spec = await _sut.BuildPipelineExecutionAsync(
+        var execution = await _sut.BuildPipelineExecutionAsync(
             profile.Name,
+            null,
             profile.OrganizationId,
             "review",
             gate: true,
             pipelineRunId: 71,
             workingDirectory: "/workspace",
-            TestContext.Current.CancellationToken);
+            ct: TestContext.Current.CancellationToken);
 
+        var spec = execution.Spec;
         Assert.NotNull(spec);
+        Assert.Null(execution.Problem);
+        // The step named it, so there is nothing to flag; the agent still writes why at the top of the log.
+        Assert.False(execution.IsFallback);
+        Assert.Equal("Using AI runner profile 'reviewer' named by the step.", execution.Resolution);
+        Assert.Equal(execution.Resolution, spec.EnvironmentVariables["AETHEUS_AI_PROFILE_RESOLUTION"]);
         Assert.Equal("ai-run", spec.Target);
         Assert.Equal(profile.TimeoutSeconds, spec.TimeoutSeconds);
         Assert.Equal("true", spec.EnvironmentVariables["AETHEUS_AI_GATE"]);
         Assert.Equal("/workspace", spec.EnvironmentVariables["AETHEUS_AI_WORKING_DIR"]);
-        Assert.Equal(profile.Binary, spec.EnvironmentVariables["AETHEUS_AI_BINARY"]);
+        Assert.Equal("anthropic", spec.EnvironmentVariables["AETHEUS_AI_PROVIDER"]);
+        Assert.Equal("https://api.anthropic.com", spec.EnvironmentVariables["AETHEUS_AI_BASE_URL"]);
+        Assert.Equal("claude-sonnet-5-5", spec.EnvironmentVariables["AETHEUS_AI_MODEL"]);
+        Assert.Equal("sk-key", spec.EnvironmentVariables["AETHEUS_AI_API_KEY"]);
+        Assert.Equal("low", spec.EnvironmentVariables["AETHEUS_AI_EFFORT"]);
+        Assert.Equal("8000", spec.EnvironmentVariables["AETHEUS_AI_MAX_OUTPUT_TOKENS"]);
         Assert.False(spec.EnvironmentVariables.ContainsKey("AETHEUS_AI_TASK_DEFINITION_ID"));
+        Assert.False(spec.EnvironmentVariables.ContainsKey("AETHEUS_AI_BINARY"));
+        // The key is a secret of the run: everything the run shows a person is masked.
+        _masking.Received(1).RegisterRuntimeSecret(71, "sk-key");
     }
 
     [Fact]
-    public async Task BuildPipelineExecutionAsync_MissingProfile_ReturnsNoSpec()
+    public async Task BuildPipelineExecutionAsync_CliProfile_IsRefusedAsToReconfigure()
     {
-        _repo.FindProfileByNameAsync(
-                "missing",
-                7,
-                Arg.Any<CancellationToken>())
-            .Returns((AiRunnerProfile?)null);
+        var profile = Profile();
+        profile.Provider = string.Empty;
+        profile.Binary = "claude";
+        OrganizationProfiles(profile.OrganizationId, profile);
 
-        Assert.Null(await
-            _sut.BuildPipelineExecutionAsync(
-                "missing",
-                7,
-                "prompt",
-                gate: false,
-                pipelineRunId: 71,
-                workingDirectory: "/workspace",
-                TestContext.Current.CancellationToken));
+        var execution = await _sut.BuildPipelineExecutionAsync(
+            profile.Name, null, profile.OrganizationId, "review", gate: false, pipelineRunId: 71,
+            workingDirectory: "/workspace", ct: TestContext.Current.CancellationToken);
+
+        Assert.Null(execution.Spec);
+        Assert.Contains("must be reconfigured", execution.Problem, StringComparison.Ordinal);
+        _masking.DidNotReceiveWithAnyArgs().RegisterRuntimeSecret(default, default!);
+    }
+
+    [Fact]
+    public async Task RunNowAsync_CliProfile_IsRefusedBeforeAnythingIsQueued()
+    {
+        var profile = Profile();
+        profile.Model = string.Empty;
+        var definition = Definition(profile);
+        _repo.FindDefinitionAsync(definition.Id, Arg.Any<CancellationToken>()).Returns(definition);
+
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => _sut.RunNowAsync(
+            definition.Id, null, TestContext.Current.CancellationToken));
+
+        Assert.Contains("must be reconfigured", error.Message, StringComparison.Ordinal);
+        await _repo.DidNotReceiveWithAnyArgs().AddTaskAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task BuildPipelineExecutionAsync_NoProfileInTheOrganization_ReturnsNoSpec_AndSaysSo()
+    {
+        OrganizationProfiles(7);
+
+        var execution = await _sut.BuildPipelineExecutionAsync(
+            "missing",
+            null,
+            7,
+            "prompt",
+            gate: false,
+            pipelineRunId: 71,
+            workingDirectory: "/workspace",
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Null(execution.Spec);
+        Assert.Contains("Profile 'missing' named by the step was not found", execution.Problem, StringComparison.Ordinal);
+        Assert.Contains("The pipeline's organization has no AI runner profile.", execution.Problem, StringComparison.Ordinal);
+        _masking.DidNotReceiveWithAnyArgs().RegisterRuntimeSecret(default, default!);
+    }
+
+    [Fact]
+    public async Task BuildPipelineExecutionAsync_AMissingName_FallsBackOnThePipelineProfile_AndSaysWhy()
+    {
+        var other = Profile();
+        other.Id = 4;
+        other.Name = "Claude";
+        other.Priority = 50;
+        var preferred = Profile();
+        preferred.Priority = 10;
+        OrganizationProfiles(7, preferred, other);
+
+        var execution = await _sut.BuildPipelineExecutionAsync(
+            "claude-sonnet", other.Id, 7, "prompt", gate: false, pipelineRunId: 71,
+            workingDirectory: "/workspace", ct: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(execution.Spec);
+        Assert.True(execution.IsFallback);
+        Assert.Equal(
+            "Profile 'claude-sonnet' named by the step was not found in the organization. Using the pipeline's AI runner profile 'Claude'.",
+            execution.Resolution);
+        Assert.Equal("Claude", execution.Spec.EnvironmentVariables["AETHEUS_AI_PROFILE_NAME"]);
+    }
+
+    [Fact]
+    public async Task FindPipelineProfileProblemAsync_IsNullWhenAnotherProfileCanRun_AndNamesTheReasonsOtherwise()
+    {
+        var complete = Profile();
+        var keyless = Profile();
+        keyless.Id = 4;
+        keyless.Name = "keyless";
+        keyless.ApiKeyEncrypted = string.Empty;
+        OrganizationProfiles(7, complete, keyless);
+        OrganizationProfiles(8, keyless);
+
+        var fallbackProblem = await _sut.FindPipelineProfileProblemAsync("claude-sonnet", 7, TestContext.Current.CancellationToken);
+        var noneProblem = await _sut.FindPipelineProfileProblemAsync("keyless", 8, TestContext.Current.CancellationToken);
+
+        Assert.Null(fallbackProblem);
+        Assert.Contains("'keyless' must be reconfigured", noneProblem, StringComparison.Ordinal);
+        // A read for the launch: the key is never decrypted nor registered as a run secret here.
+        _masking.DidNotReceiveWithAnyArgs().RegisterRuntimeSecret(default, default!);
     }
 
     [Fact]
@@ -704,6 +594,38 @@ public sealed class AiTaskServiceTests
     }
 
     [Fact]
+    public async Task PublishResultAsync_OfAProjectTask_NotifiesItsProject_WithTheRunToOpen()
+    {
+        var notifications = Substitute.For<Aetheus.Back.Components.Notifications.IUserNotificationService>();
+        var sut = new AiTaskService(_repo, _audit, _encryption, _masking, _notifier, _time,
+            new ConfigurationBuilder().Build(), NullLogger<AiTaskService>.Instance, notifications);
+        _repo.FindTaskAsync(17, Arg.Any<CancellationToken>()).Returns(new ServerTask
+        {
+            Id = 17,
+            Operation = OperationKind.AiRun,
+            EnvironmentVariables = JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["AETHEUS_AI_TASK_DEFINITION_ID"] = "5"
+            })
+        });
+        _repo.FindDefinitionAsync(5, Arg.Any<CancellationToken>())
+            .Returns(new AiTaskDefinition { Id = 5, Name = "nightly review", ProjectId = 12 });
+        _repo.AddResultAsync(Arg.Do<AiRunResult>(stored => stored.Id = 300), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        await sut.PublishResultAsync(
+            new PublishAiRunResultRequest { ServerTaskId = 17, ProfileName = "reviewer", ReportMarkdown = "report", Succeeded = true },
+            TestContext.Current.CancellationToken);
+
+        await notifications.Received(1).RecordProjectEventAsync(
+            NotificationEventTypes.AiTaskCompleted,
+            Arg.Is<string>(payload => payload.Contains("\"ProjectId\":12", StringComparison.Ordinal)
+                && payload.Contains("\"AiTaskDefinitionId\":5", StringComparison.Ordinal)
+                && payload.Contains("\"AiRunResultId\":300", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task PublishResultAsync_IdempotentExistingResult_ReturnsMappedDto()
     {
         var existing = Result();
@@ -724,7 +646,7 @@ public sealed class AiTaskServiceTests
     }
 
     [Fact]
-    public async Task PublishResultAsync_ValidTask_MasksAndPersistsReportAndDiff()
+    public async Task PublishResultAsync_ValidTask_MasksTheReportAndTheTaskApiKey()
     {
         var task = new ServerTask
         {
@@ -734,14 +656,13 @@ public sealed class AiTaskServiceTests
             EnvironmentVariables = JsonSerializer.Serialize(new Dictionary<string, string>
             {
                 ["AETHEUS_AI_TASK_DEFINITION_ID"] = "11",
-                ["AETHEUS_AI_SOURCE_REPOSITORY_ID"] = "13"
+                ["AETHEUS_AI_SOURCE_REPOSITORY_ID"] = "13",
+                ["AETHEUS_AI_API_KEY"] = "sk-task-key"
             })
         };
         _repo.FindTaskAsync(task.Id, Arg.Any<CancellationToken>()).Returns(task);
-        _masking.MaskAsync("report secret", 71, Arg.Any<CancellationToken>())
-            .Returns("report ***");
-        _masking.MaskAsync("diff secret", 71, Arg.Any<CancellationToken>())
-            .Returns("diff ***");
+        _masking.MaskAsync("report secret sk-task-key", 71, Arg.Any<CancellationToken>())
+            .Returns("report *** sk-task-key");
         _repo.AddResultAsync(Arg.Any<AiRunResult>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
@@ -752,8 +673,7 @@ public sealed class AiTaskServiceTests
         var result = await _sut.PublishResultAsync(
             PublishRequest(task.Id) with
             {
-                ReportMarkdown = "report secret",
-                DiffPatch = "diff secret",
+                ReportMarkdown = "report secret sk-task-key",
                 SourceRepositoryId = 13,
                 BaseCommitSha = new string('a', 40),
                 Verdict = AiVerdict.Pass,
@@ -764,8 +684,8 @@ public sealed class AiTaskServiceTests
 
         Assert.Equal(88, result.Id);
         Assert.Equal(11, result.AiTaskDefinitionId);
-        Assert.Equal("report ***", result.ReportMarkdown);
-        Assert.Equal("diff ***", result.DiffPatch);
+        Assert.Equal("report *** ***", result.ReportMarkdown);
+        Assert.Null(result.DiffPatch);
         Assert.Equal(new string('a', 40), result.BaseCommitSha);
     }
 
@@ -865,141 +785,6 @@ public sealed class AiTaskServiceTests
         Assert.Equal(1, result.FailedCount);
         Assert.Equal(2000, result.DurationMs);
         Assert.Equal(2, result.Profiles.Count);
-    }
-
-    [Fact]
-    public async Task ApplyProposedPatchAsync_CreatesBranchPersistsCommitAndAudits()
-    {
-        var result = Result();
-        result.SourceRepositoryId = 13;
-        result.BaseCommitSha = new string('a', 40);
-        result.DiffPatch = "diff --git a/file b/file";
-        result.AiTaskDefinition = Definition(Profile());
-        _repo.FindResultAsync(result.Id, Arg.Any<CancellationToken>()).Returns(result);
-        _gitLight.GetRepositoryAsync(13, Arg.Any<CancellationToken>())
-            .Returns(new GitLightRepoDto
-            {
-                Id = 13,
-                ProjectId = result.AiTaskDefinition.ProjectId!.Value,
-                Name = "Aetheus"
-            });
-        _gitLight.ApplyPatchAsync(
-                13,
-                $"ai-proposed/{result.Id}",
-                result.DiffPatch,
-                Arg.Any<CancellationToken>())
-            .Returns((true, new string('b', 40), null));
-
-        var applied = await _sut.ApplyProposedPatchAsync(
-            result.Id,
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(13, applied.RepositoryId);
-        Assert.Equal($"ai-proposed/{result.Id}", applied.BranchName);
-        Assert.Equal(new string('b', 40), applied.CommitSha);
-        Assert.Equal(applied.CommitSha, result.ProposedCommitSha);
-        await _gitLight.Received(1).CreateBranchAsync(
-            13,
-            Arg.Is<CreateGitLightBranchRequest>(request =>
-                request.Name == $"ai-proposed/{result.Id}"
-                && request.StartRef == result.BaseCommitSha),
-            Arg.Any<CancellationToken>());
-        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ApplyProposedPatchAsync_AlreadyApplied_IsIdempotent()
-    {
-        var result = Result();
-        result.AiTaskDefinition = Definition(Profile());
-        result.ProposedRepositoryId = 13;
-        result.ProposedBranchName = "ai-proposed/88";
-        result.ProposedCommitSha = new string('b', 40);
-        _repo.FindResultAsync(result.Id, Arg.Any<CancellationToken>()).Returns(result);
-
-        var applied = await _sut.ApplyProposedPatchAsync(
-            result.Id,
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(result.ProposedRepositoryId, applied.RepositoryId);
-        Assert.Equal(result.ProposedBranchName, applied.BranchName);
-        Assert.Equal(result.ProposedCommitSha, applied.CommitSha);
-        await _gitLight.DidNotReceiveWithAnyArgs().ApplyPatchAsync(
-            default,
-            default!,
-            default!,
-            TestContext.Current.CancellationToken);
-    }
-
-    [Fact]
-    public async Task ApplyProposedPatchAsync_InvalidResultStates_AreRejected()
-    {
-        _repo.FindResultAsync(404, Arg.Any<CancellationToken>())
-            .Returns((AiRunResult?)null);
-        await Assert.ThrowsAsync<NotFoundException>(() => _sut.ApplyProposedPatchAsync(
-            404,
-            TestContext.Current.CancellationToken));
-
-        var result = Result();
-        result.AiTaskDefinition = null;
-        _repo.FindResultAsync(result.Id, Arg.Any<CancellationToken>()).Returns(result);
-        await Assert.ThrowsAsync<BadRequestException>(() => _sut.ApplyProposedPatchAsync(
-            result.Id,
-            TestContext.Current.CancellationToken));
-
-        result.AiTaskDefinition = Definition(Profile());
-        result.DiffPatch = null;
-        await Assert.ThrowsAsync<BadRequestException>(() => _sut.ApplyProposedPatchAsync(
-            result.Id,
-            TestContext.Current.CancellationToken));
-
-        result.DiffPatch = "patch";
-        result.Truncated = false;
-        result.SourceRepositoryId = null;
-        result.BaseCommitSha = null;
-        await Assert.ThrowsAsync<BadRequestException>(() => _sut.ApplyProposedPatchAsync(
-            result.Id,
-            TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task ApplyProposedPatchAsync_WrongRepositoryAndPatchFailure_AreRejected()
-    {
-        var result = Result();
-        result.AiTaskDefinition = Definition(Profile());
-        result.SourceRepositoryId = 13;
-        result.BaseCommitSha = new string('a', 40);
-        _repo.FindResultAsync(result.Id, Arg.Any<CancellationToken>()).Returns(result);
-        _gitLight.GetRepositoryAsync(13, Arg.Any<CancellationToken>())
-            .Returns(new GitLightRepoDto
-            {
-                Id = 13,
-                ProjectId = 999,
-                Name = "Other"
-            });
-        await Assert.ThrowsAsync<BadRequestException>(() => _sut.ApplyProposedPatchAsync(
-            result.Id,
-            TestContext.Current.CancellationToken));
-
-        _gitLight.GetRepositoryAsync(13, Arg.Any<CancellationToken>())
-            .Returns(new GitLightRepoDto
-            {
-                Id = 13,
-                ProjectId = result.AiTaskDefinition.ProjectId!.Value,
-                Name = "Aetheus"
-            });
-        _gitLight.ApplyPatchAsync(
-                13,
-                Arg.Any<string>(),
-                result.DiffPatch!,
-                Arg.Any<CancellationToken>())
-            .Returns((false, null, "conflict"));
-        var error = await Assert.ThrowsAsync<ConflictException>(() =>
-            _sut.ApplyProposedPatchAsync(
-                result.Id,
-                TestContext.Current.CancellationToken));
-
-        Assert.Contains("conflict", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1128,15 +913,39 @@ public sealed class AiTaskServiceTests
             item.MemberNames.Contains(nameof(PublishAiRunResultRequest.ProfileName)));
     }
 
+    // Recette R3-4: the connection test was refused (400) whenever the name was still empty, and the
+    // dialog showed nothing. A test needs no name, a create without one generates it (R3-5); saving an
+    // existing profile still needs one.
+    [Fact]
+    public void ProfileRequests_NameIsRequiredToSaveAnExistingProfile_Only()
+    {
+        static bool NameInvalid(AiRunnerProfileRequest request)
+        {
+            var validation = new List<ValidationResult>();
+            Validator.TryValidateObject(request, new ValidationContext(request), validation, validateAllProperties: true);
+            return validation.Any(item => item.MemberNames.Contains(nameof(AiRunnerProfileRequest.Name)));
+        }
+
+        Assert.False(NameInvalid(new TestAiRunnerProfileRequest { Provider = AiProvider.Anthropic, Model = "m" }));
+        Assert.False(NameInvalid(new CreateAiRunnerProfileRequest { Provider = AiProvider.Anthropic, Model = "m" }));
+        Assert.True(NameInvalid(new UpdateAiRunnerProfileRequest { Provider = AiProvider.Anthropic, Model = "m" }));
+    }
+
+    private void OrganizationProfiles(int organizationId, params AiRunnerProfile[] profiles) =>
+        _repo.GetOrganizationProfilesByPriorityAsync(organizationId, Arg.Any<CancellationToken>())
+            .Returns([.. profiles]);
+
     private static AiRunnerProfile Profile() => new()
     {
         Id = 3,
         OrganizationId = 7,
         Name = "reviewer",
         Description = "Reviews code",
-        Binary = "codex",
-        ArgsTemplateJson = """["{prompt_file}","--quiet"]""",
-        EnvironmentJsonEncrypted = """{"TOKEN":"secret"}""",
+        Provider = "anthropic",
+        Model = "claude-sonnet-5-5",
+        ApiKeyEncrypted = "sk-key",
+        ReasoningEffort = "low",
+        MaxOutputTokens = 8000,
         TimeoutSeconds = 90,
         MaxOutputBytes = 4096,
         SendsDataExternally = true,
@@ -1173,18 +982,6 @@ public sealed class AiTaskServiceTests
         SourceRepositoryId = 13,
         BaseCommitSha = new string('a', 40),
         CreatedAt = new DateTime(2026, 1, 1)
-    };
-
-    private static CreateAiRunnerProfileRequest ValidCreateProfile() => new()
-    {
-        OrganizationId = 7,
-        Name = "reviewer",
-        Description = "Reviews code",
-        Binary = "codex",
-        ArgsTemplate = ["{prompt_file}"],
-        Environment = new Dictionary<string, string>(),
-        TimeoutSeconds = 90,
-        MaxOutputBytes = 4096
     };
 
     private static UpdateAiTaskDefinitionRequest ValidUpdateDefinition(int profileId) => new()

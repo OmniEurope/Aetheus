@@ -61,9 +61,8 @@ public class ControllerAuthorizationAuditTests
         "Aetheus.Back.Components.Auth.AuthController.Login",
         "Aetheus.Back.Components.Auth.AuthController.ExternalLogin",
         "Aetheus.Back.Components.Auth.AuthController.RefreshToken",
-        // PLAN-005 lot 9: the reason a client ended a session, sent once the session is gone (so no
-        // JWT exists). Accepts only a known reason code and a [A-Za-z0-9-] correlation id, writes one
-        // log line, echoes nothing, and shares the auth-token rate limiter.
+        // The post-session diagnostic endpoint accepts only bounded reason and correlation codes,
+        // echoes nothing and shares the authentication rate limiter because no JWT remains.
         "Aetheus.Back.Components.Auth.AuthController.SessionEnded",
         // Public login-page metadata. Returns one boolean only, contains no secret or user data,
         // and must be available before authentication so credentials can be explained on the demo.

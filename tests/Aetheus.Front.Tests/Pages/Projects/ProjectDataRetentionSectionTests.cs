@@ -7,10 +7,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Projects;
 
-/// <summary>
-/// PLAN-013 lot 4: the « Conservation des données » section shows the project's profile, the profile's
-/// value in each empty field, and saves the profile with only the values the user typed.
-/// </summary>
+/// <summary> The « Conservation des données » section shows the project's profile, the profile's
+/// value in each empty field, and saves the profile with only the values the user typed. </summary>
 public sealed class ProjectDataRetentionSectionTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -66,7 +64,7 @@ public sealed class ProjectDataRetentionSectionTests : BunitContext
     }
 
     [Fact]
-    public void TheSavedSendInterval_IsStatedNextToItsField_WithThePackageThatAppliesIt()
+    public void TheSavedSendInterval_IsStatedInItsFieldLabel_WithThePackageThatAppliesIt()
     {
         Services.AddSingleton<Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings>>(
             Aetheus.Front.Tests.TestDoubles.ResxLocalizer.French());
@@ -74,9 +72,9 @@ public sealed class ProjectDataRetentionSectionTests : BunitContext
 
         var cut = RenderSection();
 
-        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("#project-data-retention-export-field-description")));
-        Assert.Equal("Envoi toutes les 5 min (profil Standard) : un point toutes les 5 minutes",
-            cut.Find("#project-data-retention-export-field-description").TextContent.Trim());
+        cut.WaitForAssertion(() => Assert.Contains("Envoi de la télémétrie (minutes) - actuel : Envoi toutes les 5 min (profil Standard) : un point toutes les 5 minutes",
+            cut.Find("label[for=project-data-retention-export]").TextContent));
+        Assert.Empty(cut.FindAll("#project-data-retention-export-field-description"));
         Assert.Contains("Aetheus.Telemetry 1.1.0", cut.Find("#project-data-retention-export-field-help-content").TextContent);
     }
 

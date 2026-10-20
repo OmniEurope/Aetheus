@@ -161,8 +161,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
         await repo.AddProjectAsync(project, ct).ConfigureAwait(false);
         cache.Remove(RepoUrlsCacheKey);
         await audit.LogAsync("Created", "Project", project.Id, project.Name, ct).ConfigureAwait(false);
-        // Recette R2-034: nobody followed anything, so no project event ever reached a user. The
-        // creator follows the project they created; they can unfollow it like any other.
+        // The creator follows the new project to receive its events and can unfollow it later.
         if (creatorUserId is { } creator)
             await userNotifications.SubscribeAsync(creator, project.Id, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.Project, project.Id, EntityChangeOps.Created, ct, organizationId: orgId).ConfigureAwait(false);
@@ -337,11 +336,9 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
         return true;
     }
 
-    /// <summary>
-    /// PLAN-005 lot 6: mirrors a project server's own port into the registry, so a port it holds stops
-    /// being invisible to the preflight guard. Only an agent server has a registry identity; an
-    /// external host names a machine Aetheus does not manage, so its port has nowhere to be recorded.
-    /// </summary>
+    /// <summary>Registers a project server port so the preflight guard accounts for it. Only
+    /// managed agent servers have a registry identity; external hosts cannot be recorded
+    /// there.</summary>
     private Task SyncProjectServerPortAsync(ProjectServer entity, int projectId, CancellationToken ct) =>
         portRegistry.SyncOwnedPortAsync(
             entity.ServerId, entity.Port,

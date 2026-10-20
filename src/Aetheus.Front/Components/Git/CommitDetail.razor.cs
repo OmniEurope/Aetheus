@@ -16,7 +16,7 @@ public partial class CommitDetail
     private int? _projectId;
     private GitCommitDto? _commit;
 
-    /// <summary>Recette R-319: the commit's page at its provider when no internal repository holds it.</summary>
+    /// <summary>The commit's page at its provider when no internal repository holds it.</summary>
     private string? ExternalHref => _commit is null ? null : ExternalCommitLink.For(_commit.RepositoryUrl, _commit.Sha);
 
     protected override async Task OnParametersSetAsync()
@@ -49,8 +49,8 @@ public partial class CommitDetail
             return;
         }
 
-        // Recette R-319: no internal repository holds this commit (its runs cloned another one, an
-        // external repository most often). Say so, with its provider's page, instead of a dead link.
+        // No internal repository holds this commit (its runs cloned another one, an external
+        // repository most often). Say so, with its provider's page, instead of a dead link.
         _commit = commit;
         _loading = false;
     }

@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>
-/// Recette R2-121: the names of the shipped delivery templates whose role the platform acts on. A
-/// pipeline plays a delivery role because it extends one of them (<c>extends: name@N</c>, stored as the
-/// pipeline's template reference), whatever the project calls it: the setup wizard writes
-/// <c>portfolio-candidate</c>, <c>atlas-ci</c>, and the self-deploy pipelines keep their historical
-/// <c>aetheus-*</c> names beside it.
-/// </summary>
+/// <summary>Names delivery templates whose roles the platform recognizes through extends
+/// references. Role identification does not depend on a project-specific pipeline name.</summary>
 public static class DeliveryTemplateNames
 {
     public const string Candidate = "application-candidate";

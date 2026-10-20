@@ -162,10 +162,8 @@ public sealed class PortRegistryService(
 
             if (!string.Equals(row.OwnerKey, key, StringComparison.Ordinal))
             {
-                // The conflict gate refuses this case before a run starts. Reaching it means the gate
-                // was skipped or lost a race, and overwriting would let the registry lie about who
-                // holds the port. It used to be a log line on a successful path, so the second barrier
-                // was mute and the run carried on with a port it had not obtained.
+                // Rejects a conflicting port claim even if preflight was bypassed or lost a race,
+                // preserving the registry's ownership guarantee.
                 throw new ConflictException(
                     $"Port {port} on this server is declared by '{row.OwnerLabel}', so '{label}' "
                     + "cannot take it.");

@@ -9,6 +9,7 @@
     <OmniTextBox aria-label="@L["ImageNamePlaceholder"]" @bind-Value="_pullImageName" Placeholder="@L["ImageNamePlaceholder"]" maxlength="200" />
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@PullImageAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_pullImageName))" Class="@(_imagePulling ? "btn-busy" : null)" Busy="@(_imagePulling)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["DockerPull"]</span></OmniButton>
 </OmniStack>
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" />
 <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["DockerImages"])" ExportFields="@ExportContext.Fields()" Items="@FilteredImages" TItem="DockerImageDto" KeyOf="@(row => row.ImageId)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_imageGroups"
     AllGroupsExpanded="@_allImageGroupsExpanded" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">

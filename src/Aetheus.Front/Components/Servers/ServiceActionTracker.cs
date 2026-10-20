@@ -2,22 +2,13 @@
 
 namespace Aetheus.Front.Components.Servers;
 
-/// <summary>
-/// Recette R-510: every action the Services page launches (one row's button or the bulk bar) is
-/// followed per service, so each row says what is happening to it: queued, running, succeeded, or
-/// failed with its exit code. The page used to follow a single action at a time and said nothing of
-/// the others beyond a "task queued" toast.
-///
-/// A task is matched by its id. Whether a queued task has started is read from the live task list
-/// the top bar already keeps (<see cref="TaskTrackerService"/>), so nothing more is subscribed.
-/// </summary>
+/// <summary>Tracks each service action by agent task id so every row reports its own progress and
+/// result. Read start state from the shared TaskTrackerService without another
+/// subscription.</summary>
 internal sealed class ServiceActionTracker
 {
-    /// <summary>
-    /// Recette R2-030: how long a success stays on its row at least. The success refreshes the server
-    /// at once, so the list that reflects it arrives a moment later and used to take the line away
-    /// before it could be read.
-    /// </summary>
+    /// <summary>Keep success visible for this minimum interval so the refreshed server list cannot
+    /// dismiss it before it can be read.</summary>
     internal static readonly TimeSpan SuccessShownAtLeast = TimeSpan.FromSeconds(10);
 
     private readonly Dictionary<string, ServiceActionState> _byService = new(StringComparer.OrdinalIgnoreCase);

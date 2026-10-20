@@ -69,12 +69,8 @@ public sealed class PipelineRunLauncherTests : BunitContext
         Assert.DoesNotContain("PipelineRunFailedNoReason", notification.Detail, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Recette R2-039: the exact body <c>ErrorHandlingMiddleware</c> writes for the preflight's
-    /// <c>BadRequestException</c>. Serialized with the Web defaults, its null <c>errors</c> dictionary is
-    /// written as <c>"errors": null</c>, which the typed read turns into a <c>YamlValidationResultDto</c>
-    /// whose <c>Errors</c> list is null: joining it threw and the page fell into the error boundary.
-    /// </summary>
+    /// <summary>Middleware error payloads may contain a null <c>errors</c> field; the launcher must
+    /// extract the refusal without joining a null list.</summary>
     private static string MiddlewareRefusalBody() => System.Text.Json.JsonSerializer.Serialize(
         new ApiError
         {
@@ -97,8 +93,8 @@ public sealed class PipelineRunLauncherTests : BunitContext
     [Fact]
     public async Task TriggerAsync_RefusedThroughTheGlobalErrorNotifier_ShowsExactlyOneToastWithTheReason()
     {
-        // The production chain: the global notifier sits in front of the transport. Before R2-039 it
-        // added its own "Error 400" toast next to the launcher's, two red toasts for one refusal.
+        // The global notifier precedes transport; launch refusal must produce one notification
+        // through this chain.
         handler.SetRawResponse(HttpMethod.Post, "api/pipelines/5/run", MiddlewareRefusalBody(), "application/json", HttpStatusCode.BadRequest);
         var toast = Services.GetRequiredService<NotifyHelper>();
         var localizer = Services.GetRequiredService<IStringLocalizer<AppStrings>>();

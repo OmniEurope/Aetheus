@@ -19,4 +19,5 @@ public class RegistryPackageVersion
     public string PublishedBy { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public RegistryPackage RegistryPackage { get; set; } = null!;
+    public List<RegistryPackageFile> Files { get; set; } = [];
 }

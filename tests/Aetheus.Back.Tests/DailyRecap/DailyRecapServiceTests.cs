@@ -63,14 +63,14 @@ public sealed class DailyRecapServiceTests : IDisposable
     }
 
     /// <summary>A fresh service over a fresh context, as after a restart or in another instance.</summary>
-    private DailyRecapService Service()
+    private DailyRecapService Service(IConfiguration? configuration = null)
     {
         var repo = new DailyRecapRepository(Context());
         var compatibility = Substitute.For<IAgentCompatibilityPolicy>();
         compatibility.Evaluate(Arg.Any<ServerDto>()).Returns(new AgentCompatibilityDto());
         var collector = new DailyRecapCollector(repo, compatibility, new ConfigurationBuilder().Build());
-        return new DailyRecapService(repo, collector, _sender, Substitute.For<IAuditService>(), _clock,
-            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Cors:Origins:0"] = "https://app.example.org" }).Build(),
+        return new DailyRecapService(repo, collector, _sender, NotificationMailKit.Templates(), Substitute.For<IAuditService>(), _clock,
+            configuration ?? new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Cors:Origins:0"] = "https://app.example.org" }).Build(),
             NullLogger<DailyRecapService>.Instance);
     }
 
@@ -242,6 +242,33 @@ public sealed class DailyRecapServiceTests : IDisposable
         Assert.Equal(new DateOnly(2026, 10, 8), preview.Day);
         Assert.Contains("<!DOCTYPE html>", preview.Html);
         Assert.Contains("8 octobre 2026", preview.Subject);
+    }
+
+    [Fact]
+    public async Task PreviewLinks_UseTheRemoteOriginInsteadOfTheDevelopmentDefault()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Cors:FrontendUrl"] = "https://localhost:5401",
+            ["Cors:Origins:0"] = "https://app.example.org"
+        }).Build();
+        var preview = await Service(configuration).PreviewAsync(Ct);
+        Assert.Contains("href=\"https://app.example.org/admin/settings?tab=daily-recap\"", preview.Html);
+        Assert.DoesNotContain("localhost", preview.Html);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task PreviewLinks_FallBackToFrontendUrlWhenTheRemoteOriginIsNotSet(string? remoteOrigin)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Cors:FrontendUrl"] = "https://app.example.org",
+            ["Cors:Origins:0"] = remoteOrigin
+        }).Build();
+        var preview = await Service(configuration).PreviewAsync(Ct);
+        Assert.Contains("href=\"https://app.example.org/admin/settings?tab=daily-recap\"", preview.Html);
     }
 
     [Fact]

@@ -1,22 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Recette R2-087 (decided 2026-10-03): a page the reader comes back to shows at once what it showed,
-/// then refreshes behind it; the page-wide loader stays for a first visit only.
-/// <para>
-/// A page remembers its last loaded state under its address (the route it renders, e.g.
-/// <c>pipelines/12</c>) and asks for it before loading. The entries live in
-/// <see cref="ListCacheService"/>: in this browser tab's memory only, for the signed-in session (the
-/// layout clears it on sign-out, on a rejected token and on an organization switch), dropped after 30
-/// minutes and capped in number. Nothing is written to storage or shared with another user.
-/// </para>
-/// <para>
-/// The scroll position comes back separately and for every page: the shell's
-/// <c>Aetheus.pageScroll</c> helper restores it on a return (browser back, or "Revenir" to the page
-/// just left).
-/// </para>
-/// </summary>
+/// <summary>Restore recent page state from this tab's session-scoped, bounded memory cache so
+/// return navigation can refresh without a full-page loader; clear it across sign-out, token
+/// rejection and organization changes, with scroll restoration owned separately by the
+/// shell.</summary>
 public sealed class PageStateCache(ListCacheService cache)
 {
     /// <summary>The last state remembered for <paramref name="address"/>, if any and still recent.</summary>

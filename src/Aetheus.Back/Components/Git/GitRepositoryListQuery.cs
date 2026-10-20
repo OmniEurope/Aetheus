@@ -4,10 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Git;
 
-/// <summary>
-/// Recette R-224: the column header filters of the git repositories list. Each key is the grid column's
-/// key ("isEmpty" backs the Status column, which reads Empty or Active).
-/// </summary>
+/// <summary> The column header filters of the git repositories list. Each key is the grid column's
+/// key ("isEmpty" backs the Status column, which reads Empty or Active). </summary>
 internal static class GitRepositoryListQuery
 {
     internal static readonly GridQueryMap<GitInternalRepo> Columns = new GridQueryMap<GitInternalRepo>()

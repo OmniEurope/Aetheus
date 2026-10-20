@@ -13,4 +13,8 @@ internal sealed record PipelineFleetRow(
     int? ProjectServerId,
     string OwnerName,
     string OwnerType,
-    int OrganizationId);
+    int OrganizationId)
+{
+    /// <summary>Carried through a rewrite of the pipeline, which would otherwise return it to automatic.</summary>
+    public int? AiRunnerProfileId { get; init; }
+}

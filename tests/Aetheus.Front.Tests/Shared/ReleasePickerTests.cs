@@ -4,8 +4,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>PLAN-005 lot 5: one short form for a release name (D39), the picker grid (D38), and the
-/// predicate that decides whether releases are loaded at all (D37).</summary>
+/// <summary>Covers shortened release names, picker rows and the decision to load available
+/// releases.</summary>
 public sealed class ReleasePickerTests : BunitContext
 {
     public ReleasePickerTests() => BunitTestHelper.RegisterServices(this);
@@ -90,13 +90,9 @@ public sealed class ReleasePickerTests : BunitContext
             DetectedAt = new DateTime(2026, 9, 10 - (i % 9), 8, 0, 0, DateTimeKind.Utc)
         })];
 
-    /// <summary>
-    /// R-10 / R-327: every release in one scrolling table instead of "Show more" then "All releases",
-    /// and no longer a five-row pager: the grid asks for blocks of twenty as it scrolls. Each row
-    /// carries the release's status and the outcome of its last run: "Published" beside "Failed" is a
-    /// deployment that failed. (The test host renders without virtualization, so the block shows as one
-    /// page; the scrolling itself is declared in markup and guarded by GridCapabilityAuditTests.)
-    /// </summary>
+    /// <summary>The release grid requests blocks of twenty with both publication and run status.
+    /// The test host renders a page without virtualization, so scrolling is checked separately by
+    /// the markup guard.</summary>
     [Fact]
     public void TheGrid_LoadsReleasesByBlocksOfTwenty_WithTheirStatusAndTheirLastRun()
     {

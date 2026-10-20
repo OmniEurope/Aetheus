@@ -18,7 +18,7 @@ public class ServiceConnectionsController(
         return Ok(await service.GetConnectionsAsync(projectId, request, accessibleIds, ct));
     }
 
-    /// <summary>Recette R-224: the project names the list's Project column filter offers.</summary>
+    /// <summary>The project names the list's Project column filter offers.</summary>
     [HttpGet("filter-values")]
     public async Task<ActionResult<ServiceConnectionFilterValuesDto>> GetFilterValues(CancellationToken ct)
     {

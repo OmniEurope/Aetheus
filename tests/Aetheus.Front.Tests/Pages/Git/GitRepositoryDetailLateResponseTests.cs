@@ -114,8 +114,59 @@ public class GitRepositoryDetailLateResponseTests : BunitContext
             PageSize = 25
         });
 
+        // Loaded-machine ceiling: since the files grid follows the repository, a failure left here was only
+        // a wait whose first check never ran (bUnit "Check count: 0") in a run several times slower.
         cut.WaitForAssertion(() => Assert.Contains("second-file.txt", cut.Markup));
         Assert.DoesNotContain("first-file.txt", cut.Markup);
+    }
+
+    [Fact]
+    public void ATreeRequestOfThePreviousRepositoryThatNeverAnswers_DoesNotHoldBackTheFilesOfTheCurrentOne()
+    {
+        SetupRepository(1, "first-repo");
+        SetupRepository(2, "second-repo", [new() { Name = "second-file.txt", Path = "second-file.txt", Type = GitTreeEntryType.Blob }]);
+        var never = new TaskCompletionSource<PaginatedResult<GitLightTreeEntryDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/git/repos/1/tree", _ => never.Task);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/git-repositories/1?tab=files");
+        var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request => request.Url.Contains("api/git/repos/1/tree", StringComparison.Ordinal)));
+
+        cut.Render(p => p.Add(x => x.Id, 2));
+
+        // The file grid of the first repository still waits for its own page of rows; the second
+        // repository's rows must not wait behind it.
+        cut.WaitForAssertion(() => Assert.Contains("second-file.txt", cut.Markup));
+    }
+
+    [Fact]
+    public void ALateLoadOfThePreviousRepository_DoesNotOpenASecondLiveConnection()
+    {
+        // The superseded load resumes once its tree answers; it must stop there instead of connecting
+        // the live channel again over the one the current repository already opened (that first
+        // subscription would be overwritten and never disposed).
+        BunitTestHelper.BlockingHubConnectionFactory? hubs = null;
+        Services.AddSingleton<HubConnectionFactory>(sp => hubs = new BunitTestHelper.BlockingHubConnectionFactory(
+            sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(),
+            sp.GetRequiredService<AuthStateProvider>()));
+        SetupRepository(1, "first-repo");
+        SetupRepository(2, "second-repo", [new() { Name = "second-file.txt", Path = "second-file.txt", Type = GitTreeEntryType.Blob }]);
+        var firstTree = new TaskCompletionSource<PaginatedResult<GitLightTreeEntryDto>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/git/repos/1/tree", _ => firstTree.Task);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/git-repositories/1?tab=files");
+        var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request => request.Url.Contains("api/git/repos/1/tree", StringComparison.Ordinal)));
+        cut.Render(p => p.Add(x => x.Id, 2));
+        // The current repository's connection never answers, so its own load never ends. The superseded
+        // load ends with a render of the page itself (its title is re-rendered only then), or it connects.
+        cut.WaitForAssertion(() => Assert.Equal(1, hubs?.Created));
+        var title = cut.FindComponent<Microsoft.AspNetCore.Components.Web.PageTitle>();
+        var pageRendersBefore = title.RenderCount;
+
+        firstTree.SetResult(new PaginatedResult<GitLightTreeEntryDto>());
+
+        cut.WaitForAssertion(() => Assert.True(title.RenderCount > pageRendersBefore || hubs!.Created > 1));
+        Assert.Equal(1, hubs!.Created);
     }
 
     [Fact]
@@ -141,6 +192,8 @@ public class GitRepositoryDetailLateResponseTests : BunitContext
             AuthorName = "Dev", AuthorEmail = "dev@test.com", AuthorDate = DateTime.UtcNow
         }]);
 
+        // Loaded-machine ceiling: the late answer is processed off the renderer; a failure left here was a
+        // wait whose first check never ran (bUnit "Check count: 0").
         cut.WaitForAssertion(() => Assert.Equal(2, ReadmeReads()));
         cut.Render();
         Assert.Contains("second-repo", cut.Markup);

@@ -242,8 +242,8 @@ public sealed class AnalysisServiceTests : IDisposable
         Assert.Equal(1, gate.NewFindingCount);
         Assert.Equal(0, gate.DecidedFindingCount);
 
-        // Recette R-527: once someone accepts it, the finding is still listed for the run but is no
-        // longer counted among what is left to do, new or not.
+        // Once someone accepts it, the finding is still listed for the run but is no longer counted
+        // among what is left to do, new or not.
         finding.Status = AnalysisFindingStatus.Accepted;
         await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -619,6 +619,30 @@ public sealed class AnalysisServiceTests : IDisposable
         Assert.Contains("\"SeverityThreshold\":4", revisions[0].SnapshotJson, StringComparison.Ordinal);
         Assert.Contains("\"SeverityThreshold\":3", revisions[1].SnapshotJson, StringComparison.Ordinal);
         Assert.NotEqual(revisions[0].SnapshotHash, revisions[1].SnapshotHash);
+    }
+
+    [Fact]
+    public async Task UpdateScopedPolicyAsync_UpdatesAGlobalPolicy_AndRefusesAnotherScopeOrAProjectPolicy()
+    {
+        var request = new UpsertAnalysisPolicyRequest
+        {
+            Name = "Global gate",
+            Category = AnalysisCategory.Sast,
+            SeverityThreshold = AnalysisSeverity.High,
+            Behavior = AnalysisGateBehavior.Block
+        };
+        var global = await _service.CreateScopedPolicyAsync(null, request, TestContext.Current.CancellationToken);
+        var projectPolicy = await _service.CreatePolicyAsync(1, request with { Name = "Project gate" }, TestContext.Current.CancellationToken);
+
+        var updated = await _service.UpdateScopedPolicyAsync(
+            null, global.Id, request with { SeverityThreshold = AnalysisSeverity.Medium }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, updated.Version);
+        Assert.Equal(AnalysisSeverity.Medium, updated.SeverityThreshold);
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            _service.UpdateScopedPolicyAsync(77, global.Id, request, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            _service.UpdateScopedPolicyAsync(null, projectPolicy.Id, request, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -1072,9 +1096,9 @@ public sealed class AnalysisServiceTests : IDisposable
         Assert.Null(row.RepositoryId);
     }
 
-    /// <summary>Recette R-373: a portfolio row names the internal repository its run built (matched by
-    /// the project and slug of the run's clone URL, whatever host it was re-homed to), so the commit
-    /// links to its Aetheus page.</summary>
+    /// <summary>A portfolio row names the internal repository its run built (matched by the project
+    /// and slug of the run's clone URL, whatever host it was re-homed to), so the commit links to
+    /// its Aetheus page.</summary>
     [Fact]
     public async Task GetPortfolioAsync_ResolvesTheInternalRepositoryOfTheReportRun()
     {

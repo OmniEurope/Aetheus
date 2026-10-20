@@ -13,10 +13,8 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     [Parameter] public IEnumerable<TItem>? Data { get; set; }
     [Parameter] public int Count { get; set; }
 
-    /// <summary>
-    /// The page is loading this grid's data itself. Handed to OE's <c>Busy</c>, so the grid shows the same
-    /// loading bar as for its own requests (recette R-432).
-    /// </summary>
+    /// <summary>Expose page-owned loading through OE's Busy state so manual and grid-owned requests
+    /// use the same progress indicator.</summary>
     [Parameter] public bool IsLoading { get; set; }
     [Parameter] public EventCallback<GridLoadArgs> LoadData { get; set; }
 
@@ -45,32 +43,26 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     [Parameter] public bool AllowAltering { get; set; }
     [Parameter] public bool FullHeight { get; set; }
 
-    /// <summary>Recette R-226 / R-227: the property telling rows apart, so a live refresh can mark the
-    /// rows it brought in. Every Aetheus DTO listed in a grid carries an <c>Id</c>.</summary>
+    /// <summary>Identify rows by their DTO Id so live refresh can highlight newly received
+    /// rows.</summary>
     [Parameter] public string? KeyProperty { get; set; } = "Id";
 
-    /// <summary>Recette R-227: how long a row brought in by <see cref="Refresh"/> reads bold.</summary>
+    /// <summary>How long a row brought in by <see cref="Refresh"/> reads bold.</summary>
     [Parameter] public TimeSpan? NewRowHighlight { get; set; } = TimeSpan.FromSeconds(5);
 
-    /// <summary>Recette R-016 / R-024: each column filters from a menu in its header, not from a second
-    /// header row. On by default for every list; a grid can still turn it off.</summary>
+    /// <summary>Each column filters from a menu in its header, not from a second header row. On by
+    /// default for every list; a grid can still turn it off.</summary>
     [Parameter] public bool ShowHeaderFilterMenu { get; set; } = true;
 
-    /// <summary>Recette R-016: alternating row shades on every list by default.</summary>
+    /// <summary>Alternating row shades on every list by default.</summary>
     [Parameter] public bool AllowAlternatingRows { get; set; } = true;
 
-    // Recette R2-011: the export bar of OE's grid, declared here so a page sets it by name and type instead
-    // of through the unmatched attributes. Its buttons are OE's own, each with the file icon of its format
-    // (OE 1.4.0). Recette R2-124: a list that exports writes all its rows, titled by the page; only the
-    // tables listed in GridExportCoverageAuditTests show the bar (Markdown, second decision of 2026-10-05).
-    // OE 1.6.0: the bar sits under the rows, inside the table's frame; Aetheus puts its buttons at its end
-    // (user decision of 2026-10-06, OE's default stays the start).
+    // Expose typed export parameters so pages do not configure the grid through unmatched
+    // attributes; eligible tables export all filtered rows with page context and place Markdown
+    // actions at the footer's end.
 
-    /// <summary>
-    /// Recette R2-124 (decision of 2026-10-05): true shows the bar under the rows with the Markdown button,
-    /// for a prompt; CSV, Excel and PDF are always off. Only the tables worth handing to an AI ask for it,
-    /// listed with their reason in <c>GridExportCoverageAuditTests</c>. Off by default: no bar.
-    /// </summary>
+    /// <summary>Enable the Markdown footer only for tables approved by GridExportCoverageAuditTests
+    /// so export remains intentional; CSV, Excel and PDF stay disabled.</summary>
     [Parameter] public bool ShowFooterBar { get; set; }
 
     /// <summary>
@@ -80,11 +72,8 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     /// </summary>
     [Parameter] public bool ExportMarkdown { get; set; } = true;
 
-    /// <summary>
-    /// The variant of each format's button. By default <see cref="AetheusGrid.ExportVariants"/>: the
-    /// Markdown export blue on every export bar of Aetheus (recette R2-009, the user's exception to STD-BTN),
-    /// the other formats Ghost.
-    /// </summary>
+    /// <summary>Use AetheusGrid.ExportVariants so Markdown is the export area's blue action and
+    /// other formats retain Ghost styling, under the product's STD-BTN exception.</summary>
     [Parameter] public IReadOnlyDictionary<OmniTableExportFormat, OmniButtonVariant> ExportVariants { get; set; } = AetheusGrid.ExportVariants;
 
     /// <summary>
@@ -114,11 +103,10 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     /// </summary>
     [Parameter] public Func<GridLoadArgs, Task<PaginatedResult<TItem>>>? ExportRead { get; set; }
 
-    /// <summary>
-    /// The file name without extension and without date (see <see cref="ExportFileNames.Stem"/>); OE appends
-    /// its generation time and the extension, <c>aetheus-logs-2026-10-01-0840.md</c> (recette R2-036). Null
-    /// writes the page's breadcrumb past its module, then <see cref="ExportName"/> (<see cref="GridExportContext.FileName"/>).
-    /// </summary>
+    /// <summary> The file name without extension and without date (see <see
+    /// cref="ExportFileNames.Stem"/>); OE appends its generation time and the extension,
+    /// <c>aetheus-logs-2026-10-01-0840.md</c>. Null writes the page's breadcrumb past its module,
+    /// then <see cref="ExportName"/> (<see cref="GridExportContext.FileName"/>). </summary>
     [Parameter] public string? ExportFileName { get; set; }
 
     /// <summary>
@@ -144,14 +132,11 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     private bool UsesRemoteLoad => LoadData.HasDelegate;
     private bool EffectiveVirtualize => Virtualize;
     private IReadOnlyList<TItem> EffectiveItems => UsesRemoteLoad ? [] : GridItems;
-    // The pager of a remote paged grid counts the page's own total, as before OE 1.2.0; a virtualized grid
-    // sizes its scroll from what Load returns, and a local grid counts its rows.
+    // Use the page's total for remote pagination, the loader's result for virtualized scrolling and
+    // the row count for local grids so each mode measures its actual data source.
     private int? EffectiveCount => UsesRemoteLoad && !EffectiveVirtualize ? Count : null;
-    // The remote loader, paged or virtualized. A method group converted at each render is a new delegate
-    // instance, but OmniDataGrid (OE 1.2.0) compares its Load by delegate equality (same method, same
-    // target), so a render does not reset what it had fetched (the request loop the cached field used to
-    // prevent on the 14 remote-virtualized pages). OE sends the first request once the columns have
-    // registered, carrying their default filters and sorts (OE 35969ce).
+    // OE compares Load delegates by method and target, so rerendering does not reset fetched data;
+    // its first request follows column registration and includes default filters and sorts.
     private Func<OmniDataGridLoadRequest, Task<OmniDataGridResult<TItem>>>? EffectiveLoad =>
         UsesRemoteLoad ? LoadRemoteAsync : null;
     private bool EffectiveBusy => IsLoading;
@@ -160,8 +145,8 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
         ? EventCallback.Factory.Create<OmniDataGridRowMouseEventArgs<TItem>>(this, args => RowClick.InvokeAsync(args.Item))
         : default;
 
-    // OE 1.2.0 takes the row key as a selector (KeyOf); the wrapper keeps naming the property, read the way
-    // OE's retired KeyProperty read it: a public instance property, no key when the type has none.
+    // Resolve KeyOf through the named public instance property so the wrapper retains a
+    // property-based contract; types without that property have no key.
     private string? _keyOfProperty;
     private Func<TItem, object>? _keyOf;
     private Func<TItem, object>? EffectiveKeyOf
@@ -222,11 +207,9 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
                 + "LoadData replaces the page's rows. A table that must not be exported writes ExportMarkdown=\"false\".");
         }
 
-        // A paged grid showed the page's own rows before OE 1.2.0 (the page fed Items and Count). It now shows
-        // what its own last Load returned, so a load the page ran by itself (a first load, a change of project,
-        // a failure) that ends while the grid is not loading, signalled through IsLoading or by replacing the
-        // rows the grid last received, hands the grid the page's rows. A virtualized grid keeps its own window
-        // and catches up on a changed total only (below).
+        // When a page-owned load completes outside the grid's request, hand its rows to the paged
+        // grid so both views stay synchronized; virtualized grids retain their own window and
+        // reconcile only changed totals.
         if (UsesRemoteLoad && !EffectiveVirtualize && _remoteLoadsInProgress == 0 && ((_pageWasLoading && !IsLoading) || PageRowsReplaced()))
         {
             _pageLoadSettled = true;
@@ -234,9 +217,8 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
         _pageWasLoading = IsLoading;
     }
 
-    // Recette R2-124: the shared export of a list. The title and the header lines say where the rows come
-    // from unless the page wrote its own; a LoadData grid reads its export through ExportRead. The opt-out
-    // (ExportMarkdown="false", a table that must never export) wins over ShowFooterBar.
+    // Supply page context and ExportRead for complete exports without disturbing displayed rows;
+    // ExportMarkdown=false always overrides ShowFooterBar for tables that must never export.
     private bool Exports => ShowFooterBar && ExportMarkdown;
 
     private string EffectiveExportTitle => ExportTitle ?? ExportContext.Title(ExportName);
@@ -314,11 +296,9 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
         }
     }
 
-    // Recette R-181 / R-185: a page that loads its data itself (first load, cache revalidation) while
-    // the remote virtualized grid pulls through LoadData races it: the host drops the grid's request as stale
-    // and the grid keeps what it got then, typically an empty list under a "7056 in total" header.
-    // When the total the host now holds differs from the one the grid last received, the grid pulls
-    // again, once; an equal total leaves it alone, so this cannot loop.
+    // Reload once when the host's total differs from the virtualized grid's last result so
+    // concurrent page-owned loading cannot strand a stale window; equal totals prevent a reload
+    // loop.
     private int? _lastRemoteCount;
     private bool _catchingUp;
     private int _remoteLoadsInProgress;
@@ -331,24 +311,42 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     {
         if (_pageLoadSettled && UsesRemoteLoad && _remoteLoadsInProgress == 0 && Grid is not null)
         {
-            _pageLoadSettled = false;
-            _servingHeldRows = true;
-            try
-            {
-                await Grid.ReloadAsync();
-            }
-            finally
-            {
-                _servingHeldRows = false;
-            }
+            await ServeHeldRowsAsync(Grid);
             return;
         }
-        if (!UsesRemoteLoad || !EffectiveVirtualize || _catchingUp || _remoteLoadsInProgress > 0 || _lastRemoteCount is not { } seen || Grid is null) return;
-        if (VirtualData!().TotalCount == seen) return;
+        await CatchUpVirtualCountAsync();
+    }
+
+    // The page load settled: reload once more so the grid serves the rows it held back.
+    private async Task ServeHeldRowsAsync(OmniDataGrid<TItem> grid)
+    {
+        _pageLoadSettled = false;
+        _servingHeldRows = true;
+        try
+        {
+            await grid.ReloadAsync();
+        }
+        finally
+        {
+            _servingHeldRows = false;
+        }
+    }
+
+    // The total of the last remote load, when a catch-up may run now: a virtualized remote grid, built,
+    // with no load in flight and no catch-up already running.
+    private int? CatchUpBaseline() =>
+        UsesRemoteLoad && EffectiveVirtualize && !_catchingUp && _remoteLoadsInProgress == 0 && Grid is not null
+            ? _lastRemoteCount
+            : null;
+
+    // A virtualized remote grid whose total changed since its last load reloads once to catch up.
+    private async Task CatchUpVirtualCountAsync()
+    {
+        if (CatchUpBaseline() is not { } seen || VirtualData!().TotalCount == seen) return;
         _catchingUp = true;
         try
         {
-            await Grid.ReloadAsync();
+            await Grid!.ReloadAsync();
         }
         finally
         {
@@ -370,12 +368,9 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
 
     public Task Reload() => Grid?.ReloadAsync() ?? Task.CompletedTask;
 
-    /// <summary>
-    /// Recette R-226: for live data (a SignalR push, a feed event). The rows stay on screen while the
-    /// page fetches again, with no loader, the scroll position and the page kept; the new rows replace
-    /// them when they arrive and the ones that were not there read bold for <see cref="NewRowHighlight"/>.
-    /// A sort, a filter or a user action still uses <see cref="Reload"/>.
-    /// </summary>
+    /// <summary>Refresh live data without hiding rows or resetting scroll and page state; newly
+    /// received rows use NewRowHighlight, while sorting, filtering and explicit actions use
+    /// Reload.</summary>
     public Task Refresh() => Grid?.RefreshAsync() ?? Task.CompletedTask;
 
     public void EditRow(TItem item) => _ = Grid?.EditRowAsync(item);

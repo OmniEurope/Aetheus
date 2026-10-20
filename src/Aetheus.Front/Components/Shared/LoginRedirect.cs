@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// PLAN-005 lot 8 / D47: the page asked for survives the sign-in. Every involuntary bounce to the
-/// login page carries the current base-relative path (route, query and fragment) as
-/// <c>returnUrl</c>; the login page, and the forced password change after it, come back to it.
-/// One place builds the parameter and one place validates it, so an open redirect cannot slip in
-/// through a second, laxer copy.
-/// </summary>
+/// <summary>Preserve the requested local route, query and fragment through sign-in and forced
+/// password change so users return to their destination; centralize returnUrl construction and
+/// validation to prevent open redirects.</summary>
 public static class LoginRedirect
 {
     public const string LoginPath = "/login";

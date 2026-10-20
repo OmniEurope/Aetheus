@@ -6,37 +6,11 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Data;
 
-/// <summary>
-/// One-time restart of the shipped delivery templates' numbering at v1: recette R2-094 (decided on
-/// 2026-10-04, option a), then again for recette R1-20 (asked on 2026-10-10), because the generic
-/// templates had grown a version at each change of their file since.
-/// <para>
-/// A template of the platform's organization that stores any version other than v1 loses all its
-/// versions and gets a single v1 with its first shipped file; the pipelines of that organization
-/// referencing it get <c>TemplateReferenceVersion = 1</c> and their <c>extends:</c> line repinned to
-/// <c>@1</c>, in the database and, for a project-owned pipeline, in its <c>.pipeline/</c> file of the
-/// project's internal Git repository, which a run reads before the database. A template whose stored
-/// versions are already its shipped files one for one (the candidate's v1 and v2, R2-121) is left
-/// alone: renumbering it would hand its v2 pipelines the v1 content. User-made templates (any other
-/// name) and other organizations are untouched.
-/// </para>
-/// <para>
-/// The one-time guarantee is the <see cref="MarkerKey"/> row, written in the same transaction: the
-/// generic templates grow a version each time their file changes, so "more versions than shipped
-/// files" alone would renumber them again at every such change and turn v1 into a mutable version.
-/// A database that never ran the first reset gets one run that writes both markers. After the marker,
-/// the seeder's normal immutability check is the only rule.
-/// </para>
-/// <para>
-/// The Git repin is outside that transaction, so it has its own completion marker,
-/// <see cref="GitRepinDoneKey"/>, written only once every <c>.pipeline/</c> file was repinned or needed
-/// no change. The renumbered template names are stored in the transaction under
-/// <see cref="GitRepinTemplatesKey"/>: they are the reset's own record of what it renumbered, whereas
-/// the catalog read on a later start may already hold a v2 synchronized since (repinning that one to
-/// <c>@1</c> would be wrong). Until the done marker exists, every start runs the Git pass again under
-/// the same advisory lock; a file already at <c>@1</c> is left alone and not audited again.
-/// </para>
-/// </summary>
+/// <summary>Normalizes eligible shipped templates to their first shipped version once under a
+/// transactional marker, preserving other organisations, user templates and templates already
+/// matching the shipped files. Git repinning runs separately under the catalog lock using the
+/// recorded reset template names and its own completion marker, so retries cannot repin newer
+/// catalog versions.</summary>
 internal sealed partial class DeliveryTemplateVersionReset(
     AppDbContext db,
     TimeProvider timeProvider,
@@ -44,10 +18,11 @@ internal sealed partial class DeliveryTemplateVersionReset(
     IAuditService? audit,
     IPipelineGitService? pipelineGit = null)
 {
-    /// <summary>The current reset's marker (recette R1-20). Its presence means the reset is done.</summary>
+    /// <summary>The completion marker for this reset.</summary>
     internal const string MarkerKey = "DeliveryTemplates:VersionReset:R1-20";
 
-    /// <summary>The first reset's marker (recette R2-094), written beside <see cref="MarkerKey"/> when missing.</summary>
+    /// <summary>The compatibility reset marker, written beside <see cref="MarkerKey"/> when
+    /// missing.</summary>
     internal const string FirstResetMarkerKey = "DeliveryTemplates:VersionReset:R2-094";
 
     /// <summary>The renumbered template names (comma-separated), written with <see cref="MarkerKey"/>.</summary>

@@ -3,17 +3,9 @@ using System.Text.Json;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// PLAN-003 2.4: publishes the score of a Stryker mutation run (the <c>mutation-report.json</c> of the
-/// mutation-testing-elements schema, what Stryker.NET's <c>json</c> reporter writes) as the metric
-/// <c>reliability.mutation.score</c>. Line coverage says a line ran; the mutation score says a test
-/// would have noticed it being wrong.
-///
-/// The score is Stryker's own: detected (killed, timeout) over valid (detected, survived, no
-/// coverage). Mutants that could not compile or were ignored are not the tests' verdict and count
-/// in neither. A report with no valid mutant fails the step instead of publishing a score of nothing.
-/// The threshold, if any, belongs to a versioned quality gate on the metric, not to this step.
-/// </summary>
+/// <summary>Publish reliability.mutation.score as detected mutants over valid mutants, excluding
+/// ignored and compile-error mutants. Fail without valid mutants and leave thresholds to versioned
+/// quality gates.</summary>
 internal static class PipelineMutationPublisher
 {
     internal const string ScannerKey = "stryker-mutation";

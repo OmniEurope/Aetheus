@@ -49,8 +49,7 @@ public class PipelineRunTests : BunitContext
     [Fact]
     public void R2_045_AWaitingRun_ReadsItsApprovalBeforeTheRestOfThePage()
     {
-        // The banner used to arrive after the first render and push the page down: its approval is
-        // now read before the page shows, ahead of everything the page loads behind it.
+        // Approval is loaded before the initial page display to avoid a late layout shift.
         _handler.SetJsonResponse("api/pipelines/runs/78", new PipelineRunDto
         {
             Id = 78,
@@ -65,7 +64,7 @@ public class PipelineRunTests : BunitContext
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 78));
 
-        cut.WaitForState(() => cut.Markup.Contains("PipelineApprovalTitle"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("PipelineApprovalTitle"));
         var urls = _handler.Requests.Select(request => request.Url).ToList();
         var approvals = urls.FindIndex(url => url.Contains("runs/78/approvals", StringComparison.Ordinal));
         var releases = urls.FindIndex(url => url.Contains("releases/by-run/78", StringComparison.Ordinal));
@@ -99,7 +98,7 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("CI Build"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("CI Build"));
 
         Assert.Contains("CI Build", cut.Markup);
         Assert.Contains("Build", cut.Markup);
@@ -185,7 +184,7 @@ public class PipelineRunTests : BunitContext
             ],
             Reports = [new AnalysisRunGateReportDto { ReportId = 9, FindingCount = 1 }]
         });
-        // Recette R-485: the Gate tab reads its figures and its rows from the run findings route.
+        // The Gate tab reads its figures and its rows from the run findings route.
         _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/findings", new AnalysisRunFindingsPageDto
         {
             Items =
@@ -206,7 +205,7 @@ public class PipelineRunTests : BunitContext
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 701));
 
-        cut.WaitForState(() => cut.Markup.Contains("AnalysisGateOverview", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("AnalysisGateOverview", StringComparison.Ordinal));
         var overview = cut.Markup.IndexOf("Overview", StringComparison.Ordinal);
         var logs = cut.Markup.IndexOf("Logs", overview, StringComparison.Ordinal);
         var gate = cut.Markup.IndexOf("AnalysisGateTab", logs, StringComparison.Ordinal);
@@ -216,11 +215,10 @@ public class PipelineRunTests : BunitContext
         Assert.Contains("AnalysisGateOverview", gateTile.TextContent);
         Assert.Contains("AnalysisGateFindingsCount", gateTile.TextContent);
         gateTile.Click();
-        // PLAN-003 lot 21 removed the description line under the Gate heading; the heading itself
-        // and the finding rows prove the tile opened the Gate tab.
+        // The gate heading and findings establish that the requested tab opened.
         cut.WaitForState(() => cut.Markup.Contains("analysis-run-gate-page", StringComparison.Ordinal));
         Assert.Contains("/analysis/findings/17", cut.Markup);
-        // Recette R2-053: title and location on one line each, path:line, the message on hover.
+        // Title and location on one line each, path:line, the message on hover.
         Assert.EndsWith("Untrusted input reaches a command sink.", cut.Find(".analysis-finding-grid-title").GetAttribute("title"), StringComparison.Ordinal);
         Assert.Equal("src/Runner.cs:42", cut.Find(".analysis-finding-location").TextContent);
     }
@@ -323,12 +321,14 @@ public class PipelineRunTests : BunitContext
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 710));
 
+        // The tile follows a chain of eleven reads (run, child run, lineage, baselines, both gates); under
+        // load it was measured drawn 239 ms after the former 3 s limit (PLAN-002 B7bis).
         cut.WaitForAssertion(() =>
         {
             var tile = cut.Find(".analysis-run-gate-tile");
             Assert.Contains("AnalysisGateStatusWarning", tile.TextContent);
             Assert.Contains("AnalysisGateFindingsCount", tile.TextContent);
-        }, TimeSpan.FromSeconds(3));
+        });
     }
 
     [Fact]
@@ -348,7 +348,7 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 712));
-        cut.WaitForState(() => cut.FindAll(".run-artifacts-tile").Count == 1, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.FindAll(".run-artifacts-tile").Count == 1);
 
         var tile = Assert.Single(cut.FindAll(".run-artifacts-tile"));
         Assert.Contains("Artifacts", tile.TextContent);
@@ -365,8 +365,7 @@ public class PipelineRunTests : BunitContext
     [Fact]
     public void Artifacts_ShowTheirSizeAndDigest()
     {
-        // PLAN-006 lot 12.5. The store computes a digest over the exact bytes it kept and recorded
-        // it; nothing showed it, so an artifact could not be identified across a restore.
+        // The displayed digest identifies the stored artifact bytes across restores.
         _handler.SetJsonResponse("api/pipelines/runs/713", new PipelineRunDto
         {
             Id = 713,
@@ -386,14 +385,14 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 713));
-        cut.WaitForState(() => cut.FindAll(".run-artifacts-tile").Count == 1, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.FindAll(".run-artifacts-tile").Count == 1);
         Assert.Single(cut.FindAll(".run-artifacts-tile")).Click();
 
         cut.WaitForAssertion(() => Assert.Contains("app.zip", cut.Markup));
         // Shortened on screen, complete in the title, so it can be copied and compared.
         Assert.Contains("0123456789ab", cut.Markup);
         Assert.Contains("0123456789abcdef" + new string('0', 48), cut.Markup);
-        // Recette R-373: the short digest is the link to its artifact.
+        // The short digest is the link to its artifact.
         var digest = cut.Find(".run-artifact-digest a.short-id__text");
         Assert.Equal("/artifacts/1", digest.GetAttribute("href"));
         Assert.Equal("01234567", digest.TextContent);
@@ -426,8 +425,8 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 7));
-        // R-498: the lineage tile names the parent run and the run this one started, both as links.
-        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("a.run-lineage-child")), TimeSpan.FromSeconds(2));
+        // The lineage tile names the parent run and the run this one started, both as links.
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("a.run-lineage-child")));
 
         var tile = cut.Find(".run-lineage-tile");
         Assert.Contains("RunLineage", tile.TextContent);
@@ -484,16 +483,15 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 317));
-        cut.WaitForState(() => cut.Markup.Contains("parent-release"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("parent-release"));
 
         cut.Render(parameters => parameters.Add(component => component.RunId, 318));
-        cut.WaitForState(() => cut.Markup.Contains("child-ci"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("child-ci"));
 
         // The header title is the run identity: it has to follow the parameter change, not just the
         // body. "child-ci" appears in the run card before the header re-renders, so wait on the title.
         cut.WaitForAssertion(
-            () => Assert.Contains("PipelineRun #318", cut.Find(".omni-page-header__title").TextContent, StringComparison.Ordinal),
-            TimeSpan.FromSeconds(2));
+            () => Assert.Contains("PipelineRun #318", cut.Find(".omni-page-header__title").TextContent, StringComparison.Ordinal));
         Assert.Contains("child-ci", cut.Markup);
         Assert.DoesNotContain("parent-release", cut.Markup);
     }
@@ -569,7 +567,7 @@ public class PipelineRunTests : BunitContext
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 99));
         // Null run data -> the page renders its "run not found" empty state, not the run details.
-        cut.WaitForState(() => cut.Markup.Contains("RunNotFound"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("RunNotFound"));
         Assert.Contains("RunNotFound", cut.Markup);
         Assert.DoesNotContain("pipeline-run-toolbar", cut.Markup);
     }
@@ -606,7 +604,7 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 2));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy"));
 
         // Verify the real grouping contract on the computed stage model: the 3 steps collapse into 2
         // stages - "prepare" (1 step) and "build" (2 steps). (The timeline markup lives behind a
@@ -659,7 +657,7 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 3));
-        cut.WaitForState(() => cut.Markup.Contains("Full"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Full"));
 
         // Each stage step spans 5 minutes, so a rendered "5m ..s" duration must appear in the timeline.
         Assert.Contains("run-tl-dur", cut.Markup);
@@ -766,7 +764,7 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 4));
-        cut.WaitForState(() => cut.Markup.Contains("Toggle Test"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Toggle Test"));
 
         var selected = typeof(PipelineRun).GetField("_selectedStep", BindingFlags.NonPublic | BindingFlags.Instance)!;
         // Auto-selects the last completed step
@@ -801,7 +799,7 @@ public class PipelineRunTests : BunitContext
             ]
         });
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 401));
-        cut.WaitForState(() => cut.Markup.Contains("Pinned selection"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Pinned selection"));
         await cut.InvokeAsync(() => cut.Instance.SelectStep(manuallySelected));
 
         _handler.SetJsonResponse("api/pipelines/runs/401", new PipelineRunDto
@@ -842,7 +840,7 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Matrix"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Matrix"));
 
         var method = typeof(PipelineRun).GetMethod("ToggleMatrixGroup", BindingFlags.NonPublic | BindingFlags.Instance)!;
         method.Invoke(cut.Instance, ["s1::A"]);
@@ -924,7 +922,7 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 6));
-        cut.WaitForState(() => cut.Markup.Contains("Failed Pipeline"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Failed Pipeline"));
         Assert.Contains("Failed Pipeline", cut.Markup);
     }
 
@@ -944,7 +942,7 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 10));
-        cut.WaitForState(() => cut.Markup.Contains("Toggle Test"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Toggle Test"));
 
         var selected = typeof(PipelineRun).GetField("_selectedStep", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var step = selected.GetValue(cut.Instance) as PipelineStepRunDto;
@@ -978,7 +976,7 @@ public class PipelineRunTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 20));
-        cut.WaitForState(() => cut.Markup.Contains("Multi Stage"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Multi Stage"));
         Assert.Contains("Multi Stage", cut.Markup);
         // All three stages (build/test/deploy) must be grouped from the steps.
         var byName = StageStepCounts(cut);

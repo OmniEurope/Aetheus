@@ -30,7 +30,8 @@ public sealed class AppProbeWorker(
         while (!enrollment.IsEnrolled && !stoppingToken.IsCancellationRequested)
             await Task.Delay(AgentRuntimeDefaults.StartupRetryDelay, timeProvider, stoppingToken).ConfigureAwait(false);
 
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(AppMonitoringDefaults.AgentProbeTickSeconds));
+        // On the injected clock (the system clock in production), so the loop runs on a test clock too.
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(AppMonitoringDefaults.AgentProbeTickSeconds), timeProvider);
 
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {

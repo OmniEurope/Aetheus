@@ -72,13 +72,14 @@ public sealed record GitLightCommitDto
     /// the graph can render them as a distinct badge. Empty for undecorated commits.</summary>
     public List<string> RefNames { get; init; } = [];
 
-    /// <summary>R2-004: the committer date (<c>%cI</c>), the date git's <c>--since</c>/<c>--until</c>
+    /// <summary>The committer date (<c>%cI</c>), the date git's <c>--since</c>/<c>--until</c>
     /// filter on and the one the commits grid shows and filters.</summary>
     public DateTime CommitDate { get; init; }
 
-    /// <summary>R2-005: the branch through which the history walk reached this commit (<c>git log --source</c>,
-    /// <c>%S</c>), a short name such as <c>main</c>. A commit on several branches reads as the first one
-    /// the walk met; another ref keeps its kind (<c>tags/v1</c>). Null when the walk started from a commit id.</summary>
+    /// <summary>The branch through which the history walk reached this commit (<c>git log
+    /// --source</c>, <c>%S</c>), a short name such as <c>main</c>. A commit on several branches
+    /// reads as the first one the walk met; another ref keeps its kind (<c>tags/v1</c>). Null when
+    /// the walk started from a commit id.</summary>
     public string? SourceRef { get; init; }
 }
 

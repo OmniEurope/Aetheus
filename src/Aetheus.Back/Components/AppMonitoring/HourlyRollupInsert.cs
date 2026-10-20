@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.AppMonitoring;
 
-/// <summary>
-/// Recette R-462: writes hourly rollup rows with the effect of <c>INSERT ... ON CONFLICT DO NOTHING</c>,
-/// in LINQ (raw SQL is forbidden). Two backends sweeping the same base (the blue-green colours, an older
-/// one without the leader lease) both read "no rollup yet" and both insert: the second one failed with
-/// 23505 on the unique index and its sweep stopped before the purges. A rollup row is derived from the
-/// same raw samples whoever writes it, so the row already there is kept and only the missing ones go in.
-/// </summary>
+/// <summary>Hourly rollup insertion keeps existing rows and adds only missing ones through LINQ,
+/// tolerating concurrent aggregation.</summary>
 internal static class HourlyRollupInsert
 {
     /// <summary>Writes tried before a unique violation is let through: each retry drops the rows that are

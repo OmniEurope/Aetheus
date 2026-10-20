@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using Aetheus.Agent.Core.Configuration;
 using Aetheus.Agent.Core.Executors;
+using Aetheus.Agent.Core.Functions;
 using Aetheus.Agent.Core.Operations;
 using Aetheus.Agent.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -66,6 +67,12 @@ public class PollingServiceTests
         await service.DrainRunningTasksAsync();
     }
 
+    private readonly string _functionsDirectory =
+        Path.Combine(Path.GetTempPath(), $"aetheus-fn-polling-{Guid.NewGuid():N}");
+
+    private ContainerPipelineFunctionExecutor ContainerFunctions(IContainerExecutor container) =>
+        new(PipelineFunctions.CreateAll(), container, _functionsDirectory, PipelineFunctionCatalog.Find);
+
     private PollingService CreateService(
         IEnumerable<IOperationExecutor>? operationExecutors = null,
         IDockerStorageMaintenance? dockerStorageMaintenance = null,
@@ -75,12 +82,14 @@ public class PollingServiceTests
         IOptions<AetheusAgentOptions>? options = null)
     {
         var time = timeProvider ?? TimeProvider.System;
+        var container = containerExecutor ?? Substitute.For<IContainerExecutor>();
         return new(
         _apiClientMock,
         _enrollment,
         [_executorMock],
         operationExecutors ?? Array.Empty<IOperationExecutor>(),
-        containerExecutor ?? Substitute.For<IContainerExecutor>(),
+        container,
+        ContainerFunctions(container),
         dockerStorageMaintenance ?? Substitute.For<IDockerStorageMaintenance>(),
         _refusalOutbox,
         _agentState,
@@ -150,8 +159,8 @@ public class PollingServiceTests
     [Fact]
     public async Task NextPollDelay_PollsFastWhileARunIsActiveThenFallsBackAfterTheWindow()
     {
-        // PLAN-007 lot 7: the next stage of a run is created as soon as the previous one completes;
-        // a 10 s poll made every stage boundary wait for it.
+        // Poll promptly after completion so newly created next-stage tasks do not wait a full
+        // interval.
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero));
         var gate = new TaskCompletionSource();
         _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
@@ -228,7 +237,7 @@ public class PollingServiceTests
                 Arg.Any<CancellationToken>());
         Assert.Equal(_options.Value.WorkDirectory,
             pendingTask.EnvironmentVariables["AETHEUS_AGENT_WORK_DIRECTORY"]);
-        // PLAN-003 2.1: deployment scripts read the helper directory from the agent, not a literal.
+        // Deployment scripts obtain the helper directory from the agent configuration.
         if (OperatingSystem.IsLinux())
             Assert.Equal("/usr/local/lib/aetheus", pendingTask.EnvironmentVariables["AGENT_HELPERS_DIR"]);
         else
@@ -389,9 +398,8 @@ public class PollingServiceTests
         await service.DrainRunningTasksAsync();
     }
 
-    // Two build pipelines on one runner used to be mutually exclusive: the second task held its claim
-    // while waiting for the local build lease, and the control plane failed it for never leaving
-    // Assigned. The task must go back to the queue instead, without executing anything.
+    // Requeue a build task when the local build lease is unavailable, without executing it or
+    // holding its claim until the assigned timeout.
     [Fact]
     public async Task PollOnceAsync_BuildLeaseStaysHeld_ReturnsTheTaskToTheQueueWithoutExecuting()
     {
@@ -874,6 +882,7 @@ public class PollingServiceTests
             [_executorMock],
             Array.Empty<IOperationExecutor>(),
             Substitute.For<IContainerExecutor>(),
+            ContainerFunctions(Substitute.For<IContainerExecutor>()),
             Substitute.For<IDockerStorageMaintenance>(),
             _refusalOutbox,
             notEnrolledState,
@@ -1048,6 +1057,63 @@ public class PollingServiceTests
             Arg.Any<int>(),
             Arg.Any<Func<string, TaskLogLevel, Task>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PollOnceAsync_ContainerizedFunction_RunsAetheusFnInsideTheStepContainer()
+    {
+        Directory.CreateDirectory(_functionsDirectory);
+        try
+        {
+            foreach (var executable in ContainerPipelineFunctionExecutor.Executables)
+            {
+                var path = Path.Combine(_functionsDirectory, executable);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                await File.WriteAllTextAsync(path, "binary", TestContext.Current.CancellationToken);
+            }
+            var hostFunction = Substitute.For<IOperationExecutor>();
+            hostFunction.CanHandle(OperationKind.PipelineFunction).Returns(true);
+            var containerExecutor = Substitute.For<IContainerExecutor>();
+            containerExecutor.ExecuteAsync(
+                    Arg.Any<ContainerSpec>(), Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(),
+                    Arg.Any<int>(), Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>(),
+                    Arg.Any<IReadOnlyList<ContainerReadOnlyMount>?>())
+                .Returns(new ExecutorResult(0, false));
+            var pendingTask = new PendingTaskDto
+            {
+                Id = 103,
+                Name = "Detect languages",
+                Command = "detect-project-languages",
+                Operation = OperationKind.PipelineFunction,
+                Container = new ContainerSpec { Image = "alpine@sha256:abc", Shell = "sh" },
+                EnvironmentVariables = new Dictionary<string, string> { ["WORKSPACE"] = "/w" },
+                TimeoutSeconds = 30
+            };
+            _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+                .Returns([pendingTask]);
+            var service = CreateService([hostFunction], containerExecutor: containerExecutor);
+
+            await PollAndDrainAsync(service);
+
+            await containerExecutor.Received(1).ExecuteAsync(
+                pendingTask.Container,
+                Arg.Is<string>(command => command.Contains("exec \"$fn\" 'detect-project-languages'", StringComparison.Ordinal)),
+                Arg.Is<Dictionary<string, string>>(env => env["WORKSPACE"] == "/w"),
+                30,
+                Arg.Any<Func<string, TaskLogLevel, Task>>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Is<IReadOnlyList<ContainerReadOnlyMount>?>(mounts =>
+                    mounts != null && mounts.Single() == new ContainerReadOnlyMount(_functionsDirectory, "/opt/aetheus-fn")));
+            await hostFunction.DidNotReceiveWithAnyArgs().ExecuteAsync(
+                default, default!, default!, default, default!, TestContext.Current.CancellationToken);
+            await _apiClientMock.Received(1).CompleteTaskAsync(103,
+                Arg.Is<TaskResultDto>(r => r.Status == TaskExecutionStatus.Success),
+                Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            Directory.Delete(_functionsDirectory, recursive: true);
+        }
     }
 
     [Theory]
@@ -1258,7 +1324,7 @@ public class PollingServiceTests
         await _apiClientMock.Received(1).CompleteTaskAsync(102,
             Arg.Is<TaskResultDto>(r => r.Status == TaskExecutionStatus.Failed && r.ExitCode == 1),
             Arg.Any<CancellationToken>());
-        // Recette R-508: a finished service action asks for a heartbeat, so the page sees the new state.
+        // A finished service action asks for a heartbeat, so the page sees the new state.
         Assert.True(health.WaitForHeartbeatRequestAsync(TestContext.Current.CancellationToken).IsCompletedSuccessfully);
         // A service action does not touch the cached mail inventory.
         Assert.False(health.ConsumeMailInventoryInvalidation());
@@ -1479,7 +1545,7 @@ public class PollingServiceTests
         Assert.False(cts.IsCancellationRequested);
     }
 
-    // Recette R1-42: while a self-update is tracked the agent is about to exit, so it claims nothing.
+    // While a self-update is tracked the agent is about to exit, so it claims nothing.
     [Fact]
     public async Task PollOnceAsync_WhileASelfUpdateIsTracked_AsksForNoSlot()
     {
@@ -1510,5 +1576,15 @@ public class PollingServiceTests
         await service.PollOnceAsync(TestContext.Current.CancellationToken);
 
         await _apiClientMock.Received(1).GetPendingTasksAsync(1, _options.Value.MaxConcurrentTasks - 1, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void BoundFailureReason_CapsAReasonLongerThanTheServerAcceptsAt512Characters()
+    {
+        var reason = new string('x', 1_500);
+
+        Assert.Equal(512, PollingService.BoundFailureReason(reason)!.Length);
+        Assert.Equal("short", PollingService.BoundFailureReason("short"));
+        Assert.Null(PollingService.BoundFailureReason(null));
     }
 }

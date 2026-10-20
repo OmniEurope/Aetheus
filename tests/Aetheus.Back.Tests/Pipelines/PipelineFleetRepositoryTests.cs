@@ -109,9 +109,8 @@ public sealed class PipelineFleetRepositoryTests : IDisposable
     [Fact]
     public async Task GetPageAsync_ScopedToAProject_LeavesOutEveryOtherProject()
     {
-        // PLAN-003 lot 12: the project pipelines page used to fetch the whole fleet and discard
-        // the rest client-side. The filter has to hold for the three ways a pipeline belongs to a
-        // project: directly, through an environment, or through a project server.
+        // Project filtering includes direct pipelines and those owned through environments or
+        // project servers.
         await SeedProjectAndTemplateAsync();
         _db.Projects.Add(new Project { Id = 11, Name = "other", OrganizationId = 7 });
         _db.Environments.Add(new Environment { Id = 21, Name = "staging", ProjectId = 10 });

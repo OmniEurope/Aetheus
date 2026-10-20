@@ -5,7 +5,7 @@ using Aetheus.Back.Data.Entities;
 namespace Aetheus.Back.Components.Pipelines;
 
 public sealed class PipelineTemplateService(
-    IPipelineRepository repo,
+    IPipelineTemplateRepository repo,
     IAuditService audit,
     ILogger<PipelineTemplateService> logger,
     TimeProvider timeProvider,

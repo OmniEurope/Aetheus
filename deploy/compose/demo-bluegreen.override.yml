@@ -1,5 +1,5 @@
 # Demo-only additions layered over remote-bluegreen.compose.yml.
-# Project, ports, volumes and state paths remain validated by nightly-demo-prepare.sh.
+# Project, ports, volumes and state paths remain validated by the prepare step of aetheus-demo.yaml and aetheus-nightly.yaml.
 services:
   back-blue:
     environment:

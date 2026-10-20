@@ -4,9 +4,12 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Front.Components.Pipelines;
 
 /// <summary>
-/// The CompatibilityMode, PreviousVersionTested and CompatibilityVerdict outputs that
-/// <c>deploy/scripts/qa/persist-compatibility-mode.sh</c> publishes, read from the run's steps (the
-/// last value of each wins). The known codes are given in words with what they prove; an unknown code
+/// The COMPATIBILITY_MODE, PREVIOUS_VERSION_TESTED and COMPATIBILITY_VERDICT outputs that the
+/// <c>persist-compatibility-mode</c> pipeline function publishes, read from the run's steps (the
+/// last value of each wins). Runs stored before the function, or still produced by
+/// <c>deploy/scripts/qa/persist-compatibility-mode.sh</c>, carry the PascalCase names
+/// (CompatibilityMode, PreviousVersionTested, CompatibilityVerdict): each is read when its upper snake
+/// case name is absent from every step or empty. The known codes are given in words with what they prove; an unknown code
 /// is shown as it is, never guessed.
 /// </summary>
 public partial class PipelineRunCompatibilityAttestation
@@ -19,7 +22,7 @@ public partial class PipelineRunCompatibilityAttestation
     /// project's repository list.</summary>
     [Parameter] public int? RepoId { get; set; }
 
-    /// <summary>What the script writes as PreviousVersionTested when there is no V-1 (bootstrap).</summary>
+    /// <summary>What the function writes as PREVIOUS_VERSION_TESTED when there is no V-1 (bootstrap).</summary>
     internal const string NoPrevious = "false";
 
     private static readonly HashSet<string> ModeCodes = new(StringComparer.Ordinal) { "NMinusOne", "Bootstrap" };
@@ -29,15 +32,27 @@ public partial class PipelineRunCompatibilityAttestation
         "NMinusOneVerified", "NMinusOneDegraded", "CurrentVersionVerified", "CurrentVersionDegraded"
     };
 
+    internal const string ModeOutput = "COMPATIBILITY_MODE";
+    internal const string PreviousOutput = "PREVIOUS_VERSION_TESTED";
+    internal const string VerdictOutput = "COMPATIBILITY_VERDICT";
+
+    /// <summary>Each output with the name the legacy script published it under.</summary>
+    private static readonly Dictionary<string, string> LegacyNames = new(StringComparer.Ordinal)
+    {
+        [ModeOutput] = "CompatibilityMode",
+        [PreviousOutput] = "PreviousVersionTested",
+        [VerdictOutput] = "CompatibilityVerdict"
+    };
+
     private Dictionary<string, string> _outputs = new(StringComparer.Ordinal);
 
-    private string? Mode => _outputs.GetValueOrDefault("CompatibilityMode");
+    private string? Mode => _outputs.GetValueOrDefault(ModeOutput);
 
-    private string? Previous => _outputs.GetValueOrDefault("PreviousVersionTested");
+    private string? Previous => _outputs.GetValueOrDefault(PreviousOutput);
 
-    private string? Verdict => _outputs.GetValueOrDefault("CompatibilityVerdict");
+    private string? Verdict => _outputs.GetValueOrDefault(VerdictOutput);
 
-    /// <summary>The V-1 commit, when PreviousVersionTested holds one (the script writes a full SHA).</summary>
+    /// <summary>The V-1 commit, when PREVIOUS_VERSION_TESTED holds one (the function writes a full SHA).</summary>
     private string? PreviousSha => Previous is { } value && CommitSha().IsMatch(value) ? value : null;
 
     private string? PreviousHref => PreviousSha is not { } sha
@@ -46,12 +61,20 @@ public partial class PipelineRunCompatibilityAttestation
             ? $"/git-repositories/{repoId}/commits/{Uri.EscapeDataString(sha)}"
             : Run.ProjectId is { } projectId ? $"/git-repositories?projectId={projectId}" : null;
 
-    protected override void OnParametersSet() =>
-        _outputs = Run.Steps
+    protected override void OnParametersSet()
+    {
+        var published = Run.Steps
             .SelectMany(step => step.OutputVariables)
-            .Where(output => output.Key is "CompatibilityMode" or "PreviousVersionTested" or "CompatibilityVerdict")
+            .Where(output => LegacyNames.ContainsKey(output.Key) || LegacyNames.ContainsValue(output.Key))
             .GroupBy(output => output.Key, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.Ordinal);
+        _outputs = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, legacy) in LegacyNames)
+        {
+            if ((published.TryGetValue(name, out var value) && value.Length > 0) || published.TryGetValue(legacy, out value))
+                _outputs[name] = value;
+        }
+    }
 
     private string Readable(HashSet<string> known, string keyPrefix, string code) =>
         known.Contains(code) ? L[keyPrefix + code].Value : code;

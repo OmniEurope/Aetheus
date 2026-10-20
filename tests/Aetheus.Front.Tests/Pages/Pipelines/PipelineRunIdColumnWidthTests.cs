@@ -3,8 +3,8 @@ using Aetheus.Front.Components.Pipelines;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>Recette R-329: the frozen ID column of a pipeline's runs is as wide as its id and its row
-/// action, not a fixed width nor an equal share of the table.</summary>
+/// <summary>The frozen ID column of a pipeline's runs is as wide as its id and its row action, not
+/// a fixed width nor an equal share of the table.</summary>
 public sealed class PipelineRunIdColumnWidthTests
 {
     [Fact]

@@ -8,7 +8,7 @@ public sealed class AgentServiceRecoveryPolicyAuditTests
     {
         var script = ReadScript("install-agent-linux.sh");
 
-        // R-249: the unit is the agent/aetheus-agent.service template the installer renders.
+        // The unit is the agent/aetheus-agent.service template the installer renders.
         Assert.Contains(
             "render_host_config agent/aetheus-agent.service \"$SYSTEMD_UNIT_PATH\"",
             script,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Pipelines;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,7 +17,7 @@ public class PipelineRunCollaboratorTests : BunitContext
     public PipelineRunCollaboratorTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
-        // Recette R-485: the gate figures come from the run findings route; none by default.
+        // The gate figures come from the run findings route; none by default.
         _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/findings", new AnalysisRunFindingsPageDto());
     }
 
@@ -48,9 +49,9 @@ public class PipelineRunCollaboratorTests : BunitContext
         Assert.Equal(4, result.Run.TestResultSummary?.TotalTests);
     }
 
-    /// <summary>Recette R-485: each run's summary lists a bounded number of findings, so the merged
-    /// figures are the database's over the whole tree (a finding seen by two runs counts once), read in
-    /// one request for every run of the tree, not a count of what the summaries list.</summary>
+    /// <summary>Each run's summary lists a bounded number of findings, so the merged figures are
+    /// the database's over the whole tree (a finding seen by two runs counts once), read in one
+    /// request for every run of the tree, not a count of what the summaries list.</summary>
     [Fact]
     public async Task GateState_TakesItsCountsFromTheRunFindingsRoute_OverTheWholeTree()
     {
@@ -102,11 +103,8 @@ public class PipelineRunCollaboratorTests : BunitContext
         Assert.Equal(AnalysisGrade.F, state.Result.Grade?.OverallGrade);
     }
 
-    /// <summary>
-    /// Recette R2-129 (candidate #2571): the quality run graded every domain but security (incomplete,
-    /// optional there), the security run graded security A. The Gate tab showed the quality run's
-    /// breakdown alone, security incomplete; merged domain by domain, security is the security run's A.
-    /// </summary>
+    /// <summary>Domain-wise merging retains the complete security grade from the security run
+    /// instead of an incomplete value from another child.</summary>
     [Fact]
     public async Task GateState_MergesTheTreeDomainByDomain_SoTheSecurityRunGradesSecurity()
     {
@@ -153,8 +151,8 @@ public class PipelineRunCollaboratorTests : BunitContext
         Assert.Equal(AnalysisGradeCompleteness.Complete, state.Result.Grade.Completeness);
     }
 
-    /// <summary>Recette R2-129: the gate shows the letter the run is listed with, and says so when the
-    /// candidate's seal set it rather than the analysis.</summary>
+    /// <summary>The gate shows the letter the run is listed with, and says so when the candidate's
+    /// seal set it rather than the analysis.</summary>
     [Fact]
     public void GatePresentation_HeadlineGradeIsTheListedRunGrade()
     {
@@ -182,7 +180,7 @@ public class PipelineRunCollaboratorTests : BunitContext
         Domains = [Domain(domain, grade, required: true)]
     };
 
-    /// <summary>Recette R-485: figures that could not be read are not shown as checked.</summary>
+    /// <summary>Figures that could not be read are not shown as checked.</summary>
     [Fact]
     public async Task GateState_UnreadableCounts_LeaveTheGateIncomplete()
     {
@@ -206,8 +204,8 @@ public class PipelineRunCollaboratorTests : BunitContext
         Assert.Null(state.Result?.Grade);
     }
 
-    /// <summary>Recette R2-027 with R-485: a reverted decision reads the tree's figures again (the
-    /// finding is open once more) and drops the cached gates, without reading every run's result.</summary>
+    /// <summary>Reverting a decision refreshes tree totals and invalidates cached gates without
+    /// loading every run result.</summary>
     [Fact]
     public async Task GateState_ReopenedFinding_ReadsTheCountsAgain_AndForgetsTheCachedGates()
     {
@@ -309,6 +307,10 @@ public class PipelineRunCollaboratorTests : BunitContext
         var maxInFlight = 0;
         var requestCount = 0;
         var concurrencyGate = new object();
+        // Every read is held until four are in flight at once, then all are released: the overlap is
+        // made, not hoped for from a 20 ms pause that a loaded machine could let finish one by one.
+        var started = new StateSignal();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(
             HttpMethod.Get,
             "api/pipelines/runs/",
@@ -317,9 +319,10 @@ public class PipelineRunCollaboratorTests : BunitContext
                 Interlocked.Increment(ref requestCount);
                 var current = Interlocked.Increment(ref inFlight);
                 lock (concurrencyGate) maxInFlight = Math.Max(maxInFlight, current);
+                started.Pulse();
                 try
                 {
-                    await Task.Delay(20, ct);
+                    await release.Task.WaitAsync(ct);
                     return new PipelineRunDto { Id = current };
                 }
                 finally
@@ -329,8 +332,11 @@ public class PipelineRunCollaboratorTests : BunitContext
             });
         var parent = CreateParentWithChildren(12);
 
-        await PipelineRunChildAggregator.LoadAsync(
+        var load = PipelineRunChildAggregator.LoadAsync(
             parent, Services.GetRequiredService<ApiClient>(), ct: Xunit.TestContext.Current.CancellationToken);
+        await started.WhenAsync(() => Volatile.Read(ref inFlight) >= 4, "four reads in flight at once");
+        release.SetResult();
+        await HangGuard.AwaitAsync(load, "the children loaded");
 
         Assert.InRange(maxInFlight, 2, 4);
         Assert.Equal(12, requestCount);
@@ -437,9 +443,7 @@ public class PipelineRunCollaboratorTests : BunitContext
         using var cancellation = new CancellationTokenSource();
         var load = PipelineRunChildAggregator.LoadAsync(
             CreateParentWithChildren(12), Services.GetRequiredService<ApiClient>(), ct: cancellation.Token);
-        await firstRequestStarted.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            Xunit.TestContext.Current.CancellationToken);
+        await HangGuard.AwaitAsync(firstRequestStarted.Task, "the first child read started");
 
         await cancellation.CancelAsync();
 
@@ -459,6 +463,8 @@ public class PipelineRunCollaboratorTests : BunitContext
     public async Task LiveConnection_DisposeCancelsScheduledReload()
     {
         var reloadCount = 0;
+        var clock = new ObservedFakeClock(DateTimeOffset.UnixEpoch);
+        var debounce = TimeSpan.FromMilliseconds(250);
         var connection = new PipelineRunLiveConnection(
             Services.GetRequiredService<HubConnectionFactory>(),
             NullLogger.Instance,
@@ -466,13 +472,17 @@ public class PipelineRunCollaboratorTests : BunitContext
             () => [],
             () => { reloadCount++; return Task.CompletedTask; },
             () => Task.CompletedTask,
-            callback => callback());
+            callback => callback(),
+            timeProvider: clock);
         var schedule = typeof(PipelineRunLiveConnection).GetMethod("ScheduleReloadAsync", Priv)!;
 
         await (Task)schedule.Invoke(connection, [])!;
+        Assert.Equal(1, clock.Pending(debounce));
         await connection.DisposeAsync();
-        await Task.Delay(300, Xunit.TestContext.Current.CancellationToken);
 
+        // The scheduled reload's delay was cancelled with the connection: moving past it runs nothing.
+        Assert.Equal(0, clock.Pending(debounce));
+        clock.Advance(debounce);
         Assert.Equal(0, reloadCount);
     }
 
@@ -505,7 +515,7 @@ public class PipelineRunCollaboratorTests : BunitContext
             callback => callback());
 
         await connection.HandleStepStartedAsync(stepId: 99);
-        await reloaded.Task.WaitAsync(TimeSpan.FromSeconds(5), Xunit.TestContext.Current.CancellationToken);
+        await reloaded.Task.WaitAsync(Aetheus.Front.Tests.TestDoubles.HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
 
         lock (childRunIds) Assert.Equal(1, reloadCount);
         Assert.Equal([1, 10], connection.DesiredRunIds().Order().ToArray());
@@ -646,6 +656,53 @@ public class PipelineRunCollaboratorTests : BunitContext
 
         Assert.Equal("WaitingForExecution", ordinary);
         Assert.Equal("WaitingForApproval", awaitingApproval);
+    }
+
+    [Theory]
+    [InlineData(true, "Cleanup", TaskExecutionStatus.Success, "agent-1", PipelineStatus.Running, "WaitingForPreviousStage")]
+    [InlineData(true, "deploy", TaskExecutionStatus.Success, "agent-1", PipelineStatus.Running, "WaitingForAgent")]
+    [InlineData(false, "deploy", TaskExecutionStatus.Pending, "agent-1", PipelineStatus.Running, "WaitingForPreviousStage")]
+    [InlineData(false, "deploy", TaskExecutionStatus.Running, null, PipelineStatus.Running, "WaitingForPreviousStage")]
+    [InlineData(false, "deploy", TaskExecutionStatus.Success, null, PipelineStatus.Running, "WaitingForAgent")]
+    [InlineData(false, "deploy", TaskExecutionStatus.Success, "agent-1", PipelineStatus.WaitingForApproval, "WaitingForApproval")]
+    [InlineData(false, "build", TaskExecutionStatus.Pending, "agent-1", PipelineStatus.Running, "WaitingForExecution")]
+    public void PendingReason_NamesWhatTheStepWaitsFor(
+        bool isSystem, string stageName, TaskExecutionStatus previousStageStatus, string? serverName,
+        PipelineStatus runStatus, string expected)
+    {
+        var step = new PipelineStepRunDto { StageName = stageName, ServerName = serverName, IsSystem = isSystem, Status = TaskExecutionStatus.Pending };
+        var stages = new List<StageViewModel>
+        {
+            new() { Name = "build", Status = previousStageStatus },
+            new() { Name = "deploy", Status = TaskExecutionStatus.Pending },
+        };
+
+        var reason = PipelineRunLogView.GetPendingReason(
+            step, stages, new PipelineRunDto { Status = runStatus }, new BunitTestHelper.StubLocalizer());
+
+        Assert.Equal(expected, reason);
+    }
+
+    [Fact]
+    public void PendingReason_AnApprovalOfAnotherStage_DoesNotHoldThisOne()
+    {
+        var step = new PipelineStepRunDto { StageName = "deploy", ServerName = "agent-1", Status = TaskExecutionStatus.Pending };
+        var run = new PipelineRunDto
+        {
+            Status = PipelineStatus.WaitingForApproval,
+            Approvals =
+            [
+                new PipelineApprovalDto { StageName = "release", Status = ApprovalStatus.Pending },
+                new PipelineApprovalDto { StageName = "deploy", Status = ApprovalStatus.Approved },
+            ]
+        };
+
+        var reason = PipelineRunLogView.GetPendingReason(
+            step, [new StageViewModel { Name = "deploy" }], run, new BunitTestHelper.StubLocalizer());
+
+        Assert.Equal("WaitingForExecution", reason);
+        Assert.Equal("WaitingForAgent", PipelineRunLogView.GetPendingReason(
+            step with { ServerName = null }, [], null, new BunitTestHelper.StubLocalizer()));
     }
 
     [Fact]

@@ -3,11 +3,10 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Releases;
 
-/// <summary>
-/// Recette R-224: the column filters of the releases list (global, project and server scopes). The
-/// stored columns go through the generic map; the source pipeline, which the list shows as the root of
-/// the release run's trigger chain (not a column of the release), is resolved to release ids first.
-/// </summary>
+/// <summary> The column filters of the releases list (global, project and server scopes). The
+/// stored columns go through the generic map; the source pipeline, which the list shows as the root
+/// of the release run's trigger chain (not a column of the release), is resolved to release ids
+/// first. </summary>
 internal static class ReleaseListQuery
 {
     internal const string SourcePipelineNameKey = "SourcePipelineName";
@@ -45,5 +44,5 @@ internal static class ReleaseListQuery
     };
 }
 
-/// <summary>Recette R-224: what the releases list's checkable filters read of one release.</summary>
+/// <summary>What the releases list's checkable filters read of one release.</summary>
 public sealed record ReleaseFilterFact(int Id, string ProjectName, int? PipelineRunId);

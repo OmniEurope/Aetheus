@@ -3,11 +3,9 @@ using Aetheus.Agent.Core.Services;
 
 namespace Aetheus.Agent.Linux.Collectors;
 
-/// <summary>
-/// Recette R2-031: which Debian packages dpkg holds as installed. A package left in the <c>rc</c> state
-/// by <c>apt-get remove</c> (removed, configuration files kept) or purged is not installed, whatever
-/// unit file or configuration directory it left behind.
-/// </summary>
+/// <summary> Which Debian packages dpkg holds as installed. A package left in the <c>rc</c> state
+/// by <c>apt-get remove</c> (removed, configuration files kept) or purged is not installed,
+/// whatever unit file or configuration directory it left behind. </summary>
 internal static class DpkgInstalledPackages
 {
     // One line per package dpkg knows: name, a tab, then the three-letter status abbreviation

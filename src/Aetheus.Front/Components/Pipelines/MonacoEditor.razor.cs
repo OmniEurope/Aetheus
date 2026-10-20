@@ -6,6 +6,7 @@ public partial class MonacoEditor : IAsyncDisposable
 {
     [Inject] private IJSRuntime Js { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private TimeProvider Clock { get; set; } = default!;
 
     [Parameter] public string Value { get; set; } = string.Empty;
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
@@ -23,7 +24,7 @@ public partial class MonacoEditor : IAsyncDisposable
     private bool _initialized;
     private string? _pendingValue;
     private readonly CancellationTokenSource _lifetimeCts = new();
-    // Read once, while its source is alive (recette R2-100, see OnYamlChanged).
+    // Read the token once while its source is alive; see OnYamlChanged.
     private readonly CancellationToken _lifetime;
     private CancellationTokenSource? _debounceCts;
     private Task? _debounceTask;
@@ -102,9 +103,8 @@ public partial class MonacoEditor : IAsyncDisposable
     {
         await ValueChanged.InvokeAsync(value);
 
-        // Recette R2-100: the JS editor keeps sending changes until DisposeAsync has disposed it, which
-        // happens after the sources are disposed: a change arriving then cancelled the disposed debounce
-        // source and read the disposed lifetime's Token (ObjectDisposedException).
+        // Ignore editor callbacks during disposal because JavaScript may still emit changes after
+        // the cancellation sources have been disposed.
         if (DebouncedValueChanged.HasDelegate && !_disposed)
         {
             _debounceCts?.Cancel();
@@ -122,7 +122,7 @@ public partial class MonacoEditor : IAsyncDisposable
     {
         try
         {
-            await Task.Delay(DebounceDelay, ct);
+            await Task.Delay(TimeSpan.FromMilliseconds(DebounceDelay), Clock, ct);
             if (_disposed || generation != _debounceGeneration) return;
             await InvokeAsync(() => DebouncedValueChanged.InvokeAsync(value));
         }

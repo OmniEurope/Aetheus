@@ -279,8 +279,8 @@ public sealed class AppWebAnalyticsConfigurationServiceTests : IDisposable
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>PLAN-003 2.1: a second app of the same project joins the existing vault instead of
-    /// creating its own, and a failure then removes only the key it added.</summary>
+    /// <summary>A second application shares the project vault and removes only its newly added key
+    /// on failure.</summary>
     [Fact]
     public async Task Configure_ASecondAppOfTheProject_AddsItsKeyToTheExistingVault()
     {

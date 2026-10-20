@@ -9,6 +9,7 @@ public sealed class OperationalDefaultsTests
     [InlineData(PackageFeedType.NuGet, PackageRegistryDefaults.NuGet)]
     [InlineData(PackageFeedType.Npm, PackageRegistryDefaults.Npm)]
     [InlineData(PackageFeedType.PyPI, PackageRegistryDefaults.PyPi)]
+    [InlineData(PackageFeedType.Maven, PackageRegistryDefaults.Maven)]
     public void PackageRegistryDefaults_MapEveryFeedType(PackageFeedType type, string expected)
     {
         Assert.Equal(expected, PackageRegistryDefaults.For(type));

@@ -56,8 +56,7 @@ public class ServerAppsSectionDeepTests : BunitContext
     {
         var cut = RenderSection(1);
         cut.WaitForState(
-            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null);
 
         Assert.Contains("app-1", cut.Markup);
         Assert.Contains("app-2", cut.Markup);
@@ -118,8 +117,7 @@ public class ServerAppsSectionDeepTests : BunitContext
     {
         var cut = RenderSection(6);
         cut.WaitForState(
-            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null);
 
         typeof(ServerAppsSection).GetField("_addVisible", Priv)!.SetValue(cut.Instance, true);
         cut.Render();
@@ -149,8 +147,7 @@ public class ServerAppsSectionDeepTests : BunitContext
     {
         var cut = RenderSection(8);
         cut.WaitForState(
-            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null);
 
         typeof(ServerAppsSection).GetField("_addName", Priv)!.SetValue(cut.Instance, "my-new-app");
         typeof(ServerAppsSection).GetField("_addVersion", Priv)!.SetValue(cut.Instance, "1.0");
@@ -176,8 +173,7 @@ public class ServerAppsSectionDeepTests : BunitContext
     {
         var cut = RenderSection(9, []);
         cut.WaitForState(
-            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null);
 
         var apps = (List<ServerAppDto>?)typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(apps);
@@ -191,8 +187,7 @@ public class ServerAppsSectionDeepTests : BunitContext
     {
         var cut = RenderSection(10);
         cut.WaitForState(
-            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ServerAppsSection).GetField("_apps", Priv)!.GetValue(cut.Instance) != null);
 
         typeof(ServerAppsSection).GetField("_addName", Priv)!.SetValue(cut.Instance, "no-version-app");
         typeof(ServerAppsSection).GetField("_addVersion", Priv)!.SetValue(cut.Instance, "");

@@ -103,7 +103,7 @@ public class ProjectArtifactsSectionTests : BunitContext
         });
 
         var cut = Render<ProjectArtifactsSection>(p => p.Add(c => c.ProjectId, 1));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The download button, the artifact link and the run link.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);

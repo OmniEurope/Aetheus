@@ -11,14 +11,9 @@ using Environment = Aetheus.Back.Data.Entities.Environment;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Recette R2-117: aetheus-release-fast asked for the prod approval only when "Deploy blue-green"
-/// became ready, after "Build images" and "Application payload", long after the launch. Every
-/// approval-requiring environment a run declares is now asked when the run starts, before its first
-/// stage (System:Prepare included) is dispatched; once given it is not asked again, and the Confirm
-/// stage's own confirmation is still asked when Confirm is ready. The stage shapes mirror
-/// .pipeline/aetheus-release-fast.yaml (not read here: pipeline files are not asserted on by tests).
-/// </summary>
+/// <summary>Environment approvals precede all dispatch and are reused for the run, while stage
+/// confirmation remains a later separate decision. These tests use stage fixtures without reading
+/// pipeline files.</summary>
 public sealed class PipelineLaunchEnvironmentApprovalTests
 {
     private const int RunId = 2555;

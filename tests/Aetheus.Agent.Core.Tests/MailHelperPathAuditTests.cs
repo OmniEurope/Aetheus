@@ -4,15 +4,9 @@ using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// Drift guard for the S-FEAT-W8KN mail helpers. <see cref="MailOperationExecutor.SetupHelperPath"/>
-/// and <see cref="MailOperationExecutor.ManageHelperPath"/> are hard-coded in the agent AND must be
-/// (a) written as root-owned helpers by <c>install-agent-linux.sh</c> and (b) granted in the
-/// <c>/etc/sudoers.d/aetheus-mail</c> drop-in. If the agent shells out to a binary the installer
-/// never deposits (the exact <c>mail-manage</c> gap this guard was added for), every incremental mail
-/// op fails at runtime with no compile-time signal. This test resolves the script's shell variables
-/// and asserts the path contract, the template rendered into each helper (R-249), and the sudoers grant.
-/// </summary>
+/// <summary>Verify that agent mail-helper paths match installer-rendered root-owned templates and
+/// exact sudoers grants. Resolve installer variables to compare the complete path
+/// contract.</summary>
 public sealed class MailHelperPathAuditTests
 {
     [Fact]
@@ -23,7 +17,7 @@ public sealed class MailHelperPathAuditTests
     public void ManageHelperPath_matches_install_script()
         => Assert.Equal(MailOperationExecutor.ManageHelperPath, ResolveHelperPath("MAIL_MANAGE_HELPER_PATH"));
 
-    // R-249: each helper is a template under deploy/agent-host-config the installer renders to its path.
+    // Each helper is a template under deploy/agent-host-config the installer renders to its path.
     [Theory]
     [InlineData("MAIL_SETUP_HELPER_PATH", "mail/mail-setup")]
     [InlineData("MAIL_MANAGE_HELPER_PATH", "mail/mail-manage")]
@@ -147,12 +141,45 @@ public sealed class MailHelperPathAuditTests
     }
 
     [Fact]
-    public void The_helper_announces_version_3_which_carries_purge()
+    public void The_helper_announces_version_6_which_carries_purge_master_set_set_quota_and_retry_tuning()
     {
-        // The page gates "Réinstaller la messagerie" on the reported helper version (3 = purge exists).
+        // The page gates "Réinstaller la messagerie" on the reported helper version (3 = purge exists) and
+        // "Préparer l'accès administrateur" on version 4 (recette R1-41: master-set exists) the mailbox quota on 5 (DEP-005) and the retry tuning on 6.
         var script = LinuxHostConfigTemplates.Read("mail/mail-manage");
-        Assert.Contains("# aetheus-mail-helper-version: 3\n", script, StringComparison.Ordinal);
-        Assert.Contains("echo \"aetheus-mail-helper-version: 3\"", script, StringComparison.Ordinal);
+        Assert.Contains("# aetheus-mail-helper-version: 6\n", script, StringComparison.Ordinal);
+        Assert.Contains("\n  retry-tuning)\n", script, StringComparison.Ordinal);
+        Assert.Contains("echo \"aetheus-mail-helper-version: 6\"", script, StringComparison.Ordinal);
+        Assert.Contains("\n  purge)\n", script, StringComparison.Ordinal);
+        Assert.Contains("\n  master-set)\n", script, StringComparison.Ordinal);
+        Assert.Contains("\n  set-quota)\n", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Setup_sets_the_shorter_retry_timings_and_stays_ipv4_only()
+    {
+        // 2026-10-20: Gmail defers the hosting provider's netblock (421-4.7.28); never below 60 s.
+        var script = LinuxHostConfigTemplates.Read("mail/mail-setup");
+        Assert.Contains("postconf -e \"minimal_backoff_time = 60s\"", script, StringComparison.Ordinal);
+        Assert.Contains("postconf -e \"maximal_backoff_time = 900s\"", script, StringComparison.Ordinal);
+        Assert.Contains("postconf -e \"queue_run_delay = 60s\"", script, StringComparison.Ordinal);
+        Assert.Contains("postconf -e \"inet_protocols = ipv4\"", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Manage_retry_tuning_takes_no_argument_and_applies_the_same_three_values()
+    {
+        var script = LinuxHostConfigTemplates.Read("mail/mail-manage");
+        var start = script.IndexOf("\n  retry-tuning)\n", StringComparison.Ordinal);
+        Assert.True(start > 0);
+        var block = script[start..script.IndexOf("\n    ;;\n", start, StringComparison.Ordinal)];
+        Assert.Contains("[ \"$#\" -eq 1 ] || die \"retry-tuning takes no argument\"", block, StringComparison.Ordinal);
+        Assert.Contains(
+            "postconf -e \"minimal_backoff_time = 60s\" \"maximal_backoff_time = 900s\" \"queue_run_delay = 60s\"",
+            block, StringComparison.Ordinal);
+        Assert.Contains("systemctl reload postfix", block, StringComparison.Ordinal);
+        // No variable can reach postconf: the block never expands a positional parameter.
+        Assert.DoesNotContain("$2", block, StringComparison.Ordinal);
+        Assert.DoesNotContain("${2", block, StringComparison.Ordinal);
     }
 
     // The `purge)` branch of mail-manage, up to its closing `;;`.

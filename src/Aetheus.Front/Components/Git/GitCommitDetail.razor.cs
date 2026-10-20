@@ -172,7 +172,7 @@ public partial class GitCommitDetail
         _ => "description"
     };
 
-    private static string StatusIconClass(string status) => status.ToLowerInvariant() switch
+    internal static string StatusIconClass(string status) => status.ToLowerInvariant() switch
     {
         "added" => "git-file-status-icon diff-file-stat-add",
         "deleted" => "git-file-status-icon diff-file-stat-del",

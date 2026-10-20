@@ -20,11 +20,8 @@ namespace Aetheus.Back.Components.Pipelines;
 /// </summary>
 public interface IPipelineRunPreflightService
 {
-    /// <summary>No problem when the run may start; otherwise one readable reason per problem found.
-    /// The outcome also carries what was verified, which the launcher snapshots onto the run: without
-    /// it an accepted launch leaves no trace of what the preflight looked at. Observations that do not
-    /// refuse the launch travel in <c>Warnings</c> (PLAN-005 observed_port_policy), never in
-    /// <c>Problems</c>: a note read as a refusal would block a launch nobody meant to block.</summary>
+    /// <summary>Preflight records verified checks and launch-blocking problems separately from
+    /// nonblocking warnings, so observations cannot accidentally refuse execution.</summary>
     Task<PipelinePreflightOutcomeDto> FindBlockingProblemsAsync(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
@@ -51,6 +48,7 @@ public sealed class PipelineRunPreflightService(
     IPipelineRequirementsChecker requirements,
     IPipelineScannerManifestPreflight scannerManifest,
     IPipelineReleaseArtifactPreflight releaseArtifacts,
+    IPipelineAiProfilePreflight aiProfilePreflight,
     ILogger<PipelineRunPreflightService> logger) : IPipelineRunPreflightService
 {
     public async Task<PipelinePreflightOutcomeDto> FindBlockingProblemsAsync(
@@ -109,10 +107,8 @@ public sealed class PipelineRunPreflightService(
 
         var stages = YamlParsingHelper.FlattenJobs(definition).ToList();
 
-        // Each of the three checks below is deduplicated on its own key, because a launch is on the
-        // synchronous request path and every one of them was previously repeated per stage: the fleet
-        // query per selector, an outbound DNS+HTTP call per environment check, and one database round
-        // trip per referenced pipeline NAME. A ten-stage pipeline paid all three ten times over.
+        // Deduplicates fleet, environment and referenced-pipeline checks by their own keys to bound
+        // database and network work on the synchronous launch path.
         foreach (var stage in stages)
             await CheckRunnerIsConfiguredAsync(
                 stage, resolvedVariables, organizationId, projectId, problems, state, ct).ConfigureAwait(false);
@@ -127,6 +123,12 @@ public sealed class PipelineRunPreflightService(
             state.Record(PreflightCheckKinds.ScannerManifest, definition.Name ?? string.Empty,
                 satisfied: false, detail: manifestProblem);
         }
+
+        var aiProfiles = await aiProfilePreflight.FindProblemsAsync(definition, organizationId, ct).ConfigureAwait(false);
+        problems.AddRange(aiProfiles.Blocking);
+        state.Warnings.AddRange(aiProfiles.Warnings);
+        foreach (var aiProblem in aiProfiles.Blocking)
+            state.Record(PreflightCheckKinds.AiProfile, aiProblem, satisfied: false, detail: aiProblem);
 
         // Only on the commit the launch knows: an on_success child starts later, on its own commit.
         if (sameSourceCommit && projectId is { } releaseProjectId)
@@ -178,8 +180,10 @@ public sealed class PipelineRunPreflightService(
         ChainPreflightState state,
         CancellationToken ct)
     {
+        var expanded = await PipelineProjectResourceNames
+            .ExpandForProjectAsync(definition, repo, projectId, ct).ConfigureAwait(false);
         foreach (var outcome in await requirements
-            .CheckAsync(definition.Requires, projectId, organizationId, ct).ConfigureAwait(false))
+            .CheckAsync(expanded.Requires, projectId, organizationId, ct).ConfigureAwait(false))
         {
             if (outcome.Problem is { } problem) problems.Add(problem);
             state.Record(outcome.Kind, outcome.Name, outcome.Satisfied, outcome.Problem);
@@ -197,27 +201,11 @@ public sealed class PipelineRunPreflightService(
         public const string ChildPipeline = "child-pipeline";
         public const string ScannerManifest = "scanner-manifest";
         public const string ReleaseArtifact = "release-artifact";
+        public const string AiProfile = "ai-profile";
     }
 
-    /// <summary>
-    /// Follows `type: trigger` steps and `on_success` entries and applies the same checks to each
-    /// pipeline they name.
-    ///
-    /// This is what the preflight existed for and did not do. An orchestrator like aetheus-candidate
-    /// declares no environment and no variable library of its own: everything it needs belongs to the
-    /// four pipelines it triggers and to the deployment it proposes. So its launch passed every check
-    /// and the chain still died an hour in, on a `qa` environment whose required check refuses, or two
-    /// hours in, at the deployment, on a variable library entry nobody had created.
-    ///
-    /// Deliberately conservative about variables: a child is resolved with the parent's own resolved
-    /// variables, plus every name the triggering step forwards, plus the child's declared parameter
-    /// names. Anything that could legitimately be supplied at run time is therefore considered
-    /// supplied, because a false refusal here blocks every launch and would be far worse than the late
-    /// failure it replaces. What remains refused is what nothing can ever provide: a library entry, a
-    /// vault, an environment or a runner that does not exist.
-    /// </summary>
-    /// <summary>Recette R2-121: the shipped template the launched pipeline extends, which is what makes
-    /// portfolio-candidate a candidate for its children's scanner manifest, as aetheus-candidate is by name.</summary>
+    /// <summary>The launched pipeline's template reference identifies the root template used by
+    /// child-pipeline preflight checks.</summary>
     private async Task<string?> RootTemplateAsync(PipelineYamlDefinition definition, int projectId, CancellationToken ct) =>
         string.IsNullOrWhiteSpace(definition.Name)
             ? null
@@ -307,9 +295,8 @@ public sealed class PipelineRunPreflightService(
         /// <summary>What was verified, in the order it was verified, across the whole chain.</summary>
         public List<PreflightCheckDto> Checks { get; } = [];
 
-        /// <summary>Observations that are recorded on the run without refusing it: an undeclared
-        /// listener under <c>observed_port_policy: warning</c> (PLAN-005). Collected here for the same
-        /// reason as the checks, so a child pipeline's observation is not lost with its own state.</summary>
+        /// <summary>Nonblocking observations are retained for the run, including those discovered
+        /// while checking child pipelines.</summary>
         public List<string> Warnings { get; } = [];
 
         private readonly HashSet<string> _recorded = new(StringComparer.Ordinal);
@@ -522,9 +509,8 @@ public sealed class PipelineRunPreflightService(
         CancellationToken ct)
     {
         var stillToCome = PipelineUnresolvedVariableGuard.BuildDeferredNames(definition);
-        // Existence is a property of the NAME, not of the stage that references it. An orchestrator
-        // naming four pipelines across thirty steps used to issue thirty queries for four answers, so
-        // each distinct name is resolved once and every referencing site reuses the verdict.
+        // Resolve each distinct referenced name once because existence does not depend on the
+        // referencing stage.
         var references = stages
             .SelectMany(stage =>
             {

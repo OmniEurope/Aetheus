@@ -5,10 +5,8 @@ namespace Aetheus.Back.Components.PackageRegistry;
 
 internal sealed class PackageRegistryRepository(AppDbContext db) : IPackageRegistryRepository
 {
-    /// <summary>
-    /// Recette R-210 / R-224: the header filters of the package registry admin grid. The latest version
-    /// is read the way the list projects it (newest listed version).
-    /// </summary>
+    /// <summary> The header filters of the package registry admin grid. The latest version is read
+    /// the way the list projects it (newest listed version). </summary>
     internal static readonly GridQueryMap<RegistryPackage> Columns = new GridQueryMap<RegistryPackage>()
         .Enum("Kind", package => package.Kind)
         .Text("Name", package => package.Name)
@@ -87,6 +85,19 @@ internal sealed class PackageRegistryRepository(AppDbContext db) : IPackageRegis
             .Include(package => package.Versions)
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
+
+    public async Task<RegistryPackage?> GetPackageWithFilesAsync(
+        PackageRegistryKind kind, string normalizedName, bool forUpdate, CancellationToken ct = default)
+    {
+        var query = db.RegistryPackages
+            .Where(package => package.Kind == kind && package.NormalizedName == normalizedName)
+            .Include(package => package.Versions)
+            .ThenInclude(version => version.Files)
+            .AsSplitQuery();
+        if (!forUpdate)
+            query = query.AsNoTracking();
+        return await query.FirstOrDefaultAsync(ct).ConfigureAwait(false);
+    }
 
     public async Task<RegistryPackage?> GetPackageByIdAsync(int id, CancellationToken ct = default)
         => await db.RegistryPackages
@@ -198,12 +209,21 @@ internal sealed class PackageRegistryRepository(AppDbContext db) : IPackageRegis
             || (package.Description != null && EF.Functions.ILike(package.Description, pattern)));
     }
 
+    /// <summary>Every payload the database still references: the single archive of a version and,
+    /// for multi-file formats, each of its files. The reconciler deletes what is not in this set.</summary>
     public async Task<HashSet<string>> GetStoredFilePathsAsync(CancellationToken ct = default)
-        => (await db.RegistryPackageVersions.AsNoTracking()
+    {
+        var paths = (await db.RegistryPackageVersions.AsNoTracking()
                 .Select(version => version.FilePath)
                 .ToListAsync(ct)
                 .ConfigureAwait(false))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        paths.UnionWith(await db.RegistryPackageFiles.AsNoTracking()
+            .Select(file => file.FilePath)
+            .ToListAsync(ct)
+            .ConfigureAwait(false));
+        return paths;
+    }
 
     public async Task SaveChangesAsync(CancellationToken ct = default)
         => await db.SaveChangesAsync(ct).ConfigureAwait(false);

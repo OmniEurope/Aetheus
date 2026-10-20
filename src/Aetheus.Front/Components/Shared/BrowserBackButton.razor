@@ -1,8 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* The labelled back action of a page body (a not-found screen, a help article); the page header's own
-   back arrow is OmniPageHeader's. STD-BTN exception chosen by the user (recette R-395, 2026-09-28): the
-   back arrow is blue on every page, where the importance rule would make it a discreet neutral navigation. *@
+@* Use the labelled back action for page bodies while OmniPageHeader owns its header arrow; the
+   product's STD-BTN exception keeps this navigation action blue. *@
 <OmniButton Variant="OmniButtonVariant.Primary" Size="@Size"
             OnClick="@(_ => GoBackAsync())" title="@Title" Label="@Title">
     <OmniIcon Name="OmniIconName.ArrowLeft" /> @Text

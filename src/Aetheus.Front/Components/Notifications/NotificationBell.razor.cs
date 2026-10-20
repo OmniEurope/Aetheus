@@ -8,7 +8,6 @@ public partial class NotificationBell : IDisposable
     [Inject] private UserNotificationsFeed Feed { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
-    [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
 
     private bool _popoverOpen;
@@ -25,8 +24,7 @@ public partial class NotificationBell : IDisposable
     private void OnFeedChanged() => _ = InvokeAsync(StateHasChanged);
 
 
-    /// <summary>
-    /// Recette R2-034: each opening reads whether the user follows any project, because a user who
+    /// <summary> Each opening reads whether the user follows any project, because a user who
     /// follows none receives nothing and the panel must say why. Read at opening only: following a
     /// project happens elsewhere (its page, the preferences), and the next opening sees it.
     /// </summary>
@@ -66,19 +64,16 @@ public partial class NotificationBell : IDisposable
         }
     }
 
-    private void GoTo(string href)
-    {
-        _popoverOpen = false;
-        Nav.NavigateTo(href);
-    }
+    // The popover's links navigate by themselves; choosing one only closes the popover.
+    private void ClosePopover() => _popoverOpen = false;
 
     private async Task MarkAllReadAsync()
     {
         _busy = true;
         try
         {
-            // Recette R-188: success needs no toast, the count and the row icons change in the open
-            // panel; the toast covered that very panel. A failure still says so.
+            // Success is visible in the count and row state without a toast covering the panel;
+            // failures still display feedback.
             if (!await Feed.MarkAllReadAsync())
                 Toast.Error("Error", "OperationFailed");
         }

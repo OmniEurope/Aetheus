@@ -56,7 +56,7 @@ public class GitRepository(AppDbContext db) : IGitRepository
         var query = db.PullRequests
             .AsNoTracking()
             .Where(p => p.GitConnectionId == gitConnectionId);
-        // Recette R-224: the grid's column header filters, before the count.
+        // The grid's column header filters, before the count.
         query = GitPullRequestListQuery.Columns.ApplyFilters(query, columnFilters);
 
         if (status.HasValue)

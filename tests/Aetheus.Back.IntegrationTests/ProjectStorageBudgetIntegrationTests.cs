@@ -11,11 +11,9 @@ using NSubstitute;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-013 lot 5 control on PostgreSQL: a project pushed over its budget (10 MB) is back under it after
-/// one sweep, its oldest telemetry gone first; its grade, its totals and its newest analysis report stay,
-/// and a project under its budget is not touched.
-/// </summary>
+/// <summary>The PostgreSQL budget sweep removes oldest telemetry until within budget while
+/// preserving analysis totals, grades and latest reports, leaving under-budget projects
+/// unchanged.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class ProjectStorageBudgetIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

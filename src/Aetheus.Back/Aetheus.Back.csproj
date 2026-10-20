@@ -33,10 +33,21 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="NuGet.Packaging" />
     <PackageReference Include="NuGet.Versioning" />
+    <!-- Direct ref keeps the patched release ahead of the vulnerable transitive one (MailKit, NuGet.Packaging). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <!-- Decision of 2026-10-07: the administration Performance page reads this collector (ApiPerformanceReport). -->
     <PackageReference Include="OmniEurope.Performance" />
     <PackageReference Include="Otp.NET" />
     <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+
+  <!-- Mail templates (recette R1-75): OmniMailRenderer and OmniMailTheme render every platform mail on the
+       server. Same source switch as the front (UseLocalOmniEurope, Directory.Build.props). -->
+  <ItemGroup Condition="'$(UseLocalOmniEurope)' != 'true'">
+    <PackageReference Include="OmniEurope.Blazor" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseLocalOmniEurope)' == 'true'">
+    <ProjectReference Include="$(OmniEuropeBlazorLocalProject)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -3,12 +3,8 @@ using System.Text;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Blanks the comments and the string and character literals of a C# source, keeping every offset and
-/// line break, so a guard that scans code does not take a word inside a comment or a string for code.
-/// One implementation for the guards that need it: each used to carry its own copy, and those copies
-/// were the most complex methods of the repository (cyclomatic 22 and 21, recette R-532).
-/// </summary>
+/// <summary>Masks C# comments and literals while preserving offsets and line breaks so source
+/// guards only inspect code.</summary>
 internal static class SourceMasker
 {
     internal static string MaskCommentsAndStrings(string source)

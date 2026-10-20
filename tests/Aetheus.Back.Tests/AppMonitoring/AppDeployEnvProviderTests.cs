@@ -100,9 +100,8 @@ public class AppDeployEnvProviderTests : IDisposable
     [Fact]
     public async Task SameRun_AfterTheBackendRestarted_ReusesTheKeyWithoutRotating()
     {
-        // A production deployment restarts the backend it runs on. The key used to live in process
-        // memory, so the new colour rotated again within the same run (audit log: run 2334 twice, run
-        // 1979 nine times) and the containers were left on a key that dies with the overlap window.
+        // A deployment key must remain stable across backend restarts within the same run so
+        // containers keep valid credentials.
         var beforeRestart = await Build("https://obs.example.com")
             .GetDeployEnvAsync(1, null, pipelineRunId: 7, ct: TestContext.Current.CancellationToken);
         var afterRestart = await Build("https://obs.example.com")

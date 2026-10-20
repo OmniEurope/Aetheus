@@ -1,0 +1,516 @@
+{
+  "node": "v24.7.0",
+  "cases": [
+    {
+      "name": "clean",
+      "description": "nightly-qualification.test.mjs: a clean nightly is recorded with its zero counts and a seal over its content.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade B, critical 0, high 0; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"B\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 0\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"964691196403cfeda59efbbd66a18e821ca6ea8c0637c7b4cf42d82356deff07\"\n  }\n}\n"
+    },
+    {
+      "name": "measured",
+      "description": "nightly-qualification.test.mjs: the critical and high counts the nightly measured are recorded as measured.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"F\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"F\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":1},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":2}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade F, critical 1, high 2; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"F\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 1,\n    \"highFindings\": 2\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"9d9c5cd7c29636551744ad47a1b19cea4ae86d5ddf09ac7522bf7238471732c5\"\n  }\n}\n"
+    },
+    {
+      "name": "unmeasured",
+      "description": "nightly-qualification.test.mjs: counts the nightly never measured are recorded as unknown, not as zero.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":false,\"observedValue\":null},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":false,\"observedValue\":null}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade B, critical not measured, high not measured; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"B\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"a253f7668e99a697974518874e46c8962be4bd0f9a52387674ef5642bcca19da\"\n  }\n}\n"
+    },
+    {
+      "name": "other-commit",
+      "description": "nightly-qualification.test.mjs: a summary belonging to another commit is refused at recording time.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "out.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "mismatched"
+      },
+      "environment": {},
+      "files": {
+        "mismatched/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"2222222222222222222222222222222222222222\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "error": {
+        "name": "Error",
+        "message": "The nightly security summary belongs to another commit."
+      },
+      "stdout": []
+    },
+    {
+      "name": "extensions-and-grade",
+      "description": "nightly-qualification.test.mjs: the extension summaries and the sealed grade are recorded, a missing one as unavailable.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security",
+        "quality": "no-quality",
+        "security_history": "history",
+        "extended_dynamic_security": "no-extended"
+      },
+      "environment": {
+        "CANDIDATE_ASSURANCE_GRADE": "C"
+      },
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "history/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"C\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"C\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":2}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade B, critical 0, high 0; security history Passed, extended dynamic security Unavailable; assurance grade C."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"B\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 0\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Passed\",\n    \"grade\": \"C\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 2\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": \"C\",\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"1815505fb2e2f949ff145628bfdaa1f02615c3a0296299d4327f57b193fb5b77\"\n  }\n}\n"
+    },
+    {
+      "name": "unsealed",
+      "description": "nightly-qualification.test.mjs: an empty assurance grade is recorded as null.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {
+        "CANDIDATE_ASSURANCE_GRADE": ""
+      },
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade B, critical 0, high 0; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"B\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 0\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"964691196403cfeda59efbbd66a18e821ca6ea8c0637c7b4cf42d82356deff07\"\n  }\n}\n"
+    },
+    {
+      "name": "all-sections",
+      "description": "Every section present, nested summaries found at any depth, a 64-character uppercase source lowered.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "out/deeper/qualification.json",
+        "source_sha": "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
+        "security": "grades/security",
+        "quality": "grades/quality",
+        "security_history": "grades/history",
+        "extended_dynamic_security": "grades/extended"
+      },
+      "environment": {
+        "CANDIDATE_ASSURANCE_GRADE": "A"
+      },
+      "files": {
+        "grades/security/a/b/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"D\",\"completeness\":\"Complete\",\"commitHash\":\"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"D\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":3},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":4}]}]}}\n",
+        "grades/quality/quality-summary.json": "{\"pipelineRunId\":7,\"status\":\"Failed\",\"grade\":{\"overallGrade\":\"E\",\"completeness\":\"Partial\",\"commitHash\":\"ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "grades/history/x/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"A\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":1}]}]}}\n",
+        "grades/extended/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"F\",\"completeness\":\"Complete\",\"commitHash\":\"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"F\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":2},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789: security Passed grade D, critical 3, high 4; security history Passed, extended dynamic security Passed; assurance grade A."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"D\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\n    \"criticalFindings\": 3,\n    \"highFindings\": 4\n  },\n  \"quality\": {\n    \"status\": \"Failed\",\n    \"grade\": \"E\",\n    \"completeness\": \"Partial\",\n    \"pipelineRunId\": 7,\n    \"commitHash\": \"ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789\"\n  },\n  \"securityHistory\": {\n    \"status\": \"Passed\",\n    \"grade\": \"A\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 1\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Passed\",\n    \"grade\": \"F\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\",\n    \"criticalFindings\": 2,\n    \"highFindings\": 0\n  },\n  \"assuranceGrade\": \"A\",\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"a5f6ca85629702baf2430ef2a69984df2ef4dcb4bde61534da30d7d1e015c596\"\n  }\n}\n"
+    },
+    {
+      "name": "unavailable-shapes",
+      "description": "Two summaries, invalid JSON, a file instead of a directory and a missing directory are each unavailable.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "q.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security",
+        "quality": "quality",
+        "security_history": "history",
+        "extended_dynamic_security": "extended"
+      },
+      "environment": {},
+      "files": {
+        "security/a/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "security/b/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "quality/quality-summary.json": "{",
+        "history": "not a directory",
+        "extended/other.json": "{}"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Unavailable grade -, critical not measured, high not measured; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"fd6bfb72cb718cb776afcf62a1d5538377d83a185db145d65e3a9bca257e6c4f\"\n  }\n}\n"
+    },
+    {
+      "name": "falsy-summaries",
+      "description": "Summaries that parse to falsy values are unavailable.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "q.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security",
+        "quality": "quality",
+        "security_history": "history",
+        "extended_dynamic_security": "extended"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "null",
+        "quality/quality-summary.json": "false",
+        "history/security-summary.json": "0",
+        "extended/security-summary.json": "\"\""
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Unavailable grade -, critical not measured, high not measured; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"fd6bfb72cb718cb776afcf62a1d5538377d83a185db145d65e3a9bca257e6c4f\"\n  }\n}\n"
+    },
+    {
+      "name": "truthy-primitives",
+      "description": "Summaries that parse to truthy primitives or arrays are described with their defaults.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "q.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security",
+        "quality": "quality",
+        "security_history": "history",
+        "extended_dynamic_security": "extended"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "5",
+        "quality/quality-summary.json": "true",
+        "history/security-summary.json": "\"text\"",
+        "extended/security-summary.json": "[1]"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Unknown grade -, critical not measured, high not measured; security history Unknown, extended dynamic security Unknown; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Unknown\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"commitHash\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"quality\": {\n    \"status\": \"Unknown\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"commitHash\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unknown\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"commitHash\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unknown\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"commitHash\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"79b6a9cc14c11c07605696927b4675543bcf0c4e2b6d75e38a90d8fa71941a95\"\n  }\n}\n"
+    },
+    {
+      "name": "odd-grades",
+      "description": "Grades, run ids, statuses and completeness outside the expected forms.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "q.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security",
+        "quality": "quality",
+        "security_history": "history",
+        "extended_dynamic_security": "extended"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42.5,\"status\":3,\"grade\":{\"overallGrade\":\"AB\",\"completeness\":{\"level\":\"x\"},\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "quality/quality-summary.json": "{\"pipelineRunId\":\"42\",\"status\":null,\"grade\":{\"overallGrade\":\"a\",\"completeness\":null,\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "history/security-summary.json": "{\"pipelineRunId\":9007199254740992,\"status\":\"Réussi 😀\",\"grade\":{\"overallGrade\":[\"A\"],\"completeness\":\"Complete\",\"commitHash\":12,\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "extended/security-summary.json": "{\"pipelineRunId\":-9007199254740991,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\\n\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security 3 grade -, critical 0, high 0; security history Réussi 😀, extended dynamic security Passed; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"3\",\n    \"grade\": null,\n    \"completeness\": {\n      \"level\": \"x\"\n    },\n    \"pipelineRunId\": null,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 0\n  },\n  \"quality\": {\n    \"status\": \"Unknown\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"commitHash\": \"1111111111111111111111111111111111111111\"\n  },\n  \"securityHistory\": {\n    \"status\": \"Réussi 😀\",\n    \"grade\": [\n      \"A\"\n    ],\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": null,\n    \"commitHash\": 12,\n    \"criticalFindings\": 0,\n    \"highFindings\": 0\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Passed\",\n    \"grade\": null,\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": -9007199254740991,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 0\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"1828ef34994fd42dd967ddb12f4182cf31032746868af177dfba488c1737873e\"\n  }\n}\n"
+    },
+    {
+      "name": "array-grade-logged",
+      "description": "A grade that is an array holding one letter is recorded as that array and logged as the letter.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":[\"C\"],\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade C, critical 0, high 0; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": [\n      \"C\"\n    ],\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 0\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"a4d49dd69820d0e460361f7d8193835fef3945372231358a8dc1ab67130d554b\"\n  }\n}\n"
+    },
+    {
+      "name": "lone-surrogate",
+      "description": "A status holding a lone surrogate is escaped in the record and in the sealed text.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"status\":\"\\ud800x\",\"grade\":{\"commitHash\":\"1111111111111111111111111111111111111111\"}}"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security \ud800x grade -, critical not measured, high not measured; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"\\ud800x\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"33241150bf05f759fe8e7c7642f4d3c243d083ce4cd9eed48846e5b4885a54b8\"\n  }\n}\n"
+    },
+    {
+      "name": "severity-forms",
+      "description": "Severity matched case-insensitively and untrimmed, only observed numeric values summed across domains.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"measures\":[{\"severity\":\"CRITICAL\",\"observed\":true,\"observedValue\":1.5},{\"severity\":\" critical\",\"observed\":true,\"observedValue\":100},{\"severity\":\"critical\",\"observed\":\"true\",\"observedValue\":100},{\"severity\":\"critical\",\"observed\":true,\"observedValue\":\"100\"},{\"severity\":\"High\",\"observed\":true,\"observedValue\":1e+21},{\"severity\":\"high\",\"observed\":true,\"observedValue\":0}]},null,\"text\",{\"measures\":\"chars\"},{\"measures\":null},{\"measures\":[{\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0.25},null,7,{\"severity\":[\"critical\"],\"observed\":true,\"observedValue\":1}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade B, critical 2.75, high 1e+21; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"B\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 2.75,\n    \"highFindings\": 1e+21\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"1b6b01fe296f5d50d95675314c6b11a25eb998e4017d236f6178cce2ca57210f\"\n  }\n}\n"
+    },
+    {
+      "name": "severity-domains-not-array",
+      "description": "Domains that are not an array leave both counts unmeasured.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":{\"0\":{}}}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade B, critical not measured, high not measured; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"B\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"a253f7668e99a697974518874e46c8962be4bd0f9a52387674ef5642bcca19da\"\n  }\n}\n"
+    },
+    {
+      "name": "measures-not-iterable-object",
+      "description": "Measures that are an object cannot be iterated.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"measures\":{\"severity\":\"critical\"}}]}}\n"
+      },
+      "error": {
+        "name": "TypeError",
+        "message": "object is not iterable (cannot read property Symbol(Symbol.iterator))"
+      },
+      "stdout": []
+    },
+    {
+      "name": "measures-not-iterable-number",
+      "description": "Measures that are a number cannot be iterated.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"measures\":12.5}]}}\n"
+      },
+      "error": {
+        "name": "TypeError",
+        "message": "number 12.5 is not iterable (cannot read property Symbol(Symbol.iterator))"
+      },
+      "stdout": []
+    },
+    {
+      "name": "measures-not-iterable-boolean",
+      "description": "Measures that are a boolean cannot be iterated.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"measures\":true}]}}\n"
+      },
+      "error": {
+        "name": "TypeError",
+        "message": "boolean true is not iterable (cannot read property Symbol(Symbol.iterator))"
+      },
+      "stdout": []
+    },
+    {
+      "name": "status-not-convertible",
+      "description": "A status object with its own toString cannot be converted.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":{\"toString\":1},\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "error": {
+        "name": "TypeError",
+        "message": "Cannot convert object to primitive value"
+      },
+      "stdout": []
+    },
+    {
+      "name": "quality-other-commit",
+      "description": "The quality summary of another commit is refused with its label.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "q.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security",
+        "quality": "quality"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "quality/quality-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"2222222222222222222222222222222222222222\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "error": {
+        "name": "Error",
+        "message": "The nightly quality summary belongs to another commit."
+      },
+      "stdout": []
+    },
+    {
+      "name": "history-other-commit",
+      "description": "The security history summary of another commit is refused with its label.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "q.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security",
+        "quality": "",
+        "security_history": "history"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "history/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"2222222222222222222222222222222222222222\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "error": {
+        "name": "Error",
+        "message": "The nightly security history summary belongs to another commit."
+      },
+      "stdout": []
+    },
+    {
+      "name": "extended-other-commit",
+      "description": "The extended dynamic security summary of another commit is refused with its label.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "q.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security",
+        "quality": "",
+        "security_history": "",
+        "extended_dynamic_security": "extended"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n",
+        "extended/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"2222222222222222222222222222222222222222\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "error": {
+        "name": "Error",
+        "message": "The nightly extended dynamic security summary belongs to another commit."
+      },
+      "stdout": []
+    },
+    {
+      "name": "invalid-sha",
+      "description": "A source id that is not 40 or 64 hexadecimal characters is refused.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "q.json",
+        "source_sha": "111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "error": {
+        "name": "Error",
+        "message": "The nightly source SHA must be a full hexadecimal commit identifier."
+      },
+      "stdout": []
+    },
+    {
+      "name": "assurance-grade-forms",
+      "description": "A lowercase assurance grade is not a grade.",
+      "instant": "2026-10-16T07:30:45.123Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {
+        "CANDIDATE_ASSURANCE_GRADE": "a"
+      },
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade B, critical 0, high 0; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"2026-10-16T07:30:45.123Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"B\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 0\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"964691196403cfeda59efbbd66a18e821ca6ea8c0637c7b4cf42d82356deff07\"\n  }\n}\n"
+    },
+    {
+      "name": "other-instant",
+      "description": "Another instant changes generatedAt and the seal.",
+      "instant": "1999-12-31T23:59:59.999Z",
+      "parameters": {
+        "output": "nightly-qualification.json",
+        "source_sha": "1111111111111111111111111111111111111111",
+        "security": "security"
+      },
+      "environment": {},
+      "files": {
+        "security/security-summary.json": "{\"pipelineRunId\":42,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"1111111111111111111111111111111111111111\",\"domains\":[{\"domain\":\"Security\",\"grade\":\"B\",\"measures\":[{\"key\":\"grade.security.critical\",\"severity\":\"Critical\",\"observed\":true,\"observedValue\":0},{\"key\":\"grade.security.high\",\"severity\":\"High\",\"observed\":true,\"observedValue\":0}]}]}}\n"
+      },
+      "stdout": [
+        "Nightly qualification recorded for 1111111111111111111111111111111111111111: security Passed grade B, critical 0, high 0; security history Unavailable, extended dynamic security Unavailable; assurance grade not sealed."
+      ],
+      "output": "{\n  \"schema\": 1,\n  \"profile\": \"full\",\n  \"sourceCommit\": \"1111111111111111111111111111111111111111\",\n  \"generatedAt\": \"1999-12-31T23:59:59.999Z\",\n  \"security\": {\n    \"status\": \"Passed\",\n    \"grade\": \"B\",\n    \"completeness\": \"Complete\",\n    \"pipelineRunId\": 42,\n    \"commitHash\": \"1111111111111111111111111111111111111111\",\n    \"criticalFindings\": 0,\n    \"highFindings\": 0\n  },\n  \"quality\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null\n  },\n  \"securityHistory\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"extendedDynamicSecurity\": {\n    \"status\": \"Unavailable\",\n    \"grade\": null,\n    \"completeness\": null,\n    \"pipelineRunId\": null,\n    \"criticalFindings\": null,\n    \"highFindings\": null\n  },\n  \"assuranceGrade\": null,\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"b5cd9b6ddac5abf5e303bd881ae237905626dbcbd9c4a4de5388e9c74a480b69\"\n  }\n}\n"
+    }
+  ]
+}

@@ -4,7 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>Recette R-212: the column filters of a project's logs section. The keys are the grid's column keys.</summary>
+/// <summary>The column filters of a project's logs section. The keys are the grid's column
+/// keys.</summary>
 internal static class ProjectLogListQuery
 {
     internal static readonly GridQueryMap<TaskLog> Columns = new GridQueryMap<TaskLog>()

@@ -25,8 +25,8 @@ public class AuditController(IAuditService auditService, IAuditChainService chai
     {
         page = Math.Max(1, page);
         pageSize = PaginationDefaults.Clamp(pageSize);
-        // Recette R-238: the grid's header filters travel as the generic column filters, beside the
-        // typed parameters other callers still send.
+        // The grid's header filters travel as the generic column filters, beside the typed
+        // parameters other callers still send.
         return Ok(await auditService.GetLogsPagedAsync(page, pageSize, search, action, entityType, entityId, dateFrom, dateTo, ct,
             sortBy, sortDescending, filters is { Count: > 0 } ? filters : null));
     }

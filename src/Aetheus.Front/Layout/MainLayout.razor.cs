@@ -40,7 +40,7 @@ public partial class MainLayout : IAsyncDisposable
     internal bool IsViewportKnown => _viewportKnown;
     private bool _desktopSidebarExpanded = true;
     private DotNetObjectReference<MainLayout>? _selfRef;
-    // Recette R2-087: a page come back to finds its scroll position again.
+    // A page come back to finds its scroll position again.
     private PageScrollMemory? _scrollMemory;
 
     private bool _appReady;
@@ -52,9 +52,8 @@ public partial class MainLayout : IAsyncDisposable
         Auth.IsAuthenticated,
         Auth.IsAdmin,
         Permissions);
-    /// <summary>The look the application menu shows and changes (mode, theme): one source with the
-    /// appearance window and the settings page.</summary>
-    [Inject] private Aetheus.Front.Components.Settings.SiteAppearanceState Appearance { get; set; } = default!;
+    [Inject] private Aetheus.Front.Components.Settings.UserPreferenceSession PreferenceSession { get; set; } = default!;
+    [Inject] private IUserPreferences Preferences { get; set; } = default!;
 
     /// <summary>STD-SHELL: the sidebar floats over the page below 64rem (phones and tablets, ASTRAIA parity)
     /// and is pushed beside it above; both toggles follow it for their glyph.</summary>
@@ -106,10 +105,6 @@ public partial class MainLayout : IAsyncDisposable
         _devBranch = Configuration["DevBanner:Branch"];
         _devLabel = Configuration["DevBanner:Label"];
 
-        // The stored mode (light, dark or system, PLAN-008 lot 11) and theme the menu shows: App loads them
-        // for its OmniThemeScope, and the menu redraws when they change.
-        Appearance.Changed += OnAppearanceChanged;
-
         await Auth.InitializeAsync();
         await Auth.WatchStorageAsync();
         _initialized = true;
@@ -125,6 +120,11 @@ public partial class MainLayout : IAsyncDisposable
         _signalRState = TaskTracker.ConnectionState;
         _wasConnectedOnce = _signalRState == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected;
 
+        // R1-66: the preferences follow the user found at start (or the signed-out defaults) before
+        // anything reads them; the active organization below is one of them.
+        await PreferenceSession.StartAsync();
+        _sessionIdentity = CurrentIdentity;
+
         // A forced password change holds the user on its own screen, and the backend refuses everything else
         // until then (SITE-SEC-001): the session starts after the change, from the next login.
         if (Auth.IsAuthenticated && !Auth.MustChangePassword)
@@ -132,11 +132,10 @@ public partial class MainLayout : IAsyncDisposable
             // Same start as after a later login: permissions and organizations, then the realtime hub.
             Orgs.Changed += OnOrgsChanged;
             _connectAttempted = true;
-            var session = await MainLayoutBootstrapLoader.StartAuthenticatedSessionAsync(
+            // The hub is started, not awaited: its outcome arrives through OnSignalRStateChanged.
+            await MainLayoutBootstrapLoader.StartAuthenticatedSessionAsync(
                 Api, Permissions, Auth, Orgs, TaskTracker, Logger);
-            _signalRState = session.SignalRState;
-            _wasConnectedOnce = session.WasConnected;
-            _backendLive = session.BackendLive;
+            _signalRState = TaskTracker.ConnectionState;
         }
         _authenticatedSessionReady = Auth.IsAuthenticated && !Auth.MustChangePassword;
 
@@ -164,6 +163,9 @@ public partial class MainLayout : IAsyncDisposable
         if (AppReady && _viewportKnown && !_splashHidden)
         {
             _splashHidden = true;
+            // R3-29: a page opened on a pasted address gets its logical parent behind it in the history.
+            if (Auth.IsAuthenticated && !Auth.MustChangePassword)
+                await DeepLinkParentEntry.SeedAsync(Nav, JS);
             await JS.InvokeVoidAsync("Aetheus.hideSplash");
         }
     }
@@ -188,13 +190,31 @@ public partial class MainLayout : IAsyncDisposable
         Nav.NavigateTo(Nav.Uri, forceLoad: true);
     }
 
+    /// <summary>Who the session was started for (user id and name), or null while signed out.</summary>
+    private string? CurrentIdentity => Auth.IsAuthenticated ? $"{Auth.UserId}|{Auth.Username}" : null;
+
+    private string? _sessionIdentity;
+
     private void OnAuthStateChanged()
     {
+        // R1-66 with OE 1.8.1: another account took over this page (another tab signed in as someone
+        // else). The page is not reloaded: the session of the previous account is closed (its page,
+        // lists, permissions, organizations and realtime connections) and started again for the new
+        // one, its preferences read again for it, before any page shows again.
+        if (Auth.IsAuthenticated && _authenticatedSessionReady && CurrentIdentity != _sessionIdentity)
+        {
+            _ = InvokeAsync(SwitchAccountAsync);
+            return;
+        }
+
         if (!Auth.IsAuthenticated)
         {
             _authenticatedSessionReady = false;
+            _sessionIdentity = null;
             ClearSessionState();
             ResetConnectionLostState();
+            // The signed-out page keeps no preference of the account that left.
+            _ = InvokeAsync(() => PreferenceSession.StartAsync());
         }
         else if (!_authenticatedSessionReady)
         {
@@ -204,19 +224,34 @@ public partial class MainLayout : IAsyncDisposable
         StateHasChanged();
     }
 
+    private async Task SwitchAccountAsync()
+    {
+        // The chrome and the routed page leave the screen at once (the session loader takes their
+        // place), so nothing loaded for the previous account stays visible while the new session starts.
+        _authenticatedSessionReady = false;
+        ClearSessionState();
+        StateHasChanged();
+        await RealtimeSession.StopAsync();
+        ResetConnectionLostState();
+        await InitializeAuthenticatedSessionAsync();
+    }
+
     private async Task InitializeAuthenticatedSessionAsync()
     {
-        if (!Auth.IsAuthenticated || Auth.MustChangePassword || _authenticatedSessionReady) return;
+        if (!Auth.IsAuthenticated || _authenticatedSessionReady) return;
         try
         {
+            // R1-66: the preferences are the signed-in user's before anything reads them (the active
+            // organization is one of them).
+            await PreferenceSession.StartAsync();
+            _sessionIdentity = CurrentIdentity;
+            if (Auth.MustChangePassword) return;
             Orgs.Changed -= OnOrgsChanged;
             Orgs.Changed += OnOrgsChanged;
             _connectAttempted = true;
-            var result = await MainLayoutBootstrapLoader.StartAuthenticatedSessionAsync(
+            await MainLayoutBootstrapLoader.StartAuthenticatedSessionAsync(
                 Api, Permissions, Auth, Orgs, TaskTracker, Logger);
-            _signalRState = result.SignalRState;
-            _wasConnectedOnce = result.WasConnected;
-            _backendLive = result.BackendLive;
+            _signalRState = TaskTracker.ConnectionState;
             _authenticatedSessionReady = Auth.IsAuthenticated;
         }
         finally
@@ -311,7 +346,8 @@ public partial class MainLayout : IAsyncDisposable
 
     private Aetheus.Front.Components.Settings.SiteAppearanceWindow? _appearanceWindow;
 
-    /// <summary>Recette R-390: the menu's Theme row (OE closes the menu first) opens the appearance window.</summary>
+    /// <summary>The menu's Theme row (OE closes the menu first) opens the appearance
+    /// window.</summary>
     private async Task OnThemeMenuClick()
     {
         if (_appearanceWindow is not null)
@@ -325,13 +361,12 @@ public partial class MainLayout : IAsyncDisposable
     {
         if (string.Equals(language, CurrentLanguage, StringComparison.Ordinal)) return;
         await JS.InvokeVoidAsync("localStorage.setItem", StorageKeys.Lang, language);
+        await Preferences.SetAsync(PreferenceKeys.Language, language);
         await JS.InvokeVoidAsync("Aetheus.setLang", language);
         Nav.NavigateTo(Nav.Uri, forceLoad: true);
     }
 
     private void OnSettingsMenuClick() => Nav.NavigateTo("/settings");
-
-    private void OnAppearanceChanged() => InvokeAsync(StateHasChanged);
 
     internal void RecoverError()
     {
@@ -345,7 +380,8 @@ public partial class MainLayout : IAsyncDisposable
         // reconnect race during logout and per-user state leaking into a same-runtime re-login.
         await RealtimeSession.StopAsync();
         ResetConnectionLostState();
-        // R1-37: while the token is still held, so the server forgets the mailbox passwords it keeps for us.
+        // While the token is still held, so the server forgets the mailbox passwords it keeps for
+        // us.
         await Api.Auth.NotifyLogoutAsync();
         await Auth.LogoutAsync();
         Nav.NavigateTo("/login");
@@ -386,7 +422,7 @@ public partial class MainLayout : IAsyncDisposable
             _backendLive = true;
         else
             _ = RefreshBackendLivenessAsync();
-        HandleConnectionStateChanged(connected);
+        _ = HandleConnectionStateChanged(connected);
     }
 
     private async Task<bool> RefreshBackendLivenessAsync(CancellationToken cancellationToken = default)
@@ -404,10 +440,11 @@ public partial class MainLayout : IAsyncDisposable
     }
 
     // On reconnect, tear down the countdown and close the dialog. On a drop, wait briefly before
-    // declaring the backend unavailable so quick SignalR interruptions never flash a false alert.
-    private void HandleConnectionStateChanged(bool connected)
+    // declaring the backend unavailable so quick SignalR interruptions never flash a false alert. The
+    // returned task is that handling, to its end (the grace delay and the liveness probe included).
+    private Task HandleConnectionStateChanged(bool connected)
     {
-        _ = InvokeAsync(async () =>
+        return InvokeAsync(async () =>
         {
             if (connected)
             {
@@ -474,9 +511,8 @@ public partial class MainLayout : IAsyncDisposable
         var outcome = await TaskTracker.ReconnectAsync();
         _manualReconnecting = false;
 
-        // A session that expired during a machine sleep used to make this button a silent no-op:
-        // StartAsync returned on its authentication check and the user clicked a button that did
-        // nothing, forever. Send them where the problem can actually be fixed.
+        // An expired session cannot reconnect; direct the user to sign in rather than retrying an
+        // unauthenticated connection.
         if (outcome == TaskTrackerService.ReconnectOutcome.SessionExpired)
         {
             RedirectIfUnauthenticated();
@@ -500,7 +536,6 @@ public partial class MainLayout : IAsyncDisposable
         Nav.LocationChanged -= OnLocationChanged;
         _scrollMemory?.Dispose();
         Orgs.Changed -= OnOrgsChanged;
-        Appearance.Changed -= OnAppearanceChanged;
         if (TaskTracker is not null)
         {
             TaskTracker.OnConnectionStateChanged -= OnSignalRStateChanged;

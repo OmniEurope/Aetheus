@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 # SPDX-FileCopyrightText: 2026 Aetheus contributors
 #
-# R-249 - host configuration files written by deploy/scripts/install-agent-linux.sh. The backend
-# ships this folder next to the installer in the agent archive (agent-host-config/).
+# Lists host-configuration templates shipped beside install-agent-linux.sh in the agent archive.
 #
 # One line per template: its path relative to this folder, then the placeholders it declares.
 # render_host_config (install-agent-linux.sh) replaces each declared #{NAME}# by the value of the
@@ -44,14 +43,19 @@ firewall/sudoers.d/aetheus-firewall FIREWALL_HELPER_PATH AGENT_USER
 mail/mail-setup
 mail/dovecot-2.3/99-aetheus.conf
 mail/dovecot-2.3/99-aetheus-ssl.conf
+mail/dovecot-2.3/99-aetheus-master.conf
 mail/dovecot-2.4/99-aetheus.conf
 mail/dovecot-2.4/99-aetheus-ssl.conf
+mail/dovecot-2.4/99-aetheus-master.conf
 mail/opendkim.conf
 mail/mail-manage ACME_WEBROOT
 mail/sudoers.d/aetheus-mail MAIL_SETUP_HELPER_PATH MAIL_MANAGE_HELPER_PATH AGENT_USER
 teamspeak/teamspeak-setup
 teamspeak/teamspeak3.service
 teamspeak/sudoers.d/aetheus-teamspeak TEAMSPEAK_SETUP_HELPER_PATH AGENT_USER
-rkhunter/sudoers.d/aetheus-rkhunter AGENT_USER
-agent/aetheus-agent.service AGENT_USER AGENT_GROUP INSTALL_DIR STATE_DIRECTORY_MODE EXEC_START NNP_BLOCK PROTECT_SYSTEM_BLOCK PROTECT_HOME_BLOCK WORK_DIR READ_WRITE_PATHS_BLOCK SANDBOX_PRIV_BLOCK ADDRESS_FAMILIES
+rkhunter/aetheus-rkhunter AGENT_USER
+rkhunter/sudoers.d/aetheus-rkhunter RKHUNTER_HELPER_PATH AGENT_USER
+agent/aetheus-agent-read-grant AGENT_USER
+agent/aetheus-agent-read-grant.service AGENT_READ_GRANT_HELPER_PATH
+agent/aetheus-agent.service AGENT_USER AGENT_GROUP INSTALL_DIR STATE_DIRECTORY_MODE JOURNAL_GROUP_BLOCK EXEC_START NNP_BLOCK PROTECT_SYSTEM_BLOCK PROTECT_HOME_BLOCK WORK_DIR READ_WRITE_PATHS_BLOCK SANDBOX_PRIV_BLOCK ADDRESS_FAMILIES
 agent/appsettings.json SERVER_URL_J REG_TOKEN_J AGENT_NAME_J WORK_DIR_J ALLOW_INSECURE_JSON DOCKER_STORAGE_DEPLOYMENT_ONLY

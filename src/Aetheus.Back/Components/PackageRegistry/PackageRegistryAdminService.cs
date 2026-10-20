@@ -62,7 +62,12 @@ internal sealed class PackageRegistryAdminService(
         await repository.SaveChangesAsync(ct).ConfigureAwait(false);
         await audit.LogAsync(
             listed ? "Relisted" : "Unlisted",
-            package!.Kind == PackageRegistryKind.NuGet ? "NuGetPackage" : "NpmPackage",
+            package!.Kind switch
+            {
+                PackageRegistryKind.NuGet => "NuGetPackage",
+                PackageRegistryKind.Maven => "MavenPackage",
+                _ => "NpmPackage"
+            },
             package.Id,
             $"{package.Name}@{version.Version}",
             ct).ConfigureAwait(false);

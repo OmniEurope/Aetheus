@@ -38,7 +38,7 @@ public class GitCommitGraphTests : BunitContext
     [Fact]
     public void EachSha_LinksToItsCommitPage_WhenTheRepositoryIsKnown()
     {
-        // Recette R-373: the short SHA is the link to the commit.
+        // The short SHA is the link to the commit.
         var cut = Render<GitCommitGraph>(p => p.Add(c => c.Commits, Chain()).Add(c => c.RepoId, 4));
 
         var links = cut.FindAll(".git-graph-sha a.short-id__text");

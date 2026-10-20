@@ -1,14 +1,26 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
 @using Microsoft.AspNetCore.Components.Sections
-@* Recette R-304: no "All projects" picker; the grid's Project column filter does that job. The sync
-   of one project's releases is on that project's Releases page. Recette R-416: the global page's help
-   link sits in its page header (Releases.razor), so no toolbar row of its own adds a gap above the grid. *@
+@* Use the grid's Project filter and the host's page-header actions so release lists need no
+   separate toolbar; project synchronization remains on the project's release page. *@
 @if (IsProjectScope)
 {
-    @* Recette R-218: the sync action sits on the title line of the project header. *@
+    @* The sync action sits on the title line of the project header. *@
     <SectionContent SectionName="@PipelinesList.HeaderActionsSection">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SyncReleases" Disabled="@(!_canWrite)" Class="@(_syncing ? "btn-busy" : null)" Busy="@(_syncing)" title="@L["SyncReleases"]"><OmniIcon Name="OmniIconName.Sync" /></OmniButton>
+        @if (_canAdminProject)
+        {
+            @* Sync stays the main action; fixing the next version, an administrator's choice, is in the menu. *@
+            <OmniSplitButton Variant="OmniButtonVariant.Primary" Text="" Label="@L["SyncReleases"]" OnClick="@SyncReleases" Disabled="@(!_canWrite)" Busy="@(_syncing)" title="@L["SyncReleases"]">
+                <Icon><OmniIcon Name="OmniIconName.Sync" /></Icon>
+                <ChildContent>
+                    <OmniMenuItem OnClick="@SetNextVersion"><Icon><OmniIcon Name="OmniIconName.Tag" /></Icon><ChildContent>@L["SetNextVersion"]</ChildContent></OmniMenuItem>
+                </ChildContent>
+            </OmniSplitButton>
+        }
+        else
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SyncReleases" Disabled="@(!_canWrite)" Class="@(_syncing ? "btn-busy" : null)" Busy="@(_syncing)" title="@L["SyncReleases"]"><OmniIcon Name="OmniIconName.Sync" /></OmniButton>
+        }
     </SectionContent>
 }
 <AetheusDataGrid @ref="_grid" TItem="ReleaseDto" Data="@_releases"
@@ -79,8 +91,8 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="ReleaseDto" Title="@L["Artifact"]" ExportValue="@ArtifactExport" Width="140px" Sortable="false" Filterable="false" >
             <Template Context="r">
-                @* Recette R-225: one line per release. A single artifact keeps its name; several read as a
-                   count that opens the release, which lists them. *@
+                @* One line per release. A single artifact keeps its name; several read as a count
+                   that opens the release, which lists them. *@
                 @if (r.Artifacts.Count == 1)
                 {
                     <a href="/artifacts/@r.Artifacts[0].Id" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@r.Artifacts[0].Name</a>
@@ -105,17 +117,28 @@
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => PromoteRelease(r))" Disabled="@(!_canWrite)" title="@L["Promote"]"><OmniIcon Name="OmniIconName.Upgrade" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RollbackRelease(r))" Disabled="@(!_canWrite)" title="@L["Rollback"]"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></OmniButton>
                     }
-                    @if (r.RevertPipelineId is not null)
+                    else if (r.Status == ReleaseStatus.Archived)
                     {
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RollbackToPreviousColour(r))" Disabled="@(!_canWrite)" title="@L["RevertToPrevious"]"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></OmniButton>
+                        @* Decision D2: the archived release kept its commit; run a complete pipeline from it. *@
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => RelaunchFromCommit(r))" Disabled="@(!_canWrite || !ReleaseRelaunch.CanRelaunch(r.Status, r.CommitHash))" title="@(ReleaseRelaunch.CanRelaunch(r.Status, r.CommitHash) ? L["RelaunchFromCommit"] : L["RelaunchFromCommitUnavailable"])"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
                     }
-                    @if (r.IsPreviousDeployment)
+                    @* STD-BTN detection 11: the status action (and Rollback) visible, the other actions in the menu. *@
+                    @if (r.RevertPipelineId is not null || r.IsPreviousDeployment || r.PipelineRunId.HasValue)
                     {
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => RedeployRelease(r))" Disabled="@(!_canWrite || r.RedeployPipelineId is null)" title="@(r.RedeployPipelineId is null ? L["RedeployUnavailable"] : L["Redeploy"])"><OmniIcon Name="OmniIconName.Reset" /></OmniButton>
-                    }
-                    @if (r.PipelineRunId.HasValue)
-                    {
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/pipelines/runs/{r.PipelineRunId}"))" title="@L["ViewRun"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
+                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                            @if (r.RevertPipelineId is not null)
+                            {
+                                <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => RollbackToPreviousColour(r))" Disabled="@(!_canWrite)" title="@L["RevertToPrevious"]"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon><ChildContent>@L["RevertToPrevious"]</ChildContent></OmniMenuItem>
+                            }
+                            @if (r.IsPreviousDeployment)
+                            {
+                                <OmniMenuItem OnClick="@(() => RedeployRelease(r))" Disabled="@(!_canWrite || r.RedeployPipelineId is null)" title="@(r.RedeployPipelineId is null ? L["RedeployUnavailable"] : L["Redeploy"])"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent>@L["Redeploy"]</ChildContent></OmniMenuItem>
+                            }
+                            @if (r.PipelineRunId.HasValue)
+                            {
+                                <OmniMenuItem OnClick="@(() => Nav.NavigateTo($"/pipelines/runs/{r.PipelineRunId}"))" title="@L["ViewRun"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon><ChildContent>@L["ViewRun"]</ChildContent></OmniMenuItem>
+                            }
+                        </OmniOverflowMenu>
                     }
                     </span>
                 </Template>

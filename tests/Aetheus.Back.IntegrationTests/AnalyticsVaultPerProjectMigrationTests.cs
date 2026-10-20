@@ -8,12 +8,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-003 2.1: the <c>AnalyticsVaultPerProject</c> data migration, run for real on PostgreSQL. Two
-/// apps of one project and an orphan vault, as production has them: each app ends up with its own key
-/// in <c>&lt;project&gt;.analytics</c>, carrying the same encrypted value, and the legacy vaults are left
-/// as they were.
-/// </summary>
+/// <summary>Runs the analytics-vault migration on PostgreSQL, preserving encrypted values while
+/// assigning application keys to their project vault and retaining source vaults.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class AnalyticsVaultPerProjectMigrationTests(PostgresFixture fixture)
 {
@@ -104,13 +100,9 @@ public sealed class AnalyticsVaultPerProjectMigrationTests(PostgresFixture fixtu
         }
     }
 
-    /// <summary>
-    /// Inserts an app with SQL written against the schema the database is at, not with the current EF
-    /// model: the model gains MonitoredApp columns the predecessor migration never created (recette
-    /// R2-013 added two), and an INSERT naming them fails on 42703. Every NOT NULL column without a
-    /// default gets the zero value of its type; the test only cares about the project, the name and
-    /// the legacy vault name.
-    /// </summary>
+    /// <summary>Fixture inserts use the database's actual predecessor schema rather than current EF
+    /// columns. Required nondefault fields receive type-zero values unless relevant to the
+    /// migration scenario.</summary>
     private static async Task<int> InsertLegacyAppAsync(AppDbContext db, int projectId, string name, CancellationToken ct)
     {
         var connection = db.Database.GetDbConnection();

@@ -9,13 +9,12 @@
 </OmniPageHeader>
 
 <OmniTabs Value="@TabNames[_selectedTabIndex]" ValueChanged="@OnTabChange">
-        @* Recette R-230: no Profile tab, the display name cannot be changed. Recette R-229: every tab
-           has an icon. *@
+        @* Each settings tab has an icon; display name is not editable here. *@
         <OmniTabsItem Key="appearance" Title="@L["Appearance"]"><Icon><OmniIcon Name="OmniIconName.Palette" /></Icon><ChildContent>
-            @* Recette R-232 / R-448: the look of the whole site in one section, OE's own appearance settings
-               (mode, font, theme, palette, then the scales it edits in its window), bound to the same stored
-               values as the user menu's Theme window (SiteAppearanceState). The section takes the whole
-               width and OE lays its settings two per row, as in Atlas. The language keeps its own section. *@
+            @* Share stored appearance values with the user-menu Theme window through
+               OE's OmniAppearanceState (bound, so the content width row Aetheus does not apply stays
+               hidden). OE lays out full-width appearance settings, while language has
+               a separate section. *@
             <div class="omni-u-mt-sm">
                 <OmniSettingsSection Title="@L["AppearanceLook"]" Description="@L["AppearanceLookHint"]">
                     <OmniAppearanceSettings Appearance="Appearance.Appearance" AppearanceChanged="Appearance.SetAppearanceAsync"
@@ -39,8 +38,8 @@
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="notifications" Title="@L["NotificationPreferences"]"><Icon><OmniIcon Name="OmniIconName.Bell" /></Icon><ChildContent>
-            @* R-116: server-side preferences, one switch per event type, plus the followed projects. Recette
-               R-233: the panel draws its own settings sections, so no card around it. *@
+            @* The notification panel supplies its own sections for event preferences and followed
+               projects. *@
             <div class="omni-u-mt-sm">
                 <Aetheus.Front.Components.Notifications.NotificationPreferencesPanel />
             </div>
@@ -132,8 +131,8 @@
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="about" Title="@L["About"]"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent>
-            @* Recette R-449: OE labelled lines, each with its icon (OmniDescriptionItem.Icon), as in a
-               project overview's Information and Repository cards. *@
+            @* OE labelled lines, each with its icon (OmniDescriptionItem.Icon), as in a project
+               overview's Information and Repository cards. *@
             <OmniCard Class="omni-u-mt-sm">
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0 omni-u-mb-md">@L["AboutAetheus"]</OmniHeading>
                 <OmniDescriptionList>

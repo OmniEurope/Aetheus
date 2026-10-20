@@ -5,7 +5,7 @@ namespace Aetheus.Back.Components.Vaults;
 
 public class VaultRepository(AppDbContext db, TimeProvider timeProvider) : IVaultRepository
 {
-    /// <summary>Recette R-210 / R-224: the header filters of the vaults list.</summary>
+    /// <summary>The header filters of the vaults list.</summary>
     internal static readonly GridQueryMap<Vault> Columns = new GridQueryMap<Vault>()
         .Text("Name", v => v.Name)
         .Text("ProjectName", v => v.Project != null ? v.Project.Name : null)
@@ -14,7 +14,7 @@ public class VaultRepository(AppDbContext db, TimeProvider timeProvider) : IVaul
         .Date("CreatedAt", v => v.CreatedAt)
         .Date("UpdatedAt", v => v.UpdatedAt);
 
-    /// <summary>Recette R-210: the project names present across the vaults the caller can read.</summary>
+    /// <summary>The project names present across the vaults the caller can read.</summary>
     public async Task<VaultFilterValuesDto> GetFilterValuesAsync(List<int>? accessibleIds, CancellationToken ct = default)
     {
         var query = db.Vaults.AsNoTracking().Where(v => v.Project != null);

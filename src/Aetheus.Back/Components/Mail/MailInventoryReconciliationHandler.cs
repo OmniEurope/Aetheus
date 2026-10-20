@@ -5,9 +5,9 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.Mail;
 
-/// <summary>PLAN-005: reconciles the mail rows of a server with the inventory of its latest heartbeat and
-/// drops the cached mail reads when the reconciliation changed anything.</summary>
-public sealed class MailInventoryReconciliationHandler(IMailStateReconciler reconciler, IMemoryCache cache)
+/// <summary>Reconciles mail rows against heartbeat inventory and invalidates cached reads when data
+/// changes.</summary>
+public sealed class MailInventoryReconciliationHandler(IMailStateReconciler reconciler, IMemoryCache cache, IMailQuotaResync quotaResync)
     : IDomainEventHandler<MailInventoryReportedEvent>
 {
     public async Task HandleAsync(MailInventoryReportedEvent domainEvent, CancellationToken ct = default)
@@ -16,5 +16,7 @@ public sealed class MailInventoryReconciliationHandler(IMailStateReconciler reco
         var result = await reconciler.ReconcileAsync(domainEvent.ServerId, domainEvent.Mail, ct).ConfigureAwait(false);
         if (result.HasChanges)
             MailCacheKeys.Invalidate(cache, domainEvent.ServerId);
+        // After the reconciliation, so accounts the inventory just discovered are resynced too.
+        await quotaResync.ResyncAsync(domainEvent.ServerId, domainEvent.Mail.HelperVersion, ct).ConfigureAwait(false);
     }
 }

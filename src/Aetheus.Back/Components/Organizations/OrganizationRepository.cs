@@ -15,7 +15,7 @@ public class OrganizationRepository(AppDbContext db) : IOrganizationRepository
             var pattern = $"%{search.Trim()}%";
             query = query.Where(o => EF.Functions.ILike(o.Name, pattern) || EF.Functions.ILike(o.Slug, pattern));
         }
-        // Recette R-210: the header filters, before the count.
+        // The header filters, before the count.
         query = OrganizationListQuery.Columns.ApplyFilters(query, filters);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
         // Two collection includes → split query avoids the orgs×members×projects
@@ -33,7 +33,7 @@ public class OrganizationRepository(AppDbContext db) : IOrganizationRepository
         return (items, total);
     }
 
-    private static IQueryable<Organization> ApplySort(
+    internal static IQueryable<Organization> ApplySort(
         IQueryable<Organization> query, string? sortBy, bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {

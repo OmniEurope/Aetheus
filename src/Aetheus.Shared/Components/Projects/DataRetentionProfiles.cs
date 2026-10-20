@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 4: the values of each profile (decided on 2026-10-04) and the bounds of an override. A
-/// project's value is its override when it has one, its profile's value otherwise.
-/// </summary>
+/// <summary>Defines profile defaults and override bounds; explicit project overrides take
+/// precedence.</summary>
 public static class DataRetentionProfiles
 {
     public const int MinimumExportIntervalMinutes = 1;

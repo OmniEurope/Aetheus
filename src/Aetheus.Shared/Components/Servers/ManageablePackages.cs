@@ -13,7 +13,7 @@ namespace Aetheus.Shared.Components.Servers;
 /// <c>mariadb</c> → <c>mariadb-server</c>, <c>mongod</c> → <c>mongodb-org</c>). <see cref="All"/>
 /// holds the resolved apt names - what the agent runs and what the argv-exact
 /// <c>/etc/sudoers.d/aetheus-package</c> drop-in allow-lists (kept in lockstep by
-/// <c>ManageablePackagesSudoersAuditTests</c>).
+/// <c>SudoersAuditTests</c>).
 /// </summary>
 public static class ManageablePackages
 {

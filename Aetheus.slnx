@@ -2,6 +2,7 @@
   <Project Path="src/Aetheus.Agent.Core/Aetheus.Agent.Core.csproj" />
   <Project Path="src/Aetheus.Agent.Windows/Aetheus.Agent.Windows.csproj" />
   <Project Path="src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj" />
+  <Project Path="src/Aetheus.Agent.Functions.Cli/Aetheus.Agent.Functions.Cli.csproj" />
   <Project Path="src/Aetheus.Back/Aetheus.Back.csproj" />
   <Project Path="src/Aetheus.Front/Aetheus.Front.csproj" />
   <Project Path="src/Aetheus.Shared/Aetheus.Shared.csproj" />

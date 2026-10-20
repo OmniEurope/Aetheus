@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Logs;
 
-/// <summary>PLAN-003 lot 27 / D27: the Performance page and the browser-side timing it shows.</summary>
+/// <summary>Verifies the Performance page and its browser-side timing display.</summary>
 public sealed class PerformanceTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;

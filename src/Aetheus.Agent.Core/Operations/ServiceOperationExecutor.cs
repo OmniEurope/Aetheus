@@ -108,13 +108,35 @@ public sealed class ServiceOperationExecutor(
             return new ExecutorResult(-1, false);
         }
 
-        return await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+        var result = await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+        if (IsLinux && result.ExitCode != 0 && !result.TimedOut && ServiceStartDiagnostics.Applies(kind))
+            await ExplainFailedStartAsync(NormalizeUnit(target), onOutput, cancellationToken).ConfigureAwait(false);
+        return result;
     }
+
+    internal Func<string, bool> HelperExists { get; init; } = File.Exists;
+
+    // Recette R3-44: why the unit refused to start, appended to the task's log (its status, then the
+    // configuration check of its helper). The task keeps the exit code of the start itself.
+    private async Task ExplainFailedStartAsync(string unit, Func<string, TaskLogLevel, Task> onOutput, CancellationToken cancellationToken)
+    {
+        await onOutput($"--- {unit} did not start: status and configuration check ---", TaskLogLevel.Warning).ConfigureAwait(false);
+        foreach (var argv in ServiceStartDiagnostics.Commands(unit, HelperExists))
+        {
+            var psi = SudoProcessStartInfo.Create();
+            foreach (var arg in argv)
+                psi.ArgumentList.Add(arg);
+            await RunProcessAsync(psi, DiagnosticTimeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private const int DiagnosticTimeoutSeconds = 60;
 
     // ServiceGetLogs: journal read via argv-only journalctl (no shell interpolation - the former path
     // built a `journalctl -u {name} …` shell string). Linux-only (journalctl is a systemd tool). No sudo:
-    // journal read works for the agent user on user-readable units; system units may need the agent in the
-    // systemd-journal/adm group, which the installer arranges under the server-management module.
+    // journal read works for the agent user on user-readable units; system units need the agent in the
+    // systemd-journal group, which install-agent-linux.sh adds to the unit on every install and upgrade
+    // (read-only host observation rights, ADR-052).
     private async Task<ExecutorResult> GetLogsAsync(
         string target,
         IReadOnlyDictionary<string, string> envVars,
@@ -202,7 +224,7 @@ public sealed class ServiceOperationExecutor(
         return ["-n", "/bin/systemctl", verb, NormalizeUnit(target)];
     }
 
-    private static ProcessStartInfo? BuildWindowsArgs(OperationKind kind, string target)
+    internal static ProcessStartInfo? BuildWindowsArgs(OperationKind kind, string target)
     {
         // F-32 hardening: ServiceRestart is implemented as two sequential sc.exe calls
         // by ExecuteAsync (no shell interpolation). Single-verb operations build a sc.exe psi here.

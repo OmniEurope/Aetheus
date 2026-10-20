@@ -1,0 +1,94 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* PLAN-010 lot 1: what the agent read of sshd and of the authorized keys. A value the agent could
+   not read is shown as unknown, with the reason, never as a safe default. *@
+
+<OmniCard Class="omni-u-mb-lg ssh-config-card">
+    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
+        <OmniIcon Name="OmniIconName.LockKey" Class="omni-u-text-muted" />
+        <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 flex-1">@L["SshConfiguration"]</OmniText>
+        @if (Status is null)
+        {
+            <OmniBadge Tone="OmniTone.Neutral">@L["SshNotCollected"]</OmniBadge>
+        }
+    </OmniStack>
+
+    @if (Status is null)
+    {
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-m-0 ssh-not-collected">@L["SshNotCollectedHint"]</OmniText>
+    }
+    else
+    {
+        var snapshot = Status.Snapshot;
+        <OmniDescriptionList Columns="3">
+            <OmniDescriptionItem Label="@L["SshPermitRootLogin"]" Class="ssh-setting-permitrootlogin">
+                <OmniBadge Tone="@RootLoginTone(snapshot.PermitRootLogin.Value)">@SettingText(snapshot.PermitRootLogin)</OmniBadge>
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@SourceText(snapshot.PermitRootLogin)</OmniText>
+            </OmniDescriptionItem>
+            <OmniDescriptionItem Label="@L["SshPasswordAuthentication"]" Class="ssh-setting-passwordauthentication">
+                <OmniBadge Tone="@PasswordTone(snapshot.PasswordAuthentication.Value)">@SettingText(snapshot.PasswordAuthentication)</OmniBadge>
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@SourceText(snapshot.PasswordAuthentication)</OmniText>
+            </OmniDescriptionItem>
+            <OmniDescriptionItem Label="@L["SshAuthorizedKeysFile"]" Class="ssh-setting-authorizedkeysfile">
+                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@SettingText(snapshot.AuthorizedKeysFile)</OmniText>
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@SourceText(snapshot.AuthorizedKeysFile)</OmniText>
+            </OmniDescriptionItem>
+        </OmniDescriptionList>
+
+        @if (snapshot.UnreadableFiles.Count > 0)
+        {
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-md ssh-unreadable-files">
+                <OmniIcon Name="OmniIconName.ShieldWarning" Class="omni-u-text-warning" />
+                <OmniText Element="OmniTextElement.Small" Class="omni-u-m-0">@string.Format(L["SshUnreadableConfigFiles"], string.Join(", ", snapshot.UnreadableFiles))</OmniText>
+            </OmniStack>
+        }
+
+        <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-lg omni-u-mb-sm">@L["SshAuthorizedKeys"]</OmniText>
+        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Small">
+            @foreach (var file in snapshot.AuthorizedKeys.Where(f => f.State != AuthorizedKeysFileState.Absent))
+            {
+                <div class="ssh-keys-file">
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                        <OmniIcon Name="OmniIconName.Key" Class="omni-u-text-muted" />
+                        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 flex-1 ssh-keys-path">@file.Path</OmniText>
+                        <OmniBadge Tone="@(file.State == AuthorizedKeysFileState.Read ? OmniTone.Neutral : OmniTone.Warning)">@FileStateText(file)</OmniBadge>
+                    </OmniStack>
+                    @if (file.State == AuthorizedKeysFileState.Unreadable)
+                    {
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@string.Format(L["SshKeysUnreadableHint"], file.User)</OmniText>
+                    }
+                    @foreach (var key in file.Keys)
+                    {
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 ssh-key-fingerprint">@key.KeyType @key.Fingerprint</OmniText>
+                    }
+                </div>
+            }
+            @if (snapshot.AuthorizedKeys.All(f => f.State == AuthorizedKeysFileState.Absent))
+            {
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 ssh-no-keys">@L["SshNoAuthorizedKeys"]</OmniText>
+            }
+        </OmniStack>
+
+        <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-lg omni-u-mb-sm">@L["SshRecentChanges"]</OmniText>
+        @if (Status.RecentChanges.Count == 0)
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 ssh-no-change">@L["SshNoChangeSinceBaseline"]</OmniText>
+        }
+        else
+        {
+            <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Small">
+                @foreach (var change in Status.RecentChanges)
+                {
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="ssh-change">
+                        <OmniBadge Tone="@ChangeTone(change.Severity)">@ChangeSeverityText(change.Severity)</OmniBadge>
+                        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 omni-u-grow">@change.Message</OmniText>
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0" title="@change.DetectedAt.ToString("F")">@RelativeTime.FormatAgo(L, change.DetectedAt)</OmniText>
+                    </OmniStack>
+                }
+            </OmniStack>
+        }
+
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mt-md omni-u-mb-0 ssh-observed">
+            @string.Format(L["SshObservedSince"], Status.BaselineAt.ToString("g"), Status.ObservedAt.ToString("g"))
+        </OmniText>
+    }
+</OmniCard>

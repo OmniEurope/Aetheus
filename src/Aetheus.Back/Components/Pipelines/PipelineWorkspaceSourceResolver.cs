@@ -6,12 +6,10 @@ namespace Aetheus.Back.Components.Pipelines;
 /// <summary>What a run checks out when its definition declares a <c>source:</c> block.</summary>
 public sealed record PipelineWorkspaceSource(int RepositoryId, string CloneUrl, string Branch, string CommitHash);
 
-/// <summary>
-/// Resolves the <c>source:</c> block of a pipeline definition (recette R-534) into the repository,
-/// branch and immutable commit the run checks out, and refuses the run when that cannot be done
-/// honestly: an unknown repository, a remote that cannot be fetched, a branch that cannot be pinned,
-/// or a tree that is not the one the definition's revision holds.
-/// </summary>
+/// <summary> Resolves the <c>source:</c> block of a pipeline definition into the repository, branch
+/// and immutable commit the run checks out, and refuses the run when that cannot be done honestly:
+/// an unknown repository, a remote that cannot be fetched, a branch that cannot be pinned, or a
+/// tree that is not the one the definition's revision holds. </summary>
 public interface IPipelineWorkspaceSourceResolver
 {
     /// <param name="definitionRepositoryId">The repository the definition was read from, when the

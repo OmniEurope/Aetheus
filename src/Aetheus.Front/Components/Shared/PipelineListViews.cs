@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
-using Microsoft.Extensions.Logging;
-
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Recette R-120 / R-215: the two views of the pipelines list, Catalogue and Runs, switched from the page
-/// header. The URL (<c>?tab=catalog|runs</c>) wins; without one, the view this user last opened comes
-/// back from the browser. Storage is a convenience: when the browser refuses it the list opens on the
-/// catalogue.
-/// </summary>
-internal sealed class PipelineListViews(IJSRuntime js, ILogger logger, Func<string> storageKey)
+/// <summary>Let the URL choose Catalogue or Runs and otherwise restore the remembered view so
+/// navigation remains reproducible; the remembered view is a user preference (R1-66), Catalogue
+/// when the user has none.</summary>
+internal sealed class PipelineListViews(IUserPreferences preferences)
 {
     public const string CatalogSlug = "catalog";
     public const string RunsSlug = "runs";
@@ -33,16 +28,9 @@ internal sealed class PipelineListViews(IJSRuntime js, ILogger logger, Func<stri
     /// <summary>The last view this user opened, used only as the initial selection.</summary>
     public async Task RestoreAsync()
     {
-        try
-        {
-            var index = IndexOf(await js.InvokeAsync<string?>("localStorage.getItem", storageKey()));
-            if (index > 0)
-                Index = index;
-        }
-        catch (JSException exception)
-        {
-            logger.LogDebug(exception, "Pipelines tab preference could not be read");
-        }
+        var index = IndexOf(await preferences.GetAsync<string>(PreferenceKeys.PipelineListView));
+        if (index > 0)
+            Index = index;
     }
 
     /// <summary>Back and forward re-apply the view the URL names; a bare re-render leaves it alone.
@@ -69,13 +57,6 @@ internal sealed class PipelineListViews(IJSRuntime js, ILogger logger, Func<stri
         Index = index;
         _lastTabParameter = index == CatalogIndex ? null : slug;
         navigation.NavigateTo(navigation.GetUriWithQueryParameter("tab", _lastTabParameter));
-        try
-        {
-            await js.InvokeVoidAsync("localStorage.setItem", storageKey(), CurrentSlug);
-        }
-        catch (JSException exception)
-        {
-            logger.LogDebug(exception, "Pipelines tab preference could not be saved");
-        }
+        await preferences.SetAsync(PreferenceKeys.PipelineListView, CurrentSlug);
     }
 }

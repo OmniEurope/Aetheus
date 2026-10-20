@@ -34,7 +34,7 @@ public class ProjectsTests : BunitContext
         });
 
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => cut.Markup.Contains("Web App"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Web App"));
         Assert.Contains("Web App", cut.Markup);
     }
 
@@ -48,7 +48,7 @@ public class ProjectsTests : BunitContext
         });
 
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => cut.Markup.Contains("NoProjectsFound"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("NoProjectsFound"));
         Assert.Contains("NoProjectsFound", cut.Markup);
     }
 
@@ -80,22 +80,22 @@ public class ProjectsTests : BunitContext
             TotalCount = 1
         });
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => cut.Markup.Contains("Operational"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Operational"));
 
         Assert.Contains("href=\"/git-repositories/commits/42\"", cut.Markup);
         Assert.Contains("href=\"/pipelines/runs/52\"", cut.Markup);
-        // PLAN-003 lot 8 / D24: the tile names the run a person launched; there is no "child of" line.
+        // The tile identifies the root run without a child-of line.
         Assert.DoesNotContain("ChildOf", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("project-production-status online", cut.Markup);
         Assert.Contains("project-online-users", cut.Markup);
-        // PLAN-003 lot 8: two ruled lines, not one framed strip: production and its state, then the
-        // grade and the people online.
+        // Two ruled lines, not one framed strip: production and its state, then the grade and the
+        // people online.
         var lines = cut.FindAll(".project-production > .project-production-row");
         Assert.Equal(2, lines.Count);
         Assert.NotNull(lines[0].QuerySelector(".project-production-status"));
         Assert.NotNull(lines[1].QuerySelector(".grade-badge"));
         Assert.NotNull(lines[1].QuerySelector(".project-online-users"));
-        // PLAN-003 lot 18: the tile grade is the shared badge, not a hand-coloured strong.
+        // The tile grade is the shared badge, not a hand-coloured strong.
         var grade = Assert.Single(cut.FindAll(".grade-badge"));
         Assert.Equal("B", grade.TextContent.Trim());
         Assert.Contains("omni-badge--success", grade.ClassName, StringComparison.Ordinal);
@@ -105,11 +105,9 @@ public class ProjectsTests : BunitContext
         Assert.DoesNotContain("Repository", cut.Markup);
     }
 
-    /// <summary>
-    /// PLAN-005 lot 7: the commit message's first line on its own line (whole message in the title),
-    /// the run status as a badge with its word instead of a dot, and a run in progress says so with
-    /// the step it is on.
-    /// </summary>
+    /// <summary> The commit message's first line on its own line (whole message in the title), the
+    /// run status as a badge with its word instead of a dot, and a run in progress says so with the
+    /// step it is on. </summary>
     [Fact]
     public void ProjectCard_ShowsTheCommitFirstLine_AndARunInProgressWithItsStep()
     {
@@ -146,7 +144,7 @@ public class ProjectsTests : BunitContext
             TotalCount = 2
         });
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => cut.Markup.Contains("Quiet"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Quiet"));
 
         var cards = cut.FindAll(".project-card");
         var active = cards.Single(card => card.TextContent.Contains("Operational"));
@@ -190,8 +188,8 @@ public class ProjectsTests : BunitContext
 
         var cut = Render<ProjectsPage>();
 
-        // Recette R-319: the last commit may come from another repository than the internal one; the
-        // commit page resolves the repository that holds it instead of guessing the first one.
+        // The last commit may come from another repository than the internal one; the commit page
+        // resolves the repository that holds it instead of guessing the first one.
         cut.WaitForAssertion(() => Assert.Contains("href=\"/git-repositories/commits/42\"", cut.Markup));
         Assert.DoesNotContain("/git-repositories/7/commits/", cut.Markup, StringComparison.Ordinal);
     }
@@ -206,7 +204,7 @@ public class ProjectsTests : BunitContext
         });
 
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => cut.Markup.Contains("Dense"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Dense"));
         cut.Find("button[title='DenseView']").Click();
 
         Assert.Contains("project-dense-list", cut.Markup);
@@ -216,7 +214,7 @@ public class ProjectsTests : BunitContext
     [Fact]
     public void DenseView_ShowsTheFirstLineOfTheCommitMessage_LikeTheTiles()
     {
-        // PLAN-005 lot 7: the dense list says what the last commit is, not only its SHA.
+        // The dense list says what the last commit is, not only its SHA.
         _handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto>
         {
             Items =
@@ -232,7 +230,7 @@ public class ProjectsTests : BunitContext
         });
 
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => cut.Markup.Contains("Dense"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Dense"));
         cut.Find("button[title='DenseView']").Click();
 
         var line = cut.Find(".project-dense-row .project-dense-activity .project-activity-line");
@@ -250,13 +248,13 @@ public class ProjectsTests : BunitContext
         });
 
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => cut.Markup.Contains("Favorite me"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Favorite me"));
         cut.Find("button[title='AddToFavorites']").Click();
 
         Assert.Contains("project-favorite active", cut.Markup);
-        Assert.Contains(JSInterop.Invocations, invocation =>
-            invocation.Identifier == "localStorage.setItem"
-            && Equals(invocation.Arguments[0], "aetheus.projects.favorites"));
+        // R1-66: the favourite is the user's preference, kept on the server.
+        var preferences = Services.GetRequiredService<Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences>();
+        Assert.Equal([7], preferences.Read<HashSet<int>>(PreferenceKeys.ProjectFavorites));
     }
 
     [Fact]
@@ -280,8 +278,8 @@ public class ProjectsTests : BunitContext
         Assert.True(opened);
     }
 
-    /// <summary>Recette R2-121: a project is only its record until its pipelines exist, so creating
-    /// one leads straight to the setup wizard for it, whose readiness check names what is missing.</summary>
+    /// <summary>A project is only its record until its pipelines exist, so creating one leads
+    /// straight to the setup wizard for it, whose readiness check names what is missing.</summary>
     [Fact]
     public async Task NewProject_Created_LeadsToThePipelineSetupWizardForIt()
     {

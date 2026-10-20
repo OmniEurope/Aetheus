@@ -35,8 +35,8 @@ public interface IProjectRepository
     Task<Dictionary<int, ProjectListInsight>> GetProjectListInsightsAsync(
         IReadOnlyCollection<int> projectIds, DateTime activeSessionCutoffUtc, CancellationToken ct = default);
 
-    /// <summary>The project's current quality grade alone, the one figure its detail page shows of the
-    /// list insights (commits, runs, monitored apps, audience) it used to compute in full.</summary>
+    /// <summary>Returns only the current project quality grade required by the detail
+    /// page.</summary>
     Task<AnalysisGradeSummaryDto?> GetLatestGateGradeAsync(int projectId, CancellationToken ct = default);
 
     Task<Project?> GetProjectDetailAsync(int id, CancellationToken ct = default);
@@ -74,7 +74,7 @@ public interface IProjectRepository
         int projectId, string? search, string? sortBy, bool sortDescending,
         int page, int pageSize, CancellationToken ct = default, IReadOnlyList<GridFilter>? columnFilters = null);
 
-    /// <summary>Recette R-212: the server names across a project's tasks, for the Server column filter.</summary>
+    /// <summary>The server names across a project's tasks, for the Server column filter.</summary>
     Task<TaskFilterValuesDto> GetTaskFilterValuesAsync(int projectId, CancellationToken ct = default);
 
     Task<(List<TaskLog> Items, int TotalCount)> GetLogsPagedAsync(
@@ -86,10 +86,9 @@ public interface IProjectRepository
     Task<List<PipelineRun>> GetRecentPipelineRunsAsync(int projectId, int count, CancellationToken ct = default);
 }
 
-/// <summary>S-TECH-N8R3: per-section counts of a project. <paramref name="EnvironmentServers"/> is separate from
-/// <paramref name="Servers"/> on purpose: the Servers section lists the project's own attachments,
-/// while a server can also reach the project through one of its environments (PLAN-003 lot 29 / D23).
-/// Merging the two would have made the section tile count rows it does not show.</summary>
+/// <summary>Keeps <paramref name="EnvironmentServers"/> separate from <paramref name="Servers"/>
+/// because the Servers section lists only direct attachments. Combining them would count rows
+/// absent from that section.</summary>
 public sealed record ProjectSectionCounts(
     int Servers,
     int Releases,

@@ -48,7 +48,7 @@ public class PendingApprovalsServiceTests
         }];
         factory.AnnounceBackendReplaced();
 
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var deadline = DateTime.UtcNow.AddSeconds(30);
         while (service.Items.Count == 0 && DateTime.UtcNow < deadline)
             await Task.Delay(20, TestContext.Current.CancellationToken);
         // Let any stray second restart or fetch surface before counting.

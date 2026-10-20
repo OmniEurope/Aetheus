@@ -6,11 +6,9 @@ using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace Aetheus.Analyzers;
 
-/// <summary>
-/// An analyzer with one rule that looks at every object construction, written <c>new T(...)</c> or
-/// <c>new(...)</c>. The registration is the same for each of them, so it is written once here
-/// (recette R-530) and an analyzer only says what it reports.
-/// </summary>
+/// <summary> An analyzer with one rule that looks at every object construction, written <c>new
+/// T(...)</c> or <c>new(...)</c>. The registration is the same for each of them, so it is written
+/// once here and an analyzer only says what it reports. </summary>
 public abstract class ObjectCreationAnalyzer : DiagnosticAnalyzer
 {
     /// <summary>The single rule this analyzer reports.</summary>

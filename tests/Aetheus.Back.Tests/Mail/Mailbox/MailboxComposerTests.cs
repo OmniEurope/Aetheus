@@ -5,7 +5,8 @@ using MimeKit;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-17: address lists, reply / reply-all / forward drafts and the message finally sent.</summary>
+/// <summary>Address lists, reply / reply-all / forward drafts and the message finally
+/// sent.</summary>
 public sealed class MailboxComposerTests
 {
     private const string Own = "me@example.org";

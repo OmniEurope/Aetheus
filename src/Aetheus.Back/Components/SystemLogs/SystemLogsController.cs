@@ -31,7 +31,7 @@ public class SystemLogsController(ISystemLogService logService, ISettingsService
     {
         page = Math.Max(1, page);
         pageSize = PaginationDefaults.Clamp(pageSize);
-        // Recette R-453: the virtualized grid's column sort and header filters travel with each block.
+        // The virtualized grid's column sort and header filters travel with each block.
         return Ok(await logService.GetLogEntriesAsync(fileName, level, search, dateFrom, dateTo, page, pageSize, ct,
             sortBy, sortDescending, filters is { Count: > 0 } ? filters : null));
     }

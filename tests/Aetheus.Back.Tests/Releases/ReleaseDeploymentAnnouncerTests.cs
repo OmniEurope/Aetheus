@@ -11,10 +11,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Releases;
 
-/// <summary>
-/// Recette R-520: a <c>type: release</c> step that records its release as deployed announces the
-/// deployment with the stage the agent is running, so the environment's branch advance applies.
-/// </summary>
+/// <summary>A release step recorded as deployed announces deployment with the executing agent
+/// stage.</summary>
 public sealed class ReleaseDeploymentAnnouncerTests : IDisposable
 {
     private const int RunId = 2477;

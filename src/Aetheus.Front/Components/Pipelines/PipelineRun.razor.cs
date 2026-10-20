@@ -36,7 +36,7 @@ public partial class PipelineRun : IAsyncDisposable
     private int? _repoId;
     private List<StageViewModel> _stages = [];
     private bool _loading;
-    // Recette R-422: the run is shown while the rest of the page still loads behind it.
+    // The run is shown while the rest of the page still loads behind it.
     private bool _detailsLoading;
     private bool _childrenLoaded;
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
@@ -83,8 +83,8 @@ public partial class PipelineRun : IAsyncDisposable
         _logStreamer = new PipelineRunLogStreamer(Api, HubFactory, Logger, _logWindow, InvokeAsync, StateHasChanged);
         _baselines = new PipelineRunStageBaselines(Api);
         _approval = new PipelineRunApprovalController(Api, Toast, ReloadRunAsync, PendingApprovals);
-        // Recette R2-087: a return shows the run as it was left at once; the page-wide loader is for a
-        // first visit. The run is then read again and the page rebuilt from it, as on a first visit.
+        // A return shows the run as it was left at once; the page-wide loader is for a first visit.
+        // The run is then read again and the page rebuilt from it, as on a first visit.
         var address = $"pipelines/runs/{runId}";
         var ticket = PageState.Begin();
         _loading = !PageState.TryRestore<PipelineRunDto>(address, out var shown);
@@ -102,9 +102,8 @@ public partial class PipelineRun : IAsyncDisposable
         if (_run is null) PageState.Forget<PipelineRunDto>(address);
         else
         {
-            // Recette R-422: the page shows as soon as the run itself is loaded (header, alerts), and
-            // the rest (child runs, gate, metrics, approvals, releases, logs) arrives behind it,
-            // in parallel, instead of the whole page waiting for the slowest call.
+            // The run loads first so the header can render while child runs, gates, metrics,
+            // approvals, releases and logs load in parallel.
             _detailsLoading = true;
             PrepareRootRun();
             PageState.Remember(ticket, address, _run);
@@ -193,8 +192,8 @@ public partial class PipelineRun : IAsyncDisposable
         var releasesTask = Api.Projects.GetReleasesByRunAsync(runId, ct);
         var aiResultsTask = PipelineRunAiResults.LoadAsync(Api, runId, ct);
         var failedLogsTask = LoadFailedStepLogsAsync();
-        // The approval only reads the run's id and status, which merging the children never changes,
-        // so it no longer waits for the gate and the metrics.
+        // Approval requires only the run ID and status, so it can load independently of child-run
+        // metrics.
         var approvalTask = approvalLoaded ? Task.CompletedTask : _approval!.LoadAsync(rootRun, ct);
         var (children, mergedRun) = await PipelineRunChildAggregator.LoadAsync(rootRun, Api, _pageCache, ct);
         if (!IsCurrentLoad(runId, generation)) return false;
@@ -470,8 +469,8 @@ public partial class PipelineRun : IAsyncDisposable
 
     private List<string> TabSlugs() => PipelineRunPresentation.TabSlugs(_run, ShowGateTab, HasYamlTab, HasLintTab);
 
-    /// <summary>Recette R-422: the tabs wait for the child runs (they decide which tabs exist), and for the
-    /// tab a shared <c>?tab=</c> link names, or they would open on the overview and stay there.</summary>
+    /// <summary>The tabs wait for the child runs (they decide which tabs exist), and for the tab a
+    /// shared <c>?tab=</c> link names, or they would open on the overview and stay there.</summary>
     private bool TabsReady => _childrenLoaded
         && (!_detailsLoading || string.IsNullOrEmpty(Tab) || TabSlugs().Contains(Tab, StringComparer.OrdinalIgnoreCase));
 
@@ -603,7 +602,7 @@ public partial class PipelineRun : IAsyncDisposable
     private string? _peekName;
     private bool _yamlWrap;
     private void ClosePeek() => _peekName = null;
-    // FRONT-010 / recette R2-104: bounded live lines per task, the complete log on demand.
+    // Live lines are bounded per task; complete logs are read on demand.
     private readonly PipelineRunLogWindow _logWindow = new();
     private Dictionary<int, List<TaskLogDto>> _stepLogsCache => _logWindow.Lines;
     internal PipelineRunLogWindow LogWindow => _logWindow;
@@ -623,7 +622,7 @@ public partial class PipelineRun : IAsyncDisposable
         var taskId = step.TaskId.Value;
         if (step.Status == TaskExecutionStatus.Running) _logWindow.Forget(taskId);
         if (_logStreamer is not null) await _logStreamer.UpdateAsync(_selectedStep);
-        // A list built from streamed lines alone is not the history: it is read all the same (R2-104).
+        // Streamed lines may omit earlier history, so the complete log must still be read.
         if (_logWindow.HasSnapshot(taskId)) return;
         _logsLoading = true;
         StateHasChanged();
@@ -639,7 +638,7 @@ public partial class PipelineRun : IAsyncDisposable
         _logWindow.ApplySnapshot(taskId, snapshot, PipelineRunLogWindow.LiveWindow);
     }
 
-    /// <summary>Recette R2-104: "Journal complet" reads the selected step's complete log, page by page.</summary>
+    /// <summary>"Journal complet" reads the selected step's complete log, page by page.</summary>
     internal async Task ShowCompleteLogAsync()
     {
         if (_selectedStep?.TaskId is not { } taskId || _completeLogLoading) return;

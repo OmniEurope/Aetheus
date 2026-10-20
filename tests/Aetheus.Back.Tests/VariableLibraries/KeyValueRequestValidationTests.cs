@@ -3,10 +3,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Back.Tests.VariableLibraries;
 
-/// <summary>
-/// PLAN-003 2.1: a library entry may be empty on purpose (<c>HOST_PREFIX</c> in production), a vault
-/// secret never. The two requests share their key rules and part on the value.
-/// </summary>
+/// <summary>Library entries may intentionally have empty values, while vault secrets may not. Both
+/// request types share key validation.</summary>
 public sealed class KeyValueRequestValidationTests
 {
     private static bool IsValid(object request, out List<ValidationResult> results)

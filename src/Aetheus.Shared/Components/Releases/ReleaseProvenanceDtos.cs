@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Releases;
 
-/// <summary>
-/// Recette R-366/R-367: where a release comes from and who used it afterwards, kept apart on purpose.
-/// <see cref="CreatedBy"/> is the run that first published it; <see cref="Uses"/> are the later runs
-/// that consumed it; <see cref="ArtifactInputs"/> and <see cref="Packages"/> are what its build consumed,
-/// distinct from the deliverables it ships (<see cref="ReleaseDto.Artifacts"/>).
+/// <summary> Where a release comes from and who used it afterwards, kept apart on purpose. <see
+/// cref="CreatedBy"/> is the run that first published it; <see cref="Uses"/> are the later runs
+/// that consumed it; <see cref="ArtifactInputs"/> and <see cref="Packages"/> are what its build
+/// consumed, distinct from the deliverables it ships (<see cref="ReleaseDto.Artifacts"/>).
 /// </summary>
 public sealed record ReleaseProvenanceDto
 {

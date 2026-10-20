@@ -15,7 +15,7 @@ public partial class ServerMailSection
     [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
-    // Recette R2-089: the "installed but not configured" warning waits for the counts to be read.
+    // The "installed but not configured" warning waits for the counts to be read.
     private bool _countsRead;
     private bool _countsReading;
     private bool _countsFailed;
@@ -25,9 +25,9 @@ public partial class ServerMailSection
     private List<MailDomainDto> _domains = [];
     private List<MailAccountDto> _accounts = [];
     private List<MailDomainDto> _dialogDomains = [];
-    // Recette R-327: the grids scroll and fetch further blocks; what the page derives from them (the
-    // Relations tab resources, the default sender, the dialog domains) reads their first block, so
-    // scrolling a grid does not change it.
+    // The grids scroll and fetch further blocks; what the page derives from them (the Relations tab
+    // resources, the default sender, the dialog domains) reads their first block, so scrolling a
+    // grid does not change it.
     private List<MailDomainDto> _firstDomains = [];
     private List<MailAccountDto> _firstAccounts = [];
     private int _domainCount;
@@ -74,7 +74,7 @@ public partial class ServerMailSection
     private bool CanManageTasks => Server.MailSetupAvailable && !AgentOffline;
     private bool BlockedByOfflineAgent() => AgentOfflineGuard.Blocks(Server, Toast);
 
-    // PLAN-005 child tabs that follow the output of the tasks they queue.
+    // Child tabs follow the output of their queued tasks.
     private ServerMailQueueTab? _queueTab;
     private ServerMailLogsTab? _logsTab;
     private ServerMailStatusList? _statusList;
@@ -151,7 +151,7 @@ public partial class ServerMailSection
         await Task.WhenAll(domainsReload, accountsReload, aliasesReload);
     }
 
-    // Recette R-226: a completed task is live data, so the grids refresh quietly (rows, page, filters kept).
+    // A completed task is live data, so the grids refresh quietly (rows, page, filters kept).
     private async Task RefreshDataAsync()
     {
         var domainsRefresh = _domainsGrid?.Refresh() ?? Task.CompletedTask;
@@ -160,7 +160,7 @@ public partial class ServerMailSection
         await Task.WhenAll(domainsRefresh, accountsRefresh, aliasesRefresh);
     }
 
-    // Recette R2-124: one page of each list's export, with the grid's sort and column filters.
+    // One page of each list's export, with the grid's sort and column filters.
     private Task<PaginatedResult<MailDomainDto>> ReadDomainsExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -186,7 +186,7 @@ public partial class ServerMailSection
     {
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, descending) = GetSort(args, "Name");
-        // Recette R-210: the header filters, applied by the API.
+        // The header filters, applied by the API.
         var filters = args.ToApiFilters();
         await LoadPageAsync(
             () => Api.Mail.GetMailDomainsPageAsync(ServerId, page, pageSize, sortBy: sortBy, sortDescending: descending, filters: filters),
@@ -203,7 +203,7 @@ public partial class ServerMailSection
     {
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, descending) = GetSort(args, "Email");
-        // Recette R-210 / R-224: the header filters, applied by the API.
+        // The header filters, applied by the API.
         var filters = args.ToApiFilters();
         await LoadPageAsync(
             () => Api.Mail.GetMailAccountsPageAsync(ServerId, page, pageSize, sortBy: sortBy, sortDescending: descending, filters: filters),
@@ -220,7 +220,7 @@ public partial class ServerMailSection
     {
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, descending) = GetSort(args, "SourceEmail");
-        // Recette R-210: the header filters, applied by the API.
+        // The header filters, applied by the API.
         var filters = args.ToApiFilters();
         await LoadPageAsync(
             () => Api.Mail.GetMailAliasesPageAsync(ServerId, page, pageSize, sortBy: sortBy, sortDescending: descending, filters: filters),
@@ -389,11 +389,13 @@ public partial class ServerMailSection
     }
 
     // Recette R1-17: the integrated mailbox of one account, and the settings of an external client.
-    private void OpenMailbox(MailAccountDto account) => Nav.NavigateTo($"/servers/{ServerId}/mail/accounts/{account.Id}/mailbox");
+    private void OpenMailboxFromRow(MailAccountDto account)
+    {
+        if (account.IsActive && account.MissingSince is null)
+            OpenMailbox(account);
+    }
 
-    private Task OpenMailClientHelpAsync() => Dialog.OpenAsync<Aetheus.Front.Components.Mail.MailClientSettingsHelp>(L["MailClientHelpTitle"],
-        new Dictionary<string, object?> { ["ServerId"] = ServerId, ["InDialog"] = true },
-        new OmniDialogOptions { Width = "40rem", AutoFocusFirstElement = false });
+    private void OpenMailbox(MailAccountDto account) => Nav.NavigateTo($"/servers/{ServerId}/mail/accounts/{account.Id}/mailbox");
 
     private async Task DeleteAccountAsync(int accountId)
     {
@@ -562,7 +564,8 @@ public partial class ServerMailSection
     }
 
 
-    /// <summary>Recette R2-124: the export writes the DNS records the domain has, and the quota as the cell does.</summary>
+    /// <summary>The export writes the DNS records the domain has, and the quota as the cell
+    /// does.</summary>
     private static readonly Func<MailDomainDto, object?> DnsExport = domain => string.Join(", ",
         new[] { (domain.HasSpf, "SPF"), (domain.HasDkim, "DKIM"), (domain.HasDmarc, "DMARC") }.Where(record => record.Item1).Select(record => record.Item2));
     private Func<MailAccountDto, object?> QuotaExport => _quotaExport ??= QuotaText;

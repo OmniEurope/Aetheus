@@ -13,7 +13,7 @@ else if (_release is null)
 }
 else
 {
-    @* PLAN-005 D39: the short form as the title; the full name once, below it, to read and copy. *@
+    @* Use a short title and display the full release name once below for reading and copying. *@
     <OmniPageHeader Title="@ReleaseHelper.ShortVersion(_release.Version)"
         ShowBack="true" Subtitle="@Breadcrumb.Subtitle(ReleaseHelper.ShortVersion(_release.Version) == _release.Version ? null : _release.Version)">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("new_releases")" /></Icon>
@@ -23,13 +23,38 @@ else
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"#{_release.BuildNumber}")</OmniBadge>
         </Badges>
         <Actions>
-            @* Recette R-283: no rollback possible, no button (it used to sit there disabled). *@
-            @if (CanRollback)
+            @* STD-BTN detection 11: Rerun visible on an archived release, the other actions in the menu;
+               otherwise Rollback is the visible action, omitted when rollback is unavailable. *@
+            @if (IsArchived)
+            {
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@RelaunchFromCommitAsync" Disabled="@(!_canWrite || !CanRelaunch)" title="@RelaunchTitle"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Rerun"]</span></OmniButton>
+            }
+            else if (CanRollback)
             {
                 <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@RollbackAsync" Disabled="@(!_canWrite)" title="@RollbackDisabledReason"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /> <span>@L["Rollback"]</span></OmniButton>
             }
+            @* Recette R-13: a recorded status that is wrong is put back from the menu, never a second button. *@
+            @if (CanRestoreStatus || (IsArchived && CanRollback))
+            {
+                <OmniOverflowMenu Label="@L["MoreActions"]">
+                    @if (IsArchived && CanRollback)
+                    {
+                        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@RollbackAsync" Disabled="@(!_canWrite)" title="@RollbackDisabledReason"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon><ChildContent>@L["Rollback"]</ChildContent></OmniMenuItem>
+                    }
+                    @if (CanRestoreStatus)
+                    {
+                        <OmniMenuItem OnClick="@RestoreStatusAsync"><Icon><OmniIcon Name="OmniIconName.Restore" /></Icon><ChildContent>@L["ReleaseStatusRestore"]</ChildContent></OmniMenuItem>
+                    }
+                </OmniOverflowMenu>
+            }
         </Actions>
     </OmniPageHeader>
+
+    @* Decision D2: say what an archived release lost and what it kept. *@
+    @if (IsArchived)
+    {
+        <OmniAlert Severity="OmniSeverity.Info" Title="@L["ReleaseArchivedTitle"]" Class="omni-u-mb-lg">@L["ReleaseArchivedHint"]</OmniAlert>
+    }
 
     @* Source (where it comes from) vs Deliverables (what it ships / where it targets) *@
     <OmniRow Gap="OmniSpacing.Large">
@@ -80,7 +105,7 @@ else
                         <OmniText Element="OmniTextElement.Paragraph"><ShortId Value="@_release.TagName" Href="@TagHref" /></OmniText>
                     </OmniStack>
                 }
-                @* Recette R-366: the run that CREATED the release, never the last run that recorded it. *@
+                @* The run that CREATED the release, never the last run that recorded it. *@
                 <ReleaseCreatorRows Release="@_release" Provenance="@_provenance" />
 
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
@@ -90,8 +115,8 @@ else
             </OmniCard>
         </OmniColumn>
 
-        @* Recette R-283: the dates sit in one card beside the source instead of lone tiles above it,
-           and the deliverables under them, so the two columns read as one block. *@
+        @* The dates sit in one card beside the source instead of lone tiles above it, and the
+           deliverables under them, so the two columns read as one block. *@
         <OmniColumn Span="12" MediumSpan="6">
             <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
             <OmniCard>
@@ -118,6 +143,13 @@ else
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.RocketLaunch" Class="run-tile-icon" /> @L["Promoted"]</OmniText>
                         <OmniText Element="OmniTextElement.Paragraph">@_release.PromotedAt.Value.ToString("g")</OmniText>
+                    </OmniStack>
+                }
+                @if (_release.ArchivedAt.HasValue)
+                {
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Archive" Class="run-tile-icon" /> @L["ReleaseArchivedAt"]</OmniText>
+                        <OmniText Element="OmniTextElement.Paragraph">@_release.ArchivedAt.Value.ToString("g")</OmniText>
                     </OmniStack>
                 }
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
@@ -152,7 +184,7 @@ else
         </OmniColumn>
     </OmniRow>
 
-    @* Recette R-366/R-367: later uses, and what the build consumed (apart from the deliverables). *@
+    @* Later uses, and what the build consumed (apart from the deliverables). *@
     @if (_provenance is not null)
     {
         <ReleaseProvenancePanel Provenance="@_provenance" />

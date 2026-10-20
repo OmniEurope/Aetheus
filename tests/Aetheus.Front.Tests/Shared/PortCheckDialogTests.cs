@@ -4,12 +4,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// PLAN-005 lot 3, revised by PLAN-003 lot 24 / D14. The dialog answers "is this port a problem for
-/// me?" in one phrase per port. The two sources are still crossed behind that phrase, so the
-/// production case stays visible: a port free in the registry with something outside Aetheus already
-/// listening on it is amber, not green.
-/// </summary>
+/// <summary>Port verdicts combine registry ownership and observed listeners; an unregistered
+/// external listener is a warning rather than a free port.</summary>
 public class PortCheckDialogTests : BunitContext
 {
     private static readonly DateTime Scan = new(2026, 9, 6, 9, 30, 0, DateTimeKind.Utc);

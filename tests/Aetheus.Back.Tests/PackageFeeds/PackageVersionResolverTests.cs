@@ -19,7 +19,6 @@ public class PackageVersionResolverTests
     }
 
     [Theory]
-    [InlineData(PackageFeedType.Maven)]
     [InlineData(PackageFeedType.Docker)]
     [InlineData(PackageFeedType.Generic)]
     public async Task Resolve_UnsupportedType_ReturnsUnsupported(PackageFeedType type)

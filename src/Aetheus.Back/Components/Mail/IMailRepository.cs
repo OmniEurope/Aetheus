@@ -26,7 +26,17 @@ public interface IMailRepository
     Task AddAccountAsync(MailAccount account, CancellationToken ct = default);
     Task UpdateAccountAsync(MailAccount account, CancellationToken ct = default);
     Task DeleteAccountAsync(MailAccount account, CancellationToken ct = default);
+    /// <summary>Recette R3-49: the server's mailbox rows the heartbeat marked absent (<c>MissingSince</c> set), tracked.</summary>
+    Task<List<MailAccount>> GetMissingAccountsAsync(int serverId, CancellationToken ct = default);
+    Task DeleteAccountsAsync(IReadOnlyCollection<MailAccount> accounts, CancellationToken ct = default);
     Task AddTaskAsync(ServerTask task, CancellationToken ct = default);
+
+    /// <summary>Marks the quota resync of this server as started; true only for the one caller that found it
+    /// not yet done on a helper at the quota version (concurrent heartbeats cannot both win).</summary>
+    Task<bool> TryClaimQuotaResyncAsync(int serverId, DateTime now, CancellationToken ct = default);
+
+    /// <summary>Gives the claim back after the tasks could not be queued, so a later heartbeat retries.</summary>
+    Task ReleaseQuotaResyncAsync(int serverId, CancellationToken ct = default);
     /// <summary>True while a task of one of <paramref name="kinds"/> is pending, assigned or running on the server.</summary>
     Task<bool> HasOpenTaskAsync(int serverId, IReadOnlyCollection<OperationKind> kinds, CancellationToken ct = default);
     Task<List<MailAlias>> GetAliasesAsync(int serverId, CancellationToken ct = default);

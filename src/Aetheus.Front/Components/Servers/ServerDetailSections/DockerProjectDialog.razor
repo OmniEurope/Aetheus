@@ -3,9 +3,12 @@
 <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0"><strong>@(string.IsNullOrEmpty(Project) ? L["NoProject"] : Project)</strong></OmniHeading>
     <div class="flex-spacer"></div>
+    @* STD-BTN detection 11: Start visible, the other actions in the menu. *@
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CloseWithAction(DockerContainerAction.Start))" title="@L["StartAll"]"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniButton>
-    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => CloseWithAction(DockerContainerAction.Stop))"><OmniIcon Name="OmniIconName.Stop" /> <span>@L["StopAll"]</span></OmniButton>
-    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => CloseWithAction(DockerContainerAction.Restart))" title="@L["RestartAll"]"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniButton>
+    <OmniOverflowMenu Label="@L["MoreActions"]">
+        <OmniMenuItem OnClick="@(() => CloseWithAction(DockerContainerAction.Restart))" title="@L["RestartAll"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Restart"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => CloseWithAction(DockerContainerAction.Stop))"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["StopAll"]</ChildContent></OmniMenuItem>
+    </OmniOverflowMenu>
 </OmniStack>
 
 <OmniTabs>

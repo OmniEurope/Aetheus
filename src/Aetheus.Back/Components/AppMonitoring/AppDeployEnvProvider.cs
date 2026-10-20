@@ -45,19 +45,9 @@ public sealed class AppDeployEnvProvider(
         if (app is null)
             return None;
 
-        // Rotating per call looked right when only one stage deployed, but this method runs once per
-        // stage carrying execution_role: deploy - about ten times in a production deployment. The
-        // container starts at the Up stage holding the key of that moment, and rotation keeps exactly
-        // one previous key: from the second rotation onwards, the key the container holds is neither
-        // current nor previous. Every OTLP export then came back 401, which is why no application had
-        // ever recorded a single data point.
-        //
-        // One key per run, not per stage, and derived from the run rather than remembered: an
-        // in-memory copy did not survive the backend restart a production deployment performs, and
-        // the same run rotated again from the new colour.
-        //
-        // Recette R2-013: the deployment rotation keeps the key before the previous one as well, because
-        // the idle blue-green colour still holds it until this run replaces that colour.
+        // Deployment credentials are derived once per run so repeated stages and backend restarts
+        // retain the same key. Rotation preserves both blue-green colours' overlapping keys until
+        // their existing expiry deadlines.
         var plaintext = hasher.DeriveForRun(app.Id, pipelineRunId);
         if (!string.Equals(app.IngestKeyHash, hasher.Hash(plaintext), StringComparison.Ordinal))
         {

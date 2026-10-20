@@ -8,12 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// Run workspaces became durable so an agent restart stops destroying a live run's sources
-/// (production run 2185). /tmp used to reclaim that disk for free; this reaper replaces it, and the
-/// asymmetry it has to respect is the point of these tests: keeping a dead workspace costs disk,
-/// deleting a live one costs the run.
-/// </summary>
+/// <summary>Verifies that workspace reclamation preserves live runs and treats unavailable backend
+/// state conservatively.</summary>
 public sealed class RunWorkspaceReaperTests : IDisposable
 {
     private readonly string _root = Path.Combine(

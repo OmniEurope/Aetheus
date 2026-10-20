@@ -8,10 +8,8 @@ import test from "node:test";
 
 const script = resolve("deploy/scripts/generate-artifact-provenance.mjs");
 
-// The fixture named `aetheus-back.tar` while the pipeline had long since moved to `.tar.gz`, so the
-// generator matched nothing and the docker-images category came back empty. The test failed for an
-// unknown number of commits because it was in the repository and listed in no pipeline (PLAN-006
-// lot 7); it is registered in CI's script-test list now, which is what keeps this from recurring.
+// Use the published .tar.gz filename so the fixture exercises the docker-images provenance
+// category. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 test("produces deterministic category sizes without file contents", () => {
   const workspace = mkdtempSync(join(tmpdir(), "aetheus-provenance-"));
   mkdirSync(join(workspace, ".pipeline-artifacts"), { recursive: true });

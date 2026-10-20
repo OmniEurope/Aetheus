@@ -5,12 +5,8 @@ using System.Text.Json;
 
 namespace Aetheus.Shared.Components.Shared;
 
-/// <summary>
-/// PLAN-005: parses the machine-readable lines the root-owned <c>mail-manage</c> helper prints
-/// (<c>postqueue -j</c> JSON, <c>QUOTA</c>, <c>DELIVERY</c>, <c>CHECK</c>, OpenDKIM <c>.txt</c> records).
-/// Shared so the agent collector, the backend and the Blazor client read the same format. Every parser
-/// ignores lines it does not recognise instead of throwing: task logs interleave helper chatter.
-/// </summary>
+/// <summary>Parses machine-readable mail-helper output consistently across agent, backend and
+/// frontend. Ignore unrecognized log chatter rather than rejecting the complete output.</summary>
 public static class MailTaskOutputParser
 {
     /// <summary>Parses <c>postqueue -j</c> output (one JSON object per line).</summary>
@@ -31,6 +27,23 @@ public static class MailTaskOutputParser
             }
         }
         return items;
+    }
+
+    /// <summary>Recette R3-23: parses the <c>LEFTOVER kind name detail</c> lines and the closing
+    /// <c>CLEAN yes|no</c> line of a mail leftovers check.</summary>
+    public static MailLeftoversReportDto ParseLeftovers(string? output)
+    {
+        var items = TabFields(output, "LEFTOVER")
+            .Where(fields => fields.Length >= 3)
+            .Select(fields => new MailLeftoverDto
+            {
+                Kind = fields[1],
+                Name = fields[2],
+                Detail = fields.Length >= 4 ? fields[3] : string.Empty
+            })
+            .ToList();
+        var complete = TabFields(output, "CLEAN").Any(fields => fields.Length >= 2 && fields[1] is "yes" or "no");
+        return new MailLeftoversReportDto { IsComplete = complete, Items = items };
     }
 
     /// <summary>Parses <c>QUOTA &lt;email&gt; &lt;KiB&gt;</c> lines into a case-insensitive map.</summary>

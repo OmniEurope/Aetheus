@@ -24,10 +24,8 @@ public class LoginTests : BunitContext
         Assert.Contains("Password", cut.Markup);
     }
 
-    /// <summary>
-    /// Recette R2-123: the demo account sits in two read-only fields under the "Public demo" title,
-    /// each with OE's Copy button welded to its end, outside the sign-in form.
-    /// </summary>
+    /// <summary> The demo account sits in two read-only fields under the "Public demo" title, each
+    /// with OE's Copy button welded to its end, outside the sign-in form. </summary>
     [Fact]
     public void PublicDemo_ShowsTheAccountInTwoReadOnlyCopyableFields()
     {
@@ -146,7 +144,7 @@ public class LoginTests : BunitContext
         cut.Find("input#Password").Input("aetheus-dev-admin-pwd");
         cut.Find("form").Submit();
 
-        cut.WaitForAssertion(() => Assert.Equal("/", new Uri(nav.Uri).AbsolutePath), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Equal("/", new Uri(nav.Uri).AbsolutePath));
         Assert.Equal("jwt-token", Services.GetRequiredService<AuthStateProvider>().Token);
         Assert.Contains(nav.History, entry => new Uri(new Uri("http://localhost/"), entry.Uri).AbsolutePath == "/");
     }
@@ -170,8 +168,8 @@ public class LoginTests : BunitContext
         _handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto());
         var cut = Render<Login>();
 
-        // Recette R-376: Login is blue and the only action button of the form (the password field's
-        // own eye apart); the forgotten password is no longer a button beside it.
+        // Login is the only form action button apart from password reveal; forgotten password is a
+        // link.
         var actions = cut.Find("form").QuerySelectorAll("button")
             .Where(button => button.Closest(".omni-password") is null)
             .ToList();
@@ -186,11 +184,10 @@ public class LoginTests : BunitContext
         Assert.Empty(cut.FindAll("#login-forgot-hint"));
     }
 
-    /// <summary>
-    /// Recette R-375: the form's action sits at the end of its row, like every card action. OE 1.4.0's
-    /// sign-in shell has no actions slot (its footer is a block for the links), and the submit button
-    /// must stay inside the form, so the row is OE's end-justified stack, with no local alignment rule.
-    /// </summary>
+    /// <summary> The form's action sits at the end of its row, like every card action. OE 1.4.0's
+    /// sign-in shell has no actions slot (its footer is a block for the links), and the submit
+    /// button must stay inside the form, so the row is OE's end-justified stack, with no local
+    /// alignment rule. </summary>
     [Fact]
     public void LoginAction_IsAtTheEndOfItsRow_InsideTheForm()
     {

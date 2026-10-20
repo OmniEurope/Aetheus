@@ -9,6 +9,7 @@ public static class PackageRegistryModuleExtensions
         services.AddScoped<IPackageRegistryStorage, PackageRegistryStorage>();
         services.AddScoped<INuGetRegistryService, NuGetRegistryService>();
         services.AddScoped<INpmRegistryService, NpmRegistryService>();
+        services.AddScoped<IMavenRegistryService, MavenRegistryService>();
         services.AddScoped<IPackageRegistryAdminService, PackageRegistryAdminService>();
         services.AddScoped<NuGetPackageInspector>();
         services.AddScoped<NpmPackageInspector>();

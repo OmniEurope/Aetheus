@@ -26,7 +26,7 @@ public partial class NotificationsAdmin : ComponentBase
     private bool _rulesLoading;
     private readonly HashSet<int> _testing = [];
 
-    // Recette R-224: the grids' header filters, sent with every page request, and the values they offer.
+    // The grids' header filters, sent with every page request, and the values they offer.
     private List<GridFilter> _channelFilters = [];
     private List<GridFilter> _ruleFilters = [];
     private NotificationAdminFilterValuesDto _ruleFilterValues = new();
@@ -54,7 +54,8 @@ public partial class NotificationsAdmin : ComponentBase
         catch (HttpRequestException) { _ruleFilterValues = new NotificationAdminFilterValuesDto(); }
     }
 
-    /// <summary>Recette R2-124: one page of the channels export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the channels export, with the search, sort and column filters of the
+    /// grid.</summary>
     internal Task<PaginatedResult<NotificationChannelDto>> ReadChannelsExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -63,7 +64,8 @@ public partial class NotificationsAdmin : ComponentBase
             page, pageSize, _channelSearch, sortBy, sortDescending, args.ToApiFilters());
     }
 
-    /// <summary>Recette R2-124: one page of the rules export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the rules export, with the search, sort and column filters of the
+    /// grid.</summary>
     internal Task<PaginatedResult<NotificationRuleDto>> ReadRulesExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();

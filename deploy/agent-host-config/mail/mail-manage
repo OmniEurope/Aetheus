@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-# aetheus-mail-helper-version: 3
+# aetheus-mail-helper-version: 6
 # Aetheus Agent mail-manage helper - root-owned, invoked via /etc/sudoers.d/aetheus-mail (NOPASSWD).
 # Incremental management of an already-provisioned mail stack. First argv token is a fixed
 # sub-command; every following argument is re-validated here. Passwords and learned messages arrive on
@@ -33,17 +33,81 @@ read_password() {
   [ "${#password}" -ge 8 ] || die "password too short"
 }
 
-# Rewrites the Dovecot passwd-file line for one account (hash fed to doveadm over stdin).
-write_user_hash() {
-  hash="$(printf '%s\n%s\n' "$password" "$password" | doveadm pw -s SHA512-CRYPT)"
+# DEP-005: the users file is also Dovecot's userdb, and the extra field of a line carries the mailbox
+# quota in MiB for both syntaxes, so a host moved from Dovecot 2.3 to 2.4 keeps its limits: 2.3 reads
+# quota_rule, 2.4 reads quota_storage_size, and each ignores the other. 0 = unlimited (no field).
+quota_fields() {
+  [ "$1" -gt 0 ] || return 0
+  printf 'userdb_quota_rule=*:storage=%sM userdb_quota_storage_size=%sM' "$1" "$1"
+}
+
+# The quota (MiB) recorded on the users-file line of one account, 0 when the line has none.
+current_quota() {
+  awk -F: -v key="$1" '$1 == key { print; exit }' /etc/dovecot/users 2>/dev/null \
+    | sed -n 's/.*userdb_quota_storage_size=\([0-9]*\)M.*/\1/p' | grep . || echo 0
+}
+
+# Rewrites the Dovecot passwd-file line of one account: $1 address, $2 hash, $3 quota in MiB. Always the
+# full user:password:uid:gid:gecos:home:shell:extra form: as a userdb, Dovecot answers "user doesn't
+# exist" for a line of two fields, and LMTP then refuses every delivery to it.
+write_user_line() {
+  extra="$(quota_fields "$3")"
   umask 077
   touch /etc/dovecot/users
   without_colon_key "$1" /etc/dovecot/users
-  printf '%s:%s\n' "$1" "$hash" >> /etc/dovecot/users.tmp
+  printf '%s:%s::::::%s\n' "$1" "$2" "$extra" >> /etc/dovecot/users.tmp
   mv /etc/dovecot/users.tmp /etc/dovecot/users
   chown root:dovecot /etc/dovecot/users
   chmod 640 /etc/dovecot/users
   umask 022
+}
+
+# Rewrites the Dovecot passwd-file line for one account (hash fed to doveadm over stdin); $2 = quota.
+write_user_hash() {
+  hash="$(printf '%s\n%s\n' "$password" "$password" | doveadm pw -s SHA512-CRYPT)"
+  [ -n "$hash" ] || die "doveadm did not hash the password"
+  write_user_line "$1" "$hash" "$2"
+}
+
+# DEP-005: a stack set up by an earlier helper serves users from a static userdb without the quota
+# plugin. Rewrites the managed Dovecot file of the installed version when it does not enforce quotas
+# yet, and restores the previous file when Dovecot rejects the new one.
+ensure_quota_config() {
+  conf=/etc/dovecot/conf.d/99-aetheus.conf
+  [ -f "$conf" ] || die "dovecot is not configured by Aetheus on this host"
+  # Earlier helpers wrote "address:hash" lines, which a passwd-file userdb does not know: pad every short
+  # line to the full form first, so no existing mailbox stops receiving mail.
+  if awk -F: 'NF > 0 && NF < 8 { found = 1 } END { exit !found }' /etc/dovecot/users 2>/dev/null; then
+    umask 077
+    awk -F: 'NF > 0 && NF < 8 { line = $0; for (i = NF; i < 8; i++) line = line ":"; print line; next } { print }' \
+      /etc/dovecot/users > /etc/dovecot/users.tmp
+    mv /etc/dovecot/users.tmp /etc/dovecot/users
+    chown root:dovecot /etc/dovecot/users
+    chmod 640 /etc/dovecot/users
+    umask 022
+  fi
+  grep -q '^# Quota plugin (DEP-005)' "$conf" && return 0
+  cp -p "$conf" "$conf.pre-quota"
+  case "$(dovecot_major)" in
+    2.3)
+      cat > "$conf" <<'DOVECOT_EOF'
+#{include:mail/dovecot-2.3/99-aetheus.conf}#
+DOVECOT_EOF
+      ;;
+    2.4)
+      cat > "$conf" <<'DOVECOT_EOF'
+#{include:mail/dovecot-2.4/99-aetheus.conf}#
+DOVECOT_EOF
+      ;;
+    *) mv "$conf.pre-quota" "$conf"; die "unsupported dovecot version" ;;
+  esac
+  chmod 644 "$conf"
+  if ! doveconf -n >/dev/null; then
+    mv "$conf.pre-quota" "$conf"
+    die "dovecot rejected the quota configuration (previous configuration restored)"
+  fi
+  rm -f "$conf.pre-quota"
+  systemctl reload dovecot
 }
 
 # Installs (or, with "force", regenerates) the DKIM key of one domain and points the KeyTable and
@@ -127,7 +191,7 @@ cmd="${1:-}"
 
 case "$cmd" in
   version)
-    echo "aetheus-mail-helper-version: 3"
+    echo "aetheus-mail-helper-version: 6"
     ;;
   add-domain)
     domain="${2:-}"; selector="${3:-}"
@@ -164,7 +228,8 @@ case "$cmd" in
     mv /etc/postfix/vmailbox.tmp /etc/postfix/vmailbox
     chmod 644 /etc/postfix/vmailbox
     postmap /etc/postfix/vmailbox
-    write_user_hash "$email"
+    write_user_hash "$email" "$quota"
+    ensure_quota_config
     echo "Account $email added (quota ${quota}MB)"
     ;;
   add-alias)
@@ -201,8 +266,20 @@ case "$cmd" in
     read_password
     awk -F: -v key="$email" '$1 == key { found=1; exit } END { exit !found }' \
       /etc/dovecot/users 2>/dev/null || die "account does not exist"
-    write_user_hash "$email"
+    write_user_hash "$email" "$(current_quota "$email")"
     echo "Password changed for $email"
+    ;;
+  set-quota)
+    # DEP-005: writes the mailbox quota (MiB, 0 = unlimited) on the account's users-file line, keeping
+    # its password hash, and makes sure the Dovecot quota plugin enforces it.
+    email="${2:-}"; quota="${3:-}"
+    valid_email "$email" || die "invalid email"
+    valid_quota "$quota" || die "invalid quota"
+    hash="$(awk -F: -v key="$email" '$1 == key { print $2; exit }' /etc/dovecot/users 2>/dev/null)"
+    [ -n "$hash" ] || die "account does not exist"
+    write_user_line "$email" "$hash" "$quota"
+    ensure_quota_config
+    echo "Quota of $email set to ${quota}MB"
     ;;
   remove-domain)
     # Drop the domain from virtual_mailbox_domains and from the DKIM signing tables, reload.
@@ -273,7 +350,14 @@ case "$cmd" in
     unit="${2:-}"; action="${3:-}"
     case "$unit" in postfix|dovecot|opendkim|rspamd) : ;; *) die "invalid unit" ;; esac
     case "$action" in start|stop|restart|reload) : ;; *) die "invalid action" ;; esac
-    systemctl "$action" "$unit"
+    # Recette R3-44: a unit that refuses to start says why in the task (its status with the last journal
+    # lines, then the configuration check), so nobody needs SSH to read journalctl.
+    if ! systemctl "$action" "$unit"; then
+      echo "--- $unit did not $action: status and configuration check ---"
+      systemctl status --no-pager -n 30 "$unit" 2>&1 || true
+      "$0" check 2>&1 || true
+      exit 1
+    fi
     case "$unit:$action" in rspamd:start|rspamd:restart|rspamd:reload) wait_rspamd ;; esac
     echo "SERVICE	$unit	$action	$(systemctl is-active "$unit" 2>/dev/null || true)"
     ;;
@@ -283,6 +367,16 @@ case "$cmd" in
   queue-flush)
     postqueue -f
     echo "Queue flush requested"
+    ;;
+  retry-tuning)
+    # Shorter Postfix retry for a host whose mail is deferred by netblock rate limits (Gmail 421-4.7.28):
+    # the same three values as mail-setup, fixed here, so the sub-command takes no argument at all.
+    [ "$#" -eq 1 ] || die "retry-tuning takes no argument"
+    [ -f /etc/postfix/main.cf ] || die "postfix is not configured"
+    postconf -e "minimal_backoff_time = 60s" "maximal_backoff_time = 900s" "queue_run_delay = 60s"
+    postfix check || die "postfix rejected the retry configuration"
+    systemctl reload postfix
+    echo "RETRY	minimal_backoff_time=$(postconf -h minimal_backoff_time)	maximal_backoff_time=$(postconf -h maximal_backoff_time)	queue_run_delay=$(postconf -h queue_run_delay)"
     ;;
   queue-delete)
     qid="${2:-}"
@@ -539,6 +633,42 @@ case "$cmd" in
     # Last: until here the page still knows an Aetheus stack is (partly) on the host.
     rm -f "$marker"
     echo "Mail stack purged"
+    ;;
+  master-set)
+    # Recette R1-41: (re)creates the Dovecot master user "aetheus-master" Aetheus opens a mailbox with
+    # ("<address>*aetheus-master"). The password arrives on stdin, is hashed by doveadm over stdin and only
+    # the hash is written (root:dovecot 640). A configuration Dovecot rejects is removed again, so the
+    # stack keeps serving its mailboxes, and the call fails.
+    read_password
+    [ -d /etc/dovecot/conf.d ] || die "dovecot is not configured by Aetheus on this host"
+    hash="$(printf '%s\n%s\n' "$password" "$password" | doveadm pw -s SHA512-CRYPT)"
+    [ -n "$hash" ] || die "doveadm did not hash the master password"
+    umask 077
+    printf 'aetheus-master:%s\n' "$hash" > /etc/dovecot/master-users.tmp
+    mv /etc/dovecot/master-users.tmp /etc/dovecot/master-users
+    chown root:dovecot /etc/dovecot/master-users
+    chmod 640 /etc/dovecot/master-users
+    umask 022
+    case "$(dovecot_major)" in
+      2.3)
+        cat > /etc/dovecot/conf.d/99-aetheus-master.conf <<'DOVECOT_EOF'
+#{include:mail/dovecot-2.3/99-aetheus-master.conf}#
+DOVECOT_EOF
+        ;;
+      2.4)
+        cat > /etc/dovecot/conf.d/99-aetheus-master.conf <<'DOVECOT_EOF'
+#{include:mail/dovecot-2.4/99-aetheus-master.conf}#
+DOVECOT_EOF
+        ;;
+      *) die "unsupported dovecot version" ;;
+    esac
+    chmod 644 /etc/dovecot/conf.d/99-aetheus-master.conf
+    if ! doveconf -n >/dev/null; then
+      rm -f /etc/dovecot/conf.d/99-aetheus-master.conf
+      die "dovecot rejected the master user configuration (removed again)"
+    fi
+    systemctl reload dovecot
+    echo "Dovecot master user aetheus-master configured"
     ;;
   *)
     die "unknown sub-command: $cmd"

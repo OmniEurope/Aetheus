@@ -3,7 +3,8 @@ using System.Globalization;
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>Recette R1-11: the step-by-step help to publish the mail DNS records, for the first mail domain.</summary>
+/// <summary>The step-by-step help to publish the mail DNS records, for the first mail
+/// domain.</summary>
 public partial class MailDnsHelp
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;

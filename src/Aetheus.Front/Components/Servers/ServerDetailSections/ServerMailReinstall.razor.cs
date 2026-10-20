@@ -2,19 +2,15 @@
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>
-/// "Réinstaller la messagerie" (recette R2-083 / R2-088, decision of 2026-10-03: erase everything): asks for
-/// the domain typed back, queues <c>mail-manage purge</c> and shows its outcome on the page, the last log
-/// line of a failure included. One click queues one purge: the button is busy from the click until the
-/// task completes (R2-085).
-/// </summary>
+/// <summary>Mail reinstallation requires typed domain confirmation before queuing <c>mail-manage
+/// purge</c>. The action stays busy through task completion and exposes failure output.</summary>
 public partial class ServerMailReinstall : IDisposable
 {
     /// <summary>The first mail-manage helper version that has the <c>purge</c> sub-command.</summary>
     internal const int MinimumHelperVersion = 3;
 
-    /// <summary>Recette R1-12: the outlet beside the header's Réinstaller button where the status list puts
-    /// its "..." menu of mail actions.</summary>
+    /// <summary>The outlet beside the header's Réinstaller button where the status list puts its
+    /// "..." menu of mail actions.</summary>
     internal const string HeaderMenuSection = "mail-header-menu";
 
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -30,8 +26,8 @@ public partial class ServerMailReinstall : IDisposable
     /// <summary>The server whose agent runs the purge (SITE-OFFLINE-001: nothing is queued while it is offline).</summary>
     [Parameter, EditorRequired] public ServerDetailDto Server { get; set; } = default!;
 
-    /// <summary>Recette R2-126: raised when a purge starts or ends, so the mail section hides its
-    /// service actions and state list meanwhile.</summary>
+    /// <summary>Raised when a purge starts or ends, so the mail section hides its service actions
+    /// and state list meanwhile.</summary>
     [Parameter] public EventCallback RunningChanged { get; set; }
 
     [Inject] private TimeProvider Clock { get; set; } = default!;
@@ -174,7 +170,7 @@ public partial class ServerMailReinstall : IDisposable
     {
         try
         {
-            return await MailTaskOutputLoader.LastLineAsync(Api, taskId) ?? L["MailReinstallNoLog"].Value;
+            return await ServerTaskOutputLoader.LastLineAsync(Api, taskId) ?? L["MailReinstallNoLog"].Value;
         }
         catch (HttpRequestException ex)
         {

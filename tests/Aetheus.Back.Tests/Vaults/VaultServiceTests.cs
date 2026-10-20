@@ -263,7 +263,7 @@ public class VaultServiceTests
         Assert.NotNull(written);
         Assert.Equal("NEW", written.Key);
         Assert.Equal("alice", written.ChangedBy);
-        // The history entity no longer carries a value at all (R-287 contract step 1).
+        // History records contain no secret value.
         Assert.Null(typeof(VaultSecretVersion).GetProperty("EncryptedValue"));
         Assert.True(written.ChangedAt.Year > 2000);
     }

@@ -5,12 +5,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recette R2-109: a status count badge carries the number, the status name and the status icon, so the
-/// phone width can show the icon in place of the name while the name stays the accessible text and the
-/// tooltip. The swap itself is CSS (app.css, measured by the 375 px E2E test); this checks the markup the
-/// CSS relies on, and that the dashboard and the server list use the shared badge.
-/// </summary>
+/// <summary>Badge markup retains the status name for accessibility while providing an icon for
+/// narrow screens. CSS geometry is checked separately by the mobile E2E test.</summary>
 public sealed class StatusCountBadgeTests : BunitContext
 {
     [Fact]
@@ -73,6 +69,6 @@ public sealed class StatusCountBadgeTests : BunitContext
             Assert.Contains(badges, b => b.ClassList.Contains("omni-badge--success") && b.TextContent.Trim() == "20 AppHealthUp");
             Assert.Contains(badges, b => b.ClassList.Contains("omni-badge--danger") && b.TextContent.Trim() == "5 AppHealthDown");
             Assert.Equal(4, cut.FindAll(".status-count-badge .status-count-badge__icon").Count);
-        }, TimeSpan.FromSeconds(2));
+        });
     }
 }

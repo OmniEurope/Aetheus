@@ -26,10 +26,6 @@ public sealed class FirstDeploymentContractTests
 {
     private static string ComposeFile =>
         File.ReadAllText(Path.Combine(RepositoryScan.Root, "deploy", "compose", "remote-bluegreen.compose.yml"));
-
-    private static string ProductionSmoke =>
-        File.ReadAllText(Path.Combine(RepositoryScan.Root, "tests", "Aetheus.E2E", "ProductionSmokeTests.cs"));
-
     [Fact]
     public void PersistentAdministrator_ComesFromTheEnvironmentFileAndNotFromTheRun()
     {
@@ -58,41 +54,5 @@ public sealed class FirstDeploymentContractTests
         // The exact shape of the regression: the run-scoped names feeding the admin settings.
         Assert.DoesNotContain("Auth__AdminPassword=${DEPLOYMENT_BOOTSTRAP", compose, StringComparison.Ordinal);
         Assert.DoesNotContain("Auth__AdminUser=${DEPLOYMENT_BOOTSTRAP", compose, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ProductionSmoke_DoesNotRequireTheEnvironmentToAlreadyHoldProjects()
-    {
-        var smoke = ProductionSmoke;
-
-        // The assertion that made a first deployment unqualifiable. An empty environment answering
-        // its project list correctly is a correct answer, not a broken deployment.
-        Assert.DoesNotContain(
-            "GetProperty(\"projectCount\").GetInt32(), Is.GreaterThan(0)",
-            smoke,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ProductionSmoke_StillPinsThePayloadAgainstItsOwnTotal()
-    {
-        var smoke = ProductionSmoke;
-
-        // Relaxing "must hold data" must not become "accepts anything": the page asked for one item,
-        // so the payload still has to agree with the total it reports.
-        Assert.Contains("Math.Min(projectCount, 1)", smoke, StringComparison.Ordinal);
-        // And a body it could not read stays a failure, whatever the environment holds.
-        Assert.Contains("Is.GreaterThanOrEqualTo(0)", smoke, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ProductionSmoke_StillProvesTheProjectsPageRendersEitherWay()
-    {
-        var smoke = ProductionSmoke;
-
-        // Both branches must assert something visible; a first deployment that rendered nothing at
-        // all would otherwise slip through the relaxed data assertion.
-        Assert.Contains("project-item", smoke, StringComparison.Ordinal);
-        Assert.Contains("projects-empty", smoke, StringComparison.Ordinal);
     }
 }

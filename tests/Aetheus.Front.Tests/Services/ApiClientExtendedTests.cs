@@ -51,8 +51,6 @@ public class ApiClientExtendedTests : BunitContext
         Assert.Null(result);
     }
 
-    // S-TECH-HBS4: GetServerHeartbeatsAsync (+ its /heartbeats endpoint) was removed - the
-    // HeartbeatSparkline consumer no longer exists, so the whole read chain was dead code.
 
     // ── UpdateAgentAsync ──────────────────────────────────────────────────────
 

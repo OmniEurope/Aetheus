@@ -35,6 +35,8 @@ public sealed class PackageRegistryAdminTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Aetheus.Telemetry", cut.Markup));
         Assert.Contains("/api/packages/nuget/v3/index.json", cut.Markup);
         Assert.Contains("/api/packages/npm/", cut.Markup);
+        Assert.Contains("/api/packages/maven/", cut.Markup);
+        Assert.Contains("RegistryMavenHelp", cut.Markup);
     }
 
     [Fact]

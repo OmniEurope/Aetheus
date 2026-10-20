@@ -356,8 +356,7 @@ public sealed class AnalysisInsightsRepositoryTests : IDisposable
     [InlineData(AnalysisFindingStatus.Mitigated)]
     public async Task MarkMissingFindingsFixedAsync_FixesADecidedFindingToo(AnalysisFindingStatus decided)
     {
-        // Recette R2-135: fixed wins over any decision; an accepted finding the scan no longer sees used
-        // to stay "accepted" in the lists for ever.
+        // A finding absent from the latest scan becomes Fixed regardless of its decision history.
         await SeedOpenFindingAsync();
         var seeded = await _db.AnalysisFindings.FirstAsync(Ct);
         seeded.Status = decided;

@@ -35,10 +35,8 @@ internal static class PipelineTaskFailureClassifier
         if (!string.IsNullOrWhiteSpace(task.FailureCode)
             || result.Status is not (TaskExecutionStatus.Failed or TaskExecutionStatus.Timeout))
             return;
-        // Recette R-515: an incident is a pipeline step that failed. An action launched by hand on a
-        // server (start a service, install a package) that fails is an ordinary outcome: its task says
-        // Failed with its exit code and its own log, and the page that launched it shows it. It used to
-        // get an incident line too, worded "Pipeline step 'unknown/Service Start - dovecot'".
+        // Create pipeline incidents only for failed pipeline steps. Manual server actions expose
+        // their failure through task status, exit code and logs.
         if (stepRun is null && task.PipelineRunId is null)
             return;
 
@@ -49,7 +47,7 @@ internal static class PipelineTaskFailureClassifier
         AddIncidentLog(task, completedAt);
     }
 
-    private static void AddIncidentLog(ServerTask task, DateTime completedAt)
+    internal static void AddIncidentLog(ServerTask task, DateTime completedAt)
     {
         task.Logs.Add(new TaskLog
         {

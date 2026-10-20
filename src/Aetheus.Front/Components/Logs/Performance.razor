@@ -2,8 +2,7 @@
 @page "/admin/performance"
 @inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
 
-@* PLAN-003 lot 27 / D27: measure before correcting. What the server took to answer each API route
-   (24 hours of this instance), and what this browser actually waited for. *@
+@* Compare server API timings for this instance with the actual wait measured by this browser. *@
 <PageTitle>@L["Performance"] - Aetheus</PageTitle>
 
 <OmniPageHeader Title="@L["Performance"]" Subtitle="@Breadcrumb.Subtitle()">
@@ -12,7 +11,7 @@
         <HelpLink PageKey="performance" />
     </Badges>
 </OmniPageHeader>
-@* R-181: no Refresh button. The report reloads on the ApiPerformance admin push, sent when new API
+@* No Refresh button. The report reloads on the ApiPerformance admin push, sent when new API
    timings were recorded (at most every 15 s while requests keep coming, nothing when idle). *@
 
 @if (_loadFailed)
@@ -27,10 +26,8 @@ else if (_report is null)
 }
 else
 {
-    @* Recette R-454: since when the figures count. Decision of 2026-10-07: the OE key-figure tiles of the
-       application Performance tab (half the row from the small breakpoint, a quarter from the large one),
-       instead of a sentence above the tabs; the window is the first tile's detail. Recette R2-124: each
-       table exports through the bar under it, and the file's header carries this window. *@
+    @* Show the measurement window in the first key-figure tile and in each table export header so
+       figures retain their time context. *@
     <OmniRow Gap="OmniSpacing.Medium" Class="omni-u-mt-lg omni-u-mb-md">
         <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
             <OmniStatTile Class="app-performance-tile" Value="@SampleCountText" Label="@L["PerformanceTileRequests"]" Detail="@WindowText" data-testid="performance-window" />
@@ -46,15 +43,17 @@ else
         </OmniColumn>
     </OmniRow>
 
-    @* Recette R-454: the three tables in tabs, all rendered so a push refreshes every grid. *@
+    @* The three tables in tabs, all rendered so a push refreshes every grid. *@
     <UrlSyncedTabs Slugs="@TabSlugs" RenderAllPanels="true">
         <Tabs>
             <OmniTabsItem Key="slowest" Title="@L["PerformanceSlowestCalls"]"><Icon><OmniIcon Name="OmniIconName.Hourglass" /></Icon><ChildContent>
-                @* Recette R-240: no pager, the slowest calls scroll in a virtualized, bounded grid. *@
+                @* No pager, the slowest calls scroll in a virtualized, bounded grid. *@
                 <AetheusDataGrid ShowFooterBar="true" @ref="_slowestGrid" ExportName="@L["PerformanceSlowestCalls"]" ExportFields="@ExportFields" Data="@_report.Slowest" TItem="ApiCallTimingDto" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
                     <Columns>
-                        <OmniDataGridColumn Frozen="true" TItem="ApiCallTimingDto" Property="DurationMs" Title="@L["Duration"]" Width="7rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
-                            <Template Context="call">@Milliseconds(call.DurationMs)</Template>
+                        @* Recette R1-96: the export writes whole milliseconds under a title that names the unit,
+                           not the raw double the template formats on screen. *@
+                        <OmniDataGridColumn Frozen="true" TItem="ApiCallTimingDto" Property="DurationMs" Title="@L["DurationMs"]" ExportValue="@(call => Math.Round(call.DurationMs))" Width="7rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
+                            <Template Context="call">@WholeMilliseconds(call.DurationMs)</Template>
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="ApiCallTimingDto" Property="Method" Title="@L["Method"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                         <OmniDataGridColumn TItem="ApiCallTimingDto" Property="Route" Title="@L["Route"]" MinWidth="16rem" Filterable="true" >

@@ -38,16 +38,17 @@ public class AgentCompatibilityPolicyTests
         Assert.Equal(AgentCompatibilityReason.OlderSoftware, result.Reason);
     }
 
-    /// <summary>
-    /// Recette R2-110: the last number became the project release number (1.3.0, 1.3.1...) instead of
-    /// the global run id (1.2.2553). The fleet must still be offered the new versions: the comparison is
-    /// numeric per component, so 1.3.0 is newer than 1.2.2553, and a nightly build ranks below its release.
-    /// </summary>
+    /// <summary>Verifies numeric version-component ordering and prerelease precedence, including
+    /// 1.3.0 after 1.2.2553 and nightly builds below their releases.</summary>
     [Theory]
     [InlineData("1.2.2553", "1.3.0", AgentCompatibilityStatus.UpdateRecommended)]
     [InlineData("1.3.0", "1.3.1", AgentCompatibilityStatus.UpdateRecommended)]
     [InlineData("1.3.0-nightly", "1.3.0", AgentCompatibilityStatus.UpdateRecommended)]
     [InlineData("1.3.1", "1.3.0", AgentCompatibilityStatus.UpToDate)]
+    // A new series restarts its number at 0: 1.4.0 is above 1.3.16, and not below the 1.4.x agents.
+    [InlineData("1.3.16", "1.4.0", AgentCompatibilityStatus.UpdateRecommended)]
+    [InlineData("1.4.0", "1.3.16", AgentCompatibilityStatus.UpToDate)]
+    [InlineData("1.4.1", "1.4.0", AgentCompatibilityStatus.UpToDate)]
     public void Evaluate_ReleaseNumberVersions_CompareNumerically(string installed, string released, AgentCompatibilityStatus expected)
     {
         var policy = new AgentCompatibilityPolicy(new TestReleaseCatalog(released));
@@ -125,6 +126,26 @@ public class AgentCompatibilityPolicyTests
         Assert.Equal(0, response.TaskId);
         Assert.Equal("WaitingForIdle", response.Status);
     }
+
+    [Fact]
+    public void CanExecute_AnOnlineAgentOnTheCurrentProtocolWithTheCapability_CanRunIt() =>
+        Assert.True(_sut.CanExecute(CurrentServer(), AgentCapabilities.SelfUpdate));
+
+    [Fact]
+    public void CanExecute_AnOfflineAgent_CannotRunAnything() =>
+        Assert.False(_sut.CanExecute(CurrentServer() with { Status = ServerStatus.Offline }, AgentCapabilities.SelfUpdate));
+
+    [Fact]
+    public void CanExecute_AnAgentThatNeverReportedItsProtocol_CannotRunAnything() =>
+        Assert.False(_sut.CanExecute(CurrentServer() with { AgentProtocolVersion = null }, AgentCapabilities.SelfUpdate));
+
+    [Fact]
+    public void CanExecute_AnAgentOnAnUnsupportedProtocol_CannotRunAnything() =>
+        Assert.False(_sut.CanExecute(CurrentServer() with { AgentProtocolVersion = 0 }, AgentCapabilities.SelfUpdate));
+
+    [Fact]
+    public void CanExecute_AnAgentWithoutTheCapability_CannotRunIt() =>
+        Assert.False(_sut.CanExecute(CurrentServer(), AgentCapabilities.Deployment));
 
     private static ServerDto CurrentServer() => new()
     {

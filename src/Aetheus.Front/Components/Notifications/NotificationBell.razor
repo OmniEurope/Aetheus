@@ -1,14 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* R-112: the notification bell of the top bar, built like TaskTrackerWidget (same square button, same
-   popover and its styles). The count shown is UserNotificationsFeed.UnreadCount, the one the menu
-   badge and /notifications read too (R-115).
-   Recette R-191/R-192: an OmniPopover, so a click outside (another header menu included) or Escape
-   closes it, with no full-page veil taking the pointer cursor away from the page. *@
+@* The bell shares UserNotificationsFeed.UnreadCount with the menu and inbox. OmniPopover closes on
+   outside clicks or Escape without intercepting the page pointer. *@
 
 <div class="task-tracker-container omni-task-tracker notification-bell">
-    @* STD-BTN exception chosen by the user (recette R-170, confirmed by R-385 on 2026-09-28): the bell is
-       green (success) where the tasks are blue, told apart by their icons too. The only green button;
-       ButtonRoleColourGuardTests names it. *@
+    @* The bell uses the user-approved success colour to distinguish it from tasks.
+       ButtonRoleColourGuardTests records this STD-BTN exception. *@
     <OmniPopover Id="notification-bell" Class="header-popover"
                  Open="@_popoverOpen" OpenChanged="OnOpenChangedAsync"
                  TriggerVariant="OmniButtonVariant.Success"
@@ -32,8 +28,8 @@
                         <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@string.Format(L["NotificationUnreadCount"], Feed.UnreadCount)</OmniBadge>
                     }
                 </div>
-                @* Recette R2-034: the recipients of a project event are the project's followers; a user
-                   who follows nothing receives nothing, and is told so with the way out. *@
+                @* The recipients of a project event are the project's followers; a user who
+                   follows nothing receives nothing, and is told so with the way out. *@
                 @if (_followsNothing)
                 {
                     <OmniEmptyState Class="notification-bell-no-subscription" Title="@L["NotificationSubscriptionsEmpty"]"
@@ -45,11 +41,9 @@
                                 <OmniIcon Name="OmniIconName.Bell" />
                                 <span>@L["NotificationFollowAll"]</span>
                             </OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => GoTo("/settings?tab=notifications"))"
-                                        Class="notification-bell-preferences">
-                                <OmniIcon Name="OmniIconName.Settings" />
-                                <span>@L["Settings"]</span>
-                            </OmniButton>
+                            @* Settings is a link beside the one action (user decision, 2026-10-17). *@
+                            <OmniLink Href="/settings?tab=notifications" OnClick="@ClosePopover"
+                                      Class="notification-bell-preferences">@L["Settings"]</OmniLink>
                         </Actions>
                     </OmniEmptyState>
                 }
@@ -66,8 +60,8 @@
                     {
                         @foreach (var delivery in Feed.Latest)
                         {
-                            @* Recette R-193: one icon, on the left, for what happened; an unread row reads
-                               in bold instead of carrying a read or status icon. *@
+                            @* One icon, on the left, for what happened; an unread row reads in
+                               bold instead of carrying a read or status icon. *@
                             <a href="/notifications" class="@(delivery.ReadAt is null ? "task-tracker-row notification-bell-row notification-bell-row--unread" : "task-tracker-row notification-bell-row")"
                                @onclick="@(() => _popoverOpen = false)">
                                 <OmniIcon Name="@NotificationLabels.EventIcon(delivery.EventType)" Class="notification-event-icon" />
@@ -90,8 +84,8 @@
                             <span>@L["NotificationsMarkAllRead"]</span>
                         </OmniButton>
                     }
-                    @* Recette R-207: "Mark all read" is the primary action, "See all" a neutral button. *@
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => GoTo("/notifications"))" Class="task-tracker-see-all"><OmniIcon Name="OmniIconName.ArrowRight" /> <span>@L["SeeAll"]</span></OmniButton>
+                    @* "Mark all read" is the footer's action, "See all" a link (user decision, 2026-10-17). *@
+                    <OmniLink Href="/notifications" OnClick="@ClosePopover" Class="task-tracker-see-all">@L["SeeAll"]</OmniLink>
                 </div>
             </div>
         </ChildContent>

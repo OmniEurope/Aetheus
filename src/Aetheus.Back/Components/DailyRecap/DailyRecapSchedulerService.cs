@@ -10,8 +10,9 @@ namespace Aetheus.Back.Components.DailyRecap;
 public sealed class DailyRecapSchedulerService(
     IServiceScopeFactory scopeFactory,
     ILogger<DailyRecapSchedulerService> logger,
+    TimeProvider timeProvider,
     IPostgresLeaderLease? leaderLease = null)
-    : PeriodicBackgroundService(CheckInterval, leaderLease, "aetheus:daily-recap")
+    : PeriodicBackgroundService(CheckInterval, leaderLease, "aetheus:daily-recap", timeProvider)
 {
     internal static readonly TimeSpan CheckInterval = TimeSpan.FromMinutes(1);
 

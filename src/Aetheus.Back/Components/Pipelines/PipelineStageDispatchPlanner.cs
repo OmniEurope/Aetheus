@@ -113,7 +113,7 @@ public sealed class PipelineStageDispatchPlanner(
             resolvedVars, secretKeys, await repo.GetSuccessfulStepOutputsAsync(runId, ct).ConfigureAwait(false));
         var activeStageNames = await repo.GetActiveStageNamesAsync(runId, ct).ConfigureAwait(false) ?? [];
         var notStarted = completedStages.Count == 0 && terminalStages.Count == 0 && activeStageNames.Count == 0;
-        // R-368: before the run touches anything, approvals included. Only a run that has not started:
+        // Before the run touches anything, approvals included. Only a run that has not started:
         // failing a started one outright would skip its failed() rollback.
         if (notStarted && await _gradeGate.EvaluateAsync(runId, resolvedVars, ct).ConfigureAwait(false) is { } refusal)
         {
@@ -123,7 +123,7 @@ public sealed class PipelineStageDispatchPlanner(
         }
         // BACK-018: environments are read in the run's project, for approvals, checks and locks alike.
         var projectId = await repo.GetRunProjectIdAsync(runId, ct).ConfigureAwait(false);
-        // Recette R2-117: the environments the run declares are approved at its launch, before any stage.
+        // The environments the run declares are approved at its launch, before any stage.
         if (notStarted
             && await _approvals.RequireLaunchApprovalsAsync(runId, projectId, flattenedStages, ct).ConfigureAwait(false))
             return false;
@@ -200,27 +200,20 @@ public sealed class PipelineStageDispatchPlanner(
         return true;
     }
 
-    /// <summary>What a skipped rollback stage records as its unmet condition (recette R1-2).</summary>
+    /// <summary>What a skipped rollback stage records as its unmet condition.</summary>
     internal const string NothingToUndoCondition = "failed() after a deployment stage started";
 
-    /// <summary>
-    /// Recette R1-2: a rollback failure handler (<c>condition: failed()</c> running <c>bluegreen-rollback</c>)
-    /// is skipped when no step of a stage that starts the new colour (<c>bluegreen-up</c>) ever started:
-    /// nothing was deployed, so there is nothing to undo. Nightly 2497 failed upstream and still ran
-    /// Rollback, with a misleading compose_env warning. As soon as a start step began, whatever its
-    /// outcome, the rollback runs as before.
-    /// </summary>
+    /// <summary>Rollback is skipped when no new-colour startup step began, because there is no
+    /// deployment to undo. Once startup begins, rollback remains eligible regardless of that step's
+    /// outcome.</summary>
     private async Task<bool> NothingStartedToUndoAsync(
         int runId, PipelineStageDefinition stageDef, List<PipelineStageDefinition> flattenedStages, CancellationToken ct)
     {
-        if (!IsFailureHandlerCondition(stageDef.Condition) || !RunsStep(stageDef, "bluegreen-rollback")) return false;
-        var startStages = flattenedStages.Where(stage => RunsStep(stage, "bluegreen-up")).Select(stage => stage.Name).ToList();
+        if (!IsFailureHandlerCondition(stageDef.Condition) || !PipelineDeploymentStages.UndoesDeployment(stageDef)) return false;
+        var startStages = flattenedStages.Where(PipelineDeploymentStages.IsStart).Select(stage => stage.Name).ToList();
         return startStages.Count > 0
             && !await repo.DidAnyStepStartInStagesAsync(runId, startStages, ct).ConfigureAwait(false);
     }
-
-    private static bool RunsStep(PipelineStageDefinition stage, string stepType) =>
-        stage.Steps.Any(step => string.Equals(step.Type, stepType, StringComparison.OrdinalIgnoreCase));
 
     private async Task<ReadyStagePreparation> PrepareReadyStageAsync(
         int runId,

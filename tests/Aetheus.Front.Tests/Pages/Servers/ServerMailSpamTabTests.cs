@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>PLAN-005 lot 4: rspamd installation, lifecycle and thresholds from the spam tab.</summary>
+/// <summary>Rspamd installation, lifecycle and thresholds from the spam tab.</summary>
 public sealed class ServerMailSpamTabTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -42,7 +42,8 @@ public sealed class ServerMailSpamTabTests : BunitContext
         var cut = RenderTab(new MailSpamFilterStateDto { Name = "rspamd", IsInstalled = true, IsRunning = true, RejectScore = 15, AddHeaderScore = 6, GreylistScore = 4 });
 
         Assert.Contains("15", cut.Markup, StringComparison.Ordinal);
-        cut.FindAll("button").First(b => b.TextContent.Contains("MailSpamThresholds", StringComparison.Ordinal)).Click();
+        // Thresholds sits in the "More actions" menu beside Learn (STD-BTN detection 11).
+        cut.FindMenuItem("MailSpamThresholds")!.Click();
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, r =>
             r.Method == "PUT" && r.Url.EndsWith("mail/spam", StringComparison.Ordinal) && r.Body!.Contains("8.5", StringComparison.Ordinal)));
@@ -54,7 +55,8 @@ public sealed class ServerMailSpamTabTests : BunitContext
         _handler.SetJsonResponse(System.Net.Http.HttpMethod.Post, "api/servers/10/mail/action", new MailTaskQueuedDto { TaskId = 83 });
         var cut = RenderTab(new MailSpamFilterStateDto { Name = "rspamd", IsInstalled = true, IsRunning = true });
 
-        cut.FindAll("button").First(b => b.TextContent.Contains("Stop", StringComparison.Ordinal)).Click();
+        // Stop sits in the "More actions" menu beside Start (STD-BTN detection 11).
+        cut.FindMenuItem("Stop")!.Click();
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, r =>
             r.Url.EndsWith("mail/action", StringComparison.Ordinal)

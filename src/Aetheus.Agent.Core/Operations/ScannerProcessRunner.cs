@@ -39,7 +39,7 @@ public sealed class ScannerProcessRunner(
         process.Start();
         var monitor = containerName is null
             ? Task.FromResult(ContainerUsage.Empty)
-            : MonitorContainerAsync(containerName, monitorCancellation.Token);
+            : MonitorContainerAsync(containerName, ReadDockerStatsAsync, TimeProvider.System, monitorCancellation.Token);
         var stdout = ExecutorHelper.StreamOutputAsync(process.StandardOutput, TaskLogLevel.Info, onOutput, timeout.Token, logger);
         var stderr = ExecutorHelper.StreamOutputAsync(process.StandardError, TaskLogLevel.Error, onOutput, timeout.Token, logger);
         try
@@ -106,59 +106,61 @@ public sealed class ScannerProcessRunner(
         return null;
     }
 
-    private static async Task<ContainerUsage> MonitorContainerAsync(string containerName, CancellationToken ct)
+    /// <summary>Samples the container every five seconds until <paramref name="ct"/> is cancelled and keeps
+    /// the peak of each figure. A sample whose reading fails (<c>null</c>) or does not parse is skipped.
+    /// <paramref name="readStats"/> is <see cref="ReadDockerStatsAsync"/> outside tests.</summary>
+    internal static async Task<ContainerUsage> MonitorContainerAsync(
+        string containerName,
+        Func<string, CancellationToken, Task<string?>> readStats,
+        TimeProvider clock,
+        CancellationToken ct)
     {
-        var peakCpu = 0d;
-        long peakMemory = 0;
-        long diskRead = 0;
-        long diskWritten = 0;
-        long networkReceived = 0;
-        long networkSent = 0;
+        var usage = ContainerUsage.Empty;
         try
         {
             while (!ct.IsCancellationRequested)
             {
-                var startInfo = new ProcessStartInfo("docker")
-                {
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                foreach (var argument in new[]
-                         {
-                             "stats", "--no-stream", "--format",
-                             "{{.CPUPerc}}|{{.MemUsage}}|{{.BlockIO}}|{{.NetIO}}", containerName
-                         })
-                    startInfo.ArgumentList.Add(argument);
-                using var stats = Process.Start(startInfo);
-                if (stats is not null)
-                {
-                    var output = await stats.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
-                    await stats.WaitForExitAsync(ct).ConfigureAwait(false);
-                    if (stats.ExitCode == 0 && TryParseUsage(
-                            output,
-                            out var cpu,
-                            out var memory,
-                            out var readBytes,
-                            out var writtenBytes,
-                            out var receivedBytes,
-                            out var sentBytes))
-                    {
-                        peakCpu = Math.Max(peakCpu, cpu);
-                        peakMemory = Math.Max(peakMemory, memory);
-                        diskRead = Math.Max(diskRead, readBytes);
-                        diskWritten = Math.Max(diskWritten, writtenBytes);
-                        networkReceived = Math.Max(networkReceived, receivedBytes);
-                        networkSent = Math.Max(networkSent, sentBytes);
-                    }
-                }
-                await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+                var output = await readStats(containerName, ct).ConfigureAwait(false);
+                if (output is not null) usage = usage.WithPeakOf(output);
+                await Task.Delay(TimeSpan.FromSeconds(5), clock, ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
-        return new ContainerUsage(
-            peakCpu, peakMemory, diskRead, diskWritten, networkReceived, networkSent);
+        return usage;
+    }
+
+    /// <summary>One <c>docker stats</c> reading of the container, or <c>null</c> when docker could not be
+    /// started or failed.</summary>
+    private static Task<string?> ReadDockerStatsAsync(string containerName, CancellationToken ct) =>
+        ReadOutputAsync(DockerStatsStartInfo(containerName), ct);
+
+    internal static ProcessStartInfo DockerStatsStartInfo(string containerName)
+    {
+        var startInfo = new ProcessStartInfo("docker")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in new[]
+                 {
+                     "stats", "--no-stream", "--format",
+                     "{{.CPUPerc}}|{{.MemUsage}}|{{.BlockIO}}|{{.NetIO}}", containerName
+                 })
+            startInfo.ArgumentList.Add(argument);
+        return startInfo;
+    }
+
+    /// <summary>The standard output of the process, once it has exited with code 0; <c>null</c> when it
+    /// could not be started or exited with another code.</summary>
+    internal static async Task<string?> ReadOutputAsync(ProcessStartInfo startInfo, CancellationToken ct)
+    {
+        using var process = Process.Start(startInfo);
+        if (process is null) return null;
+        var output = await process.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
+        await process.WaitForExitAsync(ct).ConfigureAwait(false);
+        return process.ExitCode == 0 ? output : null;
     }
 
     internal static bool TryParseUsage(string value, out double cpuPercent, out long memoryBytes)
@@ -255,7 +257,7 @@ public sealed class ScannerProcessRunner(
         await PipelineMetricEmitter.EmitAsync(onOutput, "scanner.network.sent", "Size", "bytes", usage.NetworkSentBytes).ConfigureAwait(false);
     }
 
-    private sealed record ContainerUsage(
+    internal sealed record ContainerUsage(
         double PeakCpuPercent,
         long PeakMemoryBytes,
         long DiskReadBytes,
@@ -264,5 +266,19 @@ public sealed class ScannerProcessRunner(
         long NetworkSentBytes)
     {
         public static ContainerUsage Empty { get; } = new(0, 0, 0, 0, 0, 0);
+
+        /// <summary>This usage raised to the figures of one <c>docker stats</c> line; unchanged when the
+        /// line does not parse.</summary>
+        public ContainerUsage WithPeakOf(string statsLine) =>
+            TryParseUsage(statsLine, out var cpu, out var memory, out var readBytes, out var writtenBytes,
+                out var receivedBytes, out var sentBytes)
+                ? new ContainerUsage(
+                    Math.Max(PeakCpuPercent, cpu),
+                    Math.Max(PeakMemoryBytes, memory),
+                    Math.Max(DiskReadBytes, readBytes),
+                    Math.Max(DiskWrittenBytes, writtenBytes),
+                    Math.Max(NetworkReceivedBytes, receivedBytes),
+                    Math.Max(NetworkSentBytes, sentBytes))
+                : this;
     }
 }

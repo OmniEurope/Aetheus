@@ -19,12 +19,10 @@ public class PipelineSetupController(
     IPipelineOwnerAuthorization ownerAuthz,
     IResourceAuthorizationService authz) : ControllerBase
 {
-    /// <summary>
-    /// Recette R1-29: what copying a project's pipelines into another project would do. Read on the
+    /// <summary> What copying a project's pipelines into another project would do. Read on the
     /// source project, and the rights the creation itself needs on the target (Pipeline/Write and
-    /// ownership of the target project). Only the source pipelines, libraries and vaults the caller can
-    /// read are considered, and only names leave this endpoint, never a value.
-    /// </summary>
+    /// ownership of the target project). Only the source pipelines, libraries and vaults the caller
+    /// can read are considered, and only names leave this endpoint, never a value. </summary>
     [HttpPost("copy-plan")]
     public async Task<ActionResult<PipelineProjectCopyPlanDto>> PlanProjectCopy(
         [FromBody] PipelineProjectCopyRequest request, CancellationToken ct)
@@ -39,10 +37,8 @@ public class PipelineSetupController(
             await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Vault, Permission.Read, ct), ct));
     }
 
-    /// <summary>
-    /// Recette R1-29: makes the copies, with the structure of the libraries and vaults they use (names
-    /// only, values empty), so the rights to create libraries and vaults are needed too.
-    /// </summary>
+    /// <summary> Makes the copies, with the structure of the libraries and vaults they use (names
+    /// only, values empty), so the rights to create libraries and vaults are needed too. </summary>
     [HttpPost("copy")]
     public async Task<ActionResult<PipelineProjectCopyResultDto>> CopyProject(
         [FromBody] PipelineProjectCopyRequest request, CancellationToken ct)
@@ -85,11 +81,10 @@ public class PipelineSetupController(
             request.ProjectId, request.TemplateNames, organizationId, ct));
     }
 
-    /// <summary>
-    /// Recette R1-28: what would stop the project's existing pipelines from running, shown on its
-    /// pipelines page. Read access to the project suffices: it reports on that project's own pipelines
-    /// and repository, which a reader can already open, and on runners only within the caller's own
-    /// organization (an administrator, the whole fleet), as the wizard's check does.
+    /// <summary> What would stop the project's existing pipelines from running, shown on its
+    /// pipelines page. Read access to the project suffices: it reports on that project's own
+    /// pipelines and repository, which a reader can already open, and on runners only within the
+    /// caller's own organization (an administrator, the whole fleet), as the wizard's check does.
     /// </summary>
     [HttpGet("project-readiness")]
     public async Task<ActionResult<PipelineSetupReadinessDto>> CheckProjectReadiness(
@@ -102,9 +97,8 @@ public class PipelineSetupController(
             projectId, pipelineId: null, await ResolveOrganizationIdAsync(ct), ct));
     }
 
-    /// <summary>
-    /// Recette R1-28: the same verdict for one pipeline, asked just before it is launched. Gated on
-    /// read access to the pipeline and to its project; a pipeline with no project gets an empty verdict.
+    /// <summary> The same verdict for one pipeline, asked just before it is launched. Gated on read
+    /// access to the pipeline and to its project; a pipeline with no project gets an empty verdict.
     /// </summary>
     [HttpGet("pipeline-readiness")]
     public async Task<ActionResult<PipelineSetupReadinessDto>> CheckPipelineReadiness(
@@ -121,8 +115,7 @@ public class PipelineSetupController(
             projectId, pipelineId, await ResolveOrganizationIdAsync(ct), ct));
     }
 
-    /// <summary>
-    /// PLAN-003 lot 30: the libraries and vaults this project's pipelines require and it lacks. Read
+    /// <summary> The libraries and vaults this project's pipelines require and it lacks. Read
     /// access to the project suffices: it only names resources and pipelines of that project.
     /// </summary>
     [HttpGet("unmet")]
@@ -137,12 +130,9 @@ public class PipelineSetupController(
         return Ok(await provisioner.GetUnmetAsync(projectId, organizationId, ct));
     }
 
-    /// <summary>
-    /// PLAN-003 lot 30 / D22: creates the libraries and vaults the selected templates require and the
-    /// project lacks, with their keys and empty values. Needs write on the project and the right to
-    /// create libraries and vaults; the key names are only read from resources the caller can already
-    /// read, so the action discloses nothing the caller could not open themselves.
-    /// </summary>
+    /// <summary>Provisioning copies missing library and vault key names with empty values. It
+    /// requires project and resource-creation permissions and reads only resources accessible to
+    /// the caller.</summary>
     [HttpPost("provision")]
     public async Task<ActionResult<PipelineRequirementsProvisionResultDto>> ProvisionRequirements(
         [FromBody] PipelineSetupReadinessRequest request, CancellationToken ct)
@@ -155,8 +145,7 @@ public class PipelineSetupController(
             request.ProjectId, request.TemplateNames, scope.OrganizationId, scope.ReadableLibraries, scope.ReadableVaults, ct));
     }
 
-    /// <summary>
-    /// PLAN-003 lot 30: the overview's one-click fix. Creates what <see cref="GetUnmetRequirements"/>
+    /// <summary> The overview's one-click fix. Creates what <see cref="GetUnmetRequirements"/>
     /// reports for the project's existing pipelines, under the same permissions as the wizard's.
     /// </summary>
     [HttpPost("provision-unmet")]

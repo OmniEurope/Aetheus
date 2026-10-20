@@ -33,7 +33,7 @@ public partial class Backups : IAsyncDisposable
     private HubConnection? _hubConnection;
     private readonly TrailingReloadCoalescer _realtimeReload = new(500);
 
-    // Recette R-224: the header filters of both grids, sent with every page request, and their texts.
+    // The header filters of both grids, sent with every page request, and their texts.
     private List<GridFilter> _policyFilters = [];
     private List<GridFilter> _runFilters = [];
     private IReadOnlyList<string> _projectNames = [];
@@ -141,7 +141,7 @@ public partial class Backups : IAsyncDisposable
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .Order(StringComparer.OrdinalIgnoreCase)];
 
-    // Recette R-226: a live backup event refreshes both grids in place, page, sort and filters kept.
+    // A live backup event refreshes both grids in place, page, sort and filters kept.
     private async Task ReloadRealtimeAsync()
     {
         var policyReload = _policyGrid?.Refresh() ?? Task.CompletedTask;
@@ -152,7 +152,8 @@ public partial class Backups : IAsyncDisposable
         StateHasChanged();
     }
 
-    /// <summary>Recette R2-124: one page of the policies export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the policies export, with the search, sort and column filters of the
+    /// grid.</summary>
     internal Task<PaginatedResult<BackupPolicyDto>> ReadPoliciesExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -314,13 +315,14 @@ public partial class Backups : IAsyncDisposable
         _runsTotalCount = 0;
         _runsSearch = null;
         await InvokeAsync(StateHasChanged);
-        // Recette R-327: the runs grid stays mounted when another policy is picked; it reloads for that
-        // policy instead of keeping the rows (or the scrolled blocks) of the previous one.
-        // A grid appearing for the first time loads itself.
+        // The runs grid stays mounted when another policy is picked; it reloads for that policy
+        // instead of keeping the rows (or the scrolled blocks) of the previous one. A grid
+        // appearing for the first time loads itself.
         if (runsGrid is not null) await runsGrid.Reload();
     }
 
-    /// <summary>Recette R2-124: one page of the runs export of the policy shown, with the grid's search, sort and column filters.</summary>
+    /// <summary>One page of the runs export of the policy shown, with the grid's search, sort and
+    /// column filters.</summary>
     internal Task<PaginatedResult<BackupRunDto>> ReadRunsExportAsync(GridLoadArgs args)
     {
         if (_runsFor is null) return Task.FromResult(new PaginatedResult<BackupRunDto>());
@@ -401,7 +403,7 @@ public partial class Backups : IAsyncDisposable
         _hubConnection = null;
     }
 
-    /// <summary>Recette R2-124: the export writes the names the cells show.</summary>
+    /// <summary>The export writes the names the cells show.</summary>
     private Func<BackupPolicyDto, object?> ProjectExport => _projectExport ??= policy => ProjectName(policy.ProjectId);
     private Func<BackupPolicyDto, object?> ServerExport => _serverExport ??= policy => ServerName(policy.ServerId);
     private Func<BackupPolicyDto, object?>? _projectExport;

@@ -18,7 +18,7 @@ public partial class PackageRegistryPackageDialog : ComponentBase, IAsyncDisposa
     private PackageRegistryPackageDetailDto? _package;
     private AetheusDataGrid<PackageRegistryVersionDto>? _grid;
     private static readonly TimeSpan NewRowHighlight = TimeSpan.FromSeconds(5);
-    // Recette R-210: header filter text, built once so the column sees the same delegate on every render.
+    // Header filter text, built once so the column sees the same delegate on every render.
     private Func<string, string>? _listedText;
     private Func<string, string> ListedText => _listedText ??= value =>
         bool.TryParse(value, out var listed) ? L[listed ? "PackageVersionListed" : "PackageVersionUnlisted"].Value : value;
@@ -35,10 +35,9 @@ public partial class PackageRegistryPackageDialog : ComponentBase, IAsyncDisposa
             () => InvokeAsync(() => _realtimeReload.RequestAsync(RefreshFromPushAsync)));
     }
 
-    /// <summary>
-    /// Recette R-227: a live change re-reads the package without the loader; the grid notes the rows
-    /// it holds before the new list lands, so a version published meanwhile reads bold for a few seconds.
-    /// </summary>
+    /// <summary> A live change re-reads the package without the loader; the grid notes the rows it
+    /// holds before the new list lands, so a version published meanwhile reads bold for a few
+    /// seconds. </summary>
     private async Task RefreshFromPushAsync()
     {
         try

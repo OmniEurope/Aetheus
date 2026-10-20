@@ -32,8 +32,8 @@ public class AuditRepositoryTests : IDisposable
     [Fact]
     public async Task HeaderFilters_TimestampRangeWithHours_ActionList_AndText_AreAppliedToPageAndCount()
     {
-        // Recette R-238: the timestamp range (hours included) replaces the date pickers; the action list
-        // and the text columns are column filters too, next to the typed parameters.
+        // Timestamp ranges include hours; action lists and text columns travel as column filters
+        // alongside typed parameters.
         IReadOnlyList<GridFilter> filters =
         [
             new GridFilter

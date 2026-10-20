@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Audit;
+using Aetheus.Back.Components.Shared;
 using Aetheus.Back.Components.Webhooks;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services;
@@ -297,6 +298,113 @@ public class WebhookServiceTests
         Assert.True(capturedRequest!.Headers.Contains("X-Aetheus-Event"));
         Assert.Equal("pipeline.completed", capturedRequest.Headers.GetValues("X-Aetheus-Event").First());
     }
+
+    [Theory]
+    [InlineData("not a url")]
+    [InlineData("ftp://hooks.example.com/hook")]
+    [InlineData("http://internal.example.com/hook")]
+    [InlineData("http://10.0.0.5/hook")]
+    public async Task FireEventAsync_PrivateTargetsRefused_SkipsAnUnsafeTargetAndCountsAFailure(string targetUrl)
+    {
+        var sub = new WebhookSubscription { Id = 1, EventType = "e", TargetUrl = targetUrl, FailureCount = 9, IsEnabled = true };
+        _repo.GetEnabledByEventAsync("e", Arg.Any<CancellationToken>()).Returns([sub]);
+        var httpFactory = Substitute.For<IHttpClientFactory>();
+
+        await PrivateTargetsRefused(httpFactory).FireEventAsync("e", new { }, ct: TestContext.Current.CancellationToken);
+
+        httpFactory.DidNotReceive().CreateClient(Arg.Any<string>());
+        Assert.Equal(10, sub.FailureCount);
+        Assert.False(sub.IsEnabled);
+        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task FireEventAsync_PrivateTargetsRefused_DeliversToANameResolvingToPublicAddresses()
+    {
+        var sub = new WebhookSubscription { Id = 1, EventType = "e", TargetUrl = "https://public.example.com/hook", IsEnabled = true };
+        _repo.GetEnabledByEventAsync("e", Arg.Any<CancellationToken>()).Returns([sub]);
+        var httpFactory = Substitute.For<IHttpClientFactory>();
+        HttpRequestMessage? sent = null;
+        httpFactory.CreateClient("webhooks").Returns(new HttpClient(
+            new FakeHandler(new HttpResponseMessage(System.Net.HttpStatusCode.OK), request => sent = request)));
+
+        await PrivateTargetsRefused(httpFactory).FireEventAsync("e", new { }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("https://public.example.com/hook", sent?.RequestUri?.ToString());
+        Assert.Equal(0, sub.FailureCount);
+    }
+
+    [Fact]
+    public async Task FireEventAsync_AnUndecryptableSecret_SkipsThatDeliveryOnly()
+    {
+        var broken = new WebhookSubscription { Id = 1, EventType = "e", TargetUrl = "http://test/broken", Secret = "rotated", FailureCount = 9, IsEnabled = true };
+        var healthy = new WebhookSubscription { Id = 2, EventType = "e", TargetUrl = "http://test/healthy", IsEnabled = true };
+        _repo.GetEnabledByEventAsync("e", Arg.Any<CancellationToken>()).Returns([broken, healthy]);
+        _encryption.DecryptValue("rotated").Returns(_ => throw new System.Security.Cryptography.CryptographicException("bad key"));
+        var sent = new List<string>();
+        var httpFactory = Substitute.For<IHttpClientFactory>();
+        httpFactory.CreateClient("webhooks").Returns(_ => new HttpClient(
+            new FakeHandler(new HttpResponseMessage(System.Net.HttpStatusCode.OK), request => sent.Add(request.RequestUri!.ToString()))));
+
+        await PrivateTargetsAllowed(httpFactory).FireEventAsync("e", new { }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(["http://test/healthy"], sent);
+        Assert.Equal(10, broken.FailureCount);
+        Assert.False(broken.IsEnabled);
+        Assert.Null(broken.LastTriggeredAt);
+        Assert.NotNull(healthy.LastTriggeredAt);
+    }
+
+    [Fact]
+    public async Task FireEventAsync_ATimeout_IsTransient()
+    {
+        var sub = new WebhookSubscription { Id = 1, EventType = "e", TargetUrl = "http://test/slow", FailureCount = 2, IsEnabled = true };
+        _repo.GetEnabledByEventAsync("e", Arg.Any<CancellationToken>()).Returns([sub]);
+        var httpFactory = Substitute.For<IHttpClientFactory>();
+        httpFactory.CreateClient("webhooks").Returns(new HttpClient(new TimingOutHandler()));
+
+        await PrivateTargetsAllowed(httpFactory).FireEventAsync("e", new { }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, sub.FailureCount);
+        Assert.True(sub.IsEnabled);
+        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.RequestTimeout)]
+    [InlineData(System.Net.HttpStatusCode.TooManyRequests)]
+    public async Task FireEventAsync_RequestTimeoutOrTooManyRequests_IsTransient(System.Net.HttpStatusCode status)
+    {
+        var sub = new WebhookSubscription { Id = 1, EventType = "e", TargetUrl = "http://test/busy", FailureCount = 2, IsEnabled = true };
+        _repo.GetEnabledByEventAsync("e", Arg.Any<CancellationToken>()).Returns([sub]);
+        var httpFactory = Substitute.For<IHttpClientFactory>();
+        httpFactory.CreateClient("webhooks").Returns(new HttpClient(new FakeHandler(new HttpResponseMessage(status))));
+
+        await PrivateTargetsAllowed(httpFactory).FireEventAsync("e", new { }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, sub.FailureCount);
+        Assert.NotNull(sub.LastTriggeredAt);
+    }
+
+    private WebhookService PrivateTargetsAllowed(IHttpClientFactory httpFactory) =>
+        new(_repo, _audit, httpFactory,
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Webhooks:AllowPrivateTargets"] = "true" }).Build(),
+            Substitute.For<ILogger<WebhookService>>(), _encryption, TimeProvider.System);
+
+    private sealed class TimingOutHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new TaskCanceledException("The request timed out.");
+    }
+
+    // Private targets refused, and a resolver that answers without DNS: internal.example.com is private.
+    private WebhookService PrivateTargetsRefused(IHttpClientFactory httpFactory) =>
+        new(_repo, _audit, httpFactory, new ConfigurationBuilder().Build(), Substitute.For<ILogger<WebhookService>>(),
+            _encryption, TimeProvider.System,
+            new PublicHostCheck((host, _) => Task.FromResult(new[]
+            {
+                System.Net.IPAddress.Parse(host == "internal.example.com" ? "192.168.1.10" : "93.184.216.34")
+            })));
 
     private sealed class FakeHandler : HttpMessageHandler
     {

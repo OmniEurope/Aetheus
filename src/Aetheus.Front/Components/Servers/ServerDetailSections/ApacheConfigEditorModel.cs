@@ -17,6 +17,10 @@ public sealed class ApacheConfigEditorModel
     public string Content { get; set; } = string.Empty;
     public bool Loading { get; set; }
 
+    /// <summary>Recette R3-30: why the config could not be read (the failed task and its output), shown
+    /// instead of an empty editor; null when the read succeeded.</summary>
+    public string? Error { get; set; }
+
     /// <summary>Raised when the section pushes new content/loading state from SignalR.</summary>
     public event Action? OnChanged;
 

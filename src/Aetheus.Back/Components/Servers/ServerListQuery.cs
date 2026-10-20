@@ -4,10 +4,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// Recette R-211: the column filters of the servers list. The stored columns go through the generic map;
-/// the tags (kept as JSON) and the agent column, whose list mixes versions with a compatibility state
-/// computed by the policy, are resolved to server ids beforehand from facts read in memory.
+/// <summary> The column filters of the servers list. The stored columns go through the generic map;
+/// the tags (kept as JSON) and the agent column, whose list mixes versions with a compatibility
+/// state computed by the policy, are resolved to server ids beforehand from facts read in memory.
 /// </summary>
 internal static class ServerListQuery
 {
@@ -66,5 +65,5 @@ internal static class ServerListQuery
     };
 }
 
-/// <summary>Recette R-211: what the servers list's checkable filters read of one server.</summary>
+/// <summary>What the servers list's checkable filters read of one server.</summary>
 public sealed record ServerFilterFact(int Id, string OsDescription, string AgentVersion, List<string> Tags);

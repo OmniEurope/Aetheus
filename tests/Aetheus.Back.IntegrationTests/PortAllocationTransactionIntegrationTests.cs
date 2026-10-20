@@ -13,13 +13,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// The transactional half of PLAN-005 lot 5, on real PostgreSQL with the REAL
-/// <see cref="VariableLibraryService"/>. The InMemory unit suite is blind here twice over: it has no
-/// transactions at all, so it neither catches EF refusing a nested begin - which is exactly how this
-/// feature first shipped broken, failing every allocation in production while passing every test -
-/// nor proves that a failure rolls the whole thing back.
-/// </summary>
+/// <summary>Exercises allocation with the real <see cref="VariableLibraryService"/> and PostgreSQL
+/// transactions, including nested scope participation and complete rollback.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class PortAllocationTransactionIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)
@@ -153,8 +148,7 @@ public sealed class PortAllocationTransactionIntegrationTests(PostgresFixture fi
     [Fact]
     public async Task NestedScopes_JoinInsteadOfMakingEfRefuseASecondBegin()
     {
-        // The defect this re-entrance fixes, isolated: an inner Begin on the same scope used to throw
-        // "the connection is already in a transaction".
+        // Nested scope entry must join the existing transaction.
         await ResetAndMigrateAsync();
         await using var db = NewContext();
         var scope = new DbTransactionScope(db);

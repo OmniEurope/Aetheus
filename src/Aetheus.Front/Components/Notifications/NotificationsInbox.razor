@@ -1,12 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @page "/notifications"
-@* R-114: the current user's notifications. Every row is one the backend recorded for this user; while
-   no transport exists they are all "Not configured, nothing was sent" (R-117). *@
+@* List notifications recorded by the backend for the current user. *@
 
 <PageTitle>@L["MyNotifications"] - Aetheus</PageTitle>
 
-@* Recette R-189: the trail under the title instead of a description, no total badge, no filter row
-   (the grid's header filters do that job), and no Refresh: the list follows the feed (R-182). *@
+@* Use a breadcrumb and column header filters; the list refreshes from the notification feed. *@
 <OmniPageHeader Title="@L["MyNotifications"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("notifications")" /></Icon>
     <Actions>
@@ -17,6 +15,11 @@
             <span>@L["NotificationsMarkAllRead"]</span>
         </OmniButton>
     </Actions>
+    @* STD-BTN detection 11: NotificationsMarkAllRead visible, the other actions in the menu. *@
+    <MenuContent>
+        @* Recette R1-54: the notification options, on the Settings tab that holds them. *@
+        <OmniMenuItem OnClick="OpenOptions" Class="notifications-options"><Icon><OmniIcon Name="OmniIconName.Settings" /></Icon><ChildContent>@L["NotificationOptions"]</ChildContent></OmniMenuItem>
+    </MenuContent>
 </OmniPageHeader>
 
 <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-sm notifications-transport-notice">
@@ -31,10 +34,10 @@
     RowClick="@OpenAsync"
     RowRender="@(args => args.Class = args.Item.ReadAt is null ? "notification-row--unread" : null)">
     <Columns>
-        @* Recette R-224: every header filter is a real column filter of the endpoint. *@
+        @* Every header filter is a real column filter of the endpoint. *@
         <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="CreatedAt" Title="@L["Date"]" Width="11rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange">
             <Template Context="row">
-                @* Recette R-299: the date itself; how long ago stays in the tooltip. *@
+                @* The date itself; how long ago stays in the tooltip. *@
                 <span title="@RelativeTime.FormatAgo(L, row.CreatedAt)">@row.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
             </Template>
         </OmniDataGridColumn>
@@ -58,8 +61,8 @@
         <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="Subject" Title="@L["NotificationSubject"]" MinWidth="16rem" Filterable="true" />
         <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="Status" Title="@L["Status"]" Width="16rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText">
             <Template Context="row">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(row.Status)"
-                           Class="notification-status-badge">@NotificationLabels.StatusLabel(L, row.Status)</OmniBadge>
+                <OmniBadge Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(row)"
+                           Class="notification-status-badge">@NotificationLabels.StatusLabel(L, row)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="NotificationDeliveryDto" Title="@L["Actions"]" Width="6rem" Sortable="false" Filterable="false">

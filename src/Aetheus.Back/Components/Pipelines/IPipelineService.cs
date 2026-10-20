@@ -13,8 +13,9 @@ public interface IPipelineService
     Task<PipelineSourceDto?> GetPipelineSourceAsync(int projectId, string pipelineName, CancellationToken ct = default,
         string? sourceBranch = null, int? sourceRepositoryId = null);
 
-    /// <summary>Recette R-483: the source of a pipeline from its four source columns. <c>Found</c> is
-    /// false for an unknown pipeline; <c>Source</c> is null for one no project owns or with no repository.</summary>
+    /// <summary>The source of a pipeline from its four source columns. <c>Found</c> is false for an
+    /// unknown pipeline; <c>Source</c> is null for one no project owns or with no
+    /// repository.</summary>
     Task<(bool Found, PipelineSourceDto? Source)> GetPipelineSourceByIdAsync(int id, CancellationToken ct = default);
     Task<PipelineDependencyGroupsDto> GetDependencyGroupsAsync(
         List<int>? accessibleIds = null, int? serverId = null, int? projectId = null,

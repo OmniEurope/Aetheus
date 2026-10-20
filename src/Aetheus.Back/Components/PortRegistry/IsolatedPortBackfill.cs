@@ -4,17 +4,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.PortRegistry;
 
-/// <summary>
-/// PLAN-005 lot 6: brings the two port fields that predate the registry into it, once.
-///
-/// <c>ServerApp.Port</c> and <c>ProjectServer.Port</c> were each a field of their own that nothing
-/// else could read, so a port they held was invisible to the preflight guard, to the "is this port
-/// free?" answer, and to allocation - which would happily hand it out. New writes are mirrored by
-/// their services; this pass is what carries the rows that already existed.
-///
-/// Idempotent and non-destructive: a port already claimed by somebody else is left to its holder and
-/// reported, never taken. Running it again changes nothing.
-/// </summary>
+/// <summary>Backfills ServerApp.Port and ProjectServer.Port into the registry idempotently so
+/// existing descriptors participate in availability checks. Conflicting claims are reported and
+/// left with their current holder.</summary>
 public static class IsolatedPortBackfill
 {
     public static async Task RunAsync(

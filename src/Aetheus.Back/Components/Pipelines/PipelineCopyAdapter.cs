@@ -4,20 +4,10 @@ using Aetheus.Back.Services;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R1-29: adapts one pipeline definition copied from another project. Deliberately the minimum
-/// that is safe and explainable:
-/// <list type="bullet">
-/// <item>the names the copy knows how to translate are rewritten as whole tokens: the copied pipelines
-/// (their own <c>name:</c> and every reference to them), the copied libraries and vaults, and the
-/// <c>APPLICATION_PREFIX</c> value of a wizard-generated pipeline;</item>
-/// <item>everything else is kept verbatim, and what still ties the copy to the source project is
-/// reported, never silently kept: a remaining mention of the source prefix (paths, images, hosts), a
-/// pinned runner or server, a <c>source:</c> repository, a written address, a pipeline that is not
-/// copied.</item>
-/// </list>
-/// The text is rewritten rather than re-serialized so comments and layout survive the copy.
-/// </summary>
+/// <summary>Rewrites whole-token references to copied pipelines, libraries, vaults and
+/// APPLICATION_PREFIX while preserving YAML formatting. Other content remains unchanged, with
+/// source-project references, pinned execution targets, repository sources, addresses and uncopied
+/// pipeline references reported for review.</summary>
 internal static partial class PipelineCopyAdapter
 {
     private const int MaxDetails = 5;

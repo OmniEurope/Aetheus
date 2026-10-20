@@ -279,4 +279,67 @@ public class PipelineTemplatesControllerTests
 
         Assert.IsType<BadRequestObjectResult>(response.Result);
     }
+
+    private static Microsoft.AspNetCore.Http.FormFile YamlFile(string content)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        return new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(bytes), 0, bytes.Length, "file", "ci.yaml");
+    }
+
+    [Fact]
+    public async Task ImportTemplate_ValidYaml_IsCreatedInTheCallersOrganization()
+    {
+        _templateService.ImportTemplateAsync("name: ci", Arg.Any<CancellationToken>(), 1)
+            .Returns(new PipelineTemplateDto { Id = 9, Name = "ci" });
+
+        var response = await _sut.ImportTemplate(YamlFile("name: ci"), TestContext.Current.CancellationToken);
+
+        var created = Assert.IsType<CreatedAtActionResult>(response.Result);
+        Assert.Equal(9, Assert.IsType<PipelineTemplateDto>(created.Value).Id);
+    }
+
+    [Fact]
+    public async Task ImportTemplate_InvalidYaml_IsABadRequest()
+    {
+        var response = await _sut.ImportTemplate(YamlFile("not: [yaml"), TestContext.Current.CancellationToken);
+
+        Assert.Equal("Invalid YAML pipeline definition.",
+            Assert.IsType<ApiError>(Assert.IsType<BadRequestObjectResult>(response.Result).Value).Message);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1_048_577)]
+    public async Task ImportTemplate_AnEmptyOrOversizedFile_IsABadRequest(int length)
+    {
+        var file = new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(), 0, length, "file", "ci.yaml");
+
+        var response = await _sut.ImportTemplate(file, TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(response.Result);
+        await _templateService.DidNotReceiveWithAnyArgs().ImportTemplateAsync(default!, TestContext.Current.CancellationToken, default);
+    }
+
+    [Fact]
+    public async Task ImportTemplate_WithoutWriteRight_IsForbidden()
+    {
+        _authz.HasPermissionAsync(
+                Arg.Any<System.Security.Claims.ClaimsPrincipal>(),
+                Aetheus.Shared.Components.Auth.ResourceType.PipelineTemplate,
+                null,
+                Aetheus.Shared.Components.Auth.Permission.Write,
+                Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        Assert.IsType<ForbidResult>((await _sut.ImportTemplate(YamlFile("name: ci"), TestContext.Current.CancellationToken)).Result);
+    }
+
+    [Fact]
+    public async Task ImportTemplate_ForAUserWithoutOrganization_IsForbidden()
+    {
+        _authz.GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        Assert.IsType<ForbidResult>((await _sut.ImportTemplate(YamlFile("name: ci"), TestContext.Current.CancellationToken)).Result);
+    }
 }

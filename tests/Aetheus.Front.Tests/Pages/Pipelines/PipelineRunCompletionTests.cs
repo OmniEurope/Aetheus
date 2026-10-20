@@ -159,7 +159,7 @@ public class PipelineRunCompletionTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 30));
-        cut.WaitForState(() => cut.Markup.Contains("Orphaned Run"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Orphaned Run"));
 
         Assert.False(ReadRunInProgress(cut.Instance));
 
@@ -197,7 +197,7 @@ public class PipelineRunCompletionTests : BunitContext
         });
 
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 31));
-        cut.WaitForState(() => cut.Markup.Contains("Live Run"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Live Run"));
 
         Assert.True(ReadRunInProgress(cut.Instance));
 

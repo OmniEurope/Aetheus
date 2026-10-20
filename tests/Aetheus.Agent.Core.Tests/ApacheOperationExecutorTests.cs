@@ -283,6 +283,60 @@ public class ApacheOperationExecutorTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(layout.Enabled));
     }
 
+    public static TheoryData<string, IReadOnlyDictionary<string, string>, string> InvalidConfigSetPayloads()
+    {
+        static IReadOnlyDictionary<string, string> Raw(string value) =>
+            new Dictionary<string, string> { ["AETHEUS_APACHE_CONFIG_SET_B64"] = value };
+        static IReadOnlyDictionary<string, string> Manifest(Dictionary<string, string> manifest) =>
+            Raw(Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(manifest))));
+        var tooMany = Enumerable.Range(0, 33).ToDictionary(
+            index => $"site{index}.conf", _ => Convert.ToBase64String("x"u8.ToArray()));
+        var oversized = Convert.ToBase64String(new byte[(1024 * 1024) + 1]);
+        return new()
+        {
+            { "missing", new Dictionary<string, string>(), "Missing AETHEUS_APACHE_CONFIG_SET_B64" },
+            { "blank", Raw("   "), "Missing AETHEUS_APACHE_CONFIG_SET_B64" },
+            { "not base64", Raw("%%%"), "Invalid Apache configuration-set payload" },
+            { "not json", Raw(Convert.ToBase64String("not-json"u8.ToArray())), "Invalid Apache configuration-set payload" },
+            { "json null", Raw(Convert.ToBase64String("null"u8.ToArray())), "between 1 and 32 files" },
+            { "empty manifest", Manifest([]), "between 1 and 32 files" },
+            { "too many files", Manifest(tooMany), "between 1 and 32 files" },
+            { "empty file", Manifest(new() { ["site.conf"] = string.Empty }), "exceeds the 1 MiB safety limit" },
+            { "oversized file", Manifest(new() { ["site.conf"] = oversized }), "exceeds the 1 MiB safety limit" },
+            { "content not base64", Manifest(new() { ["site.conf"] = "%%%" }), "Invalid Apache configuration-set payload" },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidConfigSetPayloads))]
+    public async Task ApplyConfigSet_InvalidPayload_IsRejectedWithItsReasonBeforeAnyPrivilegedCall(
+        string scenario, IReadOnlyDictionary<string, string> envVars, string expectedError)
+    {
+        using var layout = new ApacheTestLayout();
+        var privilegedCallCount = 0;
+        var executor = layout.Build((_, _, _, _) =>
+        {
+            privilegedCallCount++;
+            return Task.FromResult(new ExecutorResult(0, false));
+        });
+        var errors = new List<string>();
+
+        var result = await executor.ExecuteAsync(
+            OperationKind.ApacheApplyConfigSet, "config-set", envVars, 10,
+            (line, level) =>
+            {
+                if (level == TaskLogLevel.Error) errors.Add(line);
+                return Task.CompletedTask;
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Equal(0, privilegedCallCount);
+        Assert.Contains(errors, line => line.Contains(expectedError, StringComparison.Ordinal));
+        Assert.True(Directory.Exists(layout.Available), scenario);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(layout.Available));
+    }
+
     private static IReadOnlyDictionary<string, string> BuildConfigSet(
         params (string Name, string Content)[] files)
     {

@@ -5,8 +5,8 @@ namespace Aetheus.Back.Components.Git;
 
 internal static class GitLightCollectionPager
 {
-    // Recette R-224: the column header filters of the repository page's grids. These lists are read from
-    // git (or loaded whole) and paged here, so the generic map filters them in memory, before the count.
+    // The column header filters of the repository page's grids. These lists are read from git (or
+    // loaded whole) and paged here, so the generic map filters them in memory, before the count.
     internal static readonly GridQueryMap<GitLightBranchDto> BranchColumns = new GridQueryMap<GitLightBranchDto>()
         .Text("name", x => x.Name)
         .Text("lastCommitSha", x => x.LastCommitSha)

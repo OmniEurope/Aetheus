@@ -36,7 +36,7 @@ public sealed class UserNotificationRepository(AppDbContext db) : IUserNotificat
             var subject = request.Subject.Trim().ToLower();
             query = query.Where(delivery => delivery.Subject.ToLower().Contains(subject));
         }
-        // Recette R-224: the grid's header filters, next to the typed parameters older callers send.
+        // The grid's header filters, next to the typed parameters older callers send.
         return UserNotificationListQuery.Columns.ApplyFilters(query, request.Filters);
     }
 
@@ -128,6 +128,24 @@ public sealed class UserNotificationRepository(AppDbContext db) : IUserNotificat
         db.UserNotificationPreferences.AsNoTracking()
             .Where(preference => preference.UserId == userId)
             .ToListAsync(ct);
+
+    public async Task<HashSet<int>> GetRecipientsAlreadyEmailedAsync(
+        string eventType, string payloadMarker, IReadOnlyCollection<int> userIds, CancellationToken ct = default)
+    {
+        var ids = userIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+        var emailed = await db.NotificationDeliveries.AsNoTracking()
+            .Where(delivery => ids.Contains(delivery.RecipientUserId)
+                && delivery.EventType == eventType
+                && delivery.ChannelId == null
+                && delivery.Status == NotificationDeliveryStatus.Sent
+                && delivery.PayloadJson.Contains(payloadMarker))
+            .Select(delivery => delivery.RecipientUserId)
+            .Distinct()
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return [.. emailed];
+    }
 
     public async Task SavePreferencesAsync(
         int userId, IReadOnlyDictionary<string, bool> preferences, CancellationToken ct = default)

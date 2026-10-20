@@ -7,11 +7,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Aetheus.Back.Tests.Security;
 
-/// <summary>
-/// PLAN-003 lot 14: the endpoint exists so the next blocked script names itself in the backend logs.
-/// It is anonymous, so it must never fail loudly and never let attacker-controlled text into a log
-/// line unshaped.
-/// </summary>
+/// <summary> The endpoint exists so the next blocked script names itself in the backend logs. It is
+/// anonymous, so it must never fail loudly and never let attacker-controlled text into a log line
+/// unshaped. </summary>
 public sealed class CspReportControllerTests
 {
     private readonly FakeLogger _logger = new();

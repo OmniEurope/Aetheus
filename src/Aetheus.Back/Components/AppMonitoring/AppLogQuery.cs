@@ -4,11 +4,10 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
-/// <summary>
-/// Recette R-358: the columns of an app's log grid. The grid reads the log page by page from the API,
-/// so its header filters and its sort are applied here, to every stored record of the app, and not to
-/// the rows already on screen. A request only names keys; the column behind each key is decided here.
-/// </summary>
+/// <summary> The columns of an app's log grid. The grid reads the log page by page from the API, so
+/// its header filters and its sort are applied here, to every stored record of the app, and not to
+/// the rows already on screen. A request only names keys; the column behind each key is decided
+/// here. </summary>
 internal static class AppLogQuery
 {
     /// <summary>

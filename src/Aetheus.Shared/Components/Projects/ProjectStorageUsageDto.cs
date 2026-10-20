@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 5: what a project occupies in the Aetheus database, estimated from its rows in each detail
-/// table and the bytes per row the database size measurement (lot 1) gives for that table.
-/// </summary>
+/// <summary>Estimates project database usage from detail-row counts and measured bytes per
+/// row.</summary>
 public sealed record ProjectStorageUsageDto
 {
     public int ProjectId { get; init; }
@@ -18,7 +16,7 @@ public sealed record ProjectStorageUsageDto
 /// <summary>One table's share of a project's usage.</summary>
 public sealed record ProjectStorageTableDto(string Table, long Rows, long Bytes);
 
-/// <summary>PLAN-013 lot 5: the usage of every project, and whether the bytes per row were measured.</summary>
+/// <summary>The usage of every project, and whether the bytes per row were measured.</summary>
 public sealed record ProjectStorageReportDto
 {
     /// <summary>When the database size measurement used was taken; null when the fixed estimates were used.</summary>

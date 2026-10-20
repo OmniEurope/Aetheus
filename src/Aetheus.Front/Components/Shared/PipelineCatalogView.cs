@@ -2,25 +2,19 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// The pure rules behind the pipelines catalogue (recette R-119, R-121, R-122): which rows a status
-/// chip matches, how many rows each chip counts, and the default order that puts the starred
-/// pipelines first. Kept out of <see cref="PipelinesList"/> so the rules are testable on their own
-/// and the component stays under the file-size budget.
-/// </summary>
+/// <summary>Keep status matching, counts and default ordering independent of PipelinesList so
+/// catalogue rules can be tested without rendering a component.</summary>
 internal static class PipelineCatalogView
 {
-    /// <summary>Statuses shown by the summary strip, in display order. Outdated needs the fleet data.</summary>
-    /// <remarks>Recette R-167: every freshness state of the fleet is there, not only Outdated.</remarks>
+    /// <summary>Expose every fleet freshness state in display order so the summary can filter the
+    /// complete catalogue.</summary>
     public static IReadOnlyList<PipelineCatalogStatus> Statuses(bool fleetAvailable) => fleetAvailable
         ? [PipelineCatalogStatus.Failed, PipelineCatalogStatus.Running, PipelineCatalogStatus.NeverRun,
            PipelineCatalogStatus.Outdated, PipelineCatalogStatus.Current, PipelineCatalogStatus.OffCatalog]
         : [PipelineCatalogStatus.Failed, PipelineCatalogStatus.Running, PipelineCatalogStatus.NeverRun];
 
-    /// <summary>
-    /// Recette R-167: a row passes when no status is chosen or when it matches ANY chosen one, the
-    /// usual reading of a multiple choice.
-    /// </summary>
+    /// <summary> A row passes when no status is chosen or when it matches ANY chosen one, the usual
+    /// reading of a multiple choice. </summary>
     public static bool MatchesAny(
         PipelineDependencyDto pipeline,
         IReadOnlyCollection<PipelineCatalogStatus> statuses,
@@ -56,7 +50,7 @@ internal static class PipelineCatalogView
         fleetItems.TryGetValue(pipeline.Id, out var fleetItem) && fleetItem.Freshness == freshness;
 
     /// <summary>The resource key of a status's label, shared by the summary chips and the catalogue
-    /// grid's status filter (recette R-213) so both name a status the same way.</summary>
+    /// grid's status filter so both name a status the same way.</summary>
     public static string LabelKey(PipelineCatalogStatus status) => status switch
     {
         PipelineCatalogStatus.Failed => "Failed",
@@ -67,11 +61,9 @@ internal static class PipelineCatalogView
         _ => "Outdated"
     };
 
-    /// <summary>
-    /// Recette R-165: each chip has its colour (danger, info, warning, primary, neutral), on top of its
-    /// icon, label and count, never instead of them. "Up to date" is blue, not green: STD-BTN (revised
-    /// 2026-09-28) never puts the success colour on a button.
-    /// </summary>
+    /// <summary>Combine each chip's colour with its icon, label and count so status remains
+    /// understandable without colour; STD-BTN uses blue for Up to date rather than a
+    /// success-coloured button.</summary>
     public static OmniButtonVariant Variant(PipelineCatalogStatus status) => status switch
     {
         PipelineCatalogStatus.Failed => OmniButtonVariant.Danger,
@@ -101,10 +93,9 @@ internal static class PipelineCatalogView
         IReadOnlyDictionary<int, PipelineFleetItemDto> fleetItems) =>
         pipelines.Count(pipeline => Matches(pipeline, status, fleetItems));
 
-    /// <summary>The catalogue's order before any column sort: pipelines with a run in progress or
-    /// awaiting an approval first, the most recently started first (recette R2-093), then the starred
-    /// ones (the favourites panel is gone, the favourites lead the one table instead, R-119), then
-    /// project, then name. A column sort chosen in the grid reorders the rows over this.</summary>
+    /// <summary>Prioritize running or approval-waiting pipelines by newest start, then favourites,
+    /// project and name so active work is visible first; explicit grid sorting overrides this
+    /// default.</summary>
     public static List<PipelineDependencyDto> DefaultOrder(
         IEnumerable<PipelineDependencyDto> pipelines,
         IReadOnlySet<int> favoritePipelineIds) => pipelines

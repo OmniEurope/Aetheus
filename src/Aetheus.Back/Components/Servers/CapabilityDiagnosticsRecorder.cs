@@ -5,17 +5,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// Persists the agent's capability diagnostics on the server row and logs them when they CHANGE, compared
-/// with the value already stored. Recette R2-015: the log used to repeat the same warning on every beat
-/// (every 30 s) for as long as a diagnostic lasted.
-///
-/// Two kinds are logged apart. A capability diagnostic (a sudoers drop-in present but unreadable, a
-/// blocked passwordless sudo, a deployment grant whose functional probe failed) means a capability the
-/// operator configured is OFF: Warning. A collection diagnostic (<see cref="HeartbeatCollectionDiagnostics"/>:
-/// the beat overran its collection budget, a collector is still running from an earlier beat) only says
-/// that beat reported cached data, and resolves on its own: Information.
-/// </summary>
+/// <summary>Persist and log capability diagnostics only when their stored value changes. Disabled
+/// configured capabilities use Warning, while collection delays serving cached data use
+/// Information.</summary>
 internal static class CapabilityDiagnosticsRecorder
 {
     public static void Apply(Server server, IReadOnlyList<string> diagnostics, ILogger logger)

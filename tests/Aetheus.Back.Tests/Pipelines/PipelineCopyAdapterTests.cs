@@ -3,12 +3,10 @@ using Aetheus.Back.Components.Pipelines;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Recette R1-29: what a pipeline copied from another project becomes. The names the copy knows are
-/// rewritten (prefix, copied pipelines, libraries, vaults, <c>APPLICATION_PREFIX</c>); what still ties
-/// it to the source project (repository, runner, site host name, addresses, pipelines not copied) is
-/// reported, never silently kept.
-/// </summary>
+/// <summary> What a pipeline copied from another project becomes. The names the copy knows are
+/// rewritten (prefix, copied pipelines, libraries, vaults, <c>APPLICATION_PREFIX</c>); what still
+/// ties it to the source project (repository, runner, site host name, addresses, pipelines not
+/// copied) is reported, never silently kept. </summary>
 public sealed class PipelineCopyAdapterTests
 {
     [Theory]

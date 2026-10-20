@@ -4,12 +4,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// PLAN-008 lot 3: every Material icon name the front still uses has its Phosphor replacement, so a
-/// migrated page or a lot 14 wrapper never falls back to a missing glyph. Static names are read from
-/// the Razor sources; the dynamic ones, computed by C# helpers and ternaries, were listed by hand when
-/// the table was built and are pinned here.
-/// </summary>
+/// <summary>Every static and explicitly enumerated dynamic Material icon name must resolve to a
+/// Phosphor mapping.</summary>
 public sealed partial class MaterialIconMapTests
 {
     private static readonly string[] DynamicNames =

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>PLAN-013 lot 6: « Récupérer la place », an administrator action, never run on its own.</summary>
+/// <summary>« Récupérer la place », an administrator action, never run on its own.</summary>
 public interface IReclaimSpaceService
 {
     Task<ReclaimSpaceStatusDto> GetStatusAsync(CancellationToken ct = default);

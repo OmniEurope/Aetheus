@@ -10,7 +10,7 @@ using ProjectsPage = Aetheus.Front.Components.Projects.Projects;
 
 namespace Aetheus.Front.Tests.Pages;
 
-/// <summary>Recette lines R-403 (live logs), R-405 (recent alerts) and R-408 (supervision entry).</summary>
+/// <summary>Covers live-log layout, recent-alert actions and the supervision entry.</summary>
 public sealed class RecetteDialogsAndPagesTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -26,7 +26,7 @@ public sealed class RecetteDialogsAndPagesTests : BunitContext
     {
         var cut = Render<LogsPage>();
 
-        // R-403: the header keeps the title; the task field and Watch are page content under it.
+        // The header keeps the title; the task field and Watch are page content under it.
         var header = cut.Find(".omni-page-header__row");
         Assert.Empty(header.QuerySelectorAll("input"));
         Assert.DoesNotContain(header.QuerySelectorAll("button"), b => b.TextContent.Contains("Watch"));
@@ -52,7 +52,7 @@ public sealed class RecetteDialogsAndPagesTests : BunitContext
         var cut = Render<AlertsPage>();
         cut.WaitForState(() => cut.Markup.Contains("cpu high"));
 
-        // R-405: no truncated "Tout marquer" button beside the heading; the action is in the menu.
+        // No truncated "Tout marquer" button beside the heading; the action is in the menu.
         Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("MarkAllRead"));
         cut.Find(".omni-overflow-menu__trigger").Click();
         cut.FindAll("button.omni-menu__item").Single(b => b.TextContent.Contains("ClearRecentAlerts")).Click();
@@ -68,7 +68,7 @@ public sealed class RecetteDialogsAndPagesTests : BunitContext
 
         var cut = Render<ProjectsPage>();
 
-        // R-408: the all-projects supervision is a side-menu entry, not a button of the list.
+        // The all-projects supervision is a side-menu entry, not a button of the list.
         Assert.Empty(cut.FindAll(".project-list-supervision"));
         Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Supervision"));
     }

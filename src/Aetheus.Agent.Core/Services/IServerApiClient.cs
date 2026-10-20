@@ -16,8 +16,8 @@ public interface IServerApiClient
         CancellationToken ct = default);
 
     // ADR-024 4.3: backup result callbacks.
-    /// <summary>PLAN-005 lot 2: pushes what a scan saw. Replaces the whole observed source of that
-    /// server, so an empty list is a real "nothing is listening", never a partial report.</summary>
+    /// <summary>Pushes what a scan saw. Replaces the whole observed source of that server, so an
+    /// empty list is a real "nothing is listening", never a partial report.</summary>
     Task ReportObservedPortsAsync(int serverId, ObservedPortsReportDto report, CancellationToken ct = default);
 
     Task ReportBackupResultAsync(int runId, BackupExecuteResultDto result, CancellationToken ct = default);

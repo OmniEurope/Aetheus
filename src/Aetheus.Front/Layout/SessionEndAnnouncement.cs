@@ -3,12 +3,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Aetheus.Front.Layout;
 
-/// <summary>
-/// PLAN-005 lot 9 / D48: says why a session ended, in the "session expired" toast, and reports the
-/// same reason with a correlation id so the next spontaneous sign-out can be read in the system logs.
-/// Once per ended session: without a pending reason (already announced) it does nothing. Kept out of
-/// <c>MainLayout</c>, which calls it from its start-up and from its need-to-login handler.
-/// </summary>
+/// <summary>Announces a pending session-end reason once and logs it with a correlation id.
+/// MainLayout calls it during startup and when sign-in is required.</summary>
 internal static class SessionEndAnnouncement
 {
     public static void Announce(

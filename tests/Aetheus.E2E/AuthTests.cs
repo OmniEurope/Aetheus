@@ -46,8 +46,9 @@ public class AuthTests : E2ETestBase
 
         await context.SetOfflineAsync(true);
         await page.ReloadAsync(new() { WaitUntil = Microsoft.Playwright.WaitUntilState.DOMContentLoaded });
+        // A reload cold-boots the page: wait with the boot budget, never the 5s default (nightly 2697).
         await Expect(page.GetByRole(Microsoft.Playwright.AriaRole.Heading, new() { Name = "Connection unavailable" }))
-            .ToBeVisibleAsync();
+            .ToBeVisibleAsync(new() { Timeout = PlaywrightConfig.AppReadyTimeoutMs });
         await Expect(page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Retry" }))
             .ToBeVisibleAsync();
         await Expect(page.Locator("#app-splash")).ToHaveCountAsync(0);
@@ -152,7 +153,7 @@ public class AuthTests : E2ETestBase
 
         // Signing out lives in OE's application menu at the end of the bar, which must be opened first.
         await Page.Locator(".omni-app-menu__trigger").ClickAsync();
-        // R-389, kept by OE: the menu's last row carries the version and a real sign-out button.
+        // The application menu ends with the version and a sign-out button.
         var logoutRow = Page.Locator(".omni-app-menu__footer .omni-app-menu__sign-out");
         await Expect(logoutRow).ToBeVisibleAsync(new() { Timeout = 5000 });
         await logoutRow.ClickAsync();

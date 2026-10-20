@@ -3,8 +3,11 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Alerts")]
+[RollbackRelevant]
 public class AlertsTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     [SetUp]
     public async Task SetUp()
     {
@@ -40,17 +43,5 @@ public class AlertsTests : E2ETestBase
 
         await Expect(dialog).ToBeHiddenAsync(new() { Timeout = 10000 });
         await Expect(Page.GetByText(ruleName, new() { Exact = true })).ToBeVisibleAsync(new() { Timeout = 10000 });
-    }
-
-    [Test]
-    public async Task Alerts_NavigateFromSidebar_Works()
-    {
-        // "Alerts" is a contextual sub-item of the Servers section, only rendered while inside that
-        // section (NavMenu renders it under @if (IsOnSection("servers"))). Start from /servers so it
-        // is in the sidebar - same approach as the Tasks/Logs sidebar tests (its sibling items).
-        await NavigateToAsync("servers");
-        await ClickSidebarNavItemAsync("Alerts");
-
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/alerts"), new() { Timeout = 5000 });
     }
 }

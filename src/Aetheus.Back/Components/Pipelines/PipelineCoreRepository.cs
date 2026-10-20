@@ -6,7 +6,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-// Core pipeline data access (paged lists, CRUD, run/step/template/artifact/approval queries).
+// Core pipeline data access (paged lists, CRUD, run/step queries; artifacts, approvals and test
+// results live in their own port repositories, audit AUD-07).
 // Extracted from the former PipelineRepository partial into a focused collaborator; the
 // PipelineRepository facade composes this plus the resolver/coverage/lifecycle collaborators.
 internal sealed class PipelineCoreRepository(
@@ -16,7 +17,6 @@ internal sealed class PipelineCoreRepository(
     IPipelineTaskLifecycle taskLifecycle)
 {
     private readonly PipelineTriggerTransitionRepository _triggerTransitions = new(db);
-    private readonly PipelineArtifactRepository _artifacts = new(db);
     private readonly PipelineCancellationRepository _cancellation =
         new(db, timeProvider, taskLifecycle);
     private readonly PipelineRunStatusRepository _runStatusRepository = new(db, logger);
@@ -42,10 +42,8 @@ internal sealed class PipelineCoreRepository(
         return (items, totalCount);
     }
 
-    /// <summary>
-    /// Recette R2-093: a pipeline with a run in progress or awaiting an approval leads the list, the most
-    /// recently started first, then the others by name as before. Shared by the two paged lists.
-    /// </summary>
+    /// <summary>Active or approval-waiting pipelines lead the list by most recent start; other
+    /// pipelines are ordered by name.</summary>
     private static IOrderedQueryable<Pipeline> InProgressFirst(IQueryable<Pipeline> query) => query
         .OrderByDescending(p => p.Runs.Any(r => !PipelineStatusFacts.Terminal.Contains(r.Status)))
         .ThenByDescending(p => p.Runs
@@ -77,8 +75,7 @@ internal sealed class PipelineCoreRepository(
     {
         var query = FilterPipelines(search, triggerType, accessibleIds);
 
-        // X4F9: project scope filters server-side on ProjectId (the project-detail list used to load the
-        // whole ProjectDetailDto just for .Pipelines). Independent of the env/server scope filters below.
+        // Project scope filters by ProjectId independently of environment and server scope.
         if (projectId.HasValue)
             query = query.Where(p => p.ProjectId == projectId.Value);
 
@@ -106,6 +103,7 @@ internal sealed class PipelineCoreRepository(
                 EnvironmentName = p.Environment != null ? p.Environment.Name : null,
                 ProjectServerId = p.ProjectServerId,
                 ProjectServerName = p.ProjectServer != null ? p.ProjectServer.DisplayName : null,
+                AiRunnerProfileId = p.AiRunnerProfileId,
                 LastRunStatus = p.Runs.OrderByDescending(r => r.StartedAt).Select(r => (PipelineStatus?)r.Status).FirstOrDefault(),
                 LastRunAt = p.Runs.OrderByDescending(r => r.StartedAt).Select(r => (DateTime?)r.StartedAt).FirstOrDefault(),
                 RecentRuns = p.Runs.OrderByDescending(r => r.StartedAt).Take(5).Select(r => new PipelineRunSummaryDto
@@ -118,7 +116,9 @@ internal sealed class PipelineCoreRepository(
                     ServerOs = r.StepRuns.Where(s => !s.IsSystem && s.ServerId != null).OrderBy(s => s.Order).Select(s => s.Server!.OsDescription).FirstOrDefault()
                 }).ToList(),
                 CreatedAt = p.CreatedAt,
-                UpdatedAt = p.UpdatedAt
+                UpdatedAt = p.UpdatedAt,
+                OwnerUsername = p.CreatedByUsername,
+                OwnerInactive = !db.Users.Any(u => u.Username == p.CreatedByUsername && u.IsActive)
             })
             .AsSplitQuery()
             .ToListAsync(ct).ConfigureAwait(false);
@@ -232,12 +232,14 @@ internal sealed class PipelineCoreRepository(
             .Select(PipelineRunDtoMapper.RunListProjection)
             .ToListAsync(ct).ConfigureAwait(false);
         items = items.Select(PipelineRunDtoMapper.HydrateListWarnings).ToList();
+        items = await PipelineAdvisorySteps.ApplyToListAsync(db, items, ct).ConfigureAwait(false);
         items = await PipelineRunGradeAggregation.ApplyAsync(db, items, ct).ConfigureAwait(false);
         items = await PipelineRunRepositoryLinks.ApplyAsync(db, items, ct).ConfigureAwait(false);
         return (items, total);
     }
 
-    /// <summary>Recette R-483: the four columns the source of a pipeline needs, not the pipeline and its runs.</summary>
+    /// <summary>The four columns the source of a pipeline needs, not the pipeline and its
+    /// runs.</summary>
     public async Task<PipelineSourceFields?> GetPipelineSourceFieldsAsync(int id, CancellationToken ct = default) =>
         await db.Pipelines.AsNoTracking()
             .Where(p => p.Id == id)
@@ -275,14 +277,6 @@ internal sealed class PipelineCoreRepository(
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<int?> GetPipelineIdForRunAsync(int runId, CancellationToken ct = default)
-    {
-        return await db.PipelineRuns.AsNoTracking()
-            .Where(r => r.Id == runId)
-            .Select(r => (int?)r.PipelineId)
-            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-    }
-
     public async Task<bool> IsServerAssignedToRunAsync(int runId, int serverId, CancellationToken ct = default)
     {
         return await db.PipelineStepRuns.AsNoTracking()
@@ -293,26 +287,10 @@ internal sealed class PipelineCoreRepository(
     {
         var stages = await db.PipelineStepRuns.AsNoTracking()
             .Where(s => s.PipelineRunId == runId && s.ServerId == serverId && s.Status == TaskExecutionStatus.Running)
-            // Ordered before Take (recette R2-017): EF warns on a row limit without an order, and the
-            // answer only needs to know whether exactly one distinct stage is running.
+            // Ordered before Take : EF warns on a row limit without an order, and the answer only
+            // needs to know whether exactly one distinct stage is running.
             .Select(s => s.StageName).Distinct().OrderBy(name => name).Take(2).ToListAsync(ct).ConfigureAwait(false);
         return stages.Count == 1 ? stages[0] : null;
-    }
-
-    public async Task<int?> GetPipelineIdForApprovalAsync(int approvalId, CancellationToken ct = default)
-    {
-        return await db.PipelineApprovals.AsNoTracking()
-            .Where(a => a.Id == approvalId)
-            .Select(a => (int?)a.PipelineRun.PipelineId)
-            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<int?> GetPipelineIdForArtifactAsync(int artifactId, CancellationToken ct = default)
-    {
-        return await db.PipelineArtifacts.AsNoTracking()
-            .Where(a => a.Id == artifactId)
-            .Select(a => (int?)a.PipelineRun.PipelineId)
-            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
     public async Task<bool> AreAllStepsInStageCompletedAsync(int runId, string stageName, CancellationToken ct = default)
@@ -505,56 +483,6 @@ internal sealed class PipelineCoreRepository(
         CancellationToken ct = default)
         => _cancellation.CancelOrphanedRunningStepRunsExceptStagesAsync(runId, preservedStages, ct);
 
-    public Task<List<PipelineArtifact>> GetArtifactsAsync(int runId, CancellationToken ct = default)
-        => _artifacts.GetArtifactsAsync(runId, ct);
-
-    public Task AddArtifactAsync(PipelineArtifact artifact, CancellationToken ct = default)
-        => _artifacts.AddArtifactAsync(artifact, ct);
-
-    public async Task<List<PipelineApproval>> GetApprovalsAsync(int runId, CancellationToken ct = default)
-    {
-        return await db.PipelineApprovals
-            .AsNoTracking()
-            .Where(a => a.PipelineRunId == runId)
-            .Include(a => a.Environment)
-            .Include(a => a.ResolvedByUser)
-            .OrderBy(a => a.RequestedAt)
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<PipelineApproval?> FindApprovalAsync(int approvalId, CancellationToken ct = default)
-    {
-        return await db.PipelineApprovals
-            .Include(a => a.Environment)
-            .Include(a => a.ResolvedByUser)
-            .FirstOrDefaultAsync(a => a.Id == approvalId, ct).ConfigureAwait(false);
-    }
-
-    public async Task AddApprovalAsync(PipelineApproval approval, CancellationToken ct = default)
-    {
-        db.PipelineApprovals.Add(approval);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<Data.Entities.Environment?> FindEnvironmentByNameAsync(
-        string name, int? projectId, CancellationToken ct = default)
-    {
-        // AsSplitQuery: two collection Includes on one query is a cartesian product (servers x checks).
-        // AsNoTracking: every caller reads this environment to decide something, none of them mutates
-        // it, and tracking an environment with its whole server list is the expensive half of the call.
-        // BACK-018: a name is unique per project only, so the run's project's own environment comes
-        // first, then a shared one (no project), never another project's; the order makes it deterministic.
-        return await db.Environments
-            .AsNoTracking()
-            .Where(e => e.Name == name && (e.ProjectId == null || e.ProjectId == projectId))
-            .Include(e => e.Servers).ThenInclude(es => es.Server)
-            .Include(e => e.Checks)
-            .AsSplitQuery()
-            .OrderBy(e => e.ProjectId == null)
-            .ThenBy(e => e.Id)
-            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-    }
-
     public Task<int?> GetRunProjectIdAsync(int runId, CancellationToken ct = default) =>
         db.PipelineRuns.AsNoTracking()
             .Where(run => run.Id == runId)
@@ -570,35 +498,10 @@ internal sealed class PipelineCoreRepository(
         db.Environments.AsNoTracking()
             .FirstOrDefaultAsync(environment => environment.Name == name && environment.ProjectId == projectId, ct);
 
-    public async Task<List<TestResult>> GetTestResultsAsync(int runId, CancellationToken ct = default)
-    {
-        return await db.TestResults
-            .AsNoTracking()
-            .Where(t => t.PipelineRunId == runId)
-            .OrderBy(t => t.TestSuite)
-            .ThenBy(t => t.TestName)
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task AddTestResultsAsync(IEnumerable<TestResult> results, CancellationToken ct = default)
-    {
-        db.TestResults.AddRange(results);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-    }
-
     public async Task<List<PipelineStepRun>> GetFailedStepRunsInStageAsync(int runId, string stageName, CancellationToken ct = default)
     {
         return await db.PipelineStepRuns
             .Where(s => s.PipelineRunId == runId && s.StageName == stageName && (s.Status == TaskExecutionStatus.Failed || s.Status == TaskExecutionStatus.Timeout))
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<List<EnvironmentCheck>> GetEnvironmentChecksAsync(int environmentId, CancellationToken ct = default)
-    {
-        return await db.EnvironmentChecks
-            .AsNoTracking()
-            .Where(c => c.EnvironmentId == environmentId)
-            .OrderBy(c => c.Name)
             .ToListAsync(ct).ConfigureAwait(false);
     }
 

@@ -146,6 +146,51 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
         Assert.Equal(-1, result.ExitCode);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Execute_AnArchiveThatDisagreesWithTheReleaseManifest_IsRejectedBeforeDownload(bool checksumDiffers)
+    {
+        var archive = BuildTarGzip(("Aetheus.Agent.Linux.dll", "new-agent"));
+        var sha = Convert.ToHexString(SHA256.HashData(archive));
+        var sut = checksumDiffers
+            ? BuildVersionedLinux(archive, sha, servedSha: new string('0', 64))
+            : BuildVersionedLinux(archive, sha, manifestSize: archive.LongLength + 1);
+        sut.IsWindowsOverride = false;
+        var output = new List<string>();
+
+        var result = await sut.ExecuteAsync(
+            OperationKind.AgentSelfUpdate, "",
+            new Dictionary<string, string> { ["AETHEUS_AGENT_TARGET_VERSION"] = VersionedLinuxHandler.Version },
+            60, (line, _) => { output.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Contains(
+            checksumDiffers
+                ? "Update archive checksum header does not match the immutable release manifest."
+                : $"Update archive size differs from manifest: expected {archive.LongLength + 1}, got {archive.LongLength}.",
+            output);
+        Assert.False(File.Exists(Path.Combine(_workDir, ".agent-update", VersionedLinuxHandler.FileName)));
+    }
+
+    [Fact]
+    public async Task Execute_MissingChecksumHeader_IsAcceptedWithAWarning_OnlyInInsecureDevMode()
+    {
+        var output = new List<string>();
+
+        var sut = Build(HttpStatusCode.OK, [1, 2, 3, 4], sha: null, allowInsecure: true);
+        sut.IsWindowsOverride = true;
+
+        var result = await sut
+            .ExecuteAsync(OperationKind.AgentSelfUpdate, "", 60,
+                (line, _) => { output.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        // Accepted past the integrity gate, then refused by the archive itself (four bytes are no archive).
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Contains("WARNING: no X-Content-SHA256 header - accepted because AllowInsecureCerts=true (dev mode)", output);
+        Assert.DoesNotContain("update rejected: missing X-Content-SHA256", output);
+    }
+
     [Fact]
     public async Task Execute_OversizedContentLength_IsRejectedBeforeDownload()
     {
@@ -184,11 +229,9 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
     [Fact]
     public async Task Execute_ValidArchive_DownloadsAndExtracts_ThenFailsStagingWithoutMarkerBinary()
     {
-        // Success-path coverage for the previously-untested middle (download SHA gate + real
-        // extraction) WITHOUT reaching the binary swap: the swap spawns a detached updater that
-        // would overwrite the running binaries, so we stop it at staging validation by omitting
-        // the expected agent binary from an otherwise-valid archive. A correct SHA header exercises
-        // the real integrity gate (no allowInsecure bypass) end-to-end.
+        // Exercises the real download hash check and archive extraction without launching the
+        // binary swap. Omitting the expected agent executable stops the operation at staging
+        // validation.
         var archive = BuildTarGzip(("readme.txt", "not the agent binary"));
         var sha = Convert.ToHexString(SHA256.HashData(archive));
         var sut = BuildVersionedLinux(archive, sha);
@@ -443,11 +486,8 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
         using var process = Process.Start(startInfo);
         Assert.NotNull(process);
         var markerPath = Path.Combine(_workDir, ".agent-update-pending");
-        // The marker is written only after PowerShell starts, the rollback snapshot is taken and the
-        // payload is mirrored. That is filesystem work whose duration belongs to the machine, not to
-        // the behaviour under test: measured at ~7.5s here against the 2.5s this loop used to allow,
-        // which failed the run on a busy or antivirus-scanned disk. Wait generously - a genuinely
-        // broken updater never writes the marker and still fails, just later.
+        // Waits for the updater marker after process startup, rollback snapshot and payload copy.
+        // The timeout accommodates filesystem latency while a missing marker still fails the test.
         var markerDeadline = DateTime.UtcNow.AddSeconds(60);
         while (!File.Exists(markerPath) && DateTime.UtcNow < markerDeadline)
             await Task.Delay(50, TestContext.Current.CancellationToken);
@@ -537,7 +577,7 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
         }
     }
 
-    private sealed class VersionedLinuxHandler(byte[] archive, string sha) : HttpMessageHandler
+    private sealed class VersionedLinuxHandler(byte[] archive, string sha, string? servedSha = null, long? manifestSize = null) : HttpMessageHandler
     {
         internal const string Version = "1.0.1118";
         internal const string FileName = "aetheus-agent-linux-x64-v1.0.1118.tar.gz";
@@ -563,7 +603,7 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
                                 Platform = "linux",
                                 Architecture = "x64",
                                 FileName = FileName,
-                                SizeBytes = archive.LongLength,
+                                SizeBytes = manifestSize ?? archive.LongLength,
                                 Sha256 = sha
                             }
                         ]
@@ -576,16 +616,17 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
                 Content = new ByteArrayContent(archive)
             };
             response.Content.Headers.ContentLength = archive.LongLength;
-            response.Headers.TryAddWithoutValidation("X-Content-SHA256", sha);
+            response.Headers.TryAddWithoutValidation("X-Content-SHA256", servedSha ?? sha);
             return Task.FromResult(response);
         }
     }
 
-    private AgentSelfUpdateOperationExecutor BuildVersionedLinux(byte[] archive, string sha)
+    private AgentSelfUpdateOperationExecutor BuildVersionedLinux(
+        byte[] archive, string sha, string? servedSha = null, long? manifestSize = null)
     {
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient(Arg.Any<string>()).Returns(_ =>
-            new HttpClient(new VersionedLinuxHandler(archive, sha)));
+            new HttpClient(new VersionedLinuxHandler(archive, sha, servedSha, manifestSize)));
         var options = Options.Create(new AetheusAgentOptions
         {
             WorkDirectory = _workDir,
@@ -660,6 +701,126 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
         {
             Directory.Delete(installDir.FullName, recursive: true);
         }
+    }
+
+    private Task<ExecutorResult> RunVersionedLinuxEnabling(AgentSelfUpdateOperationExecutor sut, string capabilities) =>
+        sut.ExecuteAsync(
+            OperationKind.AgentSelfUpdate,
+            "",
+            new Dictionary<string, string>
+            {
+                ["AETHEUS_AGENT_TARGET_VERSION"] = VersionedLinuxHandler.Version,
+                [AgentEnableableCapabilities.EnvironmentVariable] = capabilities
+            },
+            60,
+            (_, _) => Task.CompletedTask,
+            TestContext.Current.CancellationToken);
+
+    private async Task<(AgentSelfUpdateOperationExecutor Sut, DirectoryInfo InstallDir, string Request)> PrepareLinuxEnabling()
+    {
+        var installDir = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), $"aetheus-linux-install-{Guid.NewGuid():N}"));
+        var postureVersion = Path.Combine(_workDir, $"capabilities-posture-{Guid.NewGuid():N}");
+        var request = Path.Combine(_workDir, $"capabilities-request-{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(
+            Path.Combine(installDir.FullName, "Aetheus.Agent.Linux.dll"), "old-agent", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            postureVersion, AgentSelfUpdateOperationExecutor.LinuxIntegrationPostureVersion, TestContext.Current.CancellationToken);
+        var archive = BuildTarGzip(
+            ("Aetheus.Agent.Linux.dll", "new-agent"),
+            ("install-agent-linux.sh", "#!/bin/sh\nexit 0\n"));
+        var sut = BuildVersionedLinux(archive, Convert.ToHexString(SHA256.HashData(archive)));
+        sut.IsWindowsOverride = false;
+        sut.InstallDirectoryOverride = installDir.FullName;
+        sut.LinuxPostureVersionPathOverride = postureVersion;
+        sut.LinuxUpdateRequestPathOverride = request;
+        return (sut, installDir, request);
+    }
+
+    [Fact]
+    public async Task Execute_LinuxWithWhitelistedCapability_AddsItAsTheSixthRequestField()
+    {
+        var (sut, installDir, request) = await PrepareLinuxEnabling();
+        try
+        {
+            var result = await RunVersionedLinuxEnabling(sut, AgentEnableableCapabilities.PatchManage);
+
+            Assert.Equal(0, result.ExitCode);
+            var fields = (await File.ReadAllTextAsync(request, TestContext.Current.CancellationToken))
+                .TrimEnd('\n').Split('\t');
+            Assert.Equal(6, fields.Length);
+            Assert.Equal(VersionedLinuxHandler.Commit, fields[4]);
+            Assert.Equal("patch-manage", fields[5]);
+        }
+        finally
+        {
+            Directory.Delete(installDir.FullName, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("docker")]
+    [InlineData("service-control")]
+    [InlineData("patch-manage,docker")]
+    [InlineData("PATCH-MANAGE")]
+    [InlineData("patch-manage; rm -rf /")]
+    public async Task Execute_CapabilityOutsideTheWhitelist_IsRefusedWithoutDownloadOrRequest(string capabilities)
+    {
+        var (sut, installDir, request) = await PrepareLinuxEnabling();
+        try
+        {
+            var result = await RunVersionedLinuxEnabling(sut, capabilities);
+
+            Assert.Equal(-1, result.ExitCode);
+            Assert.False(File.Exists(request));
+            await _api.Received().ReportUpdateProgressAsync(
+                7,
+                Arg.Is<AgentUpdateProgressReport>(report =>
+                    report.Phase == AgentUpdatePhase.Failed && report.Message == "capability request refused"),
+                Arg.Any<CancellationToken>());
+            await _api.DidNotReceive().ReportUpdateProgressAsync(
+                7,
+                Arg.Is<AgentUpdateProgressReport>(report => report.Phase == AgentUpdatePhase.Downloading),
+                Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            Directory.Delete(installDir.FullName, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Execute_WindowsAgentAskedToEnableACapability_RefusesBeforeAnyDownload()
+    {
+        var (sut, installDir, request) = await PrepareLinuxEnabling();
+        sut.IsWindowsOverride = true;
+        try
+        {
+            var result = await RunVersionedLinuxEnabling(sut, AgentEnableableCapabilities.PatchManage);
+
+            Assert.Equal(-1, result.ExitCode);
+            Assert.False(File.Exists(request));
+            await _api.DidNotReceive().ReportUpdateProgressAsync(
+                7,
+                Arg.Is<AgentUpdateProgressReport>(report => report.Phase == AgentUpdatePhase.Downloading),
+                Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            Directory.Delete(installDir.FullName, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RequestBuilder_WithoutCapabilities_KeepsTheFiveFieldLineEveryInstalledSupervisorAccepts()
+    {
+        var release = new ResolvedAgentReleaseArchive(
+            "1.0.0", new string('a', 40),
+            new AgentReleaseArchiveDto { FileName = "aetheus-agent-linux-x64-v1.0.0.tar.gz", SizeBytes = 10, Sha256 = new string('B', 64) });
+
+        Assert.Equal(5, LinuxAgentPostureUpgradeRequester.BuildQualifiedRequest(release).Split('\t').Length);
+        Assert.Equal(5, LinuxAgentPostureUpgradeRequester.BuildQualifiedRequest(release, []).Split('\t').Length);
+        Assert.Equal(6, LinuxAgentPostureUpgradeRequester.BuildQualifiedRequest(release, ["patch-manage"]).Split('\t').Length);
     }
 
     [Fact]
@@ -751,6 +912,8 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
         Assert.Contains("kill -0 \"$new_pid\"", script, StringComparison.Ordinal);
         Assert.Contains("cp -a \"$rollback_dir\"/. \"$install_dir\"/", script, StringComparison.Ordinal);
         Assert.Contains("previous binaries restored automatically", script, StringComparison.Ordinal);
+        // sh would read a CR as part of each command; the guard must reach the host with LF only.
+        Assert.DoesNotContain('\r', script);
     }
 
     [Fact]

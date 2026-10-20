@@ -15,9 +15,8 @@
 
     <AdminIdentityNav ActiveSection="roles" />
 
-    @* PLAN-003 lot 15 / D28: the grid is only rendered for an admin. The shared wrapper asks for
-       its first page as soon as it renders, so leaving it in the markup for a visitor the guard is
-       redirecting away would fetch the role list on their behalf. *@
+    @* Render the grid only for administrators because its initial render immediately requests
+       data. *@
     @if (Auth.IsAdmin)
     {
     <div class="iam-grid-surface">

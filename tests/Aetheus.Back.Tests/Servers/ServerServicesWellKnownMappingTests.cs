@@ -3,11 +3,8 @@ using Aetheus.Back.Components.Shared;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>
-/// Recette R2-031: the Services page splits "Installed" from "Available" on the installed flag. The live
-/// heartbeat path used to force that flag to true for every reported service, so a service the agent said
-/// was not installed still landed under "Installed", where Start and Uninstall could only fail.
-/// </summary>
+/// <summary>Preserve the reported installed flag so unavailable services appear in the correct
+/// section.</summary>
 public sealed class ServerServicesWellKnownMappingTests
 {
     [Fact]

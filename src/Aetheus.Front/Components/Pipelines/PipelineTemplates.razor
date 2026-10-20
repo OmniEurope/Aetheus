@@ -118,14 +118,24 @@ else
                 Sortable="false" Filterable="false" TextAlign="OmniDataGridTextAlign.End">
                 <Template Context="template">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => UseTemplate(template))" title="@L["UseTemplate"]" Label="@L["UseTemplate"]"><OmniIcon Name="OmniIconName.Add" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ViewHistory(template))" title="@L["VersionHistoryTitle"]" Label="@L["Versions"]"><OmniIcon Name="OmniIconName.Reset" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExportTemplateAsync(template))" title="@L["Export"]" Label="@L["Export"]"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
+                        @* STD-BTN detection 11: Edit and Delete visible (Use template without write access), the other actions in the menu. *@
                         @if (_canWrite)
                         {
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => EditTemplate(template))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => EditTemplate(template))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteTemplateAsync(template))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                         }
+                        else
+                        {
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => UseTemplate(template))" title="@L["UseTemplate"]" Label="@L["UseTemplate"]"><OmniIcon Name="OmniIconName.Add" /></OmniButton>
+                        }
+                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                            @if (_canWrite)
+                            {
+                                <OmniMenuItem OnClick="@(() => UseTemplate(template))" title="@L["UseTemplate"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent>@L["UseTemplate"]</ChildContent></OmniMenuItem>
+                            }
+                            <OmniMenuItem OnClick="@(() => ViewHistory(template))" title="@L["VersionHistoryTitle"]"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent>@L["Versions"]</ChildContent></OmniMenuItem>
+                            <OmniMenuItem OnClick="@(() => ExportTemplateAsync(template))"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["Export"]</ChildContent></OmniMenuItem>
+                        </OmniOverflowMenu>
                     </span>
                 </Template>
             </OmniDataGridColumn>

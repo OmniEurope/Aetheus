@@ -4,11 +4,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recette R-536 (decision of 2026-10-01), R2-075 (2026-10-03): AetheusLoader is the package's logo loader
-/// holding the Aetheus plane, the boot splash's animated plane played as it is (AnimatedMark). The sizes
-/// and the reduced-motion stop are OE's; the wrapper gives the logo, the words and the layout.
-/// </summary>
+/// <summary>AetheusLoader supplies the plane, wording and layout to OE's logo loader, which owns
+/// sizing and reduced-motion behaviour.</summary>
 public sealed class AetheusLoaderTests : BunitContext
 {
     public AetheusLoaderTests() => BunitTestHelper.RegisterServices(this);

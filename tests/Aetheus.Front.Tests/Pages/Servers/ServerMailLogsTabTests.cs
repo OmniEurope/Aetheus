@@ -4,7 +4,7 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>PLAN-005 lot 7: journal read through the mail helper, displayed from the output of its task.</summary>
+/// <summary>Journal read through the mail helper, displayed from the output of its task.</summary>
 public sealed class ServerMailLogsTabTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;

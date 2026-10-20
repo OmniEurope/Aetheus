@@ -3,12 +3,8 @@ using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// A360-26. Raw SQL is opaque to the expand/contract analysis, so the gate demands a written rationale
-/// above every <c>migrationBuilder.Sql(...)</c> call. It used to inspect only the FIRST one: a migration
-/// whose first call carried a marker could then follow it with any number of unreviewed statements,
-/// which is exactly the shape the gate exists to stop.
-/// </summary>
+/// <summary>Requires a review rationale above every migrationBuilder.Sql call because raw SQL is
+/// opaque to expand/contract analysis.</summary>
 public sealed class BlueGreenMigrationGateSqlReviewTests
 {
     private const string Marker = "AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED:";

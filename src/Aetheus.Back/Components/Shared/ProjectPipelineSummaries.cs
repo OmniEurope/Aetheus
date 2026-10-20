@@ -3,13 +3,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Shared;
 
-/// <summary>
-/// Recette R-480 and R-481: a project tile shows how many pipelines the project has and how its last
-/// run went. The lists used to <c>Include</c> the pipelines for that, which loaded every pipeline's
-/// full YAML definition to count rows. The summary is read on its own, with the three columns it
-/// needs, and set on the projects as untracked, partial <see cref="Pipeline"/> instances (only the
-/// members filled below), so <see cref="ProjectDtoMapper"/> reads it as before.
-/// </summary>
+/// <summary>Read only pipeline counts and last-run summary columns for project tiles. Supply
+/// untracked partial Pipeline instances to ProjectDtoMapper without loading YAML
+/// definitions.</summary>
 internal static class ProjectPipelineSummaries
 {
     /// <param name="withLastRun">Also reads each pipeline's latest run (status and start).</param>

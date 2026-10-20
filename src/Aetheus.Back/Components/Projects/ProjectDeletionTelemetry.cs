@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// Recette R2-122: the telemetry, web-analytics and probe history of a project's monitored apps.
-/// These tables grow without bound, so they are counted and deleted table by table, in batches,
-/// before the apps themselves (whose own cascade would otherwise remove them in one statement).
-/// </summary>
+/// <summary> The telemetry, web-analytics and probe history of a project's monitored apps. These
+/// tables grow without bound, so they are counted and deleted table by table, in batches, before
+/// the apps themselves (whose own cascade would otherwise remove them in one statement). </summary>
 internal static class ProjectDeletionTelemetry
 {
     internal static async Task<int> CountAsync(AppDbContext db, IReadOnlyList<int> appIds, CancellationToken ct)

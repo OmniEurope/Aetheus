@@ -59,7 +59,7 @@ public partial class ProjectFormDialog
     {
         if (Project is null) return;
 
-        // Recette R2-122: the dialog counts what goes with the project, asks for its name and deletes it.
+        // The dialog counts what goes with the project, asks for its name and deletes it.
         if (!await ProjectDeleteDialog.OpenAsync(Dialog, L, Project.Id)) return;
         Dialog.Close();
         Nav.NavigateTo("/projects");

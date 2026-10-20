@@ -7,11 +7,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.Tests.Analysis;
 
-/// <summary>
-/// PLAN-003 2.4: axe-core violations of the E2E suite become Accessibility findings. The SARIF is the
-/// one the suite writes (<see cref="AccessibilitySarif"/>), read by the real parser; a lint step
-/// chooses the category; the category belongs to exactly one gate scope.
-/// </summary>
+/// <summary>Parse E2E-exported accessibility SARIF with the real parser and map the lint category
+/// to exactly one gate scope.</summary>
 public sealed class AccessibilityAnalysisTests
 {
     private static readonly AccessibilityViolation[] Violations =

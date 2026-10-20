@@ -3,19 +3,8 @@ using System.Globalization;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// PLAN-006 lot 11.3: aggregates statuses published by earlier steps into one verdict.
-///
-/// The comparison is trivial; what is worth typing is the absent case. A status nobody published
-/// must read as a FAILURE, never as a pass, and shell defaults the other way: an unset variable
-/// expands to the empty string, so the natural `[ "$STATUS" = 0 ]` is false, `[ "$STATUS" != 1 ]` is
-/// true, and which of those a project wrote decides whether a gate silently passes on evidence that
-/// never arrived. That is the worst way for a gate to fail, because it fails green.
-///
-/// A value that is neither 0 nor 1 is refused outright rather than counted as a failure: it means
-/// the producing step wrote something nobody expected, and a gate that quietly rounds unknown input
-/// to "failed" hides that just as surely as one that rounds it to "passed".
-/// </summary>
+/// <summary>Aggregate published gate statuses, treating absent evidence as failure. Reject values
+/// outside 0 and 1 rather than hiding invalid producer output.</summary>
 public sealed class PipelineGateStatusOperationExecutor : EnvironmentOperationExecutor
 {
     public override bool CanHandle(OperationKind kind) => kind == OperationKind.PipelineGateStatus;

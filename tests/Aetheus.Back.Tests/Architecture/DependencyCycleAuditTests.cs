@@ -101,8 +101,8 @@ public class DependencyCycleAuditTests
         // nothing depends on Alerts, so no cycle can form).
         ["Alerts"] = 2,
         ["AppMonitoring"] = 2,
-        // PLAN-005 lot 5: sits above PortRegistry and VariableLibraries, both L1 and therefore blind
-        // to each other, and owns the one act that needs both - reserve a port, write its variable.
+        // This coordinator sits above PortRegistry and VariableLibraries to own allocation plus
+        // variable writing without coupling those peer modules.
         ["PortAllocation"] = 2,
         ["Auth"] = 2,
         ["Plugins"] = 2,

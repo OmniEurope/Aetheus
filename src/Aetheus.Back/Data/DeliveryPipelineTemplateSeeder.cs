@@ -17,8 +17,8 @@ public sealed class DeliveryPipelineTemplateSeeder(
 {
     private const string ResourceRoot = "DeliveryPipelineTemplates/";
 
-    /// <summary>The organization the shipped templates are seeded in; every other organization extends
-    /// them from there (recette R2-121).</summary>
+    /// <summary>The organization the shipped templates are seeded in; every other organization
+    /// extends them from there.</summary>
     internal const string PlatformOrganizationSlug = "aetheus";
 
     internal static readonly IReadOnlyDictionary<string, (string Description, string Category, string[] Resources)> Definitions =
@@ -37,11 +37,11 @@ public sealed class DeliveryPipelineTemplateSeeder(
                 "Application Delivery",
                 ["application-promotion-v1.yaml"]),
             ["application-ci"] = (
-                "Run the project's CI adapter and package its immutable application payload.",
+                "Run the project's CI commands, declared in its pipeline, and package its immutable application payload (its source tree when it declares none).",
                 "Application Delivery",
                 ["generic/application-ci.yaml"]),
             ["application-quality"] = (
-                "Run the project's quality adapter, then publish and grade coverage, lint and complexity evidence for any language.",
+                "Run the project's quality commands, declared in its pipeline, then publish and grade coverage, lint and complexity evidence for any language.",
                 "Quality",
                 ["generic/application-quality.yaml"]),
             ["application-security"] = (
@@ -53,11 +53,11 @@ public sealed class DeliveryPipelineTemplateSeeder(
                 "Security",
                 ["generic/application-security-external.yaml"]),
             ["application-qa"] = (
-                "Run the project's QA adapter against the immutable application payload.",
+                "Run the project's QA commands, declared in its pipeline, against the immutable application payload.",
                 "Quality",
                 ["generic/application-qa.yaml"]),
             ["application-qa-extended"] = (
-                "Run the project's extended QA adapter, the nightly's heavy validation, against the immutable application payload.",
+                "Run the project's extended QA commands, declared in its pipeline, the nightly's heavy validation, against the immutable application payload.",
                 "Quality",
                 ["generic/application-qa-extended.yaml"]),
             ["application-security-history"] = (
@@ -77,27 +77,27 @@ public sealed class DeliveryPipelineTemplateSeeder(
                 "Application Delivery",
                 ["host-bluegreen-revert-v1.yaml"]),
             ["application-deploy-prod"] = (
-                "Restore an immutable candidate and run the project's production deployment adapter.",
+                "Restore an immutable candidate and run the project's production deployment commands, declared in its pipeline.",
                 "Application Delivery",
                 ["generic/application-deploy-prod.yaml"]),
             ["application-release-fast"] = (
-                "Run the project's explicitly opted-in fast release adapter.",
+                "Run the project's explicitly opted-in fast release commands, declared in its pipeline.",
                 "Application Delivery",
                 ["generic/application-release-fast.yaml"]),
             ["package-telemetry"] = (
-                "Build and qualify the project's telemetry package through its adapter.",
+                "Build and qualify the project's telemetry package with the commands declared in its pipeline.",
                 "Packages",
                 ["generic/package-telemetry.yaml"]),
             ["package-web-analytics-dotnet"] = (
-                "Build and qualify the project's .NET web analytics package through its adapter.",
+                "Build and qualify the project's .NET web analytics package with the commands declared in its pipeline.",
                 "Packages",
                 ["generic/package-web-analytics-dotnet.yaml"]),
             ["package-web-analytics-browser"] = (
-                "Build and qualify the project's browser analytics package through its adapter.",
+                "Build and qualify the project's browser analytics package with the commands declared in its pipeline.",
                 "Packages",
                 ["generic/package-web-analytics-browser.yaml"]),
             ["publish-observability-packages"] = (
-                "Build the selected package set and run the project's publication adapter.",
+                "Build the selected package set and run the project's publication commands, declared in its pipeline.",
                 "Packages",
                 ["generic/publish-observability-packages.yaml"])
         };
@@ -108,11 +108,9 @@ public sealed class DeliveryPipelineTemplateSeeder(
             .Where(organization => organization.Slug == PlatformOrganizationSlug)
             .Select(organization => organization.Id)
             .SingleAsync(ct).ConfigureAwait(false);
-        // Two backend colours can start together. The whole catalog write runs under one advisory
-        // lock, not only the R2-094 reset: a version a release adds (application-candidate v2,
-        // R2-121) was otherwise inserted by both colours, and the second insert broke the
-        // (TemplateId, Version) unique index and the start of that colour. The colour that waited
-        // reads the catalog only once it holds the lock, so it finds the work done.
+        // Serialize the entire catalog read and write under one advisory lock so concurrent backend
+        // starts cannot insert the same template version. Read the catalog only after acquiring the
+        // lock.
         if (lease is not null && db.Database.IsRelational())
             await lease.RunSerializedAsync(DeliveryTemplateVersionReset.LockName,
                 token => SeedCatalogAsync(organizationId, token), ct).ConfigureAwait(false);
@@ -230,17 +228,13 @@ public sealed class DeliveryPipelineTemplateSeeder(
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Recettes R2-094 then R1-20: the one-time restart of every shipped template at v1. It runs under
-    /// the catalog lock <see cref="SeedAsync"/> holds and re-reads its marker there: the second of two
-    /// colours starting together finds the work done and changes nothing.
-    /// </summary>
+    /// <summary>Runs the one-time shipped-template reset while holding the catalog lock from <see
+    /// cref="SeedAsync"/>. Recheck the marker under that lock so concurrent startup does not repeat
+    /// the reset.</summary>
     private async Task ResetVersionNumberingOnceAsync(int organizationId, CancellationToken ct)
     {
-        // The first shipped file is v1. With one file per template that was also the last; once a
-        // template ships a v2 (application-candidate, R2-121), renumbering a database that never ran the
-        // reset must still give v1 the v1 content, or the seeding below would refuse its own v1. Every
-        // file is passed so a template already holding exactly its shipped files is left alone.
+        // Use the first shipped file as v1 and pass all shipped files so templates already matching
+        // them remain untouched.
         var shipped = Definitions.ToDictionary(
             entry => entry.Key,
             entry => (IReadOnlyList<string>)entry.Value.Resources.Select(ReadResource).ToArray(),
@@ -348,8 +342,7 @@ public sealed class DeliveryPipelineTemplateSeeder(
     private static string Normalize(string value) =>
         value.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
 
-    // Recette R2-094: every shipped template restarted at v1. A v2 file added later gets its own
-    // changelog line here, beside the version it describes.
+    // Keep each shipped version changelog beside the version it describes.
     private static string GetChangelogEntry(string name, int version) => (name, version) switch
     {
         (_, 1) => "Initial reusable application delivery contract.",

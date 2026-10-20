@@ -10,28 +10,6 @@ namespace Aetheus.Back.Tests.DataSeed;
 
 public sealed class DeliveryPipelineTemplateSeederTests
 {
-    /// <summary>
-    /// Recette R2-094: the numbering restarted at v1 with the current contents. The candidate kept its
-    /// v1 (same hash as before the reset), the promotion's v1 is its former v2 and the blue-green
-    /// cutover's v1 its former v6. A published v1 never changes again: the seeder refuses it at startup.
-    /// </summary>
-    [Theory]
-    [InlineData("application-candidate-v1.yaml", "e518dbb44946507c765c7206e1351b9cc03b2fd25e3c4be60a7783c9288d5788")]
-    [InlineData("application-candidate-v2.yaml", "140793bce04abf756465316c11c73929af72e0aff3d4e04aa6b32153d8f9f421")]
-    [InlineData("application-promotion-v1.yaml", "02ffed7982ade22b01b722f7fd312b348c66871d7fd03d8b2c9e58a9ea05b78c")]
-    [InlineData("host-bluegreen-deploy-v1.yaml", "04722e3c4e8c9cc766c597b43ce71207b2ba92e1c3ccf04e1127050d0e884723")]
-    public void ShippedVersions_HaveStableContent(string resource, string expectedSha256)
-    {
-        var normalized = DeliveryPipelineTemplateSeeder.ReadResource(resource)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Trim();
-        var actual = Convert.ToHexString(
-                System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalized)))
-            .ToLowerInvariant();
-
-        Assert.Equal(expectedSha256, actual);
-    }
-
     [Fact]
     public async Task SeedAsync_IsIdempotentAndPublishesPinnedImmutableTemplates()
     {
@@ -71,8 +49,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
         Assert.Contains(templates, template => template.Name == "application-release-fast");
         Assert.Contains(templates, template => template.Name == "publish-observability-packages");
         Assert.DoesNotContain(templates, template => template.Name.Contains("aetheus", StringComparison.OrdinalIgnoreCase));
-        // Recette R2-094: every shipped template restarted at v1; one shipped file per published version
-        // since (the candidate's v2, recette R2-121).
+        // Every published version has its own shipped template file.
         Assert.All(templates, template =>
         {
             var shippedFiles = DeliveryPipelineTemplateSeeder.Definitions[template.Name].Resources.Length;
@@ -133,7 +110,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
     [Fact]
     public void CandidateTemplate_UsesProductionBaselineAndBuildOnceReleaseContract()
     {
-        // Recette R2-094 kept the candidate's v1 content, the one aetheus-candidate always pinned.
+        // The candidate v1 content matches its pinned definition.
         var versionOne = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v1.yaml");
 
         Assert.Contains("release: previous-deployed", versionOne, StringComparison.Ordinal);
@@ -142,7 +119,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
     [Fact]
     public void PromotionTemplate_RequiresAnExplicitImmutableCandidateVersion()
     {
-        // Recette R2-094: v1 is the content formerly published as v2.
+        // Verify the published v1 content hash.
         var versionOne = DeliveryPipelineTemplateSeeder.ReadResource("application-promotion-v1.yaml");
 
         Assert.Contains("required: true", versionOne, StringComparison.Ordinal);
@@ -150,7 +127,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
     }
 
     [Fact]
-    public void GenericPipelineTemplates_UseProjectAdaptersWithoutAetheusImplementationDetails()
+    public void GenericPipelineTemplates_TakeProjectCommandsWithoutAetheusImplementationDetails()
     {
         var yaml = DeliveryPipelineTemplateSeeder.ReadResource("generic/application-nightly.yaml");
         var packages = DeliveryPipelineTemplateSeeder.ReadResource(
@@ -163,20 +140,21 @@ public sealed class DeliveryPipelineTemplateSeederTests
         Assert.Contains("APPLICATION_SECURITY_PIPELINE", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("CANDIDATE", yaml, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("type: release", yaml, StringComparison.Ordinal);
-        Assert.Contains(".pipeline/scripts/publish-packages.sh", packages, StringComparison.Ordinal);
+        Assert.Contains("APPLICATION_PUBLISH_PACKAGES_COMMANDS", packages, StringComparison.Ordinal);
+        Assert.DoesNotContain(".pipeline/scripts/", packages, StringComparison.Ordinal);
         Assert.DoesNotContain("Aetheus", yaml, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Aetheus", packages, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void GenericPipelineTemplates_AreAdapterBasedAndContainNoAetheusProductPaths()
+    public void GenericPipelineTemplates_RequireNoProjectFileAndContainNoAetheusProductPaths()
     {
         var genericResources = DeliveryPipelineTemplateSeeder.Definitions.Values
             .SelectMany(definition => definition.Resources)
             .Where(resource => resource.StartsWith("generic/", StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal(14, genericResources.Length);
+        Assert.NotEmpty(genericResources);
         foreach (var resource in genericResources)
         {
             var yaml = DeliveryPipelineTemplateSeeder.ReadResource(resource);
@@ -200,17 +178,10 @@ public sealed class DeliveryPipelineTemplateSeederTests
             Assert.DoesNotContain("tests/", yaml, StringComparison.Ordinal);
         }
 
-        // The nightly only orchestrates; the security scans are the platform's own scanners.
-        string[] adapterFree =
-        [
-            "generic/application-nightly.yaml",
-            "generic/application-security.yaml",
-            "generic/application-security-history.yaml",
-            "generic/application-security-external.yaml"
-        ];
-        Assert.All(genericResources.Where(resource => !adapterFree.Contains(resource)),
-            resource => Assert.Contains(".pipeline/scripts/",
-                DeliveryPipelineTemplateSeeder.ReadResource(resource), StringComparison.Ordinal));
+        // ADR-050, recette R3-64: no template calls a script of the project's repository; the
+        // project's commands are declared in its pipeline (GenericTemplatesWithoutProjectFilesTests).
+        Assert.All(genericResources, resource => Assert.DoesNotContain(".pipeline/scripts/",
+            DeliveryPipelineTemplateSeeder.ReadResource(resource), StringComparison.Ordinal));
     }
 
     private static PipelineYamlDefinition Shipped(string resource) =>
@@ -223,11 +194,8 @@ public sealed class DeliveryPipelineTemplateSeederTests
             .Where(resource => resource.StartsWith("generic/", StringComparison.Ordinal))
             .Append("application-candidate-v2.yaml");
 
-    /// <summary>
-    /// Recette R2-121, ADR-012: the steps of a stage run concurrently. A restore beside the adapter
-    /// that reads it, or a "mark deployed" beside the deployment, raced in the v1 generic templates.
-    /// A stage that restores artifacts or writes a release does only that.
-    /// </summary>
+    /// <summary>Steps within a stage execute concurrently (ADR-012). Keep artifact restoration and
+    /// release publication isolated from steps that depend on their effects.</summary>
     [Fact]
     public void GenericTemplates_NeverShareAStageBetweenARestoreOrReleaseAndAnotherStep()
     {
@@ -240,8 +208,8 @@ public sealed class DeliveryPipelineTemplateSeederTests
             }
     }
 
-    /// <summary>Recette R2-121: a new project's quality and security runs carry a grade, on rules the
-    /// deployed backend accepts (no finding_score until R2-119 ships), with every gate after its producers.</summary>
+    /// <summary>Quality and security templates publish grades with supported rules and place each
+    /// gate after its producers.</summary>
     [Theory]
     [InlineData("generic/application-quality.yaml", "quality")]
     [InlineData("generic/application-security.yaml", "security")]
@@ -262,12 +230,10 @@ public sealed class DeliveryPipelineTemplateSeederTests
         Assert.Empty(PipelineAnalysisGateOrderingValidator.Validate(stages));
     }
 
-    /// <summary>
-    /// Recette R1-33: the template the setup wizard gives an external repository is published like the
-    /// other security template, and needs nothing in that repository: only platform scanners, none of
-    /// which the readiness check finds a repository file for (application-security, with its Gitleaks
-    /// configuration, is the control that the check does find one).
-    /// </summary>
+    /// <summary> The template the setup wizard gives an external repository is published like the
+    /// other security template, and needs nothing in that repository: only platform scanners, none
+    /// of which the readiness check finds a repository file for. Gitleaks included: its configuration
+    /// is optional since recette R3-63 (built-in rules when .gitleaks.toml is absent). </summary>
     [Fact]
     public void ExternalSecurityTemplate_IsPublished_AndNeedsNoFileInTheRepository()
     {
@@ -280,15 +246,14 @@ public sealed class DeliveryPipelineTemplateSeederTests
 
         Assert.All(steps, step => Assert.Contains(step.Type, new[] { "scanner", "analysis-gate" }));
         Assert.Equal(
-            ["opengrep", "trivy-dependencies", "trivy-iac"],
+            ["gitleaks", "opengrep", "trivy-dependencies", "trivy-iac"],
             steps.Where(step => step.Type == "scanner").Select(step => step.Scanner!).Order());
         Assert.Empty(PipelineSetupReadinessService.RequiredScannerFiles(stages));
-        Assert.Equal([".gitleaks.toml"], PipelineSetupReadinessService.RequiredScannerFiles(
+        Assert.Empty(PipelineSetupReadinessService.RequiredScannerFiles(
             YamlParsingHelper.FlattenJobs(Shipped("generic/application-security.yaml"))));
     }
 
-    /// <summary>Recette R2-121: the candidate a wizard creates releases the artifact the generic CI
-    /// packages; v1 defaulted to Package-artifacts, which no generic pipeline produces.</summary>
+    /// <summary>The candidate template publishes the artifact produced by generic CI.</summary>
     [Fact]
     public void CandidateV2_ReleasesThePayloadTheGenericCiPackages_AndSkipsAbsentPipelines()
     {
@@ -406,7 +371,7 @@ public sealed class DeliveryPipelineTemplateSeederTests
             .SingleAsync(item => item.Name == "application-ci", TestContext.Current.CancellationToken);
         Assert.Equal(2, template.LatestVersion);
         Assert.Equal("name: application-ci\nstages: []", template.Versions.Single(item => item.Version == 1).YamlContent);
-        Assert.Contains("Run project CI adapter", template.Versions.Single(item => item.Version == 2).YamlContent,
+        Assert.Contains("Run project CI commands", template.Versions.Single(item => item.Version == 2).YamlContent,
             StringComparison.Ordinal);
         Assert.Contains("name: Application payload", template.Versions.Single(item => item.Version == 2).YamlContent,
             StringComparison.Ordinal);

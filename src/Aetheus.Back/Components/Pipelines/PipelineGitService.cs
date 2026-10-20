@@ -16,8 +16,8 @@ public sealed class PipelineGitService(
 {
     private const string PipelineDir = ".pipeline";
 
-    // Recette R1-21: the application writes the pipeline files, so every commit is authored by Aetheus
-    // with the address it sends mail from (the no-reply sender, else the custom SMTP sender), never by the
+    // The application writes the pipeline files, so every commit is authored by Aetheus with the
+    // address it sends mail from (the no-reply sender, else the custom SMTP sender), never by the
     // acting login. The account that asked for the change stays in a "Requested-by" trailer.
     internal const string ServiceAuthorName = "Aetheus";
     internal const string ServiceAuthorEmail = "aetheus@aetheus.local";
@@ -68,6 +68,18 @@ public sealed class PipelineGitService(
         if (blob is null || blob.IsBinary || blob.Size > 256 * 1024)
             return null;
         return blob.Content;
+    }
+
+    public async Task<string?> ReadVersionPropsAtRevisionAsync(
+        int projectId, string revision, CancellationToken ct = default, int? sourceRepositoryId = null)
+    {
+        if (!PipelineRunHelpers.IsGitCommitHash(revision)) return null;
+        var repo = await GetProjectRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
+        if (repo is null || repo.IsEmpty) return null;
+        var diskPath = SafeDiskPath(projectId, repo);
+        if (diskPath is null || !Directory.Exists(diskPath)) return null;
+        var blob = await cli.GetBlobAsync(diskPath, revision, "Directory.Build.props", ct).ConfigureAwait(false);
+        return blob is null || blob.IsBinary || blob.Size > 256 * 1024 ? null : blob.Content;
     }
 
     private async Task<string?> ReadProjectPipelineYamlCoreAsync(
@@ -164,8 +176,8 @@ public sealed class PipelineGitService(
         int projectId, string pipelineName, CancellationToken ct = default,
         string? sourceBranch = null, int? sourceRepositoryId = null)
     {
-        // Recette R-483: a read, so the stored repository row (no default-branch detection, which is
-        // two git processes and a possible write), read once and reused for the head commit below.
+        // A read, so the stored repository row (no default-branch detection, which is two git
+        // processes and a possible write), read once and reused for the head commit below.
         var repo = await GetStoredProjectRepoAsync(projectId, sourceRepositoryId, ct).ConfigureAwait(false);
         if (repo is null) return null;
 
@@ -385,12 +397,11 @@ public sealed class PipelineGitService(
             await gitService.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false),
             projectId, sourceRepositoryId);
 
-    /// <summary>
-    /// Recette R-483: the project's repository as stored, without the default-branch detection
-    /// <see cref="IGitLightService.GetRepositoriesAsync"/> runs on every call (two git processes per
-    /// repository, and a write when it drifts). A read of the source names the stored default branch,
-    /// which a push (<c>GitSmartHttpService</c>) and the nightly maintenance keep in step with the disk.
-    /// </summary>
+    /// <summary> The project's repository as stored, without the default-branch detection <see
+    /// cref="IGitLightService.GetRepositoriesAsync"/> runs on every call (two git processes per
+    /// repository, and a write when it drifts). A read of the source names the stored default
+    /// branch, which a push (<c>GitSmartHttpService</c>) and the nightly maintenance keep in step
+    /// with the disk. </summary>
     private async Task<GitLightRepoDto?> GetStoredProjectRepoAsync(
         int projectId, int? sourceRepositoryId, CancellationToken ct) =>
         SelectProjectRepo(
@@ -404,8 +415,8 @@ public sealed class PipelineGitService(
             return repos.FirstOrDefault(repo => repo.Id == repositoryId)
                 ?? throw new BadRequestException(
                     $"Source repository {repositoryId} does not belong to project {projectId}.");
-        // Recette R-534: the mirror of an external repository attached beside the project's repository
-        // is a source a pipeline names (source: repository:), never where a definition is read by default.
+        // The mirror of an external repository attached beside the project's repository is a source
+        // a pipeline names (source: repository:), never where a definition is read by default.
         var own = repos.Where(repo => !repo.IsAdditionalSource).ToList();
         return own.Count switch
         {

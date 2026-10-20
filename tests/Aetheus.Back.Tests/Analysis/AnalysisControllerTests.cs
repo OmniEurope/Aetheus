@@ -104,7 +104,7 @@ public sealed class AnalysisControllerTests
         Assert.IsType<OkObjectResult>((await _controller.GetRunGateResult(12, ct)).Result);
     }
 
-    /// <summary>Recette R-485: a findings page of several runs needs every one of them readable.</summary>
+    /// <summary>A findings page of several runs needs every one of them readable.</summary>
     [Fact]
     public async Task R485_RunFindings_ForbidsWhenOneRunOfTheSetIsUnreadable()
     {

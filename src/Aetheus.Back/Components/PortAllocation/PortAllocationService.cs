@@ -6,12 +6,8 @@ using Aetheus.Back.Data;
 
 namespace Aetheus.Back.Components.PortAllocation;
 
-/// <summary>
-/// PLAN-005 lot 5. Joins the port registry and the variable libraries, which are both storage and
-/// therefore blind to each other, into one act: reserve free ports, then write them as
-/// <c>PORT_*</c> entries, in one transaction: either both land or neither does. A reservation with
-/// no entry would block a port nobody uses.
-/// </summary>
+/// <summary>Reserves free ports and writes their <c>PORT_*</c> library entries in one transaction,
+/// preventing reservations without usable configuration.</summary>
 public sealed class PortAllocationService(
     IPortAllocationRepository repo,
     IPortRegistryService registry,
@@ -82,8 +78,8 @@ public sealed class PortAllocationService(
             throw new BadRequestException(
                 $"This library holds no '{PortRegistryLimits.PortKeyPrefix}' entry to check.");
 
-        // PLAN-003 lot 24 / D14: the answer is relative to the library's own project, so a port this
-        // project declared and is listening on reads as its own rather than as an obstacle.
+        // Availability is evaluated for the library's project so its own listening ports are not
+        // treated as conflicts.
         return await registry.CheckPortsAsync(serverId, ports, scope.ProjectId, ct).ConfigureAwait(false);
     }
 

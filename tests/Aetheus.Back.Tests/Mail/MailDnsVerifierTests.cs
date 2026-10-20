@@ -7,7 +7,7 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>PLAN-005 lot 5: verdicts per record and the persisted SPF / DKIM / DMARC flags.</summary>
+/// <summary>Verdicts per record and the persisted SPF / DKIM / DMARC flags.</summary>
 public sealed class MailDnsVerifierTests
 {
     private readonly IMailDnsResolver _dns = Substitute.For<IMailDnsResolver>();

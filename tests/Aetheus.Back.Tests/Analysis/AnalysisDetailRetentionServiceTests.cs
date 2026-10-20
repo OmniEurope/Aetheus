@@ -5,12 +5,9 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Analysis;
 
-/// <summary>
-/// PLAN-013 lots 2 and 4: the analysis detail purge reads each project's « Détail des analyses »
-/// duration, deletes in bounded batches, stops a sweep at its batch budget, and never spins on a report
-/// another backend already purged. What is selected and deleted on PostgreSQL is proven by
-/// <c>AnalysisDetailRetentionIntegrationTests</c>.
-/// </summary>
+/// <summary>Verify project-specific retention, bounded purge batches and sweep limits, including
+/// concurrently purged reports. AnalysisDetailRetentionIntegrationTests separately exercises
+/// PostgreSQL selection and deletion.</summary>
 public sealed class AnalysisDetailRetentionServiceTests
 {
     private static readonly DateTime Now = new(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);

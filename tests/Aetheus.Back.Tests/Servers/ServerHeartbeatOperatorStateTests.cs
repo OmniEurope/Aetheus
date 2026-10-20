@@ -13,11 +13,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>
-/// Recette R-479 follow-up, through the real repositories: the heartbeat rewrite of the RKHunter section
-/// keeps the operator's scan schedule (it used to wipe it on every beat), and an unchanged
-/// security-updates report still moves <see cref="SecurityUpdatesState.CheckedAt"/>.
-/// </summary>
+/// <summary>Exercise repository updates that preserve the operator RKHunter schedule and advance
+/// security CheckedAt even when report contents are unchanged.</summary>
 public sealed class ServerHeartbeatOperatorStateTests : IDisposable
 {
     private const int ServerId = 5;

@@ -18,7 +18,7 @@
     </Filters>
 </OmniPageHeader>
 
-<AetheusDataGrid @ref="_grid" TItem="ServiceConnectionDto" Data="@_items" Count="@_count" LoadData="@LoadData" ExportRead="@ReadExportAsync"
+<AetheusDataGrid @ref="_grid" TItem="ServiceConnectionDto" RowClick="@(c => _canWrite ? OpenEditDialogAsync(c) : Task.CompletedTask)" Data="@_items" Count="@_count" LoadData="@LoadData" ExportRead="@ReadExportAsync"
     PageSize="20" AllowSorting="true" IsLoading="@_loading" Density="OmniDensity.Compact" FullHeight="true"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<ServiceConnectionDto>(_items, _count))">
@@ -43,7 +43,6 @@
         <OmniDataGridColumn TItem="ServiceConnectionDto" Title="@L["ConnectionStatus"]" Width="230px" Sortable="false" Filterable="false" >
             <Template Context="c">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => TestAsync(c.Id))" Class="@((_testing.Contains(c.Id)) ? "btn-busy" : null)" Busy="@((_testing.Contains(c.Id)))" title="@L["TestConnection"]" Label="@L["TestConnection"]"><OmniIcon Name="OmniIconName.Broadcast" /></OmniButton>
                     @if (_testResults.TryGetValue(c.Id, out var result))
                     {
                         <OmniBadge Fill="OmniFill.Solid" Tone="@StatusBadge(result.Status)"
@@ -52,13 +51,19 @@
                 </OmniStack>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServiceConnectionDto" Title="@L["Actions"]" Width="120px" Sortable="false" TextAlign="OmniDataGridTextAlign.Center" Filterable="false" >
+        <OmniDataGridColumn TItem="ServiceConnectionDto" Title="@L["Actions"]" Width="140px" Sortable="false" TextAlign="OmniDataGridTextAlign.Center" Filterable="false" >
             <Template Context="c">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                @* STD-BTN detection 11: Edit (and its Delete) visible, the other actions in the menu. *@
                 @if (_canWrite)
                 {
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenEditDialogAsync(c))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(c))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(c))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                 }
+                <OmniOverflowMenu Label="@L["MoreActions"]">
+                    <OmniMenuItem OnClick="@(() => TestAsync(c.Id))" Disabled="@(_testing.Contains(c.Id))"><Icon><OmniIcon Name="OmniIconName.Broadcast" /></Icon><ChildContent>@L["TestConnection"]</ChildContent></OmniMenuItem>
+                </OmniOverflowMenu>
+                </span>
             </Template>
         </OmniDataGridColumn>
     </Columns>

@@ -90,7 +90,7 @@ show_options() {
     echo "                                  Target: user@host or user@host:sshport"
     echo "                                  Saved in .remoteagent; prompted if absent"
     echo "  -s,    --silent                 Start servers without opening browser"
-    echo "  -t,    --test-unit              Run ALL unit tests (back + front + agent-core + analyzers)"
+    echo "  -t,    --test-unit              Run ALL unit tests (back + front + agent-core + analyzers + JavaScript)"
     echo "  -ta,   --test-all               Run EVERYTHING: unit + integration + E2E"
     echo "  -tb,   --test-back              Run backend unit tests"
     echo "  -te,   --test-e2e               Run ALL E2E tests"
@@ -123,7 +123,7 @@ show_help_long() {
     echo "  ./launch-linux.sh -ra                Start servers + SSH tunnel (reads .remoteagent)"
     echo "  ./launch-linux.sh -ra user@srv       Start servers + SSH tunnel (saves target)"
     echo "  ./launch-linux.sh -s                 Build + start servers (no browser)"
-    echo "  ./launch-linux.sh -t                 Build + ALL unit tests (back/front/agent-core/analyzers) + exit"
+    echo "  ./launch-linux.sh -t                 Build + ALL unit tests (back/front/agent-core/analyzers/JavaScript) + exit"
     echo "  ./launch-linux.sh -ta                Build + EVERYTHING (unit + integration + E2E) + exit"
     echo "  ./launch-linux.sh -tb                Build + backend tests only + exit"
     echo "  ./launch-linux.sh -tb -tf            Build + back + front tests + exit"
@@ -588,6 +588,8 @@ _export_e2e_backend_env() {
     export Seed__Demo="true"
     export RateLimiting__Disabled="true"
     export BackgroundServices__TaskStartupDelay="00:30:00"
+    # No nightly AI model list read (R3-7): a seeded profile would send a fake key to a real provider.
+    export AiTasks__ModelListRefresh__Enabled="false"
 }
 
 # ============================================================
@@ -744,6 +746,66 @@ invoke_test_run() {
     echo ""
 
     # Publish results via globals (bash has no easy multi-return)
+    LAST_TEST_EXIT=$exit_code
+    LAST_TEST_PASSED=$passed
+    LAST_TEST_FAILED=$failed
+    LAST_TEST_SKIPPED=$skipped
+    LAST_TEST_TOTAL=$total
+}
+
+invoke_node_test_run() {
+    # PLAN-002 lot 9.T: the JavaScript suites (deploy/scripts/*.test.mjs, tests/js/*) run in the CI and
+    # quality pipelines. Runs `node --test` with the TAP reporter over the given files (relative to the
+    # repository root) and reads its final counters. A skipped test fails the run, like the quality
+    # stage that demands `# skipped 0`: the PowerShell-driven suites skip themselves when pwsh is missing.
+    # args: <label> <file>...
+    local label="$1"; shift
+    write_step "$label"
+
+    LAST_TEST_EXIT=1; LAST_TEST_PASSED=0; LAST_TEST_FAILED=0; LAST_TEST_SKIPPED=0; LAST_TEST_TOTAL=0
+    if ! command -v node >/dev/null 2>&1; then
+        echo "${C_RED}  node not found on PATH: the JavaScript suites cannot run.${C_RESET}"
+        return 0
+    fi
+    if [[ $# -eq 0 ]]; then
+        echo "${C_RED}  No JavaScript test file found.${C_RESET}"
+        return 0
+    fi
+
+    local start_ts out_file
+    start_ts=$(date +%s)
+    out_file="$(mktemp /tmp/aetheus_node_test.XXXXXX)"
+    local exit_code=0
+    (cd "$ROOT" && node --test --test-reporter=tap "$@") >"$out_file" 2>&1 || exit_code=$?
+    local duration=$(( $(date +%s) - start_ts ))
+
+    node_counter() {
+        local value
+        value="$(sed -n "s/^# $1 \([0-9][0-9]*\)[[:space:]]*$/\1/p" "$out_file" | tail -n 1)"
+        echo "${value:-0}"
+    }
+    local total passed failed cancelled skipped todo
+    total="$(node_counter tests)"; passed="$(node_counter pass)"
+    failed="$(node_counter fail)"; cancelled="$(node_counter cancelled)"
+    skipped="$(node_counter skipped)"; todo="$(node_counter todo)"
+    failed=$(( failed + cancelled )); skipped=$(( skipped + todo ))
+
+    if [[ $exit_code -eq 0 && $skipped -gt 0 ]]; then
+        echo "${C_RED}  $skipped JavaScript test(s) skipped: every suite must run (is pwsh on PATH?).${C_RESET}"
+        exit_code=1
+    fi
+    if [[ $exit_code -ne 0 ]]; then
+        echo "${C_RED}  node --test exited with code $exit_code.${C_RESET}"
+        grep -E '^[[:space:]]*not ok ' "$out_file" | head -n 30 | while IFS= read -r line; do
+            echo "${C_RED}  $line${C_RESET}"
+        done
+    fi
+    rm -f "$out_file"
+
+    echo ""
+    echo "${C_WHITE}  Test summary: total: ${total}; failed: ${failed}; succeeded: ${passed}; skipped: ${skipped}  (${duration}s)${C_RESET}"
+    echo ""
+
     LAST_TEST_EXIT=$exit_code
     LAST_TEST_PASSED=$passed
     LAST_TEST_FAILED=$failed
@@ -1066,6 +1128,26 @@ if [[ $TEST_BACK -eq 1 || $TEST_FRONT -eq 1 || $TEST_AGENT -eq 1 || $TEST_ANALYZ
         if [[ $LAST_TEST_EXIT -ne 0 ]]; then
             echo "${C_RED}ANALYZER TESTS FAILED - aborting.${C_RESET}"; exit 1
         fi
+    fi
+
+    # PLAN-002 lot 9.T: the JavaScript suites belong to the unit set (-t, hence -ta), with the same
+    # file sets as the `Compile` step of aetheus-ci and the JavaScript stages of aetheus-quality.
+    if [[ $TEST_UNIT -eq 1 ]]; then
+        for js_suite in "JS deploy-scripts|deploy/scripts|*.test.mjs" "JS tests|tests/js|*.test.cjs *.test.mjs"; do
+            IFS='|' read -r js_label js_dir js_patterns <<<"$js_suite"
+            js_files=()
+            for js_pattern in $js_patterns; do
+                while IFS= read -r js_file; do js_files+=("$js_file"); done \
+                    < <(cd "$ROOT" && find "$js_dir" -maxdepth 1 -type f -name "$js_pattern" | sort)
+            done
+            invoke_node_test_run "Running $js_label suites..." "${js_files[@]}"
+            TEST_LABELS+=("$js_label")
+            TEST_PASSED+=("$LAST_TEST_PASSED"); TEST_FAILED+=("$LAST_TEST_FAILED")
+            TEST_SKIPPED+=("$LAST_TEST_SKIPPED"); TEST_TOTAL+=("$LAST_TEST_TOTAL")
+            if [[ $LAST_TEST_EXIT -ne 0 ]]; then
+                echo "${C_RED}${js_label^^} SUITES FAILED - aborting.${C_RESET}"; exit 1
+            fi
+        done
     fi
 
     # PLAN-015 lot 0: under -c the integration tests run with coverage too, in their own subdirectory:

@@ -24,7 +24,7 @@ public class PackageFeedsAdminTests : BunitContext
 
         var cut = Render<PackageFeedsAdmin>();
 
-        cut.WaitForState(() => cut.Markup.Contains("corp-nuget"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("corp-nuget"));
         Assert.Contains("corp-nuget", cut.Markup);
         Assert.Contains("NuGet", cut.Markup);
     }
@@ -36,7 +36,7 @@ public class PackageFeedsAdminTests : BunitContext
 
         var cut = Render<PackageFeedsAdmin>();
 
-        cut.WaitForState(() => cut.Markup.Contains("NoPackageFeeds"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("NoPackageFeeds"));
         Assert.Contains("NoPackageFeeds", cut.Markup);
     }
 

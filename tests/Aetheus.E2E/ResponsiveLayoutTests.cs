@@ -7,9 +7,10 @@ namespace Aetheus.E2E;
 [Category("E2E")]
 [Category("Dashboard")]
 [NonParallelizable]
-[FixtureLifeCycle(LifeCycle.InstancePerTestCase)]
 public sealed class ResponsiveLayoutTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     private static readonly string[] PrimaryMobilePaths =
     [
         "/",
@@ -113,11 +114,13 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
     }
 
     [Test]
+    [RollbackRelevant]
     public async Task PrimaryMobilePages_RemainReadableInsideTheViewport()
         => await AuditMobilePathsAsync(PrimaryMobilePaths, 375);
 
     [Test]
     [Category("Servers")]
+    [RollbackRelevant]
     public async Task ServerMobilePages_RemainReadableInsideTheViewport()
         => await AuditMobilePathsAsync(SecondaryMobilePaths.Where(path => path.StartsWith("/servers/", StringComparison.Ordinal)), 375);
 
@@ -130,16 +133,19 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         ], 375);
 
     [Test]
+    [RollbackRelevant]
     public async Task ProjectMobilePages_RemainReadableInsideTheViewport()
         => await AuditMobilePathsAsync(SecondaryMobilePaths.Where(path => path.StartsWith("/projects/", StringComparison.Ordinal)), 375);
 
     [Test]
     [Category("ResponsiveAdmin")]
+    [RollbackRelevant]
     public async Task AdministrationMobilePages_RemainReadableInsideTheViewport()
         => await AuditMobilePathsAsync(SecondaryMobilePaths.Where(path =>
             path == "/admin" || path.StartsWith("/admin/", StringComparison.Ordinal) || path.StartsWith("/users", StringComparison.Ordinal)), 375);
 
     [Test]
+    [RollbackRelevant]
     public async Task OtherSecondaryMobilePages_RemainReadableInsideTheViewport()
     {
         var artifactPath = await ResolveSeededArtifactPathAsync();
@@ -196,8 +202,8 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
     [Test]
     public async Task R2125_PipelineListsWithTheirStatusChips_DoNotScrollSidewaysOnADesktop()
     {
-        // The status chip strip (OmniStackScroll) ended 3px past its row, so under the grid's own
-        // scrollbar the content area showed a second one. Measured, like R-503.
+        // Measure the status-chip strip to detect overflow that could create a second content
+        // scrollbar.
         await Page.SetViewportSizeAsync(1014, 900);
         var failures = new List<string>();
         var pagesWithChips = 0;
@@ -293,7 +299,7 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         await Page.WaitForSelectorAsync("[data-viewport='ready']", new()
         {
             State = WaitForSelectorState.Attached,
-            Timeout = 10000
+            Timeout = PlaywrightConfig.AppReadyTimeoutMs
         });
         var violations = await Page.EvaluateAsync<string[]>(
             "() => window.__aetheusColdLoadViolations ?? []");
@@ -342,6 +348,7 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         => await AuditMobilePathsAsync(["/", "/servers", "/projects"], 812, 390);
 
     [Test]
+    [IsolatedBrowserContext]
     public async Task UnauthenticatedLogin_RemainsReadableInPortraitAndLandscape()
     {
         await NavigateToAsync("/");
@@ -382,10 +389,16 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
                 networkFailures.Add($"{request.Method} {request.Url}: {request.Failure}");
             }
         }
+        var serverErrors = new List<string>();
         void TrackResponse(object? _, IResponse response)
         {
             if (response.Status < 400 || !response.Url.StartsWith(BackendUrl, StringComparison.OrdinalIgnoreCase)) return;
-            lock (networkGate) networkFailures.Add($"HTTP {response.Status} {response.Request.Method} {response.Url}");
+            var entry = $"HTTP {response.Status} {response.Request.Method} {response.Url}";
+            lock (networkGate)
+            {
+                networkFailures.Add(entry);
+                if (response.Status >= 500) serverErrors.Add(entry);
+            }
         }
 
         Page.Request += TrackRequest;
@@ -394,13 +407,32 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         Page.Response += TrackResponse;
         try
         {
+            // The first route of a sweep is a full load at this viewport, which proves the cold start at
+            // that width; the next routes navigate inside the application, as a user does.
+            var fullLoad = true;
             foreach (var path in paths)
             {
                 try
                 {
-                    await AuditMobilePathAsync(path, viewportWidth, viewportHeight);
+                    await AuditMobilePathAsync(path, viewportWidth, viewportHeight, fullLoad);
+                    fullLoad = false;
+
+                    // A page can still render its layout while one of its API calls failed on the
+                    // server, and every layout check above then passes: a 5xx fails the route on its own.
+                    string[] routeServerErrors;
+                    lock (networkGate)
+                    {
+                        routeServerErrors = [.. serverErrors];
+                        serverErrors.Clear();
+                        networkFailures.Clear();
+                    }
+                    if (routeServerErrors.Length > 0)
+                    {
+                        failures.Add($"{viewportWidth}x{viewportHeight} {path}: the page rendered but its API answered a server error."
+                            + $" Network: {string.Join("; ", routeServerErrors)}");
+                    }
                 }
-                catch (Exception exception) when (exception is AssertionException or PlaywrightException or TimeoutException)
+                catch (Exception exception) when (exception is AssertionException or MultipleAssertException or PlaywrightException or TimeoutException)
                 {
                     string networkState;
                     lock (networkGate)
@@ -408,6 +440,7 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
                         var pending = pendingApiRequests.Select(request => $"pending {request.Method} {request.Url}");
                         networkState = string.Join("; ", networkFailures.Concat(pending));
                         networkFailures.Clear();
+                        serverErrors.Clear();
                     }
                     failures.Add($"{viewportWidth}x{viewportHeight} {path}: {exception.Message}"
                         + (string.IsNullOrEmpty(networkState) ? string.Empty : $" Network: {networkState}"));
@@ -425,7 +458,11 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
                         // A failed route can leave the browser on an error or login page. Restore a known
                         // authenticated desktop state so one defect does not cascade into every later route.
                         await Page.SetViewportSizeAsync(1280, 720);
-                        await LoginAsync(force: true);
+                        // The context is already signed in, and /login sends a signed-in user away: sign in again
+                        // only when the session was really lost.
+                        await NavigateToAsync("");
+                        if (await Page.Locator("#Username").CountAsync() > 0)
+                            await LoginAsync(force: true);
                     }
                     catch (Exception recoveryException) when (
                         recoveryException is InvalidOperationException or PlaywrightException or TimeoutException)
@@ -433,6 +470,8 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
                         failures.Add($"{viewportWidth}px recovery after {path}: {recoveryException.Message}");
                         break;
                     }
+                    // The recovery left the login flow: the next route starts again from a full load.
+                    fullLoad = true;
                 }
             }
         }
@@ -447,10 +486,13 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         Assert.That(failures, Is.Empty, () => string.Join(Environment.NewLine, failures));
     }
 
-    private async Task AuditMobilePathAsync(string path, int viewportWidth, int viewportHeight)
+    private async Task AuditMobilePathAsync(string path, int viewportWidth, int viewportHeight, bool fullLoad)
     {
         await Page.SetViewportSizeAsync(viewportWidth, viewportHeight);
-        await NavigateToAsync(path);
+        if (fullLoad)
+            await NavigateToAsync(path);
+        else
+            await NavigateInsideTheApplicationAsync(path);
         await WaitForNoSpinnerAsync();
         await Page.WaitForSelectorAsync(".omni-sidebar__backdrop", new()
         {
@@ -600,11 +642,12 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
             $"{path} must keep empty-state titles and descriptions readable inside the viewport.");
 
         var errorCardCount = await Page.Locator(".error-card").CountAsync();
+        var errorCardText = string.Join(" | ", await Page.Locator(".error-card").AllInnerTextsAsync());
         var notFoundCount = await Page.Locator(".not-found-container").CountAsync();
         Assert.Multiple(() =>
         {
             Assert.That(errorCardCount, Is.Zero,
-                $"{path} must not render the application error boundary.");
+                $"{path} must not render the application error boundary. Card: {errorCardText}");
             Assert.That(notFoundCount, Is.Zero,
                 $"{path} must resolve to a real page in the demo dataset.");
         });
@@ -649,8 +692,8 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
             });
             await route.FulfillAsync(new() { Response = response, Body = run.ToJsonString() });
         });
-        // Recette R2-104: the run page reads a step's tail (?maxLines=...), so the route matches the path
-        // whatever the query; a glob on the bare path no longer caught the request.
+        // Match the log route independently of its query because step-tail requests include
+        // maxLines.
         await Page.RouteAsync(url => new Uri(url).AbsolutePath.EndsWith($"/api/logs/task/{taskId}", StringComparison.Ordinal), route => route.FulfillAsync(new()
         {
             Status = 200,
@@ -691,9 +734,8 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
     [Category("Pipelines")]
     public async Task R2095_MobileApprovalBanner_KeepsEverythingInside_AndReducesApproveAndRejectToIcons()
     {
-        // Recette R2-095 (release-fast #2536 on a phone): the title, the text and the three buttons ran
-        // past the approval banner. Run 1 of the demo dataset is served waiting on a pipeline approval
-        // whose stage has a long name; everything else stays real.
+        // Serve a waiting approval with a long stage name to test banner containment on mobile;
+        // other responses remain real.
         await Page.RouteAsync("**/api/pipelines/runs/1", async route =>
         {
             var response = await route.FetchAsync();

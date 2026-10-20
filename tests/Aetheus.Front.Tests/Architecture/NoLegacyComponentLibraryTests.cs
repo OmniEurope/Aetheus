@@ -1,19 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// PLAN-008 lot 42 (_Generic PLAN-001 lot 21): the component library the front was built on before
-/// OmniEurope.Blazor is gone, with its frozen area, its package and its stylesheets, and nothing
-/// brings it back. The guard reads the sources rather than the build output: a leftover in a
-/// comment, a stylesheet, a script or a lock file is what would let the dependency creep back in
-/// unnoticed.
-/// <para>The forbidden name is spelled once, in <see cref="ForbiddenName"/>, and nowhere else in
-/// the product: the name itself is what the guard hunts, so this file excludes itself from its own
-/// scan.</para>
-/// <para>Scope, per STD-TESTSCOPE: the code and the assets of <c>src/</c> and <c>tests/</c>, plus
-/// the package manifest. Documentation and pipeline definitions are deliberately out of scope here
-/// and are covered by review, not by a test.</para>
-/// </summary>
+/// <summary>Guards source, tests, assets and package manifests against the forbidden
+/// component-library dependency. Documentation and pipeline definitions are outside this scan; the
+/// diagnostic token is centralized in <see cref="ForbiddenName"/>.</summary>
 public sealed class NoLegacyComponentLibraryTests
 {
     /// <summary>The library's name, the single place the product still spells it.</summary>

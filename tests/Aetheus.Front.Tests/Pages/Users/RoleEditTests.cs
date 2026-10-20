@@ -43,7 +43,7 @@ public class RoleEditTests : BunitContext
     public void Renders_ExistingRole_ForAdmin()
     {
         var cut = RenderRole();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // The stubbed role name is loaded into instance state and the GET reached api/roles/1.
         var name = (string)typeof(RoleEdit).GetField("_name", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
@@ -69,8 +69,7 @@ public class RoleEditTests : BunitContext
     {
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 0));
         cut.WaitForState(() =>
-            !(bool)typeof(RoleEdit).GetField("_loading", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!,
-            TimeSpan.FromSeconds(3));
+            !(bool)typeof(RoleEdit).GetField("_loading", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!);
 
         // BuildPermissionRows always materializes one row per ResourceType once loading completes.
         var rows = (List<RoleEdit.PermissionRowModel>)typeof(RoleEdit)
@@ -110,7 +109,7 @@ public class RoleEditTests : BunitContext
             var r = (List<RoleEdit.PermissionRowModel>)typeof(RoleEdit)
                 .GetField("_permissionRows", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
             return r.Count > 0;
-        }, TimeSpan.FromSeconds(3));
+        });
 
         // All three stubbed Read permissions map onto their resource rows as readable scope "All".
         var rows = (List<RoleEdit.PermissionRowModel>)typeof(RoleEdit)
@@ -200,7 +199,7 @@ public class RoleEditTests : BunitContext
             var r = (List<RoleEdit.PermissionRowModel>)typeof(RoleEdit)
                 .GetField("_permissionRows", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
             return r.Count > 0;
-        }, TimeSpan.FromSeconds(3));
+        });
         typeof(RoleEdit).GetField("_bulkPermission", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, null);
 
         var rows = (List<RoleEdit.PermissionRowModel>)typeof(RoleEdit)
@@ -325,7 +324,7 @@ public class RoleEditTests : BunitContext
             var r = (List<RoleEdit.PermissionRowModel>)typeof(RoleEdit)
                 .GetField("_permissionRows", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
             return r.Count > 0;
-        }, TimeSpan.FromSeconds(3));
+        });
 
         // Every resource type was stubbed at Admin level, so every row is fully granted.
         var rows = (List<RoleEdit.PermissionRowModel>)typeof(RoleEdit)
@@ -348,7 +347,7 @@ public class RoleEditTests : BunitContext
             Description = "Role with audit logs",
             Permissions = []
         });
-        // Recette R-238: the trail's Action filter lists the audit actions.
+        // The trail's Action filter lists the audit actions.
         _handler.SetJsonResponse("api/audit/actions", new List<string> { "Created", "Updated" });
         _handler.SetJsonResponse("api/audit", new PaginatedResult<AuditLogDto>
         {
@@ -377,8 +376,8 @@ public class RoleEditTests : BunitContext
     [Fact]
     public async Task EntityAuditTrail_HeaderFilters_AreSentAsColumnFilters_BesideTheEntityScope()
     {
-        // Recette R-238: the trail's timestamp range and action list reach the audit endpoint, next to
-        // the entity it is scoped to.
+        // The trail's timestamp range and action list reach the audit endpoint, next to the entity
+        // it is scoped to.
         _handler.SetJsonResponse("api/audit/actions", new List<string> { "Created", "Updated" });
         _handler.SetJsonResponse("api/audit", new PaginatedResult<AuditLogDto> { Items = [], TotalCount = 0 });
         var cut = Render<EntityAuditTrail>(p => p.Add(x => x.EntityType, "Role").Add(x => x.EntityId, 4));
@@ -425,7 +424,7 @@ public class RoleEditTests : BunitContext
             PageSize = 25
         });
         var cut = Render<RoleEdit>(parameters => parameters.Add(component => component.Id, 5));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
         var loadMembers = typeof(RoleEdit).GetMethod(
             "LoadRoleUsersAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var loadAvailable = typeof(RoleEdit).GetMethod(

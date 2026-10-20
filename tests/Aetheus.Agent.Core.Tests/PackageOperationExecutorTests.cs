@@ -39,8 +39,8 @@ public class PackageOperationExecutorTests
             new[] { "-n", "/usr/bin/apt-get", "install", "-y", "nginx" },
             PackageOperationExecutor.BuildAptArgv("install", "nginx"));
 
-    // Recette R2-031: an uninstall purges. `remove` left the conffiles (/etc/dovecot, /etc/init.d/dovecot)
-    // behind, so the service stayed listed as installed; `purge` also clears a package left in `rc` state.
+    // Uninstall purges package configuration as well as binaries, including packages already in rc
+    // state.
     [Fact]
     public void Uninstall_PurgesThePackage_NeverRemovesIt()
     {

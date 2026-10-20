@@ -3,7 +3,7 @@ using Aetheus.Back.Components.Pipelines;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>PLAN-003 lot 20 / D26: the arithmetic of "how long does this usually take".</summary>
+/// <summary>Duration-baseline arithmetic.</summary>
 public sealed class RunStageBaselineCalculatorTests
 {
     private static readonly DateTime T0 = new(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc);

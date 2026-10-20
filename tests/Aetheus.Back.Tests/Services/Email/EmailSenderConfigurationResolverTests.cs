@@ -5,7 +5,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-16: which sender the platform e-mails leave from.</summary>
+/// <summary>Which sender the platform e-mails leave from.</summary>
 public sealed class EmailSenderConfigurationResolverTests
 {
     private const string NoReply = "no-reply@example.org";

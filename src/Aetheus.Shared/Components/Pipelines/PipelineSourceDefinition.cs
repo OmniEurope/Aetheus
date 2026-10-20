@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>
-/// The <c>source:</c> block of a pipeline definition (recette R-534): the workspace is checked out
-/// from another repository attached to the same project, while the definition itself, its templates
-/// and its <c>.pipeline/configs</c> files keep coming from the pipeline's own repository.
-///
-/// The typical use is a pipeline kept in a private repository that builds and deploys what a public
-/// mirror holds. The credentials of that mirror stay on the control plane: the runner clones the
-/// mirror from Aetheus, pinned to the commit resolved when the run is prepared.
-/// </summary>
+/// <summary> The <c>source:</c> block of a pipeline definition : the workspace is checked out from
+/// another repository attached to the same project, while the definition itself, its templates and
+/// its <c>.pipeline/configs</c> files keep coming from the pipeline's own repository. The typical
+/// use is a pipeline kept in a private repository that builds and deploys what a public mirror
+/// holds. The credentials of that mirror stay on the control plane: the runner clones the mirror
+/// from Aetheus, pinned to the commit resolved when the run is prepared. </summary>
 public sealed record PipelineSourceDefinition
 {
     /// <summary>Slug of a repository attached to the pipeline's project (YAML key <c>repository:</c>).</summary>

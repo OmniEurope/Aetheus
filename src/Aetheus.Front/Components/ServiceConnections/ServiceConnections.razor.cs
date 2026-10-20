@@ -23,7 +23,7 @@ public partial class ServiceConnections : IAsyncDisposable
     private HubConnection? _hubConnection;
     private AetheusDataGrid<ServiceConnectionDto>? _grid;
 
-    // Recette R-224: the grid's header filters, sent with every page request, and the values they offer.
+    // The grid's header filters, sent with every page request, and the values they offer.
     private List<GridFilter> _columnFilters = [];
     private ServiceConnectionFilterValuesDto _filterValues = new();
     private Func<string, string>? _typeText;
@@ -56,7 +56,8 @@ public partial class ServiceConnections : IAsyncDisposable
         catch (HttpRequestException) { _filterValues = new ServiceConnectionFilterValuesDto(); }
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// grid.</summary>
     internal Task<PaginatedResult<ServiceConnectionDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(20);
@@ -79,8 +80,7 @@ public partial class ServiceConnections : IAsyncDisposable
         StateHasChanged();
     }
 
-    // Recette R-226: a live change refreshes the grid in place. It used to call LoadData(new GridLoadArgs()),
-    // which fetched page 1 with no sort and no filter while the headers still showed them.
+    // Live changes refresh the current grid page while preserving its sort and filters.
     private async Task RefreshGridAsync()
     {
         try

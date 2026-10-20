@@ -94,10 +94,10 @@ else
                     @if (_model.RequireApproval)
                     {
                         <OmniFormField For="oe-pages-environments-environmentedit-numeric-1"><LabelContent>@L["ApprovalTimeoutMinutes"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.ApprovalTimeoutMinutes" Minimum="1" Maximum="10080" Id="oe-pages-environments-environmentedit-numeric-1" /></ChildContent></OmniFormField>
-                        <OmniFormField Label="@L["ApprovalInstructions"]" Description="@L["ApprovalInstructionsHelp"]" Id="ApprovalInstructionsField" For="ApprovalInstructions">
+                        <OmniFormField Label="@L["ApprovalInstructions"]" Help="@L["ApprovalInstructionsHelp"]" Id="ApprovalInstructionsField" For="ApprovalInstructions">
                             <OmniTextArea @bind-Value="_model.ApprovalInstructions"
 
-                                Id="ApprovalInstructions" Rows="2" AriaDescribedBy="ApprovalInstructionsField-description" />
+                                Id="ApprovalInstructions" Rows="2" AriaDescribedBy="ApprovalInstructionsField-help-content" />
                         </OmniFormField>
                     }
                     <OmniSwitch @bind-Value="_model.DastEnabled">@L["DastEnabled"]</OmniSwitch>
@@ -105,11 +105,10 @@ else
                     {
                         <OmniSwitch @bind-Value="_model.DastIsEphemeral">@L["DastEphemeral"]</OmniSwitch>
                         <OmniSwitch @bind-Value="_model.DastContainsRealData">@L["DastContainsRealData"]</OmniSwitch>
-                        <OmniFormField Label="@L["DastAllowedHosts"]" For="DastAllowedHosts">
+                        <OmniFormField Label="@L["DastAllowedHosts"]" Help="@L["DastAllowedHostsHelp"]" Id="DastAllowedHostsField" For="DastAllowedHosts">
                             <OmniTextArea @bind-Value="_model.DastAllowedHosts"
 
-                                Id="DastAllowedHosts" Rows="3" Placeholder="@L["PlaceholderAllowedHosts"]" />
-                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["DastAllowedHostsHelp"]</OmniText>
+                                Id="DastAllowedHosts" AriaDescribedBy="DastAllowedHostsField-help-content" Rows="3" Placeholder="@L["PlaceholderAllowedHosts"]" />
                         </OmniFormField>
                     }
                 </OmniStack>

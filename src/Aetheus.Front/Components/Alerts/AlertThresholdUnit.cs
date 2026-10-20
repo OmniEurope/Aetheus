@@ -4,14 +4,16 @@ namespace Aetheus.Front.Components.Alerts;
 
 /// <summary>
 /// The unit an alert threshold is compared in, as <c>AlertEvaluatorService.ReadMetricValue</c> reads the
-/// metric: CPU, memory and disk usage are percentages, free disk space and build cache size are GiB
-/// (SITE-FUNC-ALERT-UNIT-001: a "less than 20 GiB free" rule read as "less than 20%").
+/// metric: CPU, memory and disk usage are percentages, free disk space and build cache size are GiB,
+/// the clock offset is seconds (SITE-FUNC-ALERT-UNIT-001: a "less than 20 GiB free" rule read as
+/// "less than 20%").
 /// </summary>
 internal static class AlertThresholdUnit
 {
     public static string Of(MetricType metric) => metric switch
     {
         MetricType.DiskFree or MetricType.BuildCache => "GiB",
+        MetricType.ClockOffset => "s",
         _ => "%"
     };
 

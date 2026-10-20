@@ -2,11 +2,9 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// Recette R1-18 / R1-31 / R1-33: what each <see cref="PipelineArchitecture"/> proposes on the wizard's
-/// capabilities step (by the option names the wizard's address carries) and what it tells the
-/// project's adapters through <c>APPLICATION_HAS_*</c>.
-/// </summary>
+/// <summary> What each <see cref="PipelineArchitecture"/> proposes on the wizard's capabilities
+/// step (by the option names the wizard's address carries) and what it tells the project's adapters
+/// through <c>APPLICATION_HAS_*</c>. </summary>
 public static class PipelineSetupArchitecture
 {
     private static readonly HashSet<string> ApplicationCapabilities = new(StringComparer.Ordinal)
@@ -22,11 +20,9 @@ public static class PipelineSetupArchitecture
         "ci", "quality", "security", "packages"
     };
 
-    /// <summary>
-    /// An external repository gets only what needs no file in it (recette R1-33): every other template
-    /// calls an adapter under <c>.pipeline/scripts/</c> or reads <c>.gitleaks.toml</c>, which Aetheus
-    /// does not write into a repository it does not own.
-    /// </summary>
+    /// <summary> An external repository gets only the platform's own scans: every other template runs
+    /// build, test or deployment commands the project declares, or deploys what it builds, which
+    /// Aetheus does not do for an application it does not own (recette R1-33). </summary>
     private static readonly HashSet<string> ExternalCapabilities = new(StringComparer.Ordinal)
     {
         "external-security"

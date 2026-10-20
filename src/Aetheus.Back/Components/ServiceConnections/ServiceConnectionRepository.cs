@@ -21,7 +21,7 @@ public class ServiceConnectionRepository(AppDbContext db) : IServiceConnectionRe
         if (projectId.HasValue)
             query = query.Where(sc => sc.ProjectId == projectId);
 
-        // Recette R-224: the grid's column header filters, after the scope and before the count.
+        // The grid's column header filters, after the scope and before the count.
         query = ServiceConnectionListQuery.Columns.ApplyFilters(query, columnFilters);
 
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);

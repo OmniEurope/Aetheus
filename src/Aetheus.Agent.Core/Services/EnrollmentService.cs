@@ -53,9 +53,8 @@ public sealed class EnrollmentService(
         var registrationToken = configuration["Aetheus:RegistrationToken"];
         if (string.IsNullOrEmpty(registrationToken))
         {
-            // F-31: previously persisted via appsettings.json (Aetheus:Enrolled=true).
-            // Now we use a sidecar `.enrollment-state` file alongside `.credentials` so we
-            // never mutate config/secrets that may live in a read-only or templated location.
+            // Persists enrollment beside credentials in .enrollment-state so read-only or templated
+            // configuration files remain untouched.
             if (HasPriorEnrollmentMarker())
             {
                 logger.LogError("Agent was previously enrolled (.enrollment-state present) but .credentials is missing or unreadable. " +
@@ -89,8 +88,8 @@ public sealed class EnrollmentService(
             PipelineRunnerAvailable = pipelineRunnerAvailable,
             // S-DES-23: report the dev-only TLS-bypass mode at enrollment (known before first heartbeat).
             InsecureTls = _options.AllowInsecureCerts,
-            // PLAN-004 R-11: a keyed hash of the machine identity, so reinstalling the agent on this
-            // machine revives its (possibly retired) server instead of enrolling a new one.
+            // Send an application-keyed machine fingerprint so re-enrollment can revive the same
+            // server record.
             MachineIdHash = MachineIdentity.ReadHash()
         };
 
@@ -140,9 +139,18 @@ public sealed class EnrollmentService(
 
     private static List<string> BuildRegistrationCapabilities(bool dockerAvailable, bool pipelineRunnerAvailable)
     {
-        var capabilities = new HashSet<string>(AgentCapabilities.SoftwareCapabilities, StringComparer.Ordinal);
+        // pipeline.functions is published by this agent, not by the shared software list: only an agent
+        // that carries the function executor may receive type: aetheus tasks. deployment.functions waits
+        // for the first heartbeat, like deployment.apply, because it needs the probed deploy grant.
+        var capabilities = new HashSet<string>(AgentCapabilities.SoftwareCapabilities, StringComparer.Ordinal)
+        {
+            AgentCapabilities.PipelineFunctions
+        };
         if (!pipelineRunnerAvailable)
+        {
             capabilities.Remove(AgentCapabilities.PipelineBuild);
+            capabilities.Remove(AgentCapabilities.PipelineFunctions);
+        }
         if (dockerAvailable)
             capabilities.Add(AgentCapabilities.DockerExecution);
         return capabilities.Order(StringComparer.Ordinal).ToList();
@@ -329,16 +337,20 @@ public sealed class EnrollmentService(
             File.SetUnixFileMode(markerPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
 
-        // Best-effort: scrub the now-consumed registration token from appsettings.json so
-        // it can't be reused. We no longer write any "Enrolled" key into the file.
+        // Best-effort removal of the consumed registration token from appsettings.json prevents its
+        // reuse.
         ClearRegistrationTokenInConfig();
 
         logger.LogInformation("Wrote enrollment marker to {Path}", markerPath);
     }
 
-    private void ClearRegistrationTokenInConfig()
+    private void ClearRegistrationTokenInConfig() =>
+        ClearRegistrationTokenInConfig(Path.Combine(AppContext.BaseDirectory, "appsettings.json"), logger);
+
+    /// <summary>Blanks a non-empty <c>Aetheus:RegistrationToken</c> in the given settings file, atomically;
+    /// a file of any other shape is left as it was.</summary>
+    internal static void ClearRegistrationTokenInConfig(string appSettingsPath, ILogger logger)
     {
-        var appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         if (!File.Exists(appSettingsPath)) return;
 
         try
@@ -348,7 +360,7 @@ public sealed class EnrollmentService(
             if (node is not JsonObject root) return;
             if (root["Aetheus"] is not JsonObject aetheus) return;
             if (!aetheus.ContainsKey("RegistrationToken")) return;
-            if (string.IsNullOrEmpty(aetheus["RegistrationToken"]?.GetValue<string>())) return;
+            if (aetheus["RegistrationToken"] is not JsonValue token || !token.TryGetValue<string>(out var value) || value.Length == 0) return;
 
             aetheus["RegistrationToken"] = "";
 

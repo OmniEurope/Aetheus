@@ -61,7 +61,7 @@ public class AdminSettingsTests : BunitContext
         });
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // OnInitializedAsync loads settings, secrets and tokens in parallel into instance state.
         var settings = (List<AppSettingDto>)typeof(AdminSettings)
@@ -99,7 +99,7 @@ public class AdminSettingsTests : BunitContext
         SetupAllMocks();
         _handler.SetJsonResponse("api/settings/SiteName", true);
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var method = typeof(AdminSettings).GetMethod("SaveSetting", BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, ["SiteName"])!);
@@ -113,7 +113,7 @@ public class AdminSettingsTests : BunitContext
     {
         SetupAllMocks();
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var method = typeof(AdminSettings).GetMethod("AddSecret", BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);

@@ -16,11 +16,9 @@ namespace Aetheus.Back.Data.Migrations
                 type: "text",
                 nullable: true);
 
-            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: data change, no schema change (recette R-287). The
-            // secret history keeps the date, the author and the name, never the value. No binary reads
-            // VaultSecretVersions.EncryptedValue (the history DTO never carried it), so blanking the stored
-            // values is safe while the previous colour still serves. The column is dropped by the contract
-            // step of a later release. Irreversible by design: Down cannot bring the values back.
+            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: erase stored secret-history values that no
+            // supported binary reads while retaining metadata and schema. This erasure is
+            // irreversible; later column removal requires a separate contract migration.
             migrationBuilder.Sql("UPDATE \"VaultSecretVersions\" SET \"EncryptedValue\" = '' WHERE \"EncryptedValue\" <> '';");
         }
 

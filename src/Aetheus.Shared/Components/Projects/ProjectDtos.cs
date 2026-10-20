@@ -18,24 +18,22 @@ public sealed record ProjectDto
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 
-    /// <summary>Status of the most recent ROOT pipeline run across the project's pipelines (a run no
-    /// other run's step triggered), or null when the project has never been run. PLAN-003 lot 8 /
-    /// D24: the tile names the run a person launched, never one of its children, so there is no
-    /// "child of" line left to carry (S-UX-30).</summary>
+    /// <summary>Status of the selected root pipeline run, excluding runs triggered by another run
+    /// step; null when the project has never run.</summary>
     public PipelineStatus? LastRunStatus { get; init; }
     public DateTime? LastRunAt { get; init; }
     public int? LastRunId { get; init; }
     public string? LastRunName { get; init; }
 
-    /// <summary>PLAN-005 lot 7 / D45: the named run is a root run still Running (it wins over a newer
-    /// finished one), so the tile says "run in progress" rather than "last run".</summary>
+    /// <summary>Indicates the selected root run is still Running, taking precedence over a newer
+    /// completed run.</summary>
     public bool LastRunIsActive { get; init; }
 
     /// <summary>The step the active run is on, as "stage · step"; null when the run is not active.</summary>
     public string? LastRunCurrentStep { get; init; }
 
-    /// <summary>Current project-wide A-F grade: the latest candidate run's (recette R2-024).
-    /// Null when no complete grade has been produced yet.</summary>
+    /// <summary>Current project-wide A-F grade: the latest candidate run's. Null when no complete
+    /// grade has been produced yet.</summary>
     public AnalysisGrade? LatestGateGrade { get; init; }
 
     /// <summary>Most recent git activity for the project: the latest of the internal repository's
@@ -71,12 +69,13 @@ public sealed record ProjectDetailDto
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 
-    /// <summary>Current project-wide A-F grade: the latest candidate run's (recette R2-024).
-    /// Null when no complete grade has been produced yet.</summary>
+    /// <summary>Current project-wide A-F grade: the latest candidate run's. Null when no complete
+    /// grade has been produced yet.</summary>
     public AnalysisGrade? LatestGateGrade { get; init; }
 
-    /// <summary>Recette R2-024: the latest candidate's root run that <see cref="LatestGateGrade"/> was
-    /// read from (its trigger children merged, the worst grade kept, as on the run page), to open it.</summary>
+    /// <summary>The latest candidate's root run that <see cref="LatestGateGrade"/> was read from
+    /// (its trigger children merged, the worst grade kept, as on the run page), to open
+    /// it.</summary>
     public int? LatestGateGradeRunId { get; init; }
 
     /// <summary>Most recent git activity (internal last push / external last sync); null when the
@@ -94,9 +93,9 @@ public sealed record ProjectDetailDto
     // (Servers / Releases / Vaults / Libraries / Environments) without N extra round-trips.
     public int ServerCount { get; init; }
 
-    /// <summary>PLAN-003 lot 29 / D23: distinct servers the project reaches through its own
-    /// environments. Kept apart from <see cref="ServerCount"/>, which is what the Servers section
-    /// actually lists; the onboarding step is satisfied by either.</summary>
+    /// <summary>Counts distinct environment-linked servers separately from <see
+    /// cref="ServerCount"/>, which represents the Servers section rows. Either count can satisfy
+    /// onboarding.</summary>
     public int EnvironmentServerCount { get; init; }
 
     public int ReleaseCount { get; init; }

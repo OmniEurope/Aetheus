@@ -20,9 +20,9 @@ public sealed record DotnetTestClassificationFailure(string Reason);
 /// disagreement between them is itself a refusal: an exit code of 0 with failures recorded, or a
 /// non-zero exit with nothing failed, means one of the two is lying and neither can be graded.
 ///
-/// This rule is also implemented in <c>deploy/scripts/classify-dotnet-test-result.mjs</c>, for the
-/// pipeline steps that orchestrate their own suites through shell. The two must never diverge;
-/// <c>DotnetTestClassifierConformanceTests</c> feeds the same corpus to both and compares verdicts.
+/// The shell twin of this rule (<c>deploy/scripts/classify-dotnet-test-result.mjs</c>) was deleted with
+/// the last pipeline step that ran it; <c>DotnetTestClassifierVerdictTests</c> pins the verdicts both gave
+/// on a shared corpus.
 /// </summary>
 public static class DotnetTestResultClassifier
 {
@@ -93,8 +93,27 @@ public static class DotnetTestResultClassifier
                 "TRX evidence must contain exactly one result summary and one counter set.");
 
         var summary = Attributes(summaries[0].Groups[1].Value);
-        var counters = Attributes(counterNodes[0].Groups[1].Value);
+        var counters = ReadCounters(Attributes(counterNodes[0].Groups[1].Value));
+        if (!counters.IsValue) return counters.Failure;
 
+        var outcome = summary.GetValueOrDefault("outcome");
+        if (outcome is not ("Completed" or "Failed"))
+            return new DotnetTestClassificationFailure(
+                $"TRX outcome '{outcome ?? "missing"}' is incomplete.");
+
+        if (counters.Value.TechnicalFailures > 0)
+            return new DotnetTestClassificationFailure("TRX records a technical test-host failure.");
+
+        return new TrxEvidence(counters.Value.Failed, outcome);
+    }
+
+    private readonly record struct TrxCounters(int Failed, int TechnicalFailures);
+
+    /// <summary>The failed and technical-failure counts, once every counter is present and the
+    /// execution counters prove at least one executed test.</summary>
+    private static OneOf<TrxCounters, DotnetTestClassificationFailure> ReadCounters(
+        IReadOnlyDictionary<string, string> counters)
+    {
         if (Counter(counters, "total") is not { } total
             || Counter(counters, "executed") is not { } executed
             || Counter(counters, "passed") is not { } passed
@@ -106,15 +125,7 @@ public static class DotnetTestResultClassifier
             return new DotnetTestClassificationFailure(
                 "TRX execution counters are inconsistent or prove no executed test.");
 
-        var outcome = summary.GetValueOrDefault("outcome");
-        if (outcome is not ("Completed" or "Failed"))
-            return new DotnetTestClassificationFailure(
-                $"TRX outcome '{outcome ?? "missing"}' is incomplete.");
-
-        if (technicalFailures > 0)
-            return new DotnetTestClassificationFailure("TRX records a technical test-host failure.");
-
-        return new TrxEvidence(failed, outcome);
+        return new TrxCounters(failed, technicalFailures);
     }
 
     /// <summary>Null when any of the technical counters is absent or malformed.</summary>

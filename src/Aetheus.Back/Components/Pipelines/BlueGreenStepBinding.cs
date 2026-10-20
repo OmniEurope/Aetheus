@@ -120,10 +120,8 @@ internal sealed record BlueGreenStepBinding
     /// </summary>
     internal const string ComposeEnvPrefix = "AETHEUS_BG_COMPOSE_ENV_";
 
-    /// <summary>
-    /// PLAN-003 2.7: the confirmation window a switch arms on the host, in minutes. Only a switch arms
-    /// one; empty or 0 means none. Bounded, because a window of hours is not a confirmation any more.
-    /// </summary>
+    /// <summary>Only a switch arms a bounded host confirmation window; empty or zero means
+    /// none.</summary>
     private static bool TryConfirmMinutes(OperationKind operation, string raw, out int minutes, out string error)
     {
         minutes = 0;
@@ -193,8 +191,7 @@ internal sealed record BlueGreenStepBinding
                 error = $"'compose_env' lists '{name}' twice.";
                 return false;
             }
-            // Defined is what counts, not non-empty: a library may hold an empty value on purpose
-            // (PLAN-003 2.1), and forwarding it keeps Compose from reading an undefined name instead.
+            // An explicitly empty library value is still defined and must be forwarded to Compose.
             if (baseVariables.TryGetValue(name, out var value))
             {
                 composeEnv.Add(new KeyValuePair<string, string>(name, value));

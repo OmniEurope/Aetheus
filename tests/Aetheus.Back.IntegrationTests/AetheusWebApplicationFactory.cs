@@ -64,6 +64,8 @@ public sealed class AetheusWebApplicationFactory : WebApplicationFactory<Program
         builder.UseSetting("Auth:EncryptionSalt", "aW50ZWdyYXRpb24tc2FsdC0xNi1ieXRlcy1taW4h");
         builder.UseSetting("Auth:AdminPassword", AdminPassword);
         builder.UseSetting("RateLimiting:Disabled", "true");
+        // Recette R3-7: no nightly AI model list read in a test host (seeded profiles hold fake keys).
+        builder.UseSetting("AiTasks:ModelListRefresh:Enabled", "false");
         // Every factory may seed the same demo repository concurrently. Never share the default
         // bin/.../data paths between hosts or test runs: a stale bare Git ref otherwise makes a
         // fresh database seed fail with "reference already exists".

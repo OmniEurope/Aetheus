@@ -1,10 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* Recette R-276 / R-373: a long identifier (a commit SHA, a c-/vc- release name, an artifact digest, a
-   release tag) in one short form everywhere: its prefix and the first eight characters; the whole value
-   on hover and in the clipboard. A short value is shown as it is, and gets no copy button unless it was
-   shortened or the host asks for one. With an Href the short form is the link to the identified object
-   (ShortIdentifierLinkAuditTests requires one); a null Href means no page is known and renders text. *@
+@* Use one short identifier form while keeping the full value available on hover and copy so dense
+   lists remain readable; link only when the identified object has a known page. *@
 <span class="@CssClass" title="@Value">
     @if (string.IsNullOrEmpty(Href))
     {

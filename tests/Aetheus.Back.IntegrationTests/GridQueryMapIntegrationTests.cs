@@ -5,11 +5,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-008 lot 12: every operator of the grid column filters, translated by Npgsql and run on
-/// PostgreSQL. The unit suite runs them on LINQ to objects; only this layer proves the expressions
-/// the allow-list builds are ones the provider can translate, with the same results.
-/// </summary>
+/// <summary>Executes grid-filter expressions through Npgsql on PostgreSQL to verify provider
+/// translation and results beyond LINQ-to-objects tests.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class GridQueryMapIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {
@@ -83,7 +80,7 @@ public sealed class GridQueryMapIntegrationTests(PostgresFixture fixture) : Rela
             Logic = GridFilterLogic.Or
         }));
         Assert.Equal(["web-back-02"], await Names(F("name", GridFilterOperator.Contains, "web"), F("docker", GridFilterOperator.Equals, "false")));
-        // Recette R-210: checkable lists, translated to one array parameter.
+        // Checkable lists, translated to one array parameter.
         Assert.Equal(["db-main", "web-back-02", "Web-Front-01"], await Names(F("status", GridFilterOperator.In, "Online\u001FOffline")));
         Assert.Equal(["db-main"], await Names(F("status", GridFilterOperator.NotIn, "Online")));
         Assert.Equal(["db-main", "Web-Front-01"], await Names(F("name", GridFilterOperator.In, "WEB-FRONT-01\u001Fdb-main")));

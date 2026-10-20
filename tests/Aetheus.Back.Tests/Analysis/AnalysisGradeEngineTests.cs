@@ -102,8 +102,8 @@ public sealed class AnalysisGradeEngineTests
         Assert.Equal(AnalysisGrade.F, result.Grade);
     }
 
-    // Recette R2-119: A = no open finding, F = one critical, between them the weighted score of the
-    // open findings (info 0.5, low 1, medium 3, high 10) against B <= 5, C <= 15, D <= 30, E above.
+    // A = no open finding, F = one critical, between them the weighted score of the open findings
+    // (info 0.5, low 1, medium 3, high 10) against B <= 5, C <= 15, D <= 30, E above.
     [Theory]
     [InlineData(0, 0, 0, 0, 0, AnalysisGrade.A)]
     [InlineData(0, 0, 0, 1, 0, AnalysisGrade.B)]
@@ -180,7 +180,7 @@ public sealed class AnalysisGradeEngineTests
     public void Evaluate_CountedFindingScore_GradesTheNumberOfOpenFindings(
         int critical, int high, int medium, int low, int info, AnalysisGrade expected)
     {
-        // Recette R1-4: no weighting, every open finding counts one; a critical one still gives F.
+        // No weighting, every open finding counts one; a critical one still gives F.
         var report = FindingsReport(
             Enumerable.Repeat(AnalysisSeverity.Critical, critical)
                 .Concat(Enumerable.Repeat(AnalysisSeverity.High, high))

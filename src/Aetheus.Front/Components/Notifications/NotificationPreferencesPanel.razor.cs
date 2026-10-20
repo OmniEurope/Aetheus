@@ -37,7 +37,7 @@ public partial class NotificationPreferencesPanel
 
     private sealed record PreferenceGroup(string TitleKey, List<NotificationPreferenceDto> Items);
 
-    /// <summary>Recette R-233: pipelines, quality, supervision, then everything else, in that order.</summary>
+    /// <summary>Pipelines, quality, supervision, then everything else, in that order.</summary>
     private IEnumerable<PreferenceGroup> Groups =>
         _preferences
             .GroupBy(preference => GroupKey(preference.EventType))
@@ -79,7 +79,7 @@ public partial class NotificationPreferencesPanel
         Toast.Success("Saved", "PreferencesSaved");
     }
 
-    /// <summary>Recette R2-034: follows every project the user can read, then lists them.</summary>
+    /// <summary>Follows every project the user can read, then lists them.</summary>
     private async Task FollowAllAsync()
     {
         if (_followingAll) return;
@@ -110,7 +110,7 @@ public partial class NotificationPreferencesPanel
             Toast.Error("Error", "OperationFailed");
             return;
         }
-        _subscriptions.Remove(subscription);
+        _subscriptions = [.. _subscriptions.Where(s => s.ProjectId != subscription.ProjectId)];
         Toast.Success("Saved", "NotificationUnsubscribed");
     }
 }

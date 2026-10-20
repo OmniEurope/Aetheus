@@ -13,11 +13,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.PortRegistry;
 
-/// <summary>
-/// PLAN-005 lot 5, over the real registry and a real database. What matters here is the identity the
-/// reservation carries and the refusals: a library with no project, or a key without the PORT_ prefix,
-/// would both produce a variable the pipeline guard never protects.
-/// </summary>
+/// <summary>Exercise reservation ownership and validation, rejecting libraries without projects and
+/// keys without PORT_ because the pipeline guard cannot protect them.</summary>
 public sealed class PortAllocationServiceTests : IDisposable
 {
     private static readonly DateTime Origin = new(2026, 9, 7, 12, 0, 0, DateTimeKind.Utc);
@@ -238,9 +235,8 @@ public sealed class PortAllocationServiceTests : IDisposable
     [Fact]
     public async Task CheckLibraryPortsAsync_JudgesEachPortRelativeToTheLibrarysProject()
     {
-        // PLAN-003 lot 24 / D14: the library belongs to project 4, so its own declared port is its own
-        // and the port project 9 holds is an obstacle. Without the project passed down, both would
-        // read as taken.
+        // Pass the library project into port checks to distinguish its own declaration from another
+        // project reservation.
         _db.VariableLibraryEntries.AddRange(
             new VariableLibraryEntry { VariableLibraryId = 100, Key = "PORT_FRONT", Value = "10031" },
             new VariableLibraryEntry { VariableLibraryId = 100, Key = "PORT_BACK", Value = "10041" });

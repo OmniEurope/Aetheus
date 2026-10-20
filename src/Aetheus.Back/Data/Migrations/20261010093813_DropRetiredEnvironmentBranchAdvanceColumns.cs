@@ -4,20 +4,17 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Aetheus.Back.Data.Migrations
 {
-    /// <summary>
-    /// Recette R2-001, contract step 2 of 2: drops Environments.AdvanceBranchOnDeploy and
-    /// Environments.AdvanceBranchName. Step 1 (20261002163217_UnmapRetiredEnvironmentBranchAdvance)
-    /// stopped mapping them and shipped in v1.3.6 and v1.3.9, so the previous colour (V-1) neither
-    /// reads nor writes them any more. Named as a reviewed contract drop in ExpandContractMigrationAuditTests.
-    /// </summary>
+    /// <summary>Drops the environment branch-advance columns after their mappings were removed in
+    /// the supported preceding release. ExpandContractMigrationAuditTests records this reviewed
+    /// contract drop.</summary>
     public partial class DropRetiredEnvironmentBranchAdvanceColumns : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: contract drop (R2-001, user authorisation 2026-10-02).
-            // V-1 (v1.3.9) carries 20261002163217_UnmapRetiredEnvironmentBranchAdvance and maps neither
-            // column, so dropping them cannot break the colour still serving nor the V/V-1 rollback gate.
+            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: contract drop; the supported preceding release
+            // v1.3.9 maps neither column after 20261002163217_UnmapRetiredEnvironmentBranchAdvance,
+            // preserving shared-schema rollback compatibility.
             migrationBuilder.Sql("ALTER TABLE \"Environments\" DROP COLUMN IF EXISTS \"AdvanceBranchOnDeploy\";");
 
             // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: second column of the same reviewed contract drop.

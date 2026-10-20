@@ -18,7 +18,7 @@ public readonly record struct MailboxResult<T>(T? Value, HttpStatusCode Status)
     public bool Locked => Status == HttpStatusCode.Conflict;
 }
 
-/// <summary>Recette R1-17: the integrated mailbox of a mail account (IMAP and SMTP through the backend).</summary>
+/// <summary>The integrated mailbox of a mail account (IMAP and SMTP through the backend).</summary>
 public sealed class MailboxApi(HttpClient http) : ApiClientBase(http)
 {
     private static string Base(int serverId, int accountId) => $"api/servers/{serverId}/mail/accounts/{accountId}/mailbox";
@@ -34,6 +34,22 @@ public sealed class MailboxApi(HttpClient http) : ApiClientBase(http)
 
     public async Task<ApiStatus> LockAsync(int serverId, int accountId, CancellationToken ct = default) =>
         await PostNoBodyAsync($"{Base(serverId, accountId)}/lock", ct).ConfigureAwait(false);
+
+    /// <summary>Recette R1-41: an administrator opens the mailbox without its password (traced in the audit log).</summary>
+    public Task<MailboxResult<MailboxAccessDto>> OpenAsAdministratorAsync(int serverId, int accountId, CancellationToken ct = default) =>
+        SendAsync<MailboxAccessDto>(HttpMethod.Post, $"{Base(serverId, accountId)}/open-as-administrator", null, ct);
+
+    /// <summary>Recette R1-41: one page of the mailboxes of every server the reader sees ("Messagerie" page).</summary>
+    public Task<PaginatedResult<MailboxDirectoryEntryDto>?> GetDirectoryAsync(
+        int page, int pageSize, string? search, string? sortBy, bool sortDescending, CancellationToken ct = default) =>
+        GetJsonAsync<PaginatedResult<MailboxDirectoryEntryDto>>("api/mail/mailboxes", new Dictionary<string, string?>
+        {
+            ["page"] = page.ToString(CultureInfo.InvariantCulture),
+            ["pageSize"] = pageSize.ToString(CultureInfo.InvariantCulture),
+            ["search"] = search,
+            ["sortBy"] = sortBy,
+            ["sortDescending"] = sortDescending ? "true" : "false"
+        }, ct);
 
     public Task<MailboxResult<List<MailboxFolderDto>>> GetFoldersAsync(int serverId, int accountId, CancellationToken ct = default) =>
         SendAsync<List<MailboxFolderDto>>(HttpMethod.Get, $"{Base(serverId, accountId)}/folders", null, ct);

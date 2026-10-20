@@ -31,8 +31,8 @@ public class AdministrationTests : BunitContext
         Assert.Contains("Dashboards", cut.Markup);
     }
 
-    /// <summary>Recette R-456: one tile per page of the side menu's Administration group, none missing,
-    /// with the icon that menu gives it, and a description under each title.</summary>
+    /// <summary>One tile per page of the side menu's Administration group, none missing, with the
+    /// icon that menu gives it, and a description under each title.</summary>
     [Fact]
     public void Tiles_MatchTheAdministrationMenu_PageForPageAndIconForIcon()
     {

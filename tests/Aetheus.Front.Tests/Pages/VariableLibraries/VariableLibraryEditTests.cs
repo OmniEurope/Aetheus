@@ -182,7 +182,8 @@ public class VariableLibraryEditTests : BunitContext
         SetFormValue(cut.Instance, "_newEntry", "Key", "NEW_VAR");
         await cut.InvokeAsync(() => InvokeFormSubmitAsync(cut.Instance, "AddEntry", "_newEntry"));
 
-        // Recette R2-065: one error toast saying the key exists (the test localizer returns the key), never a silent no-op nor a success.
+        // One error toast saying the key exists (the test localizer returns the key), never a
+        // silent no-op nor a success.
         var toasts = Services.GetRequiredService<OmniOverlayService>().Toasts();
         var error = Assert.Single(toasts, m => m.Severity == OmniSeverity.Danger);
         Assert.Contains("LibraryEntryKeyExists", error.Summary + error.Detail, StringComparison.Ordinal);

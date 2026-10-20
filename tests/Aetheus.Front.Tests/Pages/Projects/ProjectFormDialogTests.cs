@@ -66,6 +66,7 @@ public class ProjectFormDialogTests : BunitContext
         Assert.True(isNew);
         Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Create"));
         Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Delete"));
+        Assert.Null(cut.FindMenuItem("Delete"));
     }
 
     [Fact]
@@ -141,9 +142,10 @@ public class ProjectFormDialogTests : BunitContext
     {
         var cut = Render<ProjectFormDialog>(p => p.Add(x => x.Project, MakeProject()));
 
-        // Edit mode: submit label flips to "Save", the Delete button appears, and the Status selector shows.
+        // Edit mode: submit label flips to "Save", Delete appears in the "More actions" menu (STD-BTN
+        // detection 11), and the Status selector shows.
         Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Save"));
-        Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Delete"));
+        Assert.NotNull(cut.FindMenuItem("Delete"));
         Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Create"));
         Assert.Contains("Status", cut.Markup);
     }

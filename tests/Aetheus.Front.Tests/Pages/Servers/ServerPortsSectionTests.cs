@@ -7,11 +7,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// PLAN-005 lot 1. The registry page is the only place an operator can see who holds a port, so the
-/// guards here are about what it actually shows: the reservations, the holder, and the write-gated
-/// controls - never a release button offered to someone the API will refuse.
-/// </summary>
+/// <summary>The port-registry view exposes reservations and holders while withholding write actions
+/// from unauthorized readers.</summary>
 public class ServerPortsSectionTests : BunitContext
 {
     private static readonly DateTime Declared = new(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc);
@@ -38,8 +35,8 @@ public class ServerPortsSectionTests : BunitContext
         }
     ];
 
-    /// <summary>The grid's rows only: the Listening header filter (recette R-210) lists every state's
-    /// word, so the whole markup no longer tells which state a row reads.</summary>
+    /// <summary>Assertions isolate rows because header-filter choices also contain status
+    /// labels.</summary>
     private static string Rows(IRenderedComponent<ServerPortsSection> cut) =>
         string.Concat(cut.FindAll("tbody tr").Select(row => row.InnerHtml));
 
@@ -124,7 +121,7 @@ public class ServerPortsSectionTests : BunitContext
         Assert.Contains("10031", cut.Markup);
     }
 
-    // --- PLAN-005 lot 2: the observation column, the scan banner and the convert action ---
+    // Listener observations, scan progress and conversion.
 
     [Fact]
     public void NeverScanned_ShowsUnknownRatherThanClaimingNothingListens()
@@ -333,7 +330,7 @@ public class ServerPortsSectionTests : BunitContext
         Assert.False(button.HasAttribute("disabled"));
     }
 
-    // --- PLAN-005 lot 4: allocation and the allocation window ---
+    // Allocation and allocation windows.
 
     [Fact]
     public void AllocationWindow_ShowsWhetherItIsInheritedOrSetHere()
@@ -359,7 +356,8 @@ public class ServerPortsSectionTests : BunitContext
     {
         var cut = RenderWith(ThreeReservations());
 
-        cut.FindAll("button").First(button => button.TextContent.Contains("PortAllocate", StringComparison.Ordinal)).Click();
+        // Allocate sits in the "More actions" menu beside its count (STD-BTN detection 11).
+        cut.FindMenuItem("PortAllocate")!.Click();
 
         Assert.Contains("PortHolderRequired", cut.Markup);
         Assert.DoesNotContain(_handler!.Requests, request =>
@@ -404,5 +402,28 @@ public class ServerPortsSectionTests : BunitContext
 
         Assert.Null(outcome.Value);
         Assert.Contains("portfolio-prod-front", outcome.Error!.Message);
+    }
+
+    [Fact]
+    public void AnUnreadableRegistry_EmptiesTheGridAndSaysSo()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        handler.SetResponse(HttpMethod.Get, "/ports", HttpStatusCode.InternalServerError);
+        handler.SetJsonResponse(HttpMethod.Get, "/ports/range", new PortRangeDto
+        {
+            From = PortRegistryLimits.DefaultRangeFrom,
+            To = PortRegistryLimits.DefaultRangeTo,
+            IsExplicit = false
+        });
+        handler.SetPaginatedJsonResponse(HttpMethod.Get, "/projects", new List<ProjectDto>());
+
+        var cut = Render<ServerPortsSection>(parameters => parameters
+            .Add(c => c.ServerId, 1)
+            .Add(c => c.AgentOnline, true));
+
+        cut.WaitForAssertion(() => Assert.Contains(Services.Toasts(), toast =>
+            toast.Severity == OmniEurope.Blazor.Components.OmniSeverity.Danger
+            && (toast.Summary == "PortRegistryLoadFailed" || toast.Detail == "PortRegistryLoadFailed")));
+        Assert.DoesNotContain("portfolio-prod-front", cut.Markup);
     }
 }

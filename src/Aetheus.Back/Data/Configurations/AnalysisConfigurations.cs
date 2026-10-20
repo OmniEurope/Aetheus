@@ -53,7 +53,7 @@ internal sealed class AnalysisFindingConfiguration : IEntityTypeConfiguration<An
         builder.HasIndex(e => new { e.ProjectId, e.Fingerprint, e.FingerprintVersion }).IsUnique();
         builder.HasIndex(e => new { e.ProjectId, e.Status, e.Severity });
         builder.HasIndex(e => new { e.ProjectId, e.LastSeenAt });
-        // Recette R-485: the stamp of a run's result reads the project's latest finding change.
+        // The stamp of a run's result reads the project's latest finding change.
         builder.HasIndex(e => new { e.ProjectId, e.UpdatedAt });
         builder.HasOne(e => e.Organization).WithMany().HasForeignKey(e => e.OrganizationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(e => e.Project).WithMany().HasForeignKey(e => e.ProjectId).OnDelete(DeleteBehavior.Cascade);

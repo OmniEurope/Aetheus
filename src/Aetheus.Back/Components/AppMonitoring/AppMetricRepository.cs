@@ -11,7 +11,7 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>Recette R-477: read from the names table, one row per name, not from the samples.</summary>
+    /// <summary>Read from the names table, one row per name, not from the samples.</summary>
     public async Task<List<string>> GetMetricNamesAsync(int appId, CancellationToken ct = default)
     {
         return await db.AppMetricNames
@@ -96,13 +96,8 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
             .ToListAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// The attribute groups of one metric, the most recently reported first. The chart selects the
-    /// first group by default, and the order used to be alphabetical: the <c>null</c> group left by
-    /// samples stored before attributes were kept sorted first, had nothing in the last 24 hours, and
-    /// every multi-group metric opened on "not enough data points" while its live series were
-    /// arriving (measured on production, 2026-09-12: 27 of 44 metrics opened empty, all 44 had data).
-    /// </summary>
+    /// <summary>Attribute groups are ordered by most recent observation so the chart defaults to a
+    /// live series.</summary>
     public async Task<List<string?>> GetMetricAttributeGroupsAsync(
         int appId, string metricName, CancellationToken ct = default)
     {
@@ -134,8 +129,8 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
             .MaxAsync(m => (DateTime?)m.Timestamp, ct).ConfigureAwait(false);
         if (newest is null) return [];
 
-        // Recette R2-082: a route is exported only for a minute in which it was called, so its newest
-        // point can be hours older than the newest export.
+        // A route is exported only for a minute in which it was called, so its newest point can be
+        // hours older than the newest export.
         return await GetLatestPerSeriesAsync(appId, metricNames, newest.Value - lookback, newest.Value, ct)
             .ConfigureAwait(false);
     }
@@ -236,9 +231,7 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
 
     public async Task<int> AggregateHourAsync(DateTime hourUtc, CancellationToken ct = default)
     {
-        // R2-020: one completed hour, one application at a time. The sweep used to read every raw sample
-        // from the oldest hour still missing rollups up to the last one, for every application at once:
-        // the 48-hour startup catch-up raised an OutOfMemoryException in a 1 GB container.
+        // Aggregate one completed hour and one application at a time to bound memory.
         if (!await MissesRollupsAsync(appId: null, hourUtc, ct).ConfigureAwait(false))
             return 0;
 
@@ -325,7 +318,7 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
         }
 
         if (toInsert.Count == 0) return 0;
-        // R-462: a concurrent sweep that wrote some of these series first is not an error.
+        // A concurrent sweep that wrote some of these series first is not an error.
         return await HourlyRollupInsert.AddMissingAsync(db, toInsert, async token =>
         {
             var present = await RolledUpKeysAsync(appId, hourUtc, token).ConfigureAwait(false);
@@ -349,7 +342,7 @@ public sealed class AppMetricRepository(AppDbContext db) : IAppMetricRepository
     {
         if (db.Database.IsRelational())
         {
-            // R-458: in batches of PurgeBatchSize, oldest identifiers first.
+            // In batches of PurgeBatchSize, oldest identifiers first.
             var purged = 0;
             int deleted;
             do

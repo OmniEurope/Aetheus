@@ -14,11 +14,8 @@ using static Aetheus.Back.Tests.Servers.RetiredServerScenario;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>
-/// PLAN-004 R-11: deleting a server retires it. The row and every link survive, the agent can no
-/// longer authenticate, and the server leaves lists, selectors and dispatch; only an explicit purge
-/// of a retired server erases it, backup policies included.
-/// </summary>
+/// <summary>Retirement preserves rows and links while revoking agent access and hiding the server;
+/// explicit purge removes retired servers and their backup policies.</summary>
 public sealed class ServerRetirementLifecycleTests
 {
     private readonly RetiredServerScenario _scenario = new();

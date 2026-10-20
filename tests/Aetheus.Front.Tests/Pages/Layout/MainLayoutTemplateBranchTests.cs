@@ -96,7 +96,8 @@ public class MainLayoutTemplateBranchTests : BunitContext
         Assert.Empty(cut.FindAll(".omni-app-menu__trigger-name"));
     }
 
-    /// <summary>PLAN-005 lot 8 / D47: a URL pasted without a session keeps its page for after the login.</summary>
+    /// <summary>Preserve a pasted URL as the post-login return page when the session is
+    /// absent.</summary>
     [Fact]
     public void UnauthenticatedUser_OnAPage_IsSentToLoginWithThatPage()
     {
@@ -122,7 +123,7 @@ public class MainLayoutTemplateBranchTests : BunitContext
         ]));
         cut.Render();
 
-        // PLAN-003 lot 1: setting breadcrumb items paints nothing here; the page header draws them.
+        // Setting breadcrumb items paints nothing here; the page header draws them.
         Assert.DoesNotContain("omni-breadcrumb", cut.Markup);
         Assert.DoesNotContain("web-01", cut.Markup);
         Assert.DoesNotContain("breadcrumb-slot", cut.Markup);
@@ -141,7 +142,7 @@ public class MainLayoutTemplateBranchTests : BunitContext
 
         // Click the trigger - the real path that opens the menu.
         cut.Find(".omni-app-menu__trigger").Click();
-        cut.WaitForElement(".omni-app-menu__card", TimeSpan.FromSeconds(10));
+        cut.WaitForElement(".omni-app-menu__card");
 
         Assert.Equal("user", cut.Find(".omni-app-menu__identity .omni-app-menu__label").TextContent);
         // Non-admin user → "User" role badge (not "Admin").
@@ -162,32 +163,33 @@ public class MainLayoutTemplateBranchTests : BunitContext
         var cut = Render<MainLayout>();
 
         cut.Find(".omni-app-menu__trigger").Click();
-        cut.WaitForElement(".omni-app-menu__card", TimeSpan.FromSeconds(10));
+        cut.WaitForElement(".omni-app-menu__card");
 
         Assert.Equal("Admin", cut.Find(".omni-app-menu__identity .omni-badge").TextContent.Trim());
     }
 
-    // ── Mode row: dark by default; picking light stores it and repaints ─────────
+    // ── Mode row: dark by default; picking light keeps it in the user's appearance ─
 
     [Fact]
-    public async Task ModeRow_DefaultsToDark_AndPickingLightStoresAndRepaints()
+    public async Task ModeRow_DefaultsToDark_AndPickingLightKeepsItInTheUsersAppearance()
     {
         RegisterWithTaskTracker();
         var cut = Render<MainLayout>();
 
         cut.Find(".omni-app-menu__trigger").Click();
-        cut.WaitForElement(".omni-app-menu__card", TimeSpan.FromSeconds(10));
-        // OE's order: light, dark, system; the pressed one is the stored mode (dark when nothing is stored).
+        cut.WaitForElement(".omni-app-menu__card");
+        // OE's order: light, dark, system; the pressed one is the user's mode (dark, the Aetheus default, when
+        // nothing is chosen). The menu binds no appearance: it follows OE's OmniAppearanceState.
         var modes = cut.FindAll(".omni-app-menu__mode");
         Assert.Equal(["false", "true", "false"], modes.Select(mode => mode.GetAttribute("aria-checked")));
 
         // ClickAsync: the handler is async (it stores and repaints), so the dispatch task is awaited.
         await modes[0].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
-        Assert.Equal(OmniAppearance.Light, Services.GetRequiredService<Aetheus.Front.Components.Settings.SiteAppearanceState>().Appearance);
-        Assert.Contains(JSInterop.Invocations, i => i.Identifier == "localStorage.setItem"
-            && Equals(i.Arguments[0], StorageKeys.Theme) && Equals(i.Arguments[1], "light"));
-        // Recette R2-112: the mode is no longer copied on the document root; the scope carries it.
+        Assert.Equal(OmniAppearance.Light, Services.GetRequiredService<OmniAppearanceState>().Appearance);
+        Assert.DoesNotContain(JSInterop.Invocations, i => i.Identifier == "localStorage.setItem"
+            && Equals(i.Arguments[0], StorageKeys.Theme));
+        // The theme scope owns the resolved mode instead of the document root.
         Assert.DoesNotContain(JSInterop.Invocations, i => i.Identifier == "Aetheus.setOmniTheme");
         cut.WaitForAssertion(() => Assert.Equal("true", cut.FindAll(".omni-app-menu__mode")[0].GetAttribute("aria-checked")));
     }

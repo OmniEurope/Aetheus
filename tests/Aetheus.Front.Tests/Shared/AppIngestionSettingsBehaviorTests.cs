@@ -26,7 +26,7 @@ public sealed class AppIngestionSettingsBehaviorTests : BunitContext
                 AllowedOrigins = ["https://example.test"],
                 StorageBudgetBytes = 104_857_600
             });
-        // Recette R2-007: the storage line under the budget field reads the audience summary.
+        // The storage line under the budget field reads the audience summary.
         _handler.SetJsonResponse("/web-analytics?days=30", new AppWebAnalyticsSummaryDto());
     }
 
@@ -245,7 +245,7 @@ public sealed class AppIngestionSettingsBehaviorTests : BunitContext
             new() { Id = 8, MonitoredAppId = 8, MetricName = "current-app" }
         });
         var cut = Render<AppIngestionSettings>(parameters => parameters.Add(component => component.AppId, 7));
-        await oldLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), Xunit.TestContext.Current.CancellationToken);
+        await oldLoadStarted.Task.WaitAsync(Aetheus.Front.Tests.TestDoubles.HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
 
         cut.Render(parameters => parameters.Add(component => component.AppId, 8));
         cut.WaitForAssertion(() => Assert.Contains("current-app", cut.Markup, StringComparison.Ordinal));
@@ -297,7 +297,7 @@ public sealed class AppIngestionSettingsBehaviorTests : BunitContext
             && request.Url.EndsWith(
                 "api/appmonitoring/apps/7/web-analytics/configuration",
                 StringComparison.Ordinal));
-        // Recette R2-007: the save is followed by a read of the storage line, so the PUT is looked up by method.
+        // The save is followed by a read of the storage line, so the PUT is looked up by method.
         var body = _handler.RequestDetails.Last(request => request.Method == "PUT").Body;
         Assert.Contains("\"siteId\":\"portfolio-prod\"", body, StringComparison.Ordinal);
         Assert.DoesNotContain("pseudonym", body, StringComparison.OrdinalIgnoreCase);

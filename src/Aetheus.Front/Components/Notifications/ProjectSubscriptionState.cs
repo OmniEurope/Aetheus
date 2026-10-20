@@ -3,13 +3,8 @@ using System.Net.Http;
 
 namespace Aetheus.Front.Components.Notifications;
 
-/// <summary>
-/// Recette R-431: whether the current user follows a project, read once per project by the project
-/// header and handed to its "..." menu. The menu draws its entries only while it is open, so an entry
-/// that fetched this state itself asked the API at every opening and appeared a moment after the
-/// others: the menu opened on "Edit" alone, then "Follow" pushed it down under the pointer. Held here,
-/// the state is known before the menu opens and every entry shows at once, in its place.
-/// </summary>
+/// <summary>Read the follow state once per project in the header and share it with the menu.
+/// Knowing the state before opening keeps the action label and position stable.</summary>
 public sealed class ProjectSubscriptionState(ApiClient api, NotifyHelper toast)
 {
     private int _requestedFor;

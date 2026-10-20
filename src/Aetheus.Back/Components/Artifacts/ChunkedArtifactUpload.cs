@@ -22,6 +22,14 @@ public sealed record ChunkedUploadSession(
     public DateTime LastActivityAt { get; init; } = CreatedAt;
 }
 
+/// <summary>An assembled artifact whose bytes were hashed as they were written and match the digest
+/// announced at begin. Recette R1-91: the store adopts this file instead of reading, hashing and
+/// writing all of it a second time.</summary>
+/// <param name="Path">The file on disk, beside the artifact store.</param>
+/// <param name="Length">Its size in bytes, for the quota check.</param>
+/// <param name="Sha256">Its digest (lowercase hex), already verified.</param>
+public sealed record VerifiedArtifactFile(string Path, long Length, string Sha256);
+
 /// <summary>The outcome of accepting one part.</summary>
 /// <param name="Accepted">False when the part was refused; <paramref name="Reason"/> says why.</param>
 /// <param name="ReceivedParts">How many distinct parts the session now holds.</param>
@@ -35,11 +43,18 @@ public interface IChunkedArtifactUploadService
     Task<ChunkedPartResult> AcceptPartAsync(
         int runId, string uploadId, int index, string partSha256, Stream body, CancellationToken ct = default);
 
-    /// <summary>Assembles the parts, verifies the declared digest, and returns a stream over the
-    /// result. The caller publishes it; the session is discarded either way.</summary>
-    Task<Stream> OpenCompletedAsync(int runId, string uploadId, CancellationToken ct = default);
+    /// <summary>Assembles the parts, verifies the declared digest, and hands the verified file to
+    /// <paramref name="publish"/>, which may move it into the artifact store. Once
+    /// <paramref name="publish"/> returns the session is discarded; whatever it did not take of the
+    /// assembled file is deleted either way, and a refused publication keeps the parts for a retry.</summary>
+    Task<T> CompleteAsync<T>(
+        int runId, string uploadId, Func<VerifiedArtifactFile, Task<T>> publish, CancellationToken ct = default);
 
     void Discard(string uploadId);
+
+    /// <summary>Audit AUD-06 (recette R1-50): discards the upload only when it belongs to
+    /// <paramref name="runId"/>; <c>false</c> when it is unknown, expired or another run's.</summary>
+    Task<bool> DiscardForRunAsync(int runId, string uploadId, CancellationToken ct = default);
 
     /// <summary>Deletes sessions older than <paramref name="maxAge"/>. Returns how many were removed.</summary>
     int PurgeExpired(TimeSpan maxAge);
@@ -67,6 +82,12 @@ public sealed class ChunkedArtifactUploadService(IConfiguration configuration, T
     /// no project yet, and must not be counted against a project's quota or served by a download.</summary>
     private readonly string _root = Path.Combine(
         configuration.GetValue("ArtifactStorage:BasePath", "./data/artifacts")!, ".uploads");
+
+    /// <summary>Audit AUD-04 (recette R1-50): the ceiling a single artifact has at publication
+    /// (0 = unlimited, unset = 20 GiB), enforced as the parts arrive, so the staged bytes of one upload
+    /// never exceed what the project could ever be allowed to publish.</summary>
+    private readonly long _projectQuotaBytes =
+        configuration.GetValue<long>("ArtifactStorage:ProjectQuotaBytes", 20L * 1024 * 1024 * 1024);
 
     public async Task<ChunkedUploadSession> BeginAsync(
         int runId, string name, string? stageName, int totalParts, string sha256, CancellationToken ct = default)
@@ -116,6 +137,9 @@ public sealed class ChunkedArtifactUploadService(IConfiguration configuration, T
             // stored and let the agent re-send. Accepting it would corrupt the artifact silently.
             if (!string.Equals(digest, partSha256, StringComparison.OrdinalIgnoreCase))
                 return new ChunkedPartResult(false, CountParts(uploadId), "The part digest does not match its content.");
+            if (ExceedsQuota(directory, partPath, new FileInfo(temporaryPath).Length))
+                return new ChunkedPartResult(false, CountParts(uploadId),
+                    "The upload exceeds the project's artifact storage quota.");
 
             // A resent part replaces the stored one: it is the same bytes by the check above.
             File.Move(temporaryPath, partPath, overwrite: true);
@@ -133,7 +157,26 @@ public sealed class ChunkedArtifactUploadService(IConfiguration configuration, T
         }
     }
 
-    public async Task<Stream> OpenCompletedAsync(int runId, string uploadId, CancellationToken ct = default)
+    public async Task<T> CompleteAsync<T>(
+        int runId, string uploadId, Func<VerifiedArtifactFile, Task<T>> publish, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(publish);
+        var assembled = await AssembleAsync(runId, uploadId, ct).ConfigureAwait(false);
+        try
+        {
+            var result = await publish(assembled).ConfigureAwait(false);
+            Discard(uploadId);
+            return result;
+        }
+        finally
+        {
+            // Moved into the store on success; on a refusal (quota, unknown run) the assembled copy
+            // goes, the parts stay, so the agent can complete again without re-sending anything.
+            if (File.Exists(assembled.Path)) File.Delete(assembled.Path);
+        }
+    }
+
+    private async Task<VerifiedArtifactFile> AssembleAsync(int runId, string uploadId, CancellationToken ct)
     {
         var session = await ReadSessionAsync(runId, uploadId, ct).ConfigureAwait(false);
         var directory = SessionDirectory(uploadId);
@@ -147,6 +190,7 @@ public sealed class ChunkedArtifactUploadService(IConfiguration configuration, T
 
         var assembledPath = Path.Combine(directory, "assembled");
         string digest;
+        long length;
         using (var sha = SHA256.Create())
         await using (var output = new FileStream(
             assembledPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
@@ -161,6 +205,7 @@ public sealed class ChunkedArtifactUploadService(IConfiguration configuration, T
             }
             await crypto.FlushFinalBlockAsync(ct).ConfigureAwait(false);
             digest = Convert.ToHexStringLower(sha.Hash!);
+            length = output.Length;
         }
 
         // Every part matched its own digest and the whole still does not match: the parts are
@@ -172,10 +217,32 @@ public sealed class ChunkedArtifactUploadService(IConfiguration configuration, T
             throw new BadRequestException("The assembled artifact does not match the declared digest.");
         }
 
-        // Deleted on close by the caller's disposal, so the assembled copy never outlives publication.
-        return new FileStream(
-            assembledPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920,
-            FileOptions.Asynchronous | FileOptions.DeleteOnClose);
+        return new VerifiedArtifactFile(assembledPath, length, digest);
+    }
+
+    // The parts already stored, without the one this part replaces, plus this part.
+    private bool ExceedsQuota(string directory, string partPath, long incomingBytes)
+    {
+        if (_projectQuotaBytes <= 0) return false;
+        var stored = Directory.EnumerateFiles(directory, "part-*")
+            .Where(path => !path.EndsWith(".tmp", StringComparison.Ordinal)
+                && !string.Equals(path, partPath, StringComparison.Ordinal))
+            .Sum(path => new FileInfo(path).Length);
+        return incomingBytes > _projectQuotaBytes || stored > _projectQuotaBytes - incomingBytes;
+    }
+
+    public async Task<bool> DiscardForRunAsync(int runId, string uploadId, CancellationToken ct = default)
+    {
+        try
+        {
+            await ReadSessionAsync(runId, uploadId, ct).ConfigureAwait(false);
+        }
+        catch (NotFoundException)
+        {
+            return false;
+        }
+        Discard(uploadId);
+        return true;
     }
 
     public void Discard(string uploadId)
@@ -243,7 +310,9 @@ public sealed class ChunkedArtifactUploadService(IConfiguration configuration, T
     {
         var directory = SessionDirectory(uploadId);
         return Directory.Exists(directory)
-            ? Directory.EnumerateFiles(directory, "part-*").Count()
+            // A part still being received or just refused is a .tmp file: it is not a received part.
+            ? Directory.EnumerateFiles(directory, "part-*")
+                .Count(path => !path.EndsWith(".tmp", StringComparison.Ordinal))
             : 0;
     }
 

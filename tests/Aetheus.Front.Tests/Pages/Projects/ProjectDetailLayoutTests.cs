@@ -37,13 +37,10 @@ public sealed class ProjectDetailLayoutTests : BunitContext
         });
     }
 
-    /// <summary>
-    /// Recette R-431: the header menu opened on "Edit" alone, then "Follow" appeared above it once its
-    /// own request returned, at every opening. The follow state is now read once with the project, so
-    /// the menu shows both entries, Follow first, the moment it opens, and reopening asks nothing.
-    /// </summary>
+    /// <summary>Load follow state once with the project so Follow and Edit are both present when
+    /// the menu opens. Reopening the menu sends no new request.</summary>
     [Fact]
-    public async Task HeaderMenu_ShowsFollowBeforeEdit_AtOnce_WithOneReadOfTheState()
+    public async Task HeaderMenu_ShowsFollowBeforeSettings_AtOnce_WithOneReadOfTheState()
     {
         _handler.SetJsonResponse("api/projects/42", new ProjectDetailDto
         {
@@ -62,7 +59,8 @@ public sealed class ProjectDetailLayoutTests : BunitContext
 
         cut.WaitForElement(".omni-overflow-menu__trigger").Click();
         var labels = cut.FindAll(".omni-menu__item .omni-menu__label").Select(label => label.TextContent.Trim()).ToList();
-        Assert.Equal(["Subscribe", "Edit"], labels);
+        // Recette R3-70: the project's settings entry reads Settings, not Edit.
+        Assert.Equal(["Subscribe", "Settings"], labels);
 
         cut.Find(".omni-overflow-menu__trigger").Click();
         cut.Find(".omni-overflow-menu__trigger").Click();

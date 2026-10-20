@@ -9,7 +9,7 @@ public class NotificationRepository(AppDbContext db) : INotificationRepository
         string? search, int page, int pageSize, string? sortBy, bool sortDescending,
         CancellationToken ct = default, IReadOnlyList<GridFilter>? columnFilters = null)
     {
-        // Recette R-224: the grid's column header filters, before the count.
+        // The grid's column header filters, before the count.
         var query = NotificationAdminListQuery.ChannelColumns.ApplyFilters(BuildChannelQuery(search), columnFilters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -102,7 +102,7 @@ public class NotificationRepository(AppDbContext db) : INotificationRepository
                 EF.Functions.ILike(rule.EventType, pattern) ||
                 EF.Functions.ILike(rule.Channel.Name, pattern));
         }
-        // Recette R-224: the grid's column header filters, before the count.
+        // The grid's column header filters, before the count.
         query = NotificationAdminListQuery.RuleColumns.ApplyFilters(query, columnFilters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);

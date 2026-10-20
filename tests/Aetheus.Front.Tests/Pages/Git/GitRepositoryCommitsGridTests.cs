@@ -6,11 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages;
 
-/// <summary>
-/// R2-003 / R2-004 / R2-005 / R2-037 on the repository page: no toolbar above the commits grid (its
-/// filters live in the columns), the Branch column as a badge, the zip download in the header actions,
-/// and the blue Merge (here) and Open (repositories list) row actions.
-/// </summary>
+/// <summary>Verify column filters, branch badges, header archive download and primary Merge and
+/// Open actions on repository views.</summary>
 public class GitRepositoryCommitsGridTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -68,7 +65,7 @@ public class GitRepositoryCommitsGridTests : BunitContext
         if (query is not null)
             Services.GetRequiredService<NavigationManager>().NavigateTo($"/git-repositories/1{query}");
         var cut = Render<GitRepositoryDetail>(parameters => parameters.Add(page => page.Id, 1));
-        cut.WaitForAssertion(() => Assert.Contains("my-repo", cut.Markup), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Contains("my-repo", cut.Markup));
         return cut;
     }
 
@@ -77,7 +74,7 @@ public class GitRepositoryCommitsGridTests : BunitContext
     {
         var cut = RenderPage();
 
-        cut.WaitForAssertion(() => Assert.Contains("feat: add login", cut.Markup), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Contains("feat: add login", cut.Markup));
         // The removed toolbar: a branch dropdown, a search box and a Search button.
         Assert.DoesNotContain("SearchCommits", cut.Markup, StringComparison.Ordinal);
         Assert.Empty(cut.FindAll("[aria-label='Branch']"));
@@ -95,7 +92,7 @@ public class GitRepositoryCommitsGridTests : BunitContext
                 request.Url.Contains("api/git/repos/1/commits", StringComparison.Ordinal)
                 && (request.Url.Contains("ref=%2A", StringComparison.OrdinalIgnoreCase) || request.Url.Contains("ref=*", StringComparison.Ordinal)));
             Assert.Contains(cut.FindAll(".omni-badge"), badge => badge.TextContent.Trim() == "feature/login");
-        }, TimeSpan.FromSeconds(3));
+        });
     }
 
     [Fact]
@@ -128,7 +125,7 @@ public class GitRepositoryCommitsGridTests : BunitContext
         cut.FindAll("button").Single(button => button.TextContent.Contains("DownloadZip", StringComparison.Ordinal)).Click();
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request =>
-            request.Method == "GET" && request.Url.Contains("api/git/repos/1/archive", StringComparison.Ordinal)), TimeSpan.FromSeconds(3));
+            request.Method == "GET" && request.Url.Contains("api/git/repos/1/archive", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -141,7 +138,7 @@ public class GitRepositoryCommitsGridTests : BunitContext
             var merge = cut.FindAll("button[title='Merge']").Single();
             Assert.Contains("omni-button--primary", merge.ClassName, StringComparison.Ordinal);
             Assert.Contains("omni-button--danger", cut.FindAll("button[title='Close']").Single().ClassName, StringComparison.Ordinal);
-        }, TimeSpan.FromSeconds(3));
+        });
     }
 
     [Fact]
@@ -150,7 +147,7 @@ public class GitRepositoryCommitsGridTests : BunitContext
         // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
         // Enter/Space, or the row click runs after its own and wins the navigation.
         var cut = RenderPage();
-        cut.WaitForAssertion(() => Assert.Contains("feat: add login", cut.Markup), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Contains("feat: add login", cut.Markup));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }

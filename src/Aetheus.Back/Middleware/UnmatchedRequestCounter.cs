@@ -1,23 +1,13 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Middleware;
 
-/// <summary>
-/// Recette R-457: the requests that reached no route of the application and were refused (the 404, 401
-/// and 429 of robots probing <c>/.env</c>, <c>/wp-json</c>, <c>/api/graphql</c>...) are counted instead
-/// of each writing a warning line: about 32,700 of the 32,772 lines of one day were theirs. One line per
-/// minute that saw any says how many there were: a warning from <see cref="PeakPerMinute"/> requests on,
-/// so a flood reaches the warnings, an information line below it.
-///
-/// The minute is closed by the first unmatched request of a later minute: a quiet spell delays the line,
-/// which then states the exact minute it covers.
-/// </summary>
+/// <summary>Aggregate refused unmatched requests by minute, using Warning at PeakPerMinute and
+/// Information below it. Flush on the next unmatched request from a later minute and include the
+/// exact covered minute.</summary>
 public sealed class UnmatchedRequestCounter(TimeProvider time, ILogger<UnmatchedRequestCounter> logger)
 {
-    /// <summary>
-    /// Ten refused requests per second, sustained over a minute: a flood. Recette R-489: the former
-    /// threshold of 60 was the ordinary rate of the robots that scan any public host (production, 30/09:
-    /// 23 minutes above it in three hours, 95 requests in the busiest), so it warned about the expected.
-    /// </summary>
+    /// <summary>Treat a sustained average of ten refused requests per second over a minute as a
+    /// flood.</summary>
     public const int PeakPerMinute = 600;
 
     private readonly Lock _gate = new();

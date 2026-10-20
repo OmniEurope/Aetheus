@@ -17,12 +17,12 @@ public sealed class VariablesApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = ScopedPageQuery(page, pageSize, search, sortBy, sortDescending, projectId, environmentId, projectServerId);
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<VariableLibraryDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/variable-libraries", query), filters), JsonOptions.Web) ?? new();
     }
 
-    /// <summary>Recette R-210: the project names the variable libraries list's checkable filter offers.</summary>
+    /// <summary>The project names the variable libraries list's checkable filter offers.</summary>
     public async Task<VariableLibraryFilterValuesDto> GetVariableLibraryFilterValuesAsync(CancellationToken ct = default) =>
         await Http.GetFromJsonAsync<VariableLibraryFilterValuesDto>("api/variable-libraries/filter-values", JsonOptions.Web, ct) ?? new();
 
@@ -79,7 +79,8 @@ public sealed class VariablesApi(HttpClient http) : ApiClientBase(http)
         => DeleteAsync($"api/variable-libraries/{id}", ct);
 
 
-    /// <summary>A refused entry (recette R2-065: its key already exists) comes back as a 400 the caller explains.</summary>
+    /// <summary>Return duplicate-key refusal as HTTP 400 so the caller can explain why the entry
+    /// was rejected.</summary>
     public Task<ApiOutcome<VariableEntryDto, ApiError>> CreateVariableEntryAsync(int libraryId, CreateVariableEntryRequest request, CancellationToken ct = default)
         => PostForOutcomeAsync<VariableEntryDto, ApiError>($"api/variable-libraries/{libraryId}/entries", request, ct);
 
@@ -99,7 +100,7 @@ public sealed class VariablesApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<VariableEntryDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString($"api/variable-libraries/{libraryId}/entries", query), filters),
             JsonOptions.Web, ct) ?? new();
@@ -112,7 +113,7 @@ public sealed class VariablesApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<VariableEntryVersionDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString(
                 $"api/variable-libraries/{libraryId}/entries/{entryId}/versions", query), filters), JsonOptions.Web, ct) ?? new();
@@ -134,12 +135,12 @@ public sealed class VariablesApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = ScopedPageQuery(page, pageSize, search, sortBy, sortDescending, projectId, environmentId, projectServerId);
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<VaultDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/vaults", query), filters), JsonOptions.Web) ?? new();
     }
 
-    /// <summary>Recette R-210: the project names the vaults list's checkable filter offers.</summary>
+    /// <summary>The project names the vaults list's checkable filter offers.</summary>
     public async Task<VaultFilterValuesDto> GetVaultFilterValuesAsync(CancellationToken ct = default) =>
         await Http.GetFromJsonAsync<VaultFilterValuesDto>("api/vaults/filter-values", JsonOptions.Web, ct) ?? new();
 
@@ -183,7 +184,7 @@ public sealed class VariablesApi(HttpClient http) : ApiClientBase(http)
         => PostJsonAsync<RotateVaultSecretRequest, VaultSecretDto>($"api/vaults/{vaultId}/secrets/{secretId}/rotate", request, ct);
 
 
-    /// <summary>Recette R-292: one secret's clear value, for the copy button (POST, audited, no-store).</summary>
+    /// <summary>One secret's clear value, for the copy button (POST, audited, no-store).</summary>
     public Task<RevealedSecretValueDto?> RevealVaultSecretValueAsync(int vaultId, int secretId, CancellationToken ct = default)
         => PostJsonAsync<object, RevealedSecretValueDto>($"api/vaults/{vaultId}/secrets/{secretId}/reveal", new { }, ct);
 
@@ -207,7 +208,7 @@ public sealed class VariablesApi(HttpClient http) : ApiClientBase(http)
         => PostJsonAsync<List<CreateVaultSecretRequest>, ImportResultDto>($"api/vaults/{vaultId}/import", secrets, ct);
 
 
-    /// <summary>PLAN-005 lot 5: where this library may allocate, and why it may not when it cannot.</summary>
+    /// <summary>Where this library may allocate, and why it may not when it cannot.</summary>
     public Task<PortAllocationTargetsDto?> GetPortAllocationTargetsAsync(
         int libraryId, CancellationToken ct = default)
         => GetJsonAsync<PortAllocationTargetsDto>($"api/variable-libraries/{libraryId}/ports/servers", ct);

@@ -35,9 +35,8 @@ internal static class CoverageSummaryMapper
         var files = string.IsNullOrEmpty(result.FilesJson)
             ? []
             : JsonSerializer.Deserialize<List<CoverageFileDto>>(result.FilesJson) ?? [];
-        // Recette R-428: a file without a recorded package used to be dropped, so a report without
-        // package names (or stored before the parser kept them) gave an empty table. It is grouped
-        // under the project its path names instead, by the rule the page's coverage tree uses.
+        // Files without a recorded package are grouped by the project inferred from their path,
+        // using the same rule as the coverage tree.
         return files
             .GroupBy(CoverageProjectName.Of, StringComparer.Ordinal)
             .Select(group =>

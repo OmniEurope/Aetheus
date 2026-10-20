@@ -165,4 +165,37 @@ public class ArtifactDetailTests : BunitContext
             call => call.Identifier == "navigator.clipboard.writeText");
         Assert.Equal("/srv/aetheus/artifacts/build-output.zip", invocation.Arguments[0]);
     }
+
+    private async Task<IRenderedComponent<ArtifactDetail>> DownloadAsync()
+    {
+        _handler.SetJsonResponse("api/artifacts/5", Sample());
+        var cut = Render<ArtifactDetail>(p => p.Add(c => c.ArtifactId, 5));
+        cut.WaitForState(() => cut.Markup.Contains("build-output"));
+        await cut.FindAll("button").First(button => button.TextContent.Contains("Download", StringComparison.Ordinal)).ClickAsync(new());
+        return cut;
+    }
+
+    [Fact]
+    public async Task Download_StreamsTheArchiveToTheBrowserUnderTheArtifactsName()
+    {
+        _handler.SetRawResponse("api/artifacts/5/download", "zip-bytes");
+
+        var cut = await DownloadAsync();
+
+        var invocation = Assert.Single(JSInterop.Invocations, call => call.Identifier == "downloadFileFromStream");
+        Assert.Equal("build-output.zip", invocation.Arguments[0]);
+        Assert.Contains(_handler.Requests, request => request.Url.EndsWith("api/artifacts/5/download", StringComparison.Ordinal));
+        Assert.Empty(cut.FindAll("button.btn-busy"));
+    }
+
+    [Fact]
+    public async Task Download_AFailedResponse_SendsNothingToTheBrowser()
+    {
+        _handler.SetResponse("api/artifacts/5/download", HttpStatusCode.NotFound);
+
+        var cut = await DownloadAsync();
+
+        Assert.DoesNotContain(JSInterop.Invocations, call => call.Identifier == "downloadFileFromStream");
+        Assert.Empty(cut.FindAll("button.btn-busy"));
+    }
 }

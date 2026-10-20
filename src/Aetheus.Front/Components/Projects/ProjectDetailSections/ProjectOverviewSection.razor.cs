@@ -11,7 +11,7 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private PermissionService Permissions { get; set; } = default!;
-    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private IUserPreferences Preferences { get; set; } = default!;
 
     [Parameter, EditorRequired] public ProjectDetailDto? Project { get; set; }
 
@@ -33,7 +33,7 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     private List<ReleaseDto> _changelog = [];
     private int? _loadedProjectId;
 
-    /// <summary>PLAN-003 lot 30: libraries and vaults this project's pipelines require and it lacks.</summary>
+    /// <summary>Libraries and vaults this project's pipelines require and it lacks.</summary>
     private List<UnmetRequirementDto> _unmet = [];
     private bool _provisioningUnmet;
     private string? _unmetError;
@@ -109,15 +109,33 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     /// would carry a permanent "getting started" card.
     /// </summary>
     private bool ShowGettingStarted => Project is not null && _gitStateLoaded
-        && (!_hasGitRepository || Project.EnvironmentCount == 0 || !HasServer
-            || Project.Pipelines.Count == 0);
+        && (!GettingStartedComplete || _gettingStartedLastShow);
+
+    private bool GettingStartedComplete => Project is not null
+        && _hasGitRepository && Project.EnvironmentCount > 0 && HasServer && Project.Pipelines.Count > 0;
 
     /// <summary>
-    /// PLAN-003 lot 29 / D23: the step is about being able to run somewhere, not about which screen
-    /// the attachment was made on. A server attached directly to the project counts, and so does one
-    /// carried by an environment of the project; reading only the direct count left the step on
-    /// "to do" for a project that already had a server to run on.
+    /// Recette R3-67: a finished checklist is shown one last time, saying so, then never again for
+    /// this user and project (the step that was missing must not vanish unseen).
     /// </summary>
+    private bool _gettingStartedLastShow;
+
+    private string GettingStartedDescription => GettingStartedComplete
+        ? L["ProjectGettingStartedDoneDescription"]
+        : L["ProjectGettingStartedDescription"];
+
+    private async Task ResolveGettingStartedLastShowAsync(int projectId)
+    {
+        _gettingStartedLastShow = false;
+        if (!_gitStateLoaded || !GettingStartedComplete) return;
+        if (await Preferences.GetAsync<bool>(PreferenceKeys.GettingStartedClosed(projectId))) return;
+
+        _gettingStartedLastShow = true;
+        await Preferences.SetAsync(PreferenceKeys.GettingStartedClosed(projectId), true);
+    }
+
+    /// <summary>Runner availability includes servers attached directly or through project
+    /// environments.</summary>
     private bool HasServer => Project is not null
         && (Project.ServerCount > 0 || Project.EnvironmentServerCount > 0);
 
@@ -187,12 +205,8 @@ public partial class ProjectOverviewSection : IAsyncDisposable
         .. LibraryStep
     ];
 
-    /// <summary>
-    /// PLAN-003 lot 30 / D22: the library step comes after the pipeline, because a library only
-    /// makes sense once something reads it, and it exists only when something does. It is "to do"
-    /// when a pipeline of the project requires a library or vault the project lacks, "done" once a
-    /// library exists and nothing is missing, and absent for a project that needs none.
-    /// </summary>
+    /// <summary>Library setup follows pipeline requirements: missing resources are actionable,
+    /// complete requirements are done and unnecessary setup stays hidden.</summary>
     private IEnumerable<OnboardingStep> LibraryStep
     {
         get
@@ -225,12 +239,8 @@ public partial class ProjectOverviewSection : IAsyncDisposable
         ? Project.DefaultBranch
         : _primaryGitRepository?.DefaultBranch;
 
-    /// <summary>
-    /// PLAN-003 lot 11 / D18: the branch and the last git activity share one row of the Repository
-    /// card. Either half can be missing (a project with no branch resolved, a repository never
-    /// pushed to), so the label and the value are built from whichever halves exist rather than
-    /// printing a dangling separator.
-    /// </summary>
+    /// <summary>Branch and latest activity share a row built only from available values, avoiding
+    /// dangling separators.</summary>
     private string RepositoryActivityLabel => JoinHalves(
         string.IsNullOrWhiteSpace(RepositoryDisplayBranch) ? null : L["DefaultBranch"].Value,
         Project?.LastGitUpdateAt is null ? null : L["LastGitUpdate"].Value);
@@ -274,6 +284,7 @@ public partial class ProjectOverviewSection : IAsyncDisposable
             LoadReleaseDataAsync(Project.Id),
             LoadGitDataAsync(Project.Id),
             LoadUnmetRequirementsAsync(Project.Id));
+        await ResolveGettingStartedLastShowAsync(Project.Id);
     }
 
     private async Task LoadUnmetRequirementsAsync(int projectId)
@@ -291,43 +302,26 @@ public partial class ProjectOverviewSection : IAsyncDisposable
         _unmetDismissed = await ReadUnmetDismissalAsync(projectId) == UnmetSignature(_unmet);
     }
 
-    /// <summary>Recette R-296: the warning dismissed for this project and this exact list of missing
-    /// resources; a list that changes shows it again.</summary>
+    /// <summary>The warning dismissed for this project and this exact list of missing resources; a
+    /// list that changes shows it again.</summary>
     private bool _unmetDismissed;
-
-    private static string UnmetDismissalKey(int projectId) => $"aetheus.unmet-dismissed.{projectId}";
 
     internal static string UnmetSignature(IEnumerable<UnmetRequirementDto> unmet) => string.Join("|",
         unmet.Select(item => $"{item.Kind}:{item.Name}").Order(StringComparer.Ordinal));
 
-    private async Task<string?> ReadUnmetDismissalAsync(int projectId)
-    {
-        try
-        {
-            return await JS.InvokeAsync<string?>("localStorage.getItem", UnmetDismissalKey(projectId));
-        }
-        catch (JSException)
-        {
-            return null;
-        }
-    }
+    // R1-66: the dismissal is a user preference, so it follows the user to their other devices.
+    private Task<string?> ReadUnmetDismissalAsync(int projectId) =>
+        Preferences.GetAsync<string>(PreferenceKeys.UnmetDismissed(projectId));
 
     private async Task DismissUnmetAsync()
     {
         if (Project is null) return;
         _unmetDismissed = true;
-        try
-        {
-            await JS.InvokeVoidAsync("localStorage.setItem", UnmetDismissalKey(Project.Id), UnmetSignature(_unmet));
-        }
-        catch (JSException)
-        {
-            // Hidden for this visit only when the browser refuses to store it.
-        }
+        await Preferences.SetAsync(PreferenceKeys.UnmetDismissed(Project.Id), UnmetSignature(_unmet));
     }
 
-    /// <summary>PLAN-003 lot 30: the one-click fix from the Information card, then a re-check so the
-    /// warning disappears as soon as the resources exist.</summary>
+    /// <summary>The one-click fix from the Information card, then a re-check so the warning
+    /// disappears as soon as the resources exist.</summary>
     private async Task ProvisionUnmetAsync()
     {
         if (Project is null) return;

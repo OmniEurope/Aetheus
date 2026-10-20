@@ -12,7 +12,7 @@ namespace Aetheus.Back.Tests.Alerts;
 public sealed class StorageAlertProvisioningServiceTests
 {
     [Fact]
-    public async Task ProvisionAsync_CreatesThreeIdempotentBaselineRulesPerServer()
+    public async Task ProvisionAsync_CreatesFiveIdempotentBaselineRulesPerServer()
     {
         var services = new ServiceCollection();
         var databaseName = Guid.NewGuid().ToString("N");
@@ -38,10 +38,14 @@ public sealed class StorageAlertProvisioningServiceTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                // The clock guards have their own tests (ClockAlertProvisioningTests).
+                ["ClockMonitoring:ProvisionDefaultAlerts"] = "false",
                 ["StorageMonitoring:ProvisionDefaultAlerts"] = "true",
                 ["StorageMonitoring:DiskWarningPercent"] = "80",
                 ["StorageMonitoring:DiskCriticalPercent"] = "90",
-                ["StorageMonitoring:MinFreeGiB"] = "20"
+                ["StorageMonitoring:MinFreeGiB"] = "20",
+                ["StorageMonitoring:InodeWarningPercent"] = "85",
+                ["StorageMonitoring:InodeCriticalPercent"] = "95"
             })
             .Build();
         var service = new StorageAlertProvisioningService(
@@ -53,16 +57,20 @@ public sealed class StorageAlertProvisioningServiceTests
         await using (var verifyFirstProvisionScope = provider.CreateAsyncScope())
         {
             var db = verifyFirstProvisionScope.ServiceProvider.GetRequiredService<AppDbContext>();
-            Assert.Equal(3, await db.AlertRules.CountAsync(cancellationToken: TestContext.Current.CancellationToken));
+            Assert.Equal(5, await db.AlertRules.CountAsync(cancellationToken: TestContext.Current.CancellationToken));
         }
         await service.ProvisionAsync(TestContext.Current.CancellationToken);
 
         await using var verifyScope = provider.CreateAsyncScope();
         var rules = await verifyScope.ServiceProvider.GetRequiredService<AppDbContext>().AlertRules.ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(3, rules.Count);
+        Assert.Equal(5, rules.Count);
         Assert.Contains(rules, rule => rule.Metric == MetricType.Disk && rule.Threshold == 80 && rule.Severity == AlertSeverity.Warning);
         Assert.Contains(rules, rule => rule.Metric == MetricType.Disk && rule.Threshold == 90 && rule.Severity == AlertSeverity.Critical);
         Assert.Contains(rules, rule => rule.Metric == MetricType.DiskFree && rule.Threshold == 20 && rule.Operator == ComparisonOperator.LessThan);
+        Assert.Contains(rules, rule => rule.Metric == MetricType.Inodes && rule.Threshold == 85 && rule.Severity == AlertSeverity.Warning
+            && rule.Operator == ComparisonOperator.GreaterThanOrEqual && rule.ProvisioningKey!.StartsWith("storage-inodes-warning:", StringComparison.Ordinal));
+        Assert.Contains(rules, rule => rule.Metric == MetricType.Inodes && rule.Threshold == 95 && rule.Severity == AlertSeverity.Critical
+            && rule.ProvisioningKey!.StartsWith("storage-inodes-critical:", StringComparison.Ordinal));
         Assert.All(rules, rule => Assert.False(string.IsNullOrWhiteSpace(rule.ProvisioningKey)));
     }
 
@@ -85,7 +93,11 @@ public sealed class StorageAlertProvisioningServiceTests
             serverId = server.Id;
         }
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(
-            new Dictionary<string, string?> { ["StorageMonitoring:ProvisionDefaultAlerts"] = "true" }).Build();
+            new Dictionary<string, string?>
+            {
+                ["StorageMonitoring:ProvisionDefaultAlerts"] = "true",
+                ["ClockMonitoring:ProvisionDefaultAlerts"] = "false"
+            }).Build();
         var service = new StorageAlertProvisioningService(
             provider.GetRequiredService<IServiceScopeFactory>(), configuration,
             NullLogger<StorageAlertProvisioningService>.Instance);
@@ -107,7 +119,7 @@ public sealed class StorageAlertProvisioningServiceTests
 
         await using var verifyScope = provider.CreateAsyncScope();
         var rules = await verifyScope.ServiceProvider.GetRequiredService<AppDbContext>().AlertRules.ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(3, rules.Count);
+        Assert.Equal(5, rules.Count);
         var customized = Assert.Single(rules, rule => rule.ProvisioningKey == $"storage-disk-warning:{serverId}");
         Assert.Equal(75, customized.Threshold);
         Assert.Equal(900, customized.SustainedSeconds);

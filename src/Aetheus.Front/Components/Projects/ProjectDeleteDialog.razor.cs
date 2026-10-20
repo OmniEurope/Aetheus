@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Projects;
 
-/// <summary>
-/// Recette R2-122: the confirmation of a project deletion. It shows what the deletion removes, read
-/// from the server's preview, refuses while a run of the project is in progress, and enables Delete
-/// only once the project's name is typed exactly. Closes with <c>true</c> once the project is deleted;
-/// a refusal stays open, the server's reason being shown by the global error notification.
-/// </summary>
+/// <summary> The confirmation of a project deletion. It shows what the deletion removes, read from
+/// the server's preview, refuses while a run of the project is in progress, and enables Delete only
+/// once the project's name is typed exactly. Closes with <c>true</c> once the project is deleted; a
+/// refusal stays open, the server's reason being shown by the global error notification. </summary>
 public partial class ProjectDeleteDialog
 {
     [Parameter, EditorRequired] public int ProjectId { get; set; }

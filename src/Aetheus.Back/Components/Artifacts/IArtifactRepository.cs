@@ -14,12 +14,20 @@ public interface IArtifactRepository
     Task<List<PipelineArtifact>> GetReleasesAsync(int pipelineId, int projectId, CancellationToken ct = default);
     Task<List<PipelineArtifact>> GetExpiredAsync(DateTime cutoff, int batchSize, CancellationToken ct = default);
     Task<bool> HasActiveRetentionLeaseAsync(int artifactId, DateTime at, CancellationToken ct = default);
+    /// <summary>Recette R1-73: the <c>FilePath</c> of every artifact row, so the files no row references can be told apart.</summary>
+    Task<List<string>> GetAllFilePathsAsync(CancellationToken ct = default);
+    /// <summary>Recette R1-73: whether a row records exactly this <c>FilePath</c>, checked again just before a file is deleted.</summary>
+    Task<bool> IsFilePathReferencedAsync(string filePath, CancellationToken ct = default);
     Task<List<PipelineArtifact>> GetProjectBuildArtifactsAsync(int projectId, CancellationToken ct = default);
     Task AddAsync(PipelineArtifact artifact, CancellationToken ct = default);
     Task LinkReleaseAsync(PipelineArtifact artifact, int releaseId, CancellationToken ct = default);
-    /// <summary>R-463: deletes the artifact row by identifier; false when another path (the other
-    /// colour, a quota eviction, a run purge) had already removed it, instead of a concurrency failure.</summary>
+    /// <summary>Deletes the artifact row by identifier, unlinking its completed Dependency-Track
+    /// deliveries in the same transaction; false when another path (the other colour,
+    /// a quota eviction, a run purge) had already removed it, instead of a concurrency
+    /// failure.</summary>
     Task<bool> RemoveAsync(PipelineArtifact artifact, CancellationToken ct = default);
+    /// <summary>The version of the newest release that links this artifact, or null when none does.</summary>
+    Task<string?> FindNewestReleaseVersionAsync(int artifactId, CancellationToken ct = default);
     Task<int> GetNextBuildNumberAsync(int projectId, int pipelineId, CancellationToken ct = default);
     // Aggregate on-record size of all artifacts of a project (for the storage quota guard).
     Task<long> GetProjectTotalSizeBytesAsync(int projectId, CancellationToken ct = default);

@@ -16,6 +16,11 @@ public interface IPackageRegistryRepository
     Task<RegistryPackageVersion?> GetVersionAsync(
         PackageRegistryKind kind, string normalizedName, string normalizedVersion, CancellationToken ct = default);
     Task<RegistryPackage?> GetPackageForUpdateAsync(PackageRegistryKind kind, string normalizedName, CancellationToken ct = default);
+
+    /// <summary>The package with its versions and each version's files (multi-file formats such as
+    /// Maven); tracked when <paramref name="forUpdate"/> is true.</summary>
+    Task<RegistryPackage?> GetPackageWithFilesAsync(
+        PackageRegistryKind kind, string normalizedName, bool forUpdate, CancellationToken ct = default);
     Task<RegistryPackage?> GetPackageByIdAsync(int id, CancellationToken ct = default);
     Task<RegistryPackage?> GetPackageByIdForUpdateAsync(int id, CancellationToken ct = default);
     Task<(List<PackageRegistrySearchPackage> Items, int Total)> SearchAsync(

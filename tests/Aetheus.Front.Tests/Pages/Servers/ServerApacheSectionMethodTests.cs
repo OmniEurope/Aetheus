@@ -186,14 +186,14 @@ public class ServerApacheSectionMethodTests : BunitContext
         var cut = RenderSection();
         typeof(ServerApacheSection).GetField("_logLoading", Priv)!.SetValue(cut.Instance, true);
 
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 1,
             ServerId = 30,
             TaskName = "Apache logs error",
             Status = TaskExecutionStatus.Success,
             Output = "[error] seg fault"
-        }));
+        })));
 
         var content = (string?)typeof(ServerApacheSection).GetField("_logContent", Priv)!.GetValue(cut.Instance);
         var loading = (bool)typeof(ServerApacheSection).GetField("_logLoading", Priv)!.GetValue(cut.Instance)!;
@@ -209,16 +209,38 @@ public class ServerApacheSectionMethodTests : BunitContext
         var model = new ApacheConfigEditorModel { SiteName = "example.com", Loading = true };
         typeof(ServerApacheSection).GetField("_configEditor", Priv)!.SetValue(cut.Instance, model);
 
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 2,
             ServerId = 30,
             TaskName = "Apache config read",
             Status = TaskExecutionStatus.Success,
             Output = "ServerName example.com"
-        }));
+        })));
 
         Assert.Contains("example.com", model.Content);
+        Assert.False(model.Loading);
+    }
+
+    [Fact]
+    public async Task HandleTaskCompleted_FailedConfigRead_ShowsWhyInsteadOfAnEmptyEditor()
+    {
+        // Recette R3-30: a read that failed says so, with its output, and leaves no empty file to save.
+        var cut = RenderSection();
+        var model = new ApacheConfigEditorModel { SiteName = "example.com", Loading = true };
+        typeof(ServerApacheSection).GetField("_configEditor", Priv)!.SetValue(cut.Instance, model);
+
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
+        {
+            TaskId = 3,
+            ServerId = 30,
+            TaskName = "Apache config read",
+            Status = TaskExecutionStatus.Failed,
+            Output = "Could not read /etc/apache2/sites-available/example.com: Permission denied"
+        })));
+
+        Assert.Equal(string.Empty, model.Content);
+        Assert.Contains("Permission denied", model.Error);
         Assert.False(model.Loading);
     }
 
@@ -229,14 +251,14 @@ public class ServerApacheSectionMethodTests : BunitContext
         var model = new ApacheConfigEditorModel { SiteName = "example.com", Content = "original" };
         typeof(ServerApacheSection).GetField("_configEditor", Priv)!.SetValue(cut.Instance, model);
 
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 3,
             ServerId = 30,
             TaskName = "Apache config save",
             Status = TaskExecutionStatus.Success,
             Output = "saved"
-        }));
+        })));
 
         // "save" tasks are filtered out - the model content must remain untouched.
         Assert.Equal("original", model.Content);

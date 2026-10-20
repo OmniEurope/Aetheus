@@ -9,7 +9,8 @@ using Microsoft.AspNetCore.SignalR;
 namespace Aetheus.Back.Components.Pipelines;
 
 public class PipelineApprovalService(
-    IPipelineRepository repo,
+    IPipelineApprovalRepository repo,
+    IPipelineRunLookupReader runs,
     IPipelineRunService runService,
     IHttpContextAccessor httpContextAccessor,
     IHubContext<PipelineHub> pipelineHub,
@@ -27,13 +28,8 @@ public class PipelineApprovalService(
         List<int>? accessiblePipelineIds, CancellationToken ct = default)
         => repo.GetPendingApprovalsAsync(accessiblePipelineIds, ct);
 
-    /// <summary>
-    /// Recette R2-116: every decision, a click on Approve or Reject as well as the system's expiry, is
-    /// written to the audit log with who made it, on which run, stage and approval, and what came of it.
-    /// A decision that is not applied is refused out loud (404, 409 or 400 with the reason) instead of the
-    /// bare 404 every refusal used to share: release-fast #2555 was "approved twenty times" with nothing
-    /// to tell whether a click had been received, refused, or applied.
-    /// </summary>
+    /// <summary>Approval decisions and expirations are audited with actor, target and outcome.
+    /// Refused transitions return a specific status and reason.</summary>
     public async Task<PipelineApprovalDto> DecideApprovalAsync(
         int approvalId, ApprovalDecisionRequest request, CancellationToken ct = default)
     {
@@ -71,11 +67,9 @@ public class PipelineApprovalService(
         if (approval.Status != ApprovalStatus.Pending)
             return DecisionOutcome.Refused(new ConflictException(AlreadyDecided(approval)));
 
-        // PLAN-005 lot 3 / D34: a decision on a run that has already ended is refused out loud. Approving
-        // would try to resume a finished run; rejecting would claim a failure the run did not have.
-        // The system's own TimedOut sweep only ever reaches pending approvals, which an ended run no
-        // longer has once CloseApprovalsOfEndedRunsAsync has run.
-        if ((await repo.GetRunStatusesByIdsAsync([approval.PipelineRunId], ct).ConfigureAwait(false))
+        // Ended runs cannot accept approval decisions because they must not resume or acquire a new
+        // failure. Their pending approvals are closed by the ended-run sweep.
+        if ((await runs.GetRunStatusesByIdsAsync([approval.PipelineRunId], ct).ConfigureAwait(false))
                 .TryGetValue(approval.PipelineRunId, out var runStatus)
             && runStatus.IsTerminal())
             return DecisionOutcome.Refused(new ConflictException(
@@ -116,7 +110,7 @@ public class PipelineApprovalService(
                 $"The approval was recorded, but run {approval.PipelineRunId} did not resume: it was no longer waiting "
                 + "for an approval. The reconciler re-applies the recorded decision on its next pass."));
         }
-        var approvedPipelineId = await repo.GetPipelineIdForRunAsync(approval.PipelineRunId, ct).ConfigureAwait(false);
+        var approvedPipelineId = await runs.GetPipelineIdForRunAsync(approval.PipelineRunId, ct).ConfigureAwait(false);
         var approvedGroups = HubGroups.PipelineRunUpdates(approval.PipelineRunId, approvedPipelineId);
         await pipelineHub.Clients.Groups(approvedGroups).SendAsync("ApprovalResolved", approval.PipelineRunId, approval.StageName, "Approved", ct).ConfigureAwait(false);
         return DecisionOutcome.Applied(MapApprovalToDto(approval), "approved, run resumed");
@@ -125,8 +119,8 @@ public class PipelineApprovalService(
     private async Task<DecisionOutcome> RefuseAsync(
         int approvalId, PipelineApproval approval, ApprovalStatus decision, CancellationToken ct)
     {
-        // PLAN-003 2.7: a stage's own confirmation fails that stage, so its Rollback still runs and
-        // the run completes later, from its handlers.
+        // Stage confirmation failure leaves rollback handlers eligible before terminal run status
+        // is computed.
         var outcome = await runService.ApplyRefusalAsync(approval.PipelineRunId, ct).ConfigureAwait(false);
         if (outcome is null)
         {
@@ -138,7 +132,7 @@ public class PipelineApprovalService(
                 $"The decision was recorded, but run {approval.PipelineRunId} did not stop: it was no longer waiting "
                 + "for an approval. The reconciler re-applies the recorded decision on its next pass."));
         }
-        var rejectedPipelineId = await repo.GetPipelineIdForRunAsync(approval.PipelineRunId, ct).ConfigureAwait(false);
+        var rejectedPipelineId = await runs.GetPipelineIdForRunAsync(approval.PipelineRunId, ct).ConfigureAwait(false);
         var rejectedGroups = HubGroups.PipelineRunUpdates(approval.PipelineRunId, rejectedPipelineId);
         var reason = decision == ApprovalStatus.TimedOut ? "TimedOut" : "Rejected";
         await pipelineHub.Clients.Groups(rejectedGroups).SendAsync("ApprovalResolved", approval.PipelineRunId, approval.StageName, reason, ct).ConfigureAwait(false);

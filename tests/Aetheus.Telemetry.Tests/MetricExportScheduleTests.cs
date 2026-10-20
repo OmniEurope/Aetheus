@@ -10,8 +10,7 @@ using OpenTelemetry.Metrics;
 
 namespace Aetheus.Telemetry.Tests;
 
-/// <summary>
-/// PLAN-013 lot 4: the package sends its metrics at the interval Aetheus hands over with the ingest key,
+/// <summary> The package sends its metrics at the interval Aetheus hands over with the ingest key,
 /// and keeps its own interval when the server says nothing (an older Aetheus, a network failure).
 /// </summary>
 public sealed class MetricExportScheduleTests

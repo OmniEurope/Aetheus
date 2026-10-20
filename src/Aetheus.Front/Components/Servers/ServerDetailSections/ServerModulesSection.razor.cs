@@ -18,7 +18,7 @@ public partial class ServerModulesSection
     private AddModuleModel _addModel = new();
     private static readonly ServerModuleType[] _moduleTypes = Enum.GetValues<ServerModuleType>();
 
-    // Recette R-210: the Type and Status filters list the translated members, built once for stable delegates.
+    // The Type and Status filters list the translated members, built once for stable delegates.
     private Func<string, string>? _typeText;
     private Func<string, string> TypeText => _typeText ??= GridFilterText.ForEnum<ServerModuleType>(L);
     private Func<string, string>? _statusText;

@@ -3,8 +3,9 @@
 @namespace Aetheus.Front.Components.Shared
 
 <div class="aetheus-grid-host">
-    @* Recette R-432: the page's load reaches OE through Busy, which draws its loading bar on the table only,
-       as on every other grid; the rows already there stay, and a grid with no row yet waits empty under it. *@
+    @* The page's load reaches OE through Busy, which draws its loading bar on the table only, as
+       on every other grid; the rows already there stay, and a grid with no row yet waits empty
+       under it. *@
     <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["Runs"])" ExportFields="@ExportContext.Fields()" Items="@DisplayItems" TItem="PipelineRunTableItem" NewRowHighlight="@NewRowHighlight"
         ShowLoadingBar="true" Busy="@IsLoading"
         MaxHeight="@(FillHeight ? null : AetheusGrid.ScrollMaxHeight)"
@@ -71,14 +72,15 @@
                             <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineHelper.GetRunBadge(run.Status)">@L.Localize(run.Status)</OmniBadge>
                             @if (run.LaunchRefused)
                             {
-                                @* Recette R2-146: a refused automated launch has its own badge, apart from "Rejeté". *@
+                                @* Give refused automated launches their own badge so they remain
+                                   distinct from rejected executions. *@
                                 <OmniBadge Fill="OmniFill.Outline" Tone="OmniTone.Neutral" Class="pipeline-launch-refused-badge" title="@L["RunLaunchRefusedTitle"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent>@L["RunLaunchRefused"]</ChildContent></OmniBadge>
                             }
                             @if (run.GateGrade.HasValue)
                             {
                                 @* The gate letter only appears when a gate actually graded the run; an
                                    ungraded run shows nothing rather than a misleading placeholder. *@
-                                @* Recette R2-147: the letter opens the Gate tab, where an F gives its cause. *@
+                                @* The letter opens the Gate tab, where an F gives its cause. *@
                                 <a href="@Aetheus.Front.Components.Pipelines.PipelineRunPresentation.GateHref(run.RunId, run.ProjectId, ServerId)" class="pipeline-gate-grade-link" title="@L["GateGrade"]"
                                    @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                     <GradeBadge Value="@run.GateGrade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge" />
@@ -128,8 +130,8 @@
                 <Template Context="run">
                     @if (!string.IsNullOrWhiteSpace(run.CommitHash))
                     {
-                        @* Recette R-373: the one short form, linked to the commit; a null Href (no page
-                           known for that commit) renders it as text. *@
+                        @* The one short form, linked to the commit; a null Href (no page known for
+                           that commit) renders it as text. *@
                         <ShortId Value="@run.CommitHash" Href="@CommitHref(run)" Copyable="false" Class="pipeline-run-ref-link" />
                     }
                     else

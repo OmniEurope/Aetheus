@@ -20,12 +20,12 @@ else
                 </OmniFormField>
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="4">
-                <OmniFormField For="project-data-retention-export" Id="project-data-retention-export-field" Description="@SavedIntervalText" Help="@L["TelemetrySendIntervalPackageHelp"]"><LabelContent>@L["DataRetentionExportInterval"]</LabelContent><ChildContent>
+                <OmniFormField For="project-data-retention-export" Id="project-data-retention-export-field" Label="@ExportIntervalLabel" Help="@L["TelemetrySendIntervalPackageHelp"]">
                     <OmniNumeric @bind-Value="_model.TelemetryExportIntervalMinutes" Id="project-data-retention-export"
                         Minimum="DataRetentionProfiles.MinimumExportIntervalMinutes" Maximum="DataRetentionProfiles.MaximumExportIntervalMinutes"
                         Placeholder="@ProfileValue(Defaults.TelemetryExportIntervalMinutes)" />
                     <ValidationMessage For="@(() => _model.TelemetryExportIntervalMinutes)" />
-                </ChildContent></OmniFormField>
+                </OmniFormField>
             </OmniColumn>
             <OmniColumn Span="12" MediumSpan="4">
                 <OmniFormField For="project-data-retention-telemetry"><LabelContent>@L["DataRetentionTelemetryDetail"]</LabelContent><ChildContent>

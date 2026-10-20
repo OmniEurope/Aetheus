@@ -2,6 +2,6 @@
 
 namespace Aetheus.Front.Layout;
 
-/// <summary>One action of <see cref="ProjectSectionMenu"/> (recette R-431): a Material icon name, its
-/// label, an optional tooltip, whether it is disabled, and what it runs.</summary>
+/// <summary>One action of <see cref="ProjectSectionMenu"/> : a Material icon name, its label, an
+/// optional tooltip, whether it is disabled, and what it runs.</summary>
 public sealed record ProjectSectionMenuAction(string Icon, string Text, string? Title, bool Disabled, Func<Task> Run);

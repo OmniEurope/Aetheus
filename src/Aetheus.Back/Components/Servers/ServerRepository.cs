@@ -74,6 +74,9 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
                 s.CreatedAt,
                 s.OrganizationId,
                 s.AgentInstalledAt,
+                s.ExternalProbe,
+                s.ExternalProbeAt,
+                s.ExternalProbeTarget,
                 s.PipelineRunnerEnabled,
                 s.DockerAvailable,
                 s.DeploymentTargetAvailable,
@@ -103,6 +106,9 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
             CreatedAt = s.CreatedAt,
             OrganizationId = s.OrganizationId,
             AgentInstalledAt = s.AgentInstalledAt,
+            ExternalProbe = s.ExternalProbe,
+            ExternalProbeAt = s.ExternalProbeAt,
+            ExternalProbeTarget = s.ExternalProbeTarget,
             PipelineRunnerEnabled = s.PipelineRunnerEnabled,
             DockerAvailable = s.DockerAvailable,
             DeploymentTargetAvailable = s.DeploymentTargetAvailable,
@@ -140,7 +146,7 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
         if (accessibleIds is not null)
             query = query.Where(s => accessibleIds.Contains(s.Id));
 
-        // Recette R-211: the list's column header filters, before the count.
+        // The list's column header filters, before the count.
         query = ServerListQuery.Columns.ApplyFilters(query, columnFilters);
 
         if (type.HasValue)
@@ -204,6 +210,9 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
         return await db.Servers.FindAsync([id], ct).ConfigureAwait(false);
     }
 
+    public Task<bool> IsMailStackManagedAsync(int serverId, CancellationToken ct = default) =>
+        db.MailStates.AsNoTracking().AnyAsync(state => state.ServerId == serverId && state.IsManagedByAetheus, ct);
+
     public async Task<Server?> FindServerWithTokensAsync(int id, CancellationToken ct = default)
     {
         // WHERE BEFORE Include (per architecture rules) - this is a single-row
@@ -216,8 +225,8 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
             .ConfigureAwait(false);
     }
 
-    // RemoveServerAsync moved to ServerRetirementRepository.PurgeServerAsync (PLAN-004 R-11): the
-    // hard delete is now the explicit purge of an already retired server.
+    // Permanent deletion belongs to ServerRetirementRepository.PurgeServerAsync and requires an
+    // already retired server.
 
 
 
@@ -336,8 +345,7 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
 
     public async Task<List<Pipeline>> GetPipelinesForServerAsync(int serverId, CancellationToken ct = default)
     {
-        // S-TECH-P2WX: include Runs so the service can resolve LastRunStatus/LastRunAt - the
-        // server-scoped list previously showed "-" for "Last run" even when runs existed.
+        // Includes runs so the server pipeline list can resolve LastRunStatus and LastRunAt.
         return await db.Pipelines
             .Where(p => PipelineIdsForServer(serverId).Contains(p.Id))
             .Include(p => p.Project)
@@ -431,7 +439,7 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
                 EF.Functions.ILike(project.Description, pattern));
         }
 
-        // Recette R-210 / R-224: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = ServerProjectListQuery.Columns.ApplyFilters(query, filters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -496,12 +504,12 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
         IReadOnlyList<GridSort>? sorts = null,
         CancellationToken ct = default)
     {
-        // R-518: a line that is only an agent directive (`##aetheus[pipelinemetric ...]`,
-        // `##aetheus[setvariable ...]`) is a message to the backend, not a log line for a reader.
+        // A line that is only an agent directive (`##aetheus[pipelinemetric...]`,
+        // `##aetheus[setvariable...]`) is a message to the backend, not a log line for a reader.
         var query = db.TaskLogs
             .Where(l => l.Task.ServerId == serverId && !l.Message.StartsWith("##aetheus["))
             .AsNoTracking();
-        // Recette R-210 / R-224: the grid's header filters narrow the whole log before the count.
+        // The grid's header filters narrow the whole log before the count.
         query = ServerLogQuery.Columns.ApplyFilters(query, filters);
 
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);

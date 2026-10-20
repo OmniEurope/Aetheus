@@ -30,8 +30,8 @@ public sealed class CandidateAssuranceContractTests : IDisposable
                 ["QA_PREVIOUS_INTEGRATION_GATE_STATUS"] = "0",
                 ["QA_PREVIOUS_E2E_GATE_STATUS"] = "0",
                 ["QA_PREVIOUS_SMOKE_GATE_STATUS"] = "0",
-                ["CompatibilityMode"] = "NMinusOne",
-                ["PreviousVersionTested"] = SourceSha,
+                ["COMPATIBILITY_MODE"] = "NMinusOne",
+                ["PREVIOUS_VERSION_TESTED"] = SourceSha,
                 ["AgentCompatibilityMode"] = "NMinusOne",
                 ["PreviousAgentTested"] = SourceSha
             });
@@ -179,8 +179,8 @@ public sealed class CandidateAssuranceContractTests : IDisposable
         var node = RequireNode();
         PrepareSummaries(qualityGrade: "B", securityGrade: "C", dynamicGrade: "B");
         var environment = PassingEnvironment();
-        environment["CompatibilityMode"] = "Bootstrap";
-        environment["PreviousVersionTested"] = "false";
+        environment["COMPATIBILITY_MODE"] = "Bootstrap";
+        environment["PREVIOUS_VERSION_TESTED"] = "false";
         environment["AgentCompatibilityMode"] = "Bootstrap";
         environment["PreviousAgentTested"] = "false";
         Assert.Equal(0, (await RunNodeAsync(
@@ -305,8 +305,8 @@ public sealed class CandidateAssuranceContractTests : IDisposable
         ["QA_PREVIOUS_INTEGRATION_GATE_STATUS"] = "0",
         ["QA_PREVIOUS_E2E_GATE_STATUS"] = "0",
         ["QA_PREVIOUS_SMOKE_GATE_STATUS"] = "0",
-        ["CompatibilityMode"] = "NMinusOne",
-        ["PreviousVersionTested"] = SourceSha,
+        ["COMPATIBILITY_MODE"] = "NMinusOne",
+        ["PREVIOUS_VERSION_TESTED"] = SourceSha,
         ["AgentCompatibilityMode"] = "NMinusOne",
         ["PreviousAgentTested"] = SourceSha
     };

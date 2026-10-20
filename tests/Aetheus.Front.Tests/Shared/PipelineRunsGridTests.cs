@@ -20,9 +20,7 @@ public class PipelineRunsGridTests : BunitContext
         var cut = Render<PipelineRunsGrid>(parameters => parameters
             .Add(component => component.IsLoading, true));
 
-        // PLAN-003 lot 15: one loading style everywhere. Since recette R-432 (user decision of 2026-09-29)
-        // that style is OE's grid loading bar, not the Aetheus veil: the grid reads busy and its empty body
-        // announces the load as a status region with a localized text, as the shared loader did.
+        // Grid loading uses OE's bar and a localized accessible status region.
         Assert.Equal("true", cut.Find(".omni-data-grid").GetAttribute("aria-busy"));
         Assert.Single(cut.FindAll("thead > tr.omni-data-grid__progress .omni-loading-bar--active"));
         var status = cut.Find("tr.omni-data-grid__pending [role='status']");
@@ -54,7 +52,7 @@ public class PipelineRunsGridTests : BunitContext
     [Fact]
     public void AGradedRun_ItsLetterOpensTheGateTab()
     {
-        // Recette R2-147: an F says why on the Gate tab; the letter in the list leads there in one click.
+        // An F says why on the Gate tab; the letter in the list leads there in one click.
         var items = new List<PipelineRunDto>
         {
             new() { Id = 2634, PipelineId = 1, ProjectId = 1, PipelineName = "candidate", Status = PipelineStatus.Success, GateGrade = AnalysisGrade.F }
@@ -69,11 +67,8 @@ public class PipelineRunsGridTests : BunitContext
         });
     }
 
-    /// <summary>
-    /// Recette R-373: the commit shows in the one short form (eight characters, the whole hash on hover)
-    /// and leads to the commit's page in Aetheus when the run recorded it. An internal repository's URL
-    /// is its smart-HTTP endpoint, so ".../commit/sha" on it served no page.
-    /// </summary>
+    /// <summary>Recorded commits use short linked hashes with full values on hover; internal clone
+    /// endpoints are not browser pages.</summary>
     [Fact]
     public void TheCommit_IsShortAndLeadsToItsPage()
     {
@@ -111,12 +106,8 @@ public class PipelineRunsGridTests : BunitContext
         });
     }
 
-    /// <summary>
-    /// Recette R-373, runs without a recorded commit: an internal repository's run leads to its Aetheus
-    /// commit and branch pages through the repository the backend resolved, never to the smart-HTTP
-    /// clone URL (a host the browser cannot reach, a path that answers 404). When the repository was not
-    /// resolved, the commit and the branch stay text.
-    /// </summary>
+    /// <summary>Resolved repositories provide internal commit and branch pages; unresolved
+    /// references remain text.</summary>
     [Fact]
     public void AnInternalRepositoryRun_LeadsToItsAetheusPages_NeverToTheCloneUrl()
     {
@@ -188,10 +179,8 @@ public class PipelineRunsGridTests : BunitContext
         {
             Assert.Contains("Alpha", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("Beta", cut.Markup, StringComparison.Ordinal);
-            // The status cell of a Running run shows its current step instead of a "Running" badge,
-            // so "Build" appears while the badge does not.
-            // Recette R-210: the Status header filter now lists every status by name, so the cell
-            // assertions read the rows only.
+            // Running rows show their current step; status-filter labels are tested separately from
+            // row content.
             var rows = string.Concat(cut.FindAll("tbody tr[data-omni-row-index]").Select(row => row.OuterHtml));
             Assert.Contains("Build", rows, StringComparison.Ordinal);
             Assert.DoesNotContain("Enum_PipelineStatus_Running", rows, StringComparison.Ordinal);
@@ -237,8 +226,7 @@ public class PipelineRunsGridTests : BunitContext
         {
             Assert.Contains("Duration", cut.Markup);
             Assert.Contains("DurationMinutesSecondsFormat", cut.Markup);
-            // The server used to be deliberately absent here. It is now a column of its own, so the
-            // run table answers "where did this run" without opening the run.
+            // The server column identifies where a run executes.
             Assert.Contains("web-01", cut.Markup);
         });
     }
@@ -521,8 +509,8 @@ public class PipelineRunsGridTests : BunitContext
     [Fact]
     public void R2102_GroupRuns_PutsRunsInProgressFirst_MostRecentlyStartedFirst_ThenTheRestByDate()
     {
-        // Recette R2-102: aetheus-deploy-prod #2543, still running, sat third under #2551 and #2544,
-        // finished and started after it.
+        // Running executions precede completed executions even when the completed runs started
+        // later.
         var at = new DateTime(2026, 10, 4, 1, 0, 0);
         var runs = new List<PipelineRunDto>
         {
@@ -638,7 +626,7 @@ public class PipelineRunsGridTests : BunitContext
             }
         };
         var cut = Render<PipelineRunsGrid>(parameters => parameters.Add(component => component.Items, items));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The run and pipeline links, the commit (ShortId) and the cancel button of a running run.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);

@@ -120,72 +120,109 @@ internal sealed class RestrictedScannerEgress : IAsyncDisposable
         {
             client.NoDelay = true;
             var clientStream = client.GetStream();
-            var header = await ReadHeaderAsync(clientStream, ct).ConfigureAwait(false);
-            if (header is null) return;
-            if (!HasValidProxyAuthorization(header))
-            {
-                await clientStream.WriteAsync(
-                    "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"Aetheus\"\r\nConnection: close\r\n\r\n"u8.ToArray(),
-                    ct).ConfigureAwait(false);
-                return;
-            }
-
-            var firstLineEnd = header.IndexOf("\r\n", StringComparison.Ordinal);
-            if (firstLineEnd <= 0) return;
-            var firstLine = header[..firstLineEnd];
-            var parts = firstLine.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 3) return;
-
-            string host;
-            int port;
-            var connect = string.Equals(parts[0], "CONNECT", StringComparison.OrdinalIgnoreCase);
-            if (connect)
-            {
-                (host, port) = ParseAuthority(parts[1], 443);
-            }
-            else if (Uri.TryCreate(parts[1], UriKind.Absolute, out var uri)
-                && uri.Scheme == Uri.UriSchemeHttp)
-            {
-                host = uri.Host;
-                port = uri.IsDefaultPort ? 80 : uri.Port;
-                parts[1] = string.IsNullOrEmpty(uri.PathAndQuery) ? "/" : uri.PathAndQuery;
-                header = string.Join(' ', parts) + header[firstLineEnd..];
-            }
-            else
-            {
-                return;
-            }
-
-            var destination = new Destination(host.TrimEnd('.').ToLowerInvariant(), port);
-            if (!_destinations.TryGetValue(destination, out var addresses) || addresses.Count == 0)
-                return;
-
-            using var upstream = new TcpClient(addresses[0].AddressFamily);
-            await upstream.ConnectAsync(addresses[0], port, ct).ConfigureAwait(false);
-            upstream.NoDelay = true;
-            var upstreamStream = upstream.GetStream();
-            if (connect)
-            {
-                await clientStream.WriteAsync(
-                    "HTTP/1.1 200 Connection Established\r\nConnection: keep-alive\r\n\r\n"u8.ToArray(),
-                    ct).ConfigureAwait(false);
-            }
-            else
-            {
-                var sanitizedHeader = RemoveProxyAuthorization(header);
-                await upstreamStream.WriteAsync(
-                    Encoding.ASCII.GetBytes(sanitizedHeader), ct).ConfigureAwait(false);
-            }
-
-            using var relayCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var upstreamCopy = clientStream.CopyToAsync(upstreamStream, relayCancellation.Token);
-            var downstreamCopy = upstreamStream.CopyToAsync(clientStream, relayCancellation.Token);
-            await Task.WhenAny(upstreamCopy, downstreamCopy).ConfigureAwait(false);
-            await relayCancellation.CancelAsync().ConfigureAwait(false);
+            await ServeAsync(
+                clientStream,
+                _proxyAuthorization,
+                AllowedAddress,
+                (admitted, token) => RelayAsync(clientStream, admitted.Request, admitted.Address, token),
+                ct).ConfigureAwait(false);
         }
     }
 
-    private bool HasValidProxyAuthorization(string header)
+    /// <summary>Relays one client connection when <see cref="AdmitAsync"/> lets its request through;
+    /// <paramref name="relay"/> is <see cref="RelayAsync"/> outside tests.</summary>
+    internal static async Task ServeAsync(
+        Stream clientStream,
+        string proxyAuthorization,
+        Func<string, int, IPAddress?> allowedAddress,
+        Func<AdmittedRequest, CancellationToken, Task> relay,
+        CancellationToken ct)
+    {
+        if (await AdmitAsync(clientStream, proxyAuthorization, allowedAddress, ct).ConfigureAwait(false)
+            is { } admitted)
+            await relay(admitted, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>A proxy request the egress lets through, and the audited address it goes to.</summary>
+    internal sealed record AdmittedRequest(ProxyRequest Request, IPAddress Address);
+
+    /// <summary>
+    /// Reads one proxy request header from <paramref name="clientStream"/> and decides whether it may pass:
+    /// it must carry <paramref name="proxyAuthorization"/> (otherwise a 407 is written back) and name a
+    /// destination <paramref name="allowedAddress"/> knows. <c>null</c> closes the connection.
+    /// </summary>
+    internal static async Task<AdmittedRequest?> AdmitAsync(
+        Stream clientStream,
+        string proxyAuthorization,
+        Func<string, int, IPAddress?> allowedAddress,
+        CancellationToken ct)
+    {
+        var header = await ReadHeaderAsync(clientStream, ct).ConfigureAwait(false);
+        if (header is null) return null;
+        if (!HasValidProxyAuthorization(header, proxyAuthorization))
+        {
+            await clientStream.WriteAsync(
+                "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"Aetheus\"\r\nConnection: close\r\n\r\n"u8.ToArray(),
+                ct).ConfigureAwait(false);
+            return null;
+        }
+
+        return TryParseProxyRequest(header) is { } request && allowedAddress(request.Host, request.Port) is { } address
+            ? new AdmittedRequest(request, address)
+            : null;
+    }
+
+    private IPAddress? AllowedAddress(string host, int port) =>
+        _destinations.TryGetValue(new Destination(host, port), out var addresses) && addresses.Count > 0
+            ? addresses[0]
+            : null;
+
+    /// <summary>A proxied request: a CONNECT tunnel, or a plain-HTTP request whose absolute target is
+    /// rewritten to its path for the upstream.</summary>
+    internal sealed record ProxyRequest(bool Connect, string Host, int Port, string Header);
+
+    /// <summary>The destination of a proxy request header, or <c>null</c> for anything that is neither a
+    /// CONNECT nor an absolute <c>http://</c> request.</summary>
+    internal static ProxyRequest? TryParseProxyRequest(string header)
+    {
+        var firstLineEnd = header.IndexOf("\r\n", StringComparison.Ordinal);
+        if (firstLineEnd <= 0) return null;
+        var parts = header[..firstLineEnd].Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 3) return null;
+
+        if (string.Equals(parts[0], "CONNECT", StringComparison.OrdinalIgnoreCase))
+        {
+            var (host, port) = ParseAuthority(parts[1], 443);
+            return new ProxyRequest(true, DestinationHost(host), port, header);
+        }
+        if (!Uri.TryCreate(parts[1], UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttp)
+            return null;
+        parts[1] = string.IsNullOrEmpty(uri.PathAndQuery) ? "/" : uri.PathAndQuery;
+        return new ProxyRequest(
+            false, DestinationHost(uri.Host), uri.IsDefaultPort ? 80 : uri.Port, string.Join(' ', parts) + header[firstLineEnd..]);
+    }
+
+    private static string DestinationHost(string host) => host.TrimEnd('.').ToLowerInvariant();
+
+    private static async Task RelayAsync(NetworkStream clientStream, ProxyRequest request, IPAddress address, CancellationToken ct)
+    {
+        using var upstream = new TcpClient(address.AddressFamily);
+        await upstream.ConnectAsync(address, request.Port, ct).ConfigureAwait(false);
+        upstream.NoDelay = true;
+        var upstreamStream = upstream.GetStream();
+        var greeting = request.Connect
+            ? "HTTP/1.1 200 Connection Established\r\nConnection: keep-alive\r\n\r\n"u8.ToArray()
+            : Encoding.ASCII.GetBytes(RemoveProxyAuthorization(request.Header));
+        await (request.Connect ? clientStream : upstreamStream).WriteAsync(greeting, ct).ConfigureAwait(false);
+
+        using var relayCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var upstreamCopy = clientStream.CopyToAsync(upstreamStream, relayCancellation.Token);
+        var downstreamCopy = upstreamStream.CopyToAsync(clientStream, relayCancellation.Token);
+        await Task.WhenAny(upstreamCopy, downstreamCopy).ConfigureAwait(false);
+        await relayCancellation.CancelAsync().ConfigureAwait(false);
+    }
+
+    private static bool HasValidProxyAuthorization(string header, string proxyAuthorization)
     {
         foreach (var line in header.Split("\r\n", StringSplitOptions.RemoveEmptyEntries))
         {
@@ -193,7 +230,7 @@ internal sealed class RestrictedScannerEgress : IAsyncDisposable
             if (line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 return CryptographicOperations.FixedTimeEquals(
                     Encoding.ASCII.GetBytes(line[prefix.Length..].Trim()),
-                    Encoding.ASCII.GetBytes(_proxyAuthorization));
+                    Encoding.ASCII.GetBytes(proxyAuthorization));
         }
         return false;
     }
@@ -244,7 +281,7 @@ internal sealed class RestrictedScannerEgress : IAsyncDisposable
         return validated;
     }
 
-    private static bool IsPrivateOrSpecial(IPAddress address)
+    internal static bool IsPrivateOrSpecial(IPAddress address)
     {
         if (IPAddress.IsLoopback(address)) return true;
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
@@ -263,7 +300,7 @@ internal sealed class RestrictedScannerEgress : IAsyncDisposable
             || octets[0] >= 224;
     }
 
-    private static async Task<string?> ReadHeaderAsync(NetworkStream stream, CancellationToken ct)
+    internal static async Task<string?> ReadHeaderAsync(Stream stream, CancellationToken ct)
     {
         var bytes = new List<byte>(1024);
         var buffer = new byte[1];

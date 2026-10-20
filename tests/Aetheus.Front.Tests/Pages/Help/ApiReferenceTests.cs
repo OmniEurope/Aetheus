@@ -67,4 +67,25 @@ public class ApiReferenceTests : BunitContext
         Assert.Contains("ApiReferenceAdminOnly", cut.Markup);
         Assert.DoesNotContain("/api/servers", cut.Markup);
     }
+
+    [Fact]
+    public void AnUntaggedOperation_IsGroupedUnderItsFirstPathSegmentAfterApi()
+    {
+        _handler.SetJsonResponse("openapi/v1.json", new Dictionary<string, object>
+        {
+            ["paths"] = new Dictionary<string, object>
+            {
+                ["/api/widgets/{id}"] = new Dictionary<string, object> { ["get"] = new { summary = "One widget" } },
+                ["/health/live"] = new Dictionary<string, object> { ["get"] = new { summary = "Liveness" } },
+                ["/api"] = new Dictionary<string, object> { ["get"] = new { summary = "Root" } },
+                ["/api/servers"] = new Dictionary<string, object> { ["get"] = new { summary = "Tagged", tags = Array.Empty<string>() } }
+            }
+        });
+
+        var cut = Render<ApiReference>();
+
+        cut.WaitForState(() => cut.Markup.Contains("/api/widgets/{id}", StringComparison.Ordinal));
+        var headings = cut.FindAll("h5").Select(heading => heading.TextContent.Trim()).ToList();
+        Assert.Equal(["ApiReferenceGeneralTag", "health", "servers", "widgets"], headings);
+    }
 }

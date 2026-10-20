@@ -61,8 +61,7 @@ public class GitRepositoriesDeepTests : BunitContext
 
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false,
-            TimeSpan.FromSeconds(2));
+            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false);
 
         // No filter now means "list all repos the user can read", not an empty grid.
         typeof(GitRepositories).GetField("_projectFilter", Priv)!.SetValue(cut.Instance, (int?)null);
@@ -83,8 +82,7 @@ public class GitRepositoriesDeepTests : BunitContext
 
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false,
-            TimeSpan.FromSeconds(2));
+            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false);
 
         // Set ProjectId via reflection (bypassing [SupplyParameterFromQuery])
         typeof(GitRepositories).GetProperty("ProjectId")!.SetValue(cut.Instance, (int?)1);
@@ -104,8 +102,7 @@ public class GitRepositoriesDeepTests : BunitContext
 
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false,
-            TimeSpan.FromSeconds(2));
+            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false);
 
         // Unknown projectId not in _projects
         typeof(GitRepositories).GetProperty("ProjectId")!.SetValue(cut.Instance, (int?)999);
@@ -126,8 +123,7 @@ public class GitRepositoriesDeepTests : BunitContext
 
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false,
-            TimeSpan.FromSeconds(2));
+            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false);
 
         // Set a filter first via reflection
         typeof(GitRepositories).GetField("_projectFilter", Priv)!.SetValue(cut.Instance, 1);
@@ -149,8 +145,7 @@ public class GitRepositoriesDeepTests : BunitContext
 
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false,
-            TimeSpan.FromSeconds(2));
+            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false);
 
         typeof(GitRepositories).GetField("_projectFilter", Priv)!.SetValue(cut.Instance, (int?)null);
 
@@ -170,8 +165,7 @@ public class GitRepositoriesDeepTests : BunitContext
 
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false,
-            TimeSpan.FromSeconds(2));
+            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false);
 
         var projects = (List<ProjectDto>)typeof(GitRepositories).GetField("_projects", Priv)!.GetValue(cut.Instance)!;
         Assert.Equal(2, projects.Count);
@@ -248,8 +242,7 @@ public class GitRepositoriesDeepTests : BunitContext
 
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false,
-            TimeSpan.FromSeconds(2));
+            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false);
 
         var projects = (List<ProjectDto>)typeof(GitRepositories).GetField("_projects", Priv)!.GetValue(cut.Instance)!;
         Assert.Empty(projects);
@@ -265,8 +258,7 @@ public class GitRepositoriesDeepTests : BunitContext
 
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => !cut.Instance.IsLoading,
-            TimeSpan.FromSeconds(2));
+            () => !cut.Instance.IsLoading);
 
         Assert.Equal(77, cut.Instance.ActiveProjectFilter);
         Assert.Contains(_handler.Requests, request => request.Url.Contains("projectId=77", StringComparison.Ordinal));
@@ -279,8 +271,7 @@ public class GitRepositoriesDeepTests : BunitContext
         SetupRepos(1);
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => !cut.Instance.IsLoading,
-            TimeSpan.FromSeconds(2));
+            () => !cut.Instance.IsLoading);
 
         var oldStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var oldResponse = new TaskCompletionSource<PaginatedResult<GitLightRepoDto>>(
@@ -335,8 +326,7 @@ public class GitRepositoriesDeepTests : BunitContext
 
         var cut = Render<GitRepositories>();
         cut.WaitForState(
-            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false,
-            TimeSpan.FromSeconds(2));
+            () => (bool)typeof(GitRepositories).GetField("_loading", Priv)!.GetValue(cut.Instance)! == false);
 
         typeof(GitRepositories).GetField("_projectFilter", Priv)!.SetValue(cut.Instance, 1);
         var method = typeof(GitRepositories).GetMethod("SyncUrlWithCurrentFilter", Priv)!;

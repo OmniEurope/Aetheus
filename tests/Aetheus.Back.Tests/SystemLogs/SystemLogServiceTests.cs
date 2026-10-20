@@ -111,8 +111,8 @@ public class SystemLogServiceTests : IDisposable
         Assert.All(result.Items, e => Assert.Equal("Error", e.Level));
     }
 
-    /// <summary>Recette R-453: the virtualized grid sends its header filters and its sort; they apply
-    /// to the whole filtered log before paging, not to one block.</summary>
+    /// <summary>The virtualized grid sends its header filters and its sort; they apply to the whole
+    /// filtered log before paging, not to one block.</summary>
     [Fact]
     public async Task GetLogEntriesAsync_AppliesColumnFiltersAndSortBeforePaging()
     {
@@ -261,5 +261,49 @@ public class SystemLogServiceTests : IDisposable
         var result = await _sut.GetLogEntriesAsync(null, null, null, null, null, 1, 50, ct: TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(result.Items);
+    }
+
+    [Theory]
+    [InlineData("[VRB] m", "Verbose", "m")]
+    [InlineData("[VERBOSE] m", "Verbose", "m")]
+    [InlineData("[DBG] m", "Debug", "m")]
+    [InlineData("[DEBUG] m", "Debug", "m")]
+    [InlineData("[INF] m", "Information", "m")]
+    [InlineData("[INFORMATION] m", "Information", "m")]
+    [InlineData("[WRN] m", "Warning", "m")]
+    [InlineData("[WARNING] m", "Warning", "m")]
+    [InlineData("[ERR]   m", "Error", "m")]
+    [InlineData("[ERROR] m", "Error", "m")]
+    [InlineData("[FTL] m", "Fatal", "m")]
+    [InlineData("[FATAL] m", "Fatal", "m")]
+    [InlineData("[wrn] m", "wrn", "m")]
+    [InlineData("[CUSTOM] m", "CUSTOM", "m")]
+    [InlineData("no level tag", "Information", "no level tag")]
+    [InlineData("[unclosed tag", "Information", "[unclosed tag")]
+    public async Task GetLogEntriesAsync_PlainTextLine_ReadsTimestampLevelAndMessage(
+        string afterTimestamp, string expectedLevel, string expectedMessage)
+    {
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "app.log"),
+            "2025-01-15 10:30:00.123 " + afterTimestamp + "\n", cancellationToken: TestContext.Current.CancellationToken);
+
+        var result = await _sut.GetLogEntriesAsync(null, null, null, null, null, 1, 50, ct: TestContext.Current.CancellationToken);
+
+        var entry = Assert.Single(result.Items);
+        Assert.Equal(new DateTime(2025, 1, 15, 10, 30, 0, 123, DateTimeKind.Utc), entry.Timestamp.ToUniversalTime());
+        Assert.Equal(expectedLevel, entry.Level);
+        Assert.Equal(expectedMessage, entry.Message);
+    }
+
+    [Fact]
+    public async Task GetLogEntriesAsync_PlainTextLineWithoutTimestamp_KeepsTheWholeLineAsInformation()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "app.log"),
+            "[ERR] not a timestamped line\n", cancellationToken: TestContext.Current.CancellationToken);
+
+        var result = await _sut.GetLogEntriesAsync(null, null, null, null, null, 1, 50, ct: TestContext.Current.CancellationToken);
+
+        var entry = Assert.Single(result.Items);
+        Assert.Equal("Information", entry.Level);
+        Assert.Equal("[ERR] not a timestamped line", entry.Message);
     }
 }

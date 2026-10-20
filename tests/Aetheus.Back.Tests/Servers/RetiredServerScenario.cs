@@ -16,13 +16,9 @@ using Environment = Aetheus.Back.Data.Entities.Environment;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>
-/// PLAN-004 R-11 production case as a fixture: server 4 (vps2577917) carries the links that a hard
-/// delete used to erase (environment, pool, port reservation and range, project server with its
-/// library and vault, an agent token, tags and admin toggles). Every step runs on a fresh
-/// <see cref="AppDbContext"/> over the same in-memory store, like separate HTTP requests, so no
-/// tracked entity can hide what the query filter does.
-/// </summary>
+/// <summary>Retirement fixture includes server links, credentials and administrator settings. Use
+/// fresh contexts over the same in-memory store to expose query-filter behaviour without relying on
+/// tracked state.</summary>
 internal sealed class RetiredServerScenario
 {
     public const int OrgId = 1;

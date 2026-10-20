@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
-/// <summary>
-/// Recette R2-108: how both front documents (the shell and the Monaco frame) name the API's CSP
-/// collector. report-to and the Reporting-Endpoints header, never report-uri: a policy carrying
-/// report-uri is reported by the DAST scan as "CSP: Notices" (ZAP 10055-3) for that directive alone.
-/// </summary>
+/// <summary>Names the API CSP collector for the shell and Monaco frame through report-to and
+/// Reporting-Endpoints, avoiding the deprecated report-uri directive.</summary>
 internal static class CspReporting
 {
     /// <summary>The Reporting-Endpoints name the policy's report-to directive refers to.</summary>

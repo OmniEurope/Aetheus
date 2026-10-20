@@ -2,7 +2,7 @@
 @page "/projects/{Id:int}/edit"
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
 
-<PageTitle>@(Loader.Project?.Name ?? L["Project"]) - @L["Edit"] - Aetheus</PageTitle>
+<PageTitle>@(Loader.Project?.Name ?? L["Project"]) - @L["Settings"] - Aetheus</PageTitle>
 
 @* Standalone edit page (not wrapped in the tabbed ProjectDetailLayout): its own header + back link. *@
 @if (Loader.Project is null)
@@ -13,13 +13,26 @@ else
 {
     @* The breadcrumb already carries "Projects / @Loader.Project.Name / Edit" - repeating the
        project name here would triple it, so the header keeps only the section title. *@
-    <OmniPageHeader Title="@L["Edit"]"
+    <OmniPageHeader Title="@L["Settings"]"
         ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("folder")" /></Icon>
     </OmniPageHeader>
     <Aetheus.Front.Components.Projects.ProjectDetailSections.ProjectEditSection
         Project="@Loader.Project" OnSaved="@OnSaved" />
-    @* PLAN-013 lot 4: how much data the project keeps, saved on its own. *@
+    @* How much data the project keeps, saved on its own. *@
     <Aetheus.Front.Components.Projects.ProjectDetailSections.ProjectDataRetentionSection
         ProjectId="@Loader.Project.Id" />
+    @* Recette R3-71: deleting the project lives in the page's danger zone (OE 1.8). Its tile is drawn
+       here rather than with OmniSettingsDangerAction: that action asks its own yes or no first, and the
+       project deletion already has its dialog (R2-122: what goes with the project, its name typed, refused
+       while a run is in progress), so the OE tile would ask twice. *@
+    <OmniSettingsDangerZone Class="omni-u-mt-lg">
+        <OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.Between" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium" Wrap="true">
+            <OmniStack Gap="OmniSpacing.XSmall">
+                <OmniText Element="OmniTextElement.Strong">@L["ProjectDeletionTitle"]</OmniText>
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["ProjectDeletionZoneHint"]</OmniText>
+            </OmniStack>
+            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+        </OmniStack>
+    </OmniSettingsDangerZone>
 }

@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>
-/// The project a covered file belongs to, used to group the coverage report by project (recette R-428).
-/// It is the Cobertura package the parser recorded (<see cref="CoverageFileDto.Assembly"/>) when there is
-/// one. A report without package names, or a file list stored before the parser recorded them, carries
-/// none: the project is then read from the file's path, the directory under the last <c>src</c> or
-/// <c>tests</c> segment (<c>src/Aetheus.Back/Components/A.cs</c> gives <c>Aetheus.Back</c>), else the
-/// path's first directory, and <c>/</c> for a file at the root. The API and the page share this rule, so
-/// the per-project table and the per-project tree always group the same way.
-/// </summary>
+/// <summary>Groups coverage by <see cref="CoverageFileDto.Assembly"/> when available, otherwise by
+/// the directory after the last src or tests segment, the first path directory, or / for a root
+/// file. Sharing this fallback keeps API and page groupings consistent.</summary>
 public static class CoverageProjectName
 {
     public const string Root = "/";

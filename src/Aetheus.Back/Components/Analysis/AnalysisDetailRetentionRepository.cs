@@ -74,6 +74,7 @@ public sealed class AnalysisDetailRetentionRepository(AppDbContext db) : IAnalys
             .Where(metric => reportIds.Contains(metric.AnalysisReportId)
                 && (metric.FilePath != null || metric.Symbol != null))
             .Select(metric => metric.Id)
+            .OrderBy(id => id)
             .Take(batchSize)
             .ToListAsync(ct).ConfigureAwait(false);
         if (ids.Count == 0) return 0;
@@ -94,6 +95,7 @@ public sealed class AnalysisDetailRetentionRepository(AppDbContext db) : IAnalys
         var ids = await db.AnalysisComponents.AsNoTracking()
             .Where(component => reportIds.Contains(component.AnalysisReportId))
             .Select(component => component.Id)
+            .OrderBy(id => id)
             .Take(batchSize)
             .ToListAsync(ct).ConfigureAwait(false);
         if (ids.Count == 0) return 0;

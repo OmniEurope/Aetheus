@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Recette R1-19 / R1-25: a page opened to fix something for another page (create an environment for
-/// the pipeline setup wizard, add a server) brings the user back to it. The address travels as
-/// <c>?returnUrl=</c> and is validated by OE's <see cref="OmniReturnUrl.IsLocal"/>, so only a path of
-/// this application is ever followed: never an open redirect.
-/// </summary>
+/// <summary> A page opened to fix something for another page (create an environment for the
+/// pipeline setup wizard, add a server) brings the user back to it. The address travels as
+/// <c>?returnUrl=</c> and is validated by OE's <see cref="OmniReturnUrl.IsLocal"/>, so only a path
+/// of this application is ever followed: never an open redirect. </summary>
 public static class LocalReturnUrl
 {
     public const string Parameter = "returnUrl";

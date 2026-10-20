@@ -20,7 +20,7 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
     // renewal/refresh so the forced change-password gate holds across a full-page reload.
     private const string MustChangePasswordClaim = "aetheus:mcp";
 
-    // Recette R-471: the opaque audience identifier minted by the backend (AetheusClaimTypes.AnalyticsVisitor).
+    // The opaque audience identifier minted by the backend (AetheusClaimTypes.AnalyticsVisitor).
     private const string AnalyticsVisitorClaim = "aetheus:avid";
 
     public string? Token { get; private set; }
@@ -37,6 +37,10 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
     /// </summary>
     public bool HasValidToken => !string.IsNullOrEmpty(Token) && !IsTokenExpired(Token);
     public string? Username { get; private set; }
+
+    /// <summary>The database id of the signed-in user (the token subject); null for an identity without a
+    /// user row, such as the bootstrap administrator, and when signed out.</summary>
+    public int? UserId { get; private set; }
     public List<string> Roles { get; private set; } = [];
     public bool IsAdmin => Roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
 
@@ -48,6 +52,9 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
     public bool MustChangePassword { get; private set; }
 
     public event Action? OnAuthStateChanged;
+
+    /// <summary>The tab's one token renewal, shared by every <see cref="AuthDelegatingHandler"/> (R1-89).</summary>
+    internal TokenRenewalGate RenewalGate { get; } = new();
 
     /// <summary>
     /// Raised only when the token-renewal endpoint definitively rejects the session. Transient
@@ -61,11 +68,8 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
 
     public void NotifyNeedsLogin() => OnNeedsLogin?.Invoke();
 
-    /// <summary>
-    /// PLAN-005 lot 9 / D48: why the last session ended without the user asking (one of
-    /// <c>SessionEndReasons.All</c>), or null. Read by the layout to say it and to report it; cleared
-    /// by the next sign-in. A voluntary logout never sets it.
-    /// </summary>
+    /// <summary>Keep the involuntary session-end reason until the next sign-in so the layout can
+    /// explain and report it; voluntary logout leaves it unset.</summary>
     public string? LastSessionEndReason { get; private set; }
 
     /// <summary>
@@ -86,12 +90,9 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
         await LogoutAsync();
     }
 
-    /// <summary>
-    /// PLAN-005 lot 9 / D50: another tab of this browser may have rotated the refresh token since this
-    /// one read it. Renewing with the stale copy looks like a replay to the server, which then revokes
-    /// the whole chain and signs every tab out. Re-read what is stored and adopt it: the stored refresh
-    /// token always, the stored access token when it is newer and still valid.
-    /// </summary>
+    /// <summary>Reread browser storage before renewing because another tab may have rotated the
+    /// refresh token; adopt that refresh token and a newer valid access token to avoid triggering
+    /// replay revocation with a stale copy.</summary>
     public async Task ReloadFromStorageAsync()
     {
         try
@@ -134,12 +135,9 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
     [JSInvokable]
     public bool IsSignedInForAnalytics() => HasValidToken;
 
-    /// <summary>
-    /// Recette R-471: the opaque identifier of the signed-in account for the audience measurement
-    /// (layout.js, <c>Aetheus.analyticsVisitor</c>), so two people behind one network count as two. It
-    /// is the token's <c>aetheus:avid</c> claim, a keyed hash minted by the backend: neither the token
-    /// nor the account name. Null when nobody is signed in.
-    /// </summary>
+    /// <summary>Use the backend-minted opaque analytics claim so distinct accounts behind one
+    /// network remain distinguishable without exposing account names or tokens; return null when
+    /// signed out.</summary>
     [JSInvokable]
     public string? VisitorForAnalytics() => HasValidToken ? _analyticsVisitor : null;
 
@@ -184,6 +182,7 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
         Token = token;
         Roles = ParseRoles(token);
         Username = ParseClaim(token, "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", "unique_name");
+        UserId = ParseUserId(token);
         MustChangePassword = ParseClaim(token, MustChangePasswordClaim) == "true";
         _analyticsVisitor = ParseClaim(token, AnalyticsVisitorClaim);
         NotifyAnalyticsIdentity();
@@ -224,6 +223,7 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
             {
                 Roles = ParseRoles(Token);
                 Username = ParseClaim(Token, "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", "unique_name");
+                UserId = ParseUserId(Token);
                 MustChangePassword = ParseClaim(Token, MustChangePasswordClaim) == "true";
             }
         }
@@ -254,6 +254,7 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
         Token = null;
         RefreshToken = null;
         Username = null;
+        UserId = null;
         Roles = [];
         MustChangePassword = false;
         _analyticsVisitor = null;
@@ -297,6 +298,12 @@ public class AuthStateProvider(IJSRuntime js, ILogger<AuthStateProvider> logger)
         }
         return [];
     }
+
+    private int? ParseUserId(string token) =>
+        int.TryParse(ParseClaim(token, "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", "nameid"),
+            System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id)
+            ? id
+            : null;
 
     // Accepts the short JWT form as a fallback when the long SOAP URI isn't
     // present - same rationale as ParseRoles.

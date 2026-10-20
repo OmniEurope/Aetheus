@@ -40,9 +40,9 @@ public class ServerPortReservation
     public DateTime DeclaredAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
-    /// <summary>When the agent last saw this port listening (PLAN-005 lot 2). Null on a declared or
-    /// manual claim no scan has confirmed. A declared port with no observation is a discrepancy the UI
-    /// shows; it is never turned into an automatic correction.</summary>
+    /// <summary>Records the last agent observation of this listening port; null means no scan has
+    /// confirmed the claim. Missing observations remain visible discrepancies rather than
+    /// triggering automatic corrections.</summary>
     public DateTime? ObservedAt { get; set; }
 
     // Navigation

@@ -22,7 +22,7 @@ public partial class AuditLogs : IAsyncDisposable
     private List<AuditLogDto> _logs = [];
     private int _count;
     private bool _loading;
-    // Recette R-238: the column header filters, and only they, filter the log (the timestamp range included).
+    // The column header filters, and only they, filter the log (the timestamp range included).
     private List<Aetheus.Shared.Components.Shared.GridFilter> _columnFilters = [];
     private Func<string, string>? _actionText;
     private List<string> _actionOptions = [];
@@ -67,8 +67,8 @@ public partial class AuditLogs : IAsyncDisposable
     private string CacheKey(int page, int pageSize, string? sortBy = null, bool sortDescending = true) =>
         $"audit:{page}:{pageSize}:{GridColumnFilters.CacheText(_columnFilters)}:{sortBy}:{sortDescending}";
 
-    /// <summary>Recette R-452: what the Action column and its filter show for an action, its label or
-    /// its name spelled out, never a raw resource key.</summary>
+    /// <summary>What the Action column and its filter show for an action, its label or its name
+    /// spelled out, never a raw resource key.</summary>
     private Func<string, string> ActionText => _actionText ??= action => AuditActionPresentation.Label(L, action);
 
     private void ApplyLogs(PaginatedResult<AuditLogDto> result)
@@ -77,7 +77,7 @@ public partial class AuditLogs : IAsyncDisposable
         _count = result.TotalCount;
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<AuditLogDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(20);
@@ -88,7 +88,7 @@ public partial class AuditLogs : IAsyncDisposable
 
     private async Task LoadData(GridLoadArgs args)
     {
-        // Recette R-238: the header filters drive the query, each one a real column filter of the endpoint.
+        // The header filters drive the query, each one a real column filter of the endpoint.
         _columnFilters = args.ToApiFilters();
         var filters = _columnFilters;
         var (page, pageSize) = args.ToPageRequest(20);
@@ -101,8 +101,8 @@ public partial class AuditLogs : IAsyncDisposable
             () => InvokeAsync(StateHasChanged));
     }
 
-    /// <summary>Recette R-226: a new entry refreshes the grid quietly, rows, page, scroll and filters kept.
-    /// The grid is virtualized and keeps the rows it pulled, so the refresh goes through it.</summary>
+    /// <summary>A new entry refreshes the grid quietly, rows, page, scroll and filters kept. The
+    /// grid is virtualized and keeps the rows it pulled, so the refresh goes through it.</summary>
     private Task RefreshData() => _grid?.Refresh() ?? LoadData(new GridLoadArgs());
 
     private async Task ShowDetailsDialogAsync(AuditLogDto log)

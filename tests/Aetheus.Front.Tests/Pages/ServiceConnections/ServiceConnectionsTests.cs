@@ -23,7 +23,7 @@ public class ServiceConnectionsTests : BunitContext
 
         var cut = Render<Aetheus.Front.Components.ServiceConnections.ServiceConnections>();
 
-        cut.WaitForState(() => cut.Markup.Contains("GitHub prod"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("GitHub prod"));
         Assert.Contains("GitHub prod", cut.Markup);
         Assert.Contains("GitHub", cut.Markup); // type badge
     }
@@ -36,13 +36,13 @@ public class ServiceConnectionsTests : BunitContext
             new ServiceConnectionTestResultDto { Status = ServiceConnectionTestStatus.Valid, Message = "ok" });
 
         var cut = Render<Aetheus.Front.Components.ServiceConnections.ServiceConnections>();
-        cut.WaitForState(() => cut.Markup.Contains("GitHub prod"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("GitHub prod"));
 
-        var testButton = cut.FindAll("button").First(b => b.Names().Contains("TestConnection", StringComparison.Ordinal));
+        var testButton = cut.FindMenuItem("TestConnection")!;
         testButton.Click();
 
         // The localized valid status (Enum key) renders in a badge - never fabricated.
-        cut.WaitForState(() => cut.Markup.Contains("Enum_ServiceConnectionTestStatus_Valid"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("Enum_ServiceConnectionTestStatus_Valid"));
         Assert.Contains("Enum_ServiceConnectionTestStatus_Valid", cut.Markup);
     }
 
@@ -54,11 +54,11 @@ public class ServiceConnectionsTests : BunitContext
             new ServiceConnectionTestResultDto { Status = ServiceConnectionTestStatus.Unsupported });
 
         var cut = Render<Aetheus.Front.Components.ServiceConnections.ServiceConnections>();
-        cut.WaitForState(() => cut.Markup.Contains("GitHub prod"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("GitHub prod"));
 
-        cut.FindAll("button").First(b => b.Names().Contains("TestConnection", StringComparison.Ordinal)).Click();
+        cut.FindMenuItem("TestConnection")!.Click();
 
-        cut.WaitForState(() => cut.Markup.Contains("Enum_ServiceConnectionTestStatus_Unsupported"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("Enum_ServiceConnectionTestStatus_Unsupported"));
         Assert.DoesNotContain("Enum_ServiceConnectionTestStatus_Valid", cut.Markup);
     }
 }

@@ -29,6 +29,18 @@ public class PluginManagementTests : BunitContext
     }
 
     [Fact]
+    public void TheFirstPage_IsReadOnce()
+    {
+        // The grid's first request reads the first page; the page used to read it a second time from
+        // OnInitializedAsync, two concurrent loads sharing one loading flag.
+        _handler.SetPaginatedJsonResponse("api/plugins", new List<PluginRegistrationDto>());
+        var cut = Render<PluginManagement>();
+        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup));
+
+        Assert.Single(_handler.Requests, request => request.Url.Contains("api/plugins?", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Renders_PluginRows()
     {
         _handler.SetPaginatedJsonResponse("api/plugins", new List<PluginRegistrationDto>

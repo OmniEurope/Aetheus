@@ -3,7 +3,7 @@ using Aetheus.Front.Components.Pipelines;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>Recette R-428: the coverage tab's project tree and its gauge colours.</summary>
+/// <summary>The coverage tab's project tree and its gauge colours.</summary>
 public sealed class CoverageProjectTreeTests
 {
     [Theory]
@@ -44,7 +44,7 @@ public sealed class CoverageProjectTreeTests
     [InlineData(0.49, 4)]
     public void GaugeColour_FollowsTheTiersOfTheFigureBesideIt(double rate, int expected)
     {
-        // OE palette: 1 green, 2 orange, 4 red. The gauge used to be orange above 80 % and green below.
+        // OE coverage palette indices 1, 2 and 4 denote green, orange and red.
         Assert.Equal(expected, PipelineRunFormatting.CoverageChartColorIndex(rate));
         var textTier = PipelineRunFormatting.CoverageColorClass(rate);
         Assert.Equal(expected switch { 1 => "omni-u-text-success", 2 => "omni-u-text-warning", _ => "omni-u-text-danger" }, textTier);

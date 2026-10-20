@@ -8,10 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// PLAN-003 2.4: the Stryker mutation score, read from a mutation-testing-elements report and
-/// published as reliability.mutation.score. A report with nothing to score fails, never publishes 0.
-/// </summary>
+/// <summary>Publish reliability.mutation.score from a mutation-testing-elements report and fail
+/// when no score can be computed.</summary>
 public sealed class PipelineMutationPublisherTests
 {
     private static string Report(params string[] statuses) => JsonSerializer.Serialize(new

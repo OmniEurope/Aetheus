@@ -119,7 +119,7 @@ public static class RouteAccessPolicy
         string.IsNullOrEmpty(path)
         || path.Equals("settings", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("settings/", StringComparison.OrdinalIgnoreCase)
-        // R-114: the caller's own notifications; the API scopes every row to the caller.
+        // The caller's own notifications; the API scopes every row to the caller.
         || path.Equals("notifications", StringComparison.OrdinalIgnoreCase)
         || path.Equals("help", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("help/", StringComparison.OrdinalIgnoreCase)

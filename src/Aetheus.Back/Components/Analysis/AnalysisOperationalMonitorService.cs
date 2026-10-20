@@ -42,8 +42,8 @@ public sealed class AnalysisOperationalMonitorService(
             logger.LogError(exception, "Analysis operational health cycle failed");
         }
 
-        // PLAN-013 lot 2: the analysis detail retention rides the same hourly leader loop, apart from the
-        // health cycle so a failure of one never skips the other.
+        // The analysis detail retention rides the same hourly leader loop, apart from the health
+        // cycle so a failure of one never skips the other.
         try
         {
             await PurgeExpiredDetailAsync(ct).ConfigureAwait(false);

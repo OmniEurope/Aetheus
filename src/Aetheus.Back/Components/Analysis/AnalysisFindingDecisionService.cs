@@ -11,8 +11,8 @@ public interface IAnalysisFindingDecisionService
     Task<AnalysisFindingDecisionDto> CreateFindingDecisionAsync(
         int findingId, CreateAnalysisFindingDecisionRequest request, string actor, CancellationToken ct = default);
 
-    /// <summary>Recette R2-027: reverts the finding's active decision, which is revoked (kept in the
-    /// history), and puts the finding back to Open unless a later scan found it fixed.</summary>
+    /// <summary>Reverts the finding's active decision, which is revoked (kept in the history), and
+    /// puts the finding back to Open unless a later scan found it fixed.</summary>
     Task RevokeActiveFindingDecisionAsync(int findingId, string actor, CancellationToken ct = default);
 }
 

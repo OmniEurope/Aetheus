@@ -123,10 +123,13 @@ public class EnrollmentServiceTests
                     && request.AgentCapabilities != null
                     && request.AgentCapabilities.Contains(AgentCapabilities.SelfUpdate)
                     && request.AgentCapabilities.Contains(AgentCapabilities.PipelineBuild)
+                    && request.AgentCapabilities.Contains(AgentCapabilities.PipelineFunctions)
+                    // The deploy grant is only known from the first heartbeat's probe.
+                    && !request.AgentCapabilities.Contains(AgentCapabilities.DeploymentFunctions)
                     && request.AgentCapabilities.SequenceEqual(
                         request.AgentCapabilities.Order(StringComparer.Ordinal))
-                    // PLAN-004 R-11: the host's keyed machine identity rides along (null on a host
-                    // that exposes none), so a reinstall revives the same server.
+                    // Include the machine fingerprint at enrollment, or null when unavailable, so
+                    // the same host can revive its server record.
                     && request.MachineIdHash == MachineIdentity.ReadHash()),
                 Arg.Any<CancellationToken>());
         }

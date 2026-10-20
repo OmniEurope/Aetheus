@@ -8,10 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R2-034: creating a project hands the caller's user id to the service, which makes them a
-/// follower; an identity without a user row (the deployment identity) hands none.
-/// </summary>
+/// <summary> Creating a project hands the caller's user id to the service, which makes them a
+/// follower; an identity without a user row (the deployment identity) hands none. </summary>
 public sealed class ProjectsControllerCreatorTests
 {
     private readonly IProjectService _service = Substitute.For<IProjectService>();

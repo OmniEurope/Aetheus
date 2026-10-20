@@ -4,8 +4,7 @@ global using Aetheus.Back.Components.Shared;
 global using Aetheus.Back.Data;
 global using Aetheus.Back.Exceptions;
 global using Aetheus.Back.Services;
-// PLAN-008 lot 43: the contracts follow their module folder, so the former flat DTOs, enums,
-// constants, validators and helpers are now one namespace per module.
+// Import contracts through their module namespaces.
 global using Aetheus.Shared.Components.AgentPools;
 global using Aetheus.Shared.Components.Agents;
 global using Aetheus.Shared.Components.AgentUpdate;
@@ -27,6 +26,7 @@ global using Aetheus.Shared.Components.Firewall;
 global using Aetheus.Shared.Components.Git;
 global using Aetheus.Shared.Components.Logs;
 global using Aetheus.Shared.Components.Mail;
+global using Aetheus.Shared.Components.MailTemplates;
 global using Aetheus.Shared.Components.ModuleLinks;
 global using Aetheus.Shared.Components.Monitoring;
 global using Aetheus.Shared.Components.Notifications;

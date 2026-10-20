@@ -170,7 +170,7 @@ public class PipelineEditCoverageTests : BunitContext
     public void NewPipeline_Renders_WithDefaultYaml()
     {
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 100, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 100);
 
         // A brand-new pipeline seeds the scaffold YAML template into the model.
         var yaml = ModelYaml(cut);
@@ -186,7 +186,7 @@ public class PipelineEditCoverageTests : BunitContext
         Services.GetRequiredService<NavigationManager>()
             .NavigateTo("http://test/pipelines/new?projectId=1");
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 100, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 100);
 
         cut.Find("input#Name").Input("template-qa");
         cut.Find("input#Description").Input("Local template reuse validation.");
@@ -212,7 +212,7 @@ public class PipelineEditCoverageTests : BunitContext
         Services.GetRequiredService<NavigationManager>()
             .NavigateTo("http://test/pipelines/new?projectId=1");
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 100, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 100);
 
         var model = typeof(PipelineEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
         var projectId = (int?)model.GetType().GetProperty("ProjectId")!.GetValue(model);
@@ -226,7 +226,7 @@ public class PipelineEditCoverageTests : BunitContext
         Services.GetRequiredService<NavigationManager>()
             .NavigateTo("http://test/pipelines/new?projectId=999");
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 100, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 100);
 
         var model = typeof(PipelineEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
         var projectId = (int?)model.GetType().GetProperty("ProjectId")!.GetValue(model);
@@ -239,7 +239,7 @@ public class PipelineEditCoverageTests : BunitContext
     public async Task OnTemplateSelected_NonIntValue_LeavesTheStateUnchanged()
     {
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 100, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 100);
 
         var before = ModelYaml(cut);
         var method = typeof(PipelineEdit).GetMethod("OnTemplateSelected", Priv)!;
@@ -263,7 +263,7 @@ public class PipelineEditCoverageTests : BunitContext
             "api/pipelines/templates/1/resolve?version=3",
             "name: basic-ci\ntrigger: manual\nstages: []");
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 100, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 100);
 
         var method = typeof(PipelineEdit).GetMethod("OnTemplateSelected", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [(object)1])!);
@@ -274,18 +274,46 @@ public class PipelineEditCoverageTests : BunitContext
         Assert.DoesNotContain("stages:\n- name:", yaml);
     }
 
-    /// <summary>
-    /// PLAN-005 lot 6 / D42 on the template parameters of a new pipeline: a described parameter has
-    /// the help icon and the field points to the hidden description; no caption under the field.
-    /// </summary>
+    /// <summary>R3-13: a described template parameter carries its description behind the "?" of its OE
+    /// field (Help), named by the control's aria-describedby, and nowhere else as text.</summary>
     [Fact]
-    public void TemplateParameters_CarryTheirDescriptionInTheHelpIcon_NotACaption()
+    public void TemplateParameters_CarryTheirDescriptionBehindTheFieldQuestionMark_NotACaption()
     {
         const string description = "Where the application is published.";
-        const string templateYaml =
-            "name: basic-ci\ntrigger: manual\nparameters:\n" +
+        var cut = RenderTemplateParameters(
             "  - name: target\n    display_name: Target\n    type: string\n    description: " + description + "\n" +
-            "  - name: plain\n    type: string\nstages: []";
+            "  - name: plain\n    type: string\n");
+
+        var descriptionId = PipelineEdit.TemplateParameterDescriptionId("target", description)!;
+        cut.WaitForElement($"#{descriptionId}");
+        Assert.Equal(description, cut.Find($"#{descriptionId}").TextContent.Trim());
+        Assert.Equal(descriptionId, cut.Find($"input#{PipelineEdit.TemplateParameterControlId("target")}").GetAttribute("aria-describedby"));
+        Assert.Empty(cut.FindAll($"#{PipelineEdit.TemplateParameterFieldId("plain")}-help-content"));
+        Assert.Null(cut.Find($"input#{PipelineEdit.TemplateParameterControlId("plain")}").GetAttribute("aria-describedby"));
+        Assert.Single(cut.FindAll("*"), element => element.Children.Length == 0
+            && element.TextContent.Contains(description, StringComparison.Ordinal));
+    }
+
+    /// <summary>R3-6: a required template parameter carries OE's required mark on its label, never a
+    /// star written into the label text; an optional one carries none.</summary>
+    [Fact]
+    public void ARequiredTemplateParameter_CarriesTheOeRequiredMark()
+    {
+        var cut = RenderTemplateParameters(
+            "  - name: target\n    display_name: Target\n    type: string\n    required: true\n" +
+            "  - name: plain\n    type: string\n");
+
+        var target = cut.WaitForElement($"label[for='{PipelineEdit.TemplateParameterControlId("target")}']");
+        Assert.Contains("omni-label--required", target.ClassList);
+        Assert.Equal("*", target.QuerySelector(".omni-label__required")!.TextContent);
+        Assert.Equal(1, target.TextContent.Count(character => character == '*'));
+        Assert.DoesNotContain("omni-label--required",
+            cut.Find($"label[for='{PipelineEdit.TemplateParameterControlId("plain")}']").ClassList);
+    }
+
+    private IRenderedComponent<PipelineEdit> RenderTemplateParameters(string parametersYaml)
+    {
+        var templateYaml = "name: basic-ci\ntrigger: manual\nparameters:\n" + parametersYaml + "stages: []";
         _handler.SetJsonResponse("api/pipelines/templates/1", new PipelineTemplateDto
         {
             Id = 1,
@@ -297,15 +325,7 @@ public class PipelineEditCoverageTests : BunitContext
         Services.GetRequiredService<NavigationManager>()
             .NavigateTo("http://test/pipelines/new?projectId=1&templateId=1");
 
-        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)null));
-
-        var help = cut.WaitForElements(".param-help");
-        Assert.Single(help);
-        Assert.Equal(description, help[0].GetAttribute("aria-label"));
-        var descriptionId = ParameterHelpRow.DescribedBy("tpl-param", "target", description)!;
-        Assert.Equal(description, cut.Find($"#{descriptionId}").TextContent);
-        Assert.Single(cut.FindAll($"[aria-describedby='{descriptionId}']"));
-        Assert.DoesNotContain(cut.FindAll(".rz-text-caption"), caption => caption.TextContent.Contains(description));
+        return Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)null));
     }
 
     [Fact]
@@ -398,7 +418,7 @@ public class PipelineEditCoverageTests : BunitContext
         _handler.SetJsonResponse("api/pipelines", new PipelineDto { Id = 88, Name = "created" });
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 100, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 100);
 
         var model = typeof(PipelineEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
         model.GetType().GetProperty("Name")!.SetValue(model, "new-pipeline");
@@ -419,7 +439,7 @@ public class PipelineEditCoverageTests : BunitContext
     {
         SetupEditStubs(30);
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 30));
-        cut.WaitForState(() => cut.Markup.Contains("Coverage Pipeline"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Coverage Pipeline"));
         Assert.Contains("Coverage Pipeline", cut.Markup);
     }
 
@@ -449,7 +469,7 @@ public class PipelineEditCoverageTests : BunitContext
         SetupEditStubs(30);
 
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 30));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The run links and the cancel button of the running run.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 4);

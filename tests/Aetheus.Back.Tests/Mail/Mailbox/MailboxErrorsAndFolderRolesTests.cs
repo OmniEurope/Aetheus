@@ -7,7 +7,7 @@ using MailKit.Security;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-17: MailKit failures become the API's own exceptions; folders get their role.</summary>
+/// <summary>MailKit failures become the API's own exceptions; folders get their role.</summary>
 public sealed class MailboxErrorsAndFolderRolesTests
 {
     [Fact]

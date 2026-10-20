@@ -3,10 +3,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Shared.Components.Mail;
 
-// Recette R1-17: the mailbox of one account of a mail server Aetheus manages, read over IMAP and sent
-// over SMTP submission from the backend. Aetheus does not know mailbox passwords: the reader types it
-// to unlock the mailbox, the backend keeps it in memory only, for a bounded time, for that reader alone.
-// No DTO here ever carries a password back.
+// The mailbox of one account of a mail server Aetheus manages, read over IMAP and sent over SMTP
+// submission from the backend. Aetheus does not know mailbox passwords: the reader types it to
+// unlock the mailbox, the backend keeps it in memory only, for a bounded time, for that reader
+// alone. No DTO here ever carries a password back.
 
 /// <summary>Where an external mail client connects: the same for every mailbox of the server.</summary>
 public sealed record MailClientSettingsDto
@@ -34,6 +34,26 @@ public sealed record MailboxAccessDto
     public bool IsUnlocked { get; init; }
     /// <summary>When the held password is forgotten unless the mailbox is used again (UTC); null when locked.</summary>
     public DateTime? UnlockedUntil { get; init; }
+    /// <summary>Recette R1-41: true when this reader is an administrator and the server has an administrator
+    /// access prepared, so the mailbox opens without its password (each opening is traced in the audit log).</summary>
+    public bool CanOpenAsAdministrator { get; init; }
+    /// <summary>Recette R1-41: true while the mailbox is held open through the administrator access.</summary>
+    public bool OpenedAsAdministrator { get; init; }
+}
+
+/// <summary>Recette R1-41: one mailbox of the "Messagerie" page, which lists the mailboxes of every server the reader sees.</summary>
+public sealed record MailboxDirectoryEntryDto
+{
+    public int ServerId { get; init; }
+    [StringLength(200)]
+    public string ServerName { get; init; } = string.Empty;
+    public int AccountId { get; init; }
+    [StringLength(254)]
+    public string Email { get; init; } = string.Empty;
+    [StringLength(253)]
+    public string Domain { get; init; } = string.Empty;
+    public int QuotaMb { get; init; }
+    public int UsedMb { get; init; }
 }
 
 /// <summary>The mailbox password, typed by the reader. Write-only: checked against the server, never stored.</summary>
@@ -161,18 +181,17 @@ public sealed record MailboxSendRequest
     public string? SourceFolder { get; init; }
     public uint? SourceUid { get; init; }
 
-    /// <summary>
-    /// Recette R1-38: the files the writer attached, on top of what a forward sends again. Bounded by
-    /// <see cref="MailboxLimits.MaxAttachmentCount"/>, <see cref="MailboxLimits.MaxAttachmentBytes"/> each and
-    /// <see cref="MailboxLimits.MaxAttachmentsTotalBytes"/> together, checked again by the backend.
+    /// <summary> The files the writer attached, on top of what a forward sends again. Bounded by
+    /// <see cref="MailboxLimits.MaxAttachmentCount"/>, <see
+    /// cref="MailboxLimits.MaxAttachmentBytes"/> each and <see
+    /// cref="MailboxLimits.MaxAttachmentsTotalBytes"/> together, checked again by the backend.
     /// </summary>
     [MaxLength(MailboxLimits.MaxAttachmentCount)]
     public List<MailboxOutgoingAttachment> Attachments { get; init; } = [];
 }
 
-/// <summary>
-/// Recette R1-38: one file the writer attached. Only its name and bytes travel: the backend sanitizes the
-/// name and derives the MIME type from its extension, never from what the browser said.
+/// <summary> One file the writer attached. Only its name and bytes travel: the backend sanitizes
+/// the name and derives the MIME type from its extension, never from what the browser said.
 /// </summary>
 public sealed record MailboxOutgoingAttachment
 {
@@ -223,8 +242,8 @@ public static class MailboxLimits
     public const int MaxPageSize = 100;
     public const int MaxFolderNameLength = 100;
 
-    // Recette R1-38: the files a writer attaches to a message, the one place these limits are set. The
-    // compose dialog checks them before sending, the backend again before building the message.
+    // The files a writer attaches to a message, the one place these limits are set. The compose
+    // dialog checks them before sending, the backend again before building the message.
     public const int MaxAttachmentCount = 10;
     public const int MaxAttachmentBytes = 10 * 1024 * 1024;
     public const int MaxAttachmentsTotalBytes = 20 * 1024 * 1024;

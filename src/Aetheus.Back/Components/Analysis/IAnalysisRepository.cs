@@ -90,8 +90,8 @@ public interface IAnalysisRepository
     Task<AnalysisRunGateDto> GetRunGateAsync(
         int runId, string? scope = null, CancellationToken ct = default);
     Task<AnalysisRunGateDto> GetRunGateAsync(int runId, CancellationToken ct = default);
-    /// <summary>Recette R-485: the run result the run page reads: every count, the most severe
-    /// <paramref name="findingLimit"/> findings (the rest are read page by page).</summary>
+    /// <summary>The run result the run page reads: every count, the most severe <paramref
+    /// name="findingLimit"/> findings (the rest are read page by page).</summary>
     Task<AnalysisRunGateDto> GetRunResultSummaryAsync(int runId, int findingLimit, CancellationToken ct = default);
     Task<int?> GetLatestProjectRunIdAsync(int projectId, CancellationToken ct = default);
     Task<DependencyTrackGateState> GetDependencyTrackGateStateAsync(

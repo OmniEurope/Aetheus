@@ -3,12 +3,9 @@ using System.Diagnostics.Metrics;
 
 namespace Aetheus.Telemetry.Tests;
 
-/// <summary>
-/// PLAN-013 lot 1 (R2-113): the database size measurement of the package. The catalog statements read
-/// sizes and statistics only, a row estimate PostgreSQL does not know stays unknown, and each measurement
-/// is exported once with its table named. Reading a real PostgreSQL is proven by
-/// <c>DatabaseSizeQueryIntegrationTests</c> in the backend integration suite.
-/// </summary>
+/// <summary>Verifies catalog size and statistics measurements, unknown row estimates and one export
+/// per named table. Real PostgreSQL reads are covered by <c>DatabaseSizeQueryIntegrationTests</c>
+/// in the backend integration suite.</summary>
 public sealed class DatabaseSizeMetricsTests
 {
     [Fact]

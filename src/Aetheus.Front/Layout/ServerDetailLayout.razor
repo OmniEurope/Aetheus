@@ -26,20 +26,16 @@
 @using Aetheus.Front.Components.Servers
 
 <CascadingValue Value="Loader" Name="ServerLoader">
-    @* Recette R2-035: OE's detail frame. The header is painted before the server arrives (PLAN-003 D4)
-       and the trail's server segment is a skeleton until the name is known; a skeleton stands for the
-       content while it loads, where a lone loader used to sit; an unknown server gives way to the
-       not-found state. @Body stays mounted (hidden) while loading, as the note above requires. *@
-    @* Recette R-199: the server's own actions (Configuration, Tools) belong to its Overview only; the
-       other sections keep their own actions (the pipelines section's New, for one, recette R-124).
-       Recette R-083: no status or compatibility badge in the header of a server page. Nothing waits
-       for the server in the header but its actions. *@
+    @* Render the detail frame immediately with skeletons for loading entity data and a not-found
+       state for an unknown server. Keep @Body mounted but hidden during loading as required above. *@
+    @* Server-wide Configuration and Tools actions belong to Overview; other sections provide their
+       own actions. Header rendering does not depend on server status or compatibility badges. *@
     @{
         RenderFragment? headerActions = Loader.Server is null ? null : @<text>
             <Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@Aetheus.Front.Components.Shared.PipelinesList.HeaderActionsSection" />
             @if (IsOverview)
             {
-            @* Recette R-200: "Configuration", the server's settings, rather than a bare "Edit". *@
+            @* "Configuration", the server's settings, rather than a bare "Edit". *@
             @if (_canWrite)
             {
                 <OmniButton Variant="OmniButtonVariant.Primary" title="@L["Configuration"]" Label="@L["Configuration"]"
@@ -48,14 +44,18 @@
                     <span>@L["Configuration"]</span>
                 </OmniButton>
             }
-            @* Single tools menu: the agent actions plus the configuration import/export that used to be
-               discoverable only after navigating into the Configuration section, and the port check.
-               Port check needs Read only, so the menu itself is not gated on write. *@
+            @* Group agent actions, configuration import/export and port checks in Tools. Port
+               checks require only Read, so the menu itself is not gated on write permission. *@
             <OmniOverflowMenu Label="@L["Tools"]">
                 @if (_canWrite)
                 {
                     <OmniMenuItem OnClick="@OpenContactAgentDialog"><Icon><OmniIcon Name="OmniIconName.CellTower" /></Icon><ChildContent>@L["ContactAgent"]</ChildContent></OmniMenuItem>
                     <OmniMenuItem OnClick="@UpdateAgentAsync"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["UpdateAgent"]</ChildContent></OmniMenuItem>
+                    @* R3-58: the installer's --enable-* flags exist on Linux only. *@
+                    @if (CanEnableAgentCapabilities)
+                    {
+                        <OmniMenuItem OnClick="@OpenAgentCapabilitiesDialog"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["EnableAgentCapabilities"]</ChildContent></OmniMenuItem>
+                    }
                     <OmniMenuItem OnClick="@GoToConfiguration"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["ImportYaml"]</ChildContent></OmniMenuItem>
                 }
                 <OmniMenuItem OnClick="@GoToConfiguration"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["ExportYaml"]</ChildContent></OmniMenuItem>
@@ -70,8 +70,8 @@
     }
     <OmniDetailShell State="@DetailState" BackHref="/servers" BackText="@L["BackToServers"]" NotFoundTitle="@L["ServerNotFound"]">
         <Header>
-            @* PLAN-003 D7: the title is the SECTION (the breadcrumb leaf); the server name is an ancestor. *@
-            <OmniPageHeader ShowBack="true" Subtitle="@Breadcrumb.Subtitle()" Actions="@headerActions">
+            @* The section is the title and breadcrumb leaf; the server name is an ancestor. *@
+            <OmniPageHeader ShowBack="true" BackHref="@BackHref" Subtitle="@Breadcrumb.Subtitle()" Actions="@headerActions">
                 <Icon><OmniIcon Name="@MaterialIconMap.Resolve(SectionIcon)" /></Icon>
             </OmniPageHeader>
         </Header>

@@ -3,14 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Components.Audit;
 
-/// <summary>
-/// Recette R-452: how an audit action reads in the audit log. The backend writes about 170 distinct
-/// actions; each has an <c>AuditAction_{action}</c> label in both cultures
-/// (<c>AuditActionLabelCoverageTests</c> holds the backend and the resources together), and one
-/// colour from the kind of change it records, so the column no longer shows raw resource keys in
-/// grey. An action with no label yet (a future one) is spelled out from its name rather than shown
-/// as a key.
-/// </summary>
+/// <summary>Share localized audit-action labels and change-type colours across views, with
+/// AuditActionLabelCoverageTests checking resource coverage. Unknown actions fall back to readable
+/// names rather than raw resource keys.</summary>
 internal static partial class AuditActionPresentation
 {
     // Words of the action name, in reading order ("RotatedIngestKeyForDeploy" -> Rotated, Ingest...).

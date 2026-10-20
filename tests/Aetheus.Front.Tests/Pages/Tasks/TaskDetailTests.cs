@@ -42,7 +42,7 @@ public class TaskDetailTests : BunitContext
         });
 
         var cut = Render<TaskDetail>(parameters => parameters.Add(p => p.TaskId, 7085));
-        cut.WaitForState(() => cut.Markup.Contains("Agent self-update to 1.0.1294"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Agent self-update to 1.0.1294"));
 
         Assert.Contains("Task #7085", cut.Markup);
         Assert.Contains("InfrastructureMismatch", cut.Markup);
@@ -54,6 +54,46 @@ public class TaskDetailTests : BunitContext
         Assert.DoesNotContain("CancelTask", cut.Markup);
         // A finished task has nothing to follow.
         Assert.DoesNotContain("TaskInProgress", cut.Markup);
+    }
+
+    [Fact]
+    public void AgentIncompatibleTask_ShowsTheBackendReasonAndItsOwnBadgeAndIcon()
+    {
+        const string reason = "L'agent du serveur « vps » (1.3.15) ne sait pas exécuter cette tâche "
+            + "(opération PipelineFunction, capacité « pipeline.functions » absente) : mettez-le à jour en 1.3.16 "
+            + "depuis la page du serveur (action « Mettre à jour »), puis relancez.";
+        _handler.SetJsonResponse("api/tasks/7100", new ServerTaskDto
+        {
+            Id = 7100,
+            ServerId = 9,
+            ServerName = "vps",
+            Name = "bump-version",
+            Status = TaskExecutionStatus.Failed,
+            ExitCode = -1,
+            FailureCode = TaskFailureCodes.AgentIncompatible,
+            FailureReason = reason,
+            TimeoutSeconds = 300
+        });
+        _handler.SetJsonResponse("api/logs/task/7100", new List<TaskLogDto>
+        {
+            new()
+            {
+                Id = 1,
+                TaskId = 7100,
+                Level = TaskLogLevel.Error,
+                Message = $"[incident:AgentIncompatible] {reason}",
+                Timestamp = new DateTime(2026, 10, 19, 9, 0, 0, DateTimeKind.Utc)
+            }
+        });
+
+        var cut = Render<TaskDetail>(parameters => parameters.Add(p => p.TaskId, 7100));
+        cut.WaitForState(() => cut.Markup.Contains("bump-version"));
+
+        Assert.Contains("AgentIncompatible", cut.Markup);
+        Assert.Contains("mettez-le à jour en 1.3.16", cut.Markup);
+        Assert.Contains("[incident:AgentIncompatible]", cut.Markup);
+        Assert.Equal(OmniIconName.Download, TaskListView.GetFailureIcon(TaskFailureCodes.AgentIncompatible));
+        Assert.Equal(OmniTone.Danger, TaskListView.GetFailureBadge(TaskFailureCodes.AgentIncompatible));
     }
 
     [Fact]

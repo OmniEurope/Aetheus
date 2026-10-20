@@ -1,8 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* R-110 / R-116: follow or stop following a project. Its subscribers are the recipients of the
-   project's notifications. Recette R-180: an entry of the project header's "..." menu. Recette R-431:
-   the state comes from the header, known before the menu opens, so the entry never appears late and
-   pushes "Edit" down; hidden while unknown, so it never shows a wrong label. *@
+@* The project header supplies the follow state before its menu opens. Hide the entry while unknown
+   to avoid displaying the wrong action. *@
 
 @if (State.Subscribed is { } subscribed)
 {

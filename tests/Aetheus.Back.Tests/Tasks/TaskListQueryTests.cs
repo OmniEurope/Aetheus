@@ -7,8 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R-212: the task lists' column header filters (server, executor and status lists, creation
+/// <summary> The task lists' column header filters (server, executor and status lists, creation
 /// range, name and id) are applied by the query, before the count, inside the caller's scope.
 /// </summary>
 public sealed class TaskListQueryTests : IDisposable

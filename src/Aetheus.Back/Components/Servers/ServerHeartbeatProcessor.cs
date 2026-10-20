@@ -31,10 +31,13 @@ internal sealed class ServerHeartbeatProcessor(
     private static readonly ConcurrentDictionary<int, DateTime> DeploymentBuildAlerts = new();
     private static readonly TimeSpan DeploymentBuildAlertCooldown = TimeSpan.FromMinutes(15);
     private readonly SudoersDriftMonitor _sudoersDrift = new(alertHub, timeProvider, domainEvents, logger);
+    private readonly OomKillMonitor _oomKills = new(alertHub, timeProvider, domainEvents, logger);
+    private readonly DockerContainerRiskMonitor _dockerRisks = new(alertHub, timeProvider, domainEvents, logger);
+    private readonly SshConfigMonitor _sshConfig = new(alertHub, timeProvider, domainEvents, logger);
 
     public async Task ProcessHeartbeatAsync(int serverId, ServerHeartbeatDto heartbeat, CancellationToken ct = default)
     {
-        var timer = new HeartbeatStageTimer(timeProvider); // R-459: a slow heartbeat says where its time went
+        var timer = new HeartbeatStageTimer(timeProvider); // A slow heartbeat says where its time went
         var server = await repo.FindServerAsync(serverId, ct).ConfigureAwait(false);
         if (server is null) return;
 
@@ -50,11 +53,9 @@ internal sealed class ServerHeartbeatProcessor(
             serverId, heartbeat, fingerprints, ct).ConfigureAwait(false);
         timer.Mark("presence");
 
-        // Atomicity (audit-360 lot F): the per-section Replace* repo calls each run an
-        // ExecuteDeleteAsync OUTSIDE the final SaveChanges transaction, so a mid-sequence failure
-        // used to leave partial heartbeat state. Wrap the whole delete-then-insert-then-save
-        // sequence in one transaction. The InMemory unit-test provider has no transactions, so
-        // run the same body without one there (mirrors ServerRetirementRepository.PurgeServerAsync).
+        // Wrap inventory deletes, inserts and the final save in one transaction so a partial
+        // failure cannot leave mixed heartbeat state. The InMemory test provider runs the same body
+        // without a transaction because it does not support them.
         if (transaction.IsRelational)
             await transaction.ExecuteInTransactionAsync(
                 () => PersistHeartbeatAsync(server, serverId, heartbeat, fingerprints, ct), ct).ConfigureAwait(false);
@@ -67,10 +68,19 @@ internal sealed class ServerHeartbeatProcessor(
             : await updateConfirmation.ProcessHeartbeatAsync(serverId, heartbeat, ct).ConfigureAwait(false);
         timer.Mark("agent-update");
         // After the update confirmation, so the heartbeat that confirms an update re-captures the
-        // sudoers baseline the update re-rendered instead of alerting on it (recette R2-023).
+        // sudoers baseline the update re-rendered instead of alerting on it.
         if (await _sudoersDrift.CheckAsync(server, heartbeat, confirmedAgentVersion, ct).ConfigureAwait(false))
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         timer.Mark("sudoers");
+        if (await _oomKills.CheckAsync(server, heartbeat, ct).ConfigureAwait(false))
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        timer.Mark("oom");
+        if (fingerprints.HasChanged(HeartbeatInventoryFingerprints.DockerContainers)
+            && await _dockerRisks.CheckAsync(server, heartbeat.Docker.Containers, ct).ConfigureAwait(false))
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        if (await _sshConfig.CheckAsync(server, heartbeat, ct).ConfigureAwait(false))
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        timer.Mark("ssh");
         await BroadcastHeartbeatAsync(serverId, heartbeat, ct).ConfigureAwait(false);
         timer.Mark("broadcast");
         await CheckSecurityAlertsAsync(server.Name, serverId, heartbeat, previousBlockedCount, previousWarningCount, ct).ConfigureAwait(false);
@@ -141,10 +151,9 @@ internal sealed class ServerHeartbeatProcessor(
             server.ScannerCapabilitiesJson = scannerCapabilitiesJson;
     }
 
-    /// <summary>
-    /// Recette R-479: the metric is history and is added on every beat; every inventory section is
-    /// rewritten only when its fingerprint changed (see <see cref="HeartbeatInventoryFingerprints"/>).
-    /// </summary>
+    /// <summary> The metric is history and is added on every beat; every inventory section is
+    /// rewritten only when its fingerprint changed (see <see
+    /// cref="HeartbeatInventoryFingerprints"/>). </summary>
     private async Task PersistHeartbeatInventoriesAsync(
         int serverId,
         ServerHeartbeatDto heartbeat,
@@ -177,12 +186,9 @@ internal sealed class ServerHeartbeatProcessor(
         await UpdateObservedPortsAsync(serverId, heartbeat, ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// PLAN-005 lot 2: hands the heartbeat's port scan to the registry. Skipped entirely when the agent
-    /// did not report one (<c>ObservedPortsAvailable</c> null or false): an agent predating the collector,
-    /// or one whose scan timed out, sends an empty list, and replacing the observations with it would
-    /// erase the registry's evidence and claim nothing is listening.
-    /// </summary>
+    /// <summary>Replace port observations only when ObservedPortsAvailable confirms a completed
+    /// scan. An unsupported or timed-out scan must not erase existing evidence with an empty
+    /// list.</summary>
     private async Task UpdateObservedPortsAsync(
         int serverId, ServerHeartbeatDto heartbeat, CancellationToken ct)
     {
@@ -299,7 +305,11 @@ internal sealed class ServerHeartbeatProcessor(
                 Created = c.Created,
                 CpuPercent = c.CpuPercent,
                 MemoryUsageMb = c.MemoryUsageMb,
-                MemoryLimitMb = c.MemoryLimitMb
+                MemoryLimitMb = c.MemoryLimitMb,
+                SecurityInspected = c.SecurityInspected,
+                Risks = c.Risks,
+                DangerousCapabilities = c.DangerousCapabilities,
+                AetheusRole = c.AetheusRole
             }).ToList(), ct).ConfigureAwait(false);
         }
 
@@ -418,14 +428,18 @@ internal sealed class ServerHeartbeatProcessor(
 
         // An unchanged state holds this beat's RenewalCheckedAt already, so there is nothing new to report.
         if (!fingerprints.HasChanged(HeartbeatInventoryFingerprints.CertbotState)) return;
-        // PLAN-007: a renewal rehearsal recorded since the previous heartbeat that failed is reported once.
+        // Report each newly recorded failed renewal rehearsal once.
         var previousCheck = await heartbeatRepo.GetCertbotRenewalCheckedAtAsync(serverId, ct).ConfigureAwait(false);
         await heartbeatRepo.ReplaceCertbotStateAsync(serverId, certbot.IsInstalled
             ? new CertbotState
             {
                 ServerId = serverId,
                 RenewalCheckedAt = certbot.RenewalCheckedAt,
-                RenewalCheckSucceeded = certbot.RenewalCheckSucceeded
+                RenewalCheckSucceeded = certbot.RenewalCheckSucceeded,
+                HelperVersion = certbot.HelperVersion,
+                RenewalCheckFailuresJson = certbot.RenewalCheckFailures.Count == 0
+                    ? null
+                    : JsonSerializer.Serialize(certbot.RenewalCheckFailures)
             }
             : null, ct).ConfigureAwait(false);
         if (certbot is { RenewalCheckSucceeded: false, RenewalCheckedAt: { } checkedAt } && checkedAt != previousCheck)

@@ -45,6 +45,18 @@ public class Server
     /// </summary>
     public DateTime? AgentInstalledAt { get; set; }
 
+    /// <summary>PLAN-010 lot 1: classification of the backend's external TCP probe, run when the
+    /// agent stopped heartbeating (stopped agent on a reachable host, unreachable host, or why it is
+    /// unknown). Read only while the server is Offline.</summary>
+    public ServerReachability ExternalProbe { get; set; }
+
+    /// <summary>UTC time of the last external probe; null when never probed.</summary>
+    public DateTime? ExternalProbeAt { get; set; }
+
+    /// <summary>The address and port(s) the last external probe tried; null when none was probed.</summary>
+    [MaxLength(128)]
+    public string? ExternalProbeTarget { get; set; }
+
     /// <summary>
     /// Secure-by-default opt-in: when <c>false</c>, this server is invisible to the pipeline
     /// scheduler - no stage will ever resolve a target to it, even if its tags/pool/environment
@@ -81,8 +93,8 @@ public class Server
     /// gates the open/close/toggle API. Firewall visibility also depends on it (ufw status needs root).</summary>
     public bool FirewallManagementAvailable { get; set; }
 
-    /// <summary>PLAN-005 lot 2: the agent publishes <c>ports.observe</c>, so it can report which TCP
-    /// ports are listening. Derived every heartbeat from the published capabilities, not from a sudoers
+    /// <summary>The agent publishes <c>ports.observe</c>, so it can report which TCP ports are
+    /// listening. Derived every heartbeat from the published capabilities, not from a sudoers
     /// grant: the scan is unprivileged, and what actually varies is the agent version.</summary>
     public bool PortObservationAvailable { get; set; }
 
@@ -120,31 +132,38 @@ public class Server
     /// dev only). Refreshed every heartbeat; surfaced as a discreet warning badge on the server card.</summary>
     public bool InsecureTls { get; set; }
 
-    /// <summary>
-    /// S-TECH-15: baseline of the agent's sudoers drop-in file hashes, captured on the first
-    /// heartbeat that reports any. Stored as a compact JSON object (<c>{"aetheus-apache":"ABC…"}</c>).
-    /// A later heartbeat whose hash for the same file differs raises a Sec-Audit drift alert.
-    /// Null until the first heartbeat with sudoers hashes arrives. Re-captured from the heartbeat that
-    /// confirms an agent update, because the update re-renders the drop-ins (recette R2-023).
-    /// </summary>
+    /// <summary>Stores compact JSON hashes of sudoers drop-ins from the first reporting heartbeat;
+    /// later mismatches raise a drift alert. A heartbeat confirming an agent update refreshes this
+    /// baseline because installation re-renders the drop-ins.</summary>
     [MaxLength(2048)]
     public string? SudoersBaseline { get; set; }
 
-    /// <summary>
-    /// Recette R2-023: SHA-256 hex fingerprint of the drifted sudoers state (file name and reported hash
-    /// of every drop-in that differs from <see cref="SudoersBaseline"/>) that last raised a Sec-Audit
-    /// alert. The same drifted state is alerted once, across heartbeats and backend restarts; a different
-    /// drifted state alerts again. Null while the drop-ins match the baseline.
-    /// </summary>
+    /// <summary> SHA-256 hex fingerprint of the drifted sudoers state (file name and reported hash
+    /// of every drop-in that differs from <see cref="SudoersBaseline"/>) that last raised a
+    /// Sec-Audit alert. The same drifted state is alerted once, across heartbeats and backend
+    /// restarts; a different drifted state alerts again. Null while the drop-ins match the
+    /// baseline. </summary>
     [MaxLength(64)]
     public string? SudoersDriftAlertedFingerprint { get; set; }
 
-    /// <summary>
-    /// Audit R2-023 follow-up: when the drifted state of <see cref="SudoersDriftAlertedFingerprint"/> was
-    /// last alerted. While the drift lasts the alert is raised again once this is older than the reminder
-    /// interval; the fingerprint only deduplicates within it. Null while the drop-ins match the baseline.
-    /// </summary>
+    /// <summary>Records when the current sudoers drift fingerprint last raised an alert. Persistent
+    /// drift raises a reminder after the configured interval; matching the baseline clears the
+    /// timestamp.</summary>
     public DateTime? SudoersDriftAlertedAt { get; set; }
+
+    /// <summary>PLAN-010 lot 1: boot id of the host when <see cref="OomKillCount"/> was read. A
+    /// different id means the host rebooted and its kernel counter started again from 0.</summary>
+    [MaxLength(64)]
+    public string? OomKillBootId { get; set; }
+
+    /// <summary>Last OOM kill counter the agent reported (kills since boot); new kills are the
+    /// increase over it. Null while the agent does not measure it (Windows, older agent).</summary>
+    public long? OomKillCount { get; set; }
+
+    /// <summary>PLAN-010 lot 1: JSON map of container name to the fingerprint of its unexpected
+    /// host-escape settings that last raised an alert (see <c>DockerContainerRiskMonitor</c>). The same
+    /// state stays quiet across heartbeats and restarts; a new container or a change alerts again.</summary>
+    public string? DockerRiskAlertedJson { get; set; }
 
     /// <summary>
     /// S-TECH-CDUI: the agent's most recent capability diagnostics (a drop-in present but unreadable, a
@@ -155,32 +174,28 @@ public class Server
     [MaxLength(4096)]
     public string? CapabilityDiagnosticsJson { get; set; }
 
-    /// <summary>
-    /// Recette R-479: fingerprint of each heartbeat inventory section as last written, with the time of
-    /// the last full rewrite, so a heartbeat rewrites only the sections that changed. Written in the same
-    /// transaction as the sections; null until the first heartbeat, and ignored once older than
-    /// <c>HeartbeatInventoryFingerprints.FullRewriteInterval</c> (every section is then rewritten once).
-    /// </summary>
+    /// <summary> Fingerprint of each heartbeat inventory section as last written, with the time of
+    /// the last full rewrite, so a heartbeat rewrites only the sections that changed. Written in
+    /// the same transaction as the sections; null until the first heartbeat, and ignored once older
+    /// than <c>HeartbeatInventoryFingerprints.FullRewriteInterval</c> (every section is then
+    /// rewritten once). </summary>
     [MaxLength(2048)]
     public string? HeartbeatInventoryFingerprintsJson { get; set; }
     public string? ScannerCapabilitiesJson { get; set; }
 
-    /// <summary>
-    /// PLAN-004 R-11: UTC instant the server was retired (the Delete action). A retired server keeps
-    /// its row and every link (port registry, environments, pools, project-server chain, RBAC grants,
-    /// tags, settings) but is hidden by the <see cref="ServerQueryFilters.ExcludeRetired"/> query
-    /// filter from lists, selectors and pipeline dispatch, and its agent tokens are revoked. Null for
-    /// an active server. Re-enrolling the same machine clears it (same id, links intact); only the
-    /// explicit purge erases the row.
-    /// </summary>
+    /// <summary>PLAN-010 lot 1: the last SSH snapshot the agent reported (<c>SshConfigStatusDto</c>
+    /// as JSON) with the changes detected against it. Null until the first report, which is the
+    /// baseline and raises nothing.</summary>
+    public string? SshConfigStateJson { get; set; }
+
+    /// <summary>Records retirement in UTC: the row and links remain, but query filters hide the
+    /// server and its agent tokens are revoked. Re-enrolling the machine clears retirement;
+    /// explicit purge deletes the row.</summary>
     public DateTime? DeletedAt { get; set; }
 
-    /// <summary>
-    /// PLAN-004 R-11: SHA-256 hex of the host's stable machine identity (Linux <c>/etc/machine-id</c>,
-    /// Windows <c>MachineGuid</c>), reported at enrollment; the raw value never leaves the host.
-    /// Enrollment matches it before the hostname, so a reinstalled machine revives its retired row.
-    /// Null for servers enrolled by an agent that predates the field.
-    /// </summary>
+    /// <summary>Stores a SHA-256 fingerprint of the stable host identity, matched before hostname
+    /// on enrollment so a returning machine can revive its row. The raw identity stays on the host;
+    /// agents without this field leave it null.</summary>
     [MaxLength(64)]
     public string? MachineIdHash { get; set; }
 

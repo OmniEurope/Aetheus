@@ -26,13 +26,8 @@ internal static class ScannerOperationValidator
                || TryValidateApiSpecification(envVars, endpoint.Uri, endpoint.AllowedHost, out error);
     }
 
-    /// <summary>
-    /// Proves that the image archive a built-artifact scanner is about to read was produced by THIS
-    /// run's source commit. Returns the precise reason on refusal rather than a bare false: the single
-    /// "revision does not match" message used to be reported for an archive that was merely absent,
-    /// which named a cause that was not the real one and sent the reader hunting a provenance problem
-    /// that did not exist.
-    /// </summary>
+    /// <summary>Verify the scanner image archive matches the run source commit and return a precise
+    /// refusal reason. Missing archives and mismatched provenance are distinct failures.</summary>
     public static async Task<ImageAssociationResult> ValidateImageAssociationAsync(
         ScannerManifestEntry scanner,
         string sourceDirectory,
@@ -126,7 +121,7 @@ internal static class ScannerOperationValidator
         string allowedHost,
         out string error)
     {
-        // R2-099: every definition of a partitioned step passes the same check as a single one.
+        // Every definition of a partitioned step passes the same check as a single one.
         var specifications = ScannerApiSpecifications.Read(envVars);
         var format = Value(envVars, "AETHEUS_SCANNER_API_SPECIFICATION_FORMAT")?.ToLowerInvariant();
         if (specifications.Count == 0
@@ -154,7 +149,7 @@ internal static class ScannerOperationValidator
         && revision.Length is >= 7 and <= 64
         && revision.All(Uri.IsHexDigit);
 
-    private static async Task<string?> FindImageConfigPathAsync(string archivePath, CancellationToken ct)
+    internal static async Task<string?> FindImageConfigPathAsync(string archivePath, CancellationToken ct)
     {
         await using var stream = File.OpenRead(archivePath);
         using var reader = new TarReader(stream, leaveOpen: false);
@@ -174,7 +169,7 @@ internal static class ScannerOperationValidator
         return null;
     }
 
-    private static async Task<bool> ImageConfigMatchesRevisionAsync(
+    internal static async Task<bool> ImageConfigMatchesRevisionAsync(
         string archivePath,
         string configPath,
         string expected,
@@ -241,20 +236,29 @@ internal static class ScannerOperationValidator
         while (pending.Count > 0)
         {
             var directory = pending.Pop();
-            foreach (var file in Directory.EnumerateFiles(directory))
-                if (extensions.Contains(Path.GetExtension(file))) return true;
+            if (ContainsFileWithExtension(directory, extensions)) return true;
             foreach (var child in Directory.EnumerateDirectories(directory))
             {
-                var name = Path.GetFileName(child);
-                if (name is ".git" or ".vs" or ".claude" or ".Codex" or "bin" or "obj"
-                    or "node_modules" or ".pipeline-artifacts" or ".analysis-image"
-                    || name.StartsWith(".analysis-", StringComparison.Ordinal)
-                    || name.StartsWith(".qa-", StringComparison.Ordinal)) continue;
-                pending.Push(child);
+                if (!IsSkippedSourceDirectory(Path.GetFileName(child)))
+                    pending.Push(child);
             }
         }
         return false;
     }
+
+    private static bool ContainsFileWithExtension(string directory, HashSet<string> extensions) =>
+        Directory.EnumerateFiles(directory).Any(file => extensions.Contains(Path.GetExtension(file)));
+
+    /// <summary>Tool, build, dependency and analysis output folders never hold the scanned sources.</summary>
+    private static readonly HashSet<string> SkippedSourceDirectories = new(StringComparer.Ordinal)
+    {
+        ".git", ".vs", ".claude", ".Codex", "bin", "obj", "node_modules", ".pipeline-artifacts", ".analysis-image"
+    };
+
+    private static bool IsSkippedSourceDirectory(string name) =>
+        SkippedSourceDirectories.Contains(name)
+        || name.StartsWith(".analysis-", StringComparison.Ordinal)
+        || name.StartsWith(".qa-", StringComparison.Ordinal);
 
     public static string? ResolveScannerVersion(ScannerManifestEntry scanner, string sourceDirectory)
     {
@@ -289,19 +293,7 @@ internal static class ScannerOperationValidator
         try
         {
             if (format is AnalysisReportFormat.CycloneDxXml)
-            {
-                var settings = new XmlReaderSettings
-                {
-                    Async = true,
-                    DtdProcessing = DtdProcessing.Prohibit,
-                    XmlResolver = null,
-                    MaxCharactersInDocument = scanner.MaxReportBytes
-                };
-                await using var stream = File.OpenRead(path);
-                using var reader = XmlReader.Create(stream, settings);
-                while (await reader.ReadAsync().ConfigureAwait(false)) ct.ThrowIfCancellationRequested();
-                return true;
-            }
+                return await IsWellFormedXmlAsync(path, scanner.MaxReportBytes, ct).ConfigureAwait(false);
 
             await using var jsonStream = File.OpenRead(path);
             using var document = await JsonDocument.ParseAsync(jsonStream, new JsonDocumentOptions
@@ -310,28 +302,47 @@ internal static class ScannerOperationValidator
                 CommentHandling = JsonCommentHandling.Disallow,
                 MaxDepth = 64
             }, ct).ConfigureAwait(false);
-            var root = document.RootElement;
-            return format switch
-            {
-                AnalysisReportFormat.Sarif => root.ValueKind == JsonValueKind.Object
-                    && root.TryGetProperty("version", out _)
-                    && root.TryGetProperty("runs", out var runs)
-                    && runs.ValueKind == JsonValueKind.Array,
-                AnalysisReportFormat.CycloneDxJson => root.ValueKind == JsonValueKind.Object
-                    && root.TryGetProperty("bomFormat", out var bom)
-                    && string.Equals(bom.GetString(), "CycloneDX", StringComparison.OrdinalIgnoreCase),
-                AnalysisReportFormat.SpdxJson => root.ValueKind == JsonValueKind.Object
-                    && root.TryGetProperty("spdxVersion", out _),
-                AnalysisReportFormat.MetricsJson or AnalysisReportFormat.NativeJson =>
-                    root.ValueKind is JsonValueKind.Object or JsonValueKind.Array,
-                _ => false
-            };
+            return HasReportShape(format, document.RootElement);
         }
         catch (Exception exception) when (exception is JsonException or XmlException or IOException)
         {
             return false;
         }
     }
+
+    /// <summary>Reads the whole XML document, without DTD, external resolution or more than
+    /// <paramref name="maxCharacters"/> characters: a malformed or oversized document throws.</summary>
+    internal static async Task<bool> IsWellFormedXmlAsync(string path, long maxCharacters, CancellationToken ct)
+    {
+        var settings = new XmlReaderSettings
+        {
+            Async = true,
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            MaxCharactersInDocument = maxCharacters
+        };
+        await using var stream = File.OpenRead(path);
+        using var reader = XmlReader.Create(stream, settings);
+        while (await reader.ReadAsync().ConfigureAwait(false)) ct.ThrowIfCancellationRequested();
+        return true;
+    }
+
+    /// <summary>Whether a parsed JSON report has the root its format declares.</summary>
+    internal static bool HasReportShape(AnalysisReportFormat format, JsonElement root) => format switch
+    {
+        AnalysisReportFormat.Sarif => root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("version", out _)
+            && root.TryGetProperty("runs", out var runs)
+            && runs.ValueKind == JsonValueKind.Array,
+        AnalysisReportFormat.CycloneDxJson => root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("bomFormat", out var bom)
+            && string.Equals(bom.GetString(), "CycloneDX", StringComparison.OrdinalIgnoreCase),
+        AnalysisReportFormat.SpdxJson => root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("spdxVersion", out _),
+        AnalysisReportFormat.MetricsJson or AnalysisReportFormat.NativeJson =>
+            root.ValueKind is JsonValueKind.Object or JsonValueKind.Array,
+        _ => false
+    };
 
     public static string? ComputeRuleSetHash(string? rules, ScannerManifestEntry scanner)
     {
@@ -348,7 +359,7 @@ internal static class ScannerOperationValidator
         return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
 
-    private static bool TryGetNestedString(JsonElement element, out string? value, params string[] path)
+    internal static bool TryGetNestedString(JsonElement element, out string? value, params string[] path)
     {
         foreach (var segment in path)
         {

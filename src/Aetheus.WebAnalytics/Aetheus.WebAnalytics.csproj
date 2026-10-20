@@ -3,8 +3,10 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <PackageId>Aetheus.WebAnalytics</PackageId>
-    <Version>1.0.0</Version>
-    <StaticAssetVersion>0.1.0</StaticAssetVersion>
+    <Version>1.1.0</Version>
+    <!-- The asset path follows the package version, so a local build without parameter serves
+         /_content/Aetheus.WebAnalytics/<package version>/ like the published package. -->
+    <StaticAssetVersion Condition="'$(StaticAssetVersion)' == ''">$(Version)</StaticAssetVersion>
     <Authors>Aetheus</Authors>
     <Description>Optional no-banner audience measurement for ASP.NET Core applications monitored by Aetheus.</Description>
     <PackageTags>analytics;privacy;razor;aspnetcore;aetheus</PackageTags>

@@ -22,7 +22,6 @@ public static class GitModuleExtensions
         services.AddScoped<GitLightCliWriter>();
         services.AddScoped<IGitLightCliService, GitLightCliService>();
         services.AddScoped<GitBranchProtectionService>();
-        services.AddScoped<GitAiPatchService>();
         services.AddScoped<IGitLightService, GitLightService>();
         services.AddScoped<IGitCommitRecorder, GitCommitRecorder>();
         services.AddScoped<GitFilterValuesService>();

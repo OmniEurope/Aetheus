@@ -3,25 +3,17 @@ using System.Globalization;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R2-110: the release number of a run, the last number of the application version
-/// (<c>major.minor.N</c>, composed by <c>deploy/scripts/app-version.sh</c>), exposed to its steps as
-/// <see cref="VariableName"/>. It counts the releases of the project one by one instead of every run of
-/// every pipeline:
-/// <list type="bullet">
-/// <item>a pipeline declaring <c>release_number: allocate</c> (candidate, release-fast) takes the
-/// project's next number at each run;</item>
-/// <item>a run started by another (a trigger step's child, an <c>on_success</c> downstream) builds
-/// with the number of the run that started it, so a candidate's CI packages the candidate's number;</item>
-/// <item>any other run (nightly, demo) reads the latest number handed out, and adds its own suffix.</item>
-/// </list>
-/// A number is taken when the run is created, so a run that fails afterwards still used it (numbers
-/// never repeat, a failed release leaves a gap), and a replayed idempotent launch burns one, like the
-/// per-pipeline build number.
-/// </summary>
+/// <summary>Release numbers are allocated per project and per version series (the <c>major.minor</c>
+/// of the released commit, each series counting from 0), inherited by child runs or read from the
+/// latest allocation according to the definition. Allocation occurs at run creation, so failed and
+/// replayed launches can leave gaps and numbers are never reused.</summary>
 internal static class PipelineReleaseNumbers
 {
     internal const string VariableName = "BUILD_RELEASENUMBER";
+
+    /// <summary>The <c>major.minor</c> series the release number counts in. The app-version function
+    /// refuses a series that differs from the one its <c>Directory.Build.props</c> declares.</summary>
+    internal const string SeriesVariableName = "BUILD_RELEASESERIES";
     internal const string Allocate = "allocate";
     private const string UpstreamRunVariable = "UPSTREAM_RUN_ID";
     internal const string InvalidModeMessage =
@@ -42,32 +34,46 @@ internal static class PipelineReleaseNumbers
             throw new BadRequestException(InvalidModeMessage);
     }
 
-    /// <summary>The release number of a run about to be created; null for a pipeline without a project.</summary>
-    internal static async Task<int?> ResolveAsync(
-        IPipelineRepository repo,
+    /// <summary>
+    /// The release number of a run about to be created, with the version series it counts in; null for
+    /// a pipeline without a project. <paramref name="series"/> is the <c>major.minor</c> of the commit
+    /// the run releases (<see cref="ReleaseSeries"/>): a run that allocates takes the next number of
+    /// that series, a run started by another inherits that run's number and series, any other run
+    /// reads the series' latest number.
+    /// </summary>
+    internal static async Task<ReleaseNumberAssignment?> ResolveAsync(
+        IPipelineReleaseNumberRepository repo,
         PipelineYamlDefinition definition,
         int? projectId,
         IReadOnlyDictionary<string, string> launchVariables,
+        string series,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(repo);
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(launchVariables);
+        ArgumentNullException.ThrowIfNull(series);
         EnsureValid(definition);
         if (projectId is not { } project) return null;
         if (Allocates(definition))
-            return await repo.AllocateNextReleaseNumberAsync(project, ct).ConfigureAwait(false);
+            return await repo.AllocateNextReleaseNumberAsync(project, series, ct).ConfigureAwait(false) is { } allocated
+                ? new ReleaseNumberAssignment(series, allocated)
+                : null;
         if (launchVariables.TryGetValue(UpstreamRunVariable, out var upstream)
             && int.TryParse(upstream, NumberStyles.None, CultureInfo.InvariantCulture, out var upstreamRunId)
-            && await repo.GetRunReleaseNumberAsync(upstreamRunId, ct).ConfigureAwait(false) is { } inherited)
-            return inherited;
-        return await repo.GetLatestReleaseNumberAsync(project, ct).ConfigureAwait(false);
+            && await repo.GetRunReleaseAsync(upstreamRunId, ct).ConfigureAwait(false) is { } inherited)
+            return inherited with { Series = inherited.Series ?? series };
+        return await repo.GetLatestReleaseNumberAsync(project, series, ct).ConfigureAwait(false) is { } latest
+            ? new ReleaseNumberAssignment(series, latest)
+            : null;
     }
 
-    /// <summary>Puts the run's release number among the variables a resolution starts from.</summary>
-    internal static void Inject(IDictionary<string, string> variables, int? releaseNumber)
+    /// <summary>Puts the run's release number and series among the variables a resolution starts from.</summary>
+    internal static void Inject(IDictionary<string, string> variables, int? releaseNumber, string? releaseSeries)
     {
         if (releaseNumber is { } number)
             variables[VariableName] = number.ToString(CultureInfo.InvariantCulture);
+        if (!string.IsNullOrEmpty(releaseSeries))
+            variables[SeriesVariableName] = releaseSeries;
     }
 }

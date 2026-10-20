@@ -44,7 +44,7 @@ internal sealed class PersonalAccessTokenRepository(AppDbContext db) : IPersonal
                 EF.Functions.ILike(token.TokenPrefix, pattern));
         }
 
-        // Recette R-224: the header filters, after the owner scope and before the count.
+        // The header filters, after the owner scope and before the count.
         query = PersonalAccessTokenListQuery.Columns.ApplyFilters(query, columnFilters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);

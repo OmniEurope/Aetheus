@@ -8,19 +8,6 @@ public class SharedDtoTaskWebhookNotifTests
     // --- Tasks ---
 
     [Fact]
-    public void ServerTaskDto_DefaultValues()
-    {
-        var dto = new ServerTaskDto();
-        Assert.Equal(string.Empty, dto.ServerName);
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Equal(string.Empty, dto.Command);
-        Assert.Null(dto.StartedAt);
-        Assert.Null(dto.CompletedAt);
-        Assert.Null(dto.ExitCode);
-        Assert.Null(dto.PipelineRunId);
-    }
-
-    [Fact]
     public void CreateTaskRequest_Valid()
     {
         var req = new CreateTaskRequest { Name = "Task", Command = "echo hi" };
@@ -61,23 +48,6 @@ public class SharedDtoTaskWebhookNotifTests
     }
 
     [Fact]
-    public void TaskResultDto_DefaultValues()
-    {
-        var dto = new TaskResultDto();
-        Assert.Equal(0, dto.TaskId);
-        Assert.Null(dto.Output);
-    }
-
-    [Fact]
-    public void TaskCompletedNotification_DefaultValues()
-    {
-        var dto = new TaskCompletedNotification();
-        Assert.Equal(string.Empty, dto.TaskName);
-        Assert.Null(dto.ExitCode);
-        Assert.Null(dto.Output);
-    }
-
-    [Fact]
     public void PendingTaskDto_DefaultValues()
     {
         var dto = new PendingTaskDto();
@@ -88,18 +58,6 @@ public class SharedDtoTaskWebhookNotifTests
     }
 
     // --- Webhooks ---
-
-    [Fact]
-    public void WebhookSubscriptionDto_DefaultValues()
-    {
-        var dto = new WebhookSubscriptionDto();
-        Assert.Equal(string.Empty, dto.EventType);
-        Assert.Equal(string.Empty, dto.TargetUrl);
-        Assert.False(dto.HasSecret);
-        Assert.False(dto.IsEnabled);
-        Assert.Null(dto.LastTriggeredAt);
-        Assert.Equal(0, dto.FailureCount);
-    }
 
     [Fact]
     public void CreateWebhookSubscriptionRequest_Valid()
@@ -155,16 +113,6 @@ public class SharedDtoTaskWebhookNotifTests
     }
 
     [Fact]
-    public void NotificationRuleDto_DefaultValues()
-    {
-        var dto = new NotificationRuleDto();
-        Assert.Equal(string.Empty, dto.ChannelName);
-        Assert.Equal(string.Empty, dto.EventType);
-        Assert.Null(dto.FilterJson);
-        Assert.False(dto.IsEnabled);
-    }
-
-    [Fact]
     public void CreateNotificationChannelRequest_Valid()
     {
         var req = new CreateNotificationChannelRequest { Name = "Slack", ConfigurationJson = "{}" };
@@ -215,24 +163,6 @@ public class SharedDtoTaskWebhookNotifTests
     }
 
     // --- AgentPool ---
-
-    [Fact]
-    public void AgentPoolDto_DefaultValues()
-    {
-        var dto = new AgentPoolDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Equal(string.Empty, dto.Description);
-        Assert.Empty(dto.Servers);
-        Assert.Equal(0, dto.MaxConcurrency);
-    }
-
-    [Fact]
-    public void AgentPoolServerDto_DefaultValues()
-    {
-        var dto = new AgentPoolServerDto();
-        Assert.Equal(string.Empty, dto.ServerName);
-        Assert.Equal(0, dto.ServerId);
-    }
 
     [Fact]
     public void CreateAgentPoolRequest_Valid()

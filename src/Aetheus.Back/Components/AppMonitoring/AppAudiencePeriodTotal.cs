@@ -3,10 +3,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
-/// <summary>
-/// Recette R-468: the audience aggregates of one period (the current day, week or month) added up over
-/// several applications.
-/// </summary>
+/// <summary> The audience aggregates of one period (the current day, week or month) added up over
+/// several applications. </summary>
 public sealed record AppAudiencePeriodTotal(
     AnalyticsPeriodKind Kind,
     int UniqueVisitors,

@@ -7,11 +7,10 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Names every key of a pipeline YAML that the running backend does not bind. The deserializer skips
-/// such keys so that a definition written for a newer backend still runs (recette R2-041); this walk is
-/// what keeps the skip visible, in the editor's validation result and in the run's warnings.
-/// </summary>
+/// <summary> Names every key of a pipeline YAML that the running backend does not bind. The
+/// deserializer skips such keys so that a definition written for a newer backend still runs; this
+/// walk is what keeps the skip visible, in the editor's validation result and in the run's
+/// warnings. </summary>
 internal static class PipelineYamlDiagnostics
 {
     // Derived from the definitions the deserializer binds, with its own naming convention:

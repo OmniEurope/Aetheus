@@ -14,6 +14,7 @@ public enum AnalysisCategory
     Coverage = 8,
     Duplication = 9,
     Architecture = 10,
-    /// <summary>axe-core violations of the E2E suite (PLAN-003 2.4), published by a lint step.</summary>
+    /// <summary>Accessibility violations published by a lint step from the axe-core E2E
+    /// report.</summary>
     Accessibility = 11
 }

@@ -49,7 +49,8 @@ public class CertbotCollectorTests
         ShellExecResult version,
         Func<List<CertbotCertificateDto>>? certificates = null,
         Func<string, bool>? fileExists = null,
-        bool? unixLike = null)
+        bool? unixLike = null,
+        Func<string, string?>? readHelper = null)
     {
         var locator = OperatingSystem.IsWindows() ? "where" : "which";
         var shell = new ScriptedShell(new Dictionary<string, ShellExecResult>(StringComparer.Ordinal)
@@ -62,7 +63,7 @@ public class CertbotCollectorTests
         // any host that actually has certbot installed.
         return new CertbotCollector(
             NullLogger<CertbotCollector>.Instance, shell, certificates ?? (() => []),
-            fileExists ?? (_ => false), unixLike);
+            fileExists ?? (_ => false), unixLike, readHelper: readHelper ?? (_ => null));
     }
 
     [Fact]
@@ -78,6 +79,27 @@ public class CertbotCollectorTests
         Assert.True(string.IsNullOrEmpty(data.Version));
     }
 
+
+    [Theory]
+    [InlineData("#!/bin/sh\n# SPDX-License-Identifier: EUPL-1.2\n# aetheus-certbot-helper-version: 1\nset -eu\n", 1)]
+    [InlineData("# aetheus-certbot-helper-version: 12\n", 12)]
+    [InlineData("#!/bin/sh\n# helper without a marker\n", 0)]
+    [InlineData(null, 0)]
+    public async Task InstalledCertbot_ReportsTheHelperVersionFromItsMarker(string? helperText, int expected)
+    {
+        string? requestedPath = null;
+        var collector = Build(
+            locate: new ShellExecResult(1, string.Empty, "certbot not found"),
+            version: new ShellExecResult(0, "certbot 2.7.4", string.Empty),
+            fileExists: path => path == "/usr/bin/certbot",
+            unixLike: true,
+            readHelper: path => { requestedPath = path; return helperText; });
+
+        var data = await collector.CollectAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, data.HelperVersion);
+        Assert.Equal("/usr/local/lib/aetheus/aetheus-certbot-manage", requestedPath);
+    }
     [Fact]
     public async Task PathLookupFails_ButBinarySitsInAKnownLocation_ReportsInstalled()
     {

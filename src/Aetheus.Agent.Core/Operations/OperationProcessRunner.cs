@@ -7,12 +7,12 @@ internal static class OperationProcessRunner
 {
     public static Task<ExecutorResult> RunOptionalAsync(
         ProcessStartInfo? startInfo,
+        Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>> run,
         int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput,
         ILogger logger,
         CancellationToken cancellationToken) =>
         startInfo is null
             ? Task.FromResult(new ExecutorResult(-1, false))
-            : ProcessRunner.RunAsync(
-                startInfo, timeoutSeconds, onOutput, logger, cancellationToken);
+            : run(startInfo, timeoutSeconds, onOutput, logger, cancellationToken);
 }

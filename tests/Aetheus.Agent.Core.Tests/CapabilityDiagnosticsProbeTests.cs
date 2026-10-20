@@ -4,12 +4,8 @@ using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// T13: the capability diagnostics drive the operator-facing "WHY is this capability off" hints
-/// (S-FEAT-HBDX / S-TECH-CAPX). Exercises the Linux-only branch through the internal seam
-/// (isWindows: false + test-owned sudoers paths) so the unreadable-drop-in and sudo-probe
-/// contracts are frozen from the Windows test host. Previously untested.
-/// </summary>
+/// <summary>Exercises Linux capability diagnostics from a Windows test host through explicit
+/// platform selection and test-owned sudoers paths.</summary>
 public class CapabilityDiagnosticsProbeTests
 {
     private static ShellExecResult SudoOk() => new(0, "User may run the following commands", string.Empty);

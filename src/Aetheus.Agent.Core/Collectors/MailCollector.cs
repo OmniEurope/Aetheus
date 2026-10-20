@@ -7,7 +7,8 @@ public sealed partial class MailCollector(
     ILogger<MailCollector> logger,
     IShellRunner shell,
     Func<string, bool>? fileExists = null,
-    Func<string, string?>? readText = null)
+    Func<string, string?>? readText = null,
+    Func<IEnumerable<System.Net.IPAddress>>? hostAddresses = null)
     : BaseShellCollector<MailCollector>(logger, shell), IMailCollector
 {
     private const string PostfixMainConfigPath = "/etc/postfix/main.cf";
@@ -16,7 +17,10 @@ public sealed partial class MailCollector(
     private const long MaxInventoryFileBytes = 8 * 1024 * 1024;
 
     private static readonly string[] s_postconfParameters =
-        ["myhostname", "smtpd_tls_cert_file", "virtual_mailbox_maps", "virtual_alias_maps"];
+        [
+            "myhostname", "smtpd_tls_cert_file", "virtual_mailbox_maps", "virtual_alias_maps",
+            "inet_protocols", "smtp_address_preference", "minimal_backoff_time", "maximal_backoff_time", "queue_run_delay"
+        ];
 
     private Func<string, bool> FileExists => fileExists ?? File.Exists;
 
@@ -46,9 +50,10 @@ public sealed partial class MailCollector(
             var queueTask = CollectQueueSizeAsync(ct);
             var domainsTask = CollectDomainsAsync(ct);
             var parametersTask = CollectPostconfParametersAsync(ct);
+            var deferredTask = CollectDeferredAsync(ct);
 
             await Task.WhenAll(dovecotVersionTask, postfixRunningTask, dovecotRunningTask, openDkimRunningTask,
-                rspamdRunningTask, rspamdVersionTask, queueTask, domainsTask, parametersTask).ConfigureAwait(false);
+                rspamdRunningTask, rspamdVersionTask, queueTask, domainsTask, parametersTask, deferredTask).ConfigureAwait(false);
 
             var parameters = await parametersTask.ConfigureAwait(false);
             var (domains, domainsCollected) = await domainsTask.ConfigureAwait(false);
@@ -91,6 +96,7 @@ public sealed partial class MailCollector(
                     AddHeaderScore = addHeader,
                     GreylistScore = greylist
                 },
+                Delivery = BuildDelivery(parameters, await deferredTask.ConfigureAwait(false)),
                 Diagnostics = reader.Diagnostics.Take(MailInventoryLimits.MaxDiagnostics).ToList()
             };
         }
@@ -303,6 +309,62 @@ public sealed partial class MailCollector(
         {
             Logger.LogDebug(ex, "Failed to read postfix parameters");
             return null;
+        }
+    }
+
+    // Deferred entries with their deferral reason: `postqueue -j` (Postfix 3.1+), else the `postqueue -p`
+    // listing. Read-only and bounded; a failure only leaves the list empty.
+    private async Task<List<MailDeferredMessageDto>> CollectDeferredAsync(CancellationToken ct)
+    {
+        try
+        {
+            var json = await Shell.RunExecAsync("postqueue", ["-j"], ct).ConfigureAwait(false);
+            if (json.ExitCode == 0)
+            {
+                var entries = MailDeliveryParser.ParseQueueJson(json.StdOut);
+                if (entries.Count > 0 || json.StdOut.Contains("Mail queue is empty", StringComparison.OrdinalIgnoreCase))
+                    return entries;
+            }
+
+            var text = await Shell.RunExecAsync("postqueue", ["-p"], ct).ConfigureAwait(false);
+            return text.ExitCode == 0 ? MailDeliveryParser.ParseQueueText(text.StdOut) : [];
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to collect deferred mail queue entries");
+            return [];
+        }
+    }
+
+    private MailDeliveryStateDto BuildDelivery(Dictionary<string, string>? parameters, List<MailDeferredMessageDto> deferred)
+    {
+        string Value(string name) => Truncate(parameters?.GetValueOrDefault(name, string.Empty) ?? string.Empty, 40);
+        return new MailDeliveryStateDto
+        {
+            InetProtocols = Value("inet_protocols"),
+            SmtpAddressPreference = Value("smtp_address_preference"),
+            MinimalBackoffTime = Value("minimal_backoff_time"),
+            MaximalBackoffTime = Value("maximal_backoff_time"),
+            QueueRunDelay = Value("queue_run_delay"),
+            Deferred = deferred,
+            HostIpv6Addresses = MailDeliveryParser.GlobalIpv6(ReadHostAddresses())
+        };
+    }
+
+    private IEnumerable<System.Net.IPAddress> ReadHostAddresses()
+    {
+        if (hostAddresses is not null) return hostAddresses();
+        try
+        {
+            return System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .Where(nic => nic.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+                .SelectMany(nic => nic.GetIPProperties().UnicastAddresses.Select(a => a.Address))
+                .ToList();
+        }
+        catch (System.Net.NetworkInformation.NetworkInformationException ex)
+        {
+            Logger.LogDebug(ex, "Failed to list the host network addresses");
+            return [];
         }
     }
 

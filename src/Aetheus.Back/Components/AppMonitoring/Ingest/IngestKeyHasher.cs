@@ -16,15 +16,9 @@ public sealed class IngestKeyHasher(IOptions<JwtOptions> jwtOptions)
 
     public string Hash(string key) => AuthTokenHelper.HashToken(_signingKey, key);
 
-    /// <summary>
-    /// The ingestion key a deployment run hands its containers, derived rather than drawn so that
-    /// every backend instance computes the same one. It used to be random and remembered in process
-    /// memory, and a production deployment restarts the backend it runs on: the new colour forgot the
-    /// key and rotated again within the same run (runs 2334, 2327 twice, 2325 three times, 1979 nine
-    /// times in the audit log), leaving the containers on a key that expires with the overlap window.
-    /// Distinct purpose label, same secret as <see cref="Hash"/>: whoever could derive it could
-    /// already sign an access token.
-    /// </summary>
+    /// <summary>Derives deployment ingestion keys deterministically so all backend instances retain
+    /// the same key within a run. A distinct purpose label separates derivation from the
+    /// access-token use of the same secret.</summary>
     public string DeriveForRun(int appId, int pipelineRunId) =>
         AuthTokenHelper.HashToken(
             _signingKey,

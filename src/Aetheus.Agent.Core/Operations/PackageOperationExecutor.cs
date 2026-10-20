@@ -18,10 +18,17 @@ public sealed class PackageOperationExecutor(
 {
     private readonly AetheusAgentOptions _options = options.Value;
 
+    internal bool IsLinux { get; init; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+
+    // The sudo/apt runner, replaceable so the argv of each step is asserted without spawning a process.
+    internal Func<IReadOnlyList<string>, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>>
+        RunSudoAsync
+    { get; init; } = AptProcessRunner.RunSudoAsync;
+
     /// <summary>The apt verb of an install, as the AETHEUS_PACKAGE allow-list names it.</summary>
     internal const string InstallVerb = "install";
 
-    /// <summary>The apt verb of an uninstall: purge, never remove (recette R2-031).</summary>
+    /// <summary>The apt verb of an uninstall: purge, never remove.</summary>
     internal const string UninstallVerb = "purge";
 
     public bool CanHandle(OperationKind kind) => kind is
@@ -37,19 +44,14 @@ public sealed class PackageOperationExecutor(
             "Package is not in the managed-package allow-list").ConfigureAwait(false);
         if (targetFailure is not null) return targetFailure;
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (!IsLinux)
         {
             await onOutput("Package install/uninstall is only supported on Linux", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
         }
 
-        // apt-get install/purge must run as root and legitimately execs dpkg + maintainer scripts, so
-        // it goes through `sudo -n` (NOPASSWD) against the argv-exact AETHEUS_PACKAGE drop-in. The verb +
-        // bare package name match the sudoers rule one-to-one; no shell, no string interpolation.
-        // Recette R2-031: uninstall purges. `remove` kept the conffiles (/etc/dovecot, /etc/init.d/dovecot),
-        // which systemd turned back into a "generated" unit, so the service stayed listed as installed and
-        // could be neither started nor removed. `purge` also clears a package already left in the `rc`
-        // state by an earlier `remove`, so uninstalling again repairs it.
+        // Use sudo -n with the exact package verb and bare-name grant, without a shell. Purge
+        // removes retained configuration as well as package binaries.
         var verb = AptVerbFor(kind);
         timeoutSeconds = Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
 
@@ -62,13 +64,13 @@ public sealed class PackageOperationExecutor(
             // is its own argv-exact entry in the AETHEUS_PACKAGE allow-list.
             if (kind == OperationKind.ServiceInstall)
             {
-                var update = await AptProcessRunner.RunSudoAsync(
+                var update = await RunSudoAsync(
                     BuildAptUpdateArgv(), timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
                 if (update.ExitCode != 0)
                     await onOutput("apt-get update failed; continuing with the cached package index", TaskLogLevel.Warning).ConfigureAwait(false);
             }
 
-            return await AptProcessRunner.RunSudoAsync(
+            return await RunSudoAsync(
                 BuildAptArgv(verb, target), timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
         }
         finally

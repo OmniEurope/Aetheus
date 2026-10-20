@@ -1,0 +1,38 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
+@* The pipelines whose chained runs are authorized against this user, and the bulk transfer. *@
+<OmniCard Class="iam-detail-card">
+    @if (_loading)
+    {
+        <AetheusLoader />
+    }
+    else
+    {
+        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md omni-u-mt-sm">
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 omni-u-text-muted">@L["OwnedPipelinesHint"]</OmniText>
+            @if (_owned.Count > 0)
+            {
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnTransferAsync"><OmniIcon Name="OmniIconName.UserPlus" /> <span>@L["TransferPipelinesTo"]</span></OmniButton>
+            }
+        </OmniStack>
+        @if (_owned.Count == 0)
+        {
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NoOwnedPipelines"]</OmniText>
+        }
+        else
+        {
+            <OmniDataGrid FillAvailableHeight="true" TItem="PipelineOwnershipDto" ExportTitle="@ExportContext.Title(L["OwnedPipelines"])" ExportFields="@ExportContext.Fields()" Items="@_owned"
+                OnRowClick="@(args => Nav.NavigateTo($"/pipelines/{args.Item.PipelineId}?tab=settings"))" Class="aetheus-clickable-rows" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+                <Columns>
+                    <OmniDataGridColumn Frozen="true" TItem="PipelineOwnershipDto" Property="PipelineName" Title="@L["Pipeline"]" Filterable="true">
+                        <Template Context="p">
+                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/pipelines/{p.PipelineId}?tab=settings")">@p.PipelineName</OmniLink></span>
+                            <PipelineOwnerBadge OwnerUsername="@p.OwnerUsername" OwnerInactive="@p.OwnerInactive" />
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="PipelineOwnershipDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+                </Columns>
+            </OmniDataGrid>
+        }
+    }
+</OmniCard>

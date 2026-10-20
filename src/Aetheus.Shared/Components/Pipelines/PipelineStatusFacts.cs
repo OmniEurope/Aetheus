@@ -2,14 +2,8 @@
 
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>
-/// The two questions every caller asks about a run's status, answered in one place.
-///
-/// They used to be spelled out as `is Success or Failed or Cancelled` at nine call sites, so adding
-/// <see cref="PipelineStatus.Partial"/> (PLAN-003 D13) would have left a finished run looking like a
-/// running one to the finalizer, the rerun button, the release rollback and the trigger reconciler.
-/// A guard test pins that every terminal value is listed here.
-/// </summary>
+/// <summary>Centralizes run status predicates so terminal status handling stays consistent across
+/// callers. A guard test requires every terminal value to be listed here.</summary>
 public static class PipelineStatusFacts
 {
     /// <summary>True when the run is over, whatever the outcome. Nothing more will be dispatched.</summary>

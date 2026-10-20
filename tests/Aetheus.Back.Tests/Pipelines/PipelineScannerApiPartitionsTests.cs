@@ -7,12 +7,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Recette R2-099: the eight "Produce OpenAPI DAST evidence against V partition N" steps became one
-/// zap-api step naming eight definitions. The control plane resolves and checks every definition,
-/// hands the agent the list, and leaves the single URL empty so an agent that predates the list
-/// refuses the scan instead of scanning the first part and reporting it as the whole.
-/// </summary>
+/// <summary>API partition scanning resolves every definition and sends the complete list, leaving
+/// the single URL empty so unsupported agents fail closed.</summary>
 public sealed class PipelineScannerApiPartitionsTests
 {
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();
@@ -60,6 +56,42 @@ public sealed class PipelineScannerApiPartitionsTests
         PipelineStepAnalysisValidator.Validate(errors, step, "stage 'ZAP API'", "qa");
 
         Assert.Contains(errors, error => error.Contains("both api_specification_url and api_specification_urls", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("not-in-the-manifest")]
+    public async Task AScannerAbsentFromTheManifest_FailsTheStepWithoutDispatch(string? scanner)
+    {
+        var step = new PipelineStepRun { Id = 4, PipelineRunId = 1, StageName = "Scan", StepName = "scan" };
+
+        await new PipelineScannerTaskFactory(_repo, Substitute.For<IEncryptionService>(), TimeProvider.System).CreateScannerTaskAsync(
+            1, new Server { Id = 5, Name = "linux-01" }, step, new PipelineStepDefinition { Name = "scan", Type = "scanner", Scanner = scanner },
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), new PipelineStageDefinition { Name = "Scan" },
+            stageIsContainer: false, TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Failed, step.Status);
+        await _repo.Received(1).AppendRunWarningsAsync(
+            1, Arg.Is<IReadOnlyCollection<string>>(warnings => warnings.Single() == "Scanner step 'scan': scanner key is absent from scanner-manifest.json."),
+            Arg.Any<CancellationToken>());
+        _repo.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+    }
+
+    [Fact]
+    public async Task ACandidateScanOnAnAgentWithoutTheManifest_FailsTheStepNamingWhatItReported()
+    {
+        var step = new PipelineStepRun { Id = 4, PipelineRunId = 1, StageName = "Scan", StepName = "secrets" };
+        var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["UPSTREAM_PIPELINE"] = "aetheus-candidate" };
+
+        await new PipelineScannerTaskFactory(_repo, Substitute.For<IEncryptionService>(), TimeProvider.System).CreateScannerTaskAsync(
+            1, new Server { Id = 5, Name = "linux-01" }, step, new PipelineStepDefinition { Name = "secrets", Type = "scanner", Scanner = "gitleaks" },
+            variables, new PipelineStageDefinition { Name = "Scan" }, stageIsContainer: false, TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Failed, step.Status);
+        await _repo.Received(1).AppendRunWarningsAsync(
+            1, Arg.Is<IReadOnlyCollection<string>>(warnings => warnings.Single().Contains("agent 'linux-01' reported no manifest hash", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+        _repo.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
     }
 
     private async Task<(PipelineStepRun Step, Dictionary<string, string>? Env)> DispatchAsync(params string[] specifications)

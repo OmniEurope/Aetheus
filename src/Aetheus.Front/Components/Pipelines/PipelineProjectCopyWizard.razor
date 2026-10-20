@@ -1,5 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R1-29, option 1: start from an existing project. Its own steps, in the same wizard frame. *@
+@* Copying an existing project has dedicated steps within the shared wizard frame. *@
 <WizardDialog Steps="@_steps" CanAdvance="@CanAdvance" StepChanged="@OnStepChanged"
               OnFinishClicked="@FinishAsync" OnCancelClicked="@OnCancel"
               FinishText="@(Result is null ? L["PipelineCopyFinish"] : L["PipelineCopyOpenPipelines"])" />

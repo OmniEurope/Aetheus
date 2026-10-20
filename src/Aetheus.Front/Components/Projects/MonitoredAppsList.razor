@@ -9,7 +9,7 @@
     }
 </OmniRow>
 
-<AetheusDataGrid @ref="_grid" Data="@_apps" TItem="MonitoredAppDto" PageSize="20" Virtualize="@(_apps.Count > 20)"
+<AetheusDataGrid @ref="_grid" Data="@_apps" TItem="MonitoredAppDto" RowClick="@(app => OpenEditDialogAsync(app))" PageSize="20" Virtualize="@(_apps.Count > 20)"
                 IsLoading="@_loading" EmptyText="@L["NoMonitoredApps"]">
     <EmptyTemplate>
         <EmptyState Icon="monitor_heart" Title="@L["NoMonitoredApps"]" Description="@L["EmptyMonitoredAppsHint"]">
@@ -22,7 +22,7 @@
         </EmptyState>
     </EmptyTemplate>
     <Columns>
-        @* Recette R-210: the status column reads CurrentStatus, so its filter lists the health states. *@
+        @* The status column reads CurrentStatus, so its filter lists the health states. *@
         <OmniDataGridColumn Frozen="true" TItem="MonitoredAppDto" Property="CurrentStatus" Title="@L["Status"]" Width="160px" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
             <Template Context="app">
                 @if (app.CurrentStatus == AppHealthStatus.Unknown && app.LastCheckedAt is null)
@@ -44,7 +44,7 @@
         <OmniDataGridColumn TItem="MonitoredAppDto" Property="Name" Title="@L["Name"]" Filterable="true" >
             <Template Context="app">
                 @* R-467: the name opens this page's telemetry on that application, not a second page. *@
-                <OmniLink Href="@($"/projects/{ProjectId}/monitoring?app={app.Id}")">@app.Name</OmniLink>
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/projects/{ProjectId}/monitoring?app={app.Id}")">@app.Name</OmniLink></span>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppDto" Property="ProbeUrl" Title="@L["ProbeUrl"]" Filterable="true" >
@@ -56,7 +56,7 @@
             <Template Context="app">
                 @if (MonitoredAppServerLabel.ServerId(app) is { } serverId)
                 {
-                    <OmniLink Href="@($"/servers/{serverId}/overview")">@FormatServer(app)</OmniLink>
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/servers/{serverId}/overview")">@FormatServer(app)</OmniLink></span>
                 }
                 else
                 {
@@ -82,9 +82,11 @@
         {
             <OmniDataGridColumn TItem="MonitoredAppDto" Title="@L["Actions"]" Width="110px" Sortable="false" Filterable="false">
                 <Template Context="app">
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     @* R-505 (2026-09-30): Edit is the main action of a monitored application's row, blue. *@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(app))" Class="omni-u-me-xs" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAppAsync(app))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    </span>
                 </Template>
             </OmniDataGridColumn>
         }

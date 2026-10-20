@@ -8,6 +8,7 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Rbac")]
+[RollbackRelevant]
 public class RbacUiTests : E2ETestBase
 {
     [Test]
@@ -141,9 +142,8 @@ public class RbacUiTests : E2ETestBase
 
     private async Task LoginAsAsync(string username, string password)
     {
-        // The PageTest context starts with the shared admin local-storage state. Let that first WASM
-        // bootstrap finish before clearing it: reloading at DOMContentLoaded used to cancel an in-flight
-        // fingerprinted assembly request and report a fake application download failure in teardown.
+        // Waits for the initial WASM bootstrap before clearing authentication state so reload
+        // cannot cancel assembly downloads.
         await Page.GotoAsync(FrontendUrl, new() { WaitUntil = WaitUntilState.DOMContentLoaded });
         await Page.WaitForSelectorAsync("[data-testid='blazor-ready']", new() { Timeout = PlaywrightConfig.AppReadyTimeoutMs });
         await Page.EvaluateAsync("localStorage.clear()");

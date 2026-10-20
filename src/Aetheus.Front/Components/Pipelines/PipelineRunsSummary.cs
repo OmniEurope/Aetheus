@@ -2,15 +2,8 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// Figures behind the summary tiles on a pipeline's Runs tab, computed from the page of runs the
-/// grid is showing so the tiles and the rows below them can never disagree.
-/// </summary>
-/// <remarks>
-/// Carries no display text: every "nothing to show" case surfaces as null and the view renders its
-/// own localized placeholder, which keeps this type free of the localizer and directly testable.
-/// Recette R2-128: the latest grade and the last success also name their run, so both tiles open it.
-/// </remarks>
+/// <summary>Summary figures use the grid's loaded runs, with null values left for the view to
+/// localize. Grade and success summaries retain the corresponding run IDs for navigation.</summary>
 public sealed record PipelineRunsSummary(
     AnalysisGrade? LatestGrade,
     int SucceededCount,

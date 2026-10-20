@@ -16,9 +16,9 @@ internal static class PipelineRunRepositoryResolver
         ? $"/git-repositories/{id}?tab=branches&branch={Uri.EscapeDataString(branchName)}"
         : $"/git-repositories?projectId={projectId}";
 
-    /// <summary>Recette R-373: a run row's commit page in Aetheus, from the git graph when the run
-    /// recorded the commit, else from the internal repository the backend resolved for the row. Null
-    /// (text) otherwise: <see cref="PipelineRunDto.RepositoryUrl"/> of an internal repository is its
+    /// <summary>A run row's commit page in Aetheus, from the git graph when the run recorded the
+    /// commit, else from the internal repository the backend resolved for the row. Null (text)
+    /// otherwise: <see cref="PipelineRunDto.RepositoryUrl"/> of an internal repository is its
     /// smart-HTTP endpoint, which serves git, not a page.</summary>
     public static string? RunCommitHref(PipelineRunDto run) =>
         string.IsNullOrWhiteSpace(run.CommitHash) ? null
@@ -26,7 +26,7 @@ internal static class PipelineRunRepositoryResolver
         : run.RepositoryId is { } repositoryId ? $"/git-repositories/{repositoryId}/commits/{Uri.EscapeDataString(run.CommitHash)}"
         : null;
 
-    /// <summary>Recette R-373: the branch counterpart of <see cref="RunCommitHref"/>.</summary>
+    /// <summary>The branch counterpart of <see cref="RunCommitHref"/>.</summary>
     public static string? RunBranchHref(PipelineRunDto run) =>
         string.IsNullOrWhiteSpace(run.BranchName) ? null
         : run.Branches.FirstOrDefault() is { } branch ? $"/git/branches/{branch.Id}"
@@ -48,8 +48,8 @@ internal static class PipelineRunRepositoryResolver
         if (run.ProjectId is not { } projectId) return null;
         try
         {
-            // Recette R-373: an internal clone URL is matched by project and slug, whatever host it
-            // was re-homed to; any other URL by its canonical form. Never guessed among several.
+            // An internal clone URL is matched by project and slug, whatever host it was re-homed
+            // to; any other URL by its canonical form. Never guessed among several.
             if (!string.IsNullOrWhiteSpace(run.RepositoryUrl))
                 return GitRepositoryUrl.ResolveRepositoryId(run.RepositoryUrl, await api.Git.GetGitReposAsync(projectId, ct));
 

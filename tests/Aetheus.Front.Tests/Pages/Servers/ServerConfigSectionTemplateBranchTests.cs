@@ -75,8 +75,9 @@ public class ServerConfigSectionTemplateBranchTests : BunitContext
         cut.Render();
 
         Assert.Contains("ImportYamlConfiguration", cut.Markup);
-        Assert.Contains("ValidateYaml", cut.Markup);
-        Assert.Contains("Preview", cut.Markup);
+        // Validate and Preview sit in the "More actions" menu beside Deploy (STD-BTN detection 11).
+        Assert.NotNull(cut.FindMenuItem("ValidateYaml"));
+        Assert.NotNull(cut.FindMenuItem("Preview"));
     }
 
     // ── TEST 4: _configValidation not null, IsValid = true → success alert ────

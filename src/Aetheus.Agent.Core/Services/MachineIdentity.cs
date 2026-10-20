@@ -6,14 +6,9 @@ using Microsoft.Win32;
 
 namespace Aetheus.Agent.Core.Services;
 
-/// <summary>
-/// PLAN-004 R-11: the host's stable machine identity, reported at enrollment so the backend can
-/// recognise a reinstalled machine and revive its retired server instead of enrolling a new one.
-/// Sources: Linux <c>/etc/machine-id</c> (fallback <c>/var/lib/dbus/machine-id</c>), Windows
-/// <c>HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid</c>. The raw value never leaves the host:
-/// machine-id(5) asks applications not to expose it, and to key its hash with an application-specific
-/// key, so the agent sends an HMAC-SHA256 under a fixed Aetheus key (lowercase hex, 64 chars).
-/// </summary>
+/// <summary>Identify the host from Linux machine-id paths or Windows MachineGuid so re-enrollment
+/// can revive its server. Send only application-keyed HMAC-SHA256 as lowercase hex; the raw
+/// identity stays on the host.</summary>
 public static class MachineIdentity
 {
     internal const string LinuxMachineIdPath = "/etc/machine-id";

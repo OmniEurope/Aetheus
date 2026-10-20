@@ -5,8 +5,8 @@ using NSubstitute;
 
 namespace Aetheus.Front.Tests.Pages.Projects;
 
-/// <summary>Recette R-441: the hosting server column names the deduced fleet server of a backend-probed
-/// app, and links the registered or deduced server.</summary>
+/// <summary>The hosting server column names the deduced fleet server of a backend-probed app, and
+/// links the registered or deduced server.</summary>
 public sealed class MonitoredAppServerLabelTests
 {
     private static IStringLocalizer<AppStrings> Localizer()

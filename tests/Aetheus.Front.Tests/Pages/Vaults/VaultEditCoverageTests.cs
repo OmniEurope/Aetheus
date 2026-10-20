@@ -54,7 +54,7 @@ public class VaultEditCoverageTests : BunitContext
     {
         SetupProjects();
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, (int?)0));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var isNew = (bool)typeof(VaultEdit).GetProperty("_isNew", Priv)!.GetValue(cut.Instance)!;
         Assert.True(isNew);
@@ -81,7 +81,7 @@ public class VaultEditCoverageTests : BunitContext
         nav.NavigateTo("http://localhost/?EnvironmentId=7");
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // The EnvironmentId query param must propagate onto the bound model.
         Assert.Equal(7, ModelInt(cut, "EnvironmentId"));
@@ -98,7 +98,7 @@ public class VaultEditCoverageTests : BunitContext
         nav.NavigateTo("http://localhost/?ProjectServerId=3");
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         Assert.Equal(3, ModelInt(cut, "ProjectServerId"));
         Assert.Null(ModelInt(cut, "EnvironmentId"));
@@ -114,7 +114,7 @@ public class VaultEditCoverageTests : BunitContext
         nav.NavigateTo("http://localhost/?ProjectId=99"); // 99 not in project list
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // 99 is not in the loaded project list → the guard rejects it, model stays unset.
         Assert.Null(ModelInt(cut, "ProjectId"));
@@ -127,7 +127,7 @@ public class VaultEditCoverageTests : BunitContext
     {
         SetupVault(2);
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 2));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var requestsBefore = _handler.Requests.Count(r => r.Url.Contains("api/vaults/2"));
 
@@ -145,7 +145,7 @@ public class VaultEditCoverageTests : BunitContext
     {
         SetupVault(1);
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         var method = typeof(VaultEdit).GetMethod("CopyKeyReference", Priv)!;
@@ -166,7 +166,7 @@ public class VaultEditCoverageTests : BunitContext
         _handler.SetJsonResponse("api/vaults", (VaultDetailDto?)null);
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var modelField = typeof(VaultEdit).GetField("_model", Priv)!;
         var model = modelField.GetValue(cut.Instance)!;
@@ -204,7 +204,7 @@ public class VaultEditCoverageTests : BunitContext
         _handler.SetJsonResponse("api/vaults/1/export-keys", new List<string> { "DB_PASSWORD", "API_KEY" });
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         var method = typeof(VaultEdit).GetMethod("ExportKeys", Priv)!;

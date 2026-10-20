@@ -3,12 +3,10 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Analysis;
 
-/// <summary>
-/// Recette R-485: what tells whether a computed run result is still the run's result. Every input of
-/// the result moves one of these values: a report or an evaluation added to the run, a finding of the
-/// project seen again, reopened or re-rated by a later scan (<c>LastSeenAt</c>), or decided on, marked
-/// fixed or reopened when its decision expires (<c>UpdatedAt</c>).
-/// </summary>
+/// <summary> What tells whether a computed run result is still the run's result. Every input of the
+/// result moves one of these values: a report or an evaluation added to the run, a finding of the
+/// project seen again, reopened or re-rated by a later scan (<c>LastSeenAt</c>), or decided on,
+/// marked fixed or reopened when its decision expires (<c>UpdatedAt</c>). </summary>
 public sealed record AnalysisRunResultStamp(
     int ProjectId,
     bool Finished,

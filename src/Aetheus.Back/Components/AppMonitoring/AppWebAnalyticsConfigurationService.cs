@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Aetheus.Back.Components.Vaults;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
-public sealed partial class AppWebAnalyticsConfigurationService(
+public sealed class AppWebAnalyticsConfigurationService(
     IAppMonitoringRepository apps,
     IVaultService vaults,
     IAuditService audit,
@@ -231,25 +230,16 @@ public sealed partial class AppWebAnalyticsConfigurationService(
         return (rotated, purged);
     }
 
-    /// <summary>
-    /// PLAN-003 2.1: one vault per project, <c>&lt;project&gt;.analytics</c>, holding one key per app.
-    /// The slug must stay identical to the one the <c>AnalyticsVaultPerProject</c> migration computes in
-    /// SQL: lower-case, every run of other characters turned into one hyphen, trimmed, 90 at most.
-    /// </summary>
-    internal static string VaultNameFor(string projectName, int projectId)
-    {
-        var slug = NonSlugCharacters().Replace(projectName.ToLowerInvariant(), "-").Trim('-');
-        if (slug.Length > 90) slug = slug[..90].Trim('-');
-        return (slug.Length == 0 ? $"project-{projectId}" : slug) + ".analytics";
-    }
+    /// <summary>Per-project analytics vault slugs must match the migration's canonical lowercase,
+    /// hyphenated and length-bounded calculation.</summary>
+    internal static string VaultNameFor(string projectName, int projectId) =>
+        ProjectResourceNames.Slug(projectName, projectId) + ".analytics";
 
     /// <summary>The key of one app inside its project's vault.</summary>
     internal static string SecretKeyFor(int appId) => $"{SecretKey}_{appId}";
 
-    /// <summary>
-    /// The app's own key, or the unsuffixed key of a one-app vault that predates PLAN-003 2.1 (an app
-    /// configured by the previous release, still readable after a return to it).
-    /// </summary>
+    /// <summary>Reads the application-specific key with an unsuffixed single-application-vault
+    /// fallback for compatibility.</summary>
     internal static string? ReadKey(IReadOnlyDictionary<string, string> secrets, int appId) =>
         secrets.TryGetValue(SecretKeyFor(appId), out var own) ? own
         : secrets.TryGetValue(SecretKey, out var legacy) ? legacy
@@ -303,9 +293,6 @@ public sealed partial class AppWebAnalyticsConfigurationService(
     }
 
     private sealed record ProvisionedKey(int VaultId, bool CreatedVault, int? SecretId);
-
-    [GeneratedRegex("[^a-z0-9]+")]
-    private static partial Regex NonSlugCharacters();
 
     /// <summary>Drops the key versions older than 31 days for one app; 0 when its vault or key is gone.</summary>
     private async Task<int> PurgeKeyHistoryAsync(

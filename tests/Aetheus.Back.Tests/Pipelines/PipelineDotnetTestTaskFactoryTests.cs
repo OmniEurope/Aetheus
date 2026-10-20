@@ -129,6 +129,47 @@ public sealed class PipelineDotnetTestTaskFactoryTests
     }
 
     [Fact]
+    public void ThePinnedSdkAndToolDirectoriesAreSubstitutedFromTheRunsOutputs()
+    {
+        var step = Step() with { Dotnet = "$(DOTNET)", ToolPaths = ["$(NODE_BIN_DIR)", "/opt/tools"] };
+
+        Factory().CreateDotnetTestTask(
+            42, new Server { Id = 1, Name = "runner" }, new PipelineStepRun { StepName = step.Name }, step,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["WORKSPACE"] = "/srv/run/42",
+                ["DOTNET"] = "/home/agent/.aetheus/dotnet/10.0.100/dotnet",
+                ["NODE_BIN_DIR"] = "/home/agent/.aetheus/node/24.4.1/bin"
+            },
+            new PipelineStageDefinition { Name = "test" });
+        var variables = CapturedVariables();
+
+        Assert.Equal("/home/agent/.aetheus/dotnet/10.0.100/dotnet", variables[PipelineDotnetTestVariables.DotnetPath]);
+        Assert.Equal(
+            "/home/agent/.aetheus/node/24.4.1/bin\n/opt/tools", variables[PipelineDotnetTestVariables.ToolPaths]);
+    }
+
+    [Fact]
+    public void AnUnpublishedOutputStaysLiteralSoTheAgentRefusesIt()
+    {
+        // No silent fallback to the host SDK: the literal reaches the agent, which refuses a dotnet that
+        // is neither 'dotnet' nor an absolute path.
+        Create(Step() with { Dotnet = "$(DOTNET)" });
+
+        Assert.Equal("$(DOTNET)", CapturedVariables()[PipelineDotnetTestVariables.DotnetPath]);
+    }
+
+    [Fact]
+    public void WithoutToolchainSettingsNoneIsSent()
+    {
+        Create(Step());
+        var variables = CapturedVariables();
+
+        Assert.False(variables.ContainsKey(PipelineDotnetTestVariables.DotnetPath));
+        Assert.False(variables.ContainsKey(PipelineDotnetTestVariables.ToolPaths));
+    }
+
+    [Fact]
     public void AStepWithoutAStatusVariableIsRefusedBecauseItWouldReportNowhere()
     {
         var error = Create(Step() with { StatusVariable = null });

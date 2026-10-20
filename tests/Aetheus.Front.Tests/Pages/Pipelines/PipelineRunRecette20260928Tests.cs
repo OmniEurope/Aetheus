@@ -5,10 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>The run page rows of the 2026-09-28 recette: a shared tab link still opens its tab now that
-/// the page shows before its details (R-422), no coverage tile on the overview (R-423), the artifacts
-/// tab is the grid alone (R-427) and the coverage tab groups its files by project in a tree, with the
-/// gauge colours on the tiers of the figure beside them (R-428).</summary>
+/// <summary>Covers shared tab links, artifact-grid presentation and project-grouped coverage with
+/// consistent gauge colours.</summary>
 public sealed class PipelineRunRecette20260928Tests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -73,7 +71,7 @@ public sealed class PipelineRunRecette20260928Tests : BunitContext
 
         var cut = RenderRun(2464);
 
-        cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".run-overview-tiles")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".run-overview-tiles")));
         Assert.DoesNotContain("Coverage", cut.Find(".run-overview-tiles").TextContent, StringComparison.Ordinal);
         // The coverage itself stays reachable, as a tab of the run.
         Assert.Contains("Coverage", cut.Find(".pipeline-run-tabs").TextContent, StringComparison.Ordinal);
@@ -94,8 +92,7 @@ public sealed class PipelineRunRecette20260928Tests : BunitContext
         var cut = RenderRun(2465, "gate");
 
         cut.WaitForAssertion(
-            () => Assert.NotNull(cut.Find(".analysis-run-gate-page")),
-            TimeSpan.FromSeconds(3));
+            () => Assert.NotNull(cut.Find(".analysis-run-gate-page")));
     }
 
     [Fact]
@@ -108,7 +105,7 @@ public sealed class PipelineRunRecette20260928Tests : BunitContext
 
         var cut = RenderRun(2466, "artifacts");
 
-        var grid = cut.WaitForElement(".run-artifacts-grid", TimeSpan.FromSeconds(2));
+        var grid = cut.WaitForElement(".run-artifacts-grid");
         Assert.Null(grid.Closest(".omni-card"));
         Assert.DoesNotContain("Artifacts (1)", cut.Markup, StringComparison.Ordinal);
     }
@@ -121,7 +118,7 @@ public sealed class PipelineRunRecette20260928Tests : BunitContext
 
         var cut = RenderRun(2467, "coverage");
 
-        var tree = cut.WaitForElement(".coverage-project-tree", TimeSpan.FromSeconds(2));
+        var tree = cut.WaitForElement(".coverage-project-tree");
         // The flat per-file table is gone.
         Assert.Empty(cut.FindAll(".coverage-file-name"));
         var projects = tree.Children.Where(child => child.GetAttribute("role") == "treeitem").ToList();
@@ -137,8 +134,8 @@ public sealed class PipelineRunRecette20260928Tests : BunitContext
         Assert.Equal(["src/Aetheus.Back/Components/A.cs", "src/Aetheus.Back/Components/B.cs"], files);
     }
 
-    /// <summary>Recette R-484: the run detail sends the coverage figures without the per-file list; the
-    /// Coverage tab reads that list from the run's coverage route when it opens, and only then.</summary>
+    /// <summary>The run detail sends the coverage figures without the per-file list; the Coverage
+    /// tab reads that list from the run's coverage route when it opens, and only then.</summary>
     [Fact]
     public void CoverageTab_ReadsTheFilesOnDemand_FromTheRunCoverageRoute()
     {
@@ -148,14 +145,14 @@ public sealed class PipelineRunRecette20260928Tests : BunitContext
         MockCoverageEndpoints(2468);
 
         var cut = RenderRun(2468);
-        cut.WaitForElement(".run-overview-tiles", TimeSpan.FromSeconds(2));
+        cut.WaitForElement(".run-overview-tiles");
         Assert.DoesNotContain(_handler.Requests, request => request.Url.EndsWith("/runs/2468/coverage", StringComparison.Ordinal));
 
         // The reader opens the Coverage tab of the page already shown.
         Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
             .NavigateTo("/pipelines/runs/2468?tab=coverage");
 
-        var tree = cut.WaitForElement(".coverage-project-tree", TimeSpan.FromSeconds(2));
+        var tree = cut.WaitForElement(".coverage-project-tree");
         Assert.Equal(2, tree.Children.Count(child => child.GetAttribute("role") == "treeitem"));
         Assert.Single(_handler.Requests, request => request.Url.EndsWith("/runs/2468/coverage", StringComparison.Ordinal));
     }

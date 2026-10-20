@@ -7,11 +7,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-007 lots 3, 5 and 7 add three read queries whose unit tests run on the InMemory provider, which
-/// translates nothing. These run them on PostgreSQL: the grade of each recent run in the pipelines
-/// table, the redeploy target of a project, and the pending approvals across pipelines.
-/// </summary>
+/// <summary>Verifies PostgreSQL translation for recent-run grades, redeployment targets and
+/// cross-pipeline pending approvals.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class Plan007ReadModelIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

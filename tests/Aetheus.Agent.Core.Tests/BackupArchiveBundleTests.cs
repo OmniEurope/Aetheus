@@ -343,6 +343,76 @@ public class BackupArchiveBundleTests
             $"Indexing the maximum manifest file set took {stopwatch.Elapsed}.");
     }
 
+    [Theory]
+    [InlineData("unknown-root", "Backup directory metadata is invalid.")]
+    [InlineData("absolute-path", "Backup directory metadata is invalid.")]
+    [InlineData("dot-dot-segment", "Backup directory metadata is invalid.")]
+    [InlineData("duplicate", "Backup directory metadata is invalid.")]
+    [InlineData("missing-timestamp", "Backup directory metadata is invalid.")]
+    [InlineData("foreign-mode", "Backup directory metadata is invalid.")]
+    [InlineData("missing-root", "Backup directory source is missing its root metadata.")]
+    [InlineData("legacy-version", "Legacy backup manifests cannot contain directory metadata.")]
+    public async Task OpenVerifiedAsync_TamperedDirectoryMetadata_IsRefusedWithItsReason(
+        string tampering, string expectedMessage)
+    {
+        var root = NewRoot();
+        try
+        {
+            var source = Path.Combine(root, "source");
+            Directory.CreateDirectory(Path.Combine(source, "sub"));
+            await File.WriteAllTextAsync(
+                Path.Combine(source, "sub", "data.txt"), "data", TestContext.Current.CancellationToken);
+            var archive = Path.Combine(root, "backup.aetheus-backup");
+            await BackupArchiveBundle.CreateAsync(
+                archive, databaseDumpPath: null, [source], TestContext.Current.CancellationToken);
+            await RewriteManifestAsync(archive, manifest => TamperDirectories(manifest, tampering, root));
+
+            var error = await Assert.ThrowsAsync<InvalidDataException>(() =>
+                BackupArchiveBundle.OpenVerifiedAsync(archive, TestContext.Current.CancellationToken));
+
+            Assert.Equal(expectedMessage, error.Message);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    private static void TamperDirectories(JsonNode manifest, string tampering, string root)
+    {
+        var directories = manifest["Directories"]!.AsArray();
+        var rootDirectory = directories.First(directory => (string?)directory!["RelativePath"] == string.Empty)!;
+        var subDirectory = directories.First(directory => (string?)directory!["RelativePath"] != string.Empty)!;
+        switch (tampering)
+        {
+            case "unknown-root": subDirectory["EntryRoot"] = "files/999"; break;
+            case "absolute-path": subDirectory["RelativePath"] = Path.GetFullPath(root); break;
+            case "dot-dot-segment": subDirectory["RelativePath"] = "sub/../escape"; break;
+            case "duplicate": directories.Add(subDirectory.DeepClone()); break;
+            case "missing-timestamp": subDirectory["LastWriteTimeUtcTicks"] = null; break;
+            case "foreign-mode": subDirectory["UnixMode"] = OperatingSystem.IsWindows() ? 0x1ED : 0x1000; break;
+            case "missing-root": directories.Remove(rootDirectory); break;
+            case "legacy-version": manifest["Version"] = 1; break;
+            default: throw new ArgumentOutOfRangeException(nameof(tampering), tampering, null);
+        }
+    }
+
+    private static async Task RewriteManifestAsync(string archive, Action<JsonNode> tamper)
+    {
+        using var zip = ZipFile.Open(archive, ZipArchiveMode.Update);
+        var manifestEntry = zip.GetEntry("manifest.json")!;
+        string json;
+        await using (var stream = manifestEntry.Open())
+        using (var reader = new StreamReader(stream))
+            json = await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
+        manifestEntry.Delete();
+        var manifest = JsonNode.Parse(json)!;
+        tamper(manifest);
+        var replacement = zip.CreateEntry("manifest.json");
+        await using var output = new StreamWriter(replacement.Open());
+        await output.WriteAsync(manifest.ToJsonString());
+    }
+
     private static string NewRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), $"aetheus-backup-test-{Guid.NewGuid():N}");

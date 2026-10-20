@@ -46,7 +46,7 @@ public class AdminSettingsDeepTests : BunitContext
     {
         SetupAdminData();
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var settings = (List<AppSettingDto>)typeof(AdminSettings).GetField("_settings", Priv)!.GetValue(cut.Instance)!;
         var secrets = (List<SecretDto>)typeof(AdminSettings).GetField("_secrets", Priv)!.GetValue(cut.Instance)!;
@@ -77,7 +77,7 @@ public class AdminSettingsDeepTests : BunitContext
     {
         _handler.SetResponse("api/settings", System.Net.HttpStatusCode.ServiceUnavailable);
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var settings = (List<AppSettingDto>)typeof(AdminSettings).GetField("_settings", Priv)!.GetValue(cut.Instance)!;
         Assert.Empty(settings);
@@ -90,7 +90,7 @@ public class AdminSettingsDeepTests : BunitContext
     {
         SetupAdminData();
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var savingKeys = (HashSet<string>)typeof(AdminSettings).GetField("_savingKeys", Priv)!.GetValue(cut.Instance)!;
         savingKeys.Add("MaxWorkers");
@@ -110,7 +110,7 @@ public class AdminSettingsDeepTests : BunitContext
     {
         SetupAdminData();
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         var method = typeof(AdminSettings).GetMethod("SaveSetting", Priv)!;
@@ -128,7 +128,7 @@ public class AdminSettingsDeepTests : BunitContext
         SetupAdminData();
         _handler.SetJsonResponse("api/settings/MaxWorkers", true);
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var buffer = (Dictionary<string, string>)typeof(AdminSettings).GetField("_editBuffer", Priv)!.GetValue(cut.Instance)!;
         buffer["MaxWorkers"] = "8";
@@ -151,7 +151,7 @@ public class AdminSettingsDeepTests : BunitContext
     {
         SetupAdminData();
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(AdminSettings).GetField("_newSecretKey", Priv)!.SetValue(cut.Instance, "");
         typeof(AdminSettings).GetField("_newSecretValue", Priv)!.SetValue(cut.Instance, "");
@@ -174,7 +174,7 @@ public class AdminSettingsDeepTests : BunitContext
         // Verify admin settings renders with secrets loaded
         SetupAdminData();
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         var secrets = (List<SecretDto>)typeof(AdminSettings).GetField("_secrets", Priv)!.GetValue(cut.Instance)!;
         Assert.Single(secrets);
     }
@@ -187,7 +187,7 @@ public class AdminSettingsDeepTests : BunitContext
         SetupAdminData();
         _handler.SetResponse("api/settings/secrets", System.Net.HttpStatusCode.BadRequest);
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(AdminSettings).GetField("_newSecretKey", Priv)!.SetValue(cut.Instance, "MY_KEY");
         typeof(AdminSettings).GetField("_newSecretValue", Priv)!.SetValue(cut.Instance, "my_value");
@@ -215,7 +215,7 @@ public class AdminSettingsDeepTests : BunitContext
     {
         SetupAdminData();
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var tokens = (List<RegistrationTokenDto>)typeof(AdminSettings).GetField("_tokens", Priv)!.GetValue(cut.Instance)!;
         Assert.Single(tokens);
@@ -229,7 +229,7 @@ public class AdminSettingsDeepTests : BunitContext
     {
         SetupAdminData();
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // POST returns NotFound → CreateRegistrationTokenAsync null → "SaveFailed" Error toast.
         _handler.SetResponse("api/auth/registration-tokens", System.Net.HttpStatusCode.NotFound);
@@ -249,7 +249,7 @@ public class AdminSettingsDeepTests : BunitContext
     {
         SetupAdminData();
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var method = typeof(AdminSettings).GetMethod("ToggleTokenReveal", Priv)!;
         method.Invoke(cut.Instance, [1]);

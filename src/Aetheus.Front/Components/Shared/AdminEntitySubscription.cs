@@ -2,16 +2,9 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// RT4M: reusable wrapper around the admin SignalR hub's <c>AdminEntityChanged</c> feed. Each admin
-/// list page (Users, Roles, Organizations, Plugins) carried a near-identical block: create the
-/// <c>admin</c> hub, subscribe to <c>AdminEntityChanged</c>, filter by its entity name, reload on a
-/// match, and dispose the connection. This collapses those copies into one collaborator: the page
-/// supplies the entity name(s) to watch and an <c>onChanged</c> callback (which marshals to the renderer
-/// and reloads its grid). After a reconnect the callback runs once, so a change missed while the hub
-/// was down still shows. There is no polling path (recette R-181: realtime by push only). Each page
-/// owns its own instance and disposes it.
-/// </summary>
+/// <summary>Own one admin-hub subscription per page and dispatch only matching entity changes so
+/// lists share consistent refresh behavior; invoke catch-up once after reconnect and dispose with
+/// the page.</summary>
 public sealed class AdminEntitySubscription(HubConnectionFactory hubFactory) : IAsyncDisposable
 {
     private HubConnection? _hub;
@@ -43,7 +36,7 @@ public sealed class AdminEntitySubscription(HubConnectionFactory hubFactory) : I
                 try { await onChanged().ConfigureAwait(false); }
                 catch { /* reconnect reconciliation is best-effort */ }
             };
-            using var timeout = new CancellationTokenSource(FrontendRuntimeDefaults.SignalRStartTimeout);
+            using var timeout = new CancellationTokenSource(FrontendRuntimeDefaults.SignalRStartTimeout, hubFactory.Clock);
             await _hub.StartAsync(timeout.Token);
         }
         catch

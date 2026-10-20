@@ -3,12 +3,8 @@
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 D13 added a sixth status. Nine call sites used to spell "the run is over" as
-/// <c>is Success or Failed or Cancelled</c>, so the new value would have read as "still running" to
-/// the finalizer, the rerun button, the release rollback and the trigger reconciler. These pin the
-/// single definition, and the sweep below is what makes the next added value impossible to forget.
-/// </summary>
+/// <summary>Terminal-state decisions use the shared status definition so additional enum values
+/// cannot be missed by individual call sites.</summary>
 public sealed class PipelineStatusFactsTests
 {
     [Theory]
@@ -39,8 +35,7 @@ public sealed class PipelineStatusFactsTests
     [Fact]
     public void No_status_enumerates_the_terminal_set_by_hand()
     {
-        // The literal that used to be duplicated everywhere. Left anywhere in the sources, it means a
-        // call site that will silently ignore the next status added to the enum.
+        // Reject duplicated terminal-state patterns that could omit supported statuses.
         var offenders = RepositoryScan
             .Enumerate(Path.Combine(RepositoryScan.Root, "src"), "*.cs")
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)

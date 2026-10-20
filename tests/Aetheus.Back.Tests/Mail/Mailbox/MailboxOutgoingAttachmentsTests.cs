@@ -7,7 +7,7 @@ using MimeKit;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-38: the limits, names and MIME parts of the files a writer attaches to a message.</summary>
+/// <summary>The limits, names and MIME parts of the files a writer attaches to a message.</summary>
 public sealed class MailboxOutgoingAttachmentsTests
 {
     private const string Own = "me@example.org";

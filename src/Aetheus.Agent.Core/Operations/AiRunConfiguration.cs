@@ -1,17 +1,21 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
 using System.Text.Json;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// What an <c>OperationKind.AiRun</c> task asks of the agent, read from the task environment the
-/// control plane built. Extracted from <see cref="AiRunOperationExecutor"/>, which runs it.
-/// </summary>
+/// <summary>Reads the encrypted task configuration for an HTTP API profile: provider, HTTPS URL,
+/// model and API key (ADR-023). Reject incomplete configuration, including CLI-runner tasks lacking
+/// these fields.</summary>
 internal sealed record AiRunConfiguration(
     int ServerTaskId,
     string ProfileName,
-    string Binary,
-    List<string> Arguments,
+    AiProvider Provider,
+    Uri BaseUrl,
+    string Model,
+    string ApiKey,
+    AiReasoningEffort Effort,
+    int MaxOutputTokens,
     string Prompt,
     string? PromptFile,
     List<string> ContextPaths,
@@ -19,26 +23,40 @@ internal sealed record AiRunConfiguration(
     bool Gate,
     bool SendsDataExternally,
     int MaxOutputBytes,
-    Dictionary<string, string> RunnerEnvironment,
     int? SourceRepositoryId,
     string? SourceRepositoryPath,
     string? SourceRef,
     string? GitUsername,
     string? GitPassword)
 {
+    internal const string IncompleteError =
+        "AI run configuration is incomplete: the task names no API provider, model or key (a profile of the retired CLI runner must be reconfigured).";
+
     /// <summary>An advisory step's failures are reported, never decisive (PipelineStepDefinition.Advisory).</summary>
     public bool Advisory { get; init; }
 
-    /// <summary>False skips the workspace diff capture after the CLI exits.</summary>
-    public bool CaptureDiff { get; init; } = true;
+    /// <summary>The model is asked for a JSON findings block, published as SARIF under the run.</summary>
+    public bool PublishFindings { get; init; }
 
-    /// <summary>Workspace-relative SARIF the CLI writes its findings to, published after it exits.</summary>
-    public string? FindingsSarif { get; init; }
+    /// <summary>An empty findings block publishes one synthetic, [FAKE]-marked note instead.</summary>
+    public bool FindingsPlaceholder { get; init; }
 
-    /// <summary>Run and stage the findings are published under; set together with <see cref="FindingsSarif"/>.</summary>
+    /// <summary>A commit range whose log and diff are added to the prompt, as the run substituted it.</summary>
+    public string? GitRange { get; init; }
+
+    /// <summary>Run and stage the findings are published under; set together with <see cref="PublishFindings"/>.</summary>
     public int? PipelineRunId { get; init; }
 
     public string? StageName { get; init; }
+
+    /// <summary>Which profile a pipeline step runs with and why, as the backend resolved it (the step's
+    /// name, the pipeline's profile, or the most preferred usable one); written at the top of the step
+    /// log. Null for a standalone task, which names its profile itself.</summary>
+    public string? ProfileResolution { get; init; }
+
+    /// <summary>Never prints the API key nor the Git password (a record would print every member).</summary>
+    public override string ToString() =>
+        $"AiRunConfiguration {{ Task = {ServerTaskId}, Profile = {ProfileName}, Provider = {Provider}, Model = {Model} }}";
 
     public static bool TryRead(
         IReadOnlyDictionary<string, string> env,
@@ -46,34 +64,31 @@ internal sealed record AiRunConfiguration(
         out string error)
     {
         configuration = default!;
-        error = "AI run configuration is incomplete.";
+        error = IncompleteError;
         if (!TryReadRequired(env, out var required)) return false;
-        List<string>? arguments;
-        try
-        {
-            arguments = JsonSerializer.Deserialize<List<string>>(required.ArgumentsJson);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-        if (arguments is null || arguments.Count > 64) return false;
         var contextPaths = ReadJsonList(env.GetValueOrDefault("AETHEUS_AI_CONTEXT_PATHS_JSON"));
         if (!TryReadSourceRepository(
                 env, out var sourceRepositoryId, out var sourceRepositoryPath, out var sourceRef))
             return false;
-        var findingsSarif = env.GetValueOrDefault("AETHEUS_AI_FINDINGS_SARIF");
-        int? runId = int.TryParse(env.GetValueOrDefault("AETHEUS_RUN_ID"), out var parsedRunId) ? parsedRunId : null;
-        if (!string.IsNullOrWhiteSpace(findingsSarif) && runId is null)
+        var publishFindings = IsTrue(env, "AETHEUS_AI_FINDINGS");
+        int? runId = int.TryParse(env.GetValueOrDefault("AETHEUS_RUN_ID"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedRunId)
+            ? parsedRunId
+            : null;
+        if (publishFindings && runId is null)
         {
-            error = "AI findings_sarif needs the pipeline run it is published under (AETHEUS_RUN_ID).";
+            error = "AI findings need the pipeline run they are published under (AETHEUS_RUN_ID).";
             return false;
         }
+        var gitRange = env.GetValueOrDefault("AETHEUS_AI_GIT_RANGE");
         configuration = new AiRunConfiguration(
             required.TaskId,
             required.ProfileName,
-            required.Binary,
-            arguments,
+            required.Provider,
+            required.BaseUrl,
+            required.Model,
+            required.ApiKey,
+            AiProviderCatalog.ParseEffort(env.GetValueOrDefault("AETHEUS_AI_EFFORT")),
+            required.MaxOutputTokens,
             required.Prompt,
             env.GetValueOrDefault("AETHEUS_AI_PROMPT_FILE"),
             contextPaths,
@@ -81,7 +96,6 @@ internal sealed record AiRunConfiguration(
             IsTrue(env, "AETHEUS_AI_GATE"),
             IsTrue(env, "AETHEUS_AI_SENDS_DATA_EXTERNALLY"),
             Math.Clamp(required.MaxOutputBytes, 1024, 1_000_000),
-            ReadRunnerEnvironment(env, Environment.GetEnvironmentVariable, OperatingSystem.IsWindows()),
             sourceRepositoryId,
             sourceRepositoryPath,
             sourceRef,
@@ -89,37 +103,16 @@ internal sealed record AiRunConfiguration(
             env.GetValueOrDefault("GIT_PASSWORD"))
         {
             Advisory = IsTrue(env, "AETHEUS_AI_ADVISORY"),
-            CaptureDiff = !string.Equals(
-                env.GetValueOrDefault("AETHEUS_AI_CAPTURE_DIFF"), "false", StringComparison.OrdinalIgnoreCase),
-            FindingsSarif = string.IsNullOrWhiteSpace(findingsSarif) ? null : findingsSarif,
+            PublishFindings = publishFindings,
+            FindingsPlaceholder = publishFindings && IsTrue(env, "AETHEUS_AI_FINDINGS_PLACEHOLDER"),
+            GitRange = string.IsNullOrWhiteSpace(gitRange) ? null : gitRange.Trim(),
             PipelineRunId = runId,
-            StageName = env.GetValueOrDefault("AETHEUS_STAGE_NAME")
+            StageName = env.GetValueOrDefault("AETHEUS_STAGE_NAME"),
+            ProfileResolution = env.GetValueOrDefault("AETHEUS_AI_PROFILE_RESOLUTION") is { Length: > 0 } resolution
+                ? resolution
+                : null
         };
         return true;
-    }
-
-    /// <summary>
-    /// The CLI's environment: the profile's variables, never the executor's AETHEUS_* nor the ephemeral
-    /// Git credentials, plus the home directory of the agent's own account. The process starts with an
-    /// emptied environment (DefaultShellRunner keeps PATH, TEMP and locale only), and a CLI logged in once
-    /// headless keeps its login and configuration under that home (Claude Code: ~/.claude, or
-    /// %USERPROFILE%\.claude on Windows). A profile that sets the variable itself wins.
-    /// </summary>
-    internal static Dictionary<string, string> ReadRunnerEnvironment(
-        IReadOnlyDictionary<string, string> env, Func<string, string?> agentVariable, bool isWindows)
-    {
-        var runner = env.Where(variable =>
-                !variable.Key.StartsWith("AETHEUS_", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(variable.Key, "GIT_USERNAME", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(variable.Key, "GIT_PASSWORD", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(variable => variable.Key, variable => variable.Value, StringComparer.Ordinal);
-        string[] homeVariables = isWindows ? ["HOME", "USERPROFILE"] : ["HOME"];
-        foreach (var name in homeVariables)
-        {
-            var value = agentVariable(name);
-            if (!string.IsNullOrWhiteSpace(value)) runner.TryAdd(name, value);
-        }
-        return runner;
     }
 
     private static bool IsTrue(IReadOnlyDictionary<string, string> env, string name) =>
@@ -130,15 +123,23 @@ internal sealed record AiRunConfiguration(
     {
         configuration = default!;
         if (!env.TryGetValue("AETHEUS_TASK_ID", out var taskText)
-            || !int.TryParse(taskText, out var taskId)
+            || !int.TryParse(taskText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var taskId)
             || !env.TryGetValue("AETHEUS_AI_PROFILE_NAME", out var profileName)
-            || !env.TryGetValue("AETHEUS_AI_BINARY", out var binary)
-            || !env.TryGetValue("AETHEUS_AI_ARGS_JSON", out var argsJson)
+            || !AiProviderCatalog.TryParse(env.GetValueOrDefault("AETHEUS_AI_PROVIDER"), out var provider)
+            || !AiProviderCatalog.IsValidBaseUrl(env.GetValueOrDefault("AETHEUS_AI_BASE_URL"), out var baseUrl)
+            || !env.TryGetValue("AETHEUS_AI_MODEL", out var model) || string.IsNullOrWhiteSpace(model)
+            || !env.TryGetValue("AETHEUS_AI_API_KEY", out var apiKey) || string.IsNullOrWhiteSpace(apiKey)
             || !env.TryGetValue("AETHEUS_AI_PROMPT", out var prompt)
             || !env.TryGetValue("AETHEUS_AI_MAX_OUTPUT_BYTES", out var maxText)
-            || !int.TryParse(maxText, out var maxOutputBytes)) return false;
+            || !int.TryParse(maxText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var maxOutputBytes))
+            return false;
+        var maxOutputTokens = int.TryParse(
+            env.GetValueOrDefault("AETHEUS_AI_MAX_OUTPUT_TOKENS"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var tokens)
+            && tokens > 0
+                ? Math.Clamp(tokens, 256, 128_000)
+                : 16_000;
         configuration = new RequiredAiConfiguration(
-            taskId, profileName, binary, argsJson, prompt, maxOutputBytes);
+            taskId, profileName, provider, baseUrl!, model.Trim(), apiKey, prompt, maxOutputBytes, maxOutputTokens);
         return true;
     }
 
@@ -150,7 +151,11 @@ internal sealed record AiRunConfiguration(
     }
 
     private sealed record RequiredAiConfiguration(
-        int TaskId, string ProfileName, string Binary, string ArgumentsJson, string Prompt, int MaxOutputBytes);
+        int TaskId, string ProfileName, AiProvider Provider, Uri BaseUrl, string Model, string ApiKey,
+        string Prompt, int MaxOutputBytes, int MaxOutputTokens)
+    {
+        public override string ToString() => $"RequiredAiConfiguration {{ Task = {TaskId} }}";
+    }
 
     private static bool TryReadSourceRepository(
         IReadOnlyDictionary<string, string> env,
@@ -171,7 +176,7 @@ internal sealed record AiRunConfiguration(
         {
             if (!hasSourceRepositoryId
                 || !hasSourceRepositoryPath
-                || !int.TryParse(sourceRepositoryText, out var parsedSourceRepositoryId)
+                || !int.TryParse(sourceRepositoryText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedSourceRepositoryId)
                 || parsedSourceRepositoryId <= 0
                 || string.IsNullOrWhiteSpace(sourceRepositoryPath)
                 || !sourceRepositoryPath.StartsWith("/git/", StringComparison.Ordinal)

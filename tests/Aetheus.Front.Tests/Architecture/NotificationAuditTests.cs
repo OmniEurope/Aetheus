@@ -3,13 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// NotifyHelper is the one door to a toast. The duration of each severity, the title and message
-/// mapping and the error report with its correlation id live there (PLAN-008 lots 2 and 11); a page
-/// that raised a toast by itself would bypass all of them, as two pages once did through the library's
-/// NotificationService. Since lot 11 the toast is an OmniEurope.Blazor notification, so a direct
-/// <c>OmniOverlayService.Notify</c> call is refused as well, while the service stays free for dialogs.
-/// </summary>
+/// <summary>NotifyHelper centralizes toast duration, content and correlated error reporting. Direct
+/// overlay notifications are forbidden while dialog usage remains allowed.</summary>
 public sealed partial class NotificationAuditTests
 {
     [GeneratedRegex(@"\bNotificationService\b")]

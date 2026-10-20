@@ -27,7 +27,7 @@ public class HelpCenterDeepTests : BunitContext
     public void Renders_HelpCenter_WithArticles()
     {
         var cut = Render<HelpCenter>();
-        cut.WaitForState(() => !(bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !(bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         // Init loads the two stubbed articles and surfaces their titles.
         var articles = (IReadOnlyList<HelpArticle>)typeof(HelpCenter).GetField("_articles", Priv)!.GetValue(cut.Instance)!;
@@ -43,7 +43,7 @@ public class HelpCenterDeepTests : BunitContext
         {
             var loading = (bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!;
             return !loading;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var loadingFinal = (bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!;
         Assert.False(loadingFinal);
@@ -53,7 +53,7 @@ public class HelpCenterDeepTests : BunitContext
     public async Task FilterAsync_WithEmptySearch_ReturnsAll()
     {
         var cut = Render<HelpCenter>();
-        cut.WaitForState(() => !(bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !(bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         typeof(HelpCenter).GetField("_search", Priv)!.SetValue(cut.Instance, "");
         var method = typeof(HelpCenter).GetMethod("FilterAsync", Priv)!;
@@ -68,7 +68,7 @@ public class HelpCenterDeepTests : BunitContext
     public async Task FilterAsync_WithSearch_FiltersResults()
     {
         var cut = Render<HelpCenter>();
-        cut.WaitForState(() => !(bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !(bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         typeof(HelpCenter).GetField("_search", Priv)!.SetValue(cut.Instance, "xyznonexistent987");
         var method = typeof(HelpCenter).GetMethod("FilterAsync", Priv)!;
@@ -82,7 +82,7 @@ public class HelpCenterDeepTests : BunitContext
     public void Articles_And_Filtered_AreInitialized()
     {
         var cut = Render<HelpCenter>();
-        cut.WaitForState(() => !(bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !(bool)typeof(HelpCenter).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         var articles = (IReadOnlyList<HelpArticle>?)typeof(HelpCenter).GetField("_articles", Priv)!.GetValue(cut.Instance);
         var filtered = (IReadOnlyList<HelpArticle>?)typeof(HelpCenter).GetField("_filtered", Priv)!.GetValue(cut.Instance);

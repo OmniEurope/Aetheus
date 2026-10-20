@@ -200,7 +200,8 @@ public sealed class PipelineRunGateProducerTests : BunitContext
 
         var alert = cut.Find(".omni-alert");
         Assert.Contains("GateSealedGradeTitle", alert.TextContent, StringComparison.Ordinal);
-        Assert.Equal("/pipelines/runs/2638?tab=logs&step=50", alert.QuerySelector(".run-blocking-test a")!.GetAttribute("href"));
+        // Recette R1-79: the link stays on the run on screen (2634); its log tab finds the step of child run 2638.
+        Assert.Equal("/pipelines/runs/2634?tab=logs&step=50", alert.QuerySelector(".run-blocking-test a")!.GetAttribute("href"));
         Assert.Contains("Auth.LoginLocksOut", alert.TextContent, StringComparison.Ordinal);
     }
 
@@ -217,6 +218,41 @@ public sealed class PipelineRunGateProducerTests : BunitContext
         Assert.Contains(marked, row => row.TextContent.Contains("Test V integration", StringComparison.Ordinal));
         Assert.DoesNotContain(marked, row => row.TextContent.Contains("Deploy V and migrate", StringComparison.Ordinal));
         Assert.Contains("omni-badge--warning", marked[0].QuerySelector(".run-tl-gate-findings")!.ClassName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R1_81_TheFindingsBadge_SitsBesideTheStatus_OutOfReachOfThePinnedDurations()
+    {
+        // The sticky duration block is pinned to the right of a row that scrolls sideways; after the name,
+        // the badge ran under it and was painted over. Next to the status it stays on the left.
+        var (_, children) = Candidate2634();
+
+        var cut = Render<RunTimelineTree>(parameters => parameters.Add(component => component.Run, children[2638]));
+
+        var row = cut.FindAll(".run-tl-step").First(r => r.QuerySelector(".run-tl-gate-findings") is not null);
+        var order = row.Children.Select(child => child.ClassList).ToList();
+        var status = order.FindIndex(classes => classes.Contains("run-status-badge"));
+        var findings = order.FindIndex(classes => classes.Contains("run-tl-gate-findings"));
+        var name = order.FindIndex(classes => classes.Contains("run-tl-name"));
+        var times = order.FindIndex(classes => classes.Contains("run-tl-times"));
+        Assert.True(status < findings && findings < name && name < times, string.Join(" | ", order.Select(c => string.Join('.', c))));
+        Assert.Contains("omni-badge--tonal", row.QuerySelector(".run-tl-gate-findings")!.ClassName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R1_81_ARejectedStep_IsOneWarningBadge_NeverGreen_AndNoSecondBadgeRepeatsIt()
+    {
+        var rejected = Step(60, "Test V integration", T0, new() { ["QA_CURRENT_INTEGRATION_GATE_STATUS"] = "1" }) with { IsRejected = true };
+        var run = new PipelineRunDto { Id = 2700, PipelineName = "aetheus-qa", Status = PipelineStatus.Rejected, Steps = [rejected] };
+
+        var cut = Render<RunTimelineTree>(parameters => parameters.Add(component => component.Run, run));
+
+        var row = cut.Find(".run-tl-step");
+        var badges = row.QuerySelectorAll(".omni-badge");
+        var badge = Assert.Single(badges);
+        Assert.Contains("omni-badge--warning", badge.ClassName, StringComparison.Ordinal);
+        Assert.DoesNotContain("omni-badge--success", badge.ClassName, StringComparison.Ordinal);
+        Assert.Null(row.QuerySelector(".run-tl-gate-findings"));
     }
 
     [Fact]
@@ -244,7 +280,7 @@ public sealed class PipelineRunGateProducerTests : BunitContext
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 2638));
 
         // Without ?step= the page opens the last completed step (50), not the one the link names.
-        cut.WaitForAssertion(() => Assert.Equal(49, cut.Instance.SelectedStep?.Id), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Equal(49, cut.Instance.SelectedStep?.Id));
         Assert.True(cut.Instance.IsStepSelectionPinned);
     }
 }

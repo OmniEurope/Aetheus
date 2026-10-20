@@ -15,7 +15,7 @@ public interface IVaultService
     Task<VaultSecretDto?> UpdateSecretAsync(int vaultId, int secretId, UpdateVaultSecretRequest request, CancellationToken ct = default);
     Task<VaultSecretDto?> RotateSecretAsync(int vaultId, int secretId, RotateVaultSecretRequest request, CancellationToken ct = default);
     Task<bool> DeleteSecretAsync(int vaultId, int secretId, CancellationToken ct = default);
-    /// <summary>Recette R-292: one secret's clear value, for the copy button; every read is audited.</summary>
+    /// <summary>One secret's clear value, for the copy button; every read is audited.</summary>
     Task<string?> RevealSecretValueAsync(int vaultId, int secretId, CancellationToken ct = default);
     Task<List<VaultSecretVersionDto>> GetSecretVersionsAsync(int vaultId, int secretId, CancellationToken ct = default);
     Task<int> PurgeHistoricalSecretVersionsAsync(

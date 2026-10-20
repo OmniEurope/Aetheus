@@ -13,7 +13,7 @@
 }
 else
 {
-    @* Recette R1-29: new pipelines from the templates, or the pipelines of an existing project. *@
+    @* New pipelines from the templates, or the pipelines of an existing project. *@
     <OmniRadioButtonList TValue="bool" Label="@L["PipelineSetupStartFrom"]" Options="@StartOptions"
                          Value="@_copyMode" ValueChanged="@OnModeChanged" ValueExpression="@(() => _copyMode)"
                          Class="omni-u-mb-md" data-testid="setup-start-from" />

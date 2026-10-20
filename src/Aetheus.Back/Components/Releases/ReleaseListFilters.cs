@@ -3,12 +3,10 @@ using Aetheus.Back.Components.Pipelines;
 
 namespace Aetheus.Back.Components.Releases;
 
-/// <summary>
-/// Recette R-224: what the releases list's header filters need beyond the generic map. The source
-/// pipeline the list shows is the root of the release run's trigger chain (read exactly as
-/// <see cref="ReleaseSourcePipelineEnricher"/> shows it), so its filter and its checkable values are
-/// resolved over the releases of the caller's scope.
-/// </summary>
+/// <summary> What the releases list's header filters need beyond the generic map. The source
+/// pipeline the list shows is the root of the release run's trigger chain (read exactly as <see
+/// cref="ReleaseSourcePipelineEnricher"/> shows it), so its filter and its checkable values are
+/// resolved over the releases of the caller's scope. </summary>
 internal sealed class ReleaseListFilters(IReleaseRepository repo, IPipelineRepository? pipelineRepo)
 {
     /// <summary>

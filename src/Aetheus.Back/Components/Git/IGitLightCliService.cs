@@ -8,25 +8,15 @@ public interface IGitLightCliService
 {
     Task InitBareRepoAsync(string diskPath, string defaultBranch = "main", CancellationToken ct = default);
     Task DeleteRepoAsync(string diskPath, CancellationToken ct = default);
-    /// <summary>
-    /// Lists commits with two pagination modes.
-    /// <list type="bullet">
-    ///   <item><b>Cursor (preferred for deep pages):</b> when <paramref name="afterSha"/> is non-empty,
-    ///         walks history starting from that commit's parent - O(<paramref name="take"/>).</item>
-    ///   <item><b>Skip (fallback):</b> when <paramref name="afterSha"/> is null, uses <c>--skip=N</c> -
-    ///         O(N + take) because git has to walk past N commits first. The CLI logs a warning when
-    ///         deep skips happen so future callers know to plumb a cursor.</item>
-    /// </list>
-    /// </summary>
-    /// <remarks>Recette R-224 / R2-004: <paramref name="filter"/> carries the commits grid's column
-    /// filters (message, authors, branches, committer dates); its branches, when set, replace
-    /// <paramref name="refName"/> as the walk's start.</remarks>
+    /// <summary>Uses <paramref name="afterSha"/> for O(take) cursor pagination, falling back to
+    /// O(skip + take) traversal with a deep-skip warning. <paramref name="filter"/> carries column
+    /// filters; its branches override <paramref name="refName"/> as history roots.</summary>
     Task<List<GitLightCommitDto>> GetCommitsAsync(string diskPath, string? refName, int skip, int take, string? search = null, string? afterSha = null, CancellationToken ct = default, GitCommitLogFilter? filter = null);
     Task<Dictionary<string, string>> GetCommitMessagesAsync(string diskPath, IReadOnlyCollection<string> shas, CancellationToken ct = default);
     Task<int> GetCommitCountAsync(string diskPath, string? refName, string? search = null, CancellationToken ct = default, GitCommitLogFilter? filter = null);
 
-    /// <summary>Recette R-224: the distinct author names of the most recent commits of every branch, for
-    /// the commits grid's Author column filter.</summary>
+    /// <summary>The distinct author names of the most recent commits of every branch, for the
+    /// commits grid's Author column filter.</summary>
     Task<List<string>> GetCommitAuthorsAsync(string diskPath, CancellationToken ct = default);
     Task<List<GitLightBranchDto>> GetBranchesAsync(string diskPath, string defaultBranch, CancellationToken ct = default);
     Task<List<GitLightTagDto>> GetTagsAsync(string diskPath, CancellationToken ct = default);
@@ -38,8 +28,9 @@ public interface IGitLightCliService
     Task<GitLightBlobDto?> GetBlobAsync(string diskPath, string refName, string path, CancellationToken ct = default);
     Task<Stream?> GetBlobStreamAsync(string diskPath, string refName, string path, CancellationToken ct = default);
 
-    /// <summary>R2-003: <c>git archive --format=zip --prefix=&lt;prefix&gt;/ &lt;ref&gt;</c>, streamed. Null when
-    /// the ref names no tree (checked before the first byte, so a bad ref is a 404, not a cut zip).</summary>
+    /// <summary><c>git archive --format=zip --prefix=&lt;prefix&gt;/ &lt;ref&gt;</c>, streamed.
+    /// Null when the ref names no tree (checked before the first byte, so a bad ref is a 404, not a
+    /// cut zip).</summary>
     Task<Stream?> GetArchiveStreamAsync(string diskPath, string refName, string prefix, CancellationToken ct = default);
     Task<(bool Success, string? MergeCommitSha, string? Error)> MergeBranchesAsync(string diskPath, string source, string target, string authorName, string authorEmail, CancellationToken ct = default);
 
@@ -61,9 +52,6 @@ public interface IGitLightCliService
         string diskPath, string branch,
         IReadOnlyList<(string RelativePath, string Content)> upserts,
         IReadOnlyList<string> deletions,
-        string commitMessage, string authorName, string authorEmail, CancellationToken ct = default);
-    Task<(bool Success, string? CommitSha, string? Error)> ApplyPatchAsync(
-        string diskPath, string branch, string patch,
         string commitMessage, string authorName, string authorEmail, CancellationToken ct = default);
     Task<PullRequestDiffDto> GetDiffAsync(string diskPath, string fromRef, string toRef, CancellationToken ct = default);
     Task<GitPatchResult> GetCommitPatchAsync(

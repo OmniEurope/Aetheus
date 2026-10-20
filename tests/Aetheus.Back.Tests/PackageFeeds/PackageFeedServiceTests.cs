@@ -277,4 +277,62 @@ public class PackageFeedServiceTests
         await _repo.Received(1).RemoveFeedAsync(Arg.Any<PackageFeed>(), Arg.Any<CancellationToken>());
         await _audit.Received(1).LogAsync("Deleted", "PackageFeed", 1, null, Arg.Any<CancellationToken>());
     }
+
+    // --- AddPackageAsync ---
+
+    private static PackageFeed NuGetFeed() =>
+        new() { Id = 1, Name = "nuget", FeedType = PackageFeedType.NuGet, UpstreamUrl = "https://api.nuget.org" };
+
+    [Fact]
+    public async Task AddPackageAsync_UnknownFeed_ReturnsNullWithoutStoringAnything()
+    {
+        Assert.Null(await _sut.AddPackageAsync(9, new AddPackageRequest { Name = "x" }, TestContext.Current.CancellationToken));
+        await _repo.DidNotReceiveWithAnyArgs().AddPackageAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AddPackageAsync_AlreadyTracked_ReturnsTheExistingEntryWithoutResolving()
+    {
+        _repo.FindFeedAsync(1, Arg.Any<CancellationToken>()).Returns(NuGetFeed());
+        _repo.FindPackageByNameAsync(1, "Serilog", Arg.Any<CancellationToken>())
+            .Returns(new PackageEntry { Id = 3, PackageFeedId = 1, Name = "Serilog", LatestVersion = "4.0.0" });
+
+        var dto = await _sut.AddPackageAsync(1, new AddPackageRequest { Name = "Serilog" }, TestContext.Current.CancellationToken);
+
+        Assert.Equal((3, "4.0.0"), (dto!.Id, dto.LatestVersion));
+        await _repo.DidNotReceiveWithAnyArgs().AddPackageAsync(default!, TestContext.Current.CancellationToken);
+        await _resolver.DidNotReceiveWithAnyArgs().ResolveLatestAsync(default, default!, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AddPackageAsync_Resolved_StoresTheUpstreamVersionAndPublicationDate()
+    {
+        var published = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        _repo.FindFeedAsync(1, Arg.Any<CancellationToken>()).Returns(NuGetFeed());
+        _resolver.ResolveLatestAsync(PackageFeedType.NuGet, "https://api.nuget.org", "Serilog", Arg.Any<CancellationToken>())
+            .Returns(new PackageResolveResult(PackageResolveOutcome.Resolved, "4.1.0", published));
+
+        var dto = await _sut.AddPackageAsync(1, new AddPackageRequest { Name = "Serilog" }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(("Serilog", "4.1.0", published), (dto!.Name, dto.LatestVersion, dto.PublishedAt));
+        Assert.NotEqual(default, dto.LastSyncedAt);
+        await _repo.Received(1).AddPackageAsync(Arg.Is<PackageEntry>(e => e.PackageFeedId == 1), Arg.Any<CancellationToken>());
+        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _audit.Received(1).LogAsync("Created", "PackageEntry", Arg.Any<int>(), "nuget/Serilog", Arg.Any<CancellationToken>());
+        await _notifier.Received(1).BroadcastAsync(AdminEntities.PackageFeed, 1, EntityChangeOps.Updated, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AddPackageAsync_NotResolved_KeepsAnHonestBlankVersion()
+    {
+        _repo.FindFeedAsync(1, Arg.Any<CancellationToken>()).Returns(NuGetFeed());
+        _resolver.ResolveLatestAsync(PackageFeedType.NuGet, Arg.Any<string>(), "ghost", Arg.Any<CancellationToken>())
+            .Returns(new PackageResolveResult(PackageResolveOutcome.NotFound, null, null));
+
+        var dto = await _sut.AddPackageAsync(1, new AddPackageRequest { Name = "ghost" }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(string.Empty, dto!.LatestVersion);
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _audit.Received(1).LogAsync("Created", "PackageEntry", Arg.Any<int>(), "nuget/ghost", Arg.Any<CancellationToken>());
+    }
 }

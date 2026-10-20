@@ -4,8 +4,7 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Tasks;
 
-/// <summary>
-/// Recette R-212: the column filters of the task lists (the global /tasks page, a server's tasks and a
+/// <summary> The column filters of the task lists (the global /tasks page, a server's tasks and a
 /// project's tasks, all reading <see cref="ServerTaskDto"/>). The keys are the grid's column keys.
 /// </summary>
 internal static class TaskListQuery

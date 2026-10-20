@@ -14,9 +14,17 @@ public partial class GitRepositoryCreateDialog
     private CreateGitLightRepoRequest _request = new();
     private bool _submitting;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _request = new CreateGitLightRepoRequest { ProjectId = ProjectId };
+        // Recette R3-60: a project's repository is named after the project unless the user says otherwise;
+        // the backend derives the slug from the name.
+        if (ProjectId <= 0) return;
+        ProjectDetailDto? project;
+        try { project = await Api.Projects.GetProjectDetailAsync(ProjectId); }
+        catch (HttpRequestException) { return; }
+        if (project is not null && string.IsNullOrWhiteSpace(_request.Name))
+            _request.Name = project.Name;
     }
 
     private async Task Submit()

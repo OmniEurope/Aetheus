@@ -27,6 +27,52 @@ public sealed class WorkspaceFileMatcherTests : IDisposable
         Assert.EndsWith("inside.txt", matches[0], StringComparison.Ordinal);
     }
 
+    /// <summary>QA run 1283: the V suite's SARIF sat under <c>.qa-evidence/qa-1283-current/e2e</c> and the
+    /// pattern's <c>*-current</c> segment was read as a literal directory name, so nothing matched. The
+    /// wildcard segment selects the current directory and leaves the V-1 one out.</summary>
+    [Fact]
+    public void WildcardDirectorySegment_MatchesOnlyTheDirectoriesItSelects()
+    {
+        var current = Directory.CreateDirectory(Path.Combine(root, ".qa-evidence", "qa-1283-current", "e2e")).FullName;
+        var previous = Directory.CreateDirectory(Path.Combine(root, ".qa-evidence", "qa-1283-previous", "e2e")).FullName;
+        File.WriteAllText(Path.Combine(current, "accessibility.sarif"), "{}");
+        File.WriteAllText(Path.Combine(previous, "accessibility.sarif"), "{}");
+
+        var matches = WorkspaceFileMatcher.GetMatchingFiles(root, ".qa-evidence/*-current/e2e/accessibility.sarif").ToList();
+
+        Assert.Equal([Path.Combine(current, "accessibility.sarif")], matches);
+    }
+
+    /// <summary>A wildcard segment that selects a directory without the file still matches nothing, so the
+    /// lint step keeps failing when the report is genuinely absent.</summary>
+    [Fact]
+    public void WildcardDirectorySegment_WithoutTheFile_MatchesNothing()
+    {
+        var current = Directory.CreateDirectory(Path.Combine(root, ".qa-evidence", "qa-1283-current", "e2e")).FullName;
+        File.WriteAllText(Path.Combine(current, "e2e.trx"), "<TestRun />");
+
+        Assert.Empty(WorkspaceFileMatcher.GetMatchingFiles(root, ".qa-evidence/*-current/e2e/accessibility.sarif"));
+        Assert.Empty(WorkspaceFileMatcher.GetMatchingFiles(root, ".qa-evidence/*-missing/e2e/*.trx"));
+    }
+
+    [Fact]
+    public void WildcardDirectorySegment_SkipsDirectorySymlinkOutsideWorkspace()
+    {
+        Directory.CreateDirectory(Path.Combine(outside, "e2e"));
+        File.WriteAllText(Path.Combine(outside, "e2e", "accessibility.sarif"), "{}");
+        Directory.CreateDirectory(Path.Combine(root, ".qa-evidence"));
+        LinkOutsideWorkspace(Path.Combine(root, ".qa-evidence", "escape-current"), outside);
+
+        try
+        {
+            Assert.Empty(WorkspaceFileMatcher.GetMatchingFiles(root, ".qa-evidence/*-current/e2e/accessibility.sarif"));
+        }
+        finally
+        {
+            Directory.Delete(Path.Combine(root, ".qa-evidence", "escape-current"));
+        }
+    }
+
     /// <summary>
     /// Creates a directory reparse point pointing outside the workspace. On Windows a symbolic link
     /// needs the developer-mode or SeCreateSymbolicLink privilege, which is exactly why this test used

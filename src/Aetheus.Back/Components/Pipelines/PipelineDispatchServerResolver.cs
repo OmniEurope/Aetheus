@@ -49,7 +49,7 @@ public interface IPipelineDispatchServerResolver
 /// Server resolution for stage dispatch, extracted from <see cref="PipelineRunService"/>. It reads the
 /// repository and returns a server or a reason; it never mutates a run, which is why it moved out whole.
 /// </summary>
-public sealed class PipelineDispatchServerResolver(IPipelineRepository repo) : IPipelineDispatchServerResolver
+public sealed class PipelineDispatchServerResolver(IPipelineRunnerTargetReader repo) : IPipelineDispatchServerResolver
 {
     // Human-readable fail-closed reason. Explicit selectors never broaden to another runner.
     public string BuildNoServerReason(string stageName, PipelineStageDefinition stageDef)

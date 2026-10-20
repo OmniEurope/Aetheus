@@ -4,7 +4,10 @@ using System.Globalization;
 
 namespace Aetheus.Agent.Core.Collectors;
 
-public sealed class DockerCollector(ILogger<DockerCollector> logger, IShellRunner shell)
+/// <param name="storage">Names the agent's own Buildx builder so its BuildKit container is shown as
+/// Aetheus's; null where the builder is not needed.</param>
+public sealed class DockerCollector(
+    ILogger<DockerCollector> logger, IShellRunner shell, IDockerStorageMaintenance? storage = null)
     : BaseShellCollector<DockerCollector>(logger, shell), IDockerCollector
 {
     public async Task<DockerDataDto> CollectAllAsync(CancellationToken ct = default)
@@ -20,7 +23,10 @@ public sealed class DockerCollector(ILogger<DockerCollector> logger, IShellRunne
         var containers = await containersTask.ConfigureAwait(false);
 
         if (containers.Count > 0)
+        {
             await EnrichWithStatsAsync(containers, ct).ConfigureAwait(false);
+            containers = await InspectSecurityAsync(containers, ct).ConfigureAwait(false);
+        }
 
         return new DockerDataDto
         {
@@ -114,6 +120,26 @@ public sealed class DockerCollector(ILogger<DockerCollector> logger, IShellRunne
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Failed to collect Docker stats");
+        }
+    }
+
+    /// <summary>One read-only <c>docker inspect</c> for the listed containers. Docker answers non-zero
+    /// when one of them vanished since <c>ps</c> but still prints the others, so the output is read
+    /// whatever the exit code; a container missing from it stays uninspected (unknown).</summary>
+    private async Task<List<DockerContainerDto>> InspectSecurityAsync(
+        List<DockerContainerDto> containers, CancellationToken ct)
+    {
+        try
+        {
+            var res = await Shell.RunExecAsync("docker",
+                DockerContainerSecurityInspector.BuildArguments(containers.Select(c => c.ContainerId)),
+                ct).ConfigureAwait(false);
+            return DockerContainerSecurityInspector.Apply(containers, res.StdOut, storage?.BuilderName);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(ex, "Failed to inspect Docker container security settings");
+            return containers;
         }
     }
 

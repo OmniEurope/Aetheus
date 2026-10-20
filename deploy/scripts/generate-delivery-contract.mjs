@@ -57,10 +57,8 @@ const artifacts = {};
 for (const path of artifactPaths)
   artifacts[basename(path)] = await fileSha256(path);
 
-// The schema state this delivery migrates from, chained off the contract currently in production.
-// A candidate is no longer pinned to the identity of the release it was qualified against, only to
-// the schema states its QA actually exercised, so a concurrent deploy that changes no schema stops
-// invalidating it.
+// Bind delivery to the schema states exercised by QA so a concurrent release with the same schema
+// does not invalidate qualification. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 const bootstrap = process.env.DELIVERY_BASELINE_BOOTSTRAP === "true";
 const baselineSchemaHash = process.env.DELIVERY_BASELINE_SCHEMA_HASH ?? "";
 // Base64 because a setvariable directive carries one line: the list cannot travel raw.

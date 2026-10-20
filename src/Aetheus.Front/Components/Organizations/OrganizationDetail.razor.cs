@@ -68,7 +68,7 @@ public partial class OrganizationDetail : IAsyncDisposable
 
     private OmniDataGrid<OrganizationMemberDto>? _membersGrid;
 
-    // Recette R-210: the Role filter shows the same words as the role picker, built once for a stable delegate.
+    // The Role filter shows the same words as the role picker, built once for a stable delegate.
     private Func<string, string>? _roleText;
     private Func<string, string> RoleText => _roleText ??= value =>
         Enum.TryParse<OrganizationRole>(value, ignoreCase: true, out var role)
@@ -152,8 +152,8 @@ public partial class OrganizationDetail : IAsyncDisposable
             if (Id != id) return;
 
             _loadError = false;
-            // Recette R-227: a live reload tells the members grid before the new list arrives, so the
-            // members it did not hold read bold.
+            // A live reload tells the members grid before the new list arrives, so the members it
+            // did not hold read bold.
             if (!showLoading && _membersGrid is not null) await _membersGrid.RefreshAsync();
             _org = organization;
             _selectedProjectIds = organization?.Projects.Select(p => p.Id).ToList() ?? [];

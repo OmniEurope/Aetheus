@@ -3,20 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// The Secondary style is banned on buttons (ButtonStyle.Secondary) and on badges (OmniTone.Secondary):
-/// it rendered nearly identically to Light and had split 117/224 across the app for no expressible
-/// reason (decision of 2026-08-19; ui-patterns: "Secondary is banned on badges too"). ButtonStyle is
-/// the retired library's name; the OE button's neutral grey is OmniButtonVariant.Secondary, which stays
-/// allowed. OmniTone.Accent is NOT banned: counts use it, and R2-058 maps a running service to it
-/// (FRONTTEST-001: this summary and the badge diagnostic used to name Accent while the scan matched
-/// Secondary).
-///
-/// Scope note: this guard checks ONLY that ban. Button colours follow STD-BTN (revised 2026-09-28,
-/// colour follows importance: Primary the main action of its zone, Secondary the others, Ghost a minor
-/// one, Danger a destructive one, never Success), enforced by ButtonRoleColourGuardTests and
-/// ButtonFamilyAndGridNavigationAuditTests; see docs/contracts/ui-patterns.md.
-/// </summary>
+/// <summary>This guard forbids ButtonStyle.Secondary and OmniTone.Secondary while allowing OE
+/// neutral buttons and accent badges. Role-colour policies are enforced by their dedicated guards
+/// and the UI contract.</summary>
 public class ButtonSemanticsAuditTests
 {
     private static readonly Regex BannedButtonStyle = new(@"\bButtonStyle\.Secondary\b", RegexOptions.Compiled);

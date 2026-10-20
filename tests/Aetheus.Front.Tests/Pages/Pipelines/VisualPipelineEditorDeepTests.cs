@@ -87,12 +87,13 @@ public class VisualPipelineEditorDeepTests : BunitContext
             {
                 Nodes = [new LayoutNode { Id = "0", X = 0, Y = 0 }]
             });
-        JSInterop.Setup<VisualPipelineLayoutStore.LayoutBlob>("visualPipeline.loadLayout", _ => true)
-            .SetResult(new VisualPipelineLayoutStore.LayoutBlob
-            {
-                Sig = "5:build",
-                Pos = new Dictionary<string, double[]> { ["0"] = [100, 76.666666666666657] }
-            });
+        // R1-66: the positions laid out by hand are a user preference of pipeline 42.
+        var preferences = Services.GetRequiredService<Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences>();
+        preferences.Seed(PreferenceKeys.VisualLayout(42), new VisualPipelineLayoutStore.LayoutBlob
+        {
+            Sig = "5:build",
+            Pos = new Dictionary<string, double[]> { ["0"] = [100, 76.666666666666657] }
+        });
         var cut = Render<VisualPipelineEditor>(parameters => parameters
             .Add(component => component.YamlDefinition, SimpleYaml)
             .Add(component => component.PipelineId, 42)
@@ -106,10 +107,9 @@ public class VisualPipelineEditorDeepTests : BunitContext
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Equal(2, JSInterop.Invocations.Count(invocation =>
-                invocation.Identifier == "visualPipeline.loadLayout"));
-            // PLAN-008 lot 44: the coordinates ride as data attributes and a script copies them
-            // into the custom properties through the CSSOM, so the markup carries no style.
+            Assert.Equal(2, preferences.Reads.Count(key => key == PreferenceKeys.VisualLayout(42)));
+            // The coordinates ride as data attributes and a script copies them into the custom
+            // properties through the CSSOM, so the markup carries no style.
             var node = cut.Find(".vp-node");
             Assert.Equal("100", node.GetAttribute("data-node-x"));
             Assert.Equal("76.66666666666666", node.GetAttribute("data-node-y"));

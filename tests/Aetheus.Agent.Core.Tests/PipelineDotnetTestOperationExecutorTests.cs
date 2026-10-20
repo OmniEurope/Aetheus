@@ -227,6 +227,81 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
         Assert.Null(PublishedStatus());
     }
 
+    [Fact]
+    public async Task ASilentSuiteWritesProgressLinesWhileItRuns()
+    {
+        // run-with-progress.sh wrote a line every interval so a long silent suite could be told apart
+        // from a stalled runner; the typed step keeps that, at the interval the run variable sets.
+        _ = ResultsDirectory;
+        Stage("backend.trx", Trx());
+        var runner = Path.Combine(_workspace, OperatingSystem.IsWindows() ? "slow.cmd" : "slow.sh");
+        File.WriteAllText(
+            runner,
+            OperatingSystem.IsWindows()
+                ? $"@echo off\r\nping -n 4 127.0.0.1 >nul\r\n{WindowsPublishStaged}exit /b 0\r\n"
+                : $"#!/bin/sh\nsleep 3\n{PosixPublishStaged}exit 0\n");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(runner, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var executor = new PipelineDotnetTestOperationExecutor(
+            NullLogger<PipelineDotnetTestOperationExecutor>.Instance, new PhysicalFileSystemReader());
+
+        var result = await executor.ExecuteAsync(
+            OperationKind.PipelineDotnetTest,
+            "tests/Sample.Tests",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["WORKSPACE"] = _workspace,
+                [PipelineDotnetTestVariables.ResultsDirectory] = "coverage/backend",
+                [PipelineDotnetTestVariables.StatusVariable] = "BACKEND_STATUS",
+                [PipelineDotnetTestVariables.TrxName] = "backend.trx",
+                [PipelineDotnetTestVariables.DotnetPath] = runner,
+                [PipelineDotnetTestVariables.ProgressIntervalSeconds] = "1"
+            },
+            timeoutSeconds: 60,
+            onOutput: (line, _) =>
+            {
+                lock (_output) _output.Add(line);
+                return Task.CompletedTask;
+            },
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("0", PublishedStatus());
+        Assert.Contains(_output, line => line.StartsWith("tests/Sample.Tests: still running after ", StringComparison.Ordinal));
+        // The progress lines stop with the suite: none follows the published verdict.
+        var verdict = _output.FindIndex(line => line.StartsWith("##aetheus[setvariable name=BACKEND_STATUS]", StringComparison.Ordinal));
+        Assert.DoesNotContain(_output.Skip(verdict), line => line.Contains("still running", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AnUnpublishedDotnetOutputIsRefusedInsteadOfRunningTheHostSdk()
+    {
+        var executor = new PipelineDotnetTestOperationExecutor(
+            NullLogger<PipelineDotnetTestOperationExecutor>.Instance, new PhysicalFileSystemReader());
+
+        var result = await executor.ExecuteAsync(
+            OperationKind.PipelineDotnetTest,
+            "tests/Sample.Tests",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["WORKSPACE"] = _workspace,
+                [PipelineDotnetTestVariables.ResultsDirectory] = "coverage/backend",
+                [PipelineDotnetTestVariables.StatusVariable] = "BACKEND_STATUS",
+                [PipelineDotnetTestVariables.DotnetPath] = "$(DOTNET)"
+            },
+            timeoutSeconds: 60,
+            onOutput: (line, _) =>
+            {
+                _output.Add(line);
+                return Task.CompletedTask;
+            },
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("invalid-request", result.FailureCode);
+        Assert.Contains("never published", result.FailureReason!, StringComparison.Ordinal);
+        Assert.Null(PublishedStatus());
+    }
+
     // --- Microsoft.Testing.Platform (global.json "test.runner") ---
 
     private void SelectTestingPlatform() => File.WriteAllText(
@@ -247,11 +322,8 @@ public sealed class PipelineDotnetTestOperationExecutorTests : IDisposable
         return path;
     }
 
-    /// <summary>
-    /// This repository's suites run on the testing platform, which refuses the VSTest switches the
-    /// step used to pass unconditionally (a bare project argument, --logger trx, --collect). The step
-    /// now speaks the dialect global.json selects - the one run-unit-suite.sh speaks.
-    /// </summary>
+    /// <summary>Verifies that the test executor selects the Microsoft.Testing.Platform or VSTest
+    /// argument dialect from global.json.</summary>
     [Fact]
     public async Task OnTheTestingPlatform_TheRunnerReceivesItsCommandLine()
     {

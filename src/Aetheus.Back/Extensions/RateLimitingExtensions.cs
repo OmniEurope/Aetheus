@@ -17,98 +17,94 @@ internal static class RateLimitingExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddRateLimiter(options =>
-        {
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.OnRejected = async (context, ct) =>
-            {
-                if (context.HttpContext.Request.Path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase))
-                {
-                    var audit = context.HttpContext.RequestServices.GetRequiredService<IAuditService>();
-                    var ip = context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                    var userAgent = context.HttpContext.Request.Headers.UserAgent.ToString();
-                    var cleanedUserAgent = new string(userAgent.Where(c => !char.IsControl(c)).Take(200).ToArray());
-                    await audit.LogAsync("LoginFailed.RateLimited", "Authentication", details:
-                        $"IP: {ip}, UA: {(string.IsNullOrEmpty(cleanedUserAgent) ? "unknown" : cleanedUserAgent)}", ct: ct);
-                }
-
-                context.HttpContext.Response.ContentType = "application/json";
-                await context.HttpContext.Response.WriteAsJsonAsync(
-                    new ApiError { Message = "Too many authentication attempts. Try again shortly." }, ct);
-            };
-            if (configuration.GetValue("RateLimiting:Disabled", false))
-            {
-                AddDisabledPolicies(options);
-                return;
-            }
-
-            options.AddPolicy("login", context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    _ => FixedWindow(20)));
-            options.AddPolicy("enrollment", context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    _ => FixedWindow(5)));
-            options.AddPolicy("auth-token", context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    context.User.Identity?.IsAuthenticated == true
-                        ? $"user:{context.User.Identity.Name}"
-                        : $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
-                    _ => FixedWindow(60)));
-            options.AddPolicy("webhook", context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    _ => FixedWindow(30)));
-
-            // Fail closed before ingest-key authentication: an untrusted caller can rotate arbitrary
-            // header values, so a key-derived bucket would grant a fresh allowance on every request.
-            // A validated app identity is not available at middleware time; partition by address here
-            // and let the ingest authentication/cache enforce the per-app boundary afterwards.
-            options.AddPolicy("otlp-ingest", context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    ResolveOtlpPartitionKey(context),
-                    _ => FixedWindow(120)));
-            options.AddPolicy("web-analytics-public", context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    "analytics-address:"
-                    + (context.Connection.RemoteIpAddress?.ToString() ?? "unknown"),
-                    _ => FixedWindow(60)));
-            // PLAN-003 lot 14: a browser posts one report per violation; a broken page could post
-            // many, so this has its own partition rather than eating the global budget.
-            options.AddPolicy("csp-report", context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    "csp-report:"
-                    + (context.Connection.RemoteIpAddress?.ToString() ?? "unknown"),
-                    _ => FixedWindow(30)));
-            options.AddPolicy("external-login", context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    "external-login:"
-                    + (context.Connection.RemoteIpAddress?.ToString() ?? "unknown"),
-                    _ => FixedWindow(5)));
-
-            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-            {
-                var path = context.Request.Path.Value ?? string.Empty;
-                if (path.EndsWith("/api/auth/external-login", StringComparison.OrdinalIgnoreCase))
-                    return RateLimitPartition.GetFixedWindowLimiter(
-                        "external-login-global",
-                        _ => FixedWindow(60));
-
-                var (partitionKey, permitLimit) = ResolveGlobalLimit(context);
-                return RateLimitPartition.GetSlidingWindowLimiter(
-                    partitionKey,
-                    _ => new SlidingWindowRateLimiterOptions
-                    {
-                        PermitLimit = permitLimit,
-                        Window = BackendRuntimeDefaults.RateLimitWindow,
-                        SegmentsPerWindow = 6,
-                        QueueLimit = 0
-                    });
-            });
-        });
-
+        services.AddRateLimiter(options => ConfigureRateLimiter(options, configuration));
         return services;
+    }
+
+    private static void ConfigureRateLimiter(RateLimiterOptions options, IConfiguration configuration)
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.OnRejected = WriteRejectionAsync;
+        if (configuration.GetValue("RateLimiting:Disabled", false))
+        {
+            AddDisabledPolicies(options);
+            return;
+        }
+
+        AddAuthenticationPolicies(options);
+        AddPublicEndpointPolicies(options);
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ResolveGlobalPartition);
+    }
+
+    /// <summary>Audits a throttled login attempt, then answers the refusal as a JSON <see cref="ApiError"/>.</summary>
+    internal static async ValueTask WriteRejectionAsync(OnRejectedContext context, CancellationToken ct)
+    {
+        if (context.HttpContext.Request.Path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase))
+            await AuditRateLimitedLoginAsync(context.HttpContext, ct);
+
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new ApiError { Message = "Too many authentication attempts. Try again shortly." }, ct);
+    }
+
+    private static async Task AuditRateLimitedLoginAsync(HttpContext httpContext, CancellationToken ct)
+    {
+        var audit = httpContext.RequestServices.GetRequiredService<IAuditService>();
+        var ip = RemoteAddress(httpContext);
+        var userAgent = httpContext.Request.Headers.UserAgent.ToString();
+        var cleanedUserAgent = new string(userAgent.Where(c => !char.IsControl(c)).Take(200).ToArray());
+        await audit.LogAsync("LoginFailed.RateLimited", "Authentication", details:
+            $"IP: {ip}, UA: {(string.IsNullOrEmpty(cleanedUserAgent) ? "unknown" : cleanedUserAgent)}", ct: ct);
+    }
+
+    private static void AddAuthenticationPolicies(RateLimiterOptions options)
+    {
+        options.AddPolicy("login", context =>
+            RateLimitPartition.GetFixedWindowLimiter(RemoteAddress(context), _ => FixedWindow(20)));
+        options.AddPolicy("enrollment", context =>
+            RateLimitPartition.GetFixedWindowLimiter(RemoteAddress(context), _ => FixedWindow(5)));
+        options.AddPolicy("auth-token", context =>
+            RateLimitPartition.GetFixedWindowLimiter(ResolveAuthTokenPartitionKey(context), _ => FixedWindow(60)));
+        options.AddPolicy("webhook", context =>
+            RateLimitPartition.GetFixedWindowLimiter(RemoteAddress(context), _ => FixedWindow(30)));
+    }
+
+    private static void AddPublicEndpointPolicies(RateLimiterOptions options)
+    {
+        // Fail closed before ingest-key authentication: an untrusted caller can rotate arbitrary
+        // header values, so a key-derived bucket would grant a fresh allowance on every request.
+        // A validated app identity is not available at middleware time; partition by address here
+        // and let the ingest authentication/cache enforce the per-app boundary afterwards.
+        options.AddPolicy("otlp-ingest", context =>
+            RateLimitPartition.GetFixedWindowLimiter(ResolveOtlpPartitionKey(context), _ => FixedWindow(120)));
+        options.AddPolicy("web-analytics-public", context =>
+            RateLimitPartition.GetFixedWindowLimiter("analytics-address:" + RemoteAddress(context), _ => FixedWindow(60)));
+        // A browser posts one report per violation; a broken page could post many, so this has
+        // its own partition rather than eating the global budget.
+        options.AddPolicy("csp-report", context =>
+            RateLimitPartition.GetFixedWindowLimiter("csp-report:" + RemoteAddress(context), _ => FixedWindow(30)));
+        options.AddPolicy("external-login", context =>
+            RateLimitPartition.GetFixedWindowLimiter("external-login:" + RemoteAddress(context), _ => FixedWindow(5)));
+    }
+
+    /// <summary>The global ceiling: one shared fixed window for external sign-in, otherwise a sliding
+    /// window per agent, user or address.</summary>
+    internal static RateLimitPartition<string> ResolveGlobalPartition(HttpContext context)
+    {
+        var path = context.Request.Path.Value ?? string.Empty;
+        if (path.EndsWith("/api/auth/external-login", StringComparison.OrdinalIgnoreCase))
+            return RateLimitPartition.GetFixedWindowLimiter("external-login-global", _ => FixedWindow(60));
+
+        var (partitionKey, permitLimit) = ResolveGlobalLimit(context);
+        return RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey,
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = permitLimit,
+                Window = BackendRuntimeDefaults.RateLimitWindow,
+                SegmentsPerWindow = 6,
+                QueueLimit = 0
+            });
     }
 
     internal static (string PartitionKey, int PermitLimit) ResolveGlobalLimit(HttpContext context)
@@ -128,8 +124,16 @@ internal static class RateLimitingExtensions
                 BackendRuntimeDefaults.AuthenticatedUserRateLimit);
     }
 
+    internal static string ResolveAuthTokenPartitionKey(HttpContext context) =>
+        context.User.Identity?.IsAuthenticated == true
+            ? $"user:{context.User.Identity.Name}"
+            : $"ip:{RemoteAddress(context)}";
+
     internal static string ResolveOtlpPartitionKey(HttpContext context) =>
-        $"otlp-address:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+        $"otlp-address:{RemoteAddress(context)}";
+
+    private static string RemoteAddress(HttpContext context) =>
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
     private static void AddDisabledPolicies(RateLimiterOptions options)
     {

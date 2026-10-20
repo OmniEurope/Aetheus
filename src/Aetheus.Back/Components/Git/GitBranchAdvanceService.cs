@@ -16,7 +16,7 @@ public enum GitBranchAdvanceOutcome
 
     /// <summary>The branch is already past the commit: the commit is an ancestor of the branch tip
     /// (someone pushed the branch beyond the release, or a rollback deploys an older release). The
-    /// branch already contains what was deployed; nothing to do (recette R2-105).</summary>
+    /// branch already contains what was deployed; nothing to do.</summary>
     AlreadyContains,
 
     /// <summary>The branch and the commit diverged: neither descends from the other. Refused on
@@ -160,8 +160,8 @@ public sealed class GitBranchAdvanceService(
                 .ConfigureAwait(false);
             if (ancestorCode != 0)
             {
-                // Recette R2-105: 'main' had been pushed past the deployed candidate, so the release
-                // was already on it. That is no divergence; the branch simply has nothing to catch up.
+                // A branch that already contains the deployed commit requires no advancement and is
+                // not divergent.
                 var (containsCode, _, _) = await git.RunGitAsync(
                     diskPath, ["merge-base", "--is-ancestor", targetSha, previousSha], ct, ignoreExitCode: true)
                     .ConfigureAwait(false);

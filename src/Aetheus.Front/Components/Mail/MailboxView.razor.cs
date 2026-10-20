@@ -4,8 +4,7 @@ using System.Net.Http;
 
 namespace Aetheus.Front.Components.Mail;
 
-/// <summary>
-/// Recette R1-17: the integrated mailbox. Every call goes through the backend, which uses the password
+/// <summary> The integrated mailbox. Every call goes through the backend, which uses the password
 /// the reader typed; a 409 means it is no longer held, and the page goes back to its locked state.
 /// </summary>
 public partial class MailboxView : IDisposable
@@ -66,7 +65,12 @@ public partial class MailboxView : IDisposable
     {
         var result = await Dialog.OpenAsync<MailboxUnlockDialog>(
             string.Format(L["MailboxUnlockTitle"], _access?.Email ?? string.Empty),
-            new Dictionary<string, object?> { ["ServerId"] = ServerId, ["AccountId"] = AccountId },
+            new Dictionary<string, object?>
+            {
+                ["ServerId"] = ServerId,
+                ["AccountId"] = AccountId,
+                ["CanOpenAsAdministrator"] = _access?.CanOpenAsAdministrator == true
+            },
             new OmniDialogOptions { Width = "32rem", AutoFocusFirstElement = false });
         if (result is not MailboxAccessDto access) return;
         _access = access;
@@ -168,23 +172,8 @@ public partial class MailboxView : IDisposable
 
     internal async Task ComposeAsync(MailboxComposeMode mode)
     {
-        var draft = new MailboxDraftDto();
-        if (mode != MailboxComposeMode.New)
-        {
-            if (_message is null) return;
-            var language = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-            if (Handle(await Api.Mailbox.GetDraftAsync(ServerId, AccountId, _folder, _message.Uid, mode, language)) is not { } prepared)
-                return;
-            draft = prepared;
-        }
-        var title = mode switch
-        {
-            MailboxComposeMode.Reply => L["MailboxReply"],
-            MailboxComposeMode.ReplyAll => L["MailboxReplyAll"],
-            MailboxComposeMode.Forward => L["MailboxForward"],
-            _ => L["MailboxNewMessage"]
-        };
-        var result = await Dialog.OpenAsync<MailboxComposeDialog>(title, new Dictionary<string, object?>
+        if (await PrepareDraftAsync(mode) is not { } draft) return;
+        var result = await Dialog.OpenAsync<MailboxComposeDialog>(ComposeTitle(mode), new Dictionary<string, object?>
         {
             ["ServerId"] = ServerId,
             ["AccountId"] = AccountId,
@@ -199,6 +188,25 @@ public partial class MailboxView : IDisposable
         else Toast.Warning("MailboxSent", "MailboxSentCopyFailed", sent.SentCopyProblem ?? string.Empty);
         await LoadFoldersAsync();
     }
+
+    // A new message starts empty; a reply or a forward starts from the draft the server prepares from
+    // the open message, in the reader's language. Null when there is nothing to answer or the server
+    // refused (Handle has already said why).
+    private async Task<MailboxDraftDto?> PrepareDraftAsync(MailboxComposeMode mode)
+    {
+        if (mode == MailboxComposeMode.New) return new MailboxDraftDto();
+        if (_message is null) return null;
+        var language = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+        return Handle(await Api.Mailbox.GetDraftAsync(ServerId, AccountId, _folder, _message.Uid, mode, language));
+    }
+
+    private string ComposeTitle(MailboxComposeMode mode) => mode switch
+    {
+        MailboxComposeMode.Reply => L["MailboxReply"],
+        MailboxComposeMode.ReplyAll => L["MailboxReplyAll"],
+        MailboxComposeMode.Forward => L["MailboxForward"],
+        _ => L["MailboxNewMessage"]
+    };
 
     internal async Task CreateFolderAsync()
     {
@@ -219,6 +227,19 @@ public partial class MailboxView : IDisposable
     }
 
     internal void BackToMail() => Nav.NavigateTo($"/servers/{ServerId}/mail?tab=accounts");
+
+    /// <summary>Recette R3-52: an unread message reads in bold, the open one is highlighted (a background
+    /// tint, never a side stripe).</summary>
+    internal void OnMessageRowRender(OmniDataGridRowRenderArgs<MailboxMessageSummaryDto> args) =>
+        args.Class = MessageRowClass(args.Item, _message?.Uid);
+
+    internal static string? MessageRowClass(MailboxMessageSummaryDto message, uint? openUid)
+    {
+        var classes = new List<string>(2);
+        if (!message.IsRead) classes.Add("mailbox-row--unread");
+        if (openUid == message.Uid) classes.Add("mailbox-row--open");
+        return classes.Count == 0 ? null : string.Join(' ', classes);
+    }
 
     internal string FolderLabel(MailboxFolderDto folder) =>
         folder.Role is MailboxFolderRole.Other ? folder.Name : L[$"Enum_MailboxFolderRole_{folder.Role}"];
@@ -263,7 +284,7 @@ public partial class MailboxView : IDisposable
 
     private void BecomeLocked()
     {
-        if (_access is not null) _access = _access with { IsUnlocked = false, UnlockedUntil = null };
+        if (_access is not null) _access = _access with { IsUnlocked = false, UnlockedUntil = null, OpenedAsAdministrator = false };
         _folders = [];
         _messages = [];
         _total = 0;

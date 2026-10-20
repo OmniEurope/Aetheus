@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Pipelines;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// Guards the recursive run timeline refactor (A1-A4): stage grouping (<c>RunStageBuilder</c>), the
-/// trigger-node lazy-load/expand, and the two failure paths that previously had no coverage - a fetch
-/// error and a malformed child body (the latter used to escape as an uncaught <c>JsonException</c>).
-/// </summary>
+/// <summary>Covers recursive stage grouping, child loading and expansion, including fetch failures
+/// and malformed child bodies.</summary>
 public class RunTimelineTreeTests : BunitContext
 {
     public RunTimelineTreeTests()
@@ -55,8 +53,8 @@ public class RunTimelineTreeTests : BunitContext
     [Fact]
     public void EveryRow_KeepsItsDurationsInTheTrailingTimesColumn_InsideOneScrollFrame()
     {
-        // Recette R-363: the tree scrolls sideways in one frame and each row ends with the block the
-        // stylesheet pins to the right edge, so a long label never pushes its duration out of view.
+        // The tree scrolls sideways in one frame and each row ends with the block the stylesheet
+        // pins to the right edge, so a long label never pushes its duration out of view.
         var run = new PipelineRunDto
         {
             Id = 1,
@@ -134,10 +132,10 @@ public class RunTimelineTreeTests : BunitContext
     }
 
     [Fact]
-    public void FirstRender_RestoresExpandedChildFromLocalStorage()
+    public void FirstRender_RestoresExpandedChildFromThePreference()
     {
-        JSInterop.Setup<string?>("localStorage.getItem", "run-tl-exp-12").SetResult("[99]");
-        JSInterop.SetupVoid("localStorage.setItem", _ => true).SetVoidResult();
+        // R1-66: the open child runs are a user preference, one map keyed by run id.
+        Preferences.Seed(PreferenceKeys.RunTimelineExpanded, new Dictionary<string, int[]> { ["12"] = [99] });
         _handler.SetJsonResponse("api/pipelines/runs/99", new PipelineRunDto
         {
             Id = 99,
@@ -154,16 +152,11 @@ public class RunTimelineTreeTests : BunitContext
         var cut = Render<RunTimelineTree>(p => p.Add(x => x.Run, parent));
 
         cut.WaitForAssertion(() => Assert.Contains("restored-child", cut.Markup));
-        Assert.Contains(JSInterop.Invocations, invocation =>
-            invocation.Identifier == "localStorage.getItem"
-            && Equals(invocation.Arguments[0], "run-tl-exp-12"));
     }
 
     [Fact]
-    public void ToggleChild_PersistsExpandedChildIdsToLocalStorage()
+    public void ToggleChild_PersistsExpandedChildIdsInThePreference()
     {
-        JSInterop.Setup<string?>("localStorage.getItem", _ => true).SetResult(null);
-        JSInterop.SetupVoid("localStorage.setItem", _ => true).SetVoidResult();
         _handler.SetJsonResponse("api/pipelines/runs/99", new PipelineRunDto
         {
             Id = 99,
@@ -180,11 +173,12 @@ public class RunTimelineTreeTests : BunitContext
 
         cut.Find(".run-tl-trigger").Click();
 
-        cut.WaitForAssertion(() => Assert.Contains(JSInterop.Invocations, invocation =>
-            invocation.Identifier == "localStorage.setItem"
-            && Equals(invocation.Arguments[0], "run-tl-exp-13")
-            && Convert.ToString(invocation.Arguments[1], System.Globalization.CultureInfo.InvariantCulture)!.Contains("99")));
+        cut.WaitForAssertion(() => Assert.Equal(new[] { 99 },
+            Preferences.Read<Dictionary<string, int[]>>(PreferenceKeys.RunTimelineExpanded)?.GetValueOrDefault("13")));
     }
+
+    private Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences Preferences =>
+        Services.GetRequiredService<Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences>();
 
     [Fact]
     public void TriggerStep_Collapse_HidesChildren()
@@ -232,8 +226,8 @@ public class RunTimelineTreeTests : BunitContext
     [Fact]
     public void TriggerStep_MalformedChildJson_DoesNotThrow_ShowsNotFound()
     {
-        // Regression guard: a malformed body used to surface an uncaught JsonException and tear down the
-        // whole timeline. It must now degrade to the "child run not found" note like any fetch failure.
+        // Malformed child bodies degrade to unavailable-child feedback without breaking the
+        // timeline.
         _handler.SetRawResponse("api/pipelines/runs/99", "{ this is not valid json");
         var parent = new PipelineRunDto
         {
@@ -294,8 +288,8 @@ public class RunTimelineTreeTests : BunitContext
     [InlineData("fr-FR", "(~2s)", "Durée moyenne de cette étape sur les dernières exécutions réussies")]
     public void R2084_UsualDuration_ReadsTildeAndTheHintStillSaysAverage(string culture, string label, string hint)
     {
-        // Recette R2-084: the running step reads "(~16m 20s)", not "(moyenne 16m 20s)"; the tooltip
-        // keeps explaining that it is the average.
+        // The running step reads "(~16m 20s)", not "(moyenne 16m 20s)"; the tooltip keeps
+        // explaining that it is the average.
         var resources = new System.Resources.ResourceManager("Aetheus.Front.Resources.AppStrings", typeof(Aetheus.Front.Resources.AppStrings).Assembly);
         var cultureInfo = System.Globalization.CultureInfo.GetCultureInfo(culture);
 
@@ -306,8 +300,7 @@ public class RunTimelineTreeTests : BunitContext
     [Fact]
     public void RunningTask_ShowsOnlyItsUsualDuration()
     {
-        // PLAN-003 lot 20 / D26: while a step runs, the list shows how long it usually takes, averaged
-        // over the last successful runs; the finished step beside it shows none.
+        // Running steps show their successful-run duration average; finished steps do not.
         var now = new DateTime(2026, 7, 16, 18, 0, 0);
         var current = new PipelineRunDto
         {
@@ -337,7 +330,7 @@ public class RunTimelineTreeTests : BunitContext
 
         var marker = Assert.Single(cut.FindAll(".run-tl-prev-dur"));
         Assert.Contains("StepUsualDuration", marker.TextContent);
-        // Recette R2-044: "2s (~2s)" since R2-084, the reset arrow is gone.
+        // The duration includes a compact approximate baseline.
         Assert.Null(marker.QuerySelector(".omni-icon"));
         Assert.Equal("test", marker.Closest(".run-tl-row")!.QuerySelector(".run-tl-name")!.TextContent);
         var liveDurations = cut.FindComponents<PipelineRunLiveDuration>()
@@ -348,7 +341,10 @@ public class RunTimelineTreeTests : BunitContext
         cut.WaitForAssertion(() => Assert.All(
             liveDurations.Select((component, index) => (component, index)),
             item => Assert.True(item.component.RenderCount > initialRenderCounts[item.index])),
-            TimeSpan.FromSeconds(2));
+            // A thread-pool timer ticks after one second and its render is marshalled back to the
+            // renderer: on a loaded run both hops queue behind other tests, so a fixed two seconds is
+            // a timing bet, not a check of the tick.
+            BunitTestHelper.AsyncRenderWait);
     }
 
     [Fact]
@@ -408,9 +404,8 @@ public class RunTimelineTreeTests : BunitContext
     [Fact]
     public void ASkippedStageSaysSoWhetherOrNotItHasMoreThanOneStep()
     {
-        // The one-step case is the common one in this repository's own pipelines, and it renders no
-        // stage header. R-246: every step row's badge reads "Skipped" with the condition as tooltip,
-        // and the multi-step stage header keeps its chip (a header has no badge of its own).
+        // One-step stages have no header, so their badge carries the skipped state and condition.
+        // Multi-step headers retain their own skipped indicator.
         var run = new PipelineRunDto
         {
             Id = 1,
@@ -439,7 +434,7 @@ public class RunTimelineTreeTests : BunitContext
     [Fact]
     public void AStepCancelledAfterAFailure_StillReadsCancelled_BesideASkippedOne()
     {
-        // R-246: only SkippedCondition makes a Cancelled step read "Skipped"; a real cancellation
+        // Only SkippedCondition makes a Cancelled step read "Skipped"; a real cancellation
         // (upstream failure, user cancel) carries none and keeps its Cancelled label.
         var run = new PipelineRunDto
         {
@@ -566,8 +561,8 @@ public class RunTimelineTreeTests : BunitContext
     [Fact]
     public void TheListCarriesDurationOnly_ResourcesMovedToTheProgressionColumns()
     {
-        // PLAN-003 lot 20 / D26: CPU, memory and I/O left the list for the aligned columns of the
-        // progression bars; the previous-run drift chips gave way to the usual duration.
+        // Resource measurements belong to the progression columns; the step list retains the
+        // usual-duration estimate.
         var run = new PipelineRunDto
         {
             Id = 1,

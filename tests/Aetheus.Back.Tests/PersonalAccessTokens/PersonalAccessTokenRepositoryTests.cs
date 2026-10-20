@@ -92,7 +92,7 @@ public class PersonalAccessTokenRepositoryTests : IDisposable
     [Fact]
     public async Task GetForUserPaged_AppliesColumnFilters_InsideTheOwnersTokens()
     {
-        // Recette R-224: the scope list and the expiry range are column filters; the owner scope stays.
+        // The scope list and the expiry range are column filters; the owner scope stays.
         var (tokens, total) = await _repo.GetForUserPagedAsync(
             userId: 1, search: null, page: 1, pageSize: 10, sortBy: null, sortDescending: true,
             ct: TestContext.Current.CancellationToken,

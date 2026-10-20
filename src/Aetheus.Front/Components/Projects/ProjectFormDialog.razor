@@ -68,9 +68,12 @@
     </OmniRow>
 
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+        @* STD-BTN detection 11: Save visible, the other actions in the menu. *@
         @if (!_isNew)
         {
-            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnDelete" Disabled="@_saving"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+            <OmniOverflowMenu Label="@L["MoreActions"]">
+                <OmniMenuItem Tone="OmniTone.Danger" OnClick="@OnDelete" Disabled="@_saving"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+            </OmniOverflowMenu>
         }
         <div class="flex-spacer"></div>
         <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /> <span>@(_isNew ? L["Create"] : L["Save"])</span></OmniButton>

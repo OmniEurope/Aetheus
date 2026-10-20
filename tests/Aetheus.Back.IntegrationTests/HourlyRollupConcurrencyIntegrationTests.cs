@@ -7,14 +7,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Recette R-462 on PostgreSQL: two backends sweep the same base (the blue-green colours). Both read "no
-/// rollup for this hour", the other one inserts first, and this one's insert used to fail with 23505 on
-/// <c>IX_AppMetricHourly_MonitoredAppId_MetricName_AttributesJson_HourUtc</c> or
-/// <c>IX_AppHealthHourly_MonitoredAppId_HourUtc</c>, which stopped the sweep before its purges. The
-/// race is reproduced exactly: the other writer's rows are committed between this sweep's read and its
-/// write, from inside its own SaveChanges.
-/// </summary>
+/// <summary>Reproduces competing rollup inserts on PostgreSQL by committing another writer between
+/// the sweep's read and write, verifying conflict tolerance.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class HourlyRollupConcurrencyIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

@@ -2,10 +2,8 @@
 
 namespace Aetheus.Front.Tests;
 
-// #12: the reload-decision/throttle that used to live as a hand-rolled "_…ReloadScheduled" flag inside
-// the Servers heartbeat handler and the PipelinesList hub handlers is now a standalone, unit-testable
-// helper. bUnit can't drive a SignalR push, so these tests exercise the coalescing logic directly with
-// an injected delay (no real time).
+// Exercises realtime reload coalescing directly with an injected delay because bUnit does not drive
+// SignalR broadcasts.
 public class TrailingReloadCoalescerTests
 {
     [Fact]

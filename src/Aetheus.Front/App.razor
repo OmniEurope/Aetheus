@@ -1,16 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @using Aetheus.Front.Layout
-@* STD-SHELL (user decision 2026-10-04: everything goes through the package): OE's theme scope wraps the
-   whole application and paints the look stored by SiteAppearanceState (mode, theme, palette, font,
-   density); it wraps the overlay host too, so dialogs and notifications take the same look as the pages.
-   The OmniEurope.Blazor host (ADR-046) draws the dialogs and notifications raised by the shared services
-   over whichever layout is on screen. PLAN-008 lot 11: each toast counts its time down, and a burst piles
-   up behind a count while an error stays apart, readable in full (verification OE-16, section D).
-   Recette R2-112: the scope keeps a snapshot of what it painted under ThemeSnapshotKey, which OE's
-   omni-boot.js (index.html) replays on the document before Blazor starts, for the boot splash. *@
-<OmniThemeScope Id="@ThemeScopeId" Appearance="@Appearance.Appearance" Preset="@Appearance.Preset"
-                Palette="@Appearance.Palette" Font="@Appearance.Font" Density="@Appearance.Density"
-                BackdropMotion="@Appearance.BackdropMotion" SnapshotKey="@ThemeSnapshotKey">
+@* Wrap pages and overlays in the same OE theme scope and overlay host (ADR-046) so appearance and
+   notification behaviour remain consistent. The scope binds no appearance parameter: it follows OE's
+   OmniAppearanceState, the signed-in user's preference (R1-66), and writes the snapshot omni-boot.js
+   replays before Blazor starts. *@
+<OmniThemeScope Id="@ThemeScopeId" SnapshotKey="@ThemeSnapshotKey">
     <OmniComponentsHost OverlayService="@Overlays" Notifications="@NotificationOptions">
         <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Aetheus.Front.Components.Shared.NotFound)">
             <Found Context="routeData">

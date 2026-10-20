@@ -11,12 +11,13 @@ public partial class Edit
     [Inject] private ProjectDetailLoader Loader { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private Aetheus.Front.Layout.BreadcrumbService Breadcrumb { get; set; } = default!;
+    [Inject] private OmniDialogService Dialog { get; set; } = default!;
 
     protected override async Task OnParametersSetAsync()
     {
         await Loader.EnsureLoadedAsync(Id);
-        // Recette R-187: this page has no ProjectDetailLayout, which is what swaps the route trail's
-        // loading segment for the project name; without it the trail stayed on "Loading...".
+        // Sets the breadcrumb project name directly because this page does not use
+        // ProjectDetailLayout.
         if (Loader.Project is { } project)
             Breadcrumb.Set(
                 new Aetheus.Front.Layout.BreadcrumbItem(L["Projects"], "/projects"),
@@ -31,5 +32,12 @@ public partial class Edit
     {
         await Loader.ForceReloadAsync(Id);
         Nav.NavigateTo($"/projects/{Id}/overview");
+    }
+
+    // Recette R2-122: the dialog counts what goes with the project, asks for its name and deletes it.
+    private async Task DeleteAsync()
+    {
+        if (!await ProjectDeleteDialog.OpenAsync(Dialog, L, Id)) return;
+        Nav.NavigateTo("/projects");
     }
 }

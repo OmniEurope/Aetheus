@@ -24,14 +24,14 @@
     </MenuContent>
 </OmniPageHeader>
 
-@* Recette R-403: the title alone at the top; under it, what the page is for and the task to follow. *@
+@* The title alone at the top; under it, what the page is for and the task to follow. *@
 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-md">@L["LiveLogsDescription"]</OmniText>
 <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.End" Gap="OmniSpacing.Small" Class="live-logs-watch omni-u-mb-md">
     <OmniFormField For="live-logs-task-id"><LabelContent>@L["TaskId"]</LabelContent><ChildContent>
         <OmniNumeric @bind-Value="_taskIdFilter" Id="live-logs-task-id" Minimum="1" TValue="int?" />
     </ChildContent></OmniFormField>
-    @* Never disabled (recette R-090): the number field commits on blur, so a Watch button disabled until
-       then swallowed the very click that committed it, and the page looked dead. Empty, it does nothing. *@
+    @* Keep Watch enabled while the number field commits on blur so that the same click can start
+       watching. Empty input performs no action. *@
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@StartWatching"><OmniIcon Name="OmniIconName.Eye" /> <span>@L["Watch"]</span></OmniButton>
 </OmniStack>
 

@@ -13,7 +13,7 @@ public interface IUserNotificationService
         int userId, UserNotificationPageRequest request, CancellationToken ct = default);
     Task<int> GetUnreadCountAsync(int userId, CancellationToken ct = default);
 
-    /// <summary>Recette R-224: the values the user's /notifications grid filters offer.</summary>
+    /// <summary>The values the user's /notifications grid filters offer.</summary>
     Task<UserNotificationFilterValuesDto> GetFilterValuesAsync(int userId, CancellationToken ct = default);
 
     /// <summary>Marks one of the user's deliveries as read; false when it is not theirs or does not exist.</summary>
@@ -33,34 +33,26 @@ public interface IUserNotificationService
 
     Task<bool> UnsubscribeAsync(int userId, int projectId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Recette R2-034, "follow all my projects": subscribes the user to every project of
-    /// <paramref name="readableProjectIds"/> not followed yet, null meaning every project (a wildcard
-    /// read grant). Returns all of the user's subscriptions afterwards.
-    /// </summary>
+    /// <summary>Subscribe to readable projects not yet followed; null <paramref
+    /// name="readableProjectIds"/> means a wildcard read grant. Return all current
+    /// subscriptions.</summary>
     Task<List<ProjectSubscriptionDto>> FollowProjectsAsync(
         int userId, IReadOnlyCollection<int>? readableProjectIds, CancellationToken ct = default);
 
-    /// <summary>
-    /// Recette R2-034: records <see cref="NotificationEventTypes.ReleaseDeployed"/> for the subscribers of
-    /// the release's project. Returns the number of deliveries written; zero for an unknown release.
-    /// </summary>
+    /// <summary> Records <see cref="NotificationEventTypes.ReleaseDeployed"/> for the subscribers
+    /// of the release's project. Returns the number of deliveries written; zero for an unknown
+    /// release. </summary>
     Task<int> RecordReleaseDeployedAsync(
         int releaseId, int? pipelineRunId, string? stageName, bool isRollback, CancellationToken ct = default);
 
-    /// <summary>
-    /// Recette R2-034: records a server event once per project the server is attached to, with that
-    /// project's id in the payload built by <paramref name="payloadForProject"/>. A server attached to no
-    /// project records nothing. Returns the number of deliveries written.
-    /// </summary>
+    /// <summary> Records a server event once per project the server is attached to, with that
+    /// project's id in the payload built by <paramref name="payloadForProject"/>. A server attached
+    /// to no project records nothing. Returns the number of deliveries written. </summary>
     Task<int> RecordServerEventAsync(
         string eventType, int serverId, Func<int, object> payloadForProject, CancellationToken ct = default);
 
-    /// <summary>
-    /// Audit R2-023 follow-up: writes one delivery per active administrator, whatever their project
-    /// subscriptions and preferences, for an event that concerns the platform rather than a project (a
-    /// server attached to no project has no subscriber to tell). Returns the number of rows written.
-    /// </summary>
+    /// <summary>Record one delivery per active administrator for platform events, independent of
+    /// project subscriptions and preferences. Return the number of deliveries written.</summary>
     Task<int> RecordAdministratorEventAsync(
         string eventType, string subject, string jsonPayload, CancellationToken ct = default);
 
@@ -69,5 +61,11 @@ public interface IUserNotificationService
     /// still read the project. Returns the number of rows written; zero when the payload names no project.
     /// No transport exists for these deliveries, so they are recorded as NotConfigured and never Sent.
     /// </summary>
-    Task<int> RecordProjectEventAsync(string eventType, string jsonPayload, CancellationToken ct = default);
+    /// <param name="emailOptInEventType">When set, a subscriber is e-mailed only if the preference of that event type is
+    /// enabled for them (default off); the in-app delivery is written for every subscriber either way.</param>
+    /// <param name="emailOnceMarker">Recette R1-77: when set, a subscriber already e-mailed (Sent) a delivery of the same event
+    /// type whose payload contains this fragment is not e-mailed again; the in-app delivery is still written.</param>
+    Task<int> RecordProjectEventAsync(
+        string eventType, string jsonPayload, CancellationToken ct = default, string? emailOptInEventType = null,
+        string? emailOnceMarker = null);
 }

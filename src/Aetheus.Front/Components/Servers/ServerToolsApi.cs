@@ -73,13 +73,13 @@ public sealed class ServerToolsApi(HttpClient http) : ApiClientBase(http)
         query["sortBy"] = sortBy ?? "CreatedAt";
         query["sortDescending"] = sortDescending.ToString().ToLowerInvariant();
 
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         var url = GridColumnFilters.AddTo(QueryHelpers.AddQueryString($"api/artifacts/project/{projectId}", query), filters);
         return await Http.GetFromJsonAsync<PaginatedResult<PipelineArtifactDto>>(url, JsonOptions.Web) ?? new();
     }
 
-    /// <summary>Recette R-210: the pipeline and environment names the project artifacts grid's
-    /// checkable filters offer.</summary>
+    /// <summary>The pipeline and environment names the project artifacts grid's checkable filters
+    /// offer.</summary>
     public async Task<ProjectArtifactFilterValuesDto> GetProjectArtifactFilterValuesAsync(int projectId, CancellationToken ct = default) =>
         await Http.GetFromJsonAsync<ProjectArtifactFilterValuesDto>(
             $"api/artifacts/project/{projectId}/filter-values", JsonOptions.Web, ct) ?? new();

@@ -3,12 +3,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Analysis;
 
-/// <summary>
-/// When Dependency-Track is required, a run that produced an SBOM is not passed until its upload has
-/// succeeded: the gate turns to Error with the outbox state among its missing producers. Read live on
-/// every request, never cached: the outbox moves after the run has finished. Extracted from
-/// <see cref="AnalysisService"/> so the run result reader applies the same rule (recette R-485).
-/// </summary>
+/// <summary>When Dependency-Track is required, an SBOM-producing run stays in gate Error until its
+/// upload succeeds. Read outbox state live because it can change after the run ends.</summary>
 internal static class DependencyTrackGateVerdict
 {
     public static async Task<AnalysisRunGateDto> ApplyAsync(

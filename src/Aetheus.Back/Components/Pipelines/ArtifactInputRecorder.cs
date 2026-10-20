@@ -3,10 +3,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R-366/R-367: records, at dispatch, the artifact a restore or deploy step hands to the agent.
-/// Recorded when the task is created rather than when it succeeds: the release detail lists what a run
-/// consumed or tried to consume, and the run's own status says whether that attempt succeeded.
+/// <summary> Records, at dispatch, the artifact a restore or deploy step hands to the agent.
+/// Recorded when the task is created rather than when it succeeds: the release detail lists what a
+/// run consumed or tried to consume, and the run's own status says whether that attempt succeeded.
 /// </summary>
 internal static class ArtifactInputRecorder
 {

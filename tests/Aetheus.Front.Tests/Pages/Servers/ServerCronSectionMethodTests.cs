@@ -43,8 +43,7 @@ public class ServerCronSectionMethodTests
     [Fact]
     public void ValidateCronExpression_SixFieldWithSeconds_NowRejected()
     {
-        // CR5F: /etc/cron.d is strictly 5-field, so a 6-field (seconds) schedule is rejected at save -
-        // the preview mirrors that and no longer accepts the 6-field form.
+        // Both preview and save enforce the five-field schedule supported by /etc/cron.d.
         var (isValid, nextRun, error) = ServerCronSection.ValidateCronExpression("0 0 * * * *");
         Assert.False(isValid);
         Assert.Null(nextRun);

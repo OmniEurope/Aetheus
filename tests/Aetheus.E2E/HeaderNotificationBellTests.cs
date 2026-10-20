@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.E2E;
 
-/// <summary>
-/// Recette R2-106: the header bell shows the unread count of the signed-in user, next to the task
-/// count. The count the API answers is fixed here (the rest of the response is the real one), so the
-/// test reads what the shell does with it, whatever notifications the E2E database holds.
-/// </summary>
+/// <summary> The header bell shows the unread count of the signed-in user, next to the task count.
+/// The count the API answers is fixed here (the rest of the response is the real one), so the test
+/// reads what the shell does with it, whatever notifications the E2E database holds. </summary>
 [Category("E2E")]
 [Category("Dashboard")]
 public class HeaderNotificationBellTests : E2ETestBase

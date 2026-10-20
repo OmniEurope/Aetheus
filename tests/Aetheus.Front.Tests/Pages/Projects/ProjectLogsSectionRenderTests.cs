@@ -18,7 +18,7 @@ public class ProjectLogsSectionRenderTests : BunitContext
     {
         _handler.SetJsonResponse("api/projects/1/logs", new PaginatedResult<TaskLogDto> { Items = [], TotalCount = 0 });
         var cut = Render<ProjectLogsSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("Logs"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Logs"));
         Assert.Contains("Logs", cut.Markup);
         Assert.Contains("NoLogs", cut.Markup);
     }
@@ -35,7 +35,7 @@ public class ProjectLogsSectionRenderTests : BunitContext
             TotalCount = 1
         });
         var cut = Render<ProjectLogsSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("Deployment log"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deployment log"));
         Assert.Contains("Deployment log", cut.Markup);
     }
 }

@@ -29,17 +29,15 @@ else
                 <OmniTabsItem Title="@L["Visitors"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("groups"))" /></Icon><ChildContent>
                     <AppWebAnalyticsView AppId="_selectedApp.Id" ProjectId="_selectedApp.ProjectId" />
                 </ChildContent></OmniTabsItem>
-                @* Recette R-355: the top pages grid has its own sub-tab. *@
+                @* The top pages grid has its own sub-tab. *@
                 <OmniTabsItem Key="pages" Title="@L["WebAnalyticsPagesTab"]"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent>
                     <AppWebAnalyticsPagesView AppId="_selectedApp.Id" />
                 </ChildContent></OmniTabsItem>
-                @* R-455 / R-444: the Performance tab replaces the Metrics tab. Its overview comes first
-                   (per-route timings from the Aetheus.Telemetry package) and the metric explorer opens
-                   on demand under it. *@
+                @* Show route performance first and load the metric explorer only when opened. *@
                 <OmniTabsItem Key="performance" Title="@L["Performance"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("speed"))" /></Icon><ChildContent>
                     <AppPerformanceView AppId="_selectedApp.Id" AppName="@_selectedApp.Name" />
                 </ChildContent></OmniTabsItem>
-                @* PLAN-013 lot 1 (R2-113): the size of the application's database and of its largest tables. *@
+                @* Display application database size and its largest tables. *@
                 <OmniTabsItem Key="database" Title="@L["AppDatabaseTab"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("storage"))" /></Icon><ChildContent>
                     <AppDatabaseSizeView AppId="_selectedApp.Id" />
                 </ChildContent></OmniTabsItem>

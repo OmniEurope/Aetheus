@@ -79,7 +79,7 @@ public sealed class UserNotificationsControllerTests : IDisposable
     [Fact]
     public async Task GetMine_HeaderFilters_StatusList_ReadYesNo_AndDateRange()
     {
-        // Recette R-224: the grid's columns filter through the generic column filters.
+        // The grid's columns filter through the generic column filters.
         var unreadOfTwoStates = await _sut.GetMine(new UserNotificationPageRequest
         {
             Filters =
@@ -215,9 +215,11 @@ public sealed class UserNotificationsControllerTests : IDisposable
         var defaults = (List<NotificationPreferenceDto>)((OkObjectResult)(await _sut.GetPreferences(TestContext.Current.CancellationToken)).Result!).Value!;
         // R-522: a refused automatic launch is on by default too, it is the only trace of the refusal.
         // R2-034: so are a deployed release and a failed agent update; a completed update is off.
+        // R3-16: and a finished AI task run, whose notification links to its report.
+        // R1-77: and a rejected run, a final result beside failed and succeeded; the child results option is off.
         Assert.Equal(
-            [NotificationEventTypes.PipelineFailed, NotificationEventTypes.PipelineApprovalRequested, NotificationEventTypes.PipelineLaunchRefused,
-             NotificationEventTypes.ReleaseDeployed, NotificationEventTypes.AgentUpdateFailed],
+            [NotificationEventTypes.PipelineFailed, NotificationEventTypes.PipelineRejected, NotificationEventTypes.PipelineApprovalRequested, NotificationEventTypes.PipelineLaunchRefused,
+             NotificationEventTypes.ReleaseDeployed, NotificationEventTypes.AgentUpdateFailed, NotificationEventTypes.AiTaskCompleted],
             defaults.Where(p => p.IsEnabled).Select(p => p.EventType));
         Assert.All(defaults, p => Assert.False(p.IsSaved));
 
@@ -232,8 +234,8 @@ public sealed class UserNotificationsControllerTests : IDisposable
 
         var saved = (List<NotificationPreferenceDto>)((OkObjectResult)(await _sut.GetPreferences(TestContext.Current.CancellationToken)).Result!).Value!;
         Assert.Equal(
-            [NotificationEventTypes.PipelineSucceeded, NotificationEventTypes.PipelineApprovalRequested, NotificationEventTypes.PipelineLaunchRefused,
-             NotificationEventTypes.ReleaseDeployed, NotificationEventTypes.AgentUpdateFailed],
+            [NotificationEventTypes.PipelineSucceeded, NotificationEventTypes.PipelineRejected, NotificationEventTypes.PipelineApprovalRequested, NotificationEventTypes.PipelineLaunchRefused,
+             NotificationEventTypes.ReleaseDeployed, NotificationEventTypes.AgentUpdateFailed, NotificationEventTypes.AiTaskCompleted],
             saved.Where(p => p.IsEnabled).Select(p => p.EventType));
         Assert.Equal(2, await _db.UserNotificationPreferences.CountAsync(p => p.UserId == Alice, TestContext.Current.CancellationToken));
     }

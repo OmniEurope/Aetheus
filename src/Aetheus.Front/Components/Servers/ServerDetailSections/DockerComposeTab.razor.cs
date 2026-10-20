@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
 /// <summary>
@@ -21,6 +22,8 @@ public partial class DockerComposeTab
     /// <summary>BACK-012: the backend takes Server.Admin for this tab's agent-reaching writes (compose
     /// deploy, image build and delete, container shell); without it they are not offered.</summary>
     [Parameter] public bool CanAdmin { get; set; }
+
+    private ServerTaskFollower? _follower;
     [Parameter, EditorRequired] public IReadOnlyList<DockerComposeStackDto> Stacks { get; set; } = [];
 
     // SITE-OFFLINE-001: every action of this tab queues a task only the agent can claim. The parent passes
@@ -32,7 +35,7 @@ public partial class DockerComposeTab
 
     private string _composeSearch = string.Empty;
 
-    // Recette R-227: each heartbeat brings a new stack list; stacks that were not there read bold.
+    // Each heartbeat brings a new stack list; stacks that were not there read bold.
     private OmniDataGrid<DockerComposeStackDto>? _grid;
     private readonly LiveGridRows _liveRows = new();
 
@@ -43,6 +46,7 @@ public partial class DockerComposeTab
     private string _composeEditorContent = string.Empty;
     private bool _composeDeploying;
     private bool _composeFileLoading;
+    private string? _composeError;
 
     private List<DockerComposeStackDto> FilteredCompose => Stacks
         .Where(s => string.IsNullOrWhiteSpace(_composeSearch)
@@ -58,12 +62,14 @@ public partial class DockerComposeTab
     /// A's file under B's title and Deploy would apply it to B; an answer arriving once the file is
     /// shown would overwrite the user's edits.
     /// </summary>
-    public void HandleTaskOutput(string taskName, string output)
+    public void HandleTaskOutput(string taskName, string output, bool failed = false, int taskId = 0)
     {
         if (!_composeEditorVisible || !_composeFileLoading
             || !string.Equals(taskName, DockerTaskNames.ComposeFile(_composeEditorStack), StringComparison.Ordinal))
             return;
-        _composeEditorContent = output;
+        // Recette R3-34: a failed read says why (the task and its output) instead of loading forever.
+        _composeError = failed ? output : null;
+        _composeEditorContent = failed ? string.Empty : output;
         _composeFileLoading = false;
 
         // The parent calls this from the SignalR callback, outside the render loop, so the repaint has
@@ -75,6 +81,8 @@ public partial class DockerComposeTab
     {
         if (BlockedByOfflineAgent()) return;
         var request = new DockerComposeActionRequest { StackName = stackName, Action = action };
+        // Recette R3-37: the follower shows what becomes of the task, in place of a lone "queued" toast.
+        _follower?.Expect($"{L["DockerCompose"]} {action} {stackName}");
         var success = await Api.ServerTools.ExecuteComposeActionAsync(ServerId, request);
         if (success)
         {
@@ -82,6 +90,7 @@ public partial class DockerComposeTab
         }
         else
         {
+            _follower?.Forget();
             Toast.Error("DockerCompose", "DockerComposeFailed", action, stackName);
         }
     }
@@ -93,6 +102,7 @@ public partial class DockerComposeTab
         _composeEditorContent = string.Empty;
         _composeEditorVisible = true;
         _composeFileLoading = true;
+        _composeError = null;
         var success = await Api.ServerTools.GetComposeFileAsync(ServerId, stackName);
         if (!success)
         {
@@ -118,6 +128,7 @@ public partial class DockerComposeTab
             StackName = _composeEditorStack,
             Content = _composeEditorContent
         };
+        _follower?.Expect($"{L["Deploy"]} {request.StackName}");
         var success = await Api.ServerTools.SaveComposeFileAsync(ServerId, request);
         if (success)
         {
@@ -126,11 +137,12 @@ public partial class DockerComposeTab
         }
         else
         {
+            _follower?.Forget();
             Toast.Error("DockerCompose", "DockerComposeDeployFailed");
         }
         _composeDeploying = false;
     }
 
-    /// <summary>Recette R2-124: the export writes the running and total services as the cell does.</summary>
+    /// <summary>The export writes the running and total services as the cell does.</summary>
     private static readonly Func<DockerComposeStackDto, object?> ServicesExport = stack => $"{stack.RunningCount} / {stack.TotalCount}";
 }

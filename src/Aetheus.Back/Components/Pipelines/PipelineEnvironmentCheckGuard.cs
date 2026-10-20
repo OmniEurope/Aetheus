@@ -24,9 +24,11 @@ public interface IPipelineEnvironmentCheckGuard
 /// it comes out whole rather than as a set of helpers on the engine.
 /// </summary>
 public sealed class PipelineEnvironmentCheckGuard(
-    IPipelineRepository repo,
+    IPipelineEnvironmentReader repo,
     IHttpClientFactory httpClientFactory,
-    ILogger<PipelineEnvironmentCheckGuard> logger) : IPipelineEnvironmentCheckGuard
+    ILogger<PipelineEnvironmentCheckGuard> logger,
+    // The DNS lookup of a REST callback host; the system resolver unless a test supplies one.
+    Func<string, CancellationToken, Task<System.Net.IPAddress[]>>? resolve = null) : IPipelineEnvironmentCheckGuard
 {
     public async Task<bool> CheckEnvironmentChecksAsync(PipelineStageDefinition stageDef, int? projectId, CancellationToken ct)
     {
@@ -82,7 +84,7 @@ public sealed class PipelineEnvironmentCheckGuard(
             // re-resolves between here and connect; these checks are intended for trusted hosts only.
             if (Uri.TryCreate(url, UriKind.Absolute, out var parsed) && !System.Net.IPAddress.TryParse(parsed.Host, out _))
             {
-                var resolved = await System.Net.Dns.GetHostAddressesAsync(parsed.Host, timeoutCts.Token).ConfigureAwait(false);
+                var resolved = await (resolve ?? System.Net.Dns.GetHostAddressesAsync)(parsed.Host, timeoutCts.Token).ConfigureAwait(false);
                 if (resolved.Length == 0 || Array.Exists(resolved, IsBlockedIp))
                 {
                     logger.LogWarning("REST callback check '{CheckName}' rejected URL '{Url}' - host resolves to an internal address.", check.Name, url);
@@ -115,9 +117,8 @@ public sealed class PipelineEnvironmentCheckGuard(
         return true;
     }
 
-    // One definition of "internal address" for the whole product. This guard used to carry its own
-    // copy, which had drifted: it was missing 192.0.0.0/24, 198.18/15, 240/4 and broadcast. A second
-    // blocklist is a blocklist that will diverge again, so this delegates instead of restating.
+    // Delegates internal-address classification to the shared guard so SSRF blocklists cannot
+    // diverge.
     private static bool IsBlockedIp(System.Net.IPAddress ip) =>
         Shared.WebhookSsrfGuard.IsForbiddenAddress(ip);
 }

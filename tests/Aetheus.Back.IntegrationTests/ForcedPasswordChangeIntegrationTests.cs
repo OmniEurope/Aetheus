@@ -8,20 +8,9 @@ using Aetheus.Back.Components.Shared;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// End-to-end exercise of the forced first-login password change cycle (S-FEAT-UE4K / S-TECH-MDP7)
-/// through the real HTTP pipeline backed by PostgreSQL.
-/// <para>
-/// A user created with <c>MustChangePassword = true</c> logs in successfully, but the response carries
-/// <c>MustChangePassword = true</c> AND the minted JWT carries the <c>aetheus:mcp</c> claim
-/// (<see cref="AetheusClaimTypes.MustChangePassword"/>): the Front gates navigation onto the
-/// change-password screen, and <see cref="ForcedPasswordChangeMiddleware"/> refuses every other request
-/// with 403 (SITE-SEC-001). After a self-service change, the
-/// flag is cleared in the DB and a fresh login no longer sets <c>MustChangePassword</c> nor mints the
-/// <c>aetheus:mcp</c> claim. This whole flag → change → cleared cycle depends on real persisted
-/// state and a real token mint, which the InMemory suite cannot model.
-/// </para>
-/// </summary>
+/// <summary>Exercises forced password change through real HTTP and PostgreSQL: the persisted flag
+/// and JWT claim restrict access until the password changes. A subsequent login must clear both
+/// restrictions.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class ForcedPasswordChangeIntegrationTests(PostgresFixture fixture)
 {

@@ -5,13 +5,9 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Aetheus.Back.Components.Artifacts;
 
-/// <summary>
-/// Measures the physical artifact volume, not only database metadata, and raises a throttled alert
-/// when its configured budget is exceeded or when its growth, measured over at least 24 hours, would
-/// reach that budget soon. It never deletes data. Audit R2-016 follow-up: the growth history is kept in
-/// the database (<see cref="IArtifactStorageMeasurementRepository"/>) and reloaded each time this
-/// backend becomes the leader, so a deploy or a leader change no longer restarts the 24-hour wait.
-/// </summary>
+/// <summary>Measure physical artifact storage and raise throttled budget or growth alerts without
+/// deleting data. Persist growth history and reload it on leadership acquisition so deployments do
+/// not reset the observation window.</summary>
 public sealed class ArtifactStorageMonitorService(
     IConfiguration configuration,
     IHubContext<AlertHub> alertHub,
@@ -20,12 +16,12 @@ public sealed class ArtifactStorageMonitorService(
     ILogger<ArtifactStorageMonitorService> logger,
     IPostgresLeaderLease? leaderLease = null) : BackgroundService
 {
-    /// <summary>R2-016: one backend measures and alerts. Without a lease both blue-green colours raised
-    /// the same alert, 0.4 s apart.</summary>
+    /// <summary>Only the leader measures and alerts to avoid duplicate notifications across
+    /// replicas.</summary>
     internal const string LeaseName = "aetheus:artifact-storage-monitor";
 
-    /// <summary>R2-016: growth is measured over at least this window. One hour times 24 turned a single
-    /// 2 GB upload into 48.8 GB per day against a 5 GB per day threshold.</summary>
+    /// <summary>Measure growth over at least this window to avoid extrapolating a single large
+    /// upload into daily growth.</summary>
     internal static readonly TimeSpan GrowthWindow = TimeSpan.FromHours(24);
 
     /// <summary>A growth over the threshold is a risk only when it would reach the budget within this

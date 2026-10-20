@@ -2,7 +2,7 @@
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>Recette R-119 and R-122: the catalogue order and the summary strip rules.</summary>
+/// <summary>Covers catalogue ordering and summary-strip filtering.</summary>
 public class PipelineCatalogViewTests
 {
     private static readonly Dictionary<int, PipelineFleetItemDto> NoFleet = [];

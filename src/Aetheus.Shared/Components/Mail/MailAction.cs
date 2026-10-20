@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Mail;
 
-/// <summary>Service, queue and configuration actions of the mail stack. PLAN-005 replaced the former
-/// SpamAssassin members (a shell fallback the non-root agent could never run) with rspamd controls.</summary>
+/// <summary>Mail service, queue and configuration actions.</summary>
 public enum MailAction
 {
     StartPostfix,
@@ -19,5 +18,8 @@ public enum MailAction
     StartSpamFilter,
     StopSpamFilter,
     RestartSpamFilter,
-    RestartOpenDkim
+    RestartOpenDkim,
+
+    /// <summary>Shorter Postfix retry timings (mail-manage retry-tuning); values fixed in the helper.</summary>
+    ApplyRetryTuning
 }

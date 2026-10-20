@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: EUPL-1.2
 # The nightly extension of application-qa: what is too long or too heavy to run on every candidate
-# (long-running scenarios, performance, the whole API surface under dynamic scan). The project's adapter
-# decides what that is; only the nightly triggers this pipeline. The restore and the adapter sit in two
+# (long-running scenarios, performance, the whole API surface under dynamic scan). The project decides what
+# that is, in shell written in its pipeline in APPLICATION_QA_EXTENDED_COMMANDS (run with `sh -eu -c` from
+# the workspace): nothing is required in its repository (ADR-050, recette R3-64), and without commands the
+# step fails and says so. Only the nightly triggers this pipeline. The restore and the commands sit in two
 # stages: the steps of one stage run concurrently (ADR-012).
 name: application-qa-extended-template
 trigger: manual
 variables:
   APPLICATION_CI_PIPELINE: application-ci
   APPLICATION_PERFORMANCE_ENABLED: "true"
+  APPLICATION_QA_EXTENDED_COMMANDS: ""
 
 stages:
   - name: Restore CI payload
@@ -27,11 +30,14 @@ stages:
     os: linux
     depends_on: [Restore CI payload]
     steps:
-      - name: Run project extended QA adapter
+      - name: Run project extended QA commands
         working_directory: "$(WORKSPACE)"
         shell: |
           set -eu
-          test -f .pipeline/scripts/qa-extended.sh
+          if test -z "${APPLICATION_QA_EXTENDED_COMMANDS:-}"; then
+            echo "No extended QA command declared: set APPLICATION_QA_EXTENDED_COMMANDS in this pipeline." >&2
+            exit 1
+          fi
           APPLICATION_PERFORMANCE_ENABLED="$(APPLICATION_PERFORMANCE_ENABLED)" \
-            sh .pipeline/scripts/qa-extended.sh
+            sh -eu -c "$APPLICATION_QA_EXTENDED_COMMANDS"
         timeout_seconds: 18000

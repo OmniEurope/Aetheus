@@ -30,7 +30,8 @@ const wrapper = 'i=0; set --; while [ "$i" -lt "$HELPER_ARGC" ]; do eval "set --
 // Copies one helper under a temporary root. Host paths are rebased with a lookbehind so only real
 // path starts move; the caller asserts the rebase it relies on, so a renamed path fails loudly.
 // stubs: { command: "shell body" } overrides the default stand-in (record the call, exit 0).
-function setUp(helper, { stubs = {} } = {}) {
+// rewrite: applied to the helper text first, for what a path rebase cannot express (an account, a PATH).
+function setUp(helper, { stubs = {}, rewrite = text => text } = {}) {
   const root = mkdtempSync(join(tmpdir(), "aetheus-helper-")).replace(/\\/g, "/");
   const bin = `${root}/bin`;
   mkdirSync(bin);
@@ -40,8 +41,10 @@ function setUp(helper, { stubs = {} } = {}) {
     writeFileSync(`${bin}/${command}`, `#!/bin/sh\necho "${command} $*" >> "${log}"\n${body}\n`);
     chmodSync(`${bin}/${command}`, 0o755);
   }
-  const source = readFileSync(join(helpersRoot, helper), "utf8");
-  const text = source
+  // A #{include:<path>}# line is inlined the way render_host_config does it at install time.
+  const source = readFileSync(join(helpersRoot, helper), "utf8")
+    .replace(/^#\{include:(.+)\}#$/gm, (_, path) => readFileSync(join(helpersRoot, path), "utf8").replace(/\n$/, ""));
+  const text = rewrite(source)
     .replace(/#\{ACME_WEBROOT\}#/g, `${root}/var/www/acme`)
     .replace(/(?<=^|[\s"'=(])\/usr\/sbin\/(ufw|sshd)\b/gm, `${bin}/$1`)
     .replace(/(?<=^|[\s"'=(])\/(etc|var|opt)\//gm, `${root}/$1/`);
@@ -49,6 +52,7 @@ function setUp(helper, { stubs = {} } = {}) {
   writeFileSync(script, text);
   const run = (args, { env = {}, input = "" } = {}) => spawnSync("sh", ["-c", wrapper], {
     encoding: "utf8",
+    timeout: 60000,
     input,
     env: {
       ...process.env,
@@ -69,7 +73,8 @@ function setUp(helper, { stubs = {} } = {}) {
   return { root, shRoot: shellPath(root), text, run, calls, file, directory, write, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-// ---- DEP-002: an argument holding a line break is refused before anything runs ------------------
+// Reject line breaks in arguments before execution so one input cannot become multiple commands.
+// See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 test("cron-apply refuses a multi-line command and leaves the existing cron file as it was", () => {
   const env = setUp("cron/cron-apply");
@@ -162,7 +167,8 @@ for (const { helper, bad, reason, good, reaches, env: badEnv = {}, goodEnv = bad
   });
 }
 
-// ---- DEP-003: enable stops when the administration port cannot be allowed --------------------------
+// Refuse enablement when the administration port cannot be allowed so the reported state remains
+// usable. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 test("the firewall is not enabled when allowing the administration port fails", () => {
   const env = setUp("firewall/aetheus-firewall", {
@@ -186,7 +192,8 @@ test("the firewall is enabled once the administration port is allowed", () => {
   } finally { env.cleanup(); }
 });
 
-// ---- DEP-004: delete reports the result of both variants -------------------------------------------
+// Report both deletion variants so a partial operation cannot appear complete. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 // The stand-in holds the rules named in RULES ("allow" and/or "deny"); deleting an absent one prints
 // ufw's own message, and FAIL makes that variant fail for a real reason.
@@ -230,7 +237,8 @@ for (const [label, args, failing] of [
   });
 }
 
-// ---- DEP-006: portsentry-setup and unblock-ip only report success that happened --------------------
+// Require successful portsentry setup and unblock operations before reporting success. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 for (const [label, stubs, reason] of [
   ["the package install fails", { "apt-get": 'case "$1" in install) exit 100 ;; esac' }, /apt-get install portsentry failed/],
@@ -320,7 +328,8 @@ test("unblock-ip keeps hosts.deny when it cannot be read", () => {
   } finally { env.cleanup(); }
 });
 
-// ---- DEP-007: an installed TeamSpeak that does not start is a failure ------------------------------
+// Treat an installed TeamSpeak service that cannot start as a failure. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 function teamspeak({ active, start = "0", unit = true }) {
   const state = `"$(dirname "$0")/../active"`;
@@ -379,5 +388,255 @@ test("teamspeak-setup writes a missing unit again and starts the installed serve
     const order = env.calls().filter(call => call.startsWith("systemctl")).map(call => call.split(" ")[1]);
     assert.deepEqual(order, ["is-active", "daemon-reload", "enable", "start", "is-active"]);
     assert.ok(!env.calls().some(call => call.startsWith("curl")));
+  } finally { env.cleanup(); }
+});
+
+// ---- Recette R1-41: mail-manage master-set writes the Dovecot master user, never its password -------
+
+function masterSet({ version = "2.4.1 (abc)", doveconf = "exit 0" } = {}) {
+  const env = setUp("mail/mail-manage", {
+    stubs: {
+      doveadm: "cat > /dev/null; echo '{SHA512-CRYPT}$6$hashed'",
+      dovecot: `echo "${version}"`,
+      doveconf
+    }
+  });
+  env.directory("/etc/dovecot/conf.d");
+  return env;
+}
+
+for (const [version, marker] of [["2.4.1 (abc)", "passwd_file_path = "], ["2.3.21 (47349e2482)", "args = scheme=SHA512-CRYPT "]]) {
+  test(`master-set writes the hashed master user and the ${version.slice(0, 3)} passdb, then reloads Dovecot`, () => {
+    const env = masterSet({ version });
+    try {
+      const result = env.run(["master-set"], { input: "M4sterPassw0rd!\n" });
+      assert.equal(result.status, 0, result.stderr);
+      const users = readFileSync(env.file("/etc/dovecot/master-users"), "utf8");
+      assert.equal(users, "aetheus-master:{SHA512-CRYPT}$6$hashed\n");
+      assert.doesNotMatch(users + result.stdout + result.stderr + env.calls().join("\n"), /M4sterPassw0rd/);
+      const conf = readFileSync(env.file("/etc/dovecot/conf.d/99-aetheus-master.conf"), "utf8");
+      assert.match(conf, /^auth_master_user_separator = \*$/m);
+      assert.match(conf, /master = yes/);
+      assert.ok(conf.includes(marker + env.root + "/etc/dovecot/master-users"), conf);
+      assert.doesNotMatch(conf, /#\{/);
+      assert.ok(env.calls().includes("systemctl reload dovecot"), env.calls().join(" | "));
+    } finally { env.cleanup(); }
+  });
+}
+
+test("master-set refuses a missing or short password before anything is written", () => {
+  for (const input of ["", "short\n"]) {
+    const env = masterSet();
+    try {
+      const result = env.run(["master-set"], { input });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /no password on stdin|empty password|password too short/);
+      assert.ok(!existsSync(env.file("/etc/dovecot/master-users")));
+      assert.deepEqual(env.calls(), []);
+    } finally { env.cleanup(); }
+  }
+});
+
+test("master-set removes a configuration Dovecot rejects and does not reload", () => {
+  const env = masterSet({ doveconf: "exit 1" });
+  try {
+    const result = env.run(["master-set"], { input: "M4sterPassw0rd!\n" });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /dovecot rejected the master user configuration/);
+    assert.ok(!existsSync(env.file("/etc/dovecot/conf.d/99-aetheus-master.conf")));
+    assert.ok(!env.calls().some(call => call.startsWith("systemctl")));
+  } finally { env.cleanup(); }
+});
+
+// The collector reads the marker line from the installed helper and the `version` verb prints the same
+// number; the verb answers before the certbot-installed check, so it works on a host without certbot.
+test("aetheus-certbot-manage announces its helper version, marker and verb agreeing", () => {
+  const env = setUp("certbot/aetheus-certbot-manage");
+  try {
+    const result = env.run(["version"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), "aetheus-certbot-helper-version: 1");
+    const script = readFileSync(join(helpersRoot, "certbot/aetheus-certbot-manage"), "utf8");
+    assert.match(script, /^# aetheus-certbot-helper-version: 1$/m);
+  } finally { env.cleanup(); }
+});
+
+// --- aetheus-agent-read-grant -------------------------------------------------------------------
+// Root-owned helper run by aetheus-agent-read-grant.service before every agent start: read-only POSIX ACLs
+// for the agent account on the SSH configuration. It is run for real on a fake tree; setfacl is a stand-in
+// that records the call (the helper never names a path to setfacl, only the open file /proc/self/fd/3). The
+// test account stands for root (/etc/ssh) and for the login user: it owns every file of the tree, so the
+// owner check passes, or is made to fail by the uid the passwd line claims.
+const ownUid = Number(spawnSync("sh", ["-c", "id -u"], { encoding: "utf8" }).stdout.trim());
+
+// The tests that depend on file modes (the world-readable files are skipped), on real symbolic links
+// and on FIFOs need a file system that has them: a Windows checkout (Git Bash on NTFS) has none, its
+// chmod does nothing. They are skipped there, with that reason, and run on Linux and macOS (CI, WSL,
+// docker run --user 1000 -v <repo>:/r -w /r node node --test deploy/scripts/agent-host-helpers.test.mjs).
+const posixFiles = (() => {
+  const dir = mkdtempSync(join(tmpdir(), "aetheus-posix-")).replace(/\\/g, "/");
+  try {
+    const probe = spawnSync("sh", ["-c", `cd "${shellPath(dir)}" && touch f && chmod 600 f && ln -s f l && mkfifo p && [ "$(stat -c %A f)" = "-rw-------" ] && [ -L l ] && [ -p p ]`]);
+    return probe.status === 0;
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+})();
+const posixTest = (name, body) => test(name, { skip: posixFiles ? false : "needs POSIX file modes, symbolic links and FIFOs (not available on this file system)" }, body);
+
+function setUpGrant({ stubs = {}, timeout = 5 } = {}) {
+  const env = setUp("agent/aetheus-agent-read-grant", {
+    stubs: { id: "exit 0", setfacl: "exit 0", ...stubs },
+    rewrite: text => text
+      .replace('AGENT="#{AGENT_USER}#"', 'AGENT="aetheus-agent"')
+      .replace("PATH=/usr/sbin:/usr/bin:/sbin:/bin", 'PATH="$PATH:/usr/sbin:/usr/bin:/sbin:/bin"')
+      .replace("OPEN_TIMEOUT=5", `OPEN_TIMEOUT=${timeout}`)
+      .replace("f 0 r", `f ${ownUid} r`)
+  });
+  const rooted = env.text.replace('echo "0 /root"', `echo "${ownUid} ${env.shRoot}/home/root"`);
+  writeFileSync(`${env.root}/aetheus-agent-read-grant`, rooted);
+  assert.ok(rooted.includes(`SSHD_CONFIG=${env.root}/etc/ssh/sshd_config`), "the sshd paths were rebased");
+  assert.ok(rooted.includes(`f ${ownUid} r`) && rooted.includes(`"${ownUid} ${env.shRoot}/home/root"`), "the owner and the root home were rewritten");
+  return env;
+}
+
+const grantCalls = env => env.calls().filter(call => call.startsWith("setfacl "));
+const permissionOf = call => call.match(/ u:aetheus-agent:([rx]) /)?.[1];
+const shell = command => {
+  const result = spawnSync("sh", ["-c", command], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+};
+const stripRoot = (env, text) => text.replaceAll(env.root, "").replaceAll(env.shRoot, "");
+
+// Root's .ssh, the sshd files, and the files the helper must leave alone (world-readable ones, a private
+// key, a file that is not a .conf), and a nologin account that is not a login user.
+function grantTree(env) {
+  env.directory("/etc/ssh/sshd_config.d");
+  env.directory("/home/root/.ssh");
+  env.write("/etc/passwd", `root:x:0:0::/root:/bin/bash\nsvc:x:${ownUid}:${ownUid}::${env.shRoot}/home/svc:/usr/sbin/nologin\n`);
+  for (const [path, mode] of [
+    ["/etc/ssh/sshd_config", 0o600], ["/etc/ssh/sshd_config.d/50-cloud-init.conf", 0o600],
+    ["/etc/ssh/sshd_config.d/10-open.conf", 0o644], ["/etc/ssh/sshd_config.d/notes.txt", 0o600],
+    ["/home/root/.ssh/authorized_keys", 0o600], ["/home/root/.ssh/id_ed25519", 0o600],
+    ["/home/root/.ssh/config", 0o644], ["/home/root/.ssh/known_hosts", 0o644]
+  ]) {
+    env.write(path, "x\n");
+    chmodSync(env.file(path), mode);
+  }
+  chmodSync(env.file("/home/root/.ssh"), 0o700);
+}
+
+posixTest("aetheus-agent-read-grant grants read on the SSH files and traverse on .ssh, only r and x", () => {
+  const env = setUpGrant();
+  try {
+    grantTree(env);
+    const result = env.run([]);
+    assert.equal(result.status, 0, result.stderr);
+    const granted = [...result.stdout.matchAll(/may now read (\S+) \((\w)\)/g)].map(m => `${m[2]} ${stripRoot(env, m[1])}`);
+    assert.deepEqual(granted, [
+      "r /etc/ssh/sshd_config", "r /etc/ssh/sshd_config.d/50-cloud-init.conf",
+      "x /home/root/.ssh", "r /home/root/.ssh/authorized_keys"
+    ]);
+    // Only r and x, only on the open file; the 0644 drop-in, the .txt, the private key and the 0644 files
+    // of .ssh get no entry.
+    const calls = grantCalls(env);
+    assert.equal(calls.length, 4);
+    for (const call of calls) assert.match(call, /^setfacl -m u:aetheus-agent:[rx] \/proc\/self\/fd\/3$/);
+    assert.deepEqual(calls.map(permissionOf), ["r", "r", "x", "r"]);
+  } finally { env.cleanup(); }
+});
+
+test("aetheus-agent-read-grant leaves a file alone when its owner is not the expected user", () => {
+  const env = setUpGrant();
+  try {
+    const stranger = ownUid === 4242 ? 4243 : 4242;
+    env.directory("/home/alice/.ssh");
+    env.write("/etc/passwd", `alice:x:${stranger}:${stranger}::${env.shRoot}/home/alice:/bin/bash\n`);
+    env.write("/home/alice/.ssh/authorized_keys", "x\n");
+    chmodSync(env.file("/home/alice/.ssh"), 0o700);
+    chmodSync(env.file("/home/alice/.ssh/authorized_keys"), 0o600);
+    // /etc/ssh files must be owned by root: here they belong to the test account.
+    env.write("/etc/ssh/sshd_config", "x\n");
+    chmodSync(env.file("/etc/ssh/sshd_config"), 0o600);
+    const script = `${env.root}/aetheus-agent-read-grant`;
+    writeFileSync(script, readFileSync(script, "utf8").replace(`f ${ownUid} r`, "f 0 r"));
+    const result = env.run([]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal((result.stderr.match(/is not owned by uid/g) ?? []).length, 3, result.stderr);
+    assert.match(result.stderr, new RegExp(`alice/\\.ssh is not owned by uid ${stranger}`));
+    assert.match(result.stderr, /sshd_config is not owned by uid 0/);
+    assert.deepEqual(grantCalls(env), []);
+  } finally { env.cleanup(); }
+});
+
+posixTest("aetheus-agent-read-grant refuses a symbolic link, even to a file the right user owns", () => {
+  const env = setUpGrant();
+  try {
+    grantTree(env);
+    env.write("/home/root/real-keys", "x\n");
+    chmodSync(env.file("/home/root/real-keys"), 0o600);
+    env.write("/etc/ssh/real.conf", "x\n");
+    chmodSync(env.file("/etc/ssh/real.conf"), 0o600);
+    // The targets have the right owner: only the link itself can stop the grant.
+    shell(`ln -s "${env.shRoot}/home/root/real-keys" "${env.shRoot}/home/root/.ssh/authorized_keys2" && ln -s "${env.shRoot}/etc/ssh/real.conf" "${env.shRoot}/etc/ssh/sshd_config.d/60-link.conf"`);
+    const result = env.run([]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /authorized_keys2 is a symbolic link, left alone/);
+    assert.match(result.stderr, /60-link\.conf is a symbolic link, left alone/);
+    // Only the four regular files of the first case are granted.
+    assert.equal(grantCalls(env).length, 4);
+    assert.ok(!/real-keys|real\.conf|authorized_keys2|60-link/.test(result.stdout));
+  } finally { env.cleanup(); }
+});
+
+posixTest("aetheus-agent-read-grant does not block on a FIFO, planted or swapped in after the check", () => {
+  const planted = setUpGrant();
+  try {
+    grantTree(planted);
+    shell(`mkfifo "${planted.shRoot}/home/root/.ssh/authorized_keys2"`);
+    const started = Date.now();
+    const result = planted.run([]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(Date.now() - started < 4000, "a FIFO made the helper wait");
+    assert.equal(grantCalls(planted).length, 4);
+  } finally { planted.cleanup(); }
+
+  // The race itself: the kind check is told "regular file" for this one path (a stand-in for stat), then
+  // the open meets the FIFO. The open is killed at the timeout and the other files still get their grant.
+  const swapped = setUpGrant({
+    timeout: 1,
+    stubs: { stat: 'case "$*" in *authorized_keys2*) echo "regular file"; exit 0 ;; esac\nPATH="${PATH#*:}"\nexec stat "$@"' }
+  });
+  try {
+    grantTree(swapped);
+    shell(`mkfifo "${swapped.shRoot}/home/root/.ssh/authorized_keys2"`);
+    const started = Date.now();
+    const result = swapped.run([]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(Date.now() - started < 10000, "the helper waited on the FIFO");
+    assert.match(result.stderr, /authorized_keys2 did not open within 1s, skipped/);
+    assert.equal(grantCalls(swapped).length, 4);
+  } finally { swapped.cleanup(); }
+});
+
+test("aetheus-agent-read-grant --revoke removes the agent entry from the same files and grants nothing", () => {
+  const env = setUpGrant();
+  try {
+    grantTree(env);
+    const result = env.run(["--revoke"]);
+    assert.equal(result.status, 0, result.stderr);
+    const calls = grantCalls(env);
+    // sshd_config, the two drop-ins (the world-readable one too: a revoke does not look at the mode), .ssh, authorized_keys.
+    assert.equal(calls.length, 5);
+    for (const call of calls) assert.equal(call, "setfacl -x u:aetheus-agent /proc/self/fd/3");
+  } finally { env.cleanup(); }
+});
+
+test("aetheus-agent-read-grant --list-ssh-dirs prints the .ssh directories and changes nothing", () => {
+  const env = setUpGrant();
+  try {
+    grantTree(env);
+    const result = env.run(["--list-ssh-dirs"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), `${env.shRoot}/home/root/.ssh`);
+    assert.deepEqual(grantCalls(env), []);
   } finally { env.cleanup(); }
 });

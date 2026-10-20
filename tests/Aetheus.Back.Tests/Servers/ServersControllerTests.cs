@@ -7,6 +7,7 @@ using Aetheus.Back.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
 namespace Aetheus.Back.Tests;
@@ -22,13 +23,14 @@ public class ServersControllerTests
     private readonly IAgentUpdateService _agentUpdateMock = Substitute.For<IAgentUpdateService>();
     private readonly IResourceAuthorizationService _authzMock = Substitute.For<IResourceAuthorizationService>();
     private readonly IAuthService _authServiceMock = Substitute.For<IAuthService>();
+    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero));
     private readonly ServersController _sut;
 
     public ServersControllerTests()
     {
         _sut = new ServersController(_serviceMock, _retirementMock, _heartbeatMock, _servicesMock,
             _agentContactMock, _diagnosticMock,
-            _agentUpdateMock, _authzMock, _authServiceMock,
+            _agentUpdateMock, _authzMock, _authServiceMock, _time,
             Substitute.For<ILogger<ServersController>>());
         _sut.ControllerContext = new ControllerContext
         {
@@ -243,6 +245,29 @@ public class ServersControllerTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         await _heartbeatMock.Received(1).ProcessHeartbeatAsync(1, Arg.Any<ServerHeartbeatDto>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Heartbeat_StampsReceptionBeforeProcessingAndReplyAfterIt()
+    {
+        // PLAN-010 lot 1: T2 is read before the heartbeat is processed and T3 after, so the 250 ms the
+        // processing takes falls between them and is taken out of the agent's round trip.
+        var receivedAt = _time.GetUtcNow().UtcDateTime;
+        _heartbeatMock.ProcessHeartbeatAsync(1, Arg.Any<ServerHeartbeatDto>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                _time.Advance(TimeSpan.FromMilliseconds(250));
+                return Task.CompletedTask;
+            });
+        _authServiceMock.MaybeRenewAgentTokenAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new ServerHeartbeatResponseDto { RenewedToken = "renewed" });
+
+        var result = await _sut.Heartbeat(1, new ServerHeartbeatDto(), TestContext.Current.CancellationToken);
+
+        var response = Assert.IsType<ServerHeartbeatResponseDto>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(receivedAt, response.ReceivedAtUtc);
+        Assert.Equal(receivedAt.AddMilliseconds(250), response.RepliedAtUtc);
+        Assert.Equal("renewed", response.RenewedToken);
     }
 
     [Fact]

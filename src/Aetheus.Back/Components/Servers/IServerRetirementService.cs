@@ -2,11 +2,9 @@
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// PLAN-004 R-11: the server removal lifecycle. Deleting a server retires it (row and links kept,
-/// agent tokens revoked, hidden everywhere); re-enrolling the same machine revives it; only an
-/// explicit purge of a retired server erases it. Callers own the RBAC check (Server.Admin).
-/// </summary>
+/// <summary>Retirement preserves rows and links, revokes agent tokens and hides the server;
+/// re-enrollment revives it, while explicit purge erases it. Callers enforce Server.Admin
+/// permission.</summary>
 public interface IServerRetirementService
 {
     /// <summary>Retires an active server. Returns false when no active server has this id.</summary>

@@ -4,11 +4,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Aetheus.Back.Data.Migrations
 {
-    /// <summary>
-    /// Recette R2-034: nobody followed any project, so no project event ever reached a user's bell. From
-    /// now on the creator of a project follows it (ProjectService.CreateProjectAsync); this backfill gives
-    /// the projects created before that their creator as a subscriber. Data only, no schema change.
-    /// </summary>
+    /// <summary>Backfill project-creator subscriptions without changing schema; new projects
+    /// subscribe their creators through ProjectService.</summary>
     public partial class SubscribeProjectCreatorsToTheirProjects : Migration
     {
         /// <inheritdoc />

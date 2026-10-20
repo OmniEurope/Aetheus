@@ -181,7 +181,7 @@ public sealed class DefaultShellRunner(ILogger<DefaultShellRunner> logger) : ISh
         return new ShellExecResult(process.ExitCode, stdout, stderr, truncated);
     }
 
-    private static async Task<CapturedOutput> ReadOutputAsync(
+    internal static async Task<CapturedOutput> ReadOutputAsync(
         StreamReader reader,
         int? maxCapturedOutputBytes,
         CancellationToken ct)
@@ -228,7 +228,7 @@ public sealed class DefaultShellRunner(ILogger<DefaultShellRunner> logger) : ISh
         "SSL_CERT_FILE"
     ];
 
-    private readonly record struct CapturedOutput(string Value, bool Truncated);
+    internal readonly record struct CapturedOutput(string Value, bool Truncated);
 
     // A cancelled/timed-out run must not orphan the child: a stuck docker/systemctl/tar
     // would otherwise outlive `using process` and accumulate on the host. A tree it may not kill whole

@@ -3,13 +3,8 @@ using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// The archive names used to be hard-coded to <c>aetheus-back.tar</c> / <c>aetheus-front.tar</c>,
-/// which made built-artifact image analysis unreachable for every project that is not Aetheus: the
-/// file was never found and the run reported a revision mismatch, a cause that was not the real one.
-/// These tests pin the resolution order, the refusal of ambiguity, and the traversal guard on a
-/// pipeline-declared name.
-/// </summary>
+/// <summary>Verifies scanner archive resolution order, ambiguous-role rejection and traversal
+/// protection for declared archive names.</summary>
 public sealed class ScannerImageArchiveResolverTests : IDisposable
 {
     private readonly string _directory =

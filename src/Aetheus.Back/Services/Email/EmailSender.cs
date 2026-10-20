@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Services.Email;
 
-/// <summary>
-/// Recette R1-16: the one way Aetheus sends e-mail. The sender is resolved for every call (the
-/// settings may have changed), the messages share one SMTP connection, and every outcome is
-/// reported: nothing is ever called sent unless the server accepted it.
-/// </summary>
+/// <summary> The one way Aetheus sends e-mail. The sender is resolved for every call (the settings
+/// may have changed), the messages share one SMTP connection, and every outcome is reported:
+/// nothing is ever called sent unless the server accepted it. </summary>
 public sealed class EmailSender(
     IEmailSenderConfigurationResolver resolver,
     ISmtpTransport transport,

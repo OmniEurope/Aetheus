@@ -12,28 +12,19 @@ public partial class MonitoredAppsStatusGrid
     [Parameter] public IReadOnlyList<MonitoredAppStatusDto>? Applications { get; set; }
     [Parameter] public bool IsLoading { get; set; }
 
-    /// <summary>The dashboard tile is narrow and leaves this column out; the Supervision page shows it.</summary>
-    [Parameter] public bool ShowLastEvent { get; set; }
 
     private OmniDataGrid<MonitoredAppStatusDto>? _grid;
     private IReadOnlyList<MonitoredAppStatusDto>? _shownApplications;
     private static readonly TimeSpan NewRowHighlight = TimeSpan.FromSeconds(5);
 
-    /// <summary>Recette R-210: the last-event column shows local time, so its range filter and sort
-    /// read the same local instant.</summary>
-    private static readonly Func<MonitoredAppStatusDto, object?> LocalLastEventAt = app => app.LastEventAt?.ToLocalTime();
-
-    // Recette R-210: the status filter names the states as the badges do; built once so the column
-    // sees the same delegate on every render.
+    // The status filter names the states as the badges do; built once so the column sees the same
+    // delegate on every render.
     private Func<string, string>? _statusText;
     private Func<string, string> StatusText => _statusText ??= value =>
         Enum.TryParse<AppHealthStatus>(value, ignoreCase: true, out var status) ? L[$"AppHealth{status}"].Value : value;
 
-    /// <summary>
-    /// Recette R-227: the parent hands a new list on each live reload. The grid notes the rows it holds
-    /// before it renders the new ones, so an application that appeared reads bold for a few seconds.
-    /// The first list (from nothing) marks nothing.
-    /// </summary>
+    /// <summary>Compare live lists before rendering so newly appearing applications can be
+    /// highlighted briefly; do not mark rows on the initial load.</summary>
     protected override async Task OnParametersSetAsync()
     {
         if (!ReferenceEquals(Applications, _shownApplications))
@@ -44,7 +35,7 @@ public partial class MonitoredAppsStatusGrid
         }
     }
 
-    /// <summary>Recette R-467: the project's supervision page, opened on this application.</summary>
+    /// <summary>The project's supervision page, opened on this application.</summary>
     private static string AppHref(MonitoredAppStatusDto app) => $"/projects/{app.ProjectId}/monitoring?app={app.Id}";
 
     internal static OmniTone HealthBadge(AppHealthStatus status) => status switch

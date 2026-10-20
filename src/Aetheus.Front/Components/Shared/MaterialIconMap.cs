@@ -4,13 +4,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// PLAN-008 lot 3: the Material icon names the front used before the migration, each with the Phosphor
-/// <see cref="OmniIconName"/> that replaces it. Static names come from every <c>Icon="..."</c> of the
-/// Razor sources, dynamic ones from the C# helpers and ternaries that computed an icon name. The
-/// lot 14 wrappers keep their string <c>Icon</c> parameter through this table while pages still pass
-/// Material names; the table goes with the wrappers at lot 34.
-/// </summary>
+/// <summary>Map Material icon strings to OmniIconName so wrappers with string Icon parameters can
+/// resolve their callers' names through one table.</summary>
 public static class MaterialIconMap
 {
     private static readonly FrozenDictionary<string, OmniIconName> Map = new Dictionary<string, OmniIconName>(StringComparer.Ordinal)
@@ -145,6 +140,7 @@ public static class MaterialIconMap
         ["lock_reset"] = OmniIconName.LockKey,
         ["login"] = OmniIconName.SignIn,
         ["logout"] = OmniIconName.SignOut,
+        ["mail"] = OmniIconName.Envelope,
         ["manage_search"] = OmniIconName.Search,
         ["memory"] = OmniIconName.Cpu,
         ["merge_type"] = OmniIconName.GitMerge,

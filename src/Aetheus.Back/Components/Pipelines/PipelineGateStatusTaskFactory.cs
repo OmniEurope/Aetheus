@@ -4,13 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Turns a <c>type: gate-status</c> step into the agent task that evaluates it (PLAN-006 lot 11.3).
-///
-/// The aggregation itself is the agent's job; what is decided here is that the gate is well formed,
-/// because the two ways to write a meaningless gate both look harmless in YAML and both end up
-/// passing on nothing.
-/// </summary>
+/// <summary>Builds a gate-status task only for a well-formed gate so the agent cannot pass an empty
+/// or meaningless aggregation.</summary>
 public interface IPipelineGateStatusTaskFactory
 {
     /// <summary><c>null</c> when the task was created; otherwise the validation error the caller must

@@ -12,7 +12,7 @@
     <Tabs>
         <OmniTabsItem Key="general" Title="@L["General"]">
             <OmniCard Class="omni-u-mt-sm">
-                @foreach (var setting in _settings)
+                @foreach (var setting in TextSettings)
                 {
                     <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                         <OmniColumn Span="12" MediumSpan="4">
@@ -29,13 +29,21 @@
                     </OmniRow>
                 }
             </OmniCard>
+            @* A switch, saved as soon as it changes: "run to end" is a safety choice, not free text. *@
+            <OmniSettingsSection Title="@L["Pipelines"]" Class="omni-u-mt-sm">
+                <OmniSettingsTile Title="@L["AllowRunToEnd"]" Description="@L["AllowRunToEndDescription"]">
+                    <OmniSwitch Value="@_allowRunToEnd" ValueExpression="@(() => _allowRunToEnd)"
+                                ValueChanged="@((bool value) => SaveRunToEndAsync(value))" Disabled="@_savingRunToEnd"
+                                aria-label="@L["AllowRunToEnd"]" />
+                </OmniSettingsTile>
+            </OmniSettingsSection>
         </OmniTabsItem>
 
         <OmniTabsItem Key="quality-gates" Title="@L["QualityGates"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("rule"))" /></Icon><ChildContent>
             <QualityGatePolicyEditor Scope="AnalysisPolicyScope.Global" CanEdit="true" />
         </ChildContent></OmniTabsItem>
 
-        @* Recette R1-16: the platform e-mail sender, default no-reply mailbox or custom SMTP server. *@
+        @* The platform e-mail sender, default no-reply mailbox or custom SMTP server. *@
         <OmniTabsItem Key="email" Title="@L["EmailSenderTab"]"><Icon><OmniIcon Name="OmniIconName.Envelope" /></Icon><ChildContent>
             <div class="omni-u-mt-sm">
                 <EmailSenderSettingsPanel />

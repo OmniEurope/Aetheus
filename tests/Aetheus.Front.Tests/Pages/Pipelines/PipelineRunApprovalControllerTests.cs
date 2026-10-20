@@ -6,12 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// The run page's approval state. Its two states used to look identical from the page: a run waiting on
-/// a decision that exists, and one waiting on a decision that does not, the second rendering nothing at
-/// all. Run 2152 sat in that second state for eight days, so both are pinned here, along with the
-/// difference between "no approval exists" and "the approval could not be loaded".
-/// </summary>
+/// <summary>Distinguishes a waiting run with an approval, one without an approval and a failed
+/// approval read.</summary>
 public class PipelineRunApprovalControllerTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -44,7 +40,7 @@ public class PipelineRunApprovalControllerTests : BunitContext
     [Fact]
     public async Task LoadAsync_PendingApproval_ExposesItWithoutFlaggingAnythingMissing()
     {
-        // Recette R1-24: the instructions come with the approval; no environment read is needed.
+        // The instructions come with the approval; no environment read is needed.
         _handler.SetJsonResponse("api/pipelines/runs/1/approvals", new List<PipelineApprovalDto>
         {
             Pending() with { EnvironmentInstructions = "check the changelog" }
@@ -60,8 +56,9 @@ public class PipelineRunApprovalControllerTests : BunitContext
         Assert.False(sut.LoadFailed);
     }
 
-    /// <summary>R-370: the pipeline's own approval has no environment instructions, and a run that then
-    /// waits on the environment's approval shows that environment's, not the ones of the first.</summary>
+    /// <summary>The pipeline's own approval has no environment instructions, and a run that then
+    /// waits on the environment's approval shows that environment's, not the ones of the
+    /// first.</summary>
     [Fact]
     public async Task LoadAsync_InstructionsFollowTheApprovalShown_AndOnlyAnEnvironmentApprovalHasAny()
     {
@@ -160,10 +157,8 @@ public class PipelineRunApprovalControllerTests : BunitContext
     [Fact]
     public async Task DecideAsync_Refused_SaysWhy_KeepsTheComment_AndRefreshesTheBanner()
     {
-        // Recette R2-116: on release-fast #2555 a refused click showed one generic toast and left the
-        // banner as it was, offering again an approval the server had already settled. The reason the
-        // server gives is shown, and the banner is read again. The comment is the operator's typed
-        // input, kept for the next attempt.
+        // Refusal displays the server's reason and refreshes approval state while preserving the
+        // operator's comment.
         _handler.SetJsonResponse("api/pipelines/runs/1/approvals", new List<PipelineApprovalDto> { Pending() });
         _handler.SetJsonResponse("api/environments/3", new EnvironmentDto { Id = 3 });
         _handler.SetRawResponse(
@@ -219,8 +214,7 @@ public class PipelineRunApprovalControllerTests : BunitContext
     [InlineData(PipelineStatus.Partial)]
     public async Task LoadAsync_AnEndedRun_NeverOffersADecision_EvenWithAPendingRowLeftOver(PipelineStatus status)
     {
-        // PLAN-005 lot 3 / D34: run 2323 ended Cancelled with a Pending Rollback approval in the
-        // database. The page must not offer a decision for it, and must not even ask.
+        // Terminal runs must neither load nor offer pending approval decisions.
         _handler.SetJsonResponse("api/pipelines/runs/1/approvals", new List<PipelineApprovalDto> { Pending() });
         var sut = Sut();
 

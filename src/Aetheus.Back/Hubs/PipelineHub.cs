@@ -5,11 +5,11 @@ using Microsoft.AspNetCore.SignalR;
 namespace Aetheus.Back.Hubs;
 
 [Authorize]
-public class PipelineHub(IPipelineRepository pipelineRepo, IResourceAuthorizationService authz) : Hub
+public class PipelineHub(IPipelineRunLookupReader runLookup, IResourceAuthorizationService authz) : Hub
 {
     public async Task JoinPipelineRunGroup(int runId)
     {
-        var pipelineId = await pipelineRepo.GetPipelineIdForRunAsync(runId).ConfigureAwait(false);
+        var pipelineId = await runLookup.GetPipelineIdForRunAsync(runId).ConfigureAwait(false);
         if (pipelineId is null)
             throw new HubException("Run not found.");
 

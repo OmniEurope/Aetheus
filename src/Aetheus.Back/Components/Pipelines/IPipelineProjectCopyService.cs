@@ -2,11 +2,9 @@
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R1-29: the setup wizard's "start from an existing project". Plans and makes adapted copies
-/// of a project's pipelines in another project, with the structure of the libraries and vaults they
-/// use (names only, never a value).
-/// </summary>
+/// <summary> The setup wizard's "start from an existing project". Plans and makes adapted copies of
+/// a project's pipelines in another project, with the structure of the libraries and vaults they
+/// use (names only, never a value). </summary>
 public interface IPipelineProjectCopyService
 {
     /// <summary>What the copy would do, read only.</summary>

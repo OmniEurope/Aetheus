@@ -48,4 +48,21 @@ public class TagsHelperTests
         var result = TagsHelper.DeserializeTags("[]");
         Assert.Empty(result);
     }
+
+    [Fact]
+    public void SerializeTags_NoTagsOrOnlyBlankOnes_StoresAnEmptyColumn()
+    {
+        Assert.Equal(string.Empty, TagsHelper.SerializeTags(null));
+        Assert.Equal(string.Empty, TagsHelper.SerializeTags([]));
+        Assert.Equal(string.Empty, TagsHelper.SerializeTags(["", "  "]));
+    }
+
+    [Fact]
+    public void SerializeTags_StoresAJsonArrayWithoutTheBlankOnes_ThatReadsBack()
+    {
+        var stored = TagsHelper.SerializeTags(["prod", " ", "web"]);
+
+        Assert.Equal("""["prod","web"]""", stored);
+        Assert.Equal(["prod", "web"], TagsHelper.DeserializeTags(stored));
+    }
 }

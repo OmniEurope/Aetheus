@@ -44,7 +44,7 @@ public class ProjectsDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var projects = (List<ProjectDto>)typeof(ProjectsPage).GetField("_projects", Priv)!.GetValue(cut.Instance)!;
         Assert.Equal(3, projects.Count);
@@ -57,7 +57,7 @@ public class ProjectsDeepTests : BunitContext
     {
         SetupProjects(2);
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var method = typeof(ProjectsPage).GetMethod("LoadDataAndRender", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -73,7 +73,7 @@ public class ProjectsDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(ProjectsPage).GetField("_search", Priv)!.SetValue(cut.Instance, "some search");
         typeof(ProjectsPage).GetField("_statusFilter", Priv)!.SetValue(cut.Instance, (ProjectStatus?)ProjectStatus.Active);
@@ -131,7 +131,7 @@ public class ProjectsDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var method = typeof(ProjectsPage).GetMethod("StartHubAsync", Priv)!;
 
@@ -152,7 +152,7 @@ public class ProjectsDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         await ((IAsyncDisposable)cut.Instance).DisposeAsync();
 
@@ -168,7 +168,7 @@ public class ProjectsDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<ProjectsPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(ProjectsPage).GetField("_search", Priv)!.SetValue(cut.Instance, "Project 1");
         var method = typeof(ProjectsPage).GetMethod("LoadData", Priv)!;

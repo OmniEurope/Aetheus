@@ -3,11 +3,8 @@ using System.Globalization;
 
 namespace Aetheus.Back.Components.Git;
 
-/// <summary>
-/// Recette R-224 / R2-004: the commits grid's column filters, already checked against the grid's
-/// allow-list (<see cref="GitCommitListQuery"/>) and turned into what <c>git log</c> understands.
-/// Every field is optional; a null field filters nothing.
-/// </summary>
+/// <summary>Carries optional git log filters already validated by <see cref="GitCommitListQuery"/>;
+/// null fields impose no filter.</summary>
 public sealed record GitCommitLogFilter
 {
     /// <summary>Text the commit message must contain, case-insensitive (<c>--grep</c>, matched literally).</summary>

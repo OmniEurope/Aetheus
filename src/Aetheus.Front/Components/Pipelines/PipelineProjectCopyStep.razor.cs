@@ -2,8 +2,9 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>One step of <see cref="PipelineProjectCopyWizard"/> (recette R1-29): the projects, the
-/// pipelines to take over with their verdict, then the summary and, once copied, what remains to set up.</summary>
+/// <summary>One step of <see cref="PipelineProjectCopyWizard"/> : the projects, the pipelines to
+/// take over with their verdict, then the summary and, once copied, what remains to set
+/// up.</summary>
 public partial class PipelineProjectCopyStep
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;

@@ -3,15 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R-411 (and R-400 before it): OmniEurope.Blazor's inverse surface is a mid grey (#555555 in
-/// light mode, #4b4b4b in dark mode), not a dark console background. Aetheus had painted panels, hovers
-/// and code blocks with it while keeping the page's ink, which is dark in light mode: the text vanished,
-/// and each new view repeated the mistake. The only ink OE guarantees on that surface is
-/// <c>--omni-color-on-inverse</c>, so every app.css rule that paints its background with the inverse
-/// surface must set that ink in the same rule. Anything else belongs on a page surface
-/// (<c>--omni-color-surface</c>, <c>-surface-muted</c>, <c>-surface-hover</c>, <c>-surface-highlight</c>).
-/// </summary>
+/// <summary>Inverse backgrounds require OE's on-inverse text token in the same rule; ordinary page
+/// text belongs on page surfaces.</summary>
 public class InverseSurfaceInkAuditTests
 {
     private static readonly Regex Comment = new(@"/\*.*?\*/", RegexOptions.Singleline | RegexOptions.CultureInvariant);

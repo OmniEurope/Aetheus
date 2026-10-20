@@ -9,11 +9,9 @@ using ServiceConnectionsPage = Aetheus.Front.Components.ServiceConnections.Servi
 
 namespace Aetheus.Front.Tests.Pages;
 
-/// <summary>
-/// Recette R-224 / R-226: on the server-paged grids of these pages a header filter reaches the API as a
-/// column filter (<c>Filters[i].Field</c> ...), so the server filters the whole list, not the page on screen;
-/// and a live refresh keeps the filter the header shows.
-/// </summary>
+/// <summary> On the server-paged grids of these pages a header filter reaches the API as a column
+/// filter (<c>Filters[i].Field</c>...), so the server filters the whole list, not the page on
+/// screen; and a live refresh keeps the filter the header shows. </summary>
 public sealed class GridHeaderFilterApiTests : BunitContext
 {
     private const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
@@ -81,7 +79,7 @@ public sealed class GridHeaderFilterApiTests : BunitContext
         _handler.SetJsonResponse("api/git/repos/1/graph-data", new List<GitLightCommitDto>());
         var cut = Render<GitRepositoryDetail>(parameters => parameters.Add(page => page.Id, 1));
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request =>
-            request.Url.Contains("api/git/repos/1/filter-values", StringComparison.Ordinal)), TimeSpan.FromSeconds(3));
+            request.Url.Contains("api/git/repos/1/filter-values", StringComparison.Ordinal)));
 
         await cut.InvokeAsync(() => InvokePrivate(cut.Instance, "OnLoadCommits", Filtered("AuthorName", "alice")));
         await cut.InvokeAsync(() => InvokePrivate(cut.Instance, "OnLoadPrs", Filtered("Status", "Merged")));
@@ -92,10 +90,8 @@ public sealed class GridHeaderFilterApiTests : BunitContext
         Assert.True(Sent("api/git/repos/1/branches", "Name", "release"));
     }
 
-    /// <summary>
-    /// Recette R-226: the live handler used to call LoadData(new GridLoadArgs()), which fetched page 1 with no
-    /// filter while the header still showed one. The refresh now goes through the grid and keeps it.
-    /// </summary>
+    /// <summary>Refresh through the grid so a live update retains its current header
+    /// filters.</summary>
     [Fact]
     public async Task ServiceConnections_LiveRefresh_KeepsTheHeaderFilter()
     {
@@ -106,15 +102,15 @@ public sealed class GridHeaderFilterApiTests : BunitContext
             TotalCount = 1
         });
         var cut = Render<ServiceConnectionsPage>();
-        cut.WaitForState(() => cut.Markup.Contains("GitHub prod", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("GitHub prod", StringComparison.Ordinal));
         var grid = cut.FindComponent<AetheusDataGrid<ServiceConnectionDto>>().Instance.Grid!;
         await cut.InvokeAsync(() => grid.SetFiltersAsync(new Dictionary<string, string?> { ["Name"] = "prod" }));
-        cut.WaitForAssertion(() => Assert.True(Sent("api/service-connections?", "Name", "prod")), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.True(Sent("api/service-connections?", "Name", "prod")));
         var before = _handler.Requests.Count;
 
         await cut.InvokeAsync(() => InvokePrivate(cut.Instance, "RefreshGridAsync"));
 
-        cut.WaitForAssertion(() => Assert.True(_handler.Requests.Count > before), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.True(_handler.Requests.Count > before));
         var refreshed = Uri.UnescapeDataString(_handler.Requests.Skip(before)
             .Last(request => request.Url.Contains("api/service-connections?", StringComparison.Ordinal)).Url);
         Assert.Contains("Filters[0].Field=Name", refreshed, StringComparison.Ordinal);

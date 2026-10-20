@@ -64,11 +64,82 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
                 StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task PromotionHarness_PublishesEachPackageUnderItsOwnAttestedVersion()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        var result = await fixture.RunPromotionAsync("accepted-self-signed-author");
+
+        Assert.True(result.ExitCode == 0, $"stdout={result.StandardOutput}{Environment.NewLine}stderr={result.StandardError}");
+        Assert.Equal(
+            [
+                "true:telemetry:1.2.0",
+                "true:web-analytics-dotnet:1.1.0",
+                "true:web-analytics-browser:0.1.0",
+                "false:telemetry:1.2.0",
+                "false:web-analytics-dotnet:1.1.0",
+                "false:web-analytics-browser:0.1.0"
+            ],
+            await File.ReadAllLinesAsync(fixture.PublishInvocations, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task PromotionHarness_RefusesALegacySetVersionThatACandidateDoesNotCarry()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        var result = await fixture.RunPromotionAsync("accepted-self-signed-author", legacySetVersion: "1.2.0");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("The web-analytics-dotnet candidate is 1.1.0", result.StandardError, StringComparison.Ordinal);
+        Assert.DoesNotContain("Package signature matches", result.StandardOutput, StringComparison.Ordinal);
+        Assert.False(File.Exists(fixture.PublishInvocations));
+    }
+
+    [Fact]
+    public async Task PromotionHarness_StillPublishesALegacySetWhoseCandidatesAllCarryIt()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync(uniformVersion: "1.2.3");
+        var result = await fixture.RunPromotionAsync("accepted-self-signed-author", legacySetVersion: "1.2.3");
+
+        Assert.True(result.ExitCode == 0, $"stdout={result.StandardOutput}{Environment.NewLine}stderr={result.StandardError}");
+        Assert.All(
+            await File.ReadAllLinesAsync(fixture.PublishInvocations, TestContext.Current.CancellationToken),
+            line => Assert.EndsWith(":1.2.3", line, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PromotionHarness_RefusesACandidateWithoutAnAttestedVersion_BeforeSigning()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        await fixture.WriteProvenanceAsync("web-analytics-browser", version: null);
+        var result = await fixture.RunPromotionAsync("accepted-self-signed-author");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains(
+            "The web-analytics-browser candidate does not attest one valid packageVersion.",
+            result.StandardError,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Package signature matches", result.StandardOutput, StringComparison.Ordinal);
+        Assert.False(File.Exists(fixture.PublishInvocations));
+    }
+
+    [Fact]
+    public async Task PublicationHarness_RefusesAVersionTheCandidateDoesNotAttest()
+    {
+        await using var fixture = await SignatureFixture.CreateAsync();
+        var result = await fixture.RunPublicationAsync("accepted-self-signed-author", packageVersion: "1.1.0");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains(
+            "PACKAGE_VERSION 1.1.0 is not the version the telemetry candidate attests.",
+            result.StandardError,
+            StringComparison.Ordinal);
+    }
+
     private static string FindRepoRoot() => Aetheus.Agent.Core.Tests.RepositoryScan.Root;
 
     private sealed class SignatureFixture : IAsyncDisposable
     {
-        private const string Version = "1.2.3";
         private readonly string _root;
         private readonly string _fakeBin;
         private readonly string _registryPackage;
@@ -85,25 +156,34 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
 
         public string PublishInvocations { get; }
 
-        public static async Task<SignatureFixture> CreateAsync()
+        public string TelemetryVersion { get; private init; } = "";
+
+        // The three packages carry distinct versions, as their own csproj/package.json declare them.
+        public static async Task<SignatureFixture> CreateAsync(string? uniformVersion = null)
         {
             var root = Path.Combine(Path.GetTempPath(), $"aetheus-signature-{Guid.NewGuid():N}");
             var fakeBin = Path.Combine(root, "fake-bin");
             Directory.CreateDirectory(fakeBin);
+            var telemetryVersion = uniformVersion ?? "1.2.0";
+            var webAnalyticsVersion = uniformVersion ?? "1.1.0";
+            var browserVersion = uniformVersion ?? "0.1.0";
 
-            await CreateCandidateAsync(root, "telemetry", $"Aetheus.Telemetry.{Version}.nupkg");
+            await CreateCandidateAsync(
+                root, "telemetry", $"Aetheus.Telemetry.{telemetryVersion}.nupkg", telemetryVersion);
             await CreateCandidateAsync(
                 root,
                 "web-analytics-dotnet",
-                $"Aetheus.WebAnalytics.{Version}.nupkg");
+                $"Aetheus.WebAnalytics.{webAnalyticsVersion}.nupkg",
+                webAnalyticsVersion);
             await CreateCandidateAsync(
                 root,
                 "web-analytics-browser",
-                $"aetheus-web-analytics-{Version}.tgz");
+                $"aetheus-web-analytics-{browserVersion}.tgz",
+                browserVersion);
 
             var registryPackage = Path.Combine(root, "registry.nupkg");
             File.Copy(
-                Path.Combine(root, ".package-candidate", "telemetry", $"Aetheus.Telemetry.{Version}.nupkg"),
+                Path.Combine(root, ".package-candidate", "telemetry", $"Aetheus.Telemetry.{telemetryVersion}.nupkg"),
                 registryPackage);
 
             await WriteExecutableAsync(
@@ -172,7 +252,8 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
                 Path.Combine(fakeBin, "publish"),
                 """
                 #!/bin/sh
-                printf '%s:%s\n' "${AETHEUS_PUBLISH_PREFLIGHT_ONLY:-false}" "$1" >> "$FAKE_PUBLISH_INVOCATIONS"
+                printf '%s:%s:%s\n' "${AETHEUS_PUBLISH_PREFLIGHT_ONLY:-false}" "$1" "${PACKAGE_VERSION:-}" \
+                  >> "$FAKE_PUBLISH_INVOCATIONS"
                 """);
 
             var shellWrapper = Path.Combine(fakeBin, "run-script");
@@ -185,14 +266,22 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
                 exec /bin/sh "$TARGET_SCRIPT" "$@"
                 """);
 
-            return new SignatureFixture(root, fakeBin, registryPackage, shellWrapper);
+            return new SignatureFixture(root, fakeBin, registryPackage, shellWrapper)
+            {
+                TelemetryVersion = telemetryVersion
+            };
         }
 
-        public Task<ProcessResult> RunPromotionAsync(string scenario)
+        public Task WriteProvenanceAsync(string kind, string? version) =>
+            WriteProvenanceAsync(Path.Combine(_root, ".package-candidate", kind), kind, version);
+
+        public Task<ProcessResult> RunPromotionAsync(string scenario, string? legacySetVersion = null)
         {
             var startInfo = CreateStartInfo(Path.Combine(
                 FindRepoRoot(), "deploy", "scripts", "promote-observability-packages.sh"));
             ConfigureCommonEnvironment(startInfo, scenario);
+            if (legacySetVersion is not null)
+                startInfo.Environment["PACKAGE_VERSION"] = legacySetVersion;
             startInfo.Environment["AETHEUS_WORKING_DIR"] = ToShellPath(_root);
             startInfo.Environment["AETHEUS_NUGET_SIGNING_PFX_BASE64"] = "cGZ4";
             startInfo.Environment["AETHEUS_NUGET_SIGNING_PFX_PASSWORD"] = "fixture-password";
@@ -202,12 +291,13 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
             return RunAsync(startInfo);
         }
 
-        public Task<ProcessResult> RunPublicationAsync(string scenario)
+        public Task<ProcessResult> RunPublicationAsync(string scenario, string? packageVersion = null)
         {
             var startInfo = CreateStartInfo(Path.Combine(
                 FindRepoRoot(), "deploy", "scripts", "publish-observability-package.sh"));
             startInfo.ArgumentList.Add("telemetry");
             ConfigureCommonEnvironment(startInfo, scenario);
+            startInfo.Environment["PACKAGE_VERSION"] = packageVersion ?? TelemetryVersion;
             startInfo.Environment["WORKSPACE"] = ToShellPath(_root);
             startInfo.Environment["AETHEUS_PACKAGE_BASE_URL"] = "https://packages.invalid";
             startInfo.Environment["AETHEUS_PACKAGE_TOKEN"] = "aeth_pat_signature+/=";
@@ -218,7 +308,7 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
 
         private void ConfigureCommonEnvironment(ProcessStartInfo startInfo, string scenario)
         {
-            startInfo.Environment["PACKAGE_VERSION"] = Version;
+            startInfo.Environment.Remove("PACKAGE_VERSION");
             startInfo.Environment["AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT"] = ExpectedFingerprint;
             startInfo.Environment["EXPECTED_TEST_FINGERPRINT"] = ExpectedFingerprint;
             startInfo.Environment["FAKE_VERIFY_SCENARIO"] = scenario;
@@ -255,7 +345,7 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
             return new ProcessResult(process.ExitCode, await standardOutput, await standardError);
         }
 
-        private static async Task CreateCandidateAsync(string root, string kind, string packageName)
+        private static async Task CreateCandidateAsync(string root, string kind, string packageName, string version)
         {
             var output = Path.Combine(root, ".package-candidate", kind);
             Directory.CreateDirectory(output);
@@ -267,11 +357,17 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
                 Path.Combine(output, "SHA256SUMS"),
                 $"{digest}  {packageName}\n",
                 TestContext.Current.CancellationToken);
-            await File.WriteAllTextAsync(
-                Path.Combine(output, "provenance.json"),
-                "{}",
-                TestContext.Current.CancellationToken);
+            await WriteProvenanceAsync(output, kind, version);
         }
+
+        // Same layout as the child pipeline's JSON.stringify(provenance, null, 2); null attests no version.
+        private static Task WriteProvenanceAsync(string output, string kind, string? version) =>
+            File.WriteAllTextAsync(
+                Path.Combine(output, "provenance.json"),
+                version is null
+                    ? "{}\n"
+                    : $"{{\n  \"schema\": 1,\n  \"packageKind\": \"{kind}\",\n  \"packageVersion\": \"{version}\",\n  \"artifacts\": []\n}}\n",
+                TestContext.Current.CancellationToken);
 
         private static async Task WriteExecutableAsync(string path, string contents)
         {

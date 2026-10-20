@@ -11,10 +11,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R-181: the audit page and the system logs page follow their data over the admin hub
-/// instead of a Refresh button.
-/// </summary>
+/// <summary>Verifies that audit and system log pages receive data changes through the admin
+/// hub.</summary>
 public sealed class LiveLogPushTests
 {
     [Fact]

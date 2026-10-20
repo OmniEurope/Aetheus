@@ -3,12 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// A page has one title, the one its <c>OmniPageHeader</c> renders (PLAN-003 D2). The shared lists
-/// (pipelines, releases, environments, libraries, vaults) each had their own title in the toolbar
-/// they draw in global mode, and every global page that hosts one also renders an <c>OmniPageHeader</c>:
-/// /pipelines read "Pipelines" twice, and so did four other pages (PLAN-004 R-04).
-/// </summary>
+/// <summary>The page header owns the page title; shared list toolbars must not duplicate
+/// it.</summary>
 public sealed class ListToolbarTitleAuditTests
 {
     private static readonly Regex Toolbar = new(
@@ -35,9 +31,7 @@ public sealed class ListToolbarTitleAuditTests
             }
         }
 
-        // Recette R-218 moved the create actions of four lists into the page header, so fewer toolbars remain;
-        // recette R-416 moved the releases help link into its page header, which removed that toolbar too.
-        // The count only proves the scan still finds the remaining toolbars (Git repositories, templates).
+        // The count confirms that remaining Git-repository and template toolbars are detected.
         Assert.True(toolbars >= 2, $"Expected the shared list toolbars to be found, got {toolbars}.");
         Assert.True(violations.Count == 0,
             "A list toolbar repeats the page title that OmniPageHeader already renders:\n"

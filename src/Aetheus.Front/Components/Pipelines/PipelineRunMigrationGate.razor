@@ -1,0 +1,52 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+
+@* Recette R1-43: what the expand/contract gate of each blue-green migrate step concluded, kept by the
+   control plane instead of living only in the step log. Nothing renders for a run without a gate. *@
+@if (_gates is { Count: > 0 } gates)
+{
+    <OmniCard Class="run-attestation-card run-migration-gate-card" data-testid="run-migration-gate">
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.ShieldCheck" Class="run-tile-icon" /> @L["MigrationGateTitle"]</OmniText>
+        <OmniTimeline Label="@L["MigrationGateTitle"]">
+            @foreach (var gate in gates)
+            {
+                <OmniTimelineItem DateText="@gate.RecordedAt.ToString("g")" Title="@StepLabel(gate)" Level="OmniHeadingLevel.H6">
+                    <div class="run-migration-gate-head" data-testid="migration-gate-verdict">
+                        <OmniBadge Fill="OmniFill.Solid" Tone="@OutcomeTone(gate.Outcome)">@L.Localize(gate.Outcome)</OmniBadge>
+                        <span class="run-attestation-hint">@Summary(gate)</span>
+                    </div>
+                    @if (gate.Detail is { Length: > 0 } detail)
+                    {
+                        <p class="run-attestation-hint run-migration-gate-detail">@detail</p>
+                    }
+                    @if (gate.Migrations.Count > 0)
+                    {
+                        <ul class="run-migration-gate-list">
+                            @foreach (var migration in gate.Migrations)
+                            {
+                                <li class="run-migration-gate-item" data-testid="migration-gate-migration">
+                                    <div class="run-migration-gate-head">
+                                        <OmniBadge Fill="OmniFill.Tonal" Tone="@(migration.Compatible ? OmniTone.Success : OmniTone.Danger)">@L[migration.Compatible ? "MigrationGateMigrationCompatible" : "MigrationGateMigrationRefused"]</OmniBadge>
+                                        <code class="run-migration-gate-id" title="@migration.MigrationId">@migration.MigrationId</code>
+                                    </div>
+                                    @if (migration.Violations.Count > 0)
+                                    {
+                                        <ul class="run-migration-gate-violations">
+                                            @foreach (var violation in migration.Violations)
+                                            {
+                                                <li>@violation</li>
+                                            }
+                                        </ul>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                        @if (gate.PendingCount > gate.Migrations.Count)
+                        {
+                            <p class="run-attestation-hint">@string.Format(L["MigrationGateMoreNotListed"].Value, gate.PendingCount - gate.Migrations.Count)</p>
+                        }
+                    }
+                </OmniTimelineItem>
+            }
+        </OmniTimeline>
+    </OmniCard>
+}

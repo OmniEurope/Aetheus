@@ -1,17 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-# Gives each coverlet.MTP Cobertura report the layout coverlet.collector used to write.
-#
-# coverlet.collector (VSTest) wrote <results>/<guid>/coverage.cobertura.xml. coverlet.MTP writes
-# <results>/coverage.cobertura.<timestamp>.xml instead, and every reader of the evidence looks for the
-# exact name: classify-dotnet-test-result.mjs, ci/verify-test-evidence.sh, merge-quality-coverage.sh,
-# and the agent's default coverage glob. Each stamped report moves to <results>/<timestamp>/ under the
-# old name, so several reports in one directory never overwrite each other.
-#
-# A directory without a stamped report is left as it is: whether coverage is missing is the
-# classifier's verdict to give, not this script's.
-#
-#   $1  results directory of one test run
+# Normalize timestamped coverlet.MTP output to the filename evidence readers expect, using separate
+# timestamp directories to prevent collisions; leave missing-report classification to the caller.
+# See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 set -eu
 
 RESULTS="${1:?results directory is required}"

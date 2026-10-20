@@ -13,6 +13,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" />
+    <!-- Direct ref keeps the patched release ahead of the vulnerable transitive one (Analyzer.Testing). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
   </ItemGroup>

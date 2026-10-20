@@ -8,11 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// PLAN-003 lot 30 / D22: the readiness panel offers to create the libraries and vaults the templates
-/// require. It also fixes the titles those findings had: they fell through to "missing environments"
-/// and linked to "add a server".
-/// </summary>
+/// <summary>Readiness findings offer relevant library and vault creation actions.</summary>
 public sealed class PipelineSetupReadinessPanelTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -35,7 +31,7 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
 
         Assert.Contains("ReadinessMissingRequiredLibraries", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("ReadinessMissingEnvironments", cut.Markup, StringComparison.Ordinal);
-        // The wrong remedy it used to point at.
+        // An unrelated server-creation remedy must not be offered.
         Assert.DoesNotContain("/servers/add-agent", cut.Markup, StringComparison.Ordinal);
         Assert.Single(cut.FindAll("[data-testid='setup-provision']"));
     }
@@ -78,8 +74,8 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
         Assert.Contains(_handler.Requests, request => request.Url.Contains("api/pipelines/setup/provision", StringComparison.Ordinal));
     }
 
-    /// <summary>Recette R2-121: each missing adapter says what the project has to write in it, not only
-    /// its name; an adapter no template documents is listed bare.</summary>
+    /// <summary>Each missing adapter says what the project has to write in it, not only its name;
+    /// an adapter no template documents is listed bare.</summary>
     [Fact]
     public void AMissingAdapter_SaysWhatItHasToDo()
     {
@@ -108,8 +104,8 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
         Assert.Contains("/git-repositories?projectId=4", cut.Markup, StringComparison.Ordinal);
     }
 
-    /// <summary>Recette R1-26: what was created stays listed as created, each element opens with the
-    /// summary as its return address, and only once opened does it read as checked.</summary>
+    /// <summary>What was created stays listed as created, each element opens with the summary as
+    /// its return address, and only once opened does it read as checked.</summary>
     [Fact]
     public void ACreatedElement_IsCheckedOnlyOnceTheUserOpenedIt()
     {
@@ -146,8 +142,8 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
         Assert.True(state.AllChecked(4));
     }
 
-    /// <summary>Recette R1-26: coming back to the summary (a new panel) shows the same created elements
-    /// with what was already checked.</summary>
+    /// <summary>Coming back to the summary (a new panel) shows the same created elements with what
+    /// was already checked.</summary>
     [Fact]
     public void CreatedElements_SurviveLeavingAndComingBackToTheSummary()
     {
@@ -166,8 +162,8 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
         Assert.Empty(cut.FindAll("[data-testid='setup-provisioned-pending']"));
     }
 
-    /// <summary>Recette R1-19: the missing repository is created in the dialog over the wizard, never by
-    /// leaving it, and the host is asked to check again once it exists.</summary>
+    /// <summary>The missing repository is created in the dialog over the wizard, never by leaving
+    /// it, and the host is asked to check again once it exists.</summary>
     [Fact]
     public void NoRepository_OpensTheCreateDialogOverThePage_AndRechecksAfterIt()
     {
@@ -189,8 +185,8 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
         Assert.Equal(1, rechecked);
     }
 
-    /// <summary>Recette R1-19 / R1-25: the pages that create an environment or add a server carry the
-    /// summary as their return address.</summary>
+    /// <summary>The pages that create an environment or add a server carry the summary as their
+    /// return address.</summary>
     [Fact]
     public void EnvironmentAndServerFixes_CarryTheSummaryAsReturnAddress()
     {
@@ -212,7 +208,7 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
         Assert.Contains($"/servers/add-agent?returnUrl={Uri.EscapeDataString(summary)}", hrefs);
     }
 
-    /// <summary>Recette R1-32: an external repository is never announced as missing files.</summary>
+    /// <summary>An external repository is never announced as missing files.</summary>
     [Fact]
     public void ExternalRepositoryNotInspected_SaysTheFilesCannotBeChecked()
     {

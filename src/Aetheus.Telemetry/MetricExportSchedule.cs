@@ -3,12 +3,11 @@ using System.Globalization;
 
 namespace Aetheus.Telemetry;
 
-/// <summary>
-/// PLAN-013 lot 4: how often the metrics are sent. It starts at the OpenTelemetry default (60 s, or the
+/// <summary> How often the metrics are sent. It starts at the OpenTelemetry default (60 s, or the
 /// <c>OTEL_METRIC_EXPORT_INTERVAL</c> variable in milliseconds), then takes the interval of the
-/// application's project as soon as Aetheus hands it over (<see cref="ServerConfigurationClient"/>). A
-/// server that does not hand it over (an older Aetheus) leaves the starting interval in place.
-/// </summary>
+/// application's project as soon as Aetheus hands it over (<see
+/// cref="ServerConfigurationClient"/>). A server that does not hand it over (an older Aetheus)
+/// leaves the starting interval in place. </summary>
 internal sealed class MetricExportSchedule
 {
     internal static readonly TimeSpan DefaultInterval = TimeSpan.FromSeconds(60);

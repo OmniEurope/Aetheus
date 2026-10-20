@@ -191,12 +191,9 @@ public class GitSmartHttpServiceTests : IDisposable
         await _lightRepoMock.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    /// <summary>
-    /// What this side still owes: announce the push with the ACCEPTED commit and the resolved
-    /// repository path, on the application-lifetime token rather than the disconnected client's.
-    /// What the announcement then triggers is asserted in GitPushPipelineTriggerHandlerTests - the
-    /// point of the split is that this module no longer decides it.
-    /// </summary>
+    /// <summary>Verifies push announcements carrying the accepted commit and repository path under
+    /// the application-lifetime token. GitPushPipelineTriggerHandlerTests covers subscriber
+    /// behavior (ADR-039).</summary>
     [Fact]
     public async Task MarkPushedAsync_AnnouncesTheAcceptedPushOnTheLifetimeToken()
     {

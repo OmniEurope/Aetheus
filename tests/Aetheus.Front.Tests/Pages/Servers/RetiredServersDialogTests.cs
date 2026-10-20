@@ -7,10 +7,8 @@ using ServersPage = Aetheus.Front.Components.Servers.Servers;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// PLAN-004 R-11: retired servers leave the fleet grid and are listed here, where the only
-/// irreversible step - the permanent deletion - is offered to a server admin.
-/// </summary>
+/// <summary>Retired servers have a separate list where permanent deletion requires
+/// server-administrator permission.</summary>
 public sealed class RetiredServersDialogTests : BunitContext
 {
     private BunitTestHelper.TestHandler _handler = null!;
@@ -106,10 +104,11 @@ public sealed class RetiredServersDialogTests : BunitContext
         var opened = new List<string>();
         Services.GetRequiredService<OmniDialogService>().OnOpen += (title, _, _, _) => opened.Add(title ?? string.Empty);
 
-        Assert.Single(cut.FindAll("button[aria-label='RetireServer']"));
         cut.Find(".omni-overflow-menu__trigger").Click();
         cut.FindAll(".omni-menu__item").Single(item => item.TextContent.Contains("RetiredServers", StringComparison.Ordinal)).Click();
 
         Assert.Equal(["RetiredServers"], opened);
+        // STD-BTN detection 11: retiring a server is an entry of the row's "More actions" menu.
+        Assert.NotNull(cut.FindMenuItem("RetireServer"));
     }
 }

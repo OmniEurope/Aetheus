@@ -3,11 +3,9 @@ using System.Collections.Frozen;
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// The wording keys and fix pages of each readiness finding, shared by the setup wizard's summary, the
-/// project's pipelines page and the confirmation before a run (recette R1-28), so the three say the
-/// same thing about the same cause.
-/// </summary>
+/// <summary> The wording keys and fix pages of each readiness finding, shared by the setup wizard's
+/// summary, the project's pipelines page and the confirmation before a run, so the three say the
+/// same thing about the same cause. </summary>
 internal static class PipelineReadinessText
 {
     public static string TitleKey(PipelineSetupReadinessKind kind) => kind switch
@@ -17,9 +15,8 @@ internal static class PipelineReadinessText
         PipelineSetupReadinessKind.MissingAdapterScripts => "ReadinessMissingAdapterScripts",
         PipelineSetupReadinessKind.NoRunnerConfigured => "ReadinessNoRunner",
         PipelineSetupReadinessKind.NoDeployRunnerConfigured => "ReadinessNoDeployRunner",
-        // These three used to fall through to "missing environments", with an "add a server" link:
-        // a missing library was announced as a missing environment and sent the reader to the wrong
-        // page. Each now says what it is.
+        // Each missing dependency has its own description and destination so the proposed action
+        // matches the cause.
         PipelineSetupReadinessKind.MissingRequiredLibraries => "ReadinessMissingRequiredLibraries",
         PipelineSetupReadinessKind.MissingRequiredVaults => "ReadinessMissingRequiredVaults",
         PipelineSetupReadinessKind.MissingRequiredCapabilities => "ReadinessMissingRequiredCapabilities",
@@ -30,10 +27,8 @@ internal static class PipelineReadinessText
 
     public static string HintKey(PipelineSetupReadinessKind kind) => $"{TitleKey(kind)}Hint";
 
-    /// <summary>
-    /// Recette R2-121: what a missing file has to do, so the author of a new project knows what to
-    /// write rather than only its name. Null for a file the templates do not document.
-    /// </summary>
+    /// <summary> What a missing file has to do, so the author of a new project knows what to write
+    /// rather than only its name. Null for a file the templates do not document. </summary>
     public static string? ItemRoleKey(PipelineSetupReadinessKind kind, string item)
     {
         var fileName = item[(item.LastIndexOf('/') + 1)..];
@@ -80,12 +75,9 @@ internal static class PipelineReadinessText
         _ => null
     };
 
-    /// <summary>
-    /// The page that fixes a finding. A missing adapter script has no page that writes it (the fix is
-    /// a commit), so that row links to the repository browser. Pages that create something and then
-    /// send the user back (an environment, a server) carry <paramref name="returnUrl"/>, recette R1-19 /
-    /// R1-25. A missing repository has no address here: it is created in a dialog over the page.
-    /// </summary>
+    /// <summary>Finding links lead to the relevant configuration page or repository browser.
+    /// Creation pages preserve <paramref name="returnUrl"/>; a missing repository is created in a
+    /// dialog.</summary>
     public static string? RemediationHref(PipelineSetupReadinessKind kind, int projectId, string? returnUrl) => kind switch
     {
         PipelineSetupReadinessKind.EmptyBranch or PipelineSetupReadinessKind.MissingAdapterScripts

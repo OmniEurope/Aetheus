@@ -10,10 +10,8 @@ internal sealed class PipelineRunLauncher(
     NotifyHelper toast,
     IStringLocalizer<AppStrings> localizer)
 {
-    /// <summary>
-    /// Opens the launched run's page (the default). Recette R2-038: the pipeline page keeps the user
-    /// on its runs grid instead, where the new run appears.
-    /// </summary>
+    /// <summary>Successful launch opens the run by default; callers may retain their runs grid
+    /// instead.</summary>
     public bool OpenLaunchedRun { get; init; } = true;
 
     /// <summary>
@@ -35,7 +33,7 @@ internal sealed class PipelineRunLauncher(
     public async Task<PipelineRunLaunchResult?> LaunchAsync(int pipelineId, PipelineLaunchChoice choice)
     {
         if (!await runGate.ConfirmPreflightAsync(pipelineId, choice.SourceBranch)) return null;
-        return await TriggerAsync(pipelineId, choice.SourceBranch, choice.Parameters);
+        return await TriggerAsync(pipelineId, choice.SourceBranch, choice.Parameters, choice.RunToEnd);
     }
 
     /// <summary>
@@ -43,9 +41,9 @@ internal sealed class PipelineRunLauncher(
     /// fixed its parameters), then opens the new run or reports why it was refused.
     /// </summary>
     public async Task<PipelineRunLaunchResult?> TriggerAsync(
-        int pipelineId, string? sourceBranch, Dictionary<string, string>? parameters)
+        int pipelineId, string? sourceBranch, Dictionary<string, string>? parameters, bool runToEnd = false)
     {
-        var outcome = await api.Pipelines.TriggerPipelineRunAsync(pipelineId, parameters, sourceBranch);
+        var outcome = await api.Pipelines.TriggerPipelineRunAsync(pipelineId, parameters, sourceBranch, runToEnd: runToEnd);
         if (outcome.Value is not null)
         {
             // Straight to the new run, in the SPA, unless the caller shows it where the user already is.
@@ -54,9 +52,8 @@ internal sealed class PipelineRunLauncher(
             return new PipelineRunLaunchResult(outcome.Value);
         }
 
-        // R2-039: the reason comes from the body whatever its shape. Joining Error.Errors threw on the
-        // error middleware's body, whose "errors": null left that list null, and the page fell into
-        // its error boundary instead of saying why the launch was refused.
+        // Error payloads may omit or null the errors array; extract the refusal reason without
+        // assuming its shape.
         var reason = outcome.ErrorMessage is { } refusal ? refusal
             : outcome.NotFound ? localizer["RunNotFound"].Value
             : outcome.StatusCode == System.Net.HttpStatusCode.Forbidden ? localizer["PipelineRunForbidden"].Value

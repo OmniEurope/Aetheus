@@ -12,7 +12,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-21: a commit written by Aetheus clears the repository's empty flag.</summary>
+/// <summary>A commit written by Aetheus clears the repository's empty flag.</summary>
 public class GitCommitRecorderTests
 {
     private readonly IHubContext<GitRealtimeHub> _hub = Substitute.For<IHubContext<GitRealtimeHub>>();

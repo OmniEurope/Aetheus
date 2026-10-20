@@ -8,11 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// What the Overview shows for data the agent never sent (SITE-FUNC-METRICS-001, SITE-FUNC-STORAGE-DATE-001):
-/// a finished load with no metric reads "unavailable", not "loading" forever, and a DateTime.MinValue
-/// ("never") is never printed as a year-1 date.
-/// </summary>
+/// <summary>A completed load without agent metrics must show unavailable, and DateTime.MinValue
+/// must not render as a year-one date.</summary>
 public sealed class ServerOverviewMissingDataTests : BunitContext
 {
     public ServerOverviewMissingDataTests() => BunitTestHelper.RegisterServices(this);

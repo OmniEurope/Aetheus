@@ -1,8 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
 @inherits AppWebAnalyticsSummaryViewBase
-@* Recette R-355: the month's top pages, moved out of the Visitors view into their own telemetry
-   sub-tab. Same data source as the Visitors view (the web-analytics summary of the app). *@
+@* Show the month's top pages in their own telemetry sub-tab while sharing the application's
+   web-analytics summary as the data source. *@
 
 @if (_loading)
 {
@@ -21,8 +21,8 @@ else if (_summary is null)
 }
 else
 {
-    @* Recette R-443: the standard list, not a grid capped inside a card: every route of the month
-       (the backend bounds them to the per-app route limit), virtualized, down to the bottom of the page. *@
+    @* Virtualize the month's routes across the available page height so the backend-bounded list
+       remains usable without an additional capped card. *@
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["TopPagesThisMonth"]</OmniHeading>
     <AetheusDataGrid Data="@_summary.TopPages" TItem="AppWebAnalyticsPageDto" KeyProperty="Route"
                      Virtualize="true" FullHeight="true" PageSize="50" VirtualizationOverscanCount="3"

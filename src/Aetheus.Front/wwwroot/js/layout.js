@@ -4,9 +4,42 @@ Aetheus.goBack = function () {
     window.history.back();
 };
 
-// PLAN-005 lot 9 / D50: another tab of this browser rotated the tokens. The "storage" event only
-// fires in the OTHER tabs, which is exactly who needs the new values; only the two token keys are
-// forwarded, and the listener is registered once per page.
+// Recette R3-29: a page opened on a pasted or typed address gets its logical parent (computed by
+// LogicalParentRoute in .NET) as the history entry just before it, so the browser's Back stays in the
+// document and the Blazor router shows the parent without a reload. Once per document, and only when
+// the document was opened on this very entry: not on a reload or a return through the history, not
+// once the application has moved (Blazor numbers its entries in history.state._index), not after a
+// full reload the application asked for from one of its own pages. The parent takes index -1 and the
+// page keeps index 0, the number Blazor read at start, so its own numbering stays consistent.
+Aetheus._isFirstEntryOfFreshDocument = function (state) {
+    const entry = performance.getEntriesByType('navigation')[0];
+    if (!entry || entry.type !== 'navigate') return false;
+    if (state && (state.aetheusParentEntry || (state._index ?? 0) !== 0)) return false;
+    return !(history.length > 1 && document.referrer
+        && new URL(document.referrer).origin === location.origin);
+};
+
+Aetheus.seedParentHistoryEntry = function (parentHref) {
+    if (Aetheus._parentEntrySeedAttempted) return false;
+    Aetheus._parentEntrySeedAttempted = true;
+    const here = location.href;
+    const state = history.state;
+    try {
+        if (!Aetheus._isFirstEntryOfFreshDocument(state)) return false;
+        const parent = new URL(parentHref, document.baseURI);
+        if (parent.origin !== location.origin || parent.href === here) return false;
+        history.replaceState({ _index: -1, aetheusParentEntry: true }, '', parent.href);
+        history.pushState({ userState: state?.userState, _index: 0, aetheusParentEntry: true }, '', here);
+        return true;
+    } catch {
+        // The history is put back as the browser made it: Back behaves as before.
+        if (location.href !== here) history.replaceState(state, '', here);
+        return false;
+    }
+};
+
+// Shares rotated token values with other browser tabs through a single storage-event listener
+// restricted to the two token keys.
 Aetheus.watchAuthStorage = function (dotnetRef, tokenKey, refreshTokenKey) {
     Aetheus._authSession = dotnetRef;
     if (Aetheus._authStorageWatched) return;
@@ -28,9 +61,8 @@ Aetheus.analyticsSignedIn = function () {
     }
 };
 
-// Recette R-471: the opaque identifier of the signed-in account, answered from memory like the yes/no
-// above. It is a keyed hash minted by the backend (the token's aetheus:avid claim), never the token, the
-// account name or an e-mail address; undefined when nobody is signed in.
+// Returns the signed-in visitor's opaque aetheus:avid keyed hash from memory, never a token,
+// account name or email address. Returns undefined when signed out.
 Aetheus.analyticsVisitor = function () {
     try {
         const id = Aetheus._authSession ? Aetheus._authSession.invokeMethod('VisitorForAnalytics') : null;
@@ -61,19 +93,6 @@ Aetheus.hideSplash = function () {
     // Fallback if transitionend never fires (reduced-motion, display quirks, interrupted transition).
     setTimeout(remove, 600);
 };
-
-
-// Recette R-390: OE's text size and control size, 1 to 10. Level 5 is the site as drawn and carries no
-// attribute; the others set data-oe-text-size / data-oe-control-size on <html>, which OE's stylesheet
-// reads (root font size, control scale). The boot script of index.html applies the same keys.
-Aetheus._setScale = function (attribute, level) {
-    var root = document.documentElement;
-    var value = parseInt(level, 10);
-    if (value >= 1 && value <= 10 && value !== 5) root.setAttribute(attribute, String(value));
-    else root.removeAttribute(attribute);
-};
-Aetheus.setTextSize = function (level) { Aetheus._setScale('data-oe-text-size', level); };
-Aetheus.setControlSize = function (level) { Aetheus._setScale('data-oe-control-size', level); };
 
 Aetheus.setLang = function (lang) {
     document.documentElement.lang = lang.substring(0, 2);
@@ -143,10 +162,8 @@ Aetheus.copyToClipboard = async function (text) {
     }
 };
 
-// PLAN-005 lot 4 / D35 (STD-BUSY): a busy button is not disabled, the veil keeps its look, so the
-// keyboard (Enter, Space, or Enter in a form's field, which clicks the submit button) could still
-// activate it and submit twice. Its clicks are swallowed here, in the capture phase, before Blazor's
-// own listeners see them. pointer-events: none already covers the mouse.
+// Captures clicks on busy controls before Blazor receives them to prevent duplicate keyboard
+// submissions while preserving the busy appearance (STD-BUSY).
 window.addEventListener('click', function (e) {
     if (e.target instanceof Element && e.target.closest('.btn-busy')) {
         e.preventDefault();
@@ -154,8 +171,7 @@ window.addEventListener('click', function (e) {
     }
 }, true);
 
-// PLAN-005 lot 2 / D32: true when a line-clamped element hides part of its text, so the toast shows
-// "Show more" only when there is more to show.
+// Detects clipped text so the toast offers Show more only when needed.
 Aetheus.isClamped = function (el) {
     return !!el && el.scrollHeight > el.clientHeight + 1;
 };
@@ -227,6 +243,19 @@ Aetheus.setLocal = function (key, value) {
         if (value === null || value === undefined) localStorage.removeItem(key);
         else localStorage.setItem(key, value);
     } catch { /* ignore */ }
+};
+
+// R1-66: the keys of this browser that start with one of the prefixes, with their values, for the
+// one-time copy of the preferences kept here before they moved to the server.
+Aetheus.localEntries = function (prefixes) {
+    const entries = {};
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && prefixes.some(prefix => key.startsWith(prefix))) entries[key] = localStorage.getItem(key);
+        }
+    } catch { /* blocked storage: nothing to copy */ }
+    return entries;
 };
 
 // Compact drawer viewport watcher (Astraia parity). A matchMedia("(max-width: 63.99rem)") listener
@@ -337,10 +366,8 @@ window.copyToClipboard = async function (text) {
     }
 };
 
-// The app used to have no way of knowing the network had come back. During a PC sleep the browser
-// freezes timers, and on wake the SignalR retry loop was still sitting inside a backoff step of up
-// to 30s - scheduled for a network condition that no longer applied. Both events below say "try
-// now"; the .NET side decides whether anything is actually waiting.
+// Signals network recovery and browser wake-up so .NET can retry pending connections without
+// waiting for a stale backoff timer.
 Aetheus._onConnectivityWake = function () {
     if (Aetheus._connectivityRef) {
         Aetheus._connectivityRef.invokeMethodAsync('OnConnectivityWake');
@@ -450,9 +477,8 @@ Aetheus.disposePageVisibilityWatcher = function () {
     Aetheus._pageVisibilityRef = null;
 };
 
-// PLAN-008 lot 44: the viewport side of AetheusVirtualList. Blazor's own <Virtualize> sizes its
-// spacers with a style attribute in markup, which a strict style-src-attr refuses; setProperty is
-// the path it leaves open, so the heights are applied here and the scroll position is reported back.
+// Applies AetheusVirtualList spacer heights through CSSOM and reports scroll positions, avoiding
+// style attributes prohibited by CSP.
 Aetheus._virtualLists = new WeakMap();
 
 Aetheus.sizeVirtualSpacer = function (spacer, height) {
@@ -504,12 +530,8 @@ Aetheus.unwatchVirtualList = function (root) {
     Aetheus._virtualLists.delete(root);
 };
 
-// Recette R-324: the page header (OmniPageHeader) folds its badges and actions behind its toggle as
-// soon as they no longer fit beside the title, whatever the viewport width, instead of squeezing
-// badges or letting buttons fall onto the breadcrumb line; OE folds them on a phone only. The frame is
-// measured unfolded (its natural layout) and marked data-compact when anything overflows; its CSS
-// lives with the header rules in app.css. The flag is a data attribute because Blazor owns the class
-// attribute. The title's sideways scroll and its chevrons (recette R-331) are OE's (omni-page-header.js).
+// Measures the unfolded header and sets data-compact when badges or actions overflow beside the
+// title. The data attribute avoids conflicting with Blazor's ownership of the class attribute.
 (function fitPageHeaders() {
     var frames = new Set();
     var queued = false;
@@ -576,13 +598,9 @@ Aetheus.unwatchVirtualList = function (root) {
     else start();
 })();
 
-// Recette R2-087: a page the reader comes back to finds its scroll positions again: the page's own
-// (#main-content) and those of the scrolling blocks inside it, such as a grid that fills the page and
-// scrolls its rows itself. The layout reports each navigation twice: before it (leaving: the positions
-// are kept under the address being left) and after it (arrived). A return is a browser back/forward
-// (popstate) or a move to the page just left, where the "Revenir" button usually leads. Each position is
-// put back once its block exists and is tall enough again (rows may still be arriving), and given up as
-// soon as the reader scrolls, presses a key or four seconds pass. Any other arrival changes nothing.
+// Restores main-content and nested scroll positions on back/forward navigation or return to the
+// last page. Restoration waits for content height and stops on user interaction or after four
+// seconds.
 Aetheus.pageScroll = (function () {
     var positions = new Map();
     var current = location.pathname + location.search;

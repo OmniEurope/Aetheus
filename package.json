@@ -5,7 +5,7 @@
   "license": "EUPL-1.2",
   "scripts": {
     "lint": "eslint src/Aetheus.Front/wwwroot/js/**/*.js",
-    "test:coverage": "nyc --reporter=cobertura --reporter=text-summary node --test tests/js/*.test.cjs",
+    "test:coverage": "nyc --reporter=cobertura --reporter=text-summary node --test tests/js/*.test.cjs tests/js/*.test.mjs",
     "duplication": "jscpd . --reporters json --output .analysis-duplication",
     "docs:build": "node docs-site/src/build.mjs",
     "docs:check": "node docs-site/src/build.mjs && node docs-site/src/check-links.mjs"

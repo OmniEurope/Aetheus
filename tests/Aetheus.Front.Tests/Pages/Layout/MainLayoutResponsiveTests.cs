@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Layout;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using OmniEurope.Blazor.Components;
@@ -37,7 +38,8 @@ public sealed class MainLayoutResponsiveTests : BunitContext
         Assert.True(cut.Instance.IsMobileViewport);
         Assert.True(cut.Instance.IsViewportKnown);
         Assert.False(cut.Instance.IsSidebarExpanded);
-        Assert.Contains("viewport-ready", cut.Markup, StringComparison.Ordinal);
+        // The render the change queued may wait behind the layout's own start-up work on the renderer.
+        await cut.WhenRenderedAsync(() => Assert.Contains("viewport-ready", cut.Markup, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -98,8 +100,15 @@ public sealed class MainLayoutResponsiveTests : BunitContext
         // through OpenChanged, so nothing in Aetheus closes it by hand any more.
         await cut.InvokeAsync(() => nav.NavigateTo(nav.Uri));
 
-        cut.WaitForAssertion(() => Assert.False(cut.Instance.IsSidebarExpanded));
-        Assert.Empty(cut.FindAll(".omni-sidebar__backdrop"));
+        // PLAN-002 B7: the closed flag and the markup without the veil are awaited together. The flag flips in
+        // the layout's OpenChanged handler and the render that drops the veil comes after it; under load the
+        // veil was measured still drawn (OmniSidebar.Open still true) 1.9 s after the flag read false, so a
+        // wait on the flag alone, then the veil asserted once, read the render before the close.
+        cut.WaitForAssertion(() =>
+        {
+            Assert.False(cut.Instance.IsSidebarExpanded);
+            Assert.Empty(cut.FindAll(".omni-sidebar__backdrop"));
+        });
     }
 
     [Fact]

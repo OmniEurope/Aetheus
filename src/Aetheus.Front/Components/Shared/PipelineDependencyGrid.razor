@@ -7,8 +7,8 @@
     ExpandMode="OmniDataGridRowMode.Single" RowRender="@OnRowRender" OnRowClick="@(args => OnRowClick(args.Item))"
     Class="@GridCssClass">
     <DetailTemplate Context="pipeline">
-        @* Recette R-121: one list, and only a row that launches other pipelines expands; its detail is
-           those children, in YAML execution order. *@
+        @* One list, and only a row that launches other pipelines expands; its detail is those
+           children, in YAML execution order. *@
         <div class="pipeline-dependency-details">
             <div class="pipeline-relation-header">
                 <span class="pipeline-relation-header-icon" aria-hidden="true">
@@ -46,6 +46,7 @@
         <OmniDataGridColumn Frozen="true" TItem="PipelineDependencyDto" Property="Name" Title="@L["Pipeline"]" MinWidth="11rem" Filterable="true">
             <Template Context="pipeline">
                 <a href="@PipelineHref(pipeline.Id)" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@pipeline.Name</a>
+                <PipelineOwnerBadge OwnerUsername="@pipeline.OwnerUsername" OwnerInactive="@pipeline.OwnerInactive" />
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PipelineDependencyDto" Property="ProjectName" Title="@L["Project"]" Width="10rem" Filterable="true"
@@ -72,7 +73,7 @@
             Class="pipeline-secondary-column" HeaderClass="pipeline-secondary-column">
             <Template Context="pipeline">@L.Localize(pipeline.TriggerType)</Template>
         </OmniDataGridColumn>
-        @* Recette R-213: the model column filters on the model name the cell shows (or "autonomous"). *@
+        @* The model column filters on the model name the cell shows (or "autonomous"). *@
         <OmniDataGridColumn TItem="PipelineDependencyDto" Key="@TemplateColumn" Value="@TemplateValue" Title="@L["Template"]" Width="11rem"
             Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true"
             Visible="@FleetAvailable">
@@ -95,8 +96,8 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        @* Recette R-213: the status column filters on the catalogue statuses of the summary chips, with
-           the same rules (PipelineCatalogView), a row passing when it matches any chosen status. *@
+        @* The status column filters on the catalogue statuses of the summary chips, with the same
+           rules (PipelineCatalogView), a row passing when it matches any chosen status. *@
         <OmniDataGridColumn TItem="PipelineDependencyDto" Key="@StatusColumn" Title="@L["Status"]" Width="9rem"
             Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect"
             FilterValues="@StatusCandidates" FormatFilterValue="@StatusText" FilterPredicate="@StatusPredicate"
@@ -124,10 +125,9 @@
         <OmniDataGridColumn TItem="PipelineDependencyDto" Title="@L["Actions"]" Width="13rem" Sortable="false" TextAlign="OmniDataGridTextAlign.End"
             Class="pipeline-actions-column" HeaderClass="pipeline-actions-column">
             <Template Context="pipeline">
-                @* Recette R-123: Run stays on the row, and so does the star (R-119 keeps it inline); edit
-                   and the model update move into the row's "..." menu. The star is a ghost icon button
-                   (R-410). Run is blue on every row: a STD-BTN exception chosen by the user (R-414,
-                   2026-09-28), where the importance rule keeps a repeated row action discreet. *@
+                @* Keep Run and the favourite star directly available while secondary actions use
+                   the row menu; Run uses the product's blue STD-BTN exception and the star remains
+                   a ghost icon. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End" Class="pipeline-row-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => SetFavorite(pipeline.Id, !IsFavorite(pipeline.Id)))" Disabled="@PendingFavoritePipelineIds.Contains(pipeline.Id)" Class="@(IsFavorite(pipeline.Id) ? "pipeline-favorite-button active" : "pipeline-favorite-button")" title="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])" Label="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])"><OmniIcon Name="@MaterialIconMap.Resolve((IsFavorite(pipeline.Id) ? "star" : "star_border"))" /></OmniButton>
                     <OmniSplitButton Text="@L["Run"]" OnClick="@(() => RunPipeline(pipeline.Id, null))"

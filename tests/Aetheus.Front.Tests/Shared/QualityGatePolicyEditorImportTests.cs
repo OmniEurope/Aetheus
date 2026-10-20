@@ -3,11 +3,8 @@ using Aetheus.Front.Components.Shared;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// PLAN-015 lot 1: what an imported quality gate must hold before the editor accepts it. A file that
-/// passed here with a duplicate key, a rule with no target or a metric with no threshold would rewrite
-/// the gate with rules that judge nothing.
-/// </summary>
+/// <summary>Imported gates must have unique keys, rule targets and metric thresholds so accepted
+/// rules evaluate meaningful criteria.</summary>
 public sealed class QualityGatePolicyEditorImportTests
 {
     private static UpsertAnalysisPolicyRequest Metric(string key = "quality.coverage") => new()

@@ -33,6 +33,11 @@ internal sealed class PipelineConfiguration : IEntityTypeConfiguration<Pipeline>
                .WithMany(ps => ps.Pipelines)
                .HasForeignKey(e => e.ProjectServerId)
                .OnDelete(DeleteBehavior.SetNull);
+        // Nullable and SetNull: deleting a profile only returns its pipelines to automatic selection.
+        builder.HasOne(e => e.AiRunnerProfile)
+               .WithMany()
+               .HasForeignKey(e => e.AiRunnerProfileId)
+               .OnDelete(DeleteBehavior.SetNull);
     }
 }
 
@@ -47,6 +52,7 @@ internal sealed class PipelineRunConfiguration : IEntityTypeConfiguration<Pipeli
         builder.Property(e => e.BranchName).HasMaxLength(200);
         builder.Property(e => e.CommitHash).HasMaxLength(64);
         builder.Property(e => e.RepositoryUrl).HasMaxLength(2048);
+        builder.Property(e => e.ReleaseSeries).HasMaxLength(ReleaseSeries.MaxLength);
         builder.Property(e => e.IdempotencyKey).HasMaxLength(PipelineRunRequest.MaxIdempotencyKeyLength);
         builder.HasIndex(e => new { e.PipelineId, e.IdempotencyKey })
                .IsUnique()
@@ -110,5 +116,18 @@ internal sealed class PipelineRunArtifactInputConfiguration : IEntityTypeConfigu
                .WithMany()
                .HasForeignKey(e => e.ReleaseId)
                .OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+internal sealed class PipelineMigrationGateVerdictConfiguration : IEntityTypeConfiguration<PipelineMigrationGateVerdict>
+{
+    public void Configure(EntityTypeBuilder<PipelineMigrationGateVerdict> builder)
+    {
+        builder.HasIndex(e => e.PipelineRunId);
+        builder.Property(e => e.Detail).HasMaxLength(MigrationGateReport.MaxTextLength);
+        builder.HasOne(e => e.PipelineRun)
+               .WithMany(r => r.MigrationGateVerdicts)
+               .HasForeignKey(e => e.PipelineRunId)
+               .OnDelete(DeleteBehavior.Cascade);
     }
 }

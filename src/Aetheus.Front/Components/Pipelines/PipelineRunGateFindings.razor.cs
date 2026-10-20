@@ -5,7 +5,7 @@ namespace Aetheus.Front.Components.Pipelines;
 using Aetheus.Front.Components.Analysis;
 public partial class PipelineRunGateFindings : IDisposable
 {
-    /// <summary>Recette R-485: the export reads the listed findings page after page, up to this many.</summary>
+    /// <summary>The export reads the listed findings page after page, up to this many.</summary>
     internal const int ExportLimit = 2_000;
     private const int ExportPageSize = 200;
 
@@ -17,20 +17,20 @@ public partial class PipelineRunGateFindings : IDisposable
     [Inject] private PermissionService Permissions { get; set; } = default!;
     [Parameter, EditorRequired] public AnalysisRunGateDto Gate { get; set; } = default!;
 
-    /// <summary>Recette R-485: the runs whose findings the tab lists (the run and the runs it triggered),
-    /// read from the server page by page. Empty means the gate's own run.</summary>
+    /// <summary>The runs whose findings the tab lists (the run and the runs it triggered), read
+    /// from the server page by page. Empty means the gate's own run.</summary>
     [Parameter] public IReadOnlyList<int> RunIds { get; set; } = [];
 
     [Parameter] public int? ProjectId { get; set; }
 
-    /// <summary>Recette R2-036: the run's project, the start of the exported prompt's file name.</summary>
+    /// <summary>The run's project, the start of the exported prompt's file name.</summary>
     [Parameter] public string? ProjectName { get; set; }
 
-    /// <summary>Recette R2-027: raised with the finding whose decision was reverted, open again.</summary>
+    /// <summary>Raised with the finding whose decision was reverted, open again.</summary>
     [Parameter] public EventCallback<int> FindingReopened { get; set; }
 
-    /// <summary>Recette R2-129: the letter the run is listed with; when the assurance seal set it, the tab
-    /// says so and gives the analysis letter beside it.</summary>
+    /// <summary>The letter the run is listed with; when the assurance seal set it, the tab says so
+    /// and gives the analysis letter beside it.</summary>
     [Parameter] public AnalysisGrade? RunGrade { get; set; }
 
     /// <summary>The tests the seal held the candidate back for, each traced to its producing step when known.</summary>
@@ -51,13 +51,36 @@ public partial class PipelineRunGateFindings : IDisposable
 
     public void Dispose() => Permissions.OnPermissionsChanged -= PermissionsChanged;
 
-    // Recette R-527: a finding someone accepted, mitigated or ruled a false positive is not left to do.
+    // A finding someone accepted, mitigated or ruled a false positive is not left to do.
     private bool _showDecided;
 
     /// <summary>How many findings the list holds with the decided ones shown or not, from the gate's counts.</summary>
     private int ListedCount => _showDecided ? Gate.FindingCount + Gate.DecidedFindingCount : Gate.FindingCount;
 
     private IReadOnlyList<int> EffectiveRunIds => RunIds.Count > 0 ? RunIds : [Gate.PipelineRunId];
+
+    /// <summary>Recette R1-63: the alert in words ("Cycles entre types : 46, seuil 0"), the measure named as
+    /// the rest of the page names it; a target this page does not know keeps the technical text.</summary>
+    private string ViolationLabel(AnalysisRunGateViolationDto violation)
+    {
+        var key = violation.TargetKey switch
+        {
+            "architecture.cycles.namespace" => "AnalysisMetricNamespaceCycles",
+            "architecture.cycles.type" => "AnalysisMetricTypeCycles",
+            "complexity.methods.high" => "AnalysisMetricComplexMethods",
+            "complexity.cyclomatic.maximum" => "AnalysisMaximumComplexity",
+            "complexity.cyclomatic.average" => "AnalysisMetricAverageComplexity",
+            "coverage.line.percent" => "AnalysisTestedLines",
+            "duplication.percentage" => "AnalysisDuplicatedCode",
+            _ => null
+        };
+        if (key is null) return ViolationText(violation);
+        var text = $"{L[key]} : {violation.ObservedValue ?? "-"}";
+        if (string.IsNullOrWhiteSpace(violation.Threshold)) return text;
+        // A degradation is held against the previous analysis, whose value the evidence carries as its threshold.
+        var word = string.Equals(violation.Operator, "Degraded", StringComparison.Ordinal) ? "AnalysisPreviousWord" : "AnalysisThresholdWord";
+        return $"{text} ({L[word]} {violation.Threshold})";
+    }
 
     /// <summary>Recette R2-138: "quality.architecture.cycles: architecture.cycles.type = 40 (> 0)". A
     /// finding target reads as its rule; the fingerprint after the colon says nothing to a reader.</summary>
@@ -86,8 +109,8 @@ public partial class PipelineRunGateFindings : IDisposable
         if (_grid is not null) await _grid.Reload();
     }
 
-    /// <summary>Recette R-485: one page of the tree's findings, filtered and sorted by the server as the
-    /// column headers ask.</summary>
+    /// <summary>One page of the tree's findings, filtered and sorted by the server as the column
+    /// headers ask.</summary>
     private async Task LoadAsync(GridLoadArgs args)
     {
         var request = RequestOf(args);
@@ -97,7 +120,7 @@ public partial class PipelineRunGateFindings : IDisposable
         _lastRequest = request;
     }
 
-    /// <summary>Recette R2-124: one page of the export, the same query as the grid's load.</summary>
+    /// <summary>One page of the export, the same query as the grid's load.</summary>
     private async Task<PaginatedResult<AnalysisFindingDto>> ReadExportAsync(GridLoadArgs args)
     {
         var page = await Api.Analysis.GetAnalysisRunFindingsAsync(RequestOf(args));
@@ -145,9 +168,8 @@ public partial class PipelineRunGateFindings : IDisposable
     private void OpenFinding(AnalysisFindingDto finding) => Navigation.NavigateTo(AnalysisFindingColumns.FindingHref(finding.Id, Gate.PipelineRunId));
     private void OpenProjectQuality(int projectId) => Navigation.NavigateTo($"/projects/{projectId}/quality");
 
-    /// <summary>PLAN-003 lot 22: the export opens the full text first (download, copy, close)
-    /// instead of downloading a file nobody has seen. Recette R-485: the findings the list shows, with
-    /// its filters, read page after page up to <see cref="ExportLimit"/>.</summary>
+    /// <summary>The export previews the grid-filtered findings before download, reading successive
+    /// pages up to <see cref="ExportLimit"/>.</summary>
     private async Task ExportAllAiPromptAsync()
     {
         _exporting = true;
@@ -159,7 +181,7 @@ public partial class PipelineRunGateFindings : IDisposable
                 new Dictionary<string, object?>
                 {
                     [nameof(TextExportDialog.Text)] = AnalysisAiPromptBuilder.BuildBulk(findings, L),
-                    // Recette R2-036: "aetheus-run-2478-findings-2026-10-01.md".
+                    // "aetheus-run-2478-findings-2026-10-01.md".
                     [nameof(TextExportDialog.FileName)] = ExportFileNames.Dated(
                         ProjectName, "project", $"run-{Gate.PipelineRunId}-findings", DateTime.Now, "md"),
                     [nameof(TextExportDialog.ContentType)] = "text/markdown"

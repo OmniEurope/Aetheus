@@ -4,12 +4,10 @@ using System.Text;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Recette R2-036: readable names for the files Aetheus exports. The owner's name first (the
-/// application or the project, lowercase, without accents, words joined by hyphens), then what the
-/// file holds, then the date: <c>aetheus-logs</c>, <c>aetheus-run-2478-findings-2026-10-01.md</c>.
-/// When the name is unknown, a technical stand-in (<c>app-3</c>) keeps the file recognisable.
-/// </summary>
+/// <summary> Readable names for the files Aetheus exports. The owner's name first (the application
+/// or the project, lowercase, without accents, words joined by hyphens), then what the file holds,
+/// then the date: <c>aetheus-logs</c>, <c>aetheus-run-2478-findings-2026-10-01.md</c>. When the
+/// name is unknown, a technical stand-in (<c>app-3</c>) keeps the file recognisable. </summary>
 public static class ExportFileNames
 {
     /// <summary>Longest slug kept from a name, so a long application name does not make a long file name.</summary>

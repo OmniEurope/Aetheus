@@ -29,11 +29,9 @@ public class GitRepositoriesRenderTests : BunitContext
     public void Renders_ToolbarAndFilter_WithoutError()
     {
         var cut = Render<GitRepositories>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
-        // The page renders its toolbar (New Repository action) and the project filter dropdown,
-        // and OnInitializedAsync loads the project list that populates the filter.
-        // PLAN-003 lot 5: the button says "Create"; the page title carries the context.
+        // Render Create and the project filter, loading filter choices during initialization.
         Assert.Contains("GitRepositories", cut.Markup);
         Assert.Contains(">Create<", cut.Markup);
         Assert.Contains("SelectProject", cut.Markup);
@@ -49,7 +47,7 @@ public class GitRepositoriesRenderTests : BunitContext
 
         var cut = Render<GitRepositories>();
 
-        // Recette R-318: the internal repositories first; the external repository is the second tab.
+        // The internal repositories first; the external repository is the second tab.
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll(".git-repository-tabs [role='tab']").Count));
         Assert.DoesNotContain("id=\"external-repository\"", cut.Markup, StringComparison.Ordinal);
         cut.FindAll(".git-repository-tabs [role='tab']")[1].Click();
@@ -88,7 +86,7 @@ public class GitRepositoriesRenderTests : BunitContext
         });
         _handler.SetResponse("api/external-repos/project/1", System.Net.HttpStatusCode.NotFound);
         var navigation = Services.GetRequiredService<NavigationManager>();
-        // Recette R-318: the external repository is the project's second tab.
+        // The external repository is the project's second tab.
         navigation.NavigateTo("git-repositories?projectId=1&tab=external");
 
         var cut = Render<GitRepositories>();
@@ -125,7 +123,7 @@ public class GitRepositoriesRenderTests : BunitContext
             HttpMethod.Get,
             "api/git/repos",
             _ => response.Task);
-        // Recette R-224: the default-branch values of the column filter answer at once.
+        // The default-branch values of the column filter answer at once.
         _handler.SetAsyncJsonResponse(
             HttpMethod.Get,
             "api/git/repos/filter-values",
@@ -134,8 +132,7 @@ public class GitRepositoriesRenderTests : BunitContext
         var cut = Render<GitRepositories>();
         cut.WaitForState(
             () => _handler.Requests.Any(request => request.Method == "GET"
-                && request.Url.Contains("api/git/repos", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(2));
+                && request.Url.Contains("api/git/repos", StringComparison.Ordinal)));
 
         Assert.Single(cut.FindComponents<Aetheus.Front.Components.Shared.AetheusDataGrid<GitLightRepoDto>>());
 
@@ -144,8 +141,7 @@ public class GitRepositoriesRenderTests : BunitContext
         await cut.InvokeAsync(() => response.SetResult(new PaginatedResult<GitLightRepoDto>()));
         cut.WaitForState(
             () => !cut.FindComponent<Aetheus.Front.Components.Shared.AetheusDataGrid<GitLightRepoDto>>()
-                .Instance.IsLoading,
-            TimeSpan.FromSeconds(5));
+                .Instance.IsLoading);
         Assert.Contains("NoRepositoriesFound", cut.Markup);
 
         var repositoryRequests = _handler.Requests.Count(request =>
@@ -153,7 +149,7 @@ public class GitRepositoriesRenderTests : BunitContext
             && request.Url.Contains("api/git/repos", StringComparison.Ordinal)
             && !request.Url.Contains("filter-values", StringComparison.Ordinal));
         // The page's own first load, the grid's, and the reload the page asks of the grid so a
-        // virtualized grid shows that first result (recette R-185): bounded, never a loop.
+        // virtualized grid shows that first result : bounded, never a loop.
         Assert.InRange(repositoryRequests, 1, 3);
     }
 
@@ -347,7 +343,7 @@ public class GitRepositoriesRenderTests : BunitContext
         });
 
         var cut = Render<GitRepositories>();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The repository and project links, then the row buttons.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);

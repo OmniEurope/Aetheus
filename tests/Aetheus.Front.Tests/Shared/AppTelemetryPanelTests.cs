@@ -57,11 +57,11 @@ public class AppTelemetryPanelTests : BunitContext
     {
         SeedTelemetry();
         var cut = Render<AppTelemetryPanel>(p => p.Add(c => c.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("toto-qa"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("toto-qa"));
 
         Assert.Contains("toto-qa", cut.Markup);        // app picker populated
         Assert.Contains("Visitors", cut.Markup);
-        Assert.Contains("Performance", cut.Markup);    // sub-tab labels (stub localizer echoes keys); R-455: replaces Metrics
+        Assert.Contains("Performance", cut.Markup);    // The test localizer echoes sub-tab keys.
         Assert.Contains("Logs", cut.Markup);
         Assert.Contains("Errors", cut.Markup);
         Assert.Contains("Ingestion", cut.Markup);
@@ -118,7 +118,7 @@ public class AppTelemetryPanelTests : BunitContext
         var cut = Render<AppTelemetryPanel>(p => p.Add(c => c.ProjectId, 1));
         cut.WaitForAssertion(() => Assert.Contains("UniqueVisitorsToday", cut.Markup));
 
-        // Visitors (first tab) no longer carries the top pages grid.
+        // Top pages belong to their own tab.
         Assert.DoesNotContain("TopPagesThisMonth", cut.Markup);
 
         var pagesTab = cut.FindAll("[role='tab']").Single(tab => tab.GetAttribute("data-key") == "pages");
@@ -155,7 +155,7 @@ public class AppTelemetryPanelTests : BunitContext
     {
         _handler.SetJsonResponse("api/appmonitoring/projects/1/apps", new List<MonitoredAppDto>());
         var cut = Render<AppTelemetryPanel>(p => p.Add(c => c.ProjectId, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         Assert.Contains("NoMonitoredApps", cut.Markup);
     }
@@ -252,17 +252,17 @@ public class AppTelemetryPanelTests : BunitContext
         {
             Assert.Contains("UniqueVisitorsThisWeek", cut.Markup);
             Assert.Contains(">8<", cut.Markup);
-            // Recette R2-007: the storage card left the Visitors tab (one line of the Ingestion tab now).
+            // Storage information belongs in Ingestion.
             Assert.DoesNotContain("AnalyticsIngestionHealth", cut.Markup);
             Assert.DoesNotContain("AnalyticsStorage", cut.Markup);
-            // Recette R-356: compact tiles, a third of the row from the small breakpoint.
+            // Compact tiles, a third of the row from the small breakpoint.
             Assert.NotEmpty(cut.FindAll(".web-analytics-summary-tile"));
-            // R-469: the date of the last event has its own tile, first of the row ("Never" without one).
+            // The date of the last event has its own tile, first of the row ("Never" without one).
             Assert.Contains("LastEventReceived", cut.FindAll(".web-analytics-summary-tile")[0].TextContent);
             Assert.Contains("Never", cut.FindAll(".web-analytics-summary-tile")[0].TextContent);
-            // R-470: the daily chart is a wide, low drawing.
+            // The daily chart is a wide, low drawing.
             Assert.DoesNotContain("LastAnalyticsIngest", cut.Markup);
-            // Recette R-362: the chart names both series per day, the UTC day axis and the count axis.
+            // The chart names both series per day, the UTC day axis and the count axis.
             Assert.Contains("AudienceDailyTitle", cut.Markup);
             Assert.Contains("AudienceDailyCaption", cut.Markup);
             Assert.Contains("UniqueVisitorsPerDay", cut.Markup);
@@ -276,7 +276,7 @@ public class AppTelemetryPanelTests : BunitContext
             Assert.Contains("P95BrowserNavigationDuration", cut.Markup);
             Assert.Contains(">240 ms<", cut.Markup);
             Assert.Contains("BrowserErrorsLast30Days", cut.Markup);
-            // Recette R-355: the top pages moved to their own sub-tab.
+            // Top pages have a dedicated sub-tab.
             Assert.DoesNotContain("TopPagesThisMonth", cut.Markup);
             Assert.Empty(cut.FindAll(".omni-data-grid__table"));
         });

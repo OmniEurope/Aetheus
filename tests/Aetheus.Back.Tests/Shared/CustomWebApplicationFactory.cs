@@ -28,6 +28,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("Auth:EncryptionKey", "aetheus-encryption-key-32ch!");
         builder.UseSetting("Auth:AdminPassword", "admin");
         builder.UseSetting("RateLimiting:Disabled", "true");
+        // Recette R3-7: no nightly AI model list read in a test host (seeded profiles hold fake keys).
+        builder.UseSetting("AiTasks:ModelListRefresh:Enabled", "false");
         // Every factory owns an isolated in-memory database, but demo Git repositories live
         // on disk. Disable opt-in startup seeders so parallel controller fixtures never race
         // on the same Toto bare repository; dedicated seeder tests invoke them explicitly.

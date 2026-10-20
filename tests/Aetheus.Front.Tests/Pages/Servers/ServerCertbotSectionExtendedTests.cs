@@ -184,8 +184,8 @@ public class ServerCertbotSectionExtendedTests : BunitContext
     [Fact]
     public void NewCertificateButton_IsDisabled_WhileRenewAllRuns()
     {
-        // PLAN-005 lot 4: only Renew all is veiled; New certificate keeps the "an action is running"
-        // interlock in its Disabled.
+        // New certificate keeps the "an action is running" interlock in
+        // its Disabled.
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/servers/10/certbot/action", async ct =>
         {
@@ -200,14 +200,14 @@ public class ServerCertbotSectionExtendedTests : BunitContext
         Assert.False(Button("NewCertificate").HasAttribute("disabled"));
 
         ((Aetheus.Front.Tests.TestDoubles.ImmediateDialogService)Services.GetRequiredService<OmniDialogService>()).ConfirmResult = true;
-        Button("RenewAll").Click();
+        cut.FindMenuItem("RenewAll")!.Click();
 
-        cut.WaitForAssertion(() =>
-        {
-            Assert.Contains("btn-busy", Button("RenewAll").ClassName, StringComparison.Ordinal);
-            Assert.True(Button("NewCertificate").HasAttribute("disabled"));
-        });
+        // Renew all is a menu entry now (R3-41), so the zone's visible action carries the interlock.
+        cut.WaitForAssertion(() => Assert.True(Button("NewCertificate").HasAttribute("disabled")));
         release.SetResult();
+        // Loaded-machine ceiling: the action's answer returns through the thread pool before its handler
+        // ends and renders; under load the one POST was answered and the button enabled 165 to 808 ms
+        // after bUnit's 1 s default, never left disabled (PLAN-002 B7).
         cut.WaitForAssertion(() => Assert.False(Button("NewCertificate").HasAttribute("disabled")));
     }
 

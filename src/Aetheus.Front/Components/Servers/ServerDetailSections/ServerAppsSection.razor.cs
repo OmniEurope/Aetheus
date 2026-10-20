@@ -32,7 +32,7 @@ public partial class ServerAppsSection
     private List<string> _sourceValues = [];
     private Func<string, string>? _statusText;
 
-    // Recette R-210: the Status filter shows each state as the column does.
+    // The Status filter shows each state as the column does.
     private Func<string, string> StatusText => _statusText ??= GridFilterText.ForEnum<ServerAppStatus>(L);
 
     protected override async Task OnParametersSetAsync()
@@ -42,7 +42,7 @@ public partial class ServerAppsSection
         await Task.WhenAll(ReloadAppsAsync(), LoadSourceValuesAsync());
     }
 
-    // Recette R-210: the sources the Source header filter offers, across every application of the server.
+    // The sources the Source header filter offers, across every application of the server.
     private async Task LoadSourceValuesAsync()
     {
         var serverId = ServerId;
@@ -57,7 +57,8 @@ public partial class ServerAppsSection
         }
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// grid.</summary>
     private Task<PaginatedResult<ServerAppDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -91,15 +92,15 @@ public partial class ServerAppsSection
     {
         (_page, _pageSize) = args.ToPageRequest();
         (_sortBy, _sortDescending) = args.ToSortRequest("Name");
-        // Recette R-210: the header filters, applied by the API.
+        // The header filters, applied by the API.
         _columnFilters = args.ToApiFilters();
         await LoadAsync();
     }
 
     private Task OnSearchChangedAsync() => ReloadAppsAsync();
 
-    // Recette R-327: the grid scrolls (remote virtualization) and only shows what it fetched itself, so
-    // another server, a search or a new application reloads it from its first row, a deletion in place.
+    // The grid scrolls (remote virtualization) and only shows what it fetched itself, so another
+    // server, a search or a new application reloads it from its first row, a deletion in place.
     private Task ReloadAppsAsync()
     {
         _page = 1;

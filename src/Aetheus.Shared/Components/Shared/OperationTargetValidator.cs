@@ -35,7 +35,7 @@ public static partial class OperationTargetValidator
         OperationKind.PortsentryRestart,
         OperationKind.PortsentryStatus,
         OperationKind.PortsentryGetLogs,
-        // PLAN-005 lot 2: the scan always covers the whole host, so it carries no target to validate.
+        // The scan always covers the whole host, so it carries no target to validate.
         OperationKind.PortsObserve,
         OperationKind.PipelineCollectArtifacts,
         OperationKind.PipelineCreateRelease,
@@ -108,7 +108,8 @@ public static partial class OperationTargetValidator
         OperationKind.MailAddAlias,
         OperationKind.MailDeleteAccount,
         OperationKind.MailRemoveAlias,
-        OperationKind.MailSendTest
+        OperationKind.MailSendTest,
+        OperationKind.MailSetQuota
     ];
 
     private static readonly HashSet<OperationKind> s_teamspeakPathTargets =
@@ -209,6 +210,8 @@ public static partial class OperationTargetValidator
             return ManageablePackages.IsManageablePackage(target);
         if (kind == OperationKind.ServiceUninstall)
             return ManageablePackages.IsRemovablePackage(target);
+        if (kind == OperationKind.PackageInventory)
+            return target == "-";
         if (s_firewallPortTargets.Contains(kind))
             return int.TryParse(target, out var port) && port is >= 1 and <= 65535;
         if (kind == OperationKind.FirewallSetEnabled)
@@ -243,7 +246,8 @@ public static partial class OperationTargetValidator
             return MailValidation.IsValidDomainName(target);
         if (s_mailEmailTargets.Contains(kind))
             return MailValidation.IsValidEmail(target);
-        if (kind is OperationKind.MailSpamInstall or OperationKind.MailSpamConfigure or OperationKind.MailQuotaReport or OperationKind.MailPurge)
+        if (kind is OperationKind.MailSpamInstall or OperationKind.MailSpamConfigure or OperationKind.MailQuotaReport or OperationKind.MailPurge or OperationKind.MailMasterAccess
+            or OperationKind.MailLeftoversCheck or OperationKind.MailRetryTuning)
             return target == "-";
         if (kind == OperationKind.MailSpamLearn)
             return target is "spam" or "ham";
@@ -266,6 +270,8 @@ public static partial class OperationTargetValidator
             return DeployAppRegex().IsMatch(target);
         if (kind == OperationKind.PipelineSmoke)
             return SmokeOriginRegex().IsMatch(target);
+        if (kind is OperationKind.PipelineFunction or OperationKind.PipelineDeploymentFunction)
+            return PipelineFunctionCatalog.IsValidTarget(kind, target);
         if (s_blueGreenTargets.Contains(kind))
             return ComposeProjectRegex().IsMatch(target);
         if (kind == OperationKind.TeamspeakServerQuery)

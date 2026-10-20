@@ -7,11 +7,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-005 lot 4, on real PostgreSQL. The InMemory suite is blind here: it enforces no unique index,
-/// so two concurrent allocations would happily both "reserve" the same port and the test would pass
-/// while production handed the same port to two projects.
-/// </summary>
+/// <summary>Concurrent PostgreSQL port allocation must respect real unique constraints, which EF
+/// InMemory cannot verify.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class PortAllocationConcurrencyIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)

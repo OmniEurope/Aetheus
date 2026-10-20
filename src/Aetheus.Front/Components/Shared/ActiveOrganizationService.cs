@@ -4,12 +4,11 @@ namespace Aetheus.Front.Components.Shared;
 
 /// <summary>
 /// Tracks the user's available organizations (loaded from <c>/api/organizations/me</c>) and
-/// the currently active organization. The active org id is persisted in localStorage so it
+/// the currently active organization. The active org id is a user preference (R1-66), so it
 /// survives reloads. UI components subscribe to <see cref="Changed"/> to react to switches.
 /// </summary>
-public sealed class ActiveOrganizationService(ApiClient api, IJSRuntime js)
+public sealed class ActiveOrganizationService(ApiClient api, IUserPreferences preferences)
 {
-    private const string StorageKey = "aetheus.activeOrgId";
 
     public IReadOnlyList<MyOrganizationDto> Available { get; private set; } = [];
     public MyOrganizationDto? Active { get; private set; }
@@ -33,7 +32,7 @@ public sealed class ActiveOrganizationService(ApiClient api, IJSRuntime js)
         var match = Available.FirstOrDefault(o => o.Id == organizationId);
         if (match is null || (Active is not null && Active.Id == match.Id)) return;
         Active = match;
-        await js.InvokeVoidAsync("Aetheus.setLocal", StorageKey, match.Id.ToString()).ConfigureAwait(false);
+        await preferences.SetAsync(PreferenceKeys.ActiveOrganization, match.Id).ConfigureAwait(false);
         Changed?.Invoke();
     }
 
@@ -45,9 +44,5 @@ public sealed class ActiveOrganizationService(ApiClient api, IJSRuntime js)
         Changed?.Invoke();
     }
 
-    private async Task<int?> TryGetStoredAsync()
-    {
-        var raw = await js.InvokeAsync<string?>("Aetheus.getLocal", StorageKey).ConfigureAwait(false);
-        return int.TryParse(raw, out var id) ? id : null;
-    }
+    private Task<int?> TryGetStoredAsync() => preferences.GetAsync<int?>(PreferenceKeys.ActiveOrganization);
 }

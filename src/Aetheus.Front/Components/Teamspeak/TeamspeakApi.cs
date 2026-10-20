@@ -41,7 +41,7 @@ public sealed class TeamspeakApi(HttpClient http) : ApiClientBase(http)
             $"api/servers/{serverId}/teamspeak/bans", page, pageSize, search, sortBy, sortDescending, filters, ct);
 
 
-    /// <summary>Recette R-210: the platforms the clients grid's Platform filter offers.</summary>
+    /// <summary>The platforms the clients grid's Platform filter offers.</summary>
     public async Task<TeamspeakFilterValuesDto> GetTeamspeakFilterValuesAsync(int serverId, CancellationToken ct = default) =>
         await GetJsonAsync<TeamspeakFilterValuesDto>($"api/servers/{serverId}/teamspeak/filter-values", ct).ConfigureAwait(false) ?? new();
 
@@ -51,7 +51,7 @@ public sealed class TeamspeakApi(HttpClient http) : ApiClientBase(http)
         bool sortDescending, IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters, CancellationToken ct)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<T>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString(path, query), filters), JsonOptions.Web, ct).ConfigureAwait(false) ?? new();
     }

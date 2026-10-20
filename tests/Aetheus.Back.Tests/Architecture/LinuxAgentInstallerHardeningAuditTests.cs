@@ -22,7 +22,7 @@ public sealed class LinuxAgentInstallerHardeningAuditTests
     [Fact]
     public void ServiceUnit_CreatesAgentFilesWithPrivateUmask()
     {
-        // R-249: the unit is the agent/aetheus-agent.service template the installer renders.
+        // The unit is the agent/aetheus-agent.service template the installer renders.
         Assert.Contains(
             "render_host_config agent/aetheus-agent.service \"$SYSTEMD_UNIT_PATH\"",
             ReadInstaller(),
@@ -33,12 +33,8 @@ public sealed class LinuxAgentInstallerHardeningAuditTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// R-249: an agent without any sudo grant runs with NoNewPrivileges=true. Commit df6895eb9 had
-    /// dropped the sandboxed branch's NNP_BLOCK, so that unit carried an empty line instead. Renders
-    /// the unit template's hardening section with the installer's own sandboxed-branch value and
-    /// requires the restored line right after the header, as before df6895eb9.
-    /// </summary>
+    /// <summary>The installer-rendered unit requires NoNewPrivileges=true when no sudo grant is
+    /// enabled.</summary>
     [Fact]
     public void ServiceUnit_WithoutElevation_RendersNoNewPrivilegesTrue()
     {
@@ -86,7 +82,7 @@ public sealed class LinuxAgentInstallerHardeningAuditTests
     public void ApacheReloadHelper_ValidatesBeforeApplyingAndIsGrantedByExactPath()
     {
         var installer = ReadInstaller();
-        // R-249: the helper and its sudoers drop-in are templates the installer renders.
+        // The helper and its sudoers drop-in are templates the installer renders.
         var helper = LinuxHostConfigTemplates.Read("apache/aetheus-apache-reload");
         var sudoers = LinuxHostConfigTemplates.Read("apache/sudoers.d/aetheus-apache");
 
@@ -148,10 +144,102 @@ public sealed class LinuxAgentInstallerHardeningAuditTests
         Assert.DoesNotContain("ProtectHome=read-only", installer, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The effective home rule once the SSH binds are added: `ProtectHome=tmpfs` exists from systemd 242
+    /// only, an older systemd ignores the value and leaves the homes readable. The installer therefore
+    /// switches to tmpfs and binds the .ssh directories only behind a version test, and an unreadable
+    /// version counts as too old.
+    /// </summary>
+    [Fact]
+    public void SshBinds_TurnTheHomesIntoTmpfsOnlyBehindTheSystemdVersionCheck()
+    {
+        var installer = ReadInstaller();
+
+        // The default is still the full protection; tmpfs is written by exactly two places: the certbot
+        // opt-in (pre-existing) and the SSH binds below.
+        Assert.Contains("PROTECT_HOME_BLOCK=\"ProtectHome=true\"", installer, StringComparison.Ordinal);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(installer, "PROTECT_HOME_BLOCK=\"ProtectHome=tmpfs").Count);
+
+        var versionCheck = installer.IndexOf("if [ \"$(systemd_major_version)\" -ge 242 ]; then", StringComparison.Ordinal);
+        var fill = installer.IndexOf("_ssh_bind=\"$_ssh_bind -$_ssh_dir\"", StringComparison.Ordinal);
+        var useBinds = installer.IndexOf("if [ -n \"$_ssh_bind\" ]; then", StringComparison.Ordinal);
+        var tmpfs = installer.IndexOf("PROTECT_HOME_BLOCK=\"ProtectHome=tmpfs\"\n", StringComparison.Ordinal);
+        var bind = installer.IndexOf("BindReadOnlyPaths=${_ssh_bind# }", StringComparison.Ordinal);
+        Assert.True(versionCheck > 0, "the systemd version test is missing");
+        Assert.True(versionCheck < fill && fill < useBinds, "the binds are built outside the version test");
+        Assert.True(useBinds < tmpfs && tmpfs < bind, "tmpfs and the binds are set before the binds exist");
+        Assert.Contains("[ -n \"$_ssh_bind\" ]", installer, StringComparison.Ordinal);
+
+        // An unreadable version is 0, so it is treated as too old and the homes keep ProtectHome=true.
+        Assert.Contains("systemd_major_version() {", installer, StringComparison.Ordinal);
+        Assert.Contains("\"\"|*[!0-9]*) echo 0 ;;", installer, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The agent reads the kernel messages (OOM victim name) and the SSH configuration with read-only
+    /// rights: the journal group and read ACLs. Neither is allowed to become a capability, a kernel-log
+    /// write path or a write grant (docs/contracts/security.md, "Read-only host observation rights").
+    /// </summary>
+    [Fact]
+    public void ReadOnlyObservation_GrantsReadRightsOnly_AndKeepsTheKernelLogProtection()
+    {
+        var installer = ReadInstaller();
+        var unit = LinuxHostConfigTemplates.Read("agent/aetheus-agent.service");
+        var helper = LinuxHostConfigTemplates.Read("agent/aetheus-agent-read-grant");
+
+        // Kernel messages come from the journal group; ProtectKernelLogs stays on and no capability is added.
+        Assert.Contains("ProtectKernelLogs=true", unit, StringComparison.Ordinal);
+        Assert.Contains("#{JOURNAL_GROUP_BLOCK}#", unit, StringComparison.Ordinal);
+        Assert.Contains("SupplementaryGroups=systemd-journal", installer, StringComparison.Ordinal);
+        foreach (var text in new[] { unit, installer, helper })
+        {
+            Assert.DoesNotContain("ProtectKernelLogs=false", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("CAP_SYSLOG", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("AmbientCapabilities", text, StringComparison.Ordinal);
+        }
+
+        // The ACL helper runs as root from a unit of its own (a bind mount of the agent unit would make the
+        // files read-only for setfacl, even under the '+' prefix), its failure never stops the agent (Wants=,
+        // not Requires=), and the installer renders it root-owned and not writable by anyone else.
+        var grantUnit = LinuxHostConfigTemplates.Read("agent/aetheus-agent-read-grant.service");
+        Assert.Contains("Wants=network-online.target aetheus-agent-read-grant.service", unit, StringComparison.Ordinal);
+        Assert.Contains("After=network-online.target aetheus-agent-read-grant.service", unit, StringComparison.Ordinal);
+        Assert.DoesNotContain("Requires=aetheus-agent-read-grant", unit, StringComparison.Ordinal);
+        Assert.Contains("Before=aetheus-agent.service", grantUnit, StringComparison.Ordinal);
+        Assert.Contains("ExecStart=#{AGENT_READ_GRANT_HELPER_PATH}#", grantUnit, StringComparison.Ordinal);
+        Assert.Contains("NoNewPrivileges=true", grantUnit, StringComparison.Ordinal);
+        // Root is held to reading any file and writing the ACL of a file it does not own, nothing else.
+        var grantSettings = grantUnit.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0 && line[0] != '#').ToList();
+        Assert.Contains("CapabilityBoundingSet=CAP_FOWNER CAP_DAC_READ_SEARCH", grantSettings);
+        Assert.DoesNotContain(grantSettings, line => line.Contains("CAP_DAC_OVERRIDE", StringComparison.Ordinal));
+        Assert.Contains(
+            "render_host_config agent/aetheus-agent-read-grant \"$AGENT_READ_GRANT_HELPER_PATH\"",
+            installer, StringComparison.Ordinal);
+        Assert.Contains(
+            "render_host_config agent/aetheus-agent-read-grant.service \"$AGENT_READ_GRANT_SERVICE_PATH\"",
+            installer, StringComparison.Ordinal);
+        Assert.Contains("chown root:root \"$AGENT_READ_GRANT_HELPER_PATH\"", installer, StringComparison.Ordinal);
+        Assert.Contains("chmod 755 \"$AGENT_READ_GRANT_HELPER_PATH\"", installer, StringComparison.Ordinal);
+
+        // Every grant it makes is a read (r) or a directory traverse (x), nothing else, through setfacl on
+        // the open file.
+        var grants = helper.Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("change \"$ACTION\"", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(3, grants.Count);
+        Assert.All(grants, line => Assert.Matches(@" [rx]$", line));
+        Assert.Contains("setfacl -m \"u:$AGENT:$5\" /proc/self/fd/3", helper, StringComparison.Ordinal);
+
+        // Where the homes are an empty tmpfs, only the .ssh directories are bound in, read-only.
+        Assert.Contains("BindReadOnlyPaths=${_ssh_bind# }", installer, StringComparison.Ordinal);
+        Assert.DoesNotContain("BindPaths=${_ssh_bind", installer, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void MailManage_UsesLiteralKeyFilteringAndOwnsBothDkimOutputs()
     {
-        // R-249: the helper is the mail/mail-manage template the installer renders.
+        // The helper is the mail/mail-manage template the installer renders.
         Assert.Contains(
             "render_host_config mail/mail-manage \"$MAIL_MANAGE_HELPER_PATH\"",
             ReadInstaller(),
@@ -163,8 +251,8 @@ public sealed class LinuxAgentInstallerHardeningAuditTests
         Assert.DoesNotContain("grep -v \"^$email ", installer, StringComparison.Ordinal);
         Assert.DoesNotContain("grep -v \"^$email:", installer, StringComparison.Ordinal);
         Assert.DoesNotContain("grep -v \"^\\*@$domain ", installer, StringComparison.Ordinal);
-        // PLAN-005: keys live per domain (two domains may share a selector); both outputs stay owned by
-        // opendkim, the private key 600 and the public .txt 644 so the unprivileged agent can inventory it.
+        // DKIM keys are scoped by domain and owned by opendkim, with private mode 600 and public
+        // mode 644 for agent inventory.
         Assert.Contains("chown -R opendkim:opendkim \"/etc/opendkim/keys/$d\"", installer, StringComparison.Ordinal);
         Assert.Contains("chmod 600 \"/etc/opendkim/keys/$d/$s.private\"", installer, StringComparison.Ordinal);
         Assert.Contains("chmod 644 \"/etc/opendkim/keys/$d/$s.txt\"", installer, StringComparison.Ordinal);

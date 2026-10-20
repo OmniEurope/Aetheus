@@ -23,8 +23,8 @@ public partial class VariableLibraryEdit
     [SupplyParameterFromQuery] public int? EnvironmentId { get; set; }
     [SupplyParameterFromQuery] public int? ProjectServerId { get; set; }
 
-    /// <summary>Recette R1-26: the page that sent the user here to check what it created (the pipeline
-    /// setup wizard's summary); Back returns to it when it is local.</summary>
+    /// <summary>The page that sent the user here to check what it created (the pipeline setup
+    /// wizard's summary); Back returns to it when it is local.</summary>
     [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
 
     private VariableLibraryDetailDto? _detail;
@@ -207,7 +207,7 @@ public partial class VariableLibraryEdit
         }
     }
 
-    /// <summary>Recette R-284: the library's properties form, shown on demand from the ⋮ menu.</summary>
+    /// <summary>The library's properties form, shown on demand from the ⋮ menu.</summary>
     private bool _editingProperties;
 
     private void EditProperties() => _editingProperties = true;
@@ -265,7 +265,7 @@ public partial class VariableLibraryEdit
         });
         if (outcome.StatusCode == System.Net.HttpStatusCode.BadRequest)
         {
-            // Recette R2-065: the key already exists, so nothing was added: say why.
+            // The key already exists, so nothing was added: say why.
             Toast.Error("Error", "LibraryEntryKeyExists", model.Key);
             return;
         }
@@ -327,9 +327,8 @@ public partial class VariableLibraryEdit
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        // The row itself says whether the entry was a port: afterwards there is no way to know. Recette
-        // R-327: the grid scrolls and _entries only holds the block it fetched last, which may not be
-        // the one the clicked row came from.
+        // Read the port flag from the clicked row because a virtualized grid may no longer hold
+        // that row in its latest fetched block.
         var status = await Api.Variables.DeleteVariableEntryAsync(Id!.Value, deleted.Id);
         if (!status.Success)
         {
@@ -341,12 +340,10 @@ public partial class VariableLibraryEdit
         await ReloadEntriesAsync();
     }
 
-    /// <summary>
-    /// PLAN-005 lot 5: a deleted <c>PORT_*</c> entry leaves its reservation behind, which would keep the
-    /// port blocked for everybody with nothing using it. The release is offered, not automatic, and the
-    /// backend only ever releases a reservation held by this library's own project.
-    /// </summary>
-    private async Task OfferPortReleaseAsync(VariableEntryDto? deleted)
+    /// <summary> A deleted <c>PORT_*</c> entry leaves its reservation behind, which would keep the
+    /// port blocked for everybody with nothing using it. The release is offered, not automatic, and
+    /// the backend only ever releases a reservation held by this library's own project. </summary>
+    internal async Task OfferPortReleaseAsync(VariableEntryDto? deleted)
     {
         if (deleted is null) return;
         if (!deleted.Key.StartsWith(PortRegistryLimits.PortKeyPrefix, StringComparison.Ordinal)) return;
@@ -408,10 +405,8 @@ public partial class VariableLibraryEdit
         Toast.Success("Exported", "EntriesExported", entries.Count);
     }
 
-    /// <summary>
-    /// PLAN-005 lot 5: hands the library free ports and writes them as PORT_* entries. Reloads only
-    /// when something was actually created, so a cancelled dialog costs nothing.
-    /// </summary>
+    /// <summary> Hands the library free ports and writes them as PORT_* entries. Reloads only when
+    /// something was actually created, so a cancelled dialog costs nothing. </summary>
     private async Task AllocatePortsAsync()
     {
         var created = await Dialog.OpenAsync<LibraryPortAllocateDialog>(
@@ -473,12 +468,12 @@ public partial class VariableLibraryEdit
         _entryPageSize = args.Top ?? 25;
         _entryPage = ((args.Skip ?? 0) / _entryPageSize) + 1;
         (_entrySortBy, _entrySortDescending) = ResolveEntrySort(args);
-        // Recette R-210: kept with the page and sort, so the reload after an edit shows the same rows.
+        // Kept with the page and sort, so the reload after an edit shows the same rows.
         _entryFilters = args.ToApiFilters();
         await LoadEntryPageAsync();
     }
 
-    /// <summary>Recette R2-124: one page of the entries export (a library holds plain values, secrets live in
+    /// <summary>One page of the entries export (a library holds plain values, secrets live in
     /// vaults), with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<VariableEntryDto>> ReadEntriesExportAsync(GridLoadArgs args)
     {
@@ -515,8 +510,8 @@ public partial class VariableLibraryEdit
     private async Task ReloadEntriesAsync()
     {
         await ReloadDetail();
-        // Recette R-327: the grid scrolls (remote virtualization) and only shows what it fetched itself;
-        // it fetches the rows on screen again, with its sort and filters, and sets the count.
+        // The grid scrolls (remote virtualization) and only shows what it fetched itself; it
+        // fetches the rows on screen again, with its sort and filters, and sets the count.
         await (_entriesGrid is not null ? _entriesGrid.Refresh() : LoadEntryPageAsync());
     }
 
@@ -543,6 +538,6 @@ public partial class VariableLibraryEdit
     {
     }
 
-    /// <summary>Recette R2-124: the export writes the count the badge shows.</summary>
+    /// <summary>The export writes the count the badge shows.</summary>
     private static readonly Func<VariableEntryDto, object?> VersionsExport = entry => entry.VersionCount;
 }

@@ -33,4 +33,13 @@ public static class PipelineDotnetTestVariables
     /// <summary>The dotnet executable to use. The pipelines resolve a pinned SDK and pass its path;
     /// without one the agent falls back to whatever <c>dotnet</c> is on PATH.</summary>
     public const string DotnetPath = "AETHEUS_DOTNET_TEST_DOTNET";
+
+    /// <summary>Absolute directories prepended to the test host's PATH, one per line, so a suite finds
+    /// the pinned tools its tests start (Node.js, for instance) instead of whatever the host
+    /// provides.</summary>
+    public const string ToolPaths = "AETHEUS_DOTNET_TEST_TOOL_PATHS";
+
+    /// <summary>Seconds between two progress lines while the suite runs, defaulting to 30. Same name
+    /// as the run variable the legacy run-with-progress.sh read.</summary>
+    public const string ProgressIntervalSeconds = "AETHEUS_PROGRESS_INTERVAL_SECONDS";
 }

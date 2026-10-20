@@ -23,9 +23,9 @@ public sealed class AgentRuntimeHealth(TimeProvider timeProvider)
     public void MarkPollingSuccess() =>
         Interlocked.Exchange(ref _lastPollingSuccessUtcTicks, timeProvider.GetUtcNow().UtcTicks);
 
-    // Recette R-508: a service or package action has just changed what the host runs. The heartbeat
-    // loop sends the new state now rather than at its next tick, up to thirty seconds later, so the
-    // Services page shows the result of the action it just ran. One pending request at most.
+    // A service or package action has just changed what the host runs. The heartbeat loop sends the
+    // new state now rather than at its next tick, up to thirty seconds later, so the Services page
+    // shows the result of the action it just ran. One pending request at most.
     private readonly SemaphoreSlim _heartbeatRequested = new(0, 1);
     private readonly Lock _heartbeatRequestGate = new();
 
@@ -42,7 +42,7 @@ public sealed class AgentRuntimeHealth(TimeProvider timeProvider)
     /// <summary>Completes when a beat has been asked for; consumes the request.</summary>
     internal Task WaitForHeartbeatRequestAsync(CancellationToken ct) => _heartbeatRequested.WaitAsync(ct);
 
-    // Recette R1-8: a mail operation has just changed the mail stack (certificate, OpenDKIM, domains,
+    // A mail operation has just changed the mail stack (certificate, OpenDKIM, domains,
     // accounts...). The heartbeat drops its cached mail inventory before the next beat, instead of
     // reporting the old one for up to SlowInventoryTtl.
     private int _mailInventoryStale;

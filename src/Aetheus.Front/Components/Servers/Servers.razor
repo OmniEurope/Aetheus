@@ -9,13 +9,13 @@
         <HelpLink PageKey="servers" />
         @* A healthy fleet shows nothing here: the up-to-date count is the normal case and reads as
            noise, and a zero counter is not information. Only what needs attention is displayed. *@
-        @* Recette R2-109: a status count, its icon in place of its name on a phone. *@
+        @* A status count, its icon in place of its name on a phone. *@
         <StatusCountBadge Count="@_compatibilitySummary.UpdateRecommended" Label="@L["AgentCompatibility_UpdateRecommended"]" Icon="OmniIconName.Upgrade" Tone="OmniTone.Warning" />
         <StatusCountBadge Count="@_compatibilitySummary.UpdateRequired" Label="@L["AgentCompatibility_UpdateRequired"]" Icon="OmniIconName.Warning" Tone="OmniTone.Danger" />
         <StatusCountBadge Count="@_compatibilitySummary.Unknown" Label="@L["AgentCompatibility_Unknown"]" Icon="OmniIconName.Question" Tone="OmniTone.Neutral" />
     </Badges>
     <Actions>
-        @* Recette R-197: no column button in the header any more; the choice stays, opened from Tools. *@
+        @* Open the column chooser from Tools. *@
         <div class="column-chooser-wrap">
             @if (_showColumnChooser)
             {
@@ -36,7 +36,7 @@
             }
         </div>
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GoToAddAgent" Disabled="@(!_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"].Value : null)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["AddAgent"]</span></OmniButton>
-        @* Last in the row, after Add (recette R-021). *@
+        @* Last in the row, after Add. *@
         <OmniOverflowMenu Label="@L["Tools"]">
             <OmniMenuItem OnClick="@OnUpdateAllAgents" Disabled="@(!_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["UpdateAllAgents"]</ChildContent></OmniMenuItem>
             <OmniMenuItem OnClick="@OpenPortCheckDialog"><Icon><OmniIcon Name="OmniIconName.MagnifyingGlassPlus" /></Icon><ChildContent>@L["CheckPorts"]</ChildContent></OmniMenuItem>
@@ -85,7 +85,7 @@
                 <span>@L.Localize(server.Type)</span>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServerDto" Property="Status" Title="@L["Status"]" Width="140px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
+        <OmniDataGridColumn TItem="ServerDto" Property="Status" Title="@L["Status"]" Width="230px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
             <Template Context="server">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                     @if (server.Status == ServerStatus.Online)
@@ -97,11 +97,12 @@
                         <span title="@OfflineReason(server)">
                             <OmniBadge Fill="OmniFill.Solid" Tone="@ServerHeartbeatHelper.Severity(server.LastHeartbeat)">@L.Localize(server.Status)</OmniBadge>
                         </span>
+                        <ServerReachabilityBadge Server="server" />
                     }
                     @if (server.InsecureTls)
                     {
-                        @* A state of the connection, so it sits beside the status, not the name (recette
-                           R-029). Icon only; the warning keeps its accessible name through title and AriaLabel. *@
+                        @* Place connection state beside server status. The icon-only warning keeps
+                           an accessible name through title and AriaLabel. *@
                         <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning"
                             title="@L["InsecureTlsHint"]" aria-label="@L["InsecureTlsBadge"]"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon></OmniBadge>
                     }
@@ -114,10 +115,10 @@
                 <span>@server.OsDescription</span>
             </Template>
         </OmniDataGridColumn>
-        @* Recette R-211: one list mixing the agent states and the versions; a server matches any ticked item. *@
+        @* One list mixing the agent states and the versions; a server matches any ticked item. *@
         <OmniDataGridColumn TItem="ServerDto" Property="AgentVersion" Title="@L["AgentVersion"]" Width="240px" Visible="@IsColumnVisible("AgentVersion")" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_agentCandidates" FormatFilterValue="@AgentText" FilterSearchable="true" >
             <Template Context="server">
-                @* One line (recette R-030): the compatibility badge sits beside the version, not under it. *@
+                @* One line : the compatibility badge sits beside the version, not under it. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">
                         @server.AgentVersion
@@ -169,10 +170,13 @@
             <Template Context="server">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Justify="OmniJustification.Center"
                     @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                    @* STD-BTN detection 11: ContactAgent visible (the tag filters already take a row slot), the other actions in the menu. *@
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnContactAgent(server))" title="@L["ContactAgent"]" Label="@L["ContactAgent"]"><OmniIcon Name="OmniIconName.CellTower" /></OmniButton>
                     @if (Permissions.CanWrite(ResourceType.Server, server.Id))
                     {
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRetireServer(server))" title="@L["RetireServer"]" Label="@L["RetireServer"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                            <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => OnRetireServer(server))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["RetireServer"]</ChildContent></OmniMenuItem>
+                        </OmniOverflowMenu>
                     }
                 </OmniStack>
             </Template>

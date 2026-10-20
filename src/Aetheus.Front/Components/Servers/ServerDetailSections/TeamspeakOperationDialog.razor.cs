@@ -34,8 +34,7 @@ public partial class TeamspeakOperationDialog
         ? OmniButtonVariant.Danger
         : OmniButtonVariant.Primary;
 
-    // R-511: OmniDialog listens to the keyboard, so every key press re-renders the dialog and hands it the
-    // same parameters again. Copying the model there wiped what had just been typed: it is copied once.
+    // Copy the model once so repeated dialog parameter updates do not reset typed input.
     protected override void OnInitialized()
     {
         _model = Model.Clone();
@@ -59,11 +58,8 @@ public sealed class TeamspeakDialogModel : IValidatableObject
 
     public TeamspeakDialogMode Mode { get; set; }
 
-    /// <summary>
-    /// Recette R1-5: the texts of the validation messages, set by the dialog. OE shows an
-    /// <see cref="IValidatableObject"/> message as it is, so a key returned here reached the user raw; a model
-    /// validated without a localizer fails loudly instead of answering keys.
-    /// </summary>
+    /// <summary>The dialog supplies localization because validation messages are displayed
+    /// directly. Validation without a localizer fails instead of returning raw keys.</summary>
     internal IStringLocalizer L
     {
         get => _localizer ?? throw new InvalidOperationException($"{nameof(TeamspeakDialogModel)}.{nameof(L)} must be set before the model is validated.");

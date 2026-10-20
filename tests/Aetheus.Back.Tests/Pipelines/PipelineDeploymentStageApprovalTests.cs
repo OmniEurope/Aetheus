@@ -10,15 +10,9 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// R-369: aetheus-release-fast deploys to production from a stage that declares no environment
-/// ("Deploy blue-green", execution_role: deploy). Its only environment is on the Confirm stage that
-/// FOLLOWS the go-live, and the approval gate only looked at a stage's own environment: a prod that
-/// requires approval was therefore deployed first and asked afterwards. A deployment stage with no
-/// environment of its own now needs every approval-requiring environment the run targets to be
-/// approved for the run before it is dispatched. The stage shapes below mirror
-/// .pipeline/aetheus-release-fast.yaml (not read here: pipeline files are not asserted on by tests).
-/// </summary>
+/// <summary>An environment-less deployment requires approval for every gated environment declared
+/// by the run before dispatch. These stage fixtures model that behaviour without reading pipeline
+/// files.</summary>
 public class PipelineDeploymentStageApprovalTests
 {
     private const int RunId = 9369;

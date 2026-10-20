@@ -5,6 +5,7 @@ using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Aetheus.Agent.Core.Collectors;
+using Aetheus.Agent.Core.Functions;
 using Aetheus.Agent.Core.Operations;
 using Aetheus.Agent.Core.Plugins;
 using Aetheus.Agent.Core.Toolchains;
@@ -112,6 +113,21 @@ public static class AgentCoreServiceCollectionExtensions
         })
         .AddStandardResilienceHandler();
 
+        // AI provider client (ADR-023, amendment 2026-10-11): the HTTPS APIs a runner profile names.
+        // No redirect, because the request carries the API key in a header a redirect would hand to
+        // another host; no resilience handler, because AiProviderClient owns the retries and bounds them
+        // by the task's timeout. The system proxy applies, as for any outbound call of the agent.
+        services.AddHttpClient(AiRunOperationExecutor.HttpClientName, client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+            client.MaxResponseContentBufferSize = 8 * 1024 * 1024;
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false
+        });
+
         // App-availability probe client (ADR-021): plain outbound calls to localhost/LAN apps, zero
         // elevation, no auth token, no redirects. TLS validation is relaxed because a probed app may use
         // a self-signed cert and this channel authenticates nothing - it only checks reachability/status.
@@ -162,6 +178,7 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<FirewallCollector>();
         services.AddSingleton<IFirewallCollector>(sp => sp.GetRequiredService<FirewallCollector>());
         services.AddSingleton<ISudoersHashCollector, SudoersHashCollector>();
+        services.AddSingleton<Collectors.Ssh.ISshConfigCollector, Collectors.Ssh.SshConfigCollector>();
 
         // Docker executor (cross-platform)
         services.AddSingleton<IExecutor, DockerExecutor>();
@@ -185,15 +202,26 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IOperationExecutor, RkhunterOperationExecutor>();
         services.AddSingleton<IOperationExecutor, AgentSelfUpdateOperationExecutor>();
         services.AddSingleton<IOperationExecutor, MailOperationExecutor>();
-        // Recette R2-080: the outbound port 25 prerequisite, run by the agent itself (no helper).
+        // The outbound port 25 prerequisite, run by the agent itself (no helper).
         services.AddSingleton<IOutboundTcpConnector, OutboundTcpConnector>();
         services.AddSingleton<IOperationExecutor, MailOutboundProbeOperationExecutor>();
+        // Recette R3-23: what a mail stack left on the host, read by the agent itself (no helper).
+        services.AddSingleton<IOperationExecutor, MailLeftoversOperationExecutor>();
+        // Recette R3-59: the read-only list of installed packages, read by the agent itself (no sudo).
+        services.AddSingleton<IOperationExecutor, PackageInventoryOperationExecutor>();
         services.AddSingleton<IOperationExecutor, PortsentryOperationExecutor>();
         services.AddSingleton<IOperationExecutor, CronOperationExecutor>();
         services.AddSingleton<IOperationExecutor, PipelineArtifactOperationExecutor>();
         services.AddSingleton<IFileSystemReader, PhysicalFileSystemReader>();
         services.AddSingleton<IOperationExecutor, PipelineDotnetTestOperationExecutor>();
         services.AddSingleton<IOperationExecutor, PipelineGateStatusOperationExecutor>();
+        // type: aetheus steps. Function implementations register as IPipelineFunction; a catalog entry
+        // without one fails as function-not-implemented. The set is PipelineFunctions, the one the
+        // aetheus-fn executable runs inside step containers, so both paths implement the same functions.
+        foreach (var function in PipelineFunctions.CreateAll())
+            services.AddSingleton(function);
+        services.AddSingleton<IOperationExecutor, PipelineFunctionOperationExecutor>();
+        services.AddSingleton<ContainerPipelineFunctionExecutor>();
         services.AddSingleton<IScannerProcessRunner, ScannerProcessRunner>();
         services.AddSingleton<ScannerSourceProjectionManager>();
         services.AddSingleton<IOperationExecutor, ScannerOperationExecutor>();

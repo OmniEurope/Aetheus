@@ -59,17 +59,16 @@ else
     }
     else if (_run.Status == PipelineStatus.Cancelled && PipelineRunPresentation.CancelledByText(_run, L) is { } cancelledBy)
     {
-        @* Recette R2-103: who stopped the run, once it is over. *@
+        @* Who stopped the run, once it is over. *@
         <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mt-sm"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent>
             <div class="run-cancelled-by">@cancelledBy</div>
         </ChildContent></OmniAlert>
     }
-    @* PLAN-003 D15: the assurance verdict, the waiting reasons and the incomplete gate used to
-       stack up to three banners between the header and the tabs, pushing the content down on
-       every run. They are badges in the header now; their detail sits in the overview tab. *@
+    @* Header badges summarize the assurance verdict and waiting reasons; the overview tab holds
+       their detail. *@
     @* S-UX-RUNB: surface WHY a run failed at the top of the page (failed step names + exit codes), so the
        "why" reads at a glance without opening the Overview tab or drilling into a step. *@
-    @* R-14: the same "why" on a run whose rollback stage put the previous version back, in amber. *@
+    @* Amber identifies a deployment whose rollback restored the previous version. *@
     @if (_run.Status is PipelineStatus.Failed or PipelineStatus.RolledBack && FailedSteps.Count > 0)
     {
         var rolledBack = _run.Status == PipelineStatus.RolledBack;
@@ -78,6 +77,7 @@ else
             @string.Format(L["RunFailedStepsLabel"], FailedRunReason)
             </OmniAlert>
     }
+    <PipelineRunToEndAlert Run="@_run" />
 
     @* Tabs *@
     @if (!TabsReady)
@@ -109,13 +109,19 @@ else
                     @* All run facts + produced outputs (release/artifact/env) share ONE responsive, equal-height
                        grid so every tile sits on the same line and only wraps when the viewport narrows. *@
                     <div class="run-overview-tiles omni-u-mb-lg">
+                        @* Recette R1-64: the pipeline's id first; the run's own number is in the page title. *@
+                        <OmniCard Class="run-overview-card run-pipeline-id-tile">
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Tag" Class="run-tile-icon" /> @L["PipelineIdTile"]</OmniText>
+                            <div class="run-tile-main"><OmniText Element="OmniTextElement.Strong">@_run.PipelineId</OmniText></div>
+                            <div class="run-tile-foot"><span class="run-tile-sublabel">@_run.PipelineName</span></div>
+                        </OmniCard>
                         @* Status and step progress answer the same question ("where does the run stand?"),
                            so they share one tile that jumps to the step logs. *@
                         <div class="run-tile-link" role="button" tabindex="0" @onclick="GoToLogsTab"
                              @onkeydown="@(e => { if (e.Key == "Enter" || e.Key == " ") GoToLogsTab(); })">
                             <OmniCard Class="run-overview-card">
                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Info" Class="run-tile-icon" /> @L["Status"]</OmniText>
-                                @* Recette R-145: every tile is label, value, footer, in three fixed slots. *@
+                                @* Every tile is label, value, footer, in three fixed slots. *@
                                 <div class="run-tile-main">
                                     <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Start" Class="run-status-badges">
                                         <OmniBadge Fill="OmniFill.Solid" Tone="@GetRunBadge(_run.Status)">@L.Localize(_run.Status)</OmniBadge>
@@ -126,10 +132,13 @@ else
                                             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="run-live-interrupted-badge"
                                                        title="@L["RunLiveInterruptedTitle"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@string.Format(L["RunLiveInterrupted"].Value, interruptedSince.ToLocalTime().ToString("t"))</ChildContent></OmniBadge>
                                         }
-                                        @* R-497: the grade is the Quality tile's; the candidate verdict sits here, in
-                                           short words (its full sentence is the tooltip). Deployable is tri-state: only
-                                           a decided verdict is stated, so an undecided seal never reads as a refusal. *@
-                                        @* Recette R2-146: a Rejected run already says the candidate was refused; the badge stays for a deployable one. *@
+                                        @* The grade is the Quality tile's; the candidate verdict
+                                           sits here, in short words (its full sentence is the
+                                           tooltip). Deployable is tri-state: only a decided
+                                           verdict is stated, so an undecided seal never reads as a
+                                           refusal. *@
+                                        @* A Rejected run already says the candidate was refused;
+                                           the badge stays for a deployable one. *@
                                         @if (AssuranceVerdict is { Deployable: not null } verdict && !(verdict.Deployable == false && _run.Status == PipelineStatus.Rejected))
                                         {
                                             <OmniBadge Fill="OmniFill.Solid" Tone="@(verdict.Deployable == true ? OmniTone.Success : OmniTone.Warning)" Class="run-candidate-verdict-badge"
@@ -176,10 +185,10 @@ else
                             </div>
                         }
                         <PipelineRunSourceTile Run="@_run" RepoId="@_repoId" />
-                        @* Recette R-498: parent run or the person who launched, and the runs this one started. *@
+                        @* Parent run or the person who launched, and the runs this one started. *@
                         <PipelineRunLineageTile Run="@_run" ProjectId="@(ProjectId ?? _run.ProjectId)" ServerId="@ServerId" />
-                        @* Recette R-423: no coverage tile here. The figure belongs to quality: the run's
-                           Coverage tab gives its detail and the project's Quality page its trend. *@
+                        @* No coverage tile here. The figure belongs to quality: the run's Coverage
+                           tab gives its detail and the project's Quality page its trend. *@
                         @* Produced outputs - same grid as the run facts so all tiles share the row and wrap together. *@
                         @foreach (var release in _releases)
                             {
@@ -213,7 +222,8 @@ else
                                     <OmniCard Class="run-overview-card">
                                         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Archive" Class="run-tile-icon omni-u-text-accent" /> @L["Artifacts"]</OmniText>
                                         <div class="run-tile-main">
-                                            @* Recette R-340: a single artifact reads by its name, several by their count. *@
+                                            @* A single artifact reads by its name, several by
+                                               their count. *@
                                             @if (_run.Artifacts.Count == 1)
                                             {
                                                 <span class="run-tile-value run-artifact-name" title="@_run.Artifacts[0].Name">@_run.Artifacts[0].Name</span>
@@ -239,13 +249,13 @@ else
                             }
                     </div>
 
-                    @* PLAN-003 lot 19: the timeline sits right under the tiles. It is what the page is
-                       opened for - where the run stands, stage by stage - so it comes before the
-                       secondary blocks, and the time axis closes the tab. *@
+                    @* The stage timeline precedes secondary details so the run's progress is
+                       visible first. *@
                     <RunTimelineTree Run="_run!" Depth="0" SelectedStepId="_selectedStep?.Id" OnSelectStep="SelectStep"
                                      PreloadedChildren="ChildRuns" Baselines="_baselines.Runs"
                                      ProjectId="ProjectId" ServerId="ServerId" />
                     <PipelineRunCompatibilityAttestation Run="_run" RepoId="_repoId" />
+                    <PipelineRunMigrationGate Run="_run" />
                     <PipelineRunAiResultsCard Results="@_aiResults" OnView="@OpenAiResultAsync" />
                     @* S-UX-28: inline error logs for failed steps, surfaced directly on the Overview *@
                     @if (FailedSteps.Count > 0)
@@ -286,11 +296,11 @@ else
                         </OmniCard>
                     }
 
-                    @* Lot 12.4: what the preflight verified to let this run start. *@
+                    @* The preflight results explain why this run was allowed to start. *@
                     <PipelineRunPreflightRecord Checks="_run.PreflightChecks" />
                     @* D15: the detail behind the header badges. The verdict and the waiting reasons
                        are what you open the run for; they just no longer push the tabs down. *@
-                    <PipelineRunAssuranceBanner Verdict="AssuranceVerdict" />
+                    <PipelineRunAssuranceBanner Verdict="AssuranceVerdict" ViewingRunId="@_run.Id" />
                     <PipelineRunWaitingAlert Waits="WaitViews" />
                     @if (_gateState.IsIncomplete)
                     {
@@ -324,9 +334,8 @@ else
                         </OmniCard>
                     }
 
-                    @* Lot 12.1: the stages on a shared time axis, closing the tab. The list above gives
-                       names, order and durations; only the axis shows which stages overlapped and where
-                       the run's time actually went. *@
+                    @* The shared time axis shows actual stage overlap, which the ordered list
+                       alone cannot show. *@
                     <RunGanttStrip Run="_run" Baselines="@(_run is null ? null : _baselines.Runs.GetValueOrDefault(_run.Id))" />
                 </div>
             </ChildContent></OmniTabsItem>
@@ -390,8 +399,8 @@ else
                                 <div class="run-step-logs-toolbar">
                                     @if (!string.IsNullOrEmpty(_selectedStep.Command))
                                     {
-                                        @* Recette R-141: the two toggles are framed buttons again, filled while
-                                           what they show is on screen, as before the OE migration. *@
+                                        @* The framed toggle buttons are filled while their content
+                                           is visible. *@
                                         <OmniButton Variant="@(_showCommand ? OmniButtonVariant.Secondary : OmniButtonVariant.Ghost)" Class="run-logs-toggle" aria-pressed="@(_showCommand ? "true" : "false")" OnClick="@(() => _showCommand = !_showCommand)" title="@(_showCommand ? L["HideCommand"] : L["ShowCommand"])"><OmniIcon Name="@MaterialIconMap.Resolve((_showCommand ? "code_off" : "code"))" /> <span>@L["Command"]</span></OmniButton>
                                     }
                                     <OmniButton Variant="@(_showResults ? OmniButtonVariant.Secondary : OmniButtonVariant.Ghost)" Class="run-logs-toggle" aria-pressed="@(_showResults ? "true" : "false")" OnClick="@(() => _showResults = !_showResults)" title="@(_showResults ? L["HideOutput"] : L["ShowOutput"])"><OmniIcon Name="@MaterialIconMap.Resolve((_showResults ? "visibility" : "visibility_off"))" /> <span>@L["Output"]</span></OmniButton>
@@ -463,8 +472,8 @@ else
                                                tool output, so approximate sizing is acceptable here. *@
                                             @if (_logWindow.HasEarlierLines(_selectedStep.TaskId!.Value))
                                             {
-                                                @* Recette R2-104 / FRONT-010: the live view keeps the latest lines only;
-                                                   the complete log is read on demand, page by page. *@
+                                                @* The live view retains a bounded tail; complete
+                                                   logs are fetched on demand, page by page. *@
                                                 <OmniAlert Severity="OmniSeverity.Info">
                                                     <span>@L["EarlierLogLinesHidden"]</span>
                                                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ShowCompleteLogAsync" Busy="@_completeLogLoading"><OmniIcon Name="OmniIconName.ArrowLineUp" /> <span>@L["ShowCompleteLog"]</span></OmniButton>
@@ -504,8 +513,11 @@ else
                                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Definition"]</OmniText>
                                 <span class="omni-u-text-muted run-yaml-subtitle">@_run.PipelineName</span>
                                 <div class="pipeline-list-spacer"></div>
+                                @* STD-BTN detection 11: Wrap visible, the other actions in the menu. *@
                                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _yamlWrap = !_yamlWrap)" title="@L["WrapLinesHint"]"><OmniIcon Name="OmniIconName.ArrowElbowDownLeft" /> <span>@L["WrapLines"]</span></OmniButton>
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyYamlAsync"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["Copy"]</span></OmniButton>
+                                <OmniOverflowMenu Label="@L["MoreActions"]">
+                                    <OmniMenuItem OnClick="@CopyYamlAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["Copy"]</ChildContent></OmniMenuItem>
+                                </OmniOverflowMenu>
                             </div>
                             <div class="run-yaml-code @(_yamlWrap ? "run-yaml-wrap" : "")">
                                 @foreach (var yl in PipelineYamlLines.Parse(_run.YamlSnapshot))

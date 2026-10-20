@@ -83,8 +83,7 @@ public class ServerAppsSectionTests : BunitContext
             new ServerAppDto { Id = 7, Name = "myapp" });
         var cut = Render<ServerAppsSection>(p => p.Add(x => x.ServerId, 1));
         cut.WaitForState(
-            () => typeof(ServerAppsSection).GetField("_apps", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ServerAppsSection).GetField("_apps", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance) != null);
 
         typeof(ServerAppsSection).GetField("_addName", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, "myapp");
         typeof(ServerAppsSection).GetField("_addVersion", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, "1.0");

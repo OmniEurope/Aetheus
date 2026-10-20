@@ -19,7 +19,7 @@
             <OmniDataGridColumn TItem="PackageRegistryVersionDto" Property="CreatedAt" Title="@L["PublishedAt"]" Width="9.375rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true">
                 <Template Context="v">@v.CreatedAt.ToString("g")</Template>
             </OmniDataGridColumn>
-            @* Recette R-210: the listed state is this column's value, so it filters on listed / unlisted. *@
+            @* The listed state is this column's value, so it filters on listed / unlisted. *@
             <OmniDataGridColumn TItem="PackageRegistryVersionDto" Property="IsListed" Title="@L["Status"]" Width="8.125rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@ListedText">
                 <Template Context="v">
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ToggleListedAsync(v))" title="@(v.IsListed ? L["Unlist"] : L["Relist"])" Label="@(v.IsListed ? L["Unlist"] : L["Relist"])"><OmniIcon Name="@MaterialIconMap.Resolve((v.IsListed ? "visibility_off" : "visibility"))" /></OmniButton>

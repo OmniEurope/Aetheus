@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: EUPL-1.2
+using System.ComponentModel.DataAnnotations;
+
+namespace Aetheus.Shared.Components.Servers;
+
+/// <summary>
+/// Out-of-memory kills of the host since its last boot (PLAN-010 lot 1). Sent by Linux agents only;
+/// a heartbeat without it (Windows, an older agent, an unreadable <c>/proc/vmstat</c>) is unknown and
+/// never raises anything.
+/// </summary>
+public sealed record OomKillReportDto
+{
+    /// <summary>Most victims the agent reports: the backend names at most this many per alert.</summary>
+    public const int MaxVictims = 16;
+
+    /// <summary><c>/proc/sys/kernel/random/boot_id</c>: tells a reboot (counter back to 0) from a new kill.</summary>
+    [Required]
+    [StringLength(64, MinimumLength = 1)]
+    public string BootId { get; init; } = string.Empty;
+
+    /// <summary>The kernel's <c>oom_kill</c> counter of <c>/proc/vmstat</c>: kills since the boot.</summary>
+    [Range(0, long.MaxValue)]
+    public long KillCount { get; init; }
+
+    /// <summary>
+    /// Whether the agent could read the kernel log at its last attempt, which names the killed
+    /// process, from <c>/dev/kmsg</c> or from the systemd journal (the unit is in the <c>systemd-journal</c>
+    /// group). False on an install from before that group was granted, or without systemd: the backend
+    /// then reports the count without a name.
+    /// </summary>
+    public bool VictimsReadable { get; init; }
+
+    /// <summary>Latest kills found in the kernel log, oldest first; empty when it was not readable.</summary>
+    [MaxLength(MaxVictims)]
+    public List<OomKillVictimDto> RecentVictims { get; init; } = [];
+}
+
+/// <summary>One process the kernel killed for lack of memory, as its log line names it.</summary>
+public sealed record OomKillVictimDto
+{
+    [Range(1, int.MaxValue)]
+    public int Pid { get; init; }
+
+    /// <summary>The task's command name (<c>comm</c>, 15 characters in the kernel).</summary>
+    [Required]
+    [StringLength(64, MinimumLength = 1)]
+    public string Process { get; init; } = string.Empty;
+}

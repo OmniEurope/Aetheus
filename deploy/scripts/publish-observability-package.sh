@@ -45,6 +45,15 @@ case "$VERSION" in ''|*[!0-9A-Za-z.+-]*)
   exit 2
   ;;
 esac
+# Each package is published under its own version (PLAN-002 C8). Refuse a PACKAGE_VERSION other than
+# the packageVersion this candidate's build attested, so one package's version never reaches another.
+test -f "$OUT/provenance.json" || { echo "The $KIND candidate has no provenance.json." >&2; exit 2; }
+ATTESTED_VERSION="$(sed -n \
+  's/^[[:space:]]*"packageVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' "$OUT/provenance.json")"
+test "$ATTESTED_VERSION" = "$VERSION" || {
+  echo "PACKAGE_VERSION $VERSION is not the version the $KIND candidate attests." >&2
+  exit 2
+}
 test -n "${AETHEUS_PACKAGE_BASE_URL:-}" || { echo "AETHEUS_PACKAGE_BASE_URL is required." >&2; exit 1; }
 test -n "${AETHEUS_PACKAGE_TOKEN:-}" || { echo "AETHEUS_PACKAGE_TOKEN is required." >&2; exit 1; }
 case "$AETHEUS_PACKAGE_BASE_URL" in https://*) ;; *)
@@ -122,14 +131,9 @@ case "$KIND" in
       :
     else
       if [ "${AETHEUS_PUBLISH_PREFLIGHT_ONLY:-false}" = true ]; then exit 0; fi
-      # npm refuses to publish a prerelease without an explicit --tag, and it is right to: defaulting
-      # it to `latest` would hand every consumer a preview as the current release. Publisher run 1242
-      # signed and published both NuGet packages, read them back byte-identical, then died here on
-      # "You must specify a tag using --tag when publishing a prerelease version" - so no prerelease
-      # of the browser package could ever be promoted. Derive the tag from the version's own
-      # prerelease identifier (0.1.12-mirror.20260823 -> mirror, 1.0.0-rc.1 -> rc) and keep npm's
-      # default for a stable release. Build metadata is stripped first so a "+build-1" suffix cannot
-      # be mistaken for a prerelease dash.
+      # Derive prerelease npm tags from the version identifier so preview packages do not become
+      # latest; remove build metadata before detecting a prerelease dash. See
+      # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
       NPM_VERSION_CORE="${VERSION%%+*}"
       case "$NPM_VERSION_CORE" in
         *-*)
@@ -145,10 +149,9 @@ case "$KIND" in
       esac
       NPM_CONFIG_USERCONFIG="$NPMRC" npm publish "$TARBALL" \
         --registry "$NPM_SOURCE" --tag "$NPM_TAG"
-      # `test "$STATUS" = 200` used to be the whole check. Under `set -e` that killed the step
-      # without printing anything at all: the log ended on npm's own "+ @aetheus/web-analytics@..."
-      # success line and the run just failed, with no way to tell a slow read-back from a wrong URL.
-      # Say which status came back, and give the registry the same bounded grace the NuGet side gets.
+      # Report registry read-back status and allow a bounded propagation delay so a failed
+      # verification remains distinguishable from successful publication. See
+      # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
       NPM_ATTEMPTS="${AETHEUS_PACKAGE_INDEX_ATTEMPTS:-20}"
       ATTEMPT=1
       while :; do

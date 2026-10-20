@@ -18,6 +18,14 @@ public sealed class CronOperationExecutor(
 {
     private readonly AetheusAgentOptions _options = options.Value;
 
+    internal bool IsLinux { get; init; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+
+    // The process runner, replaceable so the helper argv is asserted without sudo.
+    internal Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>>
+        RunProcessAsync
+    { get; init; } = static (startInfo, timeoutSeconds, onOutput, processLogger, ct) =>
+            ProcessRunner.RunAsync(startInfo, timeoutSeconds, onOutput, processLogger, ct);
+
     // Root-owned helper deposited by install-agent-linux.sh (--module server-management). The
     // matching /etc/sudoers.d/aetheus-cron grants exactly this binary, NOPASSWD.
     internal const string HelperPath = "/usr/local/lib/aetheus/cron-apply";
@@ -48,7 +56,7 @@ public sealed class CronOperationExecutor(
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken cancellationToken)
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (!IsLinux)
         {
             await onOutput("Cron operations are only supported on Linux", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
@@ -72,7 +80,7 @@ public sealed class CronOperationExecutor(
         {
             psi.ArgumentList.Add("delete");
             psi.ArgumentList.Add(target);
-            return await ProcessRunner.RunAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+            return await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
         }
 
         // CronSave: user/schedule/command travel in env vars; re-validate each before the helper.
@@ -98,6 +106,6 @@ public sealed class CronOperationExecutor(
         psi.ArgumentList.Add(schedule!);
         psi.ArgumentList.Add(command!);
 
-        return await ProcessRunner.RunAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+        return await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -5,7 +5,8 @@ using Aetheus.Front.Layout;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>The pure helpers behind the 2026-09-24 recette rows (R-276, R-279, R-296, R-300).</summary>
+/// <summary>Covers pure formatting helpers for identifiers, requirement warnings and notification
+/// details.</summary>
 public sealed class Recette20260924Tests
 {
     [Theory]
@@ -26,7 +27,7 @@ public sealed class Recette20260924Tests
     [InlineData(null, OmniAppearance.Dark)]
     [InlineData("bogus", OmniAppearance.Dark)]
     public void ThemePreference_UnknownReadsAsDark(string? stored, OmniAppearance expected) =>
-        Assert.Equal(expected, Aetheus.Front.Components.Settings.SiteAppearanceState.ParseAppearance(stored));
+        Assert.Equal(expected, Aetheus.Front.Components.Settings.SiteAppearance.ParseAppearance(stored));
 
     [Fact]
     public void UnmetSignature_IgnoresOrderAndChangesWithTheList()

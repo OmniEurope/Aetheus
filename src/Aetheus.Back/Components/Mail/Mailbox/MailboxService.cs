@@ -3,10 +3,8 @@ using MimeKit;
 
 namespace Aetheus.Back.Components.Mail.Mailbox;
 
-/// <summary>
-/// Recette R1-17. Each call opens one IMAP connection as the mailbox, with the password the reader typed
-/// (held by <see cref="IMailboxCredentialStore"/>, never persisted), does its work and logs out.
-/// </summary>
+/// <summary>Open one IMAP connection per call with the reader credentials from <see
+/// cref="IMailboxCredentialStore"/>, perform the operation and log out.</summary>
 public sealed class MailboxService(
     IMailboxRepository repository,
     IMailboxConnector connector,
@@ -27,10 +25,23 @@ public sealed class MailboxService(
         SubmissionPort = MailboxPorts.Submission
     };
 
+    public async Task<PaginatedResult<MailboxDirectoryEntryDto>> ListDirectoryAsync(
+        IReadOnlyCollection<int>? serverIds, PaginationRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var size = Math.Clamp(request.PageSize, 1, 200);
+        var number = Math.Max(1, request.Page);
+        if (serverIds is { Count: 0 })
+            return new PaginatedResult<MailboxDirectoryEntryDto> { Items = [], TotalCount = 0, Page = number, PageSize = size };
+        var (items, total) = await repository.ListDirectoryAsync(
+            serverIds, request.Search, number, size, request.SortBy, request.SortDescending, ct).ConfigureAwait(false);
+        return new PaginatedResult<MailboxDirectoryEntryDto> { Items = items, TotalCount = total, Page = number, PageSize = size };
+    }
+
     public async Task<MailboxAccessDto> GetAccessAsync(MailboxCredentialKey key, CancellationToken ct = default)
     {
         var account = await FindAccountAsync(key, ct).ConfigureAwait(false);
-        return ToAccess(account, credentials.ExpiresAt(key));
+        return ToAccess(account, credentials.ExpiresAt(key), credentials.IsAdministratorAccess(key));
     }
 
     public async Task<MailboxAccessDto> UnlockAsync(MailboxCredentialKey key, string password, CancellationToken ct = default)
@@ -38,11 +49,11 @@ public sealed class MailboxService(
         if (string.IsNullOrEmpty(password)) throw new BadRequestException("The mailbox password is required.");
         var account = await FindAccountAsync(key, ct).ConfigureAwait(false);
         // The login itself is the check: a refused one throws before anything is held.
-        await using (await connector.OpenAsync(Endpoint(account, password), ct).ConfigureAwait(false))
+        await using (await connector.OpenAsync(Endpoint(account, new MailboxHeldCredential(password, null)), ct).ConfigureAwait(false))
         {
         }
         var expiresAt = credentials.Store(key, password);
-        return ToAccess(account, expiresAt);
+        return ToAccess(account, expiresAt, administratorAccess: false);
     }
 
     public void Lock(MailboxCredentialKey key) => credentials.Forget(key);
@@ -131,14 +142,14 @@ public sealed class MailboxService(
             throw new BadRequestException("A reply or a forward names the message it answers.");
         MailboxOutgoingAttachments.Validate(request.Attachments);
 
-        return WithSessionAsync(key, async (session, account, password) =>
+        return WithSessionAsync(key, async (session, account, credential) =>
         {
             MimeMessage? original = null;
             if (replying)
                 original = (await FetchAsync(session, request.SourceFolder!, request.SourceUid!.Value, ct).ConfigureAwait(false)).Message;
             var message = MailboxComposer.BuildMessage(
                 request, new MailboxAddress(string.Empty, account.Email), original, timeProvider.GetUtcNow());
-            await connector.SendAsync(Endpoint(account, password), message, ct).ConfigureAwait(false);
+            await connector.SendAsync(Endpoint(account, credential), message, ct).ConfigureAwait(false);
             return await SaveToSentAsync(session, message, ct).ConfigureAwait(false);
         }, ct);
     }
@@ -201,15 +212,15 @@ public sealed class MailboxService(
         WithSessionAsync(key, (session, account, _) => work(session, account), ct);
 
     private async Task<T> WithSessionAsync<T>(
-        MailboxCredentialKey key, Func<IMailboxSession, MailboxAccount, string, Task<T>> work, CancellationToken ct)
+        MailboxCredentialKey key, Func<IMailboxSession, MailboxAccount, MailboxHeldCredential, Task<T>> work, CancellationToken ct)
     {
         var account = await FindAccountAsync(key, ct).ConfigureAwait(false);
-        var password = credentials.TryUse(key)
+        var credential = credentials.TryUseCredential(key)
             ?? throw new ConflictException("The mailbox is locked: type its password to open it.");
         try
         {
-            await using var session = await connector.OpenAsync(Endpoint(account, password), ct).ConfigureAwait(false);
-            return await work(session, account, password).ConfigureAwait(false);
+            await using var session = await connector.OpenAsync(Endpoint(account, credential), ct).ConfigureAwait(false);
+            return await work(session, account, credential).ConfigureAwait(false);
         }
         catch (ConflictException)
         {
@@ -267,10 +278,11 @@ public sealed class MailboxService(
             throw new BadRequestException("The folder is missing or too long.");
     }
 
-    private static MailboxEndpoint Endpoint(MailboxAccount account, string password) =>
-        new(account.Host, MailboxPorts.Imaps, MailboxPorts.Submission, account.Email, password);
+    /// <summary>The typed password logs in as the address; the administrator access (R1-41) as the master login.</summary>
+    internal static MailboxEndpoint Endpoint(MailboxAccount account, MailboxHeldCredential credential) =>
+        new(account.Host, MailboxPorts.Imaps, MailboxPorts.Submission, credential.Login ?? account.Email, credential.Password);
 
-    private static MailboxAccessDto ToAccess(MailboxAccount account, DateTime? expiresAt) => new()
+    internal static MailboxAccessDto ToAccess(MailboxAccount account, DateTime? expiresAt, bool administratorAccess) => new()
     {
         AccountId = account.AccountId,
         Email = account.Email,
@@ -279,7 +291,8 @@ public sealed class MailboxService(
         SubmissionPort = MailboxPorts.Submission,
         Username = account.Email,
         IsUnlocked = expiresAt is not null,
-        UnlockedUntil = expiresAt
+        UnlockedUntil = expiresAt,
+        OpenedAsAdministrator = expiresAt is not null && administratorAccess
     };
 
     private static MailboxFolderDto ToFolderDto(MailboxFolderInfo folder) => new()

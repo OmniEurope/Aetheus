@@ -121,4 +121,76 @@ public sealed class PipelineDotnetTestRequestTests
         Assert.True(PipelineDotnetTestRequest.TryCreate("tests/X", vars, out var request, out _));
         Assert.True(request!.CollectCoverage);
     }
+
+    // --- Toolchain: pinned SDK, tool directories, progress interval ---
+
+    private static string Absolute(params string[] parts) => Path.Combine([Path.GetTempPath(), .. parts]);
+
+    [Fact]
+    public void WithoutToolchainSettingsTheHostDotnetRunsWithTheDefaultProgressInterval()
+    {
+        Assert.True(PipelineDotnetTestRequest.TryCreate("tests/X", Valid(), out var request, out _));
+
+        Assert.Equal("dotnet", request!.DotnetPath);
+        Assert.Empty(request.ToolPaths);
+        Assert.Equal(TimeSpan.FromSeconds(30), request.ProgressInterval);
+    }
+
+    [Fact]
+    public void APinnedSdkToolDirectoriesAndAnIntervalAreRead()
+    {
+        var vars = Valid();
+        var dotnet = Absolute("sdk", "dotnet");
+        vars[PipelineDotnetTestVariables.DotnetPath] = dotnet;
+        vars[PipelineDotnetTestVariables.ToolPaths] = Absolute("node", "bin") + "\n" + Absolute("tools");
+        vars[PipelineDotnetTestVariables.ProgressIntervalSeconds] = "45";
+
+        Assert.True(PipelineDotnetTestRequest.TryCreate("tests/X", vars, out var request, out var rejection), rejection);
+
+        Assert.Equal(dotnet, request!.DotnetPath);
+        Assert.Equal([Absolute("node", "bin"), Absolute("tools")], request.ToolPaths);
+        Assert.Equal(TimeSpan.FromSeconds(45), request.ProgressInterval);
+    }
+
+    [Theory]
+    [InlineData("$(DOTNET)")]
+    [InlineData("sdk/dotnet")]
+    [InlineData("pwsh")]
+    public void ADotnetThatIsNeitherTheHostOneNorAnAbsolutePathIsRefused(string dotnet)
+    {
+        // An unresolved $(DOTNET) means the SDK output was never published: falling back to the host
+        // SDK would hide that, so the step refuses it.
+        var vars = Valid();
+        vars[PipelineDotnetTestVariables.DotnetPath] = dotnet;
+
+        Assert.False(PipelineDotnetTestRequest.TryCreate("tests/X", vars, out _, out var rejection));
+        Assert.Contains(PipelineDotnetTestVariables.DotnetPath, rejection!, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("$(NODE_BIN_DIR)")]
+    [InlineData("relative/bin")]
+    [InlineData("")]
+    public void AToolDirectoryThatIsNotAbsoluteIsRefused(string entry)
+    {
+        var vars = Valid();
+        vars[PipelineDotnetTestVariables.ToolPaths] = Absolute("node") + "\n" + entry;
+
+        Assert.False(PipelineDotnetTestRequest.TryCreate("tests/X", vars, out _, out var rejection));
+        Assert.Contains(PipelineDotnetTestVariables.ToolPaths, rejection!, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-5")]
+    [InlineData("ten")]
+    [InlineData("1.5")]
+    public void AProgressIntervalThatIsNotAPositiveIntegerIsRefused(string interval)
+    {
+        var vars = Valid();
+        vars[PipelineDotnetTestVariables.ProgressIntervalSeconds] = interval;
+
+        Assert.False(PipelineDotnetTestRequest.TryCreate("tests/X", vars, out _, out var rejection));
+        Assert.Contains(PipelineDotnetTestVariables.ProgressIntervalSeconds, rejection!, StringComparison.Ordinal);
+    }
 }

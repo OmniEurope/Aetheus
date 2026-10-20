@@ -17,7 +17,15 @@
         <RunParameterFields @key="_parametersRevision" @ref="_fields"
                             Parameters="@_parameters" AvailableReleases="@AvailableReleases" AvailableReleaseTotal="@AvailableReleaseTotal" />
 
-        @if (Branches.Count == 0 && _parameters.Count == 0)
+        @* Offered only when the platform setting allows it; the backend refuses it otherwise. *@
+        @if (RunToEndAllowed)
+        {
+            <OmniFormField For="launch-run-to-end" Help="@L["RunToEndHelp"]" Class="run-params-field">
+                <OmniSwitch Id="launch-run-to-end" @bind-Value="_runToEnd">@L["RunToEnd"]</OmniSwitch>
+            </OmniFormField>
+        }
+
+        @if (Branches.Count == 0 && _parameters.Count == 0 && !RunToEndAllowed)
         {
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NoRunOptions"]</OmniText>
         }

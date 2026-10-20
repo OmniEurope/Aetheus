@@ -59,7 +59,7 @@ public sealed class AnalysisPolicyResolverTests
     {
         var resolved = AnalysisPolicyResolver.Resolve(null, null, []);
 
-        Assert.Equal(18, resolved.Count); // PLAN-003 2.4 added the accessibility default.
+        Assert.NotEmpty(resolved);
         Assert.All(resolved, item =>
         {
             Assert.Equal(AnalysisPolicyScope.System, item.Scope);

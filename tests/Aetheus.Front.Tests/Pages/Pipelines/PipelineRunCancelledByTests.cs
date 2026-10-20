@@ -5,10 +5,8 @@ using Microsoft.Extensions.Localization;
 
 namespace Aetheus.Front.Tests.Pages;
 
-/// <summary>
-/// Recette R2-103: release-fast #2536 was cancelled and nobody could tell by whom. The run page now
-/// names the author the backend recorded, a user or Aetheus itself.
-/// </summary>
+/// <summary>The run page names the cancellation author recorded by the backend, whether a user or
+/// the system.</summary>
 public sealed class PipelineRunCancelledByTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -41,8 +39,7 @@ public sealed class PipelineRunCancelledByTests : BunitContext
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(page => page.RunId, 40));
 
-        cut.WaitForAssertion(() => Assert.Equal(expectedKey, cut.Find(".run-cancelled-by").TextContent.Trim()),
-            TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Equal(expectedKey, cut.Find(".run-cancelled-by").TextContent.Trim()));
     }
 
     [Fact]
@@ -59,7 +56,7 @@ public sealed class PipelineRunCancelledByTests : BunitContext
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(page => page.RunId, 41));
 
-        cut.WaitForState(() => cut.Markup.Contains("old-cancelled"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("old-cancelled"));
         Assert.Empty(cut.FindAll(".run-cancelled-by"));
     }
 

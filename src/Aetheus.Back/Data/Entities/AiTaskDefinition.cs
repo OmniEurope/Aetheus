@@ -11,6 +11,15 @@ public sealed class AiTaskDefinition
     public int? ServerId { get; set; }
     public string? Schedule { get; set; }
     public bool Enabled { get; set; } = true;
+
+    /// <summary>Workspace-relative files or directories attached to the prompt of a project task, as a
+    /// JSON array (the pipeline step key <c>context_paths</c>). Null when none.</summary>
+    public string? ContextPathsJson { get; set; }
+
+    /// <summary>Commit range whose log and diff are attached to the prompt (the pipeline step key
+    /// <c>git_range</c>), for example <c>HEAD~10..HEAD</c>. Null when none.</summary>
+    public string? GitRange { get; set; }
+
     public DateTime? LastScheduledAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

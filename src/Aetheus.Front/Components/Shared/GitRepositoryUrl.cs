@@ -21,9 +21,9 @@ public static class GitRepositoryUrl
         return canonical.StartsWith('/') ? canonical : null;
     }
 
-    /// <summary>Recette R-373: true for an Aetheus internal clone URL (<c>/git/{projectId}/{slug}.git</c>,
-    /// with or without the suffix). It serves git over smart HTTP, not a web page, so no
-    /// <c>/commit/</c> or <c>/tree/</c> link may be built on it.</summary>
+    /// <summary>True for an Aetheus internal clone URL (<c>/git/{projectId}/{slug}.git</c>, with or
+    /// without the suffix). It serves git over smart HTTP, not a web page, so no <c>/commit/</c> or
+    /// <c>/tree/</c> link may be built on it.</summary>
     public static bool IsInternalClone(string? value) => TryParseInternalClone(value, out _, out _);
 
     /// <summary>The project id and slug an internal clone URL names; its host is ignored, since the
@@ -43,11 +43,9 @@ public static class GitRepositoryUrl
         return true;
     }
 
-    /// <summary>
-    /// Recette R-373: the one repository among <paramref name="repositories"/> a clone URL names: by
-    /// project and slug for an internal clone URL, by canonical URL otherwise, and the only repository
-    /// when no URL is known. Null when none or several match: never guessed.
-    /// </summary>
+    /// <summary> The one repository among <paramref name="repositories"/> a clone URL names: by
+    /// project and slug for an internal clone URL, by canonical URL otherwise, and the only
+    /// repository when no URL is known. Null when none or several match: never guessed. </summary>
     public static int? ResolveRepositoryId(string? repositoryUrl, IReadOnlyList<GitLightRepoDto> repositories)
     {
         List<GitLightRepoDto> matches;

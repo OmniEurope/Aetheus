@@ -32,8 +32,7 @@
         {
             <OmniText Element="OmniTextElement.Paragraph">@L["GracefulRestartBody"]</OmniText>
             <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-3"><LabelContent>@L["WarningSeconds"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.WarningSeconds" Minimum="0" Maximum="600" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-3" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-10"><LabelContent>@L["WarningMessage"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Message" maxlength="200" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-10" /></ChildContent></OmniFormField>
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["WarningMessageHint"]</OmniText>
+            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-10" Help="@L["WarningMessageHint"]"><LabelContent>@L["WarningMessage"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Message" maxlength="200" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-10" /></ChildContent></OmniFormField>
         }
         else if (Mode == TeamspeakDialogMode.Poke)
         {
@@ -45,8 +44,7 @@
         {
             <OmniText Element="OmniTextElement.Paragraph">@string.Format(L["ConfirmBanClient"], _model.Nickname)</OmniText>
             <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-12"><LabelContent>@L["BanReason"]</LabelContent><ChildContent><OmniTextBox @bind-Value="_model.Reason" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-12" /></ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-4"><LabelContent>@L["BanDuration"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.Duration" Minimum="0" Maximum="315360000" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-4" /></ChildContent></OmniFormField>
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 omni-u-text-muted">@L["BanDurationHint"]</OmniText>
+            <OmniFormField For="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-4" Help="@L["BanDurationHint"]"><LabelContent>@L["BanDuration"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_model.Duration" Minimum="0" Maximum="315360000" Id="oe-pages-servers-serverdetailsections-teamspeakoperationdialog-numeric-4" /></ChildContent></OmniFormField>
         }
         else if (Mode == TeamspeakDialogMode.CreateChannel)
         {

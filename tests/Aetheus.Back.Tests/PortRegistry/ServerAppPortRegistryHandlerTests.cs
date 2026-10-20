@@ -10,12 +10,8 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Back.Tests.PortRegistry;
 
-/// <summary>
-/// PLAN-005 lot 6, the upper half of the inversion. <c>ServerApps</c> and <c>PortRegistry</c> are both
-/// storage on the same layer and may not reach each other, so the app announces its port and this
-/// handler is what records it. A test that only checked the event was raised would prove nothing about
-/// the port actually landing in the registry, so this runs the real handler over a real registry.
-/// </summary>
+/// <summary>Exercise the event handler with the registry to verify announced application ports are
+/// persisted without direct dependencies between peer modules.</summary>
 public sealed class ServerAppPortRegistryHandlerTests : IDisposable
 {
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 9, 7, 12, 0, 0, TimeSpan.Zero));

@@ -11,18 +11,17 @@ else
                 @if (ShowGettingStarted)
                 {
                     <OnboardingStepList Title="@L["ProjectGettingStartedTitle"]"
-                        Description="@L["ProjectGettingStartedDescription"]"
+                        Description="@GettingStartedDescription"
                         Steps="@GettingStartedSteps" />
                 }
 
-                @* PLAN-003 lot 30 (recette R-103: an information zone above the cards, not inside one): a
-                   pipeline that requires a library or vault the project lacks will be refused at launch. Say so where the project is read, name
-                   who is waiting, and offer the fix in one click. *@
+                @* Missing pipeline requirements are identified above the project cards with their
+                   dependent pipelines and a provisioning action. *@
                 @if (_unmet.Count > 0 && !_unmetDismissed)
                 {
                     <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-md unmet-requirements-alert" data-testid="unmet-requirements">
                         <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Small">
-                            @* Recette R-296: a project that is never deployed can dismiss this warning for good,
+                            @* A project that is never deployed can dismiss this warning for good,
                                until its list of missing libraries and vaults changes. *@
                             <div class="unmet-requirements-head">
                                 <strong>@string.Format(L["UnmetRequirementsTitle"], _unmet.SelectMany(item => item.Pipelines).Distinct().Count())</strong>
@@ -38,7 +37,7 @@ else
                             }
                             @if (Permissions.CanWrite(ResourceType.Project, Project.Id))
                             {
-                                @* Recette R-273: the button and its explanation wrap instead of overlapping. *@
+                                @* The button and its explanation wrap instead of overlapping. *@
                                 <div class="unmet-requirements-actions">
                                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ProvisionUnmetAsync" Class="@(_provisioningUnmet ? "btn-busy" : null)" Busy="@(_provisioningUnmet)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["PipelineSetupProvision"]</span></OmniButton>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 unmet-requirements-hint">@L["PipelineSetupProvisionHint"]</OmniText>
@@ -55,9 +54,7 @@ else
                    "Repository" (git source, branch, last git activity) on the right. *@
                 <OmniRow Gap="OmniSpacing.Large">
                     <OmniColumn Span="12" MediumSpan="6">
-                        @* Recette R-450: both cards carry their title in the OE card header, one row the
-                           height of a control, so the Repository card's Add button no longer pushes its
-                           lines below those of this card. *@
+                        @* Both card headers occupy one control-height row so their details align. *@
                         <OmniCard Class="overview-info-card">
                             <Header>
                                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="overview-card-heading">
@@ -65,25 +62,22 @@ else
                                 </OmniStack>
                             </Header>
                             <ChildContent>
-                            @* Recette R-449: OE labelled lines, each with its icon (OmniDescriptionItem.Icon). *@
+                            @* OE labelled lines, each with its icon (OmniDescriptionItem.Icon). *@
                             <OmniDescriptionList>
                                 @if (!string.IsNullOrWhiteSpace(Project.Description))
                                 {
                                     <OmniDescriptionItem Label="@L["Description"]"><Icon><OmniIcon Name="OmniIconName.TextAlignLeft" /></Icon><ChildContent>@Project.Description</ChildContent></OmniDescriptionItem>
                                 }
-                                @* PLAN-003 lot 11 / D18: three lines instead of six stacked items.
-                                   Status and grade read together (what the project is, how well it
-                                   scores), the two dates are one line, tags close. The card was
-                                   taller than the one beside it for no added meaning. *@
+                                @* Status and grade share a row, followed by dates and tags for
+                                   compact project information. *@
                                 <OmniDescriptionItem Label="@($"{L["Status"]} · {L["AnalysisGrade"]}")">
                                     <Icon><OmniIcon Name="OmniIconName.Broadcast" /></Icon>
                                     <ChildContent>
-                                        @* Recette R2-051: the status and the grade were one space apart. *@
+                                        @* Status and grade retain distinct spacing. *@
                                         <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="project-status-grade">
                                         <OmniBadge Fill="OmniFill.Solid" Tone="@(Project.Status == ProjectStatus.Active ? OmniTone.Success : OmniTone.Neutral)">@L[Project.Status.ToString()]</OmniBadge>
-                                        @* Recette R2-024: the grade of the latest candidate run, which it opens on its Gate tab
-                                           (R2-147: the cause of an F, its blocking tests and their logs, in one click); the
-                                           quality page when no run has been graded yet. *@
+                                        @* The latest candidate grade links to its Gate tab;
+                                           projects without a graded run link to quality. *@
                                         @if (Project.LatestGateGradeRunId is { } gradeRunId)
                                         {
                                             <a href="@($"/pipelines/runs/{gradeRunId}?projectId={Project.Id}&tab=gate")" class="project-grade-run-link"
@@ -151,9 +145,10 @@ else
                                     {
                                         <OmniDescriptionItem Label="@L["RepositoryUrl"]">
                                             <Icon><OmniIcon Name="OmniIconName.Link" /></Icon>
-                                            @* Recette R1-27: the clone address, read-only in OE's copyable field, so a long
-                                               URL stays inside the card (the field scrolls, the page does not) and the Copy
-                                               button welded to its end puts it on the clipboard. *@
+                                            @* The clone address, read-only in OE's copyable field,
+                                               so a long URL stays inside the card (the field
+                                               scrolls, the page does not) and the Copy button
+                                               welded to its end puts it on the clipboard. *@
                                             <ChildContent>
                                                 <OmniTextBox Value="@RepositoryDisplayUrl" ReadOnly="true" Copyable="true"
                                                              Id="project-overview-clone-url" ValueExpression="@(() => RepositoryDisplayUrl)"
@@ -161,8 +156,7 @@ else
                                             </ChildContent>
                                         </OmniDescriptionItem>
                                     }
-                                    @* PLAN-003 lot 11 / D18: the branch and the last activity are
-                                       one fact about the same repository, so they share a line. *@
+                                    @* Branch and latest activity share a repository row. *@
                                     @if (!string.IsNullOrWhiteSpace(RepositoryDisplayBranch) || Project.LastGitUpdateAt.HasValue)
                                     {
                                         <OmniDescriptionItem Label="@RepositoryActivityLabel">
@@ -180,7 +174,7 @@ else
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-2xl omni-u-mb-sm">@L["ProjectSections"]</OmniHeading>
                 <div class="project-section-grid-scroll omni-u-mb-lg" role="region" aria-label="@L["ProjectSections"]" tabindex="0">
                     <div class="project-section-grid">
-                        @* Recette R-097: no Overview tile (it is the page being read), tiles wrap with the width. *@
+                        @* No Overview tile (it is the page being read), tiles wrap with the width. *@
                         @foreach (var navItem in ProjectNavigationCatalog.VisibleItems(Permissions, Project.Id).Where(item => item.Slug != "overview"))
                         {
                             var isPipeline = navItem.Slug == "pipelines";
@@ -234,7 +228,7 @@ else
                     </OmniCard>
                 }
 
-                @* Recette R-297: the two tiles take the dashboard tiles' size. *@
+                @* The two tiles take the dashboard tiles' size. *@
                 <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-2xl dashboard-tile-row project-overview-recent-row">
                     <OmniColumn Span="12" MediumSpan="6">
                         <OmniCard Class="dashboard-tile project-overview-recent-card">
@@ -316,7 +310,8 @@ else
                                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0"
                                                 title="@when.ToString("F")">@RelativeTime.FormatAgo(L, when)</OmniText>
                                             <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                                                @* Recette R-276 / R-373: the c-/vc- names shortened, the whole value copyable, name and tag linked to the release. *@
+                                                @* The c-/vc- names shortened, the whole value
+                                                   copyable, name and tag linked to the release. *@
                                                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0"><ShortId Value="@release.Version" Href="@($"/releases/{release.Id}")" /></OmniText>
                                                 <ReleaseStatusBadge Status="@release.Status" />
                                                 @if (!string.IsNullOrWhiteSpace(release.TagName))

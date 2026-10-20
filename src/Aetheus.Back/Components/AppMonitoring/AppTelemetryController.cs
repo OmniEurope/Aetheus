@@ -68,7 +68,8 @@ public sealed class AppTelemetryController(
         return Ok(await telemetry.GetMetricSeriesGroupsAsync(id, metric, ct));
     }
 
-    /// <summary>R-455: the application's per-route timings, as its Aetheus.Telemetry package last exported them.</summary>
+    /// <summary>The application's per-route timings, as its Aetheus.Telemetry package last exported
+    /// them.</summary>
     [HttpGet("apps/{id:int}/performance")]
     public async Task<ActionResult<AppPerformanceReportDto>> GetPerformance(int id, CancellationToken ct = default)
     {
@@ -76,7 +77,8 @@ public sealed class AppTelemetryController(
         return Ok(await telemetry.GetPerformanceAsync(id, ct));
     }
 
-    /// <summary>PLAN-013 lot 1: the application's database size, as its Aetheus.Telemetry package last measured it.</summary>
+    /// <summary>The application's database size, as its Aetheus.Telemetry package last measured
+    /// it.</summary>
     [HttpGet("apps/{id:int}/database")]
     public async Task<ActionResult<AppDatabaseSizeReportDto>> GetDatabaseSize(int id, CancellationToken ct = default)
     {
@@ -190,8 +192,8 @@ public sealed class AppTelemetryController(
         [FromQuery(Name = "Filters"), MaxLength(PaginationRequest.MaxFilters)] List<GridFilter>? filters = null)
     {
         if (await GateAsync(id, Permission.Read, ct) is { } fail) return fail;
-        // Recette R-358: the log grid's sort and header filters, checked against the allow-list of
-        // AppLogQuery; an unknown key or an unparsable value is a 400.
+        // The log grid's sort and header filters, checked against the allow-list of AppLogQuery; an
+        // unknown key or an unparsable value is a 400.
         return Ok(await telemetry.GetLogsAsync(id, hours, minSeverity, search, page, pageSize, ct,
             filters is { Count: > 0 } ? filters : null, sortBy, sortDescending));
     }

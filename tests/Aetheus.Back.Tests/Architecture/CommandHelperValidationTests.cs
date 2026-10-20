@@ -26,13 +26,11 @@ public class CommandHelperValidationTests
 {
     private readonly CommandValidator _validator = new(Options.Create(new AetheusAgentOptions()));
 
-    // Mail no longer has any shell-string builders (PLAN-005): service control, queue, configuration
-    // check, logs and spam-filter control dispatch typed OperationKinds through the root-owned
-    // mail-manage helper. The argv coverage lives in MailManageCommandBuilderTests (agent).
+    // Mail operations use typed commands through the root-owned helper; agent tests cover their
+    // argument vectors.
 
-    // Portsentry no longer has any shell-string builders: it dispatches exclusively via typed
-    // OperationKind ops (setup / unblock / service / logs / status), covered by
-    // PortsentryOperationExecutorTests / PortsentryServiceTests. Nothing to validate here anymore.
+    // Portsentry uses typed operations, covered by its executor and service tests rather than
+    // shell-string validation.
 
     // ───────────────────────────────────────────────────────────────────
     // Rkhunter - setup + getlogs are designed metacharacter-free so they PASS the default

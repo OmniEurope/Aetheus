@@ -67,7 +67,7 @@ public sealed class PipelineTemplatesApi(HttpClient http, TimeProvider? time = n
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, null, sortBy, sortDescending);
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<PipelineTemplateVersionSummaryDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString($"api/pipelines/templates/{id}/versions", query), filters),
             JsonOptions.Web, ct) ?? new();

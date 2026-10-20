@@ -55,7 +55,7 @@ public class OrganizationDetailCoverageTests : BunitContext
     {
         SetupOrg();
         var cut = Render<OrganizationDetail>(p => p.Add(c => c.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var org = typeof(OrganizationDetail).GetField("_org", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(org);
@@ -68,7 +68,7 @@ public class OrganizationDetailCoverageTests : BunitContext
     {
         SetupOrg();
         var cut = Render<OrganizationDetail>(p => p.Add(c => c.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(OrganizationDetail).GetField("_newUserId", Priv)!.SetValue(cut.Instance, (int?)null);
         var requestsBefore = _handler.Requests.Count;
@@ -88,7 +88,7 @@ public class OrganizationDetailCoverageTests : BunitContext
         SetupOrg();
         _handler.SetJsonResponse("api/organizations/1/members", new OrganizationMemberDto(20, 5, "charlie", null, OrganizationRole.Member, DateTime.UtcNow));
         var cut = Render<OrganizationDetail>(p => p.Add(c => c.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(OrganizationDetail).GetField("_newUserId", Priv)!.SetValue(cut.Instance, 5);
         var method = typeof(OrganizationDetail).GetMethod("OnAddMember", Priv)!;
@@ -109,7 +109,7 @@ public class OrganizationDetailCoverageTests : BunitContext
         SetupOrg();
         _handler.SetJsonResponse("api/organizations/1/members/10", new OrganizationMemberDto(10, 2, "alice", null, OrganizationRole.Maintainer, DateTime.UtcNow));
         var cut = Render<OrganizationDetail>(p => p.Add(c => c.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var member = new OrganizationMemberDto(10, 2, "alice", null, OrganizationRole.Owner, DateTime.UtcNow);
         var method = typeof(OrganizationDetail).GetMethod("OnChangeMemberRole", Priv)!;
@@ -134,7 +134,7 @@ public class OrganizationDetailCoverageTests : BunitContext
         SetupOrg();
         _handler.SetJsonResponse("api/organizations/1/projects", true);
         var cut = Render<OrganizationDetail>(p => p.Add(c => c.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(OrganizationDetail).GetField("_selectedProjectIds", Priv)!.SetValue(cut.Instance, new List<int> { 1 });
         var getsBefore = _handler.Requests.Count(r => r.Method == "GET" && r.Url.Contains("api/organizations/1"));

@@ -4,10 +4,7 @@ using System.Net.Http;
 
 namespace Aetheus.Front.Components.Projects.ProjectDetailSections;
 
-/// <summary>
-/// PLAN-013 lot 4 (recette R2-115): the « Conservation des données » setting of a project. The profile
-/// sets every value; each field left empty shows and keeps the profile's value.
-/// </summary>
+/// <summary>Project retention fields inherit the profile value when left empty.</summary>
 public partial class ProjectDataRetentionSection
 {
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -50,6 +47,11 @@ public partial class ProjectDataRetentionSection
         ? null
         : TelemetrySendIntervalText.Setting(L, _saved.Effective.TelemetryExportIntervalMinutes * 60, _saved.Profile,
             _saved.Overrides.TelemetryExportIntervalMinutes.HasValue);
+
+    /// <summary>The send interval field label: the field name, then the saved state once there is one.</summary>
+    private string ExportIntervalLabel => SavedIntervalText is { } saved
+        ? L["DataRetentionExportIntervalCurrent", L["DataRetentionExportInterval"].Value, saved].Value
+        : L["DataRetentionExportInterval"].Value;
 
     private string ProfileValue(int value) =>
         L["DataRetentionProfileValue", value.ToString(CultureInfo.CurrentCulture)].Value;

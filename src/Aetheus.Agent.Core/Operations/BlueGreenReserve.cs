@@ -2,19 +2,9 @@
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// PLAN-003 2.7: the colour a commit replaced, kept running "in reserve" instead of being stopped, so
-/// traffic can return to it in seconds (<c>bluegreen-revert</c>) rather than minutes (a redeploy).
-///
-/// The record lives beside the journal in the state directory, and holds what a return needs and
-/// nothing a pipeline could not supply again: the colour, the revision it serves, and the exact
-/// upstream configuration that pointed at it. Rendering the template again would not do: it is the
-/// configuration that actually served that colour which is known to work.
-///
-/// Price, assumed by the decision: two colours per environment run permanently (twice the memory).
-/// The next deployment's <c>bluegreen-up</c> recycles the reserve colour, which ends the reserve;
-/// <c>bluegreen-retire</c> stops it explicitly.
-/// </summary>
+/// <summary>Keep the replaced colour running with its revision and exact served upstream
+/// configuration for rapid reversal, at the cost of two running colours. The next deployment
+/// recycles it, while explicit retirement stops it.</summary>
 internal sealed class BlueGreenReserve(BlueGreenContext context)
 {
     private string Dir => Path.Combine(context.StateDir, "reserve");

@@ -91,10 +91,8 @@ public sealed class SecretMaskingService(ISecretMaskingRepository secretRepo, IE
         if (cache.TryGetValue<List<string>>(key, out var cached) && cached is not null)
             return cached;
 
-        // "This run has no secrets" is an answer worth caching, and it is the MAJORITY answer. Only the
-        // nominal path used to populate the cache, so a run with no vault replayed both lookups below on
-        // every call - and MaskAsync is called per step command, per failure reason and per output
-        // variable, so reading one 40-step run cost ~80 queries every time its page was opened.
+        // Caches empty secret sets as well as populated ones to avoid repeating vault lookups for
+        // every command, failure reason and output variable.
         var pipelineId = await secretRepo.GetPipelineIdForRunAsync(pipelineRunId, ct).ConfigureAwait(false);
         if (pipelineId is null)
             return CacheSecrets(key, []);

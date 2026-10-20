@@ -17,7 +17,7 @@ public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServ
     private int _totalCount;
     protected override string DefaultSortBy => "DisplayName";
 
-    // Recette R-212: the Type header filter is a checkable list of every project server type.
+    // The Type header filter is a checkable list of every project server type.
     private Func<string, string>? _typeText;
     private Func<string, string> TypeText => _typeText ??= GridFilterText.ForEnum<ProjectServerType>(L);
 
@@ -156,7 +156,7 @@ public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServ
     };
 
 
-    /// <summary>Recette R2-124: the export writes the state the badge shows.</summary>
+    /// <summary>The export writes the state the badge shows.</summary>
     private Func<ProjectServerDto, object?> StatusExport => _statusExport ??= server =>
         server.Type == ProjectServerType.AgentServer && server.ServerStatus.HasValue
             ? L[server.ServerStatus.Value.ToString()].Value

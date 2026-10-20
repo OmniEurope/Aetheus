@@ -3,13 +3,8 @@ using System.Xml.Linq;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// PLAN-005 lot 6: a French value left identical to the English one is how an untranslated label
-/// ships ("Known hosts", "Retention" without its accent). Identical is not always wrong: proper nouns,
-/// technical terms and words spelled the same in both languages stay as they are. Such an entry says so
-/// itself, in the French resource file, with the comment <c>same in both languages</c> (recette R-493:
-/// no list of keys in a test). A new identical value fails until it is translated or carries that comment.
-/// </summary>
+/// <summary>Identical French and English resource values require the explicit same-language comment
+/// when legitimate. Untranslated values without that justification fail.</summary>
 public sealed class FrenchResourceTranslationTests
 {
     private const string SameInBothLanguages = "same in both languages";

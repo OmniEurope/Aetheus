@@ -4,12 +4,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// The two-step retirement of unused columns, run for real on PostgreSQL: R2-001 step 2 drops the
-/// branch-advance columns of Environments, and R-287 step 1 keeps VaultSecretVersions.EncryptedValue
-/// NOT NULL with a database default of '' so the unmapped column accepts this version's inserts while
-/// the previous colour still writes it.
-/// </summary>
+/// <summary>Exercises staged column retirement on PostgreSQL, including branch-advance drops and
+/// the database default that permits writes to an unmapped encrypted-value column.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class RetiredColumnContractMigrationTests(PostgresFixture fixture)
 {

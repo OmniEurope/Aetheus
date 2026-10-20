@@ -7,11 +7,7 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Decides whether a ready stage must first wait for an approval, and raises it. Extracted from
-/// <see cref="PipelineStageDispatchPlanner"/>, which the R-369 rule below would have taken past the
-/// file-size budget (FileSizeAuditTests).
-/// </summary>
+/// <summary>Determines whether a ready stage needs approval before dispatch.</summary>
 internal sealed class PipelineStageApprovalGate(
     IPipelineRepository repo,
     IHubContext<PipelineHub> pipelineHub,
@@ -30,10 +26,8 @@ internal sealed class PipelineStageApprovalGate(
             : await repo.FindEnvironmentByNameAsync(stageDef.Environment, projectId, ct).ConfigureAwait(false);
         List<PipelineApproval>? existingApprovals = null;
 
-        // PLAN-003 2.7 / recette R-370: a stage with its own delay asks for the PIPELINE's approval,
-        // with or without an environment, whatever the environment's policy and whatever was already
-        // approved for the run. It is decided on its own: approving it never stands for the
-        // environment's approval below, which is still asked when the environment requires one (R-104).
+        // Stage confirmation and environment approval are separate decisions. A stage's own delay
+        // requests pipeline approval regardless of prior environment approvals.
         if (stageDef.ApprovalTimeoutMinutes is > 0)
         {
             existingApprovals = await repo.GetApprovalsAsync(runId, ct).ConfigureAwait(false);
@@ -69,14 +63,9 @@ internal sealed class PipelineStageApprovalGate(
         return await RaiseApprovalAsync(runId, stageName, ApprovalScope.Environment, env, timeoutMinutes: null, ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// R-369: a deployment stage that names no environment of its own. aetheus-release-fast goes live
-    /// from such a stage, and its only environment (prod) sits on the Confirm stage that FOLLOWS the
-    /// go-live, so a prod requiring approval was deployed first and asked afterwards. The target of an
-    /// environment-less deployment cannot be read from the stage, so it is held for every
-    /// approval-requiring environment the run declares anywhere, until each one is approved for the run.
-    /// A refusal or an expiry of that approval fails the run before the stage is ever dispatched.
-    /// </summary>
+    /// <summary>An environment-less deployment waits for every approval-requiring environment
+    /// declared by the run because its target cannot be inferred from the stage. Refusal or expiry
+    /// prevents dispatch.</summary>
     private async Task<bool> RequireRunEnvironmentApprovalsAsync(
         int runId, int? projectId, string? stageName, IReadOnlyList<PipelineStageDefinition> runStages,
         CancellationToken ct)
@@ -104,31 +93,23 @@ internal sealed class PipelineStageApprovalGate(
         return false;
     }
 
-    /// <summary>
-    /// Recette R2-117: when a run starts, every approval-requiring environment it declares (any stage's
-    /// <c>environment:</c>) is asked at once, before its first stage, System:Prepare included, is
-    /// dispatched. aetheus-release-fast used to ask for prod only when its deployment stage became ready,
-    /// after the image build, long after the launch. The run waits (WaitingForApproval) until each one is
-    /// approved; an approval given here is the run's (<see cref="IsApprovedForRun"/>), so no later stage
-    /// asks for that environment again. A stage's own confirmation (<c>approval_timeout_minutes</c>) is
-    /// not asked here: it stays a separate decision, raised when its stage is ready (R-370). A refusal or
-    /// an expiry fails the run before anything is dispatched (PipelineRunControlService.ApplyRefusalAsync).
-    /// </summary>
-    /// <returns><c>true</c> when the run must not dispatch anything on this pass.</returns>
+    /// <summary>Declared environment approvals are requested before any stage dispatch, including
+    /// preparation. Stage-specific confirmation remains a separate decision when its stage becomes
+    /// ready.</summary> <returns>True while dispatch must wait for approval.</returns>
     public Task<bool> RequireLaunchApprovalsAsync(
         int runId, int? projectId, IReadOnlyList<PipelineStageDefinition> runStages, CancellationToken ct) =>
         RequireRunEnvironmentApprovalsAsync(runId, projectId, stageName: null, runStages, ct);
 
-    /// <summary>What a deployment is, for R-369: the <c>deploy</c> execution role, or a step that
-    /// deploys (<c>type: deploy</c>, or one of the typed blue-green cutover steps).</summary>
+    /// <summary>Deployment is identified by the <c>deploy</c> execution role or a deployment step,
+    /// including typed blue-green cutovers.</summary>
     internal static bool IsDeploymentStage(PipelineStageDefinition stage) =>
         string.Equals(stage.ExecutionRole, "deploy", StringComparison.OrdinalIgnoreCase)
         || stage.Steps.Any(step => step.Type is { } type
             && (type.Equals("deploy", StringComparison.OrdinalIgnoreCase)
                 || type.StartsWith("bluegreen-", StringComparison.OrdinalIgnoreCase)));
 
-    // Only the environment's own approvals count here: a pipeline approval on a stage of that
-    // environment was a different decision (R-104), even when it names the same environment.
+    // Only environment approvals authorize the environment; pipeline-stage confirmations are
+    // separate decisions.
     private static bool IsApprovedForRun(List<PipelineApproval> approvals, int environmentId) =>
         approvals.Any(a => a.Scope == ApprovalScope.Environment && a.EnvironmentId == environmentId
                            && a.Status == ApprovalStatus.Approved);

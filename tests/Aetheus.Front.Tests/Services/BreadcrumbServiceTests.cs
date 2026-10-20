@@ -13,7 +13,7 @@ public class BreadcrumbServiceTests : BunitContext
 {
     private NavigationManager Nav => Services.GetRequiredService<NavigationManager>();
 
-    /// <summary>Recette R-395: the Aetheus facade over OE's trail, the one OmniPageHeader reads.</summary>
+    /// <summary>The Aetheus facade over OE's trail, the one OmniPageHeader reads.</summary>
     private BreadcrumbService Create(IOmniBreadcrumbResolver? resolver = null) =>
         new(new OmniBreadcrumbService(Nav, resolver), Nav, Substitute.For<IStringLocalizer<AppStrings>>());
 

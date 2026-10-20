@@ -3,17 +3,9 @@ using System.Globalization;
 
 namespace Aetheus.Agent.Core.Services;
 
-/// <summary>
-/// Resolves the "agent was last (re)installed" timestamp that the install script writes
-/// to <c>$WORK_DIR/.installed-at</c>. The file holds a single ISO-8601 UTC line written by
-/// <c>install-agent-linux.sh</c> / <c>install-agent-windows.ps1</c> in both fresh-install and
-/// <c>--upgrade</c> paths; reading it once at heartbeat time gives the operator a reliable
-/// "last update" indicator on the agent page.
-///
-/// Falls back to the agent assembly's last-write mtime so previously deployed agents (where
-/// the install script ran before this marker existed) still report a meaningful value. Both
-/// branches return UTC; never throws - a corrupt file or missing path quietly yields null.
-/// </summary>
+/// <summary>Reads the installer’s ISO-8601 UTC .installed-at marker for the agent update timestamp,
+/// falling back to the assembly modification time when unavailable. Missing or corrupt inputs never
+/// throw.</summary>
 public static class InstallInfoReader
 {
     public const string MarkerFileName = ".installed-at";

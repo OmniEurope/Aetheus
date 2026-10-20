@@ -5,6 +5,7 @@ using Aetheus.Front.Components.AiTasks;
 using Aetheus.Front.Tests.TestDoubles;
 using AngleSharp.Dom;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Ai;
@@ -42,8 +43,7 @@ public sealed class AiTasksActionTests : BunitContext
     {
         var cut = Render<AiTasks>();
         cut.WaitForState(
-            () => cut.Markup.Contains("nightly review", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(2));
+            () => cut.Markup.Contains("nightly review", StringComparison.Ordinal));
         return cut;
     }
 
@@ -86,8 +86,7 @@ public sealed class AiTasksActionTests : BunitContext
         _handler.SetJsonResponse("api/projects/10", new ProjectDetailDto { Id = 10, Name = "aetheus" });
         var cut = Render<AiTasks>(parameters => parameters.Add(page => page.ProjectId, 10));
         cut.WaitForState(
-            () => cut.Markup.Contains("nightly review", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(2));
+            () => cut.Markup.Contains("nightly review", StringComparison.Ordinal));
 
         cut.FindAll("button").First(button => button.TextContent.Contains("Create", StringComparison.Ordinal)).Click();
 
@@ -121,21 +120,20 @@ public sealed class AiTasksActionTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.True(_handler.Requests.Count(request =>
-                request.Url.Contains("api/ai/tasks", StringComparison.Ordinal)) > before),
-            TimeSpan.FromSeconds(2));
+                request.Url.Contains("api/ai/tasks", StringComparison.Ordinal)) > before));
     }
 
     // ---------- results ----------
 
     [Fact]
-    public void OpeningTheResultsPassesTheDefinitionToTheResultDialog()
+    public void OpeningTheResults_GoesToTheTaskResultsPage()
     {
         var cut = RenderList();
 
         Action(cut, "Results").Click();
 
-        Assert.Equal(typeof(AiResultDialog), _dialog.LastComponent);
-        Assert.Equal(7, Assert.Contains("DefinitionId", _dialog.LastParameters!));
+        Assert.EndsWith("/ai-tasks/7", Services.GetRequiredService<NavigationManager>().Uri, StringComparison.Ordinal);
+        Assert.Null(_dialog.LastComponent);
     }
 
     // ---------- run now ----------
@@ -148,7 +146,7 @@ public sealed class AiTasksActionTests : BunitContext
 
         Action(cut, "RunNow").Click();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/ai/tasks/7/run")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/ai/tasks/7/run")));
     }
 
     [Fact]
@@ -174,10 +172,10 @@ public sealed class AiTasksActionTests : BunitContext
 
         Action(cut, "RunNow").Click();
 
+        // Recette R3-17: the finished run opens on the task's results page, that run selected.
+        var navigation = Services.GetRequiredService<NavigationManager>();
         cut.WaitForAssertion(
-            () => Assert.Equal(typeof(AiResultDialog), _dialog.LastComponent), TimeSpan.FromSeconds(3));
-        var initial = Assert.IsType<AiRunResultDto>(Assert.Contains("InitialResult", _dialog.LastParameters!));
-        Assert.Equal(100, initial.Id);
+            () => Assert.EndsWith("/ai-tasks/7?result=100", navigation.Uri, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -188,7 +186,7 @@ public sealed class AiTasksActionTests : BunitContext
 
         Action(cut, "RunNow").Click();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/ai/tasks/7/run")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/ai/tasks/7/run")));
         Assert.Equal(0, _dialog.OpenCount);
     }
 
@@ -214,7 +212,7 @@ public sealed class AiTasksActionTests : BunitContext
 
         Action(cut, "Delete").Click();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/ai/tasks/7")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/ai/tasks/7")));
     }
 
     [Fact]
@@ -226,7 +224,7 @@ public sealed class AiTasksActionTests : BunitContext
 
         Action(cut, "Delete").Click();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/ai/tasks/7")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/ai/tasks/7")));
         Assert.Contains("nightly review", cut.Markup);
     }
 

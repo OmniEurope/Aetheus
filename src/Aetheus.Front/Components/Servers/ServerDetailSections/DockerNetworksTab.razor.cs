@@ -19,7 +19,7 @@ public partial class DockerNetworksTab
 
     private string _networkSearch = string.Empty;
 
-    // Recette R-227: each heartbeat brings a new network list; networks that were not there read bold.
+    // Each heartbeat brings a new network list; networks that were not there read bold.
     private OmniDataGrid<DockerNetworkDto>? _grid;
     private readonly LiveGridRows _liveRows = new();
 
@@ -39,6 +39,7 @@ public partial class DockerNetworksTab
             || n.Driver.Contains(_networkSearch, StringComparison.OrdinalIgnoreCase))
         .ToList();
 
-    /// <summary>Recette R2-124: the export writes the whole network id, the cell its first twelve characters.</summary>
+    /// <summary>The export writes the whole network id, the cell its first twelve
+    /// characters.</summary>
     private static readonly Func<DockerNetworkDto, object?> IdExport = network => network.NetworkId;
 }

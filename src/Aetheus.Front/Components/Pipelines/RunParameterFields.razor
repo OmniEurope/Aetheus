@@ -8,24 +8,17 @@
     var stringValue = StringValue(p.Name);
     var numberValue = NumberValue(p.Name);
     var boolValue = BoolValue(p.Name);
-    <div class="run-params-field">
-        <ParameterHelpRow Description="@description" DescriptionId="@(describedBy ?? string.Empty)">
-            @if (string.Equals(p.Type, "boolean", StringComparison.OrdinalIgnoreCase))
-            {
-                <OmniSwitch TValue="bool" Value="boolValue" ValueExpression="@(() => boolValue)" ValueChanged="@(value => _bools[p.Name] = value)">@($"{label}{(p.Required ? " *" : "")}")</OmniSwitch>
-            }
-            else
-            {
-                <OmniLabel For="@p.Name" Class="run-params-label">@($"{label}{(p.Required ? " *" : "")}")</OmniLabel>
-            }
-        </ParameterHelpRow>
-
+    @* The required mark and the "?" of the description are OE's: Required and Help of the field. *@
+    <OmniFormField For="@p.Name" Id="@FieldId(p.Name)" Label="@label" Required="@p.Required" Help="@description" Class="run-params-field">
         @switch (p.Type?.ToLowerInvariant())
         {
             case "boolean":
+                <OmniSwitch Id="@p.Name" TValue="bool" Value="boolValue" ValueExpression="@(() => boolValue)"
+                            ValueChanged="@(value => _bools[p.Name] = value)" AriaDescribedBy="@describedBy"
+                            aria-labelledby="@($"{p.Name}-label")" />
                 break;
             case "choice":
-                <OmniDropDown aria-label="@label" TValue="string" Value="@stringValue"
+                <OmniDropDown Id="@p.Name" aria-label="@label" TValue="string" Value="@stringValue"
                                 ValueChanged="@(value => _strings[p.Name] = value)"
                                 ValueExpression="@(() => stringValue)"
                                 Options="@(p.AllowedValues.ToOptions(item => (string)item, item => item))" name="@p.Name" AriaDescribedBy="@describedBy"
@@ -44,9 +37,8 @@
                                Id="@p.Name" AriaDescribedBy="@describedBy" Class="run-params-input" />
                 break;
         }
-    </div>
+    </OmniFormField>
 }
-
 @if (AvailableReleases is not null)
 {
     <div class="run-params-field">

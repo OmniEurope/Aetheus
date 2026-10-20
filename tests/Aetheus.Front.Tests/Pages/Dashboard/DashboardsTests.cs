@@ -33,6 +33,8 @@ public class DashboardsTests : BunitContext
 
         answer.SetResult([]);
 
+        // Loaded-machine ceiling: the page has no hub and renders once its list is read, so a failure left
+        // here was only the answer's thread-pool hop not yet back (bUnit "Check count: 0" or 1).
         cut.WaitForAssertion(() => Assert.Empty(cut.FindComponents<AetheusLoader>()));
         Assert.Contains("NoRecords", cut.Markup);
     }

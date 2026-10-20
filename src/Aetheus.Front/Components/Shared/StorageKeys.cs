@@ -11,12 +11,12 @@ internal static class StorageKeys
     private const string P = AppConstants.LocalStoragePrefix;
 
     public const string Theme = P + "theme";
-    // Recette R-232: the theme, palette and density of the whole site (layout.js keeps the resolved token
-    // values under theme_tokens, for the boot script of index.html).
+    // The theme, palette and density of the whole site (layout.js keeps the resolved token values
+    // under theme_tokens, for the boot script of index.html).
     public const string ThemePreset = P + "theme_preset";
     public const string ThemePalette = P + "theme_palette";
     public const string Density = P + "density";
-    // Recette R-390: the font and the text size and control size scales (1 to 10) of OE's appearance window.
+    // The font and the text size and control size scales (1 to 10) of OE's appearance window.
     public const string ThemeFont = P + "theme_font";
     public const string TextSize = P + "text_size";
     public const string ControlSize = P + "control_size";

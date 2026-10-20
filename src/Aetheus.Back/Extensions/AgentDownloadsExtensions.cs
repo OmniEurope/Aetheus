@@ -16,7 +16,7 @@ namespace Aetheus.Back.Extensions;
 /// </summary>
 internal static class AgentDownloadsExtensions
 {
-    private sealed record PreparedArchive(string Path, string Sha256);
+    internal sealed record PreparedArchive(string Path, string Sha256);
     private static readonly ConcurrentDictionary<string, Lazy<Task<PreparedArchive>>> PreparedLinuxArchives = new();
     private static readonly ConcurrentDictionary<string, Lazy<Task<string>>> FileHashes = new();
 
@@ -168,14 +168,14 @@ internal static class AgentDownloadsExtensions
         return app;
     }
 
-    private static async Task<PreparedArchive> GetPreparedLinuxArchiveAsync(
+    internal static async Task<PreparedArchive> GetPreparedLinuxArchiveAsync(
         string prebuiltArchive, string serverUrl, string? freshInstallScript, string? freshHostConfig)
     {
         var archive = new FileInfo(prebuiltArchive);
         var scriptStamp = freshInstallScript is not null && File.Exists(freshInstallScript)
             ? File.GetLastWriteTimeUtc(freshInstallScript).Ticks
             : 0;
-        // R-249: a template edit must refresh the prepared archive exactly like a script edit does.
+        // A template edit must refresh the prepared archive exactly like a script edit does.
         var hostConfigStamp = freshHostConfig is not null && Directory.Exists(freshHostConfig)
             ? string.Join(',', Directory.GetFiles(freshHostConfig, "*", SearchOption.AllDirectories)
                 .Order(StringComparer.Ordinal)
@@ -285,7 +285,8 @@ internal static class AgentDownloadsExtensions
         var linuxInstallScriptPath = Path.Combine(solutionRootPath, "deploy", "scripts", "install-agent-linux.sh");
         var hostConfigPath = HostConfigSourcePath(solutionRootPath);
 
-        // R-249: the installer refuses to run without its templates, so an archive without them is no archive.
+        // The installer refuses to run without its templates, so an archive without them is no
+        // archive.
         if (!Directory.Exists(linuxBuildPath) || !File.Exists(linuxInstallScriptPath) || !Directory.Exists(hostConfigPath))
             return null;
 
@@ -347,7 +348,7 @@ internal static class AgentDownloadsExtensions
                 NormalizeToLf(dest);
             }
 
-            // R-249: the templates the overlaid script reads travel with it, never an older copy.
+            // The templates the overlaid script reads travel with it, never an older copy.
             if (freshHostConfig is not null && Directory.Exists(freshHostConfig))
                 CopyHostConfigTemplates(freshHostConfig, extractDir);
 
@@ -372,7 +373,7 @@ internal static class AgentDownloadsExtensions
     /// than the latest agent build - i.e. someone built but the publish silently lagged, so a
     /// downloading agent would get stale code. No-op in Docker/prod (paths absent) and when fresh.
     /// </summary>
-    private static void WarnIfLinuxAgentPublishStale(WebApplication app)
+    internal static void WarnIfLinuxAgentPublishStale(WebApplication app)
     {
         var solutionRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", ".."));
         var publishDll = Path.Combine(solutionRoot, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net10.0", "linux-x64", "publish", "Aetheus.Agent.Core.dll");
@@ -406,8 +407,9 @@ internal static class AgentDownloadsExtensions
         Directory.CreateDirectory(path);
     }
 
-    /// <summary>R-249: folder of the archive, next to install-agent-linux.sh, holding the host
-    /// configuration templates the installer renders (deploy/agent-host-config in the repository).</summary>
+    /// <summary>Folder of the archive, next to install-agent-linux.sh, holding the host
+    /// configuration templates the installer renders (deploy/agent-host-config in the
+    /// repository).</summary>
     internal const string HostConfigFolderName = "agent-host-config";
 
     internal static string HostConfigSourcePath(string solutionRootPath)

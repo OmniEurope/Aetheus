@@ -2,7 +2,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Aetheus.Back.Components.Git;
-using Aetheus.Back.Components.Organizations;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
 using Cronos;
@@ -11,106 +10,18 @@ namespace Aetheus.Back.Components.AiTasks;
 
 public sealed partial class AiTaskService(
     IAiTaskRepository repo,
-    IOrganizationRepository organizations,
     IAuditService audit,
     IEncryptionService encryption,
     ISecretMaskingService secretMasking,
     ITaskQueueNotifier taskQueueNotifier,
-    IGitLightService gitLightService,
     TimeProvider timeProvider,
     IConfiguration configuration,
-    ILogger<AiTaskService> logger) : IAiTaskService
+    ILogger<AiTaskService> logger,
+    Notifications.IUserNotificationService? userNotifications = null) : IAiTaskService
 {
-    private const int MaxArguments = 64;
     private const int MaxEventTypes = 16;
     private const int MaxConcurrentRunsPerServer = 2;
     private static readonly TimeSpan EventCooldown = TimeSpan.FromMinutes(10);
-
-    public async Task<PaginatedResult<AiRunnerProfileDto>> GetProfilesAsync(
-        PaginationRequest request, CancellationToken ct)
-    {
-        var (page, pageSize) = request.Normalize();
-        var (items, total) = await repo.GetProfilesPageAsync(
-            request.Search, page, pageSize, ct, request.Filters,
-            request.SortBy, request.SortDescending).ConfigureAwait(false);
-        return new PaginatedResult<AiRunnerProfileDto>
-        {
-            Items = items.Select(MapProfile).ToList(),
-            TotalCount = total,
-            Page = page,
-            PageSize = pageSize
-        };
-    }
-
-    public async Task<AiRunnerProfileDto?> GetProfileAsync(int id, CancellationToken ct)
-    {
-        var profile = await repo.FindProfileAsync(id, ct).ConfigureAwait(false);
-        return profile is null ? null : MapProfile(profile);
-    }
-
-    public async Task<List<AiRunnerProfileDto>> GetProfileOptionsAsync(
-        List<int> organizationIds, CancellationToken ct) =>
-        (await repo.GetProfilesForOrganizationsAsync(organizationIds, ct).ConfigureAwait(false))
-            .Select(MapProfile)
-            .ToList();
-
-    public async Task<AiRunnerProfileDto> CreateProfileAsync(
-        CreateAiRunnerProfileRequest request, CancellationToken ct)
-    {
-        ValidateProfile(request.Binary, request.ArgsTemplate);
-        var organizationId = request.OrganizationId
-            ?? await organizations.GetDefaultOrganizationIdAsync(ct).ConfigureAwait(false)
-            ?? throw new BadRequestException("No organization available.");
-        var profile = new AiRunnerProfile
-        {
-            OrganizationId = organizationId,
-            Name = request.Name.Trim(),
-            Description = request.Description.Trim(),
-            Binary = request.Binary.Trim(),
-            ArgsTemplateJson = JsonSerializer.Serialize(request.ArgsTemplate),
-            EnvironmentJsonEncrypted = encryption.EncryptValue(JsonSerializer.Serialize(request.Environment)),
-            TimeoutSeconds = Math.Clamp(request.TimeoutSeconds, 1, 86_400),
-            MaxOutputBytes = Math.Clamp(request.MaxOutputBytes, 1024, 1_000_000),
-            SendsDataExternally = request.SendsDataExternally
-        };
-        await repo.AddProfileAsync(profile, ct).ConfigureAwait(false);
-        await audit.LogAsync("Created", "AiRunnerProfile", profile.Id, profile.Name, ct)
-            .ConfigureAwait(false);
-        return MapProfile(profile);
-    }
-
-    public async Task<AiRunnerProfileDto?> UpdateProfileAsync(
-        int id, UpdateAiRunnerProfileRequest request, CancellationToken ct)
-    {
-        ValidateProfile(request.Binary, request.ArgsTemplate);
-        var profile = await repo.FindProfileAsync(id, ct).ConfigureAwait(false);
-        if (profile is null) return null;
-        profile.Name = request.Name.Trim();
-        profile.Description = request.Description.Trim();
-        profile.Binary = request.Binary.Trim();
-        profile.ArgsTemplateJson = JsonSerializer.Serialize(request.ArgsTemplate);
-        profile.EnvironmentJsonEncrypted = encryption.EncryptValue(JsonSerializer.Serialize(
-            RestoreMaskedEnvironment(profile.EnvironmentJsonEncrypted, request.Environment)));
-        profile.TimeoutSeconds = Math.Clamp(request.TimeoutSeconds, 1, 86_400);
-        profile.MaxOutputBytes = Math.Clamp(request.MaxOutputBytes, 1024, 1_000_000);
-        profile.SendsDataExternally = request.SendsDataExternally;
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
-        await audit.LogAsync("Updated", "AiRunnerProfile", profile.Id, profile.Name, ct)
-            .ConfigureAwait(false);
-        return MapProfile(profile);
-    }
-
-    public async Task<bool> DeleteProfileAsync(int id, CancellationToken ct)
-    {
-        var profile = await repo.FindProfileAsync(id, ct).ConfigureAwait(false);
-        if (profile is null) return false;
-        if (await repo.ProfileHasDefinitionsAsync(id, ct).ConfigureAwait(false))
-            throw new ConflictException("The AI runner profile is used by one or more task definitions.");
-        await repo.RemoveProfileAsync(profile, ct).ConfigureAwait(false);
-        await audit.LogAsync("Deleted", "AiRunnerProfile", id, profile.Name, ct)
-            .ConfigureAwait(false);
-        return true;
-    }
 
     public async Task<PaginatedResult<AiTaskDefinitionDto>> GetDefinitionsAsync(
         PaginationRequest request, int? projectId, int? serverId,
@@ -142,6 +53,7 @@ public sealed partial class AiTaskService(
         await ValidateDefinitionAsync(
             request.ProfileId, request.ProjectId, request.ServerId,
             request.Schedule, request.EventTypes, ct).ConfigureAwait(false);
+        var (contextPathsJson, gitRange) = NormalizeRepositoryContext(request);
         var definition = new AiTaskDefinition
         {
             Name = request.Name.Trim(),
@@ -151,6 +63,8 @@ public sealed partial class AiTaskService(
             ServerId = request.ServerId,
             Schedule = NormalizeSchedule(request.Schedule),
             Enabled = request.Enabled,
+            ContextPathsJson = contextPathsJson,
+            GitRange = gitRange,
             Triggers = BuildTriggers(request.EventTypes)
         };
         await repo.AddDefinitionAsync(definition, ct).ConfigureAwait(false);
@@ -165,6 +79,7 @@ public sealed partial class AiTaskService(
         await ValidateDefinitionAsync(
             request.ProfileId, request.ProjectId, request.ServerId,
             request.Schedule, request.EventTypes, ct).ConfigureAwait(false);
+        var (contextPathsJson, gitRange) = NormalizeRepositoryContext(request);
         var definition = await repo.FindDefinitionAsync(id, ct).ConfigureAwait(false);
         if (definition is null) return null;
         definition.Name = request.Name.Trim();
@@ -174,6 +89,8 @@ public sealed partial class AiTaskService(
         definition.ServerId = request.ServerId;
         definition.Schedule = NormalizeSchedule(request.Schedule);
         definition.Enabled = request.Enabled;
+        definition.ContextPathsJson = contextPathsJson;
+        definition.GitRange = gitRange;
         definition.Triggers.Clear();
         definition.Triggers.AddRange(BuildTriggers(request.EventTypes));
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -197,6 +114,8 @@ public sealed partial class AiTaskService(
     {
         var definition = await repo.FindDefinitionAsync(definitionId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException("AI task definition not found.");
+        if (AiProfileRuntime.Problem(definition.Profile) is { } problem)
+            throw new BadRequestException(problem);
         var server = await repo.ResolveExecutionServerAsync(definition, ct).ConfigureAwait(false)
             ?? throw new BadRequestException("No execution server is available for this AI task.");
         if (await repo.GetActiveRunCountAsync(server.Id, ct).ConfigureAwait(false)
@@ -227,6 +146,7 @@ public sealed partial class AiTaskService(
                 timeProvider.GetUtcNow().UtcDateTime);
             spec.EnvironmentVariables["GIT_USERNAME"] = gitUsername;
             spec.EnvironmentVariables["GIT_PASSWORD"] = gitPassword;
+            AddRepositoryContext(spec.EnvironmentVariables, definition);
         }
         var task = new ServerTask
         {
@@ -243,16 +163,32 @@ public sealed partial class AiTaskService(
         return task;
     }
 
-    public async Task<AiExecutionSpec?> BuildPipelineExecutionAsync(
-        string profileName, int organizationId, string prompt, bool gate,
+    public async Task<AiPipelineExecution> BuildPipelineExecutionAsync(
+        string? profileName, int? pipelineProfileId, int organizationId, string prompt, bool gate,
         int pipelineRunId, string workingDirectory, CancellationToken ct)
     {
-        var profile = await repo.FindProfileByNameAsync(profileName, organizationId, ct)
+        var selection = await SelectPipelineProfileAsync(profileName, pipelineProfileId, organizationId, ct)
             .ConfigureAwait(false);
-        if (profile is null) return null;
-        return await BuildExecutionSpecAsync(
+        if (selection.Profile is not { } profile)
+            return new AiPipelineExecution(null, selection.Problem, selection.Reason, true);
+        // The key is a secret of this run from now on: anything the run shows a person is masked.
+        secretMasking.RegisterRuntimeSecret(pipelineRunId, AiProfileRuntime.ApiKey(profile, encryption));
+        var spec = await BuildExecutionSpecAsync(
             profile, prompt, gate, pipelineRunId, null, workingDirectory, ct).ConfigureAwait(false);
+        // The agent writes this line at the top of the step log, so the profile used and why are never silent.
+        spec.EnvironmentVariables["AETHEUS_AI_PROFILE_RESOLUTION"] = selection.Reason;
+        return new AiPipelineExecution(spec, null, selection.Reason, selection.IsFallback);
     }
+
+    public async Task<string?> FindPipelineProfileProblemAsync(
+        string? profileName, int organizationId, CancellationToken ct) =>
+        (await SelectPipelineProfileAsync(profileName, null, organizationId, ct).ConfigureAwait(false)).Problem;
+
+    private async Task<AiProfileSelection> SelectPipelineProfileAsync(
+        string? profileName, int? pipelineProfileId, int organizationId, CancellationToken ct) =>
+        AiProfileResolver.Resolve(
+            profileName, pipelineProfileId,
+            await repo.GetOrganizationProfilesByPriorityAsync(organizationId, ct).ConfigureAwait(false));
 
     public async Task<PaginatedResult<AiRunResultDto>> GetResultsAsync(
         int? definitionId, int? pipelineRunId, PaginationRequest request, CancellationToken ct)
@@ -281,9 +217,9 @@ public sealed partial class AiTaskService(
 
         int? definitionId = null;
         int? expectedSourceRepositoryId = null;
+        string? apiKey = null;
         var envJson = TaskEnvProtection.Unprotect(encryption, task.EnvironmentVariables);
-        if (JsonSerializer.Deserialize<Dictionary<string, string>>(envJson) is { } environment
-            )
+        if (JsonSerializer.Deserialize<Dictionary<string, string>>(envJson) is { } environment)
         {
             if (environment.TryGetValue("AETHEUS_AI_TASK_DEFINITION_ID", out var definitionText)
                 && int.TryParse(definitionText, out var parsedDefinitionId))
@@ -291,6 +227,7 @@ public sealed partial class AiTaskService(
             if (environment.TryGetValue("AETHEUS_AI_SOURCE_REPOSITORY_ID", out var repositoryText)
                 && int.TryParse(repositoryText, out var parsedRepositoryId))
                 expectedSourceRepositoryId = parsedRepositoryId;
+            apiKey = environment.GetValueOrDefault("AETHEUS_AI_API_KEY");
         }
         if (expectedSourceRepositoryId != request.SourceRepositoryId)
             throw new BadRequestException("The AI result source repository does not match its task.");
@@ -298,11 +235,11 @@ public sealed partial class AiTaskService(
             && !CommitShaRegex().IsMatch(request.BaseCommitSha))
             throw new BadRequestException("The AI result base commit is invalid.");
 
-        var report = await secretMasking.MaskAsync(
-            request.ReportMarkdown, task.PipelineRunId, ct).ConfigureAwait(false);
-        var diff = request.DiffPatch is null
-            ? null
-            : await secretMasking.MaskAsync(request.DiffPatch, task.PipelineRunId, ct).ConfigureAwait(false);
+        // The agent already masks the key; a standalone task has no run secrets, so the backend masks
+        // its own copy again before storing what a person will read.
+        var report = AiProviderClient.Mask(
+            await secretMasking.MaskAsync(request.ReportMarkdown, task.PipelineRunId, ct).ConfigureAwait(false),
+            apiKey);
         var result = new AiRunResult
         {
             ServerTaskId = task.Id,
@@ -312,7 +249,6 @@ public sealed partial class AiTaskService(
             SendsDataExternally = request.SendsDataExternally,
             ReportMarkdown = report,
             Verdict = request.Verdict,
-            DiffPatch = diff,
             DurationMs = request.DurationMs,
             Truncated = request.Truncated,
             Succeeded = request.Succeeded,
@@ -320,7 +256,44 @@ public sealed partial class AiTaskService(
             BaseCommitSha = request.BaseCommitSha
         };
         await repo.AddResultAsync(result, ct).ConfigureAwait(false);
+        await NotifyRunCompletedAsync(result, ct).ConfigureAwait(false);
         return MapResult(result);
+    }
+
+    /// <summary>
+    /// Recette R3-16: a finished run of an AI task tells the subscribers of its project (or of the projects
+    /// its server is attached to), with what the notification needs to link to the run on the task's results
+    /// page. A run of a pipeline step has no task and notifies nothing here. Never fails the publication.
+    /// </summary>
+    private async Task NotifyRunCompletedAsync(AiRunResult result, CancellationToken ct)
+    {
+        if (userNotifications is null || result.AiTaskDefinitionId is not { } definitionId) return;
+        try
+        {
+            var definition = await repo.FindDefinitionAsync(definitionId, ct).ConfigureAwait(false);
+            if (definition is null) return;
+            object Payload(int projectId) => new
+            {
+                ProjectId = projectId,
+                AiTaskDefinitionId = definition.Id,
+                AiRunResultId = result.Id,
+                TaskName = definition.Name,
+                result.Succeeded,
+                Verdict = result.Verdict.ToString()
+            };
+            if (definition.ProjectId is { } ownerProjectId)
+                await userNotifications.RecordProjectEventAsync(
+                    NotificationEventTypes.AiTaskCompleted, JsonSerializer.Serialize(Payload(ownerProjectId)), ct)
+                    .ConfigureAwait(false);
+            else if (definition.ServerId is { } serverId)
+                await userNotifications.RecordServerEventAsync(
+                    NotificationEventTypes.AiTaskCompleted, serverId, Payload, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Mandatory: the result is stored; a notification that cannot be written must not undo that.
+            logger.LogWarning(ex, "[AiTasks] Run {ResultId} stored, but its notification failed", result.Id);
+        }
     }
 
     public async Task<AiRunResultDto?> GetResultAsync(int id, CancellationToken ct)
@@ -328,65 +301,6 @@ public sealed partial class AiTaskService(
         var result = await repo.FindResultAsync(id, ct).ConfigureAwait(false);
         return result is null ? null : MapResult(result);
     }
-
-    public async Task<AiPatchApplicationDto> ApplyProposedPatchAsync(
-        int resultId, CancellationToken ct)
-    {
-        var result = await repo.FindResultAsync(resultId, ct).ConfigureAwait(false)
-            ?? throw new NotFoundException("AI run result not found.");
-        var projectId = result.AiTaskDefinition?.ProjectId
-            ?? result.PipelineRun?.Pipeline?.ProjectId
-            ?? throw new BadRequestException("This AI result is not linked to a project.");
-        if (string.IsNullOrWhiteSpace(result.DiffPatch) || result.Truncated)
-            throw new BadRequestException("The proposed patch is empty or truncated.");
-        var existing = ExistingPatchApplication(result);
-        if (existing is not null) return existing;
-
-        if (result.SourceRepositoryId is not { } sourceRepositoryId
-            || string.IsNullOrWhiteSpace(result.BaseCommitSha))
-            throw new BadRequestException("The AI result has no verified source provenance.");
-        var repository = await gitLightService.GetRepositoryAsync(sourceRepositoryId, ct)
-            .ConfigureAwait(false)
-            ?? throw new BadRequestException("The source repository no longer exists.");
-        if (repository.ProjectId != projectId)
-            throw new BadRequestException("The AI result source repository belongs to another project.");
-        var branchName = $"ai-proposed/{result.Id}";
-        await gitLightService.CreateBranchAsync(
-            repository.Id,
-            new CreateGitLightBranchRequest
-            {
-                Name = branchName,
-                StartRef = result.BaseCommitSha
-            },
-            ct).ConfigureAwait(false);
-        var applied = await gitLightService.ApplyPatchAsync(
-            repository.Id, branchName, result.DiffPatch, ct).ConfigureAwait(false);
-        if (!applied.Success || string.IsNullOrWhiteSpace(applied.CommitSha))
-            throw new ConflictException(applied.Error ?? "The proposed patch could not be applied.");
-
-        result.ProposedRepositoryId = repository.Id;
-        result.ProposedBranchName = branchName;
-        result.ProposedCommitSha = applied.CommitSha;
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
-        await audit.LogAsync(
-            "AppliedProposedPatch", "AiRunResult", result.Id, branchName, ct).ConfigureAwait(false);
-        return PatchApplication(repository.Id, branchName, applied.CommitSha);
-    }
-
-    private static AiPatchApplicationDto? ExistingPatchApplication(AiRunResult result) =>
-        result.ProposedRepositoryId is { } repositoryId
-        && !string.IsNullOrWhiteSpace(result.ProposedBranchName)
-        && !string.IsNullOrWhiteSpace(result.ProposedCommitSha)
-            ? PatchApplication(repositoryId, result.ProposedBranchName, result.ProposedCommitSha)
-            : null;
-
-    private static AiPatchApplicationDto PatchApplication(
-        int repositoryId, string branchName, string commitSha) => new()
-        {
-            RepositoryId = repositoryId,
-            BranchName = branchName,
-            CommitSha = commitSha
-        };
 
     public async Task<AiConsumptionDto> GetConsumptionAsync(int? projectId, CancellationToken ct)
     {
@@ -444,19 +358,13 @@ public sealed partial class AiTaskService(
         int? definitionId, string workingDirectory, CancellationToken ct)
     {
         var maskedPrompt = await secretMasking.MaskAsync(prompt, pipelineRunId, ct).ConfigureAwait(false);
-        var environment = JsonSerializer.Deserialize<Dictionary<string, string>>(
-            encryption.DecryptValue(profile.EnvironmentJsonEncrypted)) ?? [];
-        environment["AETHEUS_AI_PROFILE_NAME"] = profile.Name;
-        environment["AETHEUS_AI_SENDS_DATA_EXTERNALLY"] =
-            profile.SendsDataExternally ? "true" : "false";
-        environment["AETHEUS_AI_BINARY"] = profile.Binary;
-        environment["AETHEUS_AI_ARGS_JSON"] = profile.ArgsTemplateJson;
+        var environment = AiProfileRuntime.Environment(profile, encryption);
         environment["AETHEUS_AI_PROMPT"] = maskedPrompt;
         environment["AETHEUS_AI_GATE"] = gate ? "true" : "false";
-        environment["AETHEUS_AI_MAX_OUTPUT_BYTES"] = profile.MaxOutputBytes.ToString();
         environment["AETHEUS_AI_WORKING_DIR"] = workingDirectory;
         if (definitionId.HasValue)
-            environment["AETHEUS_AI_TASK_DEFINITION_ID"] = definitionId.Value.ToString();
+            environment["AETHEUS_AI_TASK_DEFINITION_ID"] = definitionId.Value.ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
         return new AiExecutionSpec("ai-run", profile.TimeoutSeconds, environment);
     }
 
@@ -478,55 +386,43 @@ public sealed partial class AiTaskService(
             throw new BadRequestException("AI event types are invalid or exceed the allowed count.");
     }
 
-    private static void ValidateProfile(string binary, List<string> arguments)
+    /// <summary>The repository content a project task attaches to its prompt, validated by the rule of
+    /// the pipeline step keys <c>context_paths</c> and <c>git_range</c>. Blank entries are dropped.</summary>
+    private static (string? ContextPathsJson, string? GitRange) NormalizeRepositoryContext(
+        AiTaskDefinitionRequest request)
     {
-        if (!BinaryRegex().IsMatch(binary)
-            || binary.Contains("..", StringComparison.Ordinal)
-            || arguments.Count > MaxArguments)
-            throw new BadRequestException("The AI runner binary or argument template is invalid.");
-        foreach (var argument in arguments)
-        {
-            var braces = argument.Contains('{') || argument.Contains('}');
-            if (braces && argument is not ("{prompt_file}" or "{workdir}" or "{output_file}"))
-                throw new BadRequestException("AI placeholders must occupy a complete argument token.");
-        }
-        if (!arguments.Contains("{prompt_file}", StringComparer.Ordinal))
-            throw new BadRequestException("The AI runner arguments must include {prompt_file}.");
+        var paths = request.ContextPaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var gitRange = string.IsNullOrWhiteSpace(request.GitRange) ? null : request.GitRange.Trim();
+        if (paths.Count == 0 && gitRange is null) return (null, null);
+        if (!request.ProjectId.HasValue)
+            throw new BadRequestException(
+                "Context paths and a git range need a project task: only a project task works on a repository.");
+        if (!AiRepositoryContextRules.AreValidContextPaths(paths))
+            throw new BadRequestException(
+                $"AI context paths must be at most {AiRepositoryContextRules.MaxContextPaths} relative paths inside the repository, without '.' or '..'.");
+        if (gitRange is not null
+            && (!AiRepositoryContextRules.IsValidGitRange(gitRange) || !AiRepositoryContextRules.IsCommitRange(gitRange)))
+            throw new BadRequestException("The AI git range must be a commit range of the form A..B, for example HEAD~10..HEAD.");
+        return (paths.Count == 0 ? null : JsonSerializer.Serialize(paths), gitRange);
     }
 
-    private Dictionary<string, string> RestoreMaskedEnvironment(
-        string encryptedExisting, Dictionary<string, string> requested)
+    /// <summary>The same variables a pipeline <c>type: ai</c> step sets, read by the agent's prompt
+    /// assembler: the agent code is shared, not duplicated.</summary>
+    private static void AddRepositoryContext(Dictionary<string, string> environment, AiTaskDefinition definition)
     {
-        var existing = JsonSerializer.Deserialize<Dictionary<string, string>>(
-            encryption.DecryptValue(encryptedExisting)) ?? [];
-        return requested.ToDictionary(
-            item => item.Key,
-            item => item.Value == "***" && existing.TryGetValue(item.Key, out var value)
-                ? value
-                : item.Value,
-            StringComparer.Ordinal);
+        var paths = ReadContextPaths(definition.ContextPathsJson);
+        if (paths.Count > 0)
+            environment["AETHEUS_AI_CONTEXT_PATHS_JSON"] = JsonSerializer.Serialize(paths);
+        if (!string.IsNullOrWhiteSpace(definition.GitRange))
+            environment["AETHEUS_AI_GIT_RANGE"] = definition.GitRange.Trim();
     }
 
-    private AiRunnerProfileDto MapProfile(AiRunnerProfile profile)
-    {
-        var environment = JsonSerializer.Deserialize<Dictionary<string, string>>(
-            encryption.DecryptValue(profile.EnvironmentJsonEncrypted)) ?? [];
-        return new AiRunnerProfileDto
-        {
-            Id = profile.Id,
-            OrganizationId = profile.OrganizationId,
-            Name = profile.Name,
-            Description = profile.Description,
-            Binary = profile.Binary,
-            ArgsTemplate = JsonSerializer.Deserialize<List<string>>(profile.ArgsTemplateJson) ?? [],
-            Environment = environment.Keys.ToDictionary(key => key, _ => "***"),
-            TimeoutSeconds = profile.TimeoutSeconds,
-            MaxOutputBytes = profile.MaxOutputBytes,
-            SendsDataExternally = profile.SendsDataExternally,
-            CreatedAt = profile.CreatedAt,
-            UpdatedAt = profile.UpdatedAt
-        };
-    }
+    private static List<string> ReadContextPaths(string? json) =>
+        string.IsNullOrWhiteSpace(json) ? [] : JsonSerializer.Deserialize<List<string>>(json) ?? [];
 
     private static AiTaskDefinitionDto MapDefinition(AiTaskDefinition definition) => new()
     {
@@ -543,6 +439,8 @@ public sealed partial class AiTaskService(
         Schedule = definition.Schedule,
         Enabled = definition.Enabled,
         EventTypes = definition.Triggers.Select(trigger => trigger.EventType).Order().ToList(),
+        ContextPaths = ReadContextPaths(definition.ContextPathsJson),
+        GitRange = definition.GitRange,
         LastScheduledAt = definition.LastScheduledAt,
         CreatedAt = definition.CreatedAt,
         UpdatedAt = definition.UpdatedAt
@@ -587,9 +485,6 @@ public sealed partial class AiTaskService(
         string.IsNullOrWhiteSpace(schedule)
             ? null
             : CronExpression.Parse(schedule, CronFormat.IncludeSeconds);
-
-    [GeneratedRegex(@"^[A-Za-z0-9._:\\/ -]{1,260}$", RegexOptions.CultureInvariant)]
-    private static partial Regex BinaryRegex();
 
     [GeneratedRegex(@"^[a-z0-9][a-z0-9._-]{0,119}$", RegexOptions.CultureInvariant)]
     private static partial Regex EventTypeRegex();

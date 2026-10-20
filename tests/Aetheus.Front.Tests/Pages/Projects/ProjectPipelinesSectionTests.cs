@@ -18,7 +18,7 @@ public class ProjectPipelinesSectionTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         _handler.SetJsonResponse("api/pipelines/favorites", new PipelineFavoritesDto());
         _handler.SetJsonResponse("api/pipelines/fleet", new PaginatedResult<PipelineFleetItemDto>());
-        // Recette R1-34: the section says where the definitions are kept, from the project's repositories.
+        // The section says where the definitions are kept, from the project's repositories.
         _handler.SetPaginatedJsonResponse("api/git/repos", Array.Empty<GitLightRepoDto>());
     }
 
@@ -43,8 +43,8 @@ public class ProjectPipelinesSectionTests : BunitContext
         Assert.Single(cut.FindComponents<PipelinesList>());
     }
 
-    /// <summary>R-124: the section's own New row is gone; the shared list's New (shown in the project
-    /// header) still opens the setup wizard for this project.</summary>
+    /// <summary>The shared list New action in the project header opens the setup wizard for this
+    /// project.</summary>
     [Fact]
     public async Task NewPipeline_Navigates_ToSetupWizardWithProjectId()
     {
@@ -74,7 +74,7 @@ public class ProjectPipelinesSectionTests : BunitContext
             p.Add(x => x.Pipelines, pipelines)
              .Add(x => x.ProjectId, 1));
         Assert.Contains("Pipelines", cut.Markup);
-        // Recette R-215: the view counts sit in the page header now; the section shows the catalogue view.
+        // The section renders the catalogue view; view counts belong to the page header.
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".pipeline-catalog-panel")));
     }
 
@@ -85,8 +85,8 @@ public class ProjectPipelinesSectionTests : BunitContext
         {
             new() { Id = 2, Name = "Nightly", TriggerType = PipelineTriggerType.Schedule, LastRunStatus = null }
         };
-        // Recette R-215: the views are picked in the project header, so the section is rendered next to
-        // the header outlet the project layout gives it.
+        // The views are picked in the project header, so the section is rendered next to the header
+        // outlet the project layout gives it.
         var cut = Render(builder =>
         {
             builder.OpenComponent<SectionOutlet>(0);
@@ -99,7 +99,7 @@ public class ProjectPipelinesSectionTests : BunitContext
         });
         var overview = cut.FindComponent<PipelinesList>();
         Assert.Equal(1, overview.Instance.ProjectId);
-        cut.WaitForState(() => cut.FindAll(".pipeline-view-switch .omni-select-bar__item").Count == 2, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.FindAll(".pipeline-view-switch .omni-select-bar__item").Count == 2);
         cut.FindAll(".pipeline-view-switch .omni-select-bar__item")[1].Click();
         cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<PipelineRunsGrid>()));
     }

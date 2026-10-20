@@ -263,11 +263,8 @@ public static class SarifAnalysisParser
             decoded = decoded[7..];
         if (decoded.Length >= 3 && char.IsLetter(decoded[0]) && decoded[1] == ':' && decoded[2] == '/')
             decoded = decoded[3..];
-        // Recette R-504: a scanner run in a container sees the repository mounted on /src
-        // (ScannerContainerProcessBuilder), so the absolute path it reports, /src/tests/x.py, is
-        // tests/x.py in the repository. Kept as it was, it read "src/tests/x.py", a file that does not
-        // exist, and the link to it fell back on the repository root. A relative path is left alone:
-        // "src/Aetheus.Back/X.cs" is a real folder of the repository.
+        // Strip the container mount prefix from absolute /src paths to recover repository-relative
+        // locations. Leave relative paths unchanged because src can be a real repository directory.
         if (decoded.StartsWith(ScannerWorkspaceMount, StringComparison.Ordinal))
             decoded = decoded[ScannerWorkspaceMount.Length..];
         decoded = decoded.TrimStart('/');
@@ -298,10 +295,9 @@ public static class SarifAnalysisParser
             : null;
     }
 
-    /// <summary>Recette R2-055: provenance a history scanner attaches to a result (gitleaks `git` mode
-    /// fills author, email, date and commit message). They say who and when, not which finding: read
-    /// first in key order, `author` merged every leak of one author into a single finding, so a vendored
-    /// Monaco line and a real token in another file shared one identity.</summary>
+    /// <summary>Identifies scanner provenance such as author, email, date and commit message.
+    /// Exclude these fields from finding identity so unrelated findings from one author remain
+    /// distinct.</summary>
     private static readonly HashSet<string> ProvenanceFingerprintKeys =
         new(StringComparer.OrdinalIgnoreCase) { "author", "email", "date", "commitMessage" };
 

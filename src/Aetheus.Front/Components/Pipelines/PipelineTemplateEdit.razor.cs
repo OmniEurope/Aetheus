@@ -17,9 +17,8 @@ public partial class PipelineTemplateEdit
     private bool _loading;
     private bool _loadFailed;
 
-    // A template that does not exist and a request that failed are two different answers to the
-    // reader: the first is final, the second is worth retrying. Every other detail page in the app
-    // says "<entity> not found."; this one used to report a load failure for both.
+    // Distinguishes a missing template from a failed request so the page can offer retry only for a
+    // transient load failure.
     private bool _notFound;
     private bool _saving;
     private int? _loadedId = int.MinValue;

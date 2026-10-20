@@ -56,8 +56,8 @@ public partial class ServerPortsSection
     private List<PortRow> _rows = [];
     private OmniDataGrid<PortRow>? _grid;
 
-    // Recette R-210: the Source and Listening filters show the same words as the cells, built once for
-    // stable delegates.
+    // The Source and Listening filters show the same words as the cells, built once for stable
+    // delegates.
     private Func<string, string>? _sourceText;
     private Func<string, string> SourceText => _sourceText ??= GridFilterText.ForEnum<PortReservationSource>(L);
     private Func<string, string>? _listeningFilterText;
@@ -215,11 +215,9 @@ public partial class ServerPortsSection
         await LoadAsync();
     }
 
-    /// <summary>
-    /// Reads the claims and the range. <paramref name="live"/> is the task-completion path (a finished
-    /// scan): the grid stays on screen (no loader) and is told before the new rows arrive, so the ports
-    /// it did not hold read bold (recette R-227).
-    /// </summary>
+    /// <summary> Reads the claims and the range. <paramref name="live"/> is the task-completion
+    /// path (a finished scan): the grid stays on screen (no loader) and is told before the new rows
+    /// arrive, so the ports it did not hold read bold. </summary>
     private async Task LoadAsync(bool live = false)
     {
         var serverId = ServerId;

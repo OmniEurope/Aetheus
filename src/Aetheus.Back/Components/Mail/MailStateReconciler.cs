@@ -16,15 +16,9 @@ public interface IMailStateReconciler
     Task<MailReconciliationResult> ReconcileAsync(int serverId, MailDataDto mail, CancellationToken ct = default);
 }
 
-/// <summary>
-/// PLAN-005 lot 2: aligns the Aetheus mail rows of a server with the inventory its agent reported.
-/// Additive by decision (2026-09-14): rows the server reports but Aetheus does not know are created with
-/// <see cref="MailRecordSource.Adopted"/>; rows Aetheus knows but the server no longer reports are only
-/// deactivated (<c>IsActive = false</c>, <c>MissingSince</c> set), never deleted, and are reactivated when
-/// they come back. A list the agent could not read completely (<c>*Collected == false</c>) is ignored,
-/// rows created in the last <see cref="Grace"/> are never marked missing (their creation task may not have
-/// run yet), and rows whose removal is still pending are never resurrected.
-/// </summary>
+/// <summary>Adopt reported rows, deactivate missing rows without deleting them, and reactivate rows
+/// that return. Ignore incomplete inventory, protect recently created rows during <see
+/// cref="Grace"/>, and do not resurrect pending removals.</summary>
 public sealed class MailStateReconciler(
     IMailInventoryRepository repo,
     TimeProvider timeProvider,

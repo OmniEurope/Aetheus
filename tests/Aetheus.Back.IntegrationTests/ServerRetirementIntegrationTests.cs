@@ -8,11 +8,8 @@ using Environment = Aetheus.Back.Data.Entities.Environment;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-004 R-11 on real PostgreSQL: the named query filter that hides a retired server, the
-/// navigation-based filter on its environment link, and the watchdog's opt-out subquery all have to
-/// translate to SQL, which the InMemory unit provider cannot prove.
-/// </summary>
+/// <summary>PostgreSQL tests verify translation of retirement filters, environment-link navigation
+/// and watchdog exclusion.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class ServerRetirementIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)

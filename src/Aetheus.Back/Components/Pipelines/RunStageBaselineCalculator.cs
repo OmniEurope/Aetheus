@@ -13,11 +13,8 @@ public sealed record StepTimingRow(
     DateTime StartedAt,
     DateTime CompletedAt);
 
-/// <summary>
-/// PLAN-003 lot 20 / D26. Pure: turns the timed steps of the sampled runs into per-stage and
-/// per-step average and last duration. Kept apart from the query so the arithmetic is tested
-/// without a database, and so "which runs count" stays the query's single decision.
-/// </summary>
+/// <summary>Computes per-stage and per-step average and last durations independently of
+/// persistence, leaving sample selection to the query.</summary>
 public static class RunStageBaselineCalculator
 {
     public static RunStageBaselinesDto Compute(IReadOnlyCollection<StepTimingRow> rows)

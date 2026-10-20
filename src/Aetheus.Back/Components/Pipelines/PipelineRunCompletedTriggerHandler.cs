@@ -25,7 +25,8 @@ public sealed class PipelineRunCompletedTriggerHandler(
         var waitingSteps = await repo.FindStepRunsByTriggeredRunIdAsync(domainEvent.PipelineRunId, ct).ConfigureAwait(false);
         if (!waitingSteps.Any(step => step.Status == TaskExecutionStatus.Running))
             return;
-        var childOutputs = domainEvent.Status == PipelineStatus.Success
+        // A Rejected child (recette R1-80) hands up its outputs too: they say what it found.
+        var childOutputs = domainEvent.Status is PipelineStatus.Success or PipelineStatus.Rejected
             ? await CollectChildOutputsAsync(domainEvent.PipelineRunId, ct).ConfigureAwait(false)
             : [];
 

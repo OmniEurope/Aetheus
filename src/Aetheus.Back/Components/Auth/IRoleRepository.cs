@@ -18,7 +18,8 @@ public interface IRoleRepository
     Task SetPermissionsForRoleAsync(int roleId, List<ResourcePermissionEntry> permissions, CancellationToken ct = default);
     Task<List<EffectivePermissionDto>> GetEffectivePermissionsAsync(int userId, CancellationToken ct = default);
 
-    /// <summary>Recette R2-014: the permissions the named roles grant, for an identity without a user row.</summary>
+    /// <summary>The permissions the named roles grant, for an identity without a user
+    /// row.</summary>
     Task<List<EffectivePermissionDto>> GetEffectivePermissionsForRolesAsync(
         IReadOnlyCollection<string> roleNames, CancellationToken ct = default);
     Task<List<ResourcePermissionDto>> GetUserPermissionsAsync(string username, CancellationToken ct = default);

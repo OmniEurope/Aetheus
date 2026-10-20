@@ -64,7 +64,8 @@ const witnesses = {
   TEAMSPEAK_SETUP_SUDOERS_FILE: "TEAMSPEAK_SETUP", DEPLOY_MANAGE_SUDOERS_FILE: "DEPLOYMENT"
 };
 
-// ---- DEP-021: a flag on an upgrade changes what it names, the rest of the host's posture stays ----
+// Change only the capability named by an upgrade flag so the rest of the installed posture remains
+// intact. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 // The host holds the drop-ins of `present`; the upgrade command passes `flags`.
 function upgrade(present, flags) {
@@ -109,6 +110,58 @@ test("one --enable flag adds that capability and keeps the others", () => {
   assert.equal(posture.MAIL_SETUP, "0", "nothing the host does not have is added");
 });
 
+// R3-58 / ADR-051: the agent update supervisor runs `--upgrade --yes --enable-patch-manage`, the one
+// grant the UI may add. It must add that capability alone and widen nothing else the host has not got.
+test("--upgrade --enable-patch-manage adds patch-manage alone", () => {
+  const posture = upgrade(["SERVICE_CONTROL", "CRON_MANAGE"], ["--yes", "--enable-patch-manage"]);
+  assert.equal(posture.PATCH_MANAGE, "1");
+  for (const capability of ["SERVICE_CONTROL", "CRON_MANAGE"]) assert.equal(posture[capability], "1", capability);
+  for (const capability of ["FIREWALL_MANAGE", "PACKAGE_MANAGE", "MAIL_SETUP", "DEPLOYMENT", "CERTBOT_MANAGE", "APACHE_MANAGE"]) {
+    assert.equal(posture[capability], "0", `${capability} stays off`);
+  }
+});
+
+// The supervisor's sixth request field, run as shipped: only the exact whitelisted token maps to the
+// installer flag; anything else ends the update with exit 20 before the host is touched, and the value is
+// only ever data (the field is passed through the environment, never into the script text).
+const supervisor = readFileSync(resolve("deploy/agent-host-config/agent-update/agent-posture-upgrade"), "utf8").replace(/\r\n/g, "\n");
+
+function capabilityField(value) {
+  const start = supervisor.indexOf("# Optional sixth field");
+  const end = supervisor.indexOf("# Let the running agent publish the handoff result");
+  assert.ok(start >= 0 && end > start, "the capability block is found in the supervisor");
+  const root = mkdtempSync(join(tmpdir(), "aetheus-supervisor-")).replace(/\\/g, "/");
+  try {
+    const script = `${root}/scenario.sh`;
+    writeFileSync(script, `set -eu\ncd "${root}"\nphase="claim"\nenable_patch_manage=0\nenable_capabilities="$CAPS"\ntrap 'echo "PHASE=$phase"; echo "PATCH=$enable_patch_manage"' EXIT\n${supervisor.slice(start, end)}\n`);
+    const result = spawnSync("sh", [script], { encoding: "utf8", env: { ...process.env, CAPS: value } });
+    return { status: result.status, ...values(result.stdout), sideEffects: readdirSync(root).filter(name => name !== "scenario.sh") };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("the supervisor maps the whitelisted capability to its one installer flag", () => {
+  const result = capabilityField("patch-manage");
+  assert.equal(result.status, 0);
+  assert.equal(result.PATCH, "1");
+});
+
+test("the supervisor takes no capability when the field is empty", () => {
+  const result = capabilityField("");
+  assert.equal(result.status, 0);
+  assert.equal(result.PATCH, "0");
+});
+
+for (const hostile of ["docker", "firewall-manage", "PATCH-MANAGE", "patch-manage,docker", "docker,patch-manage", "patch-manage;touch pwned", "$(touch pwned)", "`touch pwned`", "patch-manage touch", "patch-manage,", "--enable-all"]) {
+  test(`the supervisor refuses ${JSON.stringify(hostile)} before touching the host`, () => {
+    const result = capabilityField(hostile);
+    assert.equal(result.status, 20);
+    assert.equal(result.PHASE, "invalid-capabilities");
+    assert.deepEqual(result.sideEffects, [], "nothing was executed or created");
+  });
+}
+
 test("the server-management module keeps the capabilities outside it", () => {
   const posture = upgrade(["PATCH_MANAGE", "FIREWALL_MANAGE", "DEPLOYMENT", "CERTBOT_MANAGE"], ["--module", "server-management"]);
   for (const capability of ["PATCH_MANAGE", "FIREWALL_MANAGE", "DEPLOYMENT", "CERTBOT_MANAGE", "SERVICE_CONTROL", "CRON_MANAGE"]) {
@@ -128,7 +181,8 @@ test("a later flag on the same command wins over an earlier one", () => {
   assert.equal(posture.APACHE_MANAGE, "0");
 });
 
-// ---- DEP-018: the agent unit's sandbox follows every grant the installer puts in place ------------
+// Derive the service sandbox from every installed grant so intended elevation is usable without
+// granting unrelated privileges. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 function unitFor(enabled) {
   const body = `${stubs}
@@ -167,6 +221,63 @@ for (const capability of ["SERVICE_CONTROL", "APACHE_MANAGE", "CERTBOT_MANAGE", 
   });
 }
 
+// The homes rule of the unit as write_systemd_unit renders it, with a systemctl that reports `version`
+// (any text, as `systemctl --version` prints it) and a read-grant helper that lists `dirs`.
+function homeRuleFor(version, { dirs = ["/root/.ssh", "/home/alice/.ssh"], certbot = false } = {}) {
+  const body = `${stubs}
+${capabilities.map(capability => `ENABLE_${capability}=${certbot && capability === "CERTBOT_MANAGE" ? 1 : 0}`).join("\n")}
+INSTALL_DIR="$ROOT/opt"; SYSTEMD_UNIT_PATH="$ROOT/unit"; CERTBOT_STATE_DIR="$ROOT/certbot"; ACME_WEBROOT_OVERRIDE=""
+AGENT_READ_GRANT_HELPER_PATH="$ROOT/helper"; AGENT_READ_GRANT_SERVICE_PATH="$ROOT/grant.service"
+printf '#!/bin/sh\\n%s\\n' '${dirs.map(dir => `echo ${dir}`).join("; ")}' > "$ROOT/helper"; chmod +x "$ROOT/helper"
+mkdir() { :; }
+chown() { :; }
+getent() { return 1; }
+ensure_helper_dir() { :; }
+systemctl() { echo '${version}'; }
+render_host_config() {
+    case "$1" in agent/aetheus-agent.service) printf 'HOME=%s\\n' "$(printf '%s' "$PROTECT_HOME_BLOCK" | tr '\\n' '|')" ;; esac
+}
+${extractFunction("sudo_grant_enabled")}
+${extractFunction("systemd_major_version")}
+${extractFunction("write_systemd_unit")}
+write_systemd_unit
+`;
+  const result = run(body);
+  assert.equal(result.status, 0, result.stderr);
+  return { home: values(result.stdout).HOME, output: result.stdout };
+}
+
+test("systemd 242 and later turn the homes into tmpfs and bind the .ssh directories read-only", () => {
+  for (const version of ["systemd 242 (242.0)", "systemd 245 (245.4-4ubuntu3)", "systemd 255 (255.4-1ubuntu8.18)"]) {
+    assert.equal(homeRuleFor(version).home, "ProtectHome=tmpfs|BindReadOnlyPaths=-/root/.ssh -/home/alice/.ssh", version);
+  }
+});
+
+test("an older or unreadable systemd keeps ProtectHome=true and binds nothing", () => {
+  // tmpfs is unknown below 242: systemd would ignore the line and leave every home readable.
+  for (const version of ["systemd 241 (241)", "systemd 219", "systemd 237 (237)", "garbage", ""]) {
+    const rule = homeRuleFor(version);
+    assert.equal(rule.home, "ProtectHome=true", `[${version}]`);
+    assert.match(rule.output, /WARN systemd older than 242/);
+  }
+});
+
+test("the certbot homes keep their snap bind and gain the .ssh binds only from systemd 242", () => {
+  assert.equal(homeRuleFor("systemd 255", { certbot: true }).home,
+    "ProtectHome=tmpfs|BindPaths=-/root/snap|BindReadOnlyPaths=-/root/.ssh -/home/alice/.ssh");
+  assert.doesNotMatch(homeRuleFor("systemd 241", { certbot: true }).home, /BindReadOnlyPaths/);
+});
+
+test("certbot homes need systemd 242 for the tmpfs and the snap bind", () => {
+  const recent = homeRuleFor("systemd 255 (255.4-1ubuntu8.18)", { certbot: true, dirs: [] });
+  assert.equal(recent.home, "ProtectHome=tmpfs|BindPaths=-/root/snap");
+  for (const version of ["systemd 241 (241)", "garbage", ""]) {
+    const old = homeRuleFor(version, { certbot: true });
+    assert.equal(old.home, "ProtectHome=true", `[${version}]`);
+    assert.match(old.output, /WARN systemd older than 242 .*snap certbot/);
+  }
+});
+
 test("the grants of apply_sudoers and the sandbox list are the same set", () => {
   const apply = extractFunction("apply_sudoers");
   const granted = new Set([...apply.matchAll(/if \[ "\$ENABLE_([A-Z_]+)" -eq 1 \]/g)].map(match => match[1]));
@@ -191,9 +302,9 @@ test("the portsentry and TeamSpeak setup helpers get the system writes apt-get n
   assert.doesNotMatch(unitFor(["CRON_MANAGE"]).FAMILIES, /AF_NETLINK/);
 });
 
-// ---- DEP-019: a disabled docker capability takes the dedicated account out of the docker group ----
-// Decision D12 (option A): the installer records the membership it adds in a root-owned marker, and
-// only that marker authorizes taking it back from an account that is not the dedicated one.
+// Require a root-owned installer marker before revoking Docker membership on a shared account so
+// operator-owned membership remains untouched. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 const sharedAccount = "aetheus-agent:x:1000:1000:Ops:/home/ops:/bin/bash";
 
@@ -280,7 +391,8 @@ test("the purge withdraws only a docker membership the installer recorded", () =
   assert.match(purge, /rm -f "\$DOCKER_GROUP_MARKER_FILE"/);
 });
 
-// ---- DEP-020: a reinstall clears the agent's state and keeps the deployed applications ------------
+// Clear agent state on reinstall while preserving deployed applications and their secrets. See
+// docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 test("a reinstall purges agent state and keeps the deployment tree byte for byte", () => {
   const root = mkdtempSync(join(tmpdir(), "aetheus-workdir-")).replace(/\\/g, "/");
@@ -323,4 +435,110 @@ test("the reinstall calls the purge, not a wipe of the whole work dir", () => {
   const cleanup = installer.slice(installer.indexOf("# --- Clean any previous installation ---"));
   assert.match(cleanup, /\npurge_agent_work_dir\n/);
   assert.doesNotMatch(cleanup.slice(0, cleanup.indexOf("# --- Move files to INSTALL_DIR")), /rm -rf "\$\{WORK_DIR:\?\}"\/\*/);
+});
+
+// aetheus-fn (PLAN-002 lot 1.0g) is bind-mounted read-only into a step container that runs as a
+// non-root user: each per-C-library binary must end up 755, on install and on upgrade alike.
+
+test("the installer gives every aetheus-fn binary mode 755 and keeps the agent apphost executable", () => {
+  const root = mkdtempSync(join(tmpdir(), "aetheus-modes-")).replace(/\\/g, "/");
+  try {
+    const install = `${root}/opt/aetheus-agent`;
+    for (const path of ["Aetheus.Agent.Linux", "aetheus-fn/linux-x64/aetheus-fn", "aetheus-fn/linux-musl-x64/aetheus-fn"]) {
+      mkdirSync(join(install, path, ".."), { recursive: true });
+      writeFileSync(join(install, path), "binary");
+    }
+    const body = `${stubs}
+chmod() { printf 'CHMOD %s %s\\n' "$1" "$2"; }
+INSTALL_DIR="${install}"
+${extractFunction("restore_executable_modes")}
+restore_executable_modes
+`;
+    const result = spawnSync("sh", ["-c", body], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    const calls = result.stdout.split("\n").filter(line => line.startsWith("CHMOD ")).sort();
+    assert.deepEqual(calls, [
+      `CHMOD +x ${install}/Aetheus.Agent.Linux`,
+      `CHMOD 755 ${install}/aetheus-fn/linux-musl-x64/aetheus-fn`,
+      `CHMOD 755 ${install}/aetheus-fn/linux-x64/aetheus-fn`
+    ].sort());
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an archive without aetheus-fn installs without a chmod on a missing file", () => {
+  const root = mkdtempSync(join(tmpdir(), "aetheus-modes-")).replace(/\\/g, "/");
+  try {
+    const body = `${stubs}
+chmod() { printf 'CHMOD %s %s\\n' "$1" "$2"; }
+INSTALL_DIR="${root}"
+${extractFunction("restore_executable_modes")}
+restore_executable_modes
+`;
+    const result = spawnSync("sh", ["-c", body], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(result.stdout, /CHMOD/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("both the install and the upgrade path restore the executable modes", () => {
+  const upgrade = installer.slice(installer.indexOf("# Mode: UPGRADE"), installer.indexOf("# --- Create directories ---"));
+  const install = installer.slice(installer.indexOf("# --- Create directories ---"), installer.indexOf("# --- Write configuration ---"));
+  assert.match(upgrade, /\n\s+restore_executable_modes\n/);
+  assert.match(install, /\nrestore_executable_modes\n/);
+});
+
+// Rollback trap: a failed upgrade restores the previous agent binaries, and the posture version file the
+// failed install wrote must go back with them, or the older agent (which expects the old version) would
+// refuse every later UI update. The shipped restore_previous_agent runs on a scratch tree with stand-ins
+// for the three commands that need root (chown, systemctl, the service itself).
+function restoreScenario({ previousPosture, writtenPosture }) {
+  const start = supervisor.indexOf("restore_previous_agent() {\n");
+  const end = supervisor.indexOf("\n}\n", start) + 3;
+  assert.ok(start >= 0 && end > start, "restore_previous_agent() is defined in the supervisor");
+  const root = mkdtempSync(join(tmpdir(), "aetheus-rollback-")).replace(/[\\]/g, "/");
+  try {
+    for (const dir of ["install", "work", "upgrade", "upgrade/rollback"]) mkdirSync(`${root}/${dir}`, { recursive: true });
+    writeFileSync(`${root}/install/Aetheus.Agent.Linux`, "new binary");
+    writeFileSync(`${root}/upgrade/rollback/Aetheus.Agent.Linux`, "old binary");
+    writeFileSync(`${root}/etc-posture`, writtenPosture);
+    if (previousPosture === null) writeFileSync(`${root}/upgrade/posture.absent`, "");
+    else writeFileSync(`${root}/upgrade/posture.previous`, previousPosture);
+    const script = `${root}/scenario.sh`;
+    writeFileSync(script, `set -eu
+chown() { :; }
+systemctl() { :; }
+install_dir="${root}/install"
+work_dir="${root}/work"
+upgrade_dir="${root}/upgrade"
+rollback="${root}/upgrade/rollback"
+posture_file="${root}/etc-posture"
+rollback_ready=1
+${supervisor.slice(start, end)}
+restore_previous_agent
+`);
+    const result = spawnSync("sh", [script], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return {
+      binary: readFileSync(`${root}/install/Aetheus.Agent.Linux`, "utf8"),
+      posture: existsSync(`${root}/etc-posture`) ? readFileSync(`${root}/etc-posture`, "utf8") : null
+    };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("a rollback puts the previous posture version back with the previous agent", () => {
+  const result = restoreScenario({ previousPosture: "2\n", writtenPosture: "3\n" });
+  assert.equal(result.binary, "old binary");
+  assert.equal(result.posture, "2\n");
+});
+
+test("a rollback removes a posture file the failed install created on a host that had none", () => {
+  const result = restoreScenario({ previousPosture: null, writtenPosture: "3\n" });
+  assert.equal(result.binary, "old binary");
+  assert.equal(result.posture, null);
 });

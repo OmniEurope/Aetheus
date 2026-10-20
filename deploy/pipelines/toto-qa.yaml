@@ -541,13 +541,13 @@ stages:
           echo "##aetheus[setvariable name=QA_PREVIOUS_INTEGRATION_GATE_STATUS]$PREVIOUS_INTEGRATION"
           echo "##aetheus[setvariable name=QA_PERFORMANCE_GATE_STATUS]$PERFORMANCE"
           if test "$(tr -d '\r\n' < .qa-bootstrap)" = 1; then
-            echo "##aetheus[setvariable name=CompatibilityMode]Bootstrap"
-            echo "##aetheus[setvariable name=PreviousVersionTested]false"
+            echo "##aetheus[setvariable name=COMPATIBILITY_MODE]Bootstrap"
+            echo "##aetheus[setvariable name=PREVIOUS_VERSION_TESTED]false"
           else
             PREVIOUS="$(tr -d '\r\n' < .qa-previous)"
             test -n "$PREVIOUS"
-            echo "##aetheus[setvariable name=CompatibilityMode]NMinusOne"
-            echo "##aetheus[setvariable name=PreviousVersionTested]$PREVIOUS"
+            echo "##aetheus[setvariable name=COMPATIBILITY_MODE]NMinusOne"
+            echo "##aetheus[setvariable name=PREVIOUS_VERSION_TESTED]$PREVIOUS"
           fi
           if test ! -f .qa-failed; then
             echo "Toto QA, rollback and teardown evidence is complete."

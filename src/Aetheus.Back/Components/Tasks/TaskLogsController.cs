@@ -25,7 +25,8 @@ public class TaskLogsController(
         return Ok(await logService.GetTaskLogsAsync(taskId, maxLines, ct));
     }
 
-    /// <summary>Recette R2-104: a page of the task's complete log, from its first line (pageSize 1 to 200).</summary>
+    /// <summary>A page of the task's complete log, from its first line (pageSize 1 to
+    /// 200).</summary>
     [HttpGet("task/{taskId:int}/page")]
     public async Task<ActionResult<PaginatedResult<TaskLogDto>>> GetTaskLogPage(
         int taskId, [FromQuery] int page = 1, [FromQuery] int pageSize = 200, CancellationToken ct = default)
@@ -93,8 +94,8 @@ public class TaskLogsController(
         if (requests.Count > 500)
             return BadRequest(new ApiError { Message = "Batch size exceeds maximum of 500 entries." });
 
-        var claim = User.FindFirst("ServerId")?.Value;
-        if (claim is null || !int.TryParse(claim, out var agentServerId))
+        var agentServerId = GetAgentServerId();
+        if (agentServerId is null)
             return Forbid();
 
         // Hardening (#47): single batched lookup instead of N+1 per-line auth queries.
@@ -102,32 +103,45 @@ public class TaskLogsController(
         // on every batch.
         var distinctIds = new HashSet<int>(requests.Count);
         foreach (var r in requests) distinctIds.Add(r.TaskId);
-        var taskServerIds = await taskService.GetServerIdsForTasksAsync(distinctIds, ct);
-        foreach (var id in distinctIds)
-        {
-            if (!taskServerIds.TryGetValue(id, out var sid) || sid != agentServerId)
-                return Forbid();
-        }
-        var first = requests[0];
-        var hasLeasePayload = HasValidLease(first)
-            && !requests.Any(request =>
-                request.AgentSessionId != first.AgentSessionId
-                || request.AgentSessionFencingToken != first.AgentSessionFencingToken);
-        var hasCurrentLease = hasLeasePayload
-            && await taskService.HaveCurrentAgentLeasesAsync(
-                distinctIds,
-                agentServerId,
-                first.AgentSessionId!,
-                first.AgentSessionFencingToken!.Value,
-                ct);
-        if (hasLeasePayload && !hasCurrentLease)
-            return Conflict();
-        if (!hasLeasePayload
-            && !await taskService.AllowsLegacyUnfencedTaskProtocolAsync(agentServerId, ct))
+        if (!await OwnsEveryTaskAsync(distinctIds, agentServerId.Value, ct))
+            return Forbid();
+        if (!await AcceptsBatchLeaseAsync(requests, distinctIds, agentServerId.Value, ct))
             return Conflict();
 
         await logService.AppendLogsAsync(requests, ct);
         return Ok();
+    }
+
+    // Every task of the batch must run on the calling agent's server.
+    private async Task<bool> OwnsEveryTaskAsync(HashSet<int> taskIds, int agentServerId, CancellationToken ct)
+    {
+        var taskServerIds = await taskService.GetServerIdsForTasksAsync(taskIds, ct);
+        return taskIds.All(id => taskServerIds.TryGetValue(id, out var sid) && sid == agentServerId);
+    }
+
+    // One lease for the whole batch: its session must still hold every task. A batch without a valid,
+    // shared lease is accepted only from an agent still allowed the legacy unfenced protocol.
+    private async Task<bool> AcceptsBatchLeaseAsync(
+        List<AppendLogRequest> requests, HashSet<int> taskIds, int agentServerId, CancellationToken ct)
+    {
+        var first = requests[0];
+        if (SharesOneValidLease(requests))
+            return await taskService.HaveCurrentAgentLeasesAsync(
+                taskIds,
+                agentServerId,
+                first.AgentSessionId!,
+                first.AgentSessionFencingToken!.Value,
+                ct);
+        return await taskService.AllowsLegacyUnfencedTaskProtocolAsync(agentServerId, ct);
+    }
+
+    internal static bool SharesOneValidLease(List<AppendLogRequest> requests)
+    {
+        var first = requests[0];
+        return HasValidLease(first)
+            && requests.All(request =>
+                request.AgentSessionId == first.AgentSessionId
+                && request.AgentSessionFencingToken == first.AgentSessionFencingToken);
     }
 
     private int? GetAgentServerId()

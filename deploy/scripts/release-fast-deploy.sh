@@ -3,7 +3,8 @@
 # The preceding step built both immutable images from BUILD_SOURCEVERSION.
 set -eu
 
-# PLAN-003 2.1: ENV_FILE and UPSTREAM_DEFINE come from the aetheus.prod library, like the rest.
+# Read ENV_FILE and UPSTREAM_DEFINE from the production library so this path shares the
+# environment's deployment identity. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 required_vars="WORKSPACE BUILD_SOURCEVERSION ENV_FILE COMPOSE_PROJECT BG_COMPOSE PORT_FRONT_BLUE PORT_BACK_BLUE PORT_FRONT_GREEN PORT_BACK_GREEN UPSTREAM_CONF UPSTREAM_LINK UPSTREAM_DEFINE PUBLIC_APP_URL PUBLIC_API_URL AETHEUS_DEPLOY_TARGET"
 for name in $required_vars; do
   eval "value=\${$name:-}"
@@ -100,10 +101,9 @@ done
 # shellcheck disable=SC2086
 sh "$WORKSPACE/deploy/scripts/check-expand-migration-up.sh" $PENDING_MIGRATION_FILES
 
-# No database backup before migrating, like the blue-green path (BlueGreenMigrationGate): the
-# safety is the expand/contract check just above, which lets the previous colour run on the migrated
-# schema. The full pg_dump this script used to take hit the 4 GiB file limit of an agent step and
-# refused the fast release (run 2525, 2026-10-03). Removed on the user's decision of 2026-10-03.
+# Require expand/contract compatibility before migration so the previous colour remains usable on
+# the shared schema; this path deliberately takes no pre-migration database dump. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 echo ">>> Running the migration bundle once."
 $COMPOSE --profile "$IDLE" run --rm --no-deps \
   -e AETHEUS_RUN_MIGRATIONS=true -e AETHEUS_MIGRATE_ONLY=true "back-$IDLE"

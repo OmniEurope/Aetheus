@@ -5,8 +5,8 @@
 @if (Run.Artifacts.Count > 0)
 {
     <OmniTabsItem Key="artifacts" Title="@L["Artifacts"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("inventory_2"))" /></Icon><ChildContent>
-            @* Recette R-427: the table alone, no card around it and no "Artifacts (n)" title above it:
-               the tab already names the content and the grid holds the rows. *@
+            @* The table alone, no card around it and no "Artifacts (n)" title above it: the tab
+               already names the content and the grid holds the rows. *@
             <OmniDataGrid Items="@Run.Artifacts" ExportTitle="@ExportContext.Title(L["Artifacts"])" ExportFields="@ExportContext.Fields()" TItem="PipelineArtifactDto"
  Class="run-artifacts-grid" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                 <Columns>
@@ -19,8 +19,7 @@
                     <OmniDataGridColumn TItem="PipelineArtifactDto" Property="SizeBytes" Title="@L["Size"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
                         <Template Context="artifact">@FormatSize(artifact.SizeBytes)</Template>
                     </OmniDataGridColumn>
-                    @* Lot 12.5: the digest the store computed over these exact bytes. It is what makes
-                       an artifact identifiable across a restore, and it was recorded and never shown. *@
+                    @* The stored digest identifies the exact artifact bytes across a restore. *@
                     <OmniDataGridColumn TItem="PipelineArtifactDto" Property="Sha256" Title="@L["Digest"]" Width="10rem" Filterable="true">
                         <Template Context="artifact">
                             @if (artifact.Sha256 is { Length: > 0 } digest)
@@ -37,7 +36,8 @@
                     </OmniDataGridColumn>
                     <OmniDataGridColumn TItem="PipelineArtifactDto" Title="@L["Actions"]" Width="5rem" Sortable="false" Filterable="false">
                         <Template Context="artifact">
-                            @* STD-BTN exception chosen by the user (recette R-427, 2026-09-28): Download is blue on every row. *@
+                            @* Download uses a blue row action as the project's explicit STD-BTN
+                               exception. *@
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ArtifactDownloadRequested.InvokeAsync(artifact))" title="@L["Download"]" Label="@L["Download"]"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
                         </Template>
                     </OmniDataGridColumn>
@@ -91,7 +91,7 @@
                 </OmniRow>
 
 
-                @* Recette R-484: the per-file tree is read when this tab opens, not with every run reload. *@
+                @* The per-file tree is read when this tab opens, not with every run reload. *@
                 <PipelineRunCoverageFiles Summary="@coverage" />
             }
             else

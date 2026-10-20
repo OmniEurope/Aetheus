@@ -9,6 +9,7 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Security")]
+[RollbackRelevant]
 public class TotpTests : E2ETestBase
 {
     [SetUp]
@@ -17,7 +18,7 @@ public class TotpTests : E2ETestBase
     [Test]
     public async Task Settings_SecurityTab_ShowsTotpSetup()
     {
-        await Page.GotoAsync($"{FrontendUrl}/settings");
+        await NavigateToAsync("settings");
         await Page.WaitForSelectorAsync(".omni-tabs", new() { Timeout = 10000 });
         var securityTab = Page.GetByRole(AriaRole.Tab, new() { Name = "Security", Exact = true });
         await Expect(securityTab).ToBeVisibleAsync();

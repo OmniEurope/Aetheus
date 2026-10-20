@@ -3,16 +3,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Components.Monitoring;
 
-/// <summary>
-/// Recette R-373: tells which internal repository a snapshotted clone URL names, so a list can link a
-/// commit to its Aetheus page. An internal repository's URL is its smart-HTTP clone URL
-/// (<c>/git/{projectId}/{slug}.git</c>, see <see cref="MirrorRepoPath"/>): it serves git, not a page, and
-/// its host is whatever the agents reach (e.g. <c>host.docker.internal</c>).
-/// <para>One query per list, whatever the number of rows. The host part of the URL is ignored on
-/// purpose: <c>MirrorCloneUrl.Rehome</c> rewrites it per environment, while the path is stable.
-/// A URL that does not have the mirror shape, or whose (project, slug) pair names no repository,
-/// resolves to nothing. Used by the run lists (<see cref="ApplyAsync"/>) and the analysis portfolio.</para>
-/// </summary>
+/// <summary>Resolves internal repository clone paths in one query so list entries can link to their
+/// Aetheus pages, ignoring environment-dependent hosts. Invalid mirror paths or unknown
+/// project/slug pairs remain unresolved.</summary>
 public static class PipelineRunRepositoryLinks
 {
     /// <summary>Completes <see cref="PipelineRunDto.RepositoryId"/> on list-projected runs.</summary>

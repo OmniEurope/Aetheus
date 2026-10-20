@@ -9,11 +9,8 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Recette R1-29, option 1: "start from an existing project". The copies are adapted to the new project
-/// (prefix, references, its repository and branch, no environment, server or repository of the source),
-/// the libraries and vaults they use are copied as names only, and a failure leaves nothing behind.
-/// </summary>
+/// <summary>Project copies adapt names and references while copying only library and vault keys,
+/// with rollback on failure.</summary>
 public sealed class PipelineProjectCopyServiceTests
 {
     private const int SourceProjectId = 1;

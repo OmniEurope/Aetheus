@@ -2,17 +2,15 @@
 
 namespace Aetheus.Back.Components.ExternalRepos;
 
-/// <summary>
-/// Attach / inspect / sync / detach a project's external (mirror-backed) Git source. The whole
-/// feature is always on (recette R-295 removed its flag). Every action is org-scoped on the project.
-/// </summary>
+/// <summary>Attaches, inspects, synchronizes and detaches a project's mirror-backed Git source.
+/// Every action is scoped to the project's organization.</summary>
 [ApiController]
 [Route("api/external-repos")]
 [Authorize]
 public class ExternalReposController(IExternalRepoService service, IResourceAuthorizationService authz) : ControllerBase
 {
-    // Recette R-321: a project without an external repository is the normal case, not a missing resource:
-    // 204 keeps it out of the request error log, where every 404 is a warning.
+    // A project without an external repository is the normal case, not a missing resource: 204
+    // keeps it out of the request error log, where every 404 is a warning.
     [HttpGet("project/{projectId:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult<ExternalRepoDto>> GetForProject(int projectId, CancellationToken ct)

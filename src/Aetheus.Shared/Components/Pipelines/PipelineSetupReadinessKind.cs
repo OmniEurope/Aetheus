@@ -42,9 +42,9 @@ public enum PipelineSetupReadinessKind
     /// repository root.</summary>
     MissingScannerConfiguration,
 
-    /// <summary>Recette R1-32: the project's repository is external and Aetheus holds no readable copy
-    /// of it (a plain repository address, or a mirror not synchronized yet), so the files the templates
-    /// need cannot be checked from here. A warning, never "missing": nobody saw them absent. Items are
+    /// <summary>The project's repository is external and Aetheus holds no readable copy of it (a
+    /// plain repository address, or a mirror not synchronized yet), so the files the templates need
+    /// cannot be checked from here. A warning, never "missing": nobody saw them absent. Items are
     /// the paths to check in that repository.</summary>
     ExternalRepositoryNotInspected
 }

@@ -14,10 +14,12 @@ namespace Aetheus.Agent.Core.Collectors;
 public sealed partial class CertbotCollector : BaseShellCollector<CertbotCollector>, ICertbotCollector
 {
     private const string LetsEncryptLiveDir = "/etc/letsencrypt/live";
+    private const string ManageHelperPath = "/usr/local/lib/aetheus/aetheus-certbot-manage";
     private readonly Func<List<CertbotCertificateDto>> _collectCertificates;
     private readonly Func<string, bool> _fileExists;
     private readonly bool _unixLike;
     private readonly CertbotRenewalInspector _renewalInspector;
+    private readonly Func<string, string?> _readHelper;
 
     public CertbotCollector(ILogger<CertbotCollector> logger, IShellRunner shell)
         : this(logger, shell, null)
@@ -37,13 +39,16 @@ public sealed partial class CertbotCollector : BaseShellCollector<CertbotCollect
         // on Windows the probe was unreachable and its test could only skip itself. Injecting the
         // platform decision lets the fallback be driven anywhere; production still reads the real OS.
         bool? unixLike = null,
-        CertbotRenewalInspector? renewalInspector = null)
+        CertbotRenewalInspector? renewalInspector = null,
+        // Injectable for the same reason as fileExists: the helper file only exists on a configured host.
+        Func<string, string?>? readHelper = null)
         : base(logger, shell)
     {
         _collectCertificates = collectCertificates ?? CollectCertificates;
         _fileExists = fileExists ?? File.Exists;
         _unixLike = unixLike ?? !OperatingSystem.IsWindows();
         _renewalInspector = renewalInspector ?? new CertbotRenewalInspector(ReadFileOrNull, File.Exists);
+        _readHelper = readHelper ?? ReadFileOrNull;
     }
 
     public async Task<CertbotDataDto> CollectAsync(CancellationToken ct = default)
@@ -62,7 +67,9 @@ public sealed partial class CertbotCollector : BaseShellCollector<CertbotCollect
                 Version = await CollectVersionAsync(binary, ct).ConfigureAwait(false),
                 Certificates = _renewalInspector.Annotate(_collectCertificates().Take(2048)),
                 RenewalCheckedAt = renewalCheckedAt,
-                RenewalCheckSucceeded = renewalCheckSucceeded
+                HelperVersion = ReadHelperVersion(),
+                RenewalCheckSucceeded = renewalCheckSucceeded,
+                RenewalCheckFailures = _renewalInspector.ReadRenewalCheckFailures()
             };
         }
         catch (Exception ex)
@@ -128,20 +135,23 @@ public sealed partial class CertbotCollector : BaseShellCollector<CertbotCollect
     /// straight from the X.509 leaf. No shell, no sudo. If the agent lacks read access the dir
     /// enumeration throws and an empty list is returned (the operator can grant a read ACL).
     /// </summary>
-    private List<CertbotCertificateDto> CollectCertificates()
+    private List<CertbotCertificateDto> CollectCertificates() => CollectCertificatesFrom(LetsEncryptLiveDir);
+
+    // The inventory of one live directory, so it is read from a temporary directory in tests.
+    internal List<CertbotCertificateDto> CollectCertificatesFrom(string liveDirectory)
     {
         var result = new List<CertbotCertificateDto>();
-        if (OperatingSystem.IsWindows() || !Directory.Exists(LetsEncryptLiveDir))
+        if (!_unixLike || !Directory.Exists(liveDirectory))
             return result;
 
         IEnumerable<string> dirs;
         try
         {
-            dirs = Directory.EnumerateDirectories(LetsEncryptLiveDir);
+            dirs = Directory.EnumerateDirectories(liveDirectory);
         }
         catch (UnauthorizedAccessException ex)
         {
-            Logger.LogDebug(ex, "No read access to {Dir} - grant the agent a read ACL", LetsEncryptLiveDir);
+            Logger.LogDebug(ex, "No read access to {Dir} - grant the agent a read ACL", liveDirectory);
             return result;
         }
 
@@ -186,7 +196,7 @@ public sealed partial class CertbotCollector : BaseShellCollector<CertbotCollect
         }
     }
 
-    private static List<string> ExtractDomains(X509Certificate2 cert)
+    internal static List<string> ExtractDomains(X509Certificate2 cert)
     {
         var domains = new List<string>();
 
@@ -206,6 +216,16 @@ public sealed partial class CertbotCollector : BaseShellCollector<CertbotCollect
         }
         return domains;
     }
+
+    // `# aetheus-certbot-helper-version: N` on the root-owned helper; 0 when it is absent or carries no marker.
+    internal int ReadHelperVersion()
+    {
+        var match = HelperVersionRegex().Match(_readHelper(ManageHelperPath) ?? string.Empty);
+        return match.Success && int.TryParse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture, out var version) ? version : 0;
+    }
+
+    [GeneratedRegex(@"aetheus-certbot-helper-version:\s*(\d+)")]
+    private static partial Regex HelperVersionRegex();
 
     // "certbot 2.7.4"
     [GeneratedRegex(@"certbot\s+([\d.]+)")]

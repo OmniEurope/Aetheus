@@ -18,16 +18,16 @@ public sealed record PipelineRunTableItem
     public string? BranchName { get; init; }
     public string? CommitHash { get; init; }
 
-    /// <summary>Recette R-373: the run's commit as Aetheus recorded it, for the link to its page.</summary>
+    /// <summary>The run's commit as Aetheus recorded it, for the link to its page.</summary>
     public int? CommitId { get; init; }
     public string? RepositoryUrl { get; init; }
 
-    /// <summary>Recette R-373: the internal repository the run built, when the backend resolved it.</summary>
+    /// <summary>The internal repository the run built, when the backend resolved it.</summary>
     public int? RepositoryId { get; init; }
     public AnalysisGrade? GateGrade { get; init; }
 
-    /// <summary>Recette R2-146 (merged S-UX-M3VZ8): a failed run that only records a refused automated
-    /// launch (R-522), told apart in the list from a run that ran and failed, and from a Rejected one.</summary>
+    /// <summary>Distinguish an automated launch refused before execution from a run that executed
+    /// and failed or was rejected.</summary>
     public bool LaunchRefused { get; init; }
     public bool CancellationRequested { get; init; }
     public DateTime LatestStartedAt { get; init; }
@@ -89,9 +89,8 @@ public sealed record PipelineRunTableItem
                 var groupRunIds = group.Select(run => run.RunId).ToHashSet();
                 return BuildTree(group.Key, byId, parentByChild, groupRunIds, []);
             })
-            // Recette R2-102: what still runs or awaits an approval leads, most recently started first,
-            // then the rest by date: a deployment started before newer, finished runs no longer sinks
-            // under them. A column sort chosen in the grid still reorders the rows.
+            // Prioritize running or approval-waiting runs by newest start so ongoing work stays
+            // visible above finished runs; explicit grid sorting overrides that order.
             .OrderByDescending(run => !run.Status.IsTerminal())
             .ThenByDescending(run => run.LatestStartedAt)
             .ThenByDescending(run => run.RunId)

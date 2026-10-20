@@ -6,9 +6,10 @@
     {
         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OpenPruneDialogAsync" Disabled="@AgentOffline" Class="@(_pruning ? "btn-busy" : null)" Busy="@(_pruning)"><OmniIcon Name="OmniIconName.Broom" /> <span>@L["DockerPrune"]</span></OmniButton>
     }
-    @* R-181: no Refresh button and no 10-second polling toggle. The inventory (Server.Docker) is rewritten from every agent heartbeat
-       pushed on the servers hub (ServerDetailLoader), so the tabs follow the host by themselves. *@
+    @* Docker inventory follows agent heartbeats delivered through ServerDetailLoader. *@
 </OmniStack>
+
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" />
 
 @* TabRenderMode.Client keeps every tab alive: switching tabs must not destroy an open shell or a
    half-edited compose file, and a SignalR result arriving on an inactive tab must still land. *@

@@ -14,11 +14,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>
-/// Recette R2-023: the sudoers drift alert fired on every heartbeat, forever, once an agent update had
-/// legitimately re-rendered the drop-ins. The baseline is now re-captured by the heartbeat that confirms an
-/// agent update, and a drifted state is alerted once (fingerprint persisted on the server row).
-/// </summary>
+/// <summary>Recapture sudoers baseline on confirmed updates and deduplicate drift alerts through
+/// persisted fingerprints.</summary>
 public sealed class ServerHeartbeatSudoersDriftTests
 {
     private const string Agent = "aetheus-agent";

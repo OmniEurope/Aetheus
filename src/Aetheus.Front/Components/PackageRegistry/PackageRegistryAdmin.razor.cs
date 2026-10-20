@@ -18,7 +18,8 @@ public partial class PackageRegistryAdmin : Aetheus.Front.Components.Shared.Real
             return;
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// grid.</summary>
     private Task<PaginatedResult<PackageRegistryPackageDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -35,7 +36,7 @@ public partial class PackageRegistryAdmin : Aetheus.Front.Components.Shared.Real
         _loading = true;
         try
         {
-            // Recette R-210 / R-224: the header filters are applied by the API, not by the grid.
+            // The header filters are applied by the API, not by the grid.
             var result = await Api.Packages.GetRegistryPackagesAsync(page, pageSize, _search,
                 sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
             _packages = result.Items;

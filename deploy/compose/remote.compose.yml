@@ -26,6 +26,7 @@ services:
 
   back:
     container_name: ${APPNAME}-${ENV}-back
+    hostname: ${APPNAME}-${ENV}-back
     image: ${AETHEUS_BACK_IMAGE:-aetheus-back:local}
     build:
       context: ../..
@@ -67,11 +68,15 @@ services:
       # Prod keeps rate limiting ON (default false). QA sets RATE_LIMITING_DISABLED=true so the E2E suite's
       # ~85 per-test logins from one IP are not throttled by the login policy (5/min/IP) -> stuck on /login.
       - RateLimiting__Disabled=${RATE_LIMITING_DISABLED:-false}
+      # Nightly AI model list read (R3-7): on by default (prod). QA sets AI_MODEL_LIST_REFRESH_ENABLED=false:
+      # its nightly run falls in the 01:00-05:00 UTC window and its seeded profiles hold fake keys.
+      - AiTasks__ModelListRefresh__Enabled=${AI_MODEL_LIST_REFRESH_ENABLED:-true}
     volumes:
       - git-repos:/app/data/git-repos
       - dp-keys:/app/data/dp-keys
       - artifacts:/app/data/artifacts
       - packages:/app/data/packages
+      - logs:/app/logs
     depends_on:
       database:
         condition: service_healthy
@@ -122,3 +127,5 @@ volumes:
     name: ${APPNAME}-${ENV}-artifacts
   packages:
     name: ${APPNAME}-${ENV}-packages
+  logs:
+    name: ${APPNAME}-${ENV}-logs

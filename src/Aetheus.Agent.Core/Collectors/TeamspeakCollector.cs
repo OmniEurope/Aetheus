@@ -3,13 +3,17 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Agent.Core.Collectors;
 
-public sealed partial class TeamspeakCollector(ILogger<TeamspeakCollector> logger, IShellRunner shell, ITeamspeakQueryClient queryClient, Func<string, bool>? fileExists = null)
+public sealed partial class TeamspeakCollector(ILogger<TeamspeakCollector> logger, IShellRunner shell, ITeamspeakQueryClient queryClient, Func<string, bool>? fileExists = null,
+    Func<string, CancellationToken, Task<string>>? readText = null)
     : BaseShellCollector<TeamspeakCollector>(logger, shell), ITeamspeakCollector
 {
     // Injectable binary-path probe so a unit test can force "no binary on disk" deterministically. In
     // production it is File.Exists; without this seam the test reads the real host filesystem and fails
     // on any CI agent where a ts3server binary sits at one of the known paths (the VPS runner does).
     private readonly Func<string, bool> _fileExists = fileExists ?? File.Exists;
+
+    // Same seam for the ServerQuery credential, so a test drives each credential outcome.
+    private readonly Func<string, CancellationToken, Task<string>> _readText = readText ?? File.ReadAllTextAsync;
 
     private static readonly string[] KnownPaths =
     [
@@ -32,43 +36,81 @@ public sealed partial class TeamspeakCollector(ILogger<TeamspeakCollector> logge
             var binaryPath = await DetectBinaryAsync(ct).ConfigureAwait(false);
 
             if (binaryPath is null && !isRunning)
+            {
+                Logger.Log(LevelFor("absent", LogLevel.Information),
+                    "TeamSpeak collection: no ts3server binary at the known paths and no running ts3server process; nothing collected");
                 return new TeamspeakDataDto();
+            }
 
             if (!isRunning)
+            {
+                Logger.Log(LevelFor("stopped", LogLevel.Information),
+                    "TeamSpeak collection: ts3server installed at {BinaryPath} but not running; channels and clients are not collected",
+                    binaryPath);
                 return new TeamspeakDataDto { IsInstalled = true };
+            }
 
             var queryPort = await DetectQueryPortAsync(binaryPath, ct).ConfigureAwait(false);
-            var queryPassword = await ReadQueryPasswordAsync(ct).ConfigureAwait(false);
-
-            if (string.IsNullOrEmpty(queryPassword))
+            var running = new TeamspeakDataDto { IsInstalled = true, IsRunning = true, QueryPort = queryPort };
+            var credential = await ReadQueryPasswordAsync(ct).ConfigureAwait(false);
+            if (credential.Password is null)
             {
-                return new TeamspeakDataDto
-                {
-                    IsInstalled = true,
-                    IsRunning = true,
-                    QueryPort = queryPort
-                };
+                Logger.Log(LevelFor("credential:" + credential.Problem, LogLevel.Warning),
+                    "TeamSpeak collection: ts3server is running (ServerQuery port {QueryPort}) but the ServerQuery credential {CredentialPath} {Problem}; channels, clients and bans are not collected. Put the serveradmin password in that file, owned by the agent user, mode 600",
+                    queryPort, CredentialPath, credential.Problem);
+                return running;
             }
 
-            var queryResult = await RunServerQueryAsync(queryPort, queryPassword, ct).ConfigureAwait(false);
+            var queryResult = await RunServerQueryAsync(queryPort, credential.Password, ct).ConfigureAwait(false);
             if (queryResult is null)
             {
-                return new TeamspeakDataDto
-                {
-                    IsInstalled = true,
-                    IsRunning = true,
-                    QueryPort = queryPort
-                };
+                Logger.Log(LevelFor("no-answer", LogLevel.Warning),
+                    "TeamSpeak collection: ServerQuery on 127.0.0.1:{QueryPort} gave no answer (connection refused, timeout or empty reply); channels, clients and bans are not collected",
+                    queryPort);
+                return running;
             }
 
-            return ParseQueryResult(queryResult, queryPort);
+            var error = FirstQueryError(queryResult);
+            if (error is not null)
+            {
+                Logger.Log(LevelFor("query-error:" + error, LogLevel.Warning),
+                    "TeamSpeak collection: ServerQuery on 127.0.0.1:{QueryPort} refused a command ({QueryError}); data may be incomplete. A login error means the password in {CredentialPath} is not the serveradmin one",
+                    queryPort, error, CredentialPath);
+            }
+
+            var dto = ParseQueryResult(queryResult, queryPort);
+            Logger.Log(LevelFor(error is null ? "collected" : "collected-with-error", LogLevel.Information),
+                "TeamSpeak collection: server '{ServerName}' on ServerQuery port {QueryPort}, {ChannelCount} channels, {OnlineClients} clients online, {BanCount} bans",
+                dto.ServerName, queryPort, dto.ChannelCount, dto.OnlineClients, dto.Bans.Count);
+            return dto;
         }
         catch (Exception ex)
         {
-            Logger.LogDebug(ex, "Failed to collect TeamSpeak data");
+            Logger.Log(LevelFor("failed:" + ex.GetType().Name, LogLevel.Warning), ex,
+                "TeamSpeak collection failed; nothing collected this round");
             return new TeamspeakDataDto();
         }
     }
+
+    /// <summary>
+    /// The collection runs every few minutes: an outcome is logged at <paramref name="level"/> the
+    /// first time it occurs and each time it changes, and at Debug while it repeats, so the agent
+    /// journal says what TeamSpeak collection does without one identical line per round.
+    /// </summary>
+    private LogLevel LevelFor(string outcome, LogLevel level) =>
+        string.Equals(Interlocked.Exchange(ref _lastOutcome, outcome), outcome, StringComparison.Ordinal)
+            ? LogLevel.Debug
+            : level;
+
+    private string? _lastOutcome;
+
+    /// <summary>The first <c>error id=N msg=…</c> reply with N other than 0, as "id N: message".</summary>
+    private static string? FirstQueryError(string raw) =>
+        raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => line.StartsWith("error id=", StringComparison.Ordinal)
+                && !line.StartsWith("error id=0 ", StringComparison.Ordinal) && line != "error id=0")
+            .Select(line => $"id {ServerQueryHelper.GetValue(line, "id")}: {ServerQueryHelper.UnescapeServerQuery(ServerQueryHelper.GetValue(line, "msg"))}")
+            .FirstOrDefault();
 
     private async Task<string?> DetectBinaryAsync(CancellationToken ct)
     {
@@ -121,18 +163,18 @@ public sealed partial class TeamspeakCollector(ILogger<TeamspeakCollector> logge
         return 10011;
     }
 
-    private async Task<string?> ReadQueryPasswordAsync(CancellationToken ct)
+    private async Task<(string? Password, string? Problem)> ReadQueryPasswordAsync(CancellationToken ct)
     {
         try
         {
-            if (!File.Exists(CredentialPath))
-                return null;
-            var password = (await File.ReadAllTextAsync(CredentialPath, ct).ConfigureAwait(false)).Trim();
-            return string.IsNullOrEmpty(password) ? null : password;
+            if (!_fileExists(CredentialPath))
+                return (null, "is missing");
+            var password = (await _readText(CredentialPath, ct).ConfigureAwait(false)).Trim();
+            return string.IsNullOrEmpty(password) ? (null, "is empty") : (password, null);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return null;
+            return (null, $"cannot be read ({ex.Message})");
         }
     }
 

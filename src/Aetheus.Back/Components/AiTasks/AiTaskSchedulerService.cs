@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Configuration;
+using Aetheus.Back.Data.Entities;
 using Cronos;
 
 namespace Aetheus.Back.Components.AiTasks;
@@ -51,10 +52,7 @@ public sealed class AiTaskSchedulerService(
         {
             try
             {
-                var cron = AiTaskService.ParseSchedule(definition.Schedule);
-                var occurrence = cron?.GetNextOccurrence(now - Window, inclusive: true);
-                if (occurrence is null || occurrence > now
-                    || definition.LastScheduledAt is { } last && last >= occurrence)
+                if (DueOccurrence(definition, now) is not { } occurrence)
                     continue;
                 await service.RunNowAsync(definition.Id, null, ct).ConfigureAwait(false);
                 definition.LastScheduledAt = occurrence;
@@ -69,5 +67,15 @@ public sealed class AiTaskSchedulerService(
                 logger.LogWarning(ex, "Could not schedule AI task definition {DefinitionId}", definition.Id);
             }
         }
+    }
+
+    /// <summary>The occurrence of the definition's schedule that falls in the last <see cref="Window"/>
+    /// and has not run yet, or <c>null</c>.</summary>
+    internal static DateTime? DueOccurrence(AiTaskDefinition definition, DateTime now)
+    {
+        var occurrence = AiTaskService.ParseSchedule(definition.Schedule)?.GetNextOccurrence(now - Window, inclusive: true);
+        if (occurrence is null || occurrence > now)
+            return null;
+        return definition.LastScheduledAt is { } last && last >= occurrence ? null : occurrence;
     }
 }

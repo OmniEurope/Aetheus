@@ -8,11 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.AppMonitoring;
 
-/// <summary>
-/// R2-020: the startup catch-up read its whole 48-hour window of raw metrics at once and raised an
-/// OutOfMemoryException in a 1 GB container. The sweep now rolls up one hour at a time, each hour in its
-/// own scope, so what one hour loads is released before the next.
-/// </summary>
+/// <summary>Roll up startup catch-up one hour per scope so raw metrics from one hour are released
+/// before loading the next.</summary>
 public sealed class AppTelemetryRetentionCatchUpTests : IDisposable
 {
     private static readonly DateTime CurrentHour = new(2026, 10, 1, 1, 0, 0, DateTimeKind.Utc);

@@ -24,11 +24,29 @@ public sealed class ArtifactService(
     // cap alone bounds one upload, not the aggregate). Default 20 GiB.
     private readonly long _projectQuotaBytes = configuration.GetValue<long>("ArtifactStorage:ProjectQuotaBytes", 20L * 1024 * 1024 * 1024);
 
-    public async Task<PipelineArtifactDto?> PublishArtifactAsync(
+    public Task<PipelineArtifactDto?> PublishArtifactAsync(
         int runId, string name, string? stageName, long contentLength, Stream fileContent, CancellationToken ct = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(contentLength);
+        return PublishAsync(runId, name, stageName, contentLength,
+            (projectId, pipelineId, fileName) => storage.SaveArtifactAsync(projectId, pipelineId, runId, fileName, fileContent, ct), ct);
+    }
 
+    public Task<PipelineArtifactDto?> PublishVerifiedArtifactAsync(
+        int runId, string name, string? stageName, VerifiedArtifactFile file, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        return PublishAsync(runId, name, stageName, file.Length, async (projectId, pipelineId, fileName) =>
+            (await storage.AdoptVerifiedArtifactAsync(projectId, pipelineId, runId, fileName, file, ct).ConfigureAwait(false), file.Sha256), ct);
+    }
+
+    /// <summary>The publication both upload paths share: run context, project quota under the
+    /// project lock, then <paramref name="store"/> puts the bytes in place and gives back their
+    /// relative path and digest.</summary>
+    private async Task<PipelineArtifactDto?> PublishAsync(
+        int runId, string name, string? stageName, long contentLength,
+        Func<int, int, string, Task<(string RelativePath, string Sha256)>> store, CancellationToken ct)
+    {
         var context = await repo.GetRunPipelineContextAsync(runId, ct).ConfigureAwait(false);
         if (context is null) return null;
 
@@ -44,7 +62,7 @@ public sealed class ArtifactService(
         try
         {
             await EnsureProjectCapacityAsync(pid, contentLength, ct).ConfigureAwait(false);
-            return await SaveArtifactAsync(runId, pipelineId, pid, name, stageName, fileContent, ct).ConfigureAwait(false);
+            return await SaveArtifactAsync(runId, pipelineId, pid, name, stageName, store, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -80,8 +98,8 @@ public sealed class ArtifactService(
         {
             try
             {
-                // R-463: the same per-artifact lock as the expiry cleanup and the checkpoint reuse, so
-                // two paths never delete one artifact at the same time.
+                // The same per-artifact lock as the expiry cleanup and the checkpoint reuse, so two
+                // paths never delete one artifact at the same time.
                 var evicted = false;
                 if (operationLock is null)
                     evicted = await EvictUnlessLeasedAsync(artifact, now, ct).ConfigureAwait(false);
@@ -126,8 +144,7 @@ public sealed class ArtifactService(
         if (await repo.HasActiveRetentionLeaseAsync(artifact.Id, now, ct).ConfigureAwait(false))
             return false;
 
-        await storage.DeleteArtifactAsync(artifact.FilePath, ct).ConfigureAwait(false);
-        await repo.RemoveAsync(artifact, ct).ConfigureAwait(false);
+        await ArtifactPayloadRemoval.RemoveRowThenFileAsync(repo, storage, artifact, logger, ct).ConfigureAwait(false);
         return true;
     }
 
@@ -137,16 +154,15 @@ public sealed class ArtifactService(
     private async Task<PipelineArtifactDto> SaveArtifactAsync(
         int runId,
         int pipelineId,
-        int? projectId,
+        int projectId,
         string name,
         string? stageName,
-        Stream fileContent,
+        Func<int, int, string, Task<(string RelativePath, string Sha256)>> store,
         CancellationToken ct)
     {
         var fileName = $"{name}-{runId}.zip";
 
-        var (relativePath, sha256) = await storage.SaveArtifactAsync(
-            projectId ?? 0, pipelineId, runId, fileName, fileContent, ct).ConfigureAwait(false);
+        var (relativePath, sha256) = await store(projectId, pipelineId, fileName).ConfigureAwait(false);
 
         var sizeBytes = storage.GetArtifactSize(relativePath);
 
@@ -193,7 +209,7 @@ public sealed class ArtifactService(
         };
     }
 
-    /// <summary>Recette R-210: the names the project artifacts grid's checkable filters offer.</summary>
+    /// <summary>The names the project artifacts grid's checkable filters offer.</summary>
     public Task<ProjectArtifactFilterValuesDto> GetProjectArtifactFilterValuesAsync(int projectId, CancellationToken ct = default) =>
         repo.GetProjectFilterValuesAsync(projectId, ct);
 

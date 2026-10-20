@@ -2,8 +2,7 @@
 global using Aetheus.Agent.Core.Configuration;
 global using Aetheus.Agent.Core.Executors;
 global using Aetheus.Agent.Core.Services;
-// PLAN-008 lot 43: the contracts follow their module folder, so the former flat DTOs, enums,
-// constants, validators and helpers are now one namespace per module.
+// Imports contracts through their module namespaces.
 global using Aetheus.Shared.Components.AgentPools;
 global using Aetheus.Shared.Components.Agents;
 global using Aetheus.Shared.Components.AgentUpdate;

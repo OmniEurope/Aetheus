@@ -8,13 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Recette R2-101, remainder: two simultaneous <c>POST /api/servers/{id}/mail/setup</c> on a domain the
-/// server did not know yet. Both passed the "a setup is already running" check, both inserted the domain,
-/// and the second answered HTTP 500 (23505 on the unique (ServerId, Name) index). Over real HTTP and
-/// PostgreSQL, several rounds on fresh servers: neither answer may be a 500, and exactly one setup is
-/// recorded and queued per server.
-/// </summary>
+/// <summary>Concurrent HTTP mail-setup requests on fresh PostgreSQL-backed servers must never
+/// return 500 and must queue exactly one setup per server.</summary>
 [Collection(ApiSmokeCollection.Name)]
 public sealed class MailSetupConcurrencyIntegrationTests(ApiSmokeFixture fixture)
 {

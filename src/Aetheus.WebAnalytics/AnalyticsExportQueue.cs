@@ -7,7 +7,7 @@ namespace Aetheus.WebAnalytics;
 internal sealed class AnalyticsExportQueue
 {
     private const int Capacity = 2048;
-    private static readonly Meter Meter = new("Aetheus.WebAnalytics", "1.0.0");
+    private static readonly Meter Meter = new("Aetheus.WebAnalytics", "1.1.0");
     private static readonly Counter<long> Accepted = Meter.CreateCounter<long>("aetheus.analytics.accepted");
     private static readonly Counter<long> Dropped = Meter.CreateCounter<long>("aetheus.analytics.dropped");
     private readonly Channel<AnalyticsExportEvent> _channel = Channel.CreateBounded<AnalyticsExportEvent>(

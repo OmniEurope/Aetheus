@@ -90,3 +90,29 @@ internal sealed class ReleaseRollbackConfiguration : IEntityTypeConfiguration<Re
         builder.HasOne(e => e.PipelineRun).WithMany().HasForeignKey(e => e.PipelineRunId).OnDelete(DeleteBehavior.SetNull);
     }
 }
+
+internal sealed class ProjectReleaseSeriesConfiguration : IEntityTypeConfiguration<ProjectReleaseSeries>
+{
+    public void Configure(EntityTypeBuilder<ProjectReleaseSeries> builder)
+    {
+        builder.Property(e => e.Series).HasMaxLength(ReleaseSeries.MaxLength);
+        builder.HasIndex(e => new { e.ProjectId, e.Series }).IsUnique();
+        builder.HasOne(e => e.Project)
+               .WithMany()
+               .HasForeignKey(e => e.ProjectId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class ProjectReleaseNumberAllocationConfiguration : IEntityTypeConfiguration<ProjectReleaseNumberAllocation>
+{
+    public void Configure(EntityTypeBuilder<ProjectReleaseNumberAllocation> builder)
+    {
+        builder.Property(e => e.Series).HasMaxLength(ReleaseSeries.MaxLength);
+        builder.HasIndex(e => new { e.ProjectId, e.Series, e.Number }).IsUnique();
+        builder.HasOne(e => e.Project)
+               .WithMany()
+               .HasForeignKey(e => e.ProjectId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}

@@ -2,13 +2,8 @@
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>
-/// The TeamSpeak section's data: state plus the three server-paged grids. R-181: it no longer polls on
-/// a timer; on the server's pushed heartbeats (the agent inventory these endpoints read is rewritten on
-/// each one) and TeamSpeak task completions the section calls <see cref="RefreshStateAsync"/> and asks
-/// each grid on screen for a quiet refresh (R-226), which comes back through the Load methods with the
-/// grid's own page, sort and header filters.
-/// </summary>
+/// <summary>TeamSpeak state and paged grids refresh on server heartbeats and task completion. Grid
+/// reloads preserve their page, sort and header filters.</summary>
 internal sealed class TeamspeakDataCoordinator(ApiClient api) : IAsyncDisposable
 {
     private readonly ApiClient _api = api;
@@ -64,8 +59,7 @@ internal sealed class TeamspeakDataCoordinator(ApiClient api) : IAsyncDisposable
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null) =>
         LoadBansCoreAsync(new PageQuery(page, pageSize, search, sortBy, sortDescending, filters), _generation, CurrentToken);
 
-    /// <summary>The grid-facing loads: the block the grid asks for (recette R-327, it scrolls), its sort
-    /// with each list's default, and its header filters.</summary>
+    /// <summary>Grid loads use the requested block, sort and header filters.</summary>
     public Task LoadClientsAsync(GridLoadArgs args) =>
         LoadClientsCoreAsync(ToQuery(args, "Nickname"), _generation, CurrentToken);
 
@@ -75,8 +69,8 @@ internal sealed class TeamspeakDataCoordinator(ApiClient api) : IAsyncDisposable
     public Task LoadBansAsync(GridLoadArgs args) =>
         LoadBansCoreAsync(ToQuery(args, "Created", defaultDescending: true), _generation, CurrentToken);
 
-    // Recette R2-124: one page of each list's export, the same query as the grid's load, without
-    // touching the rows the section shows. A page that cannot be read throws and fails the export.
+    // One page of each list's export, the same query as the grid's load, without touching the rows
+    // the section shows. A page that cannot be read throws and fails the export.
     public Task<PaginatedResult<TeamspeakClientDto>> ReadClientsExportAsync(GridLoadArgs args)
     {
         var query = ToQuery(args, "Nickname");

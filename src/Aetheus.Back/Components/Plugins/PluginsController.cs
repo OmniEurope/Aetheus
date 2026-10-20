@@ -14,7 +14,7 @@ public class PluginsController(IPluginService pluginService) : ControllerBase
         return Ok(await pluginService.GetPluginsPageAsync(request, ct));
     }
 
-    /// <summary>Recette R-224: the authors the plugins list's Author column filter offers.</summary>
+    /// <summary>The authors the plugins list's Author column filter offers.</summary>
     [HttpGet("filter-values")]
     public async Task<ActionResult<PluginFilterValuesDto>> GetFilterValues(CancellationToken ct) =>
         Ok(await pluginService.GetFilterValuesAsync(ct));

@@ -5,12 +5,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recette R-432 (user decision of 2026-09-29): the two grids fed by their page, PipelineRunsGrid and
-/// MonitoredAppsStatusGrid, show OE's loading bar on the table while the page loads, like every other grid,
-/// and no Aetheus veil: the rows already there stay, the headers stay, and a grid with no row yet waits
-/// empty under the bar instead of announcing an empty list.
-/// </summary>
+/// <summary>Page-fed grids retain headers and existing rows beneath OE's loading bar; unloaded
+/// grids must not announce an empty result.</summary>
 public sealed class PageFedGridLoadingBarTests : BunitContext
 {
     private const string Bar = "thead > tr.omni-data-grid__progress .omni-loading-bar--active";
@@ -87,7 +83,7 @@ public sealed class PageFedGridLoadingBarTests : BunitContext
             new() { Id = 1, Name = "shop", ProjectId = 1, CurrentStatus = AppHealthStatus.Up }
         };
         var cut = Render<MonitoredAppsStatusGrid>(parameters => parameters.Add(p => p.Applications, apps));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }

@@ -13,11 +13,9 @@ public partial class Administration
 
     internal sealed record AdminTileGroup(string TitleKey, IReadOnlyList<AdminTile> Tiles);
 
-    /// <summary>
-    /// Recette R-456: every page of the side menu's Administration group, with the icon that menu
-    /// gives it (<c>NavMenu.razor</c>), so the tiles and the menu name and draw the same pages.
-    /// <c>AdministrationTests</c> holds the two lists together.
-    /// </summary>
+    /// <summary> Every page of the side menu's Administration group, with the icon that menu gives
+    /// it (<c>NavMenu.razor</c>), so the tiles and the menu name and draw the same pages.
+    /// <c>AdministrationTests</c> holds the two lists together. </summary>
     internal static IReadOnlyList<AdminTileGroup> Groups { get; } =
     [
         new("AdminGroupAccess",
@@ -31,7 +29,8 @@ public partial class Administration
             new("/admin/audit", "policy", "AuditLogs", "AuditLogsDescription"),
             new("/admin/system-logs", "description", "SystemLogs", "SystemLogsDescription"),
             new("/admin/performance", "speed", "Performance", "PerformanceAdminDescription"),
-            new("/admin/notifications", "notifications_active", "NotificationRules", "NotificationRulesDescription")
+            new("/admin/notifications", "notifications_active", "NotificationRules", "NotificationRulesDescription"),
+            new("/admin/mail-templates", "mail", "MailTemplates", "MailTemplatesDescription")
         ]),
         new("Platform",
         [

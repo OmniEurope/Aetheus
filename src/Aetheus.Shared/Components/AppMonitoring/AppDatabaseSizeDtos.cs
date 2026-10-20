@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.AppMonitoring;
 
-/// <summary>
-/// PLAN-013 lot 1 (R2-113): the size of a supervised application's database, as its <c>Aetheus.Telemetry</c>
-/// package last measured it (the database size measurement turned on): the whole database and its largest
-/// tables, with what they measured about 24 hours earlier.
-/// </summary>
+/// <summary>Reports the latest application database and largest-table sizes with approximate
+/// 24-hour comparisons.</summary>
 public sealed record AppDatabaseSizeReportDto
 {
     /// <summary>When the application last sent a measurement. Null when it never did.</summary>

@@ -38,14 +38,18 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/package-registry")]
     [InlineData("/api/packages/nuget/v3/flatcontainer/sample/index.json")]
     [InlineData("/api/packages/npm/-/ping")]
+    [InlineData("/api/packages/maven/org/example/sample/maven-metadata.xml")]
     [InlineData("/api/system-logs/files")]
     [InlineData("/api/releases")]
     [InlineData("/api/pipelines")]
     [InlineData("/api/pipelines/runs/1/checkpoint-resume-preview")]
     [InlineData("/api/pipelines/runs/1/lineage")]
+    [InlineData("/api/pipelines/runs/1/migration-gate")]
     [InlineData("/api/pipelines/1/runs/1/stage-baselines")]
-    // PLAN-007 lot 7: PipelineApprovalsController is its own controller under /api/pipelines.
+    // Pipeline approvals have a distinct controller under the pipeline route.
     [InlineData("/api/pipelines/approvals/pending")]
+    // Pipeline owner transfer (admin only).
+    [InlineData("/api/pipelines/ownership/candidates")]
     [InlineData("/api/admin/performance")]
     [InlineData("/api/pipelines/templates")]
     [InlineData("/api/work-items")]
@@ -55,17 +59,19 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/vaults")]
     [InlineData("/api/tasks")]
     [InlineData("/api/variable-libraries")]
-    // PLAN-005 lot 5: PortAllocationController is a distinct controller nested under a library, so the
-    // /api/variable-libraries literal above does not prove ITS [Authorize] is wired.
+    // Nested port allocation has its own controller and needs an independent authorization check.
     [InlineData("/api/variable-libraries/1/ports/servers")]
     [InlineData("/api/settings")]
     [InlineData("/api/settings/daily-recap")]
     [InlineData("/api/settings/daily-recap/preview")]
+    [InlineData("/api/mail-templates")]
+    [InlineData("/api/mail-templates/NotificationChannelTest/en")]
     [InlineData("/api/environments")]
     [InlineData("/api/git/repos")]
     [InlineData("/api/git/connections")]
     [InlineData("/api/notifications/channels")]
     [InlineData("/api/notifications/me/unread-count")]
+    [InlineData("/api/users/me/preferences")]
     [InlineData("/api/auth/registration-tokens")]
     [InlineData("/api/agent/installer/linux")]
     [InlineData("/api/personal-access-tokens")]
@@ -81,9 +87,10 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/appmonitoring/apps/1/metrics/names")]
     [InlineData("/api/appmonitoring/apps/1/send-interval")]
     [InlineData("/metrics")]
-    // PLAN-013 lots 4 to 6: the data retention setting, the storage per project and the reclaim status;
-    // the ingest configuration answers 401 without an ingest key, like the exports.
+    // Covers retention, storage and reclamation authorization; ingestion configuration requires its
+    // ingest key.
     [InlineData("/api/projects/1/data-retention")]
+    [InlineData("/api/projects/1/release-series")]
     [InlineData("/api/data-storage/projects")]
     [InlineData("/api/data-storage/reclaim")]
     [InlineData("/api/ingest/otlp/v1/configuration")]
@@ -100,6 +107,7 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/servers/1/mail/client-settings")]
     [InlineData("/api/servers/1/mail/accounts/1/mailbox")]
     [InlineData("/api/servers/1/mail/accounts/1/mailbox/messages/1")]
+    [InlineData("/api/mail/mailboxes")]
     [InlineData("/api/servers/1/module-links")]
     [InlineData("/api/servers/1/portsentry")]
     [InlineData("/api/servers/1/rkhunter")]
@@ -128,9 +136,10 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("POST", "/api/vaults")]
     [InlineData("POST", "/api/environments")]
     [InlineData("POST", "/api/servers/1/docker/action")]
-    // ServerPortObservationController (PLAN-005 lot 2) is mutation-only: without this its [Authorize]
-    // is proven by no anonymous-rejection case, the GET facet being unable to see it.
+    // The mutation-only port-observation controller needs its own anonymous-write rejection case.
     [InlineData("POST", "/api/servers/1/ports/observe")]
+    // Recette R3-59: the read-only package list is a POST (it queues an agent task); anonymous stays out.
+    [InlineData("POST", "/api/servers/1/packages/inventory")]
     // CronController is mutation-only (no GET) - without these it would be invisible to the GET
     // coverage guard AND absent from any anonymous-rejection sweep.
     [InlineData("POST", "/api/servers/1/cron")]
@@ -140,6 +149,8 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("POST", "/api/pipelines/setup/readiness")]
     [InlineData("POST", "/api/client-errors")]
     [InlineData("PUT", "/api/users/1")]
+    [InlineData("PUT", "/api/users/me/preferences/aetheus.appearance")]
+    [InlineData("DELETE", "/api/users/me/preferences/aetheus.appearance")]
     [InlineData("PUT", "/api/agent-pools/1")]
     [InlineData("DELETE", "/api/projects/1")]
     [InlineData("DELETE", "/api/agent-pools/1")]
@@ -149,6 +160,7 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("POST", "/api/mail/no-reply-sender")]
     [InlineData("PUT", "/api/settings/daily-recap")]
     [InlineData("POST", "/api/settings/daily-recap/send-now")]
+    [InlineData("POST", "/api/ai/profiles/1/model-list/refresh")]
     [InlineData("POST", "/api/servers/1/mail/accounts/1/mailbox/unlock")]
     [InlineData("POST", "/api/servers/1/mail/accounts/1/mailbox/send")]
     [InlineData("PUT", "/api/servers/1/mail/accounts/1/mailbox/messages/1/read")]

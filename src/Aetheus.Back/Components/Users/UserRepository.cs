@@ -48,7 +48,7 @@ public class UserRepository(AppDbContext db) : IUserRepository
         bool sortDescending = false,
         IReadOnlyList<GridFilter>? filters = null)
     {
-        // Recette R-210 / R-224: the header filters, before the count.
+        // The header filters, before the count.
         var query = UserListQuery.Columns.ApplyFilters(BuildUserQuery(search), filters);
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
         var pageQuery = query
@@ -143,6 +143,69 @@ public class UserRepository(AppDbContext db) : IUserRepository
             token.RevokedAt = revokedAt;
         return tokens.Count;
     }
+
+    public async Task<int> RevokeRefreshTokensAsync(int userId, DateTime revokedAt, CancellationToken ct = default)
+    {
+        var tokens = await db.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > revokedAt)
+            .ToListAsync(ct).ConfigureAwait(false);
+        foreach (var token in tokens)
+            token.RevokedAt = revokedAt;
+        return tokens.Count;
+    }
+
+    private const string AdministratorSetLockSql =
+        "SELECT pg_advisory_lock(hashtextextended('aetheus:administrator-set', 0))";
+    private const string AdministratorSetUnlockSql =
+        "SELECT pg_advisory_unlock(hashtextextended('aetheus:administrator-set', 0))";
+
+    public async Task<IAsyncDisposable> LockAdministratorSetAsync(CancellationToken ct = default)
+    {
+        if (!db.Database.IsRelational()) return NoLock.Instance;
+        // A session lock, held on a connection kept open until the caller has committed: the next
+        // request counts the administrators only once this change is visible.
+        await db.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(AdministratorSetLockSql, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await db.Database.CloseConnectionAsync().ConfigureAwait(false);
+            throw;
+        }
+        return new Release(ReleaseAdministratorSetAsync);
+    }
+
+    private async ValueTask ReleaseAdministratorSetAsync()
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(AdministratorSetUnlockSql).ConfigureAwait(false);
+        }
+        finally
+        {
+            await db.Database.CloseConnectionAsync().ConfigureAwait(false);
+        }
+    }
+
+    private sealed class Release(Func<ValueTask> release) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => release();
+    }
+
+    private sealed class NoLock : IAsyncDisposable
+    {
+        public static readonly NoLock Instance = new();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    public Task<string[]> GetOwnedPipelineNamesAsync(string username, CancellationToken ct = default) =>
+        db.Pipelines.AsNoTracking()
+            .Where(pipeline => pipeline.CreatedByUsername == username)
+            .OrderBy(pipeline => pipeline.Name)
+            .Select(pipeline => pipeline.Name)
+            .ToArrayAsync(ct);
 
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {

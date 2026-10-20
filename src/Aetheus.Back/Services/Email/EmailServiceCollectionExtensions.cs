@@ -3,7 +3,7 @@ namespace Aetheus.Back.Services.Email;
 
 public static class EmailServiceCollectionExtensions
 {
-    /// <summary>Recette R1-16: the platform e-mail sender, shared by notifications and every later mail feature.</summary>
+    /// <summary>Registers the platform email sender shared by email features.</summary>
     public static IServiceCollection AddEmailSending(this IServiceCollection services)
     {
         services.AddScoped<IEmailSenderSettingsRepository, EmailSenderSettingsRepository>();

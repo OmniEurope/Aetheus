@@ -15,12 +15,11 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Auth;
 
-/// <summary>
-/// R-072: the refresh-token rotation through the real repository on a controlled clock. A second use of
-/// the same token inside the five-minute grace window gets an access token only, and the same use after
-/// the window is still a replay that revokes the whole chain. The truly parallel race, which needs a
-/// relational row lock, is proved against PostgreSQL in <c>RefreshTokenIntegrationTests</c>.
-/// </summary>
+/// <summary> The refresh-token rotation through the real repository on a controlled clock. A second
+/// use of the same token inside the five-minute grace window gets an access token only, and the
+/// same use after the window is still a replay that revokes the whole chain. The truly parallel
+/// race, which needs a relational row lock, is proved against PostgreSQL in
+/// <c>RefreshTokenIntegrationTests</c>. </summary>
 public sealed class AuthServiceRefreshRotationTests : IDisposable
 {
     private const int UserId = 42;
@@ -94,5 +93,38 @@ public sealed class AuthServiceRefreshRotationTests : IDisposable
         Assert.All(await TokensAsync(), t => Assert.NotNull(t.RevokedAt));
         Assert.Equal(RefreshRejectionCodes.Replay,
             (await _sut.RefreshTokenWithReasonAsync(first.Response!.RefreshToken!, Ct)).RejectionCode);
+    }
+
+    [Fact]
+    public async Task UseWithinGrace_AfterTheChainWasEnded_GetsNoAccessToken()
+    {
+        // Audit AUD-01 (recette R1-50): a password change revokes every refresh token. The token rotated
+        // seconds before must not use the grace window to mint an access token after that.
+        var original = await IssueRefreshTokenAsync();
+        await _sut.RefreshTokenWithReasonAsync(original, Ct);
+        foreach (var token in _db.RefreshTokens.Where(t => t.RevokedAt == null))
+            token.RevokedAt = _clock.GetUtcNow().UtcDateTime;
+        await _db.SaveChangesAsync(Ct);
+        _clock.Advance(TimeSpan.FromSeconds(2));
+
+        var reuse = await _sut.RefreshTokenWithReasonAsync(original, Ct);
+
+        Assert.Null(reuse.Response);
+        Assert.Equal(RefreshRejectionCodes.Replay, reuse.RejectionCode);
+    }
+
+    [Fact]
+    public async Task UseWithinGrace_WhenTheReplacementWasRotatedOnward_StillGetsAnAccessToken()
+    {
+        // Two tabs: the replacement was already rotated by the other tab. That is a live chain, not a theft.
+        var original = await IssueRefreshTokenAsync();
+        var first = await _sut.RefreshTokenWithReasonAsync(original, Ct);
+        await _sut.RefreshTokenWithReasonAsync(first.Response!.RefreshToken!, Ct);
+        _clock.Advance(TimeSpan.FromSeconds(2));
+
+        var reuse = await _sut.RefreshTokenWithReasonAsync(original, Ct);
+
+        Assert.Null(reuse.RejectionCode);
+        Assert.False(string.IsNullOrEmpty(reuse.Response!.Token));
     }
 }

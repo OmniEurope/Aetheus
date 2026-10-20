@@ -72,6 +72,8 @@ public class AppDbContext(
     public DbSet<ExternalLogin> ExternalLogins => Set<ExternalLogin>();
     public DbSet<Release> Releases => Set<Release>();
     public DbSet<ReleaseRollback> ReleaseRollbacks => Set<ReleaseRollback>();
+    public DbSet<ProjectReleaseSeries> ProjectReleaseSeries => Set<ProjectReleaseSeries>();
+    public DbSet<ProjectReleaseNumberAllocation> ProjectReleaseNumberAllocations => Set<ProjectReleaseNumberAllocation>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Environment> Environments => Set<Environment>();
     public DbSet<EnvironmentServer> EnvironmentServers => Set<EnvironmentServer>();
@@ -88,12 +90,15 @@ public class AppDbContext(
     public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
     public DbSet<ProjectSubscription> ProjectSubscriptions => Set<ProjectSubscription>();
     public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
+    public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
+    public DbSet<MailTemplate> MailTemplates => Set<MailTemplate>();
     public DbSet<ServiceConnection> ServiceConnections => Set<ServiceConnection>();
     public DbSet<WebhookSubscription> WebhookSubscriptions => Set<WebhookSubscription>();
     public DbSet<TestResult> TestResults => Set<TestResult>();
     public DbSet<CoverageResult> CoverageResults => Set<CoverageResult>();
     public DbSet<LintResult> LintResults => Set<LintResult>();
     public DbSet<RunMetric> RunMetrics => Set<RunMetric>();
+    public DbSet<PipelineMigrationGateVerdict> PipelineMigrationGateVerdicts => Set<PipelineMigrationGateVerdict>();
     public DbSet<AlertRule> AlertRules => Set<AlertRule>();
     public DbSet<EnvironmentCheck> EnvironmentChecks => Set<EnvironmentCheck>();
     public DbSet<GitConnection> GitConnections => Set<GitConnection>();
@@ -149,6 +154,7 @@ public class AppDbContext(
     public DbSet<AppAnalyticsIngestVolume> AppAnalyticsIngestVolumes => Set<AppAnalyticsIngestVolume>();
     public DbSet<RegistryPackage> RegistryPackages => Set<RegistryPackage>();
     public DbSet<RegistryPackageVersion> RegistryPackageVersions => Set<RegistryPackageVersion>();
+    public DbSet<RegistryPackageFile> RegistryPackageFiles => Set<RegistryPackageFile>();
     public DbSet<AiRunnerProfile> AiRunnerProfiles => Set<AiRunnerProfile>();
     public DbSet<AiTaskDefinition> AiTaskDefinitions => Set<AiTaskDefinition>();
     public DbSet<AiTaskTrigger> AiTaskTriggers => Set<AiTaskTrigger>();

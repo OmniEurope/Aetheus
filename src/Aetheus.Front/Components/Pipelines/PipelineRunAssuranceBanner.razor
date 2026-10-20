@@ -6,7 +6,7 @@
 {
     <OmniAlert Severity="OmniSeverity.Warning" Title="@L["CandidateNotDeployableTitle"]" Class="omni-u-mt-sm">
         <div>@L["CandidateNotDeployableDetail"]</div>
-        <PipelineRunBlockingTests Tests="Verdict.BlockingTests" />
+        <PipelineRunBlockingTests Tests="Verdict.BlockingTests" ViewingRunId="@ViewingRunId" />
     </OmniAlert>
 }
 else if (Verdict is { Deployable: true })
@@ -14,7 +14,7 @@ else if (Verdict is { Deployable: true })
     <OmniAlert Severity="OmniSeverity.Success" Title="@L["CandidateDeployableTitle"]" Class="omni-u-mt-sm">
         @if (Verdict.Grade is { Length: > 0 } grade)
         {
-            @* Recette R2-050: the grade drawn as everywhere else, its colour included. *@
+            @* The grade drawn as everywhere else, its colour included. *@
             <span>@L["AssuranceGrade"]: @if (Enum.TryParse<AnalysisGrade>(grade, ignoreCase: true, out var letter)) { <GradeBadge Value="@letter" /> } else { <strong>@grade</strong> }</span>
         }
     </OmniAlert>

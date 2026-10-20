@@ -67,6 +67,25 @@ public sealed class ContainerWorkspaceMaterializerTests : IDisposable
     }
 
     [Fact]
+    public void RemoveStaleEntries_KeepsAConcurrentStepsScript_EvenWhenTheSourceDoesNotHoldIt()
+    {
+        // Two container steps of one run share the daemon-visible workspace: the one that already wrote
+        // its script must not lose it to the other one's refresh (can't open '/w/.prom-step-*.sh').
+        var script = ContainerRunExecutor.CreateScriptName();
+        var source = Directory.CreateDirectory(Path.Combine(_root, "script-source")).FullName;
+        var destination = Directory.CreateDirectory(Path.Combine(_root, "script-destination")).FullName;
+        File.WriteAllText(Path.Combine(destination, script), "echo step");
+        File.WriteAllText(Path.Combine(destination, "removed-by-checkout.txt"), "stale");
+        File.WriteAllText(Path.Combine(destination, ".prom-step-not-a-script.txt"), "stale");
+
+        ContainerWorkspaceMaterializer.RemoveStaleEntries(source, destination, excludeProtectedMetadata: true);
+
+        Assert.True(File.Exists(Path.Combine(destination, script)));
+        Assert.False(File.Exists(Path.Combine(destination, "removed-by-checkout.txt")));
+        Assert.False(File.Exists(Path.Combine(destination, ".prom-step-not-a-script.txt")));
+    }
+
+    [Fact]
     public void RemoveStaleEntries_RemovesEntriesWhoseFileTypeChanged()
     {
         var source = Directory.CreateDirectory(Path.Combine(_root, "type-source")).FullName;

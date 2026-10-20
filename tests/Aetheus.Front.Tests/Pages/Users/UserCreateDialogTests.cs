@@ -48,7 +48,7 @@ public class UserCreateDialogTests : BunitContext
     [Fact]
     public void PasswordField_HasOnlyTheDialogsRevealToggle()
     {
-        // Recette R-002: OmniPassword's own eye is off, the dialog's toggle (which Generate also uses) stays.
+        // OmniPassword's own eye is off, the dialog's toggle (which Generate also uses) stays.
         var cut = Render<UserCreateDialog>(p => p.Add(c => c.AvailableRoles, ["Admin"]));
 
         Assert.Empty(cut.FindAll("button[aria-controls='Password']"));

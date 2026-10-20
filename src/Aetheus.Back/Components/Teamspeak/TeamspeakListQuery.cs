@@ -4,10 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Teamspeak;
 
-/// <summary>
-/// Recette R-210: the column filters of a server's TeamSpeak grids (clients, channels, bans). The keys are
-/// the grids' column keys.
-/// </summary>
+/// <summary> The column filters of a server's TeamSpeak grids (clients, channels, bans). The keys
+/// are the grids' column keys. </summary>
 internal static class TeamspeakListQuery
 {
     internal static readonly GridQueryMap<TeamspeakClient> ClientColumns = new GridQueryMap<TeamspeakClient>()

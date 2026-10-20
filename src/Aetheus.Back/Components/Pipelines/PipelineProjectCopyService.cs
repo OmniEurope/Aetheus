@@ -5,18 +5,9 @@ using Aetheus.Back.Services;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R1-29, option 1: "start from an existing project". The source project's pipelines are
-/// copied into the target project and adapted by <see cref="PipelineCopyAdapter"/>; the libraries and
-/// vaults of the source project they use are copied as a structure (the variable and secret names),
-/// never with their values, which are to be entered for the new project.
-///
-/// The copies are created through <see cref="IPipelineService.CreatePipelineAsync"/>, the same path as
-/// the wizard's own pipelines: written to the target project's repository first, with no source
-/// repository, environment or server of the source project. What the target then still lacks (scripts,
-/// environments, runners, libraries or vaults the source project did not own) is the readiness verdict
-/// of the target project's pipelines, the one its pipelines page shows.
-/// </summary>
+/// <summary>Pipeline copies use <see cref="PipelineCopyAdapter"/> and the normal creation path in
+/// the target repository. Libraries and vaults copy names only, leaving values and remaining
+/// readiness requirements for the new project.</summary>
 public sealed class PipelineProjectCopyService(
     IPipelineRepository pipelines,
     IPipelineService pipelineService,
@@ -122,6 +113,34 @@ public sealed class PipelineProjectCopyService(
         return new PipelineProjectCopyResultDto { Plan = plan.ToDto(), Readiness = verdict };
     }
 
+    // The libraries and vaults each source pipeline reads, its template included: the definition
+    // a run of the SOURCE pipeline would read.
+    private async Task<(List<string> Libraries, List<string> Vaults)> CollectReferencedResourcesAsync(
+        IEnumerable<(int Id, string Name, string Yaml)> sources,
+        int sourceProjectId,
+        CancellationToken ct)
+    {
+        var libraryNames = new List<string>();
+        var vaultNames = new List<string>();
+        // R3-67: a template's `${{ project.slug }}.share` is, for the source pipeline, the source
+        // project's library.
+        var sourceSlug = await PipelineProjectResourceNames
+            .FindSlugAsync(pipelines, sourceProjectId, ct).ConfigureAwait(false);
+        foreach (var source in sources)
+        {
+            var validation = await pipelineService.ValidateYamlStrictAsync(
+                source.Yaml, sourceProjectId, null, null, ct: ct).ConfigureAwait(false);
+            var definition = validation.Definition ?? YamlParsingHelper.ParseAndValidate(source.Yaml, logger);
+            if (PipelineRequirementsProvisioner.ReferencedResources(
+                    definition is null ? null : PipelineProjectResourceNames.Expand(definition, sourceSlug)) is { } referenced)
+            {
+                libraryNames.AddRange(referenced.Libraries);
+                vaultNames.AddRange(referenced.Vaults);
+            }
+        }
+        return (libraryNames, vaultNames);
+    }
+
     private async Task<CopyPlan> BuildPlanAsync(
         PipelineProjectCopyRequest request,
         List<int>? readablePipelineIds,
@@ -142,21 +161,7 @@ public sealed class PipelineProjectCopyService(
             .Select(existing => existing.Name)
             .ToHashSet(StringComparer.Ordinal);
 
-        // The libraries and vaults each source pipeline reads, its template included: the definition
-        // a run of the SOURCE pipeline would read.
-        var libraryNames = new List<string>();
-        var vaultNames = new List<string>();
-        foreach (var source in sources)
-        {
-            var validation = await pipelineService.ValidateYamlStrictAsync(
-                source.Yaml, request.SourceProjectId, null, null, ct: ct).ConfigureAwait(false);
-            if (PipelineRequirementsProvisioner.ReferencedResources(
-                    validation.Definition ?? YamlParsingHelper.ParseAndValidate(source.Yaml, logger)) is { } referenced)
-            {
-                libraryNames.AddRange(referenced.Libraries);
-                vaultNames.AddRange(referenced.Vaults);
-            }
-        }
+        var (libraryNames, vaultNames) = await CollectReferencedResourcesAsync(sources, request.SourceProjectId, ct).ConfigureAwait(false);
 
         var plan = new CopyPlan();
         foreach (var name in libraryNames.Distinct(StringComparer.OrdinalIgnoreCase))

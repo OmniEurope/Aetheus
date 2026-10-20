@@ -25,9 +25,8 @@ public partial class TaskDetail : IAsyncDisposable
     private bool _loading;
     private int? _loadedTaskId;
 
-    // Recette R-513: the page follows its task while the agent runs it. The agent already sends its
-    // lines as it goes (batches of 20 or every 1.5 s) and the backend pushes them to the task's group;
-    // this page read once and never listened. The status comes from the live task list of the top bar.
+    // Subscribe to the task log group while the agent runs and obtain status from the shared live
+    // task list.
     private HubConnection? _logHub;
     private int? _liveTaskId;
     private bool _followingLiveTasks;

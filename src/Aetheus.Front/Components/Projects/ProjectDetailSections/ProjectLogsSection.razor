@@ -6,12 +6,11 @@
 }
 else
 {
-    @* Recette R-186: same rule as the other project sections, the breadcrumb leaf is the title and the
-       grid header filters search; virtualized, no pager (R-049). Recette R-212: each header filter is a
-       real column filter of the project's logs endpoint. *@
+    @* The breadcrumb supplies the title; the virtualized log grid sends header filters to its
+       endpoint. *@
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_result.Items" TItem="TaskLogDto"
         Count="@_result.TotalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
-        PageSize="25" EmptyText="@L["NoLogs"]"
+        PageSize="25" EmptyText="@L["NoLogs"]" RowClick="@OpenEntryAsync"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<TaskLogDto>(_result.Items, _result.TotalCount))">
         <EmptyTemplate>

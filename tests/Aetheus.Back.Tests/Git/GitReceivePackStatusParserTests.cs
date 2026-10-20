@@ -48,6 +48,37 @@ public sealed class GitReceivePackStatusParserTests
         Assert.Empty(accepted);
     }
 
+    [Fact]
+    public void GetAcceptedUpdates_StatusCarriedInASidebandPacket_IsReadFromTheNestedPackets()
+    {
+        // HTTP smart protocol wraps report-status in sideband band 1: the status packets are nested.
+        var inner = PacketLine("unpack ok\n").Concat(PacketLine("ok refs/heads/main\n")).Concat("0000"u8.ToArray()).ToArray();
+        var outer = PacketLine([1, .. inner]);
+        using var response = new MemoryStream([.. outer, .. "0000"u8.ToArray()]);
+
+        var accepted = GitReceivePackStatusParser.GetAcceptedUpdates(
+            response, [new GitRefUpdate("refs/heads/main", MainCommit)]);
+
+        var update = Assert.Single(accepted);
+        Assert.Equal("refs/heads/main", update.Reference);
+    }
+
+    [Fact]
+    public void GetAcceptedUpdates_NonHexPacketLength_FailsClosed()
+    {
+        using var response = new MemoryStream("zzzzunpack ok\n"u8.ToArray());
+
+        var accepted = GitReceivePackStatusParser.GetAcceptedUpdates(
+            response, [new GitRefUpdate("refs/heads/main", MainCommit)]);
+
+        Assert.Empty(accepted);
+    }
+
+    private static byte[] PacketLine(string text) => PacketLine(Encoding.UTF8.GetBytes(text));
+
+    private static byte[] PacketLine(byte[] payload) =>
+        [.. Encoding.ASCII.GetBytes((payload.Length + 4).ToString("x4")), .. payload];
+
     private static MemoryStream BuildResponse(params string[] packets)
     {
         var bytes = new List<byte>();

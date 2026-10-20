@@ -21,10 +21,13 @@ public interface IPipelineStepTaskBuilder
         int runId, Server server, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
         string command, IReadOnlyDictionary<string, string> variables, OperationKind operation);
 
-    /// <summary>Builds, tracks and marks the step dispatched, for a typed (non-shell) operation.</summary>
+    /// <summary>Builds, tracks and marks the step dispatched, for a typed (non-shell) operation. With a
+    /// container <paramref name="isolation"/> the task carries the stage container, so the agent runs
+    /// the operation inside it (a <c>type: aetheus</c> function); without one it runs on the host.</summary>
     void TrackTypedTask(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
-        string command, Dictionary<string, string> variables, OperationKind operation);
+        string command, Dictionary<string, string> variables, OperationKind operation,
+        PipelineIsolationDefinition? isolation = null);
 
     /// <summary>
     /// The ordinary shell step: builds the command for the target OS, scopes the environment to what
@@ -63,10 +66,13 @@ public sealed class PipelineStepTaskBuilder(
 
     public void TrackTypedTask(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
-        string command, Dictionary<string, string> variables, OperationKind operation)
+        string command, Dictionary<string, string> variables, OperationKind operation,
+        PipelineIsolationDefinition? isolation = null)
     {
         var task = BuildPipelineTask(
             runId, legServer, stepRun, stepDef, command, variables, operation);
+        foreach (var warning in ApplyContainerIsolation(task, isolation))
+            logger.LogWarning("Run {RunId} step '{Step}': {Warning}", runId, stepRun.StepName, warning);
         repo.TrackTask(task);
         MarkStepDispatched(stepRun, task);
     }

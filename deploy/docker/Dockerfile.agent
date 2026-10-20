@@ -8,13 +8,13 @@
 # carry no Version=). The csproj files sit one level below these props (/src/<proj>), so MSBuild walks
 # up to /src and finds them there.
 # =============================================================================
-FROM mcr.microsoft.com/dotnet/sdk:10.0.100@sha256:c7445f141c04f1a6b454181bd098dcfa606c61ba0bd213d0a702489e5bd4cd71 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.402@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS build
 WORKDIR /src
 
 # CPM + build conventions — required for restore to resolve centrally-managed versions.
 COPY Directory.Packages.props Directory.Build.props NuGet.config ./
 COPY scanner-manifest.json /scanner-manifest.json
-COPY .aetheus/security-rules/opengrep/aetheus-security.yml /.aetheus/security-rules/opengrep/aetheus-security.yml
+COPY .aetheus/security-rules/opengrep/ /.aetheus/security-rules/opengrep/
 
 COPY src/Aetheus.Shared/Aetheus.Shared.csproj Aetheus.Shared/
 COPY src/Aetheus.Analyzers/Aetheus.Analyzers.csproj Aetheus.Analyzers/
@@ -32,7 +32,7 @@ COPY deploy/scripts/promote-observability-packages.sh /deploy/scripts/promote-ob
 
 RUN dotnet publish Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.12@sha256:6a94333d37514e385650a3c81a55e5350b67253dbe136e9cf17e499c35606a8c AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.13@sha256:d5633778c754e89a386882eddf8dbee6942447a8a4b8267c19cf1e1158d0b0ac AS runtime
 WORKDIR /app
 
 COPY --from=build /app/publish .

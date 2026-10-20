@@ -3,11 +3,8 @@ using Aetheus.Agent.Core.Services;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// T13: the ".installed-at" marker parsing drives the operator-facing "last update" indicator on
-/// the agent page. Freezes the contract: ISO-8601 UTC parse, local-offset adjustment, and the
-/// never-throw fallback to the agent assembly's mtime on corrupt/missing input. Previously untested.
-/// </summary>
+/// <summary>Verifies UTC installation-marker parsing, offset conversion and the non-throwing
+/// assembly-time fallback.</summary>
 public class InstallInfoReaderTests : IDisposable
 {
     private readonly string _workDir;

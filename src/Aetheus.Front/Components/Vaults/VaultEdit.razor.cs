@@ -28,8 +28,8 @@ public partial class VaultEdit
     [SupplyParameterFromQuery] public int? EnvironmentId { get; set; }
     [SupplyParameterFromQuery] public int? ProjectServerId { get; set; }
 
-    /// <summary>Recette R1-26: the page that sent the user here to check what it created (the pipeline
-    /// setup wizard's summary); Back returns to it when it is local.</summary>
+    /// <summary>The page that sent the user here to check what it created (the pipeline setup
+    /// wizard's summary); Back returns to it when it is local.</summary>
     [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
 
     private VaultDetailDto? _detail;
@@ -44,7 +44,7 @@ public partial class VaultEdit
 
     protected override async Task OnParametersSetAsync()
     {
-        var key = (Id, ProjectId, EnvironmentId, ProjectServerId);
+        var key = CurrentKey();
         if (key == _previousKey) return;
         _previousKey = key;
         var generation = ++_loadGeneration;
@@ -60,36 +60,60 @@ public partial class VaultEdit
         {
             detail = await Api.Variables.GetVaultDetailAsync(key.Id!.Value);
         }
-        if (generation != _loadGeneration || key != (Id, ProjectId, EnvironmentId, ProjectServerId)) return;
+        if (!IsCurrentLoad(generation, key)) return;
 
+        ApplyLoadedVault(key, isNew, projects, detail);
+    }
+
+    private (int? Id, int? ProjectId, int? EnvironmentId, int? ProjectServerId) CurrentKey() =>
+        (Id, ProjectId, EnvironmentId, ProjectServerId);
+
+    /// <summary>False when the parameters changed, or a newer load started, while this one awaited.</summary>
+    private bool IsCurrentLoad(int generation, (int? Id, int? ProjectId, int? EnvironmentId, int? ProjectServerId) key) =>
+        generation == _loadGeneration && key == CurrentKey();
+
+    private void ApplyLoadedVault(
+        (int? Id, int? ProjectId, int? EnvironmentId, int? ProjectServerId) key,
+        bool isNew,
+        List<ProjectDto> projects,
+        VaultDetailDto? detail)
+    {
         _projects = projects;
         _detail = detail;
         if (detail is not null)
-        {
-            _model = new VaultModel
-            {
-                Name = detail.Name,
-                Description = detail.Description,
-                ProjectId = detail.ProjectId,
-                EnvironmentId = detail.EnvironmentId,
-                ProjectServerId = detail.ProjectServerId
-            };
-        }
+            _model = ModelFromDetail(detail);
         else if (isNew)
-        {
-            if (key.ProjectId is > 0 && projects.Any(p => p.Id == key.ProjectId.Value))
-                _model.ProjectId = key.ProjectId;
-            else if (key.EnvironmentId is > 0)
-                _model.EnvironmentId = key.EnvironmentId;
-            else if (key.ProjectServerId is > 0)
-                _model.ProjectServerId = key.ProjectServerId;
-        }
+            ApplyNewVaultOwner(_model, key, projects);
 
         // Publish the parent project so the NavMenu keeps the project's submenu open
         // while we're editing one of its vaults.
         ProjectNav.Set(_model.ProjectId);
 
         ReassertBreadcrumb(isNew);
+    }
+
+    private static VaultModel ModelFromDetail(VaultDetailDto detail) => new()
+    {
+        Name = detail.Name,
+        Description = detail.Description,
+        ProjectId = detail.ProjectId,
+        EnvironmentId = detail.EnvironmentId,
+        ProjectServerId = detail.ProjectServerId
+    };
+
+    /// <summary>A new vault takes the owner named by the query: a known project first, otherwise an
+    /// environment, otherwise a project server.</summary>
+    private static void ApplyNewVaultOwner(
+        VaultModel model,
+        (int? Id, int? ProjectId, int? EnvironmentId, int? ProjectServerId) key,
+        List<ProjectDto> projects)
+    {
+        if (key.ProjectId is > 0 && projects.Any(p => p.Id == key.ProjectId.Value))
+            model.ProjectId = key.ProjectId;
+        else if (key.EnvironmentId is > 0)
+            model.EnvironmentId = key.EnvironmentId;
+        else if (key.ProjectServerId is > 0)
+            model.ProjectServerId = key.ProjectServerId;
     }
 
     private void ReassertBreadcrumb(bool isNew)
@@ -171,7 +195,7 @@ public partial class VaultEdit
             : "SecretValueGenerated");
     }
 
-    /// <summary>Recette R-437: one of the other ways to generate, from the Generate button's menu.</summary>
+    /// <summary>One of the other ways to generate, from the Generate button's menu.</summary>
     private void GenerateNewSecretValueWith(SecretGenerationChoices.Choice choice)
     {
         _newSecret.Value = choice.Generate();
@@ -334,7 +358,7 @@ public partial class VaultEdit
         }
     }
 
-    /// <summary>Recette R-287 (as R-284 for libraries): the vault's properties form, shown from the ⋮ menu.</summary>
+    /// <summary>Shows the vault properties form from the header menu.</summary>
     private bool _editingProperties;
 
     private void EditProperties() => _editingProperties = true;
@@ -355,13 +379,11 @@ public partial class VaultEdit
         }
     }
 
-    /// <summary>Recette R-292: the key itself; the $(KEY) reference keeps its own button.</summary>
+    /// <summary>The key itself; the $(KEY) reference keeps its own button.</summary>
     private Task CopyKey(string key) => Clipboard.CopyAsync(key);
 
-    /// <summary>
-    /// Recette R-292: the value goes from the server straight to the clipboard; it is never kept in a
-    /// field, never rendered, and the server audits each read.
-    /// </summary>
+    /// <summary> The value goes from the server straight to the clipboard; it is never kept in a
+    /// field, never rendered, and the server audits each read. </summary>
     private async Task CopySecretValue(VaultSecretDto secret)
     {
         RevealedSecretValueDto? revealed;
@@ -414,6 +436,6 @@ public partial class VaultEdit
     {
     }
 
-    /// <summary>Recette R2-124: the export writes the count the badge shows (never the value).</summary>
+    /// <summary>The export writes the count the badge shows (never the value).</summary>
     private static readonly Func<VaultSecretDto, object?> VersionsExport = secret => secret.VersionCount;
 }

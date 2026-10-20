@@ -12,11 +12,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.PortRegistry;
 
-/// <summary>
-/// PLAN-005 lot 2. Two things must not slip here: a scan queued on an agent that cannot run it (the
-/// task would sit until the watchdog kills it, with no explanation), and an agent rewriting another
-/// server's observations.
-/// </summary>
+/// <summary>Refuse scans on incapable agents and prevent agents from replacing another server
+/// observations.</summary>
 public class ServerPortObservationControllerTests
 {
     private static readonly DateTime Now = new(2026, 9, 7, 12, 0, 0, DateTimeKind.Utc);

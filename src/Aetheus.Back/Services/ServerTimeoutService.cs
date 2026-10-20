@@ -63,8 +63,11 @@ public sealed class ServerTimeoutService(
         var serverHub = scope.ServiceProvider.GetRequiredService<IHubContext<ServerHub>>();
         var domainEvents = scope.ServiceProvider.GetRequiredService<IDomainEventDispatcher>();
 
+        var reachabilityProbe = scope.ServiceProvider.GetRequiredService<ServerReachabilityProbe>();
+
         var staleServers = await serverRepo.GetStaleOnlineServersAsync(_heartbeatTimeout, ct).ConfigureAwait(false);
 
+        var wentOffline = new List<Data.Entities.Server>();
         foreach (var server in staleServers)
         {
             // A heartbeat may have landed after the stale candidate query. Claim the transition
@@ -76,10 +79,27 @@ public sealed class ServerTimeoutService(
 
             logger.LogWarning("Server {ServerName} (#{ServerId}) marked offline - no heartbeat since {LastHeartbeat}",
                 server.Name, server.Id, server.LastHeartbeat);
-            await serverHub.Clients.Groups([HubGroups.AllServers, HubGroups.Server(server.Id)])
-                .SendAsync("ServerOffline", server.Id, ct).ConfigureAwait(false);
-            // Audit + downstream observers run on the background queue: not on the hot path.
-            domainEvents.Publish(new ServerWentOfflineEvent(server.Id, server.Name, server.LastHeartbeat));
+            wentOffline.Add(server);
         }
+
+        if (wentOffline.Count > 0)
+        {
+            // PLAN-010 lot 1: probe the host from outside before announcing the transition, so the
+            // offline alert says whether only the agent stopped or the whole host is unreachable. The
+            // probe is bounded by its timeouts and retries (seconds), against a two-minute heartbeat window.
+            var reachability = await reachabilityProbe.ProbeAndRecordAsync(wentOffline, ct).ConfigureAwait(false);
+            foreach (var server in wentOffline)
+            {
+                await serverHub.Clients.Groups([HubGroups.AllServers, HubGroups.Server(server.Id)])
+                    .SendAsync("ServerOffline", server.Id, ct).ConfigureAwait(false);
+                // Audit + downstream observers run on the background queue: not on the hot path.
+                domainEvents.Publish(new ServerWentOfflineEvent(
+                    server.Id, server.Name, server.LastHeartbeat, reachability[server.Id]));
+            }
+        }
+
+        // Servers already offline are probed again once their result is old, so the displayed state
+        // follows a host that reboots without its agent, or that goes down later.
+        await reachabilityProbe.RecheckDueAsync(ct).ConfigureAwait(false);
     }
 }

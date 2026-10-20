@@ -9,6 +9,8 @@ namespace Aetheus.E2E;
 [Category("Servers")]
 public sealed class ServerInteractiveControlsTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     private int _serverId;
 
     [SetUp]
@@ -42,7 +44,11 @@ public sealed class ServerInteractiveControlsTests : E2ETestBase
     [Test]
     public async Task Docker_PruneAndRelationFilter_TriggerTheirSideEffects()
     {
-        // Recette R-181: no auto-refresh toggle any more, the inventory follows the agent heartbeat.
+        // The seeded web-01 is offline (DemoDataSeeder), and since SITE-OFFLINE-001 the Prune action is
+        // disabled while the agent is not online. Enroll it here instead of relying on an earlier test
+        // of the run having done it.
+        await ReenrollServerForTaskProbeAsync(_serverId);
+        // Inventory follows agent heartbeats without an auto-refresh toggle.
         await NavigateToAsync($"servers/{_serverId}/docker");
         // Match the container row, not the bare text: the relations graph renders the same name as
         // an SVG label, so GetByText resolves to two elements and trips Playwright strict mode.
@@ -85,20 +91,23 @@ public sealed class ServerInteractiveControlsTests : E2ETestBase
     }
 
     [Test]
+    [RollbackRelevant]
     public async Task Services_AutoRefreshToggle_RereadsASnapshotWhenSwitchedBackOn()
     {
         await ReenrollServerForTaskProbeAsync(_serverId);
         await NavigateToAsync($"servers/{_serverId}/services");
-        // PLAN-003 D10: the row action is titled "Logs", the service row already names what it opens.
-        var logsButton = Page.Locator("button[title='Logs']").First;
-        await Expect(logsButton).ToBeVisibleAsync(new() { Timeout = 10000 });
+        // Recette R3-41: an installed service row shows one action (Start or Stop); its logs sit in the
+        // row's "More actions" menu, named after the service.
+        var rowMenu = Page.Locator("button.omni-overflow-menu__trigger[title^='More actions: ']").First;
+        await Expect(rowMenu).ToBeVisibleAsync(new() { Timeout = 10000 });
         var taskIds = new List<int>();
         try
         {
             var initialRequest = Page.WaitForResponseAsync(response =>
                 response.Request.Method == "POST"
                 && response.Url.EndsWith($"/api/servers/{_serverId}/services/logs", StringComparison.Ordinal));
-            await logsButton.ClickAsync();
+            await rowMenu.ClickAsync();
+            await Page.GetByRole(AriaRole.Menuitem, new() { Name = "Logs", Exact = true }).ClickAsync();
             var initialResponse = await initialRequest.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.That(initialResponse.Ok, Is.True, $"Initial service-log request returned HTTP {initialResponse.Status}.");
             taskIds.Add(ReadTaskId(await initialResponse.TextAsync()));
@@ -108,17 +117,15 @@ public sealed class ServerInteractiveControlsTests : E2ETestBase
 
             var trackerBadge = Page.Locator(".task-tracker-count");
             await Expect(trackerBadge).ToBeVisibleAsync(new() { Timeout = 10000 });
-            // PLAN-005 lot 1: the button shows "99+" past 99, so the exact count is read from its
-            // accessible name, which always carries the real number.
-            // OE 1.2.0 puts the popover Id on its trigger and sets aria-controls only while the panel
-            // exists, so the closed trigger is found by its id and the link is checked once open.
+            // Read exact counts from the accessible name when the badge displays 99+. Locate the
+            // closed popover trigger by id and check aria-controls after opening.
             var trackerButton = Page.Locator("button#task-tracker.task-tracker-btn");
             var initialActiveCount = int.Parse(
                 Regex.Match(await trackerButton.GetAttributeAsync("aria-label") ?? string.Empty, @"\d+").Value,
                 System.Globalization.CultureInfo.InvariantCulture);
 
-            // Recette R-181 follow-up: the viewer opens with auto-refresh on (a snapshot re-read every
-            // 30 s, never a journalctl -f session); switched off then on, it reads again at once.
+            // The viewer refreshes snapshots every 30 seconds by default, without a journalctl
+            // follow session. Re-enabling refresh fetches a snapshot immediately.
             var follow = Page.GetByRole(AriaRole.Switch, new() { Name = "Follow", Exact = true });
             await Expect(follow).ToHaveAttributeAsync("aria-checked", "true", new() { Timeout = 10000 });
             Assert.That(initialResponse.Request.PostData, Does.Contain("\"follow\":false").IgnoreCase);

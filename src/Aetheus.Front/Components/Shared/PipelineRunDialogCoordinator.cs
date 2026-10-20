@@ -50,6 +50,7 @@ public sealed class PipelineRunDialogCoordinator(
         catch (Exception exception) when (IsTransportFailure(exception)) { return null; }
 
         var (releases, releaseTotal) = await LoadReleasesIfAParameterTakesOneAsync(pipelineId, declared);
+        var runToEndAllowed = await IsRunToEndAllowedAsync().ConfigureAwait(false);
         return await dialog.OpenAsync<PipelineLaunchDialog>(
             localizer["RunWithOptions"].Value,
             new Dictionary<string, object?>
@@ -59,9 +60,24 @@ public sealed class PipelineRunDialogCoordinator(
                 { "SourceBranch", selectedBranch },
                 { "AvailableReleases", releases },
                 { "AvailableReleaseTotal", releaseTotal },
-                { "ReloadParameters", ReadParametersOrNull(pipelineId) }
+                { "ReloadParameters", ReadParametersOrNull(pipelineId) },
+                { "RunToEndAllowed", runToEndAllowed }
             },
             new OmniDialogOptions { Width = DialogWidth(declared), AutoFocusFirstElement = false }) as PipelineLaunchChoice;
+    }
+
+    /// <summary>Whether the platform accepts "run to end" launches. An unreadable answer (an older
+    /// backend without the endpoint included) hides the option: the backend refuses it anyway.</summary>
+    private async Task<bool> IsRunToEndAllowedAsync()
+    {
+        try
+        {
+            return (await api.Pipelines.GetRunOptionsAsync().ConfigureAwait(false))?.RunToEndAllowed == true;
+        }
+        catch (Exception exception) when (IsTransportFailure(exception))
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -82,13 +98,9 @@ public sealed class PipelineRunDialogCoordinator(
             }
         };
 
-    /// <summary>
-    /// PLAN-005 lot 5 / D37, R-10: the releases a deployment can restore, loaded only when a declared
-    /// parameter can receive one (the same predicate the fields use to know which one a click fills);
-    /// <c>null</c> otherwise. A pipeline that takes no version, aetheus-candidate for one, fetches none.
-    /// The grid scrolls through them (recette R-327); the ceiling is the API's largest page, far above what artifact retention
-    /// keeps, and the grid says so when a project ever holds more.
-    /// </summary>
+    /// <summary>Load restorable releases only when a declared parameter can receive one so
+    /// unrelated pipelines avoid the request; respect the API page ceiling and report when the
+    /// retained list exceeds it.</summary>
     private async Task<(List<ReleaseDto>? Releases, int Total)> LoadReleasesIfAParameterTakesOneAsync(
         int pipelineId, IEnumerable<PipelineRunParameterDto> declared)
     {

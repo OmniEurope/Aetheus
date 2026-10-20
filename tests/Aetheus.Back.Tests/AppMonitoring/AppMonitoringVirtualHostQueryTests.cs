@@ -6,11 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests.AppMonitoring;
 
-/// <summary>
-/// Recette R-441: the fleet server deduced to host a backend-probed app, read from the enabled Apache
-/// virtual hosts of the project's organization. Several servers serving the host, a disabled vhost, a
-/// deleted server or another organization's server give no answer rather than a guess.
-/// </summary>
+/// <summary> The fleet server deduced to host a backend-probed app, read from the enabled Apache
+/// virtual hosts of the project's organization. Several servers serving the host, a disabled vhost,
+/// a deleted server or another organization's server give no answer rather than a guess. </summary>
 public sealed class AppMonitoringVirtualHostQueryTests : IDisposable
 {
     private readonly AppDbContext _db;

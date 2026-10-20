@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: EUPL-1.2
 # Static security evidence for a repository in any language, graded on one versioned scale.
 #
-# Every scanner is the platform's own, pinned in the scanner manifest: no project adapter is needed.
-# One file is: Gitleaks reads its rules from .gitleaks.toml at the root of the repository (the setup
-# wizard's readiness check names it when it is missing; the default rules are one line,
-# `[extend]` then `useDefault = true`). The four scans are independent, so they share a stage; the
+# Every scanner is the platform's own, pinned in the scanner manifest: nothing is required in the
+# repository. Gitleaks reads .gitleaks.toml at the root of the repository when it has one, and its
+# built-in rules otherwise (recette R3-63). The four scans are independent, so they share a stage; the
 # grade reads all four and sits in the stage after them (ADR-012: the steps of a stage run together).
 # Image scanning needs images this template cannot know how to build: a project that ships containers
 # adds its own stage in its pipeline.
@@ -36,9 +35,9 @@ stages:
         scanner: trivy-iac
         timeout_seconds: 900
 
-  # The severity rules every security pipeline uses. Recette R2-119 will switch them to the weighted
-  # finding score once the deployed backend parses `finding_score`; until then a template carrying it
-  # would be refused.
+  # The generic grade counts open findings by severity (owner decision of 2026-10-17, ADR-030
+  # amendment of that date): no `finding_score: weighted` rule here. A project that wants the weighted
+  # score overrides this step in its own pipeline.
   - name: Grade security
     group: Security
     execution_role: build

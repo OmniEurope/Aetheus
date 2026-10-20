@@ -1,14 +1,22 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 <OmniStack Gap="OmniSpacing.Small">
-    @if (Model.Loading)
+    @* Recette R3-30: a read that failed says why, with the task, instead of opening an empty editor. *@
+    @if (!string.IsNullOrWhiteSpace(Model.Error))
     {
-        <AetheusLoader Size="OmniControlSize.Small" Class="omni-u-mb-sm" />
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["LoadingConfig"]</OmniText>
+        <OmniAlert Severity="OmniSeverity.Danger">
+            <Icon><OmniIcon Name="OmniIconName.Error" /></Icon>
+            <ChildContent><OmniText Element="OmniTextElement.Strong">@L["TaskFailed"]</OmniText><OmniText Element="OmniTextElement.Paragraph" Class="task-output-error">@Model.Error</OmniText></ChildContent>
+        </OmniAlert>
     }
-    <OmniCodeEditor @bind-Value="_content" Language="apache" Height="24rem"
-                    InteropModulePath="./js/omni-code-editor-frame.js?v=1"
-                    Label="@L["ApacheConfig"]" Disabled="@Model.Loading" />
+    @* Recette R3-32: while the config is read, OE's busy veil lies over the editor, which stays mounted
+       underneath, instead of a large loader replacing the dialog's content. *@
+    <div class="@(Model.Loading ? "omni-busy" : null)" aria-busy="@(Model.Loading ? "true" : "false")"
+         title="@(Model.Loading ? L["LoadingConfig"].Value : null)">
+        <OmniCodeEditor @bind-Value="_content" Language="apache" Height="24rem"
+                        InteropModulePath="./js/omni-code-editor-frame.js?v=1"
+                        Label="@L["ApacheConfig"]" Disabled="@Model.Loading" />
+    </div>
     <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@Cancel">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Save" Disabled="@Model.Loading" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Save" Disabled="@(Model.Loading || !string.IsNullOrWhiteSpace(Model.Error))" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
     </Aetheus.Front.Components.Shared.DialogFooter>
 </OmniStack>

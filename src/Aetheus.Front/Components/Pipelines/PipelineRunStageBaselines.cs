@@ -3,15 +3,8 @@ using System.Text.Json;
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// PLAN-003 lot 20 / D26. The usual durations of the stages and steps of the run on screen and of
-/// its child runs, keyed by run id.
-///
-/// It replaces the previous-durations loader, which downloaded the whole run history of each
-/// pipeline to keep one comparable run. The server now answers with an average over the last
-/// successful runs; one small request per run, made once, since a run's history does not change
-/// while it is watched.
-/// </summary>
+/// <summary>Stage and step baselines use successful-run averages returned by the server, keyed by
+/// run ID. Each run's fixed historical baseline needs only one request.</summary>
 internal sealed class PipelineRunStageBaselines(ApiClient api)
 {
     private readonly Dictionary<int, RunStageBaselinesDto> _byRunId = [];

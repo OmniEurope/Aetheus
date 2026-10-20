@@ -6,10 +6,9 @@ public static class AgentRuntimeDefaults
 {
     public const int PollingIntervalSeconds = 10;
 
-    /// <summary>Poll interval while this agent is part of an active run: a task is running, or one was
-    /// claimed or finished within <see cref="ActivePollingWindow"/>. The next stage of a run is created
-    /// the moment the previous one completes, and a 10 s poll made every stage boundary wait for it
-    /// (PLAN-007 lot 7).</summary>
+    /// <summary>Polling interval while a task is running or one was claimed or completed within
+    /// <see cref="ActivePollingWindow"/>. Short polling limits delays between successive
+    /// stages.</summary>
     public static readonly TimeSpan ActivePollingInterval = TimeSpan.FromSeconds(2);
 
     /// <summary>How long after its last task activity the agent keeps the active interval. Covers the
@@ -31,10 +30,10 @@ public static class AgentRuntimeDefaults
     public static readonly TimeSpan DockerInventoryTtl = TimeSpan.FromSeconds(60);
     public static readonly TimeSpan SlowInventoryTtl = TimeSpan.FromSeconds(180);
 
-    /// <summary>Recette R2-015: how often the storage measurement (<c>docker system df</c>, directory and
-    /// journal sizes) is refreshed. It runs in the background, outside the heartbeat collection budget,
-    /// because it takes minutes during builds; the sizes it reports move slowly, and the build state the
-    /// deployment-only alert needs is read live on every beat instead.</summary>
+    /// <summary>How often the storage measurement (<c>docker system df</c>, directory and journal
+    /// sizes) is refreshed. It runs in the background, outside the heartbeat collection budget,
+    /// because it takes minutes during builds; the sizes it reports move slowly, and the build
+    /// state the deployment-only alert needs is read live on every beat instead.</summary>
     public static readonly TimeSpan StorageDiagnosticsTtl = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan LivenessCheckInterval = TimeSpan.FromSeconds(10);
     public static readonly TimeSpan BackendRequestTimeout = TimeSpan.FromMinutes(10);

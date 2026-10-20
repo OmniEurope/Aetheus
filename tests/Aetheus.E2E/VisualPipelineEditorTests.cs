@@ -5,6 +5,7 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Pipelines")]
+[RollbackRelevant]
 public sealed class VisualPipelineEditorTests : E2ETestBase
 {
     [SetUp]
@@ -62,14 +63,23 @@ public sealed class VisualPipelineEditorTests : E2ETestBase
             """);
 
         // pointerup invokes the .NET callback asynchronously. Waiting only for the CSS move proves
-        // the drag handler ran, but not that OnNodeMoved reached localStorage; an immediate reload
-        // can therefore race the persistence callback. Wait on the persisted business outcome.
+        // the drag handler ran, but not that OnNodeMoved reached its store; an immediate reload can
+        // therefore race the persistence callback. Since R1-66 the layout is a user preference kept on
+        // the server (VisualPipelineLayoutStore, PreferenceKeys.VisualLayout), not a localStorage entry:
+        // wait until the server answers the moved position.
         var pipelineIdMatch = System.Text.RegularExpressions.Regex.Match(Page.Url, @"/pipelines/(\d+)");
         Assert.That(pipelineIdMatch.Success, Is.True, "The visual editor URL must expose its pipeline id.");
-        var layoutKey = $"vp-layout-{pipelineIdMatch.Groups[1].Value}";
+        // PreferenceKeys.VisualLayout, joined so that no literal reads as a CSS class selector.
+        var layoutKey = string.Join('.', "aetheus", "pipelines", pipelineIdMatch.Groups[1].Value, "visual-layout");
         await Page.WaitForFunctionAsync("""
-            expected => {
-                const raw = localStorage.getItem(expected.key);
+            async expected => {
+                const token = localStorage.getItem('aetheus_auth_token');
+                const response = await fetch(`${expected.backendUrl}/api/users/me/preferences/${encodeURIComponent(expected.key)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.status !== 200) return false;
+                const preference = await response.json();
+                const raw = preference.value ?? preference.Value;
                 if (!raw) return false;
                 const blob = JSON.parse(raw);
                 const point = (blob.pos ?? blob.Pos)?.['0'];
@@ -77,8 +87,8 @@ public sealed class VisualPipelineEditorTests : E2ETestBase
                     && Math.abs(point[0] - expected.x) < 0.01
                     && Math.abs(point[1] - expected.y) < 0.01;
             }
-            """, new { key = layoutKey, x = movedCoordinates[0], y = movedCoordinates[1] },
-            new() { Timeout = 5000 });
+            """, new { backendUrl = BackendUrl, key = layoutKey, x = movedCoordinates[0], y = movedCoordinates[1] },
+            new() { Timeout = 5000, PollingInterval = 200 });
 
         var canvasBox = await canvas.BoundingBoxAsync();
         Assert.That(canvasBox, Is.Not.Null, "The visual canvas must have a measurable viewport.");

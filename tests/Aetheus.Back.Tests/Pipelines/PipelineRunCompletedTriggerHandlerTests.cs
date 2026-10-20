@@ -77,6 +77,26 @@ public sealed class PipelineRunCompletedTriggerHandlerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task R1_80_HandleAsync_ChildRejected_HandsUpWhatItFound()
+    {
+        var step = ArrangeWaitingStep();
+        _repo.GetSuccessfulStepOutputsAsync(99, Arg.Any<CancellationToken>()).Returns(
+        [
+            new StepOutputProjection("Test V", "Test V integration", """{"QA_CURRENT_INTEGRATION_GATE_STATUS":"1"}""")
+        ]);
+
+        await _sut.HandleAsync(
+            new PipelineRunCompletedEvent(99, PipelineStatus.Rejected),
+            ct: TestContext.Current.CancellationToken);
+
+        await _runService.Received(1).ResolveCompletedTriggerStepAsync(
+            step,
+            PipelineStatus.Rejected,
+            Arg.Is<IReadOnlyDictionary<string, string>>(outputs => outputs["QA_CURRENT_INTEGRATION_GATE_STATUS"] == "1"),
+            Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(PipelineStatus.Failed)]
     [InlineData(PipelineStatus.Cancelled)]

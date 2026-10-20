@@ -5,9 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Users;
 
-/// <summary>
-/// Recette R-316: one search for Users, Organizations and Roles. Each section shows its count in brackets
-/// only when positive, and the search moves to the only section holding a result.
+/// <summary> One search for Users, Organizations and Roles. Each section shows its count in
+/// brackets only when positive, and the search moves to the only section holding a result.
 /// </summary>
 public sealed class AdminIdentitySearchTests : BunitContext
 {

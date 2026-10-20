@@ -252,7 +252,9 @@ public sealed class AgentUpdateRepositoryLifecycleTests : IDisposable
             [
                 AgentCapabilities.SelfUpdate,
                 AgentCapabilities.Deployment,
+                AgentCapabilities.DeploymentFunctions,
                 AgentCapabilities.PipelineBuild,
+                AgentCapabilities.PipelineFunctions,
                 AgentCapabilities.ShellExecution
             ],
             JsonSerializer.Deserialize<List<string>>(request.ExpectedCapabilitiesJson)!);

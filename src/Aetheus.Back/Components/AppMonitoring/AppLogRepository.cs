@@ -23,7 +23,7 @@ public sealed class AppLogRepository(AppDbContext db) : IAppLogRepository
             query = query.Where(l => l.SeverityNumber >= min);
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(l => l.Body.Contains(search));
-        // Recette R-358: the grid's header filters narrow the whole log before the count.
+        // The grid's header filters narrow the whole log before the count.
         query = AppLogQuery.Filters.ApplyFilters(query, filters);
 
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);

@@ -27,7 +27,7 @@ public partial class EnvironmentsList : IAsyncDisposable
     private int _totalCount;
     private bool _loading;
     private bool _canWrite;
-    // Recette R-224: the column header filters, each a real column filter of the endpoint.
+    // The column header filters, each a real column filter of the endpoint.
     private List<Aetheus.Shared.Components.Shared.GridFilter> _columnFilters = [];
     private Func<string, string>? _typeText;
     private Func<string, string>? _yesNoText;
@@ -64,7 +64,7 @@ public partial class EnvironmentsList : IAsyncDisposable
 
     private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.Environment);
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<EnvironmentDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -89,7 +89,7 @@ public partial class EnvironmentsList : IAsyncDisposable
     }
 
     private AetheusDataGrid<EnvironmentDto>? _grid;
-    // Recette R-226: live changes refresh quietly (rows, page, scroll and filters kept).
+    // Live changes refresh quietly (rows, page, scroll and filters kept).
     private Task RefreshGrid() => _grid?.Refresh() ?? Task.CompletedTask;
 
 
@@ -143,6 +143,6 @@ public partial class EnvironmentsList : IAsyncDisposable
         _hubConnection = null;
     }
 
-    /// <summary>Recette R2-124: the export writes the count the badge shows.</summary>
+    /// <summary>The export writes the count the badge shows.</summary>
     private static readonly Func<EnvironmentDto, object?> ServersExport = environment => environment.Servers.Count;
 }

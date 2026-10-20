@@ -3,19 +3,9 @@ using System.Globalization;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// PLAN-006 lot 11.3: runs one .NET test project and publishes a CLASSIFIED gate status.
-///
-/// The reason this is a typed step rather than a shell one is the classification, not the command.
-/// `dotnet test` is three lines of shell; deciding whether its result is a finding or a broken run
-/// is a rule that every project rewrites and gets subtly wrong, because the obvious shell form
-/// (`dotnet test || exit 1`) makes a crashed test host look exactly like an honest regression, and a
-/// run that executed zero tests look exactly like a clean one.
-///
-/// So the step never fails on the runner's exit code alone. It reconciles that code against the TRX
-/// the run produced, and publishes 0 (clean) or 1 (findings) as a run variable the gate reads. Only
-/// evidence it cannot trust at all makes the step itself fail.
-/// </summary>
+/// <summary>Reconcile runner exit status with TRX evidence to distinguish clean tests, valid
+/// findings and broken execution. Publish clean/findings gate values only from trustworthy
+/// evidence; otherwise fail the step.</summary>
 public sealed class PipelineDotnetTestOperationExecutor(
     ILogger<PipelineDotnetTestOperationExecutor> logger,
     IFileSystemReader files) : EnvironmentOperationExecutor
@@ -52,9 +42,13 @@ public sealed class PipelineDotnetTestOperationExecutor(
         // The suite's own exit code is captured rather than allowed to end the step: a test that ran
         // and failed is graded, and only unusable evidence is a technical failure of the run. On the
         // testing platform a failed test exits 2, not 1; the classifier reads the TRX, not the value.
-        var run = await ProcessRunner
-            .RunAsync(startInfo, timeoutSeconds, onOutput, logger, cancellationToken)
-            .ConfigureAwait(false);
+        var project = request.Project;
+        var run = await ProgressHeartbeat.RunAsync(
+            () => ProcessRunner.RunAsync(startInfo, timeoutSeconds, onOutput, logger, cancellationToken),
+            request.ProgressInterval,
+            elapsed => onOutput(
+                $"{project}: still running after {(long)elapsed.TotalSeconds}s.", TaskLogLevel.Info),
+            cancellationToken).ConfigureAwait(false);
         if (run.TimedOut)
         {
             await onOutput(
@@ -62,6 +56,16 @@ public sealed class PipelineDotnetTestOperationExecutor(
                 TaskLogLevel.Error).ConfigureAwait(false);
             return run;
         }
+        return await GradeAsync(request, testingPlatform, staleCoverage, run.ExitCode, onOutput).ConfigureAwait(false);
+    }
+
+    /// <summary>Grades a finished run from its evidence: the coverage reports it wrote, then the TRX
+    /// read with its exit code. Publishes the findings status, or fails the step when the evidence
+    /// cannot be trusted.</summary>
+    private async Task<ExecutorResult> GradeAsync(
+        PipelineDotnetTestRequest request, bool testingPlatform, HashSet<(long Length, DateTime WrittenUtc)>? staleCoverage,
+        int exitCode, Func<string, TaskLogLevel, Task> onOutput)
+    {
         if (testingPlatform && request.CollectCoverage)
             foreach (var report in DotnetTestCommandLine.NormalizeCoverageReports(request.ResultsDirectory))
                 await onOutput($"Coverage report: {report}", TaskLogLevel.Info).ConfigureAwait(false);
@@ -73,7 +77,7 @@ public sealed class PipelineDotnetTestOperationExecutor(
         }
 
         var verdict = DotnetTestResultClassifier.Classify(
-            NormalizeExitCode(run.ExitCode),
+            NormalizeExitCode(exitCode),
             request.TrxPath,
             request.CollectCoverage ? request.ResultsDirectory : null,
             files);

@@ -3,12 +3,10 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R-484: what a run's results add to its detail, read as figures the database works out, not
-/// as the result rows themselves: the canonical coverage report's figures (its per-file list stays on
-/// <c>GET runs/{id}/coverage</c>, read when the Coverage tab opens), the last lint report's counts, and
-/// the metric and artifact columns the page shows.
-/// </summary>
+/// <summary> What a run's results add to its detail, read as figures the database works out, not as
+/// the result rows themselves: the canonical coverage report's figures (its per-file list stays on
+/// <c>GET runs/{id}/coverage</c>, read when the Coverage tab opens), the last lint report's counts,
+/// and the metric and artifact columns the page shows. </summary>
 public sealed record PipelineRunResultSummaries(
     PipelineCoverageSummaryDto? Coverage,
     PipelineLintSummaryDto? Lint,
@@ -18,7 +16,7 @@ public sealed record PipelineRunResultSummaries(
 /// <summary>Run detail loading, extracted from <see cref="PipelineCoreRepository"/> (file-size budget).</summary>
 internal sealed class PipelineRunDetailRepository(AppDbContext db)
 {
-    /// <summary>Recette R1-2: whether any step of these stages started at all (whatever its outcome).</summary>
+    /// <summary>Whether any step of these stages started at all (whatever its outcome).</summary>
     public async Task<bool> DidAnyStepStartInStagesAsync(int runId, IReadOnlyCollection<string> stageNames, CancellationToken ct = default)
     {
         return await db.PipelineStepRuns
@@ -29,7 +27,8 @@ internal sealed class PipelineRunDetailRepository(AppDbContext db)
             .ConfigureAwait(false);
     }
 
-    /// <summary>Recette R1-3: the pipeline's most recent run, tracked, so a repeated refusal updates it.</summary>
+    /// <summary>The pipeline's most recent run, tracked, so a repeated refusal updates
+    /// it.</summary>
     public async Task<PipelineRun?> GetLatestRunTrackedAsync(int pipelineId, CancellationToken ct = default)
     {
         return await db.PipelineRuns
@@ -49,9 +48,9 @@ internal sealed class PipelineRunDetailRepository(AppDbContext db)
                 .ThenInclude(s => s.Server)
             .Include(r => r.StepRuns.OrderBy(s => s.Order))
                 .ThenInclude(s => s.Task)
-            // Recette R-484: no result rows here. Test results (one row per test) are counted by
-            // GetTestResultSummaryAsync; coverage, lint, metrics and artifacts are read as figures and
-            // columns by GetRunResultSummariesAsync.
+            // No result rows here. Test results (one row per test) are counted by
+            // GetTestResultSummaryAsync; coverage, lint, metrics and artifacts are read as figures
+            // and columns by GetRunResultSummariesAsync.
             .AsSplitQuery()
             .FirstOrDefaultAsync(r => r.Id == runId, ct).ConfigureAwait(false);
     }

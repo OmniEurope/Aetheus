@@ -5,24 +5,10 @@ using static Aetheus.Back.Components.Pipelines.PipelineRunHelpers;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R2-001: <c>type: advance-branch</c>. A branch (<c>main</c> for production) is moved by an
-/// explicit, visible step of the deploy pipeline onto the commit of the release that run deploys,
-/// instead of by a per-environment switch that did nothing, without a trace, while it was off.
-///
-/// The commit is the one the release records, i.e. the one its candidate built, never the head of the
-/// deploy run's own workspace (a newer <c>develop</c> that was never deployed). The release must already
-/// be recorded as deployed, so the step belongs after the <c>type: release</c> step with
-/// <c>deployed: true</c>. The ref is written by the backend, which hosts the repository
-/// (<see cref="IGitBranchAdvanceService"/>, ADR-044): no credential reaches the agent.
-///
-/// Advanced, already-there and already-past (the branch contains the release) succeed and say so on
-/// the step. A diverged branch succeeds too, with a run warning: the deployment before it worked, and
-/// the branch is a follower of it, not a gate (recette R2-105). Every other outcome (no release, no
-/// repository holding the commit, a refused ref update) fails the step with the reason, because a
-/// branch that silently stays behind is the defect this replaces. Decision D13: a branch a protection
-/// rule marks StrictlyProtected fails the step too; ProtectedExceptPipelines and NotProtected let it run.
-/// </summary>
+/// <summary>The explicit branch-advance step follows the recorded deployed release commit and
+/// writes its ref through the backend without agent credentials (ADR-044). Branch protection is
+/// enforced; divergence is reported as a warning while rejected ref updates fail the
+/// step.</summary>
 public sealed class PipelineBranchAdvanceStep(
     IPipelineRepository pipelines,
     IGitBranchAdvanceService branchAdvance,
@@ -79,8 +65,7 @@ public sealed class PipelineBranchAdvanceStep(
             case GitBranchAdvanceOutcome.AlreadyUpToDate:
                 return $"'{target.Branch}' already points at {Short(commit)} (release {release.Version}); nothing to advance.";
             case GitBranchAdvanceOutcome.AlreadyContains:
-                // Recette R2-105: 'main' had been pushed past the candidate; the deployment succeeded and
-                // its release is on the branch already. It failed the whole run.
+                // A branch already containing the deployed release needs no update.
                 return $"'{target.Branch}' is at {Short(result.PreviousSha)}, which already contains {Short(commit)} "
                     + $"(release {release.Version}); nothing to advance.";
             case GitBranchAdvanceOutcome.NotFastForward:
@@ -197,9 +182,7 @@ public sealed class PipelineBranchAdvanceStep(
         stepRun.ExitCode = 0;
         stepRun.StartedAt ??= now;
         stepRun.CompletedAt = now;
-        // Recette R2-071: an advance that worked is the expected outcome of a delivery, not a warning.
-        // It was appended to the run's warnings and shown in the yellow banner, which read as an error.
-        // It stays on the step, as its output, and in the audit log.
+        // Successful advancement belongs in step output and the audit log rather than run warnings.
         stepRun.OutputVariablesJson = System.Text.Json.JsonSerializer.Serialize(
             new Dictionary<string, string> { [OutcomeOutput] = message });
     }

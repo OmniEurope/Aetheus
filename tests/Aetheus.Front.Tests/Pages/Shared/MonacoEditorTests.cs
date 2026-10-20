@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages;
 
 public class MonacoEditorTests : BunitContext
 {
+    private readonly ObservedFakeClock _clock = new(new DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero));
+
     public MonacoEditorTests()
     {
         BunitTestHelper.RegisterServices(this);
+        Services.AddSingleton<TimeProvider>(_clock);
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
@@ -138,11 +143,14 @@ public class MonacoEditorTests : BunitContext
                 callback.TrySetResult(value);
             }));
 
+        // The debounce runs on the simulated clock: "second" arrives inside the window of "first" however
+        // long the machine takes between the two, and the window ends when the clock is moved.
         await cut.Instance.OnYamlChanged("first");
         await cut.Instance.OnYamlChanged("second");
-        var actual = await callback.Task.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            Xunit.TestContext.Current.CancellationToken);
+        Assert.Equal(1, _clock.Pending(TimeSpan.FromMilliseconds(500)));
+        Assert.Empty(published);
+        _clock.Advance(TimeSpan.FromMilliseconds(500));
+        var actual = await HangGuard.AwaitAsync(callback.Task, "the debounced value");
 
         Assert.Equal("second", actual);
         Assert.Equal(["second"], published);
@@ -157,10 +165,13 @@ public class MonacoEditorTests : BunitContext
             .Add(x => x.DebounceDelay, 200)
             .Add(x => x.DebouncedValueChanged, (string value) => published.Add(value)));
         await cut.Instance.OnYamlChanged("late");
+        Assert.Equal(1, _clock.Pending(TimeSpan.FromMilliseconds(200)));
 
         await cut.Instance.DisposeAsync();
-        await Task.Delay(250, Xunit.TestContext.Current.CancellationToken);
 
+        // The pending delay was cancelled: nothing is left that moving the clock could publish.
+        Assert.Equal(0, _clock.Pending(TimeSpan.FromMilliseconds(200)));
+        _clock.Advance(TimeSpan.FromMilliseconds(200));
         Assert.Empty(published);
     }
 

@@ -98,12 +98,9 @@ public class AuthController(
     public async Task<ActionResult<LoginResponse>> ExternalLogin(
         [FromBody] ExternalLoginRequest request, CancellationToken ct)
     {
-        // Provider/subject claims arrive from a reverse-proxy/IdP gateway, not from the end
-        // user. Enabling this endpoint without authenticating that gateway would let anyone
-        // mint an identity by posting an arbitrary SubjectId. Fail closed unless both sides
-        // share a dedicated secret; compare hashes in constant time and never log the value.
-        // R2-120: an external login that is not configured does not exist on this instance, so it
-        // answers 404 (never 503, which reads as an outage) and processes nothing.
+        // Authenticate the gateway with a dedicated shared secret before accepting provider and
+        // subject claims, comparing hashes in constant time and never logging the secret. An
+        // unconfigured endpoint returns 404 without processing a login.
         var expectedGatewaySecret = configuration["Auth:ExternalLogin:GatewaySecret"];
         if (string.IsNullOrWhiteSpace(expectedGatewaySecret))
             return NotFound(new ApiError { Message = "External login is not enabled on this instance." });
@@ -149,11 +146,10 @@ public class AuthController(
         return Ok(result);
     }
 
-    /// <summary>
-    /// Recette R1-37: the client says the user logged out, before it drops its tokens. The server forgets
-    /// what it holds in memory for that user (the typed mailbox passwords); it revokes no token. A
-    /// principal without a numeric user id (the bootstrap admin) holds nothing of the kind.
-    /// </summary>
+    /// <summary> The client says the user logged out, before it drops its tokens. The server
+    /// forgets what it holds in memory for that user (the typed mailbox passwords); it revokes no
+    /// token. A principal without a numeric user id (the bootstrap admin) holds nothing of the
+    /// kind. </summary>
     [EnableRateLimiting("auth-token")]
     [HttpPost("logout")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -175,17 +171,14 @@ public class AuthController(
     {
         var outcome = await authService.RefreshTokenWithReasonAsync(request.RefreshToken, ct);
         if (outcome.Response is null)
-            // PLAN-005 lot 9 / D48: the code tells the client which refusal ended the session.
+            // Return the rejection code that explains why the session ended.
             return Unauthorized(new ApiError { Message = "Invalid or expired refresh token.", Code = outcome.RejectionCode });
         return Ok(outcome.Response);
     }
 
-    /// <summary>
-    /// PLAN-005 lot 9 / D48: the client says why it ended a session it was not asked to end, so the
-    /// next spontaneous sign-out shows its reason in the system logs. Anonymous because the session is
-    /// already gone when this is sent; it only accepts a known reason code and a plain correlation id
-    /// (validated, never echoed), writes one log line, and shares the token-endpoint rate limit.
-    /// </summary>
+    /// <summary>Accept known session-end reason codes and validated correlation ids anonymously
+    /// because the session may already be gone. Log once under the token-endpoint rate limit
+    /// without echoing input.</summary>
     [AllowAnonymous]
     [EnableRateLimiting("auth-token")]
     [HttpPost("session-ended")]
@@ -197,16 +190,9 @@ public class AuthController(
         return NoContent();
     }
 
-    /// <summary>
-    /// Recette R2-018: most reasons are the normal end of a session and are information: a refresh token
-    /// that was purged or never stored here (<c>refresh_unknown</c>, e.g. a tab left open while another one
-    /// rotated the chain), one that outlived its lifetime, an account an administrator deactivated, a
-    /// short-lived bootstrap token the legacy renew endpoint does not extend, a token that expired while
-    /// the browser was closed. Two say something is wrong and stay warnings: <c>refresh_replay</c>, a
-    /// rotated token presented again outside the grace window, which revoked the whole chain as a
-    /// possible theft; and <c>refresh_rejected</c>, a refusal without a code the client knows, i.e. a
-    /// client and a server that no longer speak the same protocol.
-    /// </summary>
+    /// <summary>Log expected session expiry or account-state refusals at Information. Keep
+    /// refresh_replay and unknown refresh_rejected codes at Warning because they can indicate theft
+    /// or protocol mismatch.</summary>
     internal static LogLevel SessionEndedLevel(string reason) =>
         reason is RefreshRejectionCodes.Replay or SessionEndReasons.RefreshRejected
             ? LogLevel.Warning

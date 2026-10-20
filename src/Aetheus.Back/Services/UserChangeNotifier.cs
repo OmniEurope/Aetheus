@@ -12,8 +12,7 @@ public interface IUserChangeNotifier
     /// </summary>
     Task NotifyPermissionsChangedAsync(int userId, string reason, CancellationToken ct = default);
 
-    /// <summary>
-    /// Recette R-182: pushes <c>NotificationsChanged</c> to every connection of the given users, so
+    /// <summary> Pushes <c>NotificationsChanged</c> to every connection of the given users, so
     /// their bell, menu badge and /notifications page reload without waiting for the poll.
     /// </summary>
     Task NotifyNotificationsChangedAsync(IReadOnlyCollection<int> userIds, CancellationToken ct = default);

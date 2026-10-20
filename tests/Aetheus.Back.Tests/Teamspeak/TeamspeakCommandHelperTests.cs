@@ -221,9 +221,8 @@ public class TeamspeakCommandHelperTests
         Assert.Contains("msg=Hello\\sWorld", cmd);
     }
 
-    // --- S-TECH-87: ServerQuery commands are now BARE lines. The login/use/quit framing and the TCP
-    // transport moved to the agent's TeamspeakServerQueryOperationExecutor - the helper no longer emits
-    // any shell (printf | nc) nor the credential hop. GracefulRestart is the lone shell-chain exception.
+    // ServerQuery helpers produce bare command lines; the agent executor owns framing, credentials
+    // and TCP transport. GracefulRestart uses its dedicated shell-chain path.
 
     [Fact]
     public void ServerQueryCommands_AreBareLines_WithoutShellFraming()

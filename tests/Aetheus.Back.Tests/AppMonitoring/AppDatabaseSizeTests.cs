@@ -14,11 +14,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.AppMonitoring;
 
-/// <summary>
-/// PLAN-013 lot 1 (R2-113): the database size gauges an application exports through Aetheus.Telemetry
-/// become its Database tab: the newest measurement only, the largest table first, with the size each had
-/// about 24 hours earlier.
-/// </summary>
+/// <summary>Show only the latest database-size measurement, largest tables first, with comparison
+/// to approximately 24 hours earlier.</summary>
 public sealed class AppDatabaseSizeTests : IDisposable
 {
     private static readonly DateTime Now = new(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc);

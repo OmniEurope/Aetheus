@@ -32,8 +32,8 @@ else
         <Tabs>
             <OmniTabsItem Key="overview" Title="@L["Overview"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("dashboard"))" /></Icon><ChildContent>
                 <OmniCard Class="analysis-finding-summary-card">
-                    @* Recette R-339: the icon sits on the middle of the title it marks, not at the top
-                       of the title and the message together. *@
+                    @* The icon sits on the middle of the title it marks, not at the top of the
+                       title and the message together. *@
                     <div class="analysis-finding-problem">
                         <div>
                             <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
@@ -55,7 +55,7 @@ else
                             }
                             else
                             {
-                                @* Recette R-433: the path, the line in a badge, "Open the file" as a standard
+                                @* The path, the line in a badge, "Open the file" as a standard
                                    button, and under them the passage of the file in question. *@
                                 <div class="analysis-source-location">
                                     <OmniIcon Name="OmniIconName.Document" />
@@ -71,7 +71,8 @@ else
                                 </div>
                                 @if (_excerpt is { } excerpt)
                                 {
-                                    @* Recette R-433: the passage keeps the file's own line numbers (OE FirstLineNumber). *@
+                                    @* The passage keeps the file's own line numbers (OE
+                                       FirstLineNumber). *@
                                     <OmniCodeViewer Code="@excerpt.Code" Title="@ExcerptTitle(excerpt)" FirstLineNumber="@excerpt.FirstLine"
                                                     HighlightedLines="@excerpt.HighlightedLines" ShowWrapToggle="false" Class="omni-u-mt-sm" />
                                 }
@@ -134,10 +135,13 @@ else
                             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["AnalysisAiPrompt"]</OmniHeading>
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["AnalysisAiPromptDescription"]</OmniText>
                         </div>
-                        <OmniRow Gap="OmniSpacing.Small">
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CopyPromptAsync"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["CopyAiPrompt"]</span></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="DownloadPromptAsync" title="@L["DownloadMarkdown"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Download"]</span></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="TogglePromptPreview"><OmniIcon Name="@MaterialIconMap.Resolve((_showPromptPreview ? "code" : "visibility"))" /> <span>@(_showPromptPreview ? L["AnalysisPromptSource"] : L["AnalysisPromptPreview"])</span></OmniButton>
+                        @* STD-BTN detection 11: CopyAiPrompt visible, the other actions in the menu; the preview is a pressed/unpressed toggle. *@
+                        <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="TogglePromptPreview" aria-pressed="@(_showPromptPreview ? "true" : "false")"><OmniIcon Name="@MaterialIconMap.Resolve("visibility")" /> <span>@L["AnalysisPromptPreview"]</span></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CopyPromptAsync"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["CopyAiPrompt"]</span></OmniButton>
+                            <OmniOverflowMenu Label="@L["MoreActions"]">
+                                <OmniMenuItem OnClick="DownloadPromptAsync"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["DownloadMarkdown"]</ChildContent></OmniMenuItem>
+                            </OmniOverflowMenu>
                         </OmniRow>
                     </div>
                     @if (_showPromptPreview)
@@ -163,7 +167,7 @@ else
                     <OmniCard Class="analysis-decision-card">
                         <div class="analysis-decision-heading">
                             <span class="analysis-decision-icon"><OmniIcon Name="OmniIconName.Gavel" /></span>
-                            @* Recette R2-130: no arbitration instruction under the title. *@
+                            @* No arbitration instruction under the title. *@
                             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["AnalysisDecision"]</OmniHeading>
                         </div>
                         <div class="analysis-decision-form"><OmniTemplateForm TModel="DecisionFormModel" Model="@_decision" OnValidSubmit="@SaveDecisionAsync">
@@ -180,8 +184,9 @@ else
                                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@DecisionStatusDescription(status)</OmniText>
                                             </div>
                                         }
-                                        @* Recette R2-133: going back on a decision is one of the choices, a secondary
-                                           action apart from saving; it reopens the finding at once, after confirmation. *@
+                                        @* Going back on a decision is one of the choices, a
+                                           secondary action apart from saving; it reopens the
+                                           finding at once, after confirmation. *@
                                         @if (HasRevertibleDecision)
                                         {
                                             <div class="analysis-decision-choice analysis-decision-reopen">
@@ -207,8 +212,8 @@ else
                                 </section>
                             </div>
                             <div class="analysis-decision-actions">
-                                @* Recette R2-134: the finding's own status, never the choice not yet saved (an
-                                   "Accepted" preselected by default read as an accepted finding with no history). *@
+                                @* Display the persisted finding status, not the outcome selected
+                                   but not yet saved. *@
                                 <div class="analysis-decision-selected">
                                     <span>@L["AnalysisDecisionCurrentStatus"]</span>
                                     <strong>@(_finding is null ? string.Empty : DecisionStatusText(_finding.Status))</strong>

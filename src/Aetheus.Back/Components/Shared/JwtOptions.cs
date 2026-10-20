@@ -46,11 +46,9 @@ public static class AetheusClaimTypes
     /// </summary>
     public const string MustChangePassword = "aetheus:mcp";
 
-    /// <summary>
-    /// Recette R-471: the opaque identifier the application declares to its own audience measurement
-    /// for a signed-in visitor. A keyed hash of the account identifier: it says nothing of the account
-    /// and cannot be turned back into it without the signing key. The measurement hashes it again and
-    /// never stores it.
-    /// </summary>
+    /// <summary> The opaque identifier the application declares to its own audience measurement for
+    /// a signed-in visitor. A keyed hash of the account identifier: it says nothing of the account
+    /// and cannot be turned back into it without the signing key. The measurement hashes it again
+    /// and never stores it. </summary>
     public const string AnalyticsVisitor = "aetheus:avid";
 }

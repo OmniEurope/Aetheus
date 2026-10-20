@@ -8,6 +8,8 @@ namespace Aetheus.Agent.Core.Operations;
 /// <summary>
 /// Executes the installed, assembly-embedded observability promotion harness. Candidate files are
 /// read from the checkout, but neither the signing/publishing code nor its path comes from it.
+/// Each package is published under the version its own candidate attests (PLAN-002 C8), so no
+/// set-wide version is required.
 /// </summary>
 public sealed class ObservabilityPackageOperationExecutor(
     ILogger<ObservabilityPackageOperationExecutor> logger,
@@ -20,12 +22,20 @@ public sealed class ObservabilityPackageOperationExecutor(
     private static readonly string[] RequiredEnvironment =
     [
         "AETHEUS_WORKING_DIR",
-        "PACKAGE_VERSION",
         "AETHEUS_NUGET_SIGNING_PFX_BASE64",
         "AETHEUS_NUGET_SIGNING_PFX_PASSWORD",
         "AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT",
         "AETHEUS_PACKAGE_TOKEN"
     ];
+
+    // A run definition from before PLAN-002 C8 carries one PACKAGE_VERSION for the whole set. For one
+    // cycle it is still forwarded, and the harness then requires every candidate to carry exactly it.
+    private const string LegacySetVersion = "PACKAGE_VERSION";
+
+    // The harness runner, replaceable so the extracted scripts and the start info are asserted without a shell.
+    internal Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, CancellationToken, Task<ExecutorResult>>
+        RunProcessAsync
+    { get; init; } = RunAsync;
 
     public override bool CanHandle(OperationKind kind) =>
         kind == OperationKind.PipelinePublishObservabilityBundle;
@@ -57,7 +67,7 @@ public sealed class ObservabilityPackageOperationExecutor(
                 publishPath,
                 options.Value.ServerUrl.TrimEnd('/'),
                 envVars);
-            return await RunAsync(startInfo, timeoutSeconds, onOutput, cancellationToken).ConfigureAwait(false);
+            return await RunProcessAsync(startInfo, timeoutSeconds, onOutput, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -83,13 +93,17 @@ public sealed class ObservabilityPackageOperationExecutor(
         foreach (var key in RequiredEnvironment)
             if (envVars.TryGetValue(key, out var value))
                 startInfo.Environment[key] = value;
+        startInfo.Environment.Remove(LegacySetVersion);
+        if (envVars.TryGetValue(LegacySetVersion, out var legacySetVersion)
+            && !string.IsNullOrWhiteSpace(legacySetVersion))
+            startInfo.Environment[LegacySetVersion] = legacySetVersion;
         startInfo.Environment.Remove("DOTNET");
         startInfo.Environment["AETHEUS_PACKAGE_BASE_URL"] = trustedPackageBaseUrl;
         startInfo.Environment["AETHEUS_TRUSTED_PUBLISH_SCRIPT"] = publishPath;
         return startInfo;
     }
 
-    private static bool HasRequiredEnvironment(IReadOnlyDictionary<string, string> envVars) =>
+    internal static bool HasRequiredEnvironment(IReadOnlyDictionary<string, string> envVars) =>
         RequiredEnvironment.All(
             key => envVars.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value));
 

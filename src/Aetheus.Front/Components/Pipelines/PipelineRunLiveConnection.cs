@@ -46,7 +46,7 @@ internal sealed class PipelineRunLiveConnection(
     // pipeline broadcasts its step events to ITS OWN run group, so without joining the children the parent
     // view only refreshed on a manual reload.
     private readonly HashSet<int> _joined = [];
-    private readonly DebouncedAsyncAction _reload = new(onReload, logger, "[PipelineRun]");
+    private readonly DebouncedAsyncAction _reload = new(onReload, logger, "[PipelineRun]", clock: timeProvider);
     private Task? _queuePollTask;
     private bool _disposed;
     private bool _moving;
@@ -170,11 +170,11 @@ internal sealed class PipelineRunLiveConnection(
 
     private async Task PollQueueAsync()
     {
-        // Recette R2-100: the token is read once, while the reload's lifetime is alive.
+        // The token is read once, while the reload's lifetime is alive.
         var lifetime = _reload.LifetimeToken;
         try
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5), _clock);
             while (await timer.WaitForNextTickAsync(lifetime))
             {
                 await invokeAsync(() => needsQueuePolling?.Invoke() == true

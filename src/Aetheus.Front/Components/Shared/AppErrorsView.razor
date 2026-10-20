@@ -1,12 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* ADR-021 phase 4: grouped errors for a monitored app (fingerprint / type / message / count / seen).
-   R-181: no Refresh button, the grid reloads on the AppTelemetryChanged push of the app's project.
-   The grid is full height and remotely virtualized, like the Logs tab (recette R-358): it reads the
-   groups from the API block by block as it scrolls, and its column sorts and header filters travel
-   with each request, so they apply to every error group of the app and not to the loaded rows.
-   Recette R2-011: the export is the grid's own bar under the table (Markdown and CSV), which reads every
-   group the column filters select through ExportLoad; the button above the grid went. *@
+@* Load grouped errors through server-side virtualized filtering and refresh on project telemetry
+   events so the view covers every matching error group (ADR-021); export through the same grid
+   contract with source context. *@
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">

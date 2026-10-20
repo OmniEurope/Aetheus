@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>Recette R2-026: the lineage tile lists the runs launched after a run, not its own stages.</summary>
+/// <summary>The lineage tile lists the runs launched after a run, not its own stages.</summary>
 public sealed class PipelineRunLineageRepositoryTests : IDisposable
 {
     private readonly AppDbContext _db;

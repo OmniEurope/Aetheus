@@ -34,14 +34,19 @@
     }
     else
     {
-        <OmniSplitButton Text="@L["Scan"]" title="@L["RunScan"]" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>
-            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))">@L["RunScan"]</OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateDatabase))">@L["UpdateDatabase"]</OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateProperties))">@L["UpdateProperties"]</OmniMenuItem>
+        @* Recette R3-38: Scan is the main action of the zone (blue). R3-42: Logs joined the menu, so the zone has one
+           button. R3-39: every
+           entry of its menu carries its icon. *@
+        <OmniSplitButton Variant="OmniButtonVariant.Primary" Text="@L["Scan"]" title="@L["RunScan"]" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>
+            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>@L["RunScan"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateDatabase))"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["UpdateDatabase"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateProperties))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["UpdateProperties"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem Disabled="@AgentOffline" OnClick="@GetLogsAsync"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent>@L["ViewLogs"]</ChildContent></OmniMenuItem>
         </ChildContent></OmniSplitButton>
-        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@GetLogsAsync"><OmniIcon Name="OmniIconName.Document" /> <span>@L["ViewLogs"]</span></OmniButton>
     }
 </OmniRow>
+
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="RKHunter" />
 
 @if (Rk.IsInstalled)
 {
@@ -111,7 +116,8 @@
 
             @* --- Scan History tab --- *@
             <OmniTabsItem Key="history" Title="@L["ScanHistory"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("history"))" /></Icon><ChildContent>
-                @* R-181: warnings and history reload on the server's heartbeats and RKHunter task completions. *@
+                @* Warnings and history reload on the server's heartbeats and RKHunter task
+                   completions. *@
                 @if (_scanHistory.Count == 0)
                 {
                     <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Center" Class="omni-u-py-2xl">

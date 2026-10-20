@@ -2,13 +2,12 @@
 
 namespace Aetheus.Front.Layout;
 
-/// <summary>
-/// The pages' breadcrumb, kept in OE's <see cref="OmniBreadcrumbService"/>, which the page header
-/// (<see cref="OmniPageHeader"/>) reads for its title and its trail (recette R-395). Routed pages may
-/// replace the route-derived fallback (<see cref="AetheusBreadcrumbResolver"/>) with entity names once
-/// their data is loaded; a query-only navigation keeps the current items, a path change installs the
-/// fallback of the destination at once, so the header never goes empty while a page is loading.
-/// </summary>
+/// <summary> The pages' breadcrumb, kept in OE's <see cref="OmniBreadcrumbService"/>, which the
+/// page header (<see cref="OmniPageHeader"/>) reads for its title and its trail. Routed pages may
+/// replace the route-derived fallback (<see cref="AetheusBreadcrumbResolver"/>) with entity names
+/// once their data is loaded; a query-only navigation keeps the current items, a path change
+/// installs the fallback of the destination at once, so the header never goes empty while a page is
+/// loading. </summary>
 public sealed class BreadcrumbService(
     OmniBreadcrumbService trail,
     NavigationManager nav,
@@ -35,12 +34,9 @@ public sealed class BreadcrumbService(
     /// <summary>Puts the route-derived trail of the current page back.</summary>
     public void Clear() => trail.Reset();
 
-    /// <summary>
-    /// The header's subtitle (recette R-014 / R-089): a page with no ancestor shows it on line 2, its own
-    /// <paramref name="subtitle"/> or else the description written for its route
-    /// (<c>PageDescription_{route}</c>), so no page is left without one. With ancestors the trail is line 2
-    /// and only the page's own subtitle shows, under the header.
-    /// </summary>
+    /// <summary>Without ancestors, line 2 shows <paramref name="subtitle"/> or the route
+    /// description. With ancestors, line 2 holds the breadcrumb and an explicit subtitle appears
+    /// below the header.</summary>
     public string? Subtitle(string? subtitle = null) =>
         !string.IsNullOrWhiteSpace(subtitle) || trail.Ancestors.Count > 0 ? subtitle : RouteDescription;
 

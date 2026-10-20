@@ -22,7 +22,7 @@ public partial class AvailabilitySparkline
 
     private List<Bar> _bars = [];
 
-    /// <summary>Recette R-440: what the bar means, as its accessible name and hover text.</summary>
+    /// <summary>What the bar means, as its accessible name and hover text.</summary>
     private string Summary => L["Uptime24hLegend"];
 
     protected override void OnParametersSet() => _bars = BuildBars();

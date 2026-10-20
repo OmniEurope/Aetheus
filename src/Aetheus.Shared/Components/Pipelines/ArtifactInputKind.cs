@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>Recette R-366/R-367: how a pipeline run consumed an artifact it did not produce.</summary>
+/// <summary>How a pipeline run consumed an artifact it did not produce.</summary>
 public enum ArtifactInputKind
 {
     /// <summary>A <c>restore-artifacts</c> step brought the artifact onto the runner.</summary>

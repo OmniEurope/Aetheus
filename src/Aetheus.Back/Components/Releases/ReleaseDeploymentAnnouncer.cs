@@ -13,14 +13,9 @@ public interface IReleaseDeploymentAnnouncer
     Task AnnounceAsync(int releaseId, int pipelineRunId, int agentServerId, CancellationToken ct = default);
 }
 
-/// <summary>
-/// Recette R-520: a release goes live in two ways. A <c>type: deploy</c> step raises
-/// <see cref="ReleaseDeployedEvent"/> when its task closes; a <c>type: release</c> step with
-/// <c>deployed: true</c> (how <c>aetheus-deploy-prod</c> records its release) raised nothing, so what
-/// subscribes to a deployment never heard of that one. The stage is the one whose step the calling
-/// agent is running: the request carries the run, not the step. Recette R2-001: advancing a branch no
-/// longer subscribes to this event; it is the explicit <c>type: advance-branch</c> step.
-/// </summary>
+/// <summary>Announce deployment for release steps recorded with deployed: true, using the active
+/// agent step to identify the stage. Branch advancement remains a separate explicit advance-branch
+/// step.</summary>
 public sealed class ReleaseDeploymentAnnouncer(
     IPipelineRepository pipelines,
     IDomainEventDispatcher domainEvents) : IReleaseDeploymentAnnouncer

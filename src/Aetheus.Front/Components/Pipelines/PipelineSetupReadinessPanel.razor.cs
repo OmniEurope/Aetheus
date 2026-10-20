@@ -3,16 +3,9 @@ using System.Net.Http;
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// Renders the pre-creation readiness verdict. The backend sends a cause and its raw items, the
-/// wording and the fix of each cause live in <see cref="PipelineReadinessChecks"/> so the panel stays
-/// localizable and the API stays free of user-facing prose.
-///
-/// PLAN-003 lot 30 / D22: for the two causes a click can fix (a required library or vault that does
-/// not exist), the panel offers to create them, keys copied, values empty, instead of sending the
-/// operator to recreate each one by hand. Recette R1-26: what it created stays listed as "created"
-/// until the user has opened each element to check it.
-/// </summary>
+/// <summary>Readiness wording is localized through <see cref="PipelineReadinessChecks"/> while the
+/// API supplies structured causes. Required libraries and vaults can be created with empty values
+/// and remain marked for user review.</summary>
 public partial class PipelineSetupReadinessPanel
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;

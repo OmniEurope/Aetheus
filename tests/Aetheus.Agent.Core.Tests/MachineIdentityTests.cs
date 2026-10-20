@@ -4,11 +4,8 @@ using Aetheus.Tests.Shared;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// PLAN-004 R-11: the identity the agent reports at enrollment so a reinstalled machine revives its
-/// retired server. The readers are injected, so each platform's source order is pinned without
-/// touching this host's real machine-id or registry.
-/// </summary>
+/// <summary>Verify the enrollment identity source order with injected readers without accessing
+/// this host machine identity or registry.</summary>
 public sealed class MachineIdentityTests
 {
     private const string LinuxMachineId = "0123456789abcdef0123456789abcdef";

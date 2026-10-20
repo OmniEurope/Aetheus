@@ -1,16 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Analysis;
 
-/// <summary>
-/// One rule for grading a run tree, shared by the backend (project summary) and the run's Gate tab so
-/// the two can never show different letters for the same runs. Recette R2-118: the runs merge domain by
-/// domain, each domain keeping the worst grade among the runs that measured it completely, so a run that
-/// does not grade a domain (the quality run has no security rule) no longer hides the run that does.
-/// Recette R2-129: the Gate tab of candidate #2571 showed the quality run's breakdown alone, with an
-/// incomplete security domain, while the security run had graded it A.
-/// </summary>
-/// <remarks>The result carries no <see cref="AnalysisGradeSummaryDto.SnapshotHash"/>: hashing the
-/// snapshot is the backend's concern, the Gate tab only displays the merge.</remarks>
+/// <summary>Shares domain-by-domain run-tree grading between the backend and Gate tab, retaining
+/// the worst complete grade for each domain.</summary> <remarks>Snapshot hashing remains the
+/// backend responsibility; the merged display result has no <see
+/// cref="AnalysisGradeSummaryDto.SnapshotHash"/>.</remarks>
 public static class AnalysisGradeMerge
 {
     public static AnalysisGradeSummaryDto MergeRuns(

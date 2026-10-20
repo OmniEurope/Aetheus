@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// The single "run with options" dialog: the branch and the queue-time parameters together.
-///
-/// They used to be two dialogs chained one after the other, which meant a user who only wanted to
-/// change a parameter had to walk through the branch step first. Here both are on screen at once and
-/// either can be left alone.
-/// </summary>
+/// <summary>Combines branch selection and queue-time parameters in one launch dialog, allowing
+/// either choice independently.</summary>
 public partial class PipelineLaunchDialog
 {
     private readonly object _formModel = new();
@@ -33,6 +28,11 @@ public partial class PipelineLaunchDialog
     /// branch's form and the backend rejects the run. <c>null</c> disables the re-read.
     /// </summary>
     [Parameter] public Func<string?, Task<List<PipelineRunParameterDto>?>>? ReloadParameters { get; set; }
+
+    /// <summary>Whether the platform allows "run to end" launches; the option is shown only then.</summary>
+    [Parameter] public bool RunToEndAllowed { get; set; }
+
+    private bool _runToEnd;
 
     private RunParameterFields? _fields;
     private List<PipelineRunParameterDto> _parameters = [];
@@ -87,7 +87,7 @@ public partial class PipelineLaunchDialog
             if (!_fields.TryCollect(out var collected, out _error)) return;
             values = collected.Count > 0 ? collected : null;
         }
-        Dialog.Close(new PipelineLaunchChoice(_branch, values));
+        Dialog.Close(new PipelineLaunchChoice(_branch, values, RunToEndAllowed && _runToEnd));
     }
 
     private void OnCancel() => Dialog.Close(null);
@@ -96,4 +96,6 @@ public partial class PipelineLaunchDialog
 /// <summary>What the user confirmed in <see cref="PipelineLaunchDialog"/>.</summary>
 /// <param name="SourceBranch">The chosen branch, or <c>null</c> when the pipeline has no repository.</param>
 /// <param name="Parameters">The effective parameter values, or <c>null</c> when none are declared.</param>
-public sealed record PipelineLaunchChoice(string? SourceBranch, Dictionary<string, string>? Parameters);
+/// <param name="RunToEnd">Launch in "run to end" mode: every step continues on error.</param>
+public sealed record PipelineLaunchChoice(
+    string? SourceBranch, Dictionary<string, string>? Parameters, bool RunToEnd = false);

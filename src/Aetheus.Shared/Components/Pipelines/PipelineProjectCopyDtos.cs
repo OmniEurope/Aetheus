@@ -3,8 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>
-/// Recette R1-29: the setup wizard's "start from an existing project". The source project's pipelines
+/// <summary> The setup wizard's "start from an existing project". The source project's pipelines
 /// are copied into the target project, adapted (name prefix, references to the copied pipelines,
 /// libraries and vaults), never pointing at the source project's repository, environment or server.
 /// </summary>

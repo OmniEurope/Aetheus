@@ -5,13 +5,8 @@ using NSubstitute;
 
 namespace Aetheus.Front.Tests;
 
-/// <summary>
-/// A 401 on a request that carried no credential means "this endpoint needs a session", not "your
-/// session died". The handler used to force a renewal anyway; with no refresh token it fell back to
-/// the legacy /api/auth/renew with an empty bearer, so the renewal itself 401'd - once per API call
-/// the page made. An anonymous visit to the deployed app produced fifteen console errors on
-/// /api/auth/renew in fourteen seconds, which is what failed the smoke probe of deployment 2325.
-/// </summary>
+/// <summary>A 401 from an unauthenticated request must not trigger token renewal without
+/// credentials.</summary>
 public class AnonymousUnauthorizedDoesNotRenewTests
 {
     [Fact]

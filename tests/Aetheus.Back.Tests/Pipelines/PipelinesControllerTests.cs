@@ -17,6 +17,7 @@ public class PipelinesControllerTests
     private readonly IPipelineWebhookService _webhookService = Substitute.For<IPipelineWebhookService>();
     private readonly IPipelineRepository _pipelineRepo = Substitute.For<IPipelineRepository>();
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
+    private readonly IPipelineRunToEndPolicy _runToEnd = Substitute.For<IPipelineRunToEndPolicy>();
     private readonly IPipelineFleetService _fleetService = Substitute.For<IPipelineFleetService>();
     private readonly PipelinesController _sut;
     private readonly PipelineFleetController _fleetSut;
@@ -57,7 +58,7 @@ public class PipelinesControllerTests
         // may attach a pipeline to, and stubbing that away would assert on the stub instead.
         _sut = new PipelinesController(
             _service, _runService, _approvalService, _artifactService, _webhookService,
-            new PipelineOwnerAuthorization(_service, _authz), _authz);
+            new PipelineOwnerAuthorization(_service, _authz), _authz, _runToEnd);
         _fleetSut = new PipelineFleetController(_fleetService, _authz);
         var controllerContext = new ControllerContext
         {
@@ -665,7 +666,7 @@ public class PipelinesControllerTests
     [Fact]
     public async Task R2103_CancelRun_NamesTheSignedInUserAsTheAuthor()
     {
-        // Recette R2-103: nobody could tell who cancelled release-fast #2536.
+        // Cancellation exposes its author.
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
@@ -959,8 +960,7 @@ public class PipelinesControllerTests
     [Fact]
     public async Task DecideApproval_Refused_LetsItsReasonReachTheResponse()
     {
-        // Recette R2-116: a refusal is no longer turned into a bare 404; ErrorHandlingMiddleware answers
-        // 409 with this message, which the run page shows.
+        // Refused decisions reach middleware as conflicts with an explanatory message.
         _approvalService.DecideApprovalAsync(99, Arg.Any<ApprovalDecisionRequest>(), TestContext.Current.CancellationToken)
             .Returns<Task<PipelineApprovalDto>>(_ => throw new ConflictException("Approval 99 was already Approved."));
 
@@ -1038,5 +1038,63 @@ public class PipelinesControllerTests
 
         Assert.IsType<UnauthorizedObjectResult>(response);
     }
-}
 
+    private void GivenRawCoverageBody(string xml, long? declaredLength = null)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(xml);
+        _sut.HttpContext.Request.Body = new MemoryStream(bytes);
+        _sut.HttpContext.Request.ContentLength = declaredLength ?? bytes.Length;
+    }
+
+    [Fact]
+    public async Task PublishCoverageRaw_ForwardsTheXmlWithItsStageAndStep()
+    {
+        GivenRawCoverageBody("<coverage line-rate=\"0.8\" />");
+        var summary = new PipelineCoverageSummaryDto();
+        _artifactService.PublishCoverageAsync(5, Arg.Is<PublishCoverageRequest>(request =>
+                request.XmlContent == "<coverage line-rate=\"0.8\" />" && request.StageName == "Test" && request.StepName == "unit"),
+                Arg.Any<CancellationToken>())
+            .Returns(summary);
+
+        var response = await _sut.PublishCoverageRaw(5, "Test", "unit", TestContext.Current.CancellationToken);
+
+        Assert.Same(summary, Assert.IsType<OkObjectResult>(response.Result).Value);
+    }
+
+    [Fact]
+    public async Task PublishCoverageRaw_ADeclaredBodyAboveTheLimit_IsRefusedUnread()
+    {
+        GivenRawCoverageBody("<coverage />", CoverageUploadLimits.MaxRawXmlBytes + 1);
+
+        var response = await _sut.PublishCoverageRaw(5, null, null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(413, Assert.IsType<StatusCodeResult>(response.Result).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("<coverage />", 201, 0)]
+    [InlineData("<coverage />", 0, 201)]
+    [InlineData("  ", 0, 0)]
+    public async Task PublishCoverageRaw_OverlongNamesOrAnEmptyBody_AreBadRequests(string xml, int stageLength, int stepLength)
+    {
+        GivenRawCoverageBody(xml);
+
+        var response = await _sut.PublishCoverageRaw(
+            5, stageLength == 0 ? null : new string('s', stageLength), stepLength == 0 ? null : new string('t', stepLength),
+            TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(response.Result);
+        await _artifactService.DidNotReceiveWithAnyArgs().PublishCoverageAsync(default, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task PublishCoverageRaw_FromAServerNotOnTheRun_IsForbidden()
+    {
+        GivenRawCoverageBody("<coverage />");
+        _runService.IsServerAssignedToRunAsync(5, 1, Arg.Any<CancellationToken>()).Returns(false);
+
+        var response = await _sut.PublishCoverageRaw(5, null, null, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(response.Result);
+    }
+}

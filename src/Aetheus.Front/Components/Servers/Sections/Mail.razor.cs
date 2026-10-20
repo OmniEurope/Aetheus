@@ -6,7 +6,7 @@ public partial class Mail
 {
     private Aetheus.Front.Components.Servers.ServerDetailSections.ServerMailSection? _section;
 
-    // PLAN-005: the mail section forwards the notification to the tabs waiting for a task output.
+    // Forwards task-output notifications to the waiting mail tabs.
     protected override Task HandleTaskCompletedNotificationAsync(
         Aetheus.Shared.Components.Tasks.TaskCompletedNotification notification)
     {

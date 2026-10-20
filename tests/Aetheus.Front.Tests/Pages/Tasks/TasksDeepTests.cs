@@ -63,15 +63,14 @@ public class TasksDeepTests : BunitContext
             new ServerTaskDto { Status = TaskExecutionStatus.Pending, ServerStatus = ServerStatus.Online }));
     }
 
-    // === No filter row above the grid (recette R-221) ===
+    // No filter row above the grid.
 
     [Fact]
     public void NoSearchBoxNorStatusList_AboveTheGrid()
     {
-        // Recette R-221: the column headers are the filters; the toolbar search box and status list
-        // duplicated the Name and Status column filters and are gone, with their fields.
+        // The Name and Status column headers provide the filters.
         var cut = RenderView();
-        cut.WaitForState(() => cut.Markup.Contains("Build"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Build"));
 
         Assert.Empty(cut.FindAll(".task-list-toolbar"));
         Assert.Empty(cut.FindComponents<OmniDropDown<TaskExecutionStatus?>>());
@@ -93,7 +92,7 @@ public class TasksDeepTests : BunitContext
         Assert.EndsWith("/tasks/2", Services.GetRequiredService<NavigationManager>().Uri);
     }
 
-    // === Name and Status header filters replace the search box and status list (recette R-221) ===
+    // Name and Status header filters.
 
     [Fact]
     public async Task NameAndStatusHeaderFilters_AreColumnFilters_WithoutSearchOrStatusParameters()
@@ -123,7 +122,7 @@ public class TasksDeepTests : BunitContext
         }));
     }
 
-    // === Header filters (recette R-212) ===
+    // Header filters.
 
     [Fact]
     public async Task HeaderFilters_AreSentAsColumnFilters_AndTheServerListComesFromTheApi()
@@ -166,7 +165,7 @@ public class TasksDeepTests : BunitContext
     public void Renders_TaskList_WithMarkup()
     {
         var cut = RenderView();
-        cut.WaitForState(() => cut.Markup.Contains("Build"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Build"));
 
         // The stubbed task rows render their names in the grid.
         Assert.Contains("Build", cut.Markup);
@@ -186,7 +185,7 @@ public class TasksDeepTests : BunitContext
             TotalCount = 1
         });
         var cut = Render<TaskListView>();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The task link, then the run and server links of its source.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);

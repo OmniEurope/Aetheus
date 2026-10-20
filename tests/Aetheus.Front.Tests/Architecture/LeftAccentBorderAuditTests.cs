@@ -13,7 +13,7 @@ public class LeftAccentBorderAuditTests
     private static readonly HashSet<string> AllowedStructuralBorders =
     [
         "0",
-        // The run timeline's structural rule, softened to the tile separator token (recette R-055).
+        // The run timeline's structural rule, softened to the tile separator token.
         "1px solid var(--aetheus-tile-separator)",
         "2px dashed var(--omni-color-text-muted)",
         "1px solid var(--omni-color-text-muted, #444)",

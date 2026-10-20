@@ -282,8 +282,8 @@ public class MonitoringRepositoryTests : IDisposable
         Assert.Equal([3, 4], result.Select(metric => metric.CpuPercent));
     }
 
-    /// <summary>Recette R-480: the tile shows ten groups, so ten roots are read with the runs they
-    /// triggered (children and grandchildren), and an older root beyond the ten is not read at all.</summary>
+    /// <summary>The tile shows ten groups, so ten roots are read with the runs they triggered
+    /// (children and grandchildren), and an older root beyond the ten is not read at all.</summary>
     [Fact]
     public async Task R480_RecentRuns_ReadsTheShownGroupsWithTheirDescendants_AndNoOlderRoot()
     {
@@ -313,7 +313,7 @@ public class MonitoringRepositoryTests : IDisposable
         Assert.Equal(result.OrderByDescending(run => run.StartedAt).Select(run => run.Id), result.Select(run => run.Id));
     }
 
-    /// <summary>Recette R-480: a run triggered by a run the caller cannot read is a group of its own.</summary>
+    /// <summary>A run triggered by a run the caller cannot read is a group of its own.</summary>
     [Fact]
     public async Task R480_RecentRuns_AChildOfAnUnreadableParent_IsItsOwnGroup()
     {
@@ -333,7 +333,8 @@ public class MonitoringRepositoryTests : IDisposable
         Assert.Equal([child.Id], result.Select(run => run.Id));
     }
 
-    /// <summary>Recette R-480: the server rows come back as the tile's DTO, online first then by heartbeat.</summary>
+    /// <summary>The server rows come back as the tile's DTO, online first then by
+    /// heartbeat.</summary>
     [Fact]
     public async Task R480_DashboardServers_AreProjected_OnlineFirst_ThenMostRecentlyActive()
     {

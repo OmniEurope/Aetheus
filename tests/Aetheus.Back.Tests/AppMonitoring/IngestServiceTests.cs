@@ -23,6 +23,7 @@ public class IngestServiceTests : IDisposable
     private readonly INotificationService _notifications = Substitute.For<INotificationService>();
     private readonly IAppTelemetryChangePublisher _telemetryChanges = Substitute.For<IAppTelemetryChangePublisher>();
     private readonly RecordingLogger<IngestKeyRejectionLog> _rejectionLog = new();
+    private readonly Microsoft.AspNetCore.Http.HttpContextAccessor _httpContext = new();
 
     public IngestServiceTests()
     {
@@ -37,7 +38,8 @@ public class IngestServiceTests : IDisposable
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero)),
             Substitute.For<ILogger<IngestService>>(), _telemetryChanges,
             new IngestKeyRejectionLog(
-                new FakeTimeProvider(new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero)), _rejectionLog));
+                new FakeTimeProvider(new DateTimeOffset(2026, 1, 10, 12, 0, 0, TimeSpan.Zero)), _rejectionLog),
+            _httpContext);
 
         _db.MonitoredApps.Add(new MonitoredApp
         {
@@ -96,6 +98,23 @@ public class IngestServiceTests : IDisposable
         var warning = Assert.Single(_rejectionLog.Entries);
         Assert.Equal(LogLevel.Warning, warning.Level);
         Assert.Contains(_hasher.Hash("stale-key")[..12], warning.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task R1_87_ARefusedKey_IsReportedWithTheOriginOfTheSender()
+    {
+        var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        context.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.9");
+        context.Request.Headers.UserAgent = "OTel-OTLP-Exporter-dotnet/1.9";
+        context.Request.Path = "/v1/metrics";
+        _httpContext.HttpContext = context;
+
+        Assert.Null(await _service.ResolveAppIdAsync("stale-key", TestContext.Current.CancellationToken));
+
+        var message = Assert.Single(_rejectionLog.Entries).Message;
+        Assert.Contains("203.0.113.9", message, StringComparison.Ordinal);
+        Assert.Contains("OTel-OTLP-Exporter-dotnet/1.9", message, StringComparison.Ordinal);
+        Assert.Contains("/v1/metrics", message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -257,11 +276,9 @@ public class IngestServiceTests : IDisposable
         Assert.False(await _db.AppMetricThresholds.AsNoTracking().Select(t => t.IsBreached).SingleAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>
-    /// Recette R-478: a breach alert still being dispatched does not hold the app's ingest lock, so the
-    /// app's next batch is ingested meanwhile; and that batch, which breaches too, does not alert again
-    /// because the breach was recorded before the lock was released.
-    /// </summary>
+    /// <summary> A breach alert still being dispatched does not hold the app's ingest lock, so the
+    /// app's next batch is ingested meanwhile; and that batch, which breaches too, does not alert
+    /// again because the breach was recorded before the lock was released. </summary>
     [Fact]
     public async Task R478_ASlowAlertDispatch_DoesNotHoldTheAppsNextBatch_NorAlertTwice()
     {

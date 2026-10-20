@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Projects;
 
-/// <summary>
-/// Recette R2-122: one kind of data that deleting a project removes with it. The deletion preview
-/// counts each kind, and the audit entry of the deletion lists the same counts.
-/// </summary>
+/// <summary> One kind of data that deleting a project removes with it. The deletion preview counts
+/// each kind, and the audit entry of the deletion lists the same counts. </summary>
 public enum ProjectDeletionItemKind
 {
     Pipelines = 0,

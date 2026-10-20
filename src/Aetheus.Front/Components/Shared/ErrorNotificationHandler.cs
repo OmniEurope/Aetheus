@@ -11,13 +11,12 @@ public sealed class ErrorNotificationHandler(NotifyHelper toast, IStringLocalize
         HttpStatusCode.Unauthorized // Handled by AuthDelegatingHandler
     ];
 
-    /// <summary>
-    /// Set on a request whose caller reads a 400 itself and shows its reason (the outcome path of
-    /// <c>ApiClientBase</c>). Recette R2-039: a refused launch raised this generic "Error 400" toast and
-    /// the caller's own toast, two red toasts for one refusal. Only the 400 is left to the caller;
-    /// every other failure of such a request is still notified here.
-    /// </summary>
+    /// <summary>Let callers that handle HTTP 400 own its explanation so one refusal does not create
+    /// duplicate toasts; continue notifying other failures through this handler.</summary>
     public static readonly HttpRequestOptionsKey<bool> CallerHandlesBadRequest = new("Aetheus.CallerHandlesBadRequest");
+
+    /// <summary>Same for HTTP 409: the caller explains the conflict in place (a dialog that stays open).</summary>
+    public static readonly HttpRequestOptionsKey<bool> CallerHandlesConflict = new("Aetheus.CallerHandlesConflict");
 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
@@ -25,8 +24,10 @@ public sealed class ErrorNotificationHandler(NotifyHelper toast, IStringLocalize
         var response = await base.SendAsync(request, cancellationToken);
 
         var loginRequest = request.RequestUri?.AbsolutePath.EndsWith("/api/auth/login", StringComparison.OrdinalIgnoreCase) == true;
-        var handledByCaller = response.StatusCode == HttpStatusCode.BadRequest
-            && request.Options.TryGetValue(CallerHandlesBadRequest, out var handled) && handled;
+        var handledByCaller = (response.StatusCode == HttpStatusCode.BadRequest
+                && request.Options.TryGetValue(CallerHandlesBadRequest, out var handled) && handled)
+            || (response.StatusCode == HttpStatusCode.Conflict
+                && request.Options.TryGetValue(CallerHandlesConflict, out var conflictHandled) && conflictHandled);
         // The backend refuses everything but the password change while one is forced (SITE-SEC-001); the
         // layout already holds the user on that screen, so such a refusal is expected, not an error to show.
         var passwordChangePending = response.Headers.Contains("X-Aetheus-Password-Change-Required");

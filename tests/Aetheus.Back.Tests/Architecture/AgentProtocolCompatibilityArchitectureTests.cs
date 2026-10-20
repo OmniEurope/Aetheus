@@ -58,31 +58,36 @@ public sealed class AgentProtocolCompatibilityArchitectureTests
         Assert.Contains(AgentCapabilities.AiExecution, AgentCapabilities.SoftwareCapabilities);
     }
 
+    /// <summary>The retained N-1 agent is extracted and exercised by the <c>extract-agent-release</c>
+    /// and <c>verify-nminus1-agent-contract</c> functions (ports of the deleted
+    /// <c>extract-agent-release-from-image.sh</c> and <c>verify-nminus1-agent-contract.sh</c>), and the
+    /// live manifest generator still declares the protocol 1-2 bridge. Their behaviour is tested in
+    /// <c>ExtractAgentReleaseFunctionTests</c> and <c>VerifyNMinusOneAgentContractFunctionTests</c>; this
+    /// keeps the checks themselves from being removed.</summary>
     [Fact]
     public void ReleaseScripts_RetainAndExerciseAnImmutableNMinusOneAgentArtifact()
     {
         var root = FindRepoRoot();
-        var proof = File.ReadAllText(
-            Path.Combine(root, "deploy", "scripts", "verify-nminus1-agent-contract.sh"));
-        var extract = File.ReadAllText(
-            Path.Combine(root, "deploy", "scripts", "extract-agent-release-from-image.sh"));
+        string Function(string name) => File.ReadAllText(
+            Path.Combine(root, "src", "Aetheus.Agent.Core", "Functions", name));
+        var manifest = Function("AgentReleaseManifest.cs");
+        var extract = Function("AgentReleaseManifestCheck.cs");
+        var proof = Function("VerifyNMinusOneAgentContractFunction.cs");
+        var session = Function("AgentContractSession.cs");
         var generateShell = File.ReadAllText(
             Path.Combine(root, "deploy", "scripts", "generate-agent-release-manifest.sh"));
-        var generatePowerShell = File.ReadAllText(
-            Path.Combine(root, "deploy", "scripts", "generate-agent-release-manifest.ps1"));
 
-        Assert.Contains("agent-release-manifest.json", extract, StringComparison.Ordinal);
-        Assert.Contains("archive.sha256", extract, StringComparison.Ordinal);
-        Assert.Contains("manifest.protocolVersion !== 2", extract, StringComparison.Ordinal);
-        Assert.Contains("protocolPolicy === \"upgrade-bridge\"", extract, StringComparison.Ordinal);
-        Assert.Contains("protocolPolicy === \"historical-compatible\"", extract, StringComparison.Ordinal);
-        Assert.Contains("manifest.minimumSupportedProtocol === 1", extract, StringComparison.Ordinal);
-        Assert.Contains("manifest.minimumSupportedProtocol === 2", extract, StringComparison.Ordinal);
-        Assert.Contains("manifest.protocolVersion !== 2", proof, StringComparison.Ordinal);
+        Assert.Contains("FileName = \"agent-release-manifest.json\"", manifest, StringComparison.Ordinal);
+        Assert.Contains("SHA256.HashData", extract, StringComparison.Ordinal);
+        Assert.Contains("Number(manifest, \"protocolVersion\") != 2", extract, StringComparison.Ordinal);
+        Assert.Contains("protocolPolicy == \"upgrade-bridge\"", extract, StringComparison.Ordinal);
+        Assert.Contains("protocolPolicy == \"historical-compatible\"", extract, StringComparison.Ordinal);
+        Assert.Contains("minimum == 1 && maximum == 2", extract, StringComparison.Ordinal);
+        Assert.Contains("minimum == 2 && maximum == 2", extract, StringComparison.Ordinal);
+        Assert.Contains("IsNumber(root, \"protocolVersion\", 2)", proof, StringComparison.Ordinal);
         Assert.Contains("'  \"minimumSupportedProtocol\": 1,'", generateShell, StringComparison.Ordinal);
-        Assert.Contains("minimumSupportedProtocol = 1", generatePowerShell, StringComparison.Ordinal);
-        Assert.Contains("did not enroll and heartbeat", proof, StringComparison.Ordinal);
-        Assert.Contains("claim/start/complete proof", proof, StringComparison.Ordinal);
+        Assert.Contains("did not enroll and heartbeat", session, StringComparison.Ordinal);
+        Assert.Contains("claim/start/complete proof", session, StringComparison.Ordinal);
         Assert.Contains("result publication", proof, StringComparison.Ordinal);
     }
 

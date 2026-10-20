@@ -3,11 +3,8 @@ using Aetheus.Back.Components.Pipelines;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Lot 11.5: a pipeline definition that carries a program instead of a call. The warning is shown in
-/// the launch dialog of every project, so it must fire on what is genuinely unmaintainable (a long
-/// block, an embedded heredoc) and stay quiet on an ordinary step, or it will be ignored.
-/// </summary>
+/// <summary>Warns about long embedded programs and heredocs while leaving ordinary pipeline steps
+/// quiet.</summary>
 public class PipelineInlineLogicWarningTests
 {
     private static List<string> WarningsFor(string shell)

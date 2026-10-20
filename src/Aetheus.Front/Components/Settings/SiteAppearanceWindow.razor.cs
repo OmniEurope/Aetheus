@@ -2,14 +2,12 @@
 
 namespace Aetheus.Front.Components.Settings;
 
-/// <summary>
-/// Recette R-390: the site's appearance in OE's <see cref="OmniAppearanceWindow"/>, opened from the user
-/// menu. It reads the stored choices when it opens; each change is stored and repainted at once by
-/// <see cref="SiteAppearanceState"/>, the same source the settings page uses.
-/// </summary>
+/// <summary> The site's appearance in OE's <see cref="OmniAppearanceWindow"/>, opened from the user
+/// menu. It reads the user's appearance when it opens; each change is stored and repainted at once by
+/// OE's <see cref="OmniAppearanceState"/>, the same source the settings page uses. </summary>
 public partial class SiteAppearanceWindow : IDisposable
 {
-    [Inject] private SiteAppearanceState Appearance { get; set; } = default!;
+    [Inject] private OmniAppearanceState Appearance { get; set; } = default!;
 
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
@@ -17,7 +15,7 @@ public partial class SiteAppearanceWindow : IDisposable
 
     protected override void OnInitialized() => Appearance.Changed += OnAppearanceChanged;
 
-    /// <summary>Opens the window on the choices stored in this browser.</summary>
+    /// <summary>Opens the window on the user's appearance.</summary>
     public async Task OpenAsync()
     {
         await Appearance.LoadAsync();

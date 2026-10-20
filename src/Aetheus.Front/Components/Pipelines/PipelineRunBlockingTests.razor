@@ -13,7 +13,7 @@
                 @if (test.Producer is { } producer)
                 {
                     <span>@string.Format(L["CandidateBlockingTestSource"], test.Key, producer.StepName, producer.RunId, producer.PipelineName)</span>
-                    <OmniLink Href="@LogsHref(producer)" Class="run-blocking-test-logs">@L["CandidateBlockingTestOpenLogs"]</OmniLink>
+                    <OmniLink Href="@LogsHref(producer, ViewingRunId)" Class="run-blocking-test-logs">@L["CandidateBlockingTestOpenLogs"]</OmniLink>
                     @if (producer.FailedTests.Count > 0)
                     {
                         <div class="run-blocking-test-failures">@L["CandidateBlockingFailedTests"]: <strong>@string.Join(", ", producer.FailedTests)</strong></div>

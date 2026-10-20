@@ -20,8 +20,8 @@
     }
     else if (Listening)
     {
-        @* Recette R-401: the search reads on the page's own surface (no dark panel), the countdown under it,
-           and stopping the search sits below the panel instead of inside it. *@
+        @* The search reads on the page's own surface (no dark panel), the countdown under it, and
+           stopping the search sits below the panel instead of inside it. *@
         <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center"
                    Class="wizard-polling" role="status">
             <OmniProgressBar Value="@Percent" ShowValue="false" Shape="OmniProgressShape.Circular" Label="@L["WizardPolling"]" />

@@ -6,7 +6,7 @@
 ARG APP_VERSION=0.0.0
 ARG CACHE_COHORT=shared
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0.100@sha256:c7445f141c04f1a6b454181bd098dcfa606c61ba0bd213d0a702489e5bd4cd71 AS build-source
+FROM mcr.microsoft.com/dotnet/sdk:10.0.402@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS build-source
 ARG CACHE_COHORT
 WORKDIR /src
 
@@ -21,7 +21,7 @@ COPY Directory.Build.targets .
 COPY Directory.Packages.props .
 COPY NuGet.config .
 COPY scanner-manifest.json /scanner-manifest.json
-COPY .aetheus/security-rules/opengrep/aetheus-security.yml /.aetheus/security-rules/opengrep/aetheus-security.yml
+COPY .aetheus/security-rules/opengrep/ /.aetheus/security-rules/opengrep/
 COPY src/Aetheus.Shared/Aetheus.Shared.csproj Aetheus.Shared/
 COPY src/Aetheus.Analyzers/Aetheus.Analyzers.csproj Aetheus.Analyzers/
 COPY src/Aetheus.Telemetry/Aetheus.Telemetry.csproj Aetheus.Telemetry/
@@ -50,18 +50,59 @@ RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sha
 # Install the EF tool BEFORE copying sources: source-only rebuilds keep this
 # layer cached instead of re-downloading the tool on every deploy.
 RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sharing=locked \
-    dotnet tool install --global dotnet-ef --version 10.0.12
+    dotnet tool install --global dotnet-ef --version 10.0.13
 ENV PATH="${PATH}:/root/.dotnet/tools"
 
 ARG APP_VERSION
 ARG SOURCE_COMMIT
+
+# aetheus-fn (PLAN-002 lot 1.0g): the pipeline functions run inside a step container, one binary per
+# Linux C library. The agent looks for them at <agent dir>/aetheus-fn/<rid>/aetheus-fn.
+#
+# Built ONCE here and copied into both agent packages (the Linux tar.gz and, because Docker Desktop
+# runs Linux containers, the Windows zip). Each package used to publish both binaries itself: four
+# trimmed, self-contained, single-file publishes of the same project. The publish options and the
+# output are unchanged (same sha256 for every file of both archives, measured), only the number of
+# times they run.
+#
+# The two runtime identifiers stay in ONE stage, one after the other, on purpose: every stage that
+# mounts the `nuget-*` cache with sharing=locked holds that mount for the whole RUN, so BuildKit runs
+# those RUNs one at a time whatever the stage graph says (measured locally, two RUNs on one locked
+# mount: 20.7 s then 41.1 s, the second including its wait). Splitting the runtime identifiers into
+# two stages would only move the wait.
+#
+# RunAnalyzers=false on every agent publish below, like the host publish of Aetheus.Back and the
+# ef-bundle stage: the analyzers' verdict belongs to the CI Compile stage, which analyzes this same
+# source. Measured on 2026-10-19 (Release, AnalysisModeSecurity=All): Aetheus.Agent.Core alone took
+# 132-158 s to compile with the analyzers and 6 s without, and every agent stage compiled it; the
+# Aetheus.Agent.Core.dll and Aetheus.Shared.dll produced are byte-identical (same sha256) either way,
+# since analyzers add diagnostics and never IL.
+FROM build-source AS aetheus-fn-build
+COPY src/Aetheus.Shared/ Aetheus.Shared/
+COPY src/Aetheus.Agent.Core/ Aetheus.Agent.Core/
+COPY src/Aetheus.Agent.Functions.Cli/ Aetheus.Agent.Functions.Cli/
+COPY deploy/scripts/zap-active-automation.sh /deploy/scripts/zap-active-automation.sh
+COPY deploy/scripts/publish-observability-package.sh /deploy/scripts/publish-observability-package.sh
+COPY deploy/scripts/promote-observability-packages.sh /deploy/scripts/promote-observability-packages.sh
+ARG APP_VERSION
+RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sharing=locked \
+    for rid in linux-x64 linux-musl-x64; do \
+        dotnet publish Aetheus.Agent.Functions.Cli/Aetheus.Agent.Functions.Cli.csproj \
+            -c Release -r "$rid" \
+            -o "/aetheus-fn/$rid" \
+            /p:Version=${APP_VERSION} /p:RunAnalyzers=false \
+        && test -f "/aetheus-fn/$rid/aetheus-fn" \
+        && rm -f "/aetheus-fn/$rid"/*.pdb \
+        && chmod 755 "/aetheus-fn/$rid/aetheus-fn" \
+        || exit 1; \
+    done
 
 FROM build-source AS agent-linux-build
 COPY src/Aetheus.Shared/ Aetheus.Shared/
 COPY src/Aetheus.Agent.Core/ Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/ Aetheus.Agent.Linux/
 COPY deploy/scripts/install-agent-linux.sh deploy/scripts/install-agent-linux.sh
-# R-249: the host configuration templates install-agent-linux.sh renders, shipped next to it.
+# Ships host-configuration templates beside the installer so it can render the agent configuration.
 COPY deploy/agent-host-config/ deploy/agent-host-config/
 COPY deploy/scripts/zap-active-automation.sh /deploy/scripts/zap-active-automation.sh
 COPY deploy/scripts/publish-observability-package.sh /deploy/scripts/publish-observability-package.sh
@@ -71,8 +112,9 @@ RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sha
     dotnet publish Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj \
         -c Release -r linux-x64 --self-contained true \
         -o /tmp/agent-linux \
-        /p:Version=${APP_VERSION} \
-    && sed -i 's/\r$//' deploy/scripts/install-agent-linux.sh \
+        /p:Version=${APP_VERSION} /p:RunAnalyzers=false
+COPY --from=aetheus-fn-build /aetheus-fn/ /tmp/agent-linux/aetheus-fn/
+RUN sed -i 's/\r$//' deploy/scripts/install-agent-linux.sh \
     && chmod +x deploy/scripts/install-agent-linux.sh \
     && cp deploy/scripts/install-agent-linux.sh /tmp/agent-linux/install-agent-linux.sh \
     && find deploy/agent-host-config -type f -exec sed -i 's/\r$//' {} + \
@@ -91,13 +133,15 @@ COPY deploy/scripts/publish-observability-package.sh /deploy/scripts/publish-obs
 COPY deploy/scripts/promote-observability-packages.sh /deploy/scripts/promote-observability-packages.sh
 ARG APP_VERSION
 RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sharing=locked \
-    --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
     dotnet publish Aetheus.Agent.Windows/Aetheus.Agent.Windows.csproj \
         -c Release -r win-x64 --self-contained true \
         -o /tmp/agent-windows \
-        /p:Version=${APP_VERSION} \
-    && cp deploy/scripts/install-agent-windows.ps1 /tmp/agent-windows/install-agent-windows.ps1 \
+        /p:Version=${APP_VERSION} /p:RunAnalyzers=false
+# Docker Desktop runs Linux containers, so a Windows agent mounts the same Linux aetheus-fn binaries.
+COPY --from=aetheus-fn-build /aetheus-fn/ /tmp/agent-windows/aetheus-fn/
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    cp deploy/scripts/install-agent-windows.ps1 /tmp/agent-windows/install-agent-windows.ps1 \
     && apt-get update && apt-get install -y --no-install-recommends zip \
     && mkdir -p /agent-release \
     && (cd /tmp/agent-windows && zip -r /agent-release/aetheus-agent-win-x64-v${APP_VERSION}.zip .) \
@@ -163,14 +207,20 @@ RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sha
         -- \
         --design-connection "Host=localhost;Database=aetheus_design;Username=build"
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.12@sha256:6a94333d37514e385650a3c81a55e5350b67253dbe136e9cf17e499c35606a8c AS runtime
+# Not part of the image. The release-fast pipelines build THIS target while their host publish runs, so
+# the two slowest image inputs (the EF bundle and the agent packages, none of which reads
+# .pipeline-publish/) are already in the builder's cache when the full build starts. It only gathers
+# the outputs of stages the image already builds, so warming it changes nothing the image contains.
+# It must stay above `runtime`: a bare build takes the LAST stage of the file as its target.
+FROM scratch AS release-inputs-warm
+COPY --from=ef-bundle /app/efbundle /efbundle
+COPY --from=agent-release /agent-release/ /agent-release/
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.13@sha256:d5633778c754e89a386882eddf8dbee6942447a8a4b8267c19cf1e1158d0b0ac AS runtime
 WORKDIR /app
 
-# Static layers (apt, writable dirs) BEFORE the build-output COPY: placed after
-# it, they were invalidated - and apt re-run - on every source change.
-# curl is required by the compose healthcheck on /health/live.
-# libssl3t64 is named with openssl so apt takes the security candidate even when the base image lags
-# the Ubuntu fix (recette R2-028, CVE-2026-84782).
+# Installs reusable runtime dependencies before copying build output, including curl for health
+# checks and the OpenSSL security packages. See docs/self-deploy-guide.md.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 git openssl libssl3t64 curl \
     && rm -rf /var/lib/apt/lists/*

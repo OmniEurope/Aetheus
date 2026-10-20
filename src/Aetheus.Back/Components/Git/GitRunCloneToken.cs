@@ -63,10 +63,8 @@ internal static class GitRunCloneToken
             return null;
         }
 
-        // Recette R-464: a token is accepted under either configured secret. While a blue-green switch
-        // moves from the Auth:EncryptionKey fallback to a dedicated RunTokenKey, the two colours sign
-        // with different secrets; each must still accept what the other minted. Both are server
-        // secrets, so this widens nothing an outsider can forge.
+        // Accept signatures under either configured server secret so both blue-green colours can
+        // validate tokens during key configuration transitions.
         foreach (var secret in GitCloneTokenSecrets.Validation(config))
         {
             if (CryptographicOperations.FixedTimeEquals(presented, Compute(secret, runId, projectId, expiryUnix)))

@@ -11,7 +11,7 @@ public interface IPluginRepository
         int page, int pageSize, CancellationToken ct = default,
         IReadOnlyList<GridFilter>? columnFilters = null);
 
-    /// <summary>Recette R-224: the distinct authors of the registered plugins.</summary>
+    /// <summary>The distinct authors of the registered plugins.</summary>
     Task<List<string>> GetAuthorsAsync(CancellationToken ct = default);
     Task<PluginRegistration?> FindAsync(int id, CancellationToken ct = default);
     Task<PluginRegistration?> FindByNameVersionAsync(string name, string version, CancellationToken ct = default);

@@ -7,7 +7,6 @@ public partial class AddAgent : IAsyncDisposable
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
-    [Inject] private ClipboardService Clipboard { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private IConfiguration Config { get; set; } = default!;
@@ -25,7 +24,6 @@ public partial class AddAgent : IAsyncDisposable
     private int _tokenExpirationHours = 24;
     private RegistrationTokenDto? _generatedToken;
     private bool _tokenGenerating;
-    private bool _tokenCopied;
 
     // Real-time Verify-step detection (SignalR + polling + registration-token fast-path + countdown)
     // lives in a collaborator so this page stays within the 600-line budget. See AgentDetectionMonitor.
@@ -43,7 +41,8 @@ public partial class AddAgent : IAsyncDisposable
     // Deployment agent (cross-agent deploy target) is opt-in OFF by default: most onboarded hosts are
     // CI/CD runners / managed servers, not deploy targets. Operators tick it for a deployment host.
     private bool _includeDeploymentAgent;
-    private bool _includePatchManagement;
+    // R3-57: patch-manage is ticked by default like the other capabilities (the operator unticks it).
+    private bool _includePatchManagement = true;
     private bool _includeFirewallManagement;
     private bool _includeDocker = true;
     private bool _devModeInsecureTls;
@@ -59,16 +58,6 @@ public partial class AddAgent : IAsyncDisposable
     private string ServerBaseUrl => string.IsNullOrEmpty(_serverBaseUrl)
         ? (Config["ApiBaseUrl"] ?? DefaultApiBaseUrl).TrimEnd('/')
         : _serverBaseUrl;
-
-    private async Task CopyTokenAsync()
-    {
-        if (_generatedToken is null) return;
-        await Clipboard.CopyAsync(_generatedToken.Token, L["CopiedToClipboard"]);
-        _tokenCopied = true;
-        RefreshSteps();
-    }
-
-    internal bool HasCopiedToken => _tokenCopied;
 
     internal List<string> GetAllCommands()
     {
@@ -184,8 +173,8 @@ public partial class AddAgent : IAsyncDisposable
         RefreshSteps();
     }
 
-    /// <summary>Recette R1-19: the page that sent the user here to add a server (the pipeline setup
-    /// wizard's summary, with its choices). Done, Cancel and Back return to it when it is local.</summary>
+    /// <summary>The page that sent the user here to add a server (the pipeline setup wizard's
+    /// summary, with its choices). Done, Cancel and Back return to it when it is local.</summary>
     [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
 
     private string ExitHref => LocalReturnUrl.Validated(ReturnUrl) ?? "/servers";
@@ -230,7 +219,7 @@ public partial class AddAgent : IAsyncDisposable
             inner.AddContent(1, L["WizardPlatformDescription"]);
             inner.CloseElement();
 
-            // Recette R-399: one choice among two OE selectable cards, in a named radio group.
+            // One choice among two OE selectable cards, in a named radio group.
             inner.OpenComponent<OmniStack>(2);
             inner.AddAttribute(3, nameof(OmniStack.Gap), OmniSpacing.Medium);
             inner.AddAttribute(4, "role", "radiogroup");
@@ -257,8 +246,8 @@ public partial class AddAgent : IAsyncDisposable
             await _wizard.NextStep();
         }
 
-        // Recette R-399: OE's OmniSelectableCard. Picking a card, even the chosen one again, moves on to
-        // the next step; the choice shows by the accent frame and tint alone, no check mark.
+        // OE's OmniSelectableCard. Picking a card, even the chosen one again, moves on to the next
+        // step; the choice shows by the accent frame and tint alone, no check mark.
         builder.OpenComponent<OmniSelectableCard>(seq);
         builder.AddComponentParameter(seq + 1, nameof(OmniSelectableCard.Title), label);
         builder.AddComponentParameter(seq + 2, nameof(OmniSelectableCard.Value), isSelected);

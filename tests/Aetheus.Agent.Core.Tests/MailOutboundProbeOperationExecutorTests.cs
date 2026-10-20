@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>Recette R2-080: the outbound port 25 prerequisite, without any real socket.</summary>
+/// <summary>The outbound port 25 prerequisite, without any real socket.</summary>
 public sealed class MailOutboundProbeOperationExecutorTests
 {
     private const string Host = MailOutboundProbe.Target;

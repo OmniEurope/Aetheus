@@ -46,10 +46,8 @@ public sealed class PipelineRunApprovalController(
             var approvals = await api.Pipelines.GetApprovalsAsync(run.Id, ct);
             Pending = approvals.FirstOrDefault(a => a.Status == ApprovalStatus.Pending);
             LoadFailed = false;
-            // R-370: a run can wait on two approvals in turn (the pipeline's, then the environment's), so
-            // the instructions follow the approval shown, and only an environment approval has any.
-            // Recette R1-24: they come with the approval itself, so an approver who cannot read the
-            // environment still sees them, without a second request for the environment.
+            // Instructions belong to the approval being shown and accompany its response, so
+            // environment read access and an additional request are unnecessary.
             EnvironmentInstructions = Pending is { Scope: ApprovalScope.Environment }
                 ? Pending.EnvironmentInstructions
                 : null;
@@ -62,9 +60,9 @@ public sealed class PipelineRunApprovalController(
         WaitingWithoutApproval = Pending is null;
     }
 
-    /// <summary>Recette R2-045: the run page reads a waiting run's approval before its first render, so
-    /// the banner is there from the start instead of arriving later and pushing the page down. Returns
-    /// whether it loaded (the page then skips the load it makes behind the first render).</summary>
+    /// <summary>The run page reads a waiting run's approval before its first render, so the banner
+    /// is there from the start instead of arriving later and pushing the page down. Returns whether
+    /// it loaded (the page then skips the load it makes behind the first render).</summary>
     public async Task<bool> LoadIfWaitingAsync(PipelineRunDto? run, CancellationToken ct = default)
     {
         if (run?.Status != PipelineStatus.WaitingForApproval) return false;
@@ -72,12 +70,9 @@ public sealed class PipelineRunApprovalController(
         return true;
     }
 
-    /// <summary>
-    /// Recette R2-116: a refused decision says why (the backend's reason, or the status it answered), and
-    /// whatever the answer the banner is read again, here and in the top bar: on release-fast #2555 the
-    /// banner kept offering an approval already decided, and every click on it failed the same silent way.
-    /// The comment is kept on a refusal, it is the operator's typed input.
-    /// </summary>
+    /// <summary>A refused decision preserves the operator's comment and exposes the backend reason.
+    /// Both approval banners reload after every response to reflect the current decision
+    /// state.</summary>
     public async Task DecideAsync(ApprovalStatus decision)
     {
         if (Pending is null || Deciding) return;

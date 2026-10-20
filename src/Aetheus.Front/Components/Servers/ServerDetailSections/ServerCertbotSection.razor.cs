@@ -11,11 +11,11 @@ public partial class ServerCertbotSection : ServerActionSectionBase
 
     private CertbotDataDto Certbot => Server.Certbot;
 
-    // Recette R-210: the renewal filter lists the translated conventions.
+    // The renewal filter lists the translated conventions.
     private Func<string, string>? _conventionFilterText;
     private Func<string, string> ConventionFilterText => _conventionFilterText ??= GridFilterText.ForEnum<CertbotRenewalConvention>(L);
 
-    // Recette R-227: each heartbeat brings a new certificate list; certificates that were not there read bold.
+    // Each heartbeat brings a new certificate list; certificates that were not there read bold.
     private OmniDataGrid<CertbotCertificateDto>? _grid;
     private readonly LiveGridRows _liveRows = new();
 
@@ -33,7 +33,7 @@ public partial class ServerCertbotSection : ServerActionSectionBase
     // ExpiryDate deserializes as Kind=Local in the WASM client, so compare against DateTime.Now.
     private static bool IsExpiringSoon(CertbotCertificateDto cert) => cert.ExpiryDate <= DateTime.Now.AddDays(30);
 
-    // PLAN-007: last renewal rehearsal and per-certificate convention verdict, as the agent reported them.
+    // The agent's last renewal rehearsal and per-certificate convention verdict.
     private OmniTone RenewalCheckStyle => Certbot.RenewalCheckSucceeded switch
     {
         true => OmniTone.Success,
@@ -71,8 +71,19 @@ public partial class ServerCertbotSection : ServerActionSectionBase
             {
                 Action = action,
                 CertificateName = certName
-            }));
+            }), FollowTitle(action, certName));
     }
+
+    // Recette R3-37: what the follower calls the task this action queues.
+    private string FollowTitle(CertbotAction action, string? certName) => action switch
+    {
+        CertbotAction.Normalize => L["CertbotNormalize"],
+        CertbotAction.RenewalCheck => L["CertbotRenewalCheck"],
+        CertbotAction.RenewAll => L["RenewAllCerts"],
+        CertbotAction.Renew => $"{L["Renew"]} {certName}",
+        CertbotAction.RevokeAndDelete => $"{L["Revoke"]} {certName}",
+        _ => L[action.ToString()]
+    };
 
     private async Task OpenCreateDialog()
     {
@@ -80,11 +91,11 @@ public partial class ServerCertbotSection : ServerActionSectionBase
         if (BlockedByOfflineAgent()) return;
         await Dialog.OpenAsync<ServerCertbotCreateDialog>(
             L["NewCertificate"],
-            new Dictionary<string, object?> { { "ServerId", ServerId } },
+            new Dictionary<string, object?> { { "ServerId", ServerId }, { "Follower", _follower } },
             new OmniDialogOptions { Width = "32rem", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
     }
 
 
-    /// <summary>Recette R2-124: the export writes the domains as the cell does.</summary>
+    /// <summary>The export writes the domains as the cell does.</summary>
     private static readonly Func<CertbotCertificateDto, object?> DomainsExport = certificate => string.Join(", ", certificate.Domains);
 }

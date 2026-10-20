@@ -3,15 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// Recette R2-144 (finding #1238): the quality pipeline runs <c>dotnet format</c>, which reports every
-/// file whose namespace <c>using</c> directives are out of order (rule IMPORTS). The pre-commit hook only
-/// checks whitespace, so a directive added at the top of a file (<c>using Aetheus.Tests.Shared;</c> above
-/// <c>using System...;</c>) reached the nightly as five new findings. This guard applies the same order
-/// as <c>.editorconfig</c> (<c>dotnet_sort_system_directives_first = true</c>): <c>System</c> namespaces
-/// first, then every name compared segment by segment, ignoring case, as Roslyn's organizer does.
-/// Static and alias directives are left out: they are ordered in their own groups.
-/// </summary>
+/// <summary>Using directives follow editorconfig and Roslyn ordering: System first, then
+/// case-insensitive segment ordering. Static and alias directives belong to separate
+/// groups.</summary>
 public sealed partial class UsingDirectiveOrderAuditTests
 {
     [GeneratedRegex(@"^using\s+([A-Za-z_][\w.]*)\s*;\s*$")]

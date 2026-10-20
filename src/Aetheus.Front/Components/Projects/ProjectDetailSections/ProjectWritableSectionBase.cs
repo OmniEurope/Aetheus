@@ -23,7 +23,7 @@ public abstract class ProjectWritableSectionBase : ComponentBase, IDisposable
 
     private int? _loadedProjectId;
 
-    // Recette R-321: a parent re-render that passes the same project does not load the section again.
+    // A parent re-render that passes the same project does not load the section again.
     protected override Task OnParametersSetAsync()
     {
         if (_loadedProjectId == ProjectId)

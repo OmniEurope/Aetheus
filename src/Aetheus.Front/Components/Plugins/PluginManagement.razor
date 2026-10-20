@@ -40,7 +40,7 @@
             <OmniDataGridColumn TItem="PluginRegistrationDto" Title="@L["Actions"]" Width="160px" Sortable="false" Filterable="false" >
                 <Template Context="plugin">
                     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => TogglePlugin(plugin))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => TogglePlugin(plugin))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => UnregisterPlugin(plugin.Id))" title="@L["Unregister"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                     </OmniStack>
                 </Template>

@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>
-/// The Docker section of a server's detail page. Every tab is now its own component; what stays here
-/// is what no single tab can own: the auto-refresh toggle (R-181: no manual Refresh any more, the
-/// inventory follows the heartbeats pushed through ServerDetailLoader), the prune dialog that
-/// spans all resource kinds, the component lifetime, and the SignalR entry point that forwards task
-/// output to whichever tab was waiting for it.
-/// </summary>
+/// <summary>Coordinates Docker tabs, shared prune confirmation and component lifetime, forwarding
+/// task output to the waiting tab.</summary>
 public partial class ServerDockerSection : IAsyncDisposable
 {
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -26,6 +21,7 @@ public partial class ServerDockerSection : IAsyncDisposable
     private bool _disposed;
 
     private bool _pruning;
+    private ServerTaskFollower? _follower;
 
     private bool _dockerInitialLoaded;
 
@@ -59,8 +55,10 @@ public partial class ServerDockerSection : IAsyncDisposable
     public void HandleTaskCompleted(TaskCompletedNotification notification)
     {
         if (notification.ServerId != ServerId) return;
-        if (notification.Output is not null)
-            DispatchTaskOutput(notification.TaskName, notification.Output);
+        // Recette R3-34: the notification carries no output, so the text a tab waits for is read from the
+        // task's log; a failed task still reaches the tab, flagged, so it can say why.
+        if (notification.TaskName.StartsWith("Docker", StringComparison.OrdinalIgnoreCase))
+            _ = InvokeAsync(() => DispatchTaskOutputAsync(notification));
 
         // HTC5: HandleTaskCompleted is invoked from the SignalR callback (outside the render loop),
         // so marshal the re-render back onto the renderer's sync context - as the Apache/Mail/Services
@@ -72,10 +70,17 @@ public partial class ServerDockerSection : IAsyncDisposable
     /// Hands the raw task output to every tab that consumes any; each decides whether it was waiting
     /// for this one. The parent deliberately knows nothing about task names.
     /// </summary>
-    private void DispatchTaskOutput(string taskName, string output)
+    private async Task DispatchTaskOutputAsync(TaskCompletedNotification notification)
     {
-        _containersTab?.HandleTaskOutput(taskName, output);
-        _composeTab?.HandleTaskOutput(taskName, output);
+        string output;
+        try { output = await ServerTaskOutputLoader.ReadAsync(Api, notification.TaskId); }
+        catch (HttpRequestException) { output = L["TaskOutputUnavailable"]; }
+        var failed = notification.Status != TaskExecutionStatus.Success;
+        // A successful task that wrote nothing has nothing to show: the tabs keep what they display.
+        if (!failed && string.IsNullOrEmpty(output)) return;
+        _containersTab?.HandleTaskOutput(notification.TaskName, output);
+        _composeTab?.HandleTaskOutput(notification.TaskName, output, failed, notification.TaskId);
+        StateHasChanged();
     }
 
     // SITE-OFFLINE-001: a prune is an agent task.
@@ -94,6 +99,8 @@ public partial class ServerDockerSection : IAsyncDisposable
     private async Task PruneAsync(bool containers, bool images, bool volumes)
     {
         _pruning = true;
+        // Recette R3-37: the follower shows what becomes of the task, in place of a lone "queued" toast.
+        _follower?.Expect(L["DockerPrune"]);
         // finally, not a trailing assignment: PruneDockerAsync reaches the network without catching, so
         // an HttpRequestException used to leave the flag stuck at true and the button disabled until the
         // component was rebuilt.
@@ -107,8 +114,14 @@ public partial class ServerDockerSection : IAsyncDisposable
             }
             else
             {
+                _follower?.Forget();
                 Toast.Error("DockerPrune", "DockerPruneFailed");
             }
+        }
+        catch (HttpRequestException)
+        {
+            _follower?.Forget();
+            throw;
         }
         finally
         {

@@ -18,7 +18,7 @@ public partial class ServerProjectsSection
     private Aetheus.Front.Components.Shared.AetheusDataGrid<ProjectDto>? _grid;
     private Func<string, string>? _statusText;
 
-    // Recette R-210: what the Status header filter shows for each state.
+    // What the Status header filter shows for each state.
     private Func<string, string> StatusText => _statusText ??= GridFilterText.ForEnum<ProjectStatus>(L);
 
     protected override async Task OnParametersSetAsync()
@@ -31,7 +31,7 @@ public partial class ServerProjectsSection
         if (_grid is not null) await _grid.Reload();
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<ProjectDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -45,7 +45,7 @@ public partial class ServerProjectsSection
         var generation = _loadGeneration;
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, sortDescending) = GetSort(args);
-        // Recette R-210 / R-224: the header filters, applied by the API.
+        // The header filters, applied by the API.
         var filters = args.ToApiFilters();
         _loading = true;
         try

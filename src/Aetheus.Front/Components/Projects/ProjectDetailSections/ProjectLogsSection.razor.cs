@@ -4,11 +4,13 @@ namespace Aetheus.Front.Components.Projects.ProjectDetailSections;
 
 public partial class ProjectLogsSection : ProjectPagedSectionBase<TaskLogDto>
 {
+    [Inject] private OmniDialogService Dialog { get; set; } = default!;
+
     private PaginatedResult<TaskLogDto>? _result;
     protected override string DefaultSortBy => "Timestamp";
     protected override bool DefaultSortDescending => true;
 
-    // Recette R-212: the Level header filter is a checkable list of every log level.
+    // The Level header filter is a checkable list of every log level.
     private Func<string, string>? _levelText;
     private Func<string, string> LevelText => _levelText ??= GridFilterText.ForEnum<TaskLogLevel>(L);
 
@@ -30,6 +32,9 @@ public partial class ProjectLogsSection : ProjectPagedSectionBase<TaskLogDto>
     protected override Task<PaginatedResult<TaskLogDto>> ReadPageAsync(
         int projectId, int page, int pageSize, string sortBy, bool sortDescending, IReadOnlyList<GridFilter> filters) =>
         Api.Projects.GetProjectLogsAsync(projectId, page, pageSize, sortBy, sortDescending, filters: filters);
+
+    // Recette R3-35: clicking a line opens that exact entry.
+    private Task OpenEntryAsync(TaskLogDto log) => Logs.LogEntryDialog.OpenAsync(Dialog, L, log.Message);
 
     private static OmniTone GetLevelBadge(TaskLogLevel level) => DisplayFormatting.TaskLogBadge(level);
 }

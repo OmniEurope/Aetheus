@@ -38,7 +38,7 @@ public class MonitoringServiceTests
         Assert.Equal(1, result.OfflineServers);
         Assert.Equal(5, result.PendingTasks);
         Assert.Equal(2, result.RunningPipelines);
-        // The tile badge counts every readable project, not only the ten recent ones listed (recette R-068).
+        // The tile badge counts every readable project, not only the ten recent ones listed.
         Assert.Equal(14, result.TotalProjects);
         Assert.Equal(3, result.Servers.Count);
     }

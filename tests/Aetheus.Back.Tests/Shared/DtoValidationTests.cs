@@ -110,19 +110,6 @@ public class DtoValidationTests
     }
 
     [Fact]
-    public void TaskResultDto_CanBeCreated()
-    {
-        var result = new TaskResultDto
-        {
-            TaskId = 1,
-            Status = TaskExecutionStatus.Success,
-            ExitCode = 0
-        };
-        Assert.Equal(1, result.TaskId);
-        Assert.Equal(TaskExecutionStatus.Success, result.Status);
-    }
-
-    [Fact]
     public void AgentPoolRequests_RejectMoreThanTwoHundredServers()
     {
         var serverIds = Enumerable.Range(1, 201).ToList();
@@ -166,6 +153,22 @@ public class DtoValidationTests
 
         Assert.Contains(Validate(request),
             error => error.MemberNames.Contains(nameof(PipelineRunRequest.Parameters)));
+    }
+
+    // aetheus-ci and aetheus-deploy-prod exceed 60 000 characters: the API must accept them as the
+    // repository sync does, and still bound what it accepts.
+    [Fact]
+    public void PipelineDefinitionRequests_AcceptARepositorySizedDefinition_AndRejectAnOversizedOne()
+    {
+        var large = new string('a', 63_272);
+        var oversized = new string('a', PipelineDefinitionLimits.MaxYamlLength + 1);
+
+        Assert.Empty(Validate(new UpdatePipelineRequest { Name = "ci", YamlDefinition = large, ProjectId = 1 }));
+        Assert.Empty(Validate(new ValidateYamlRequest { Yaml = large }));
+        Assert.Contains(Validate(new UpdatePipelineRequest { Name = "ci", YamlDefinition = oversized, ProjectId = 1 }),
+            error => error.MemberNames.Contains(nameof(UpdatePipelineRequest.YamlDefinition)));
+        Assert.Contains(Validate(new ValidateYamlRequest { Yaml = oversized }),
+            error => error.MemberNames.Contains(nameof(ValidateYamlRequest.Yaml)));
     }
 
     [Fact]

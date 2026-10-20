@@ -30,7 +30,7 @@ public class AuditDetailDialogTests : BunitContext
 
         var cut = Render<AuditDetailDialog>(p => p.Add(c => c.Log, Sample()));
 
-        cut.WaitForState(() => cut.Markup.Contains("AuditChainIntact"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("AuditChainIntact"));
         Assert.Contains("AuditChainIntact", cut.Markup);
         Assert.Contains("admin", cut.Markup);   // actor
         Assert.Contains("Server", cut.Markup);  // target
@@ -44,7 +44,7 @@ public class AuditDetailDialogTests : BunitContext
 
         var cut = Render<AuditDetailDialog>(p => p.Add(c => c.Log, Sample()));
 
-        cut.WaitForState(() => cut.Markup.Contains("AuditChainBroken"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("AuditChainBroken"));
         Assert.Contains("AuditChainBroken", cut.Markup);
         Assert.DoesNotContain("AuditChainIntact", cut.Markup);
     }
@@ -57,7 +57,7 @@ public class AuditDetailDialogTests : BunitContext
 
         var cut = Render<AuditDetailDialog>(p => p.Add(c => c.Log, Sample()));
 
-        cut.WaitForState(() => cut.Markup.Contains("AuditIntegrityUnavailable"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("AuditIntegrityUnavailable"));
         Assert.Contains("AuditIntegrityUnavailable", cut.Markup);
         Assert.DoesNotContain("AuditChainIntact", cut.Markup);
     }

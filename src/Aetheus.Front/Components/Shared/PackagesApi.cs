@@ -19,7 +19,7 @@ public sealed class PackagesApi(HttpClient http) : ApiClientBase(http)
         var qs = $"?page={page}&pageSize={pageSize}";
         if (!string.IsNullOrWhiteSpace(search)) qs += $"&search={Uri.EscapeDataString(search)}";
         if (!string.IsNullOrWhiteSpace(sortBy)) qs += $"&sortBy={Uri.EscapeDataString(sortBy)}&sortDescending={sortDescending.ToString().ToLowerInvariant()}";
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<PackageFeedDto>>(
             GridColumnFilters.AddTo($"api/package-feeds{qs}", filters), JsonOptions.Web, ct) ?? new PaginatedResult<PackageFeedDto>();
     }
@@ -65,7 +65,7 @@ public sealed class PackagesApi(HttpClient http) : ApiClientBase(http)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
         if (kind.HasValue) query["kind"] = kind.Value.ToString();
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         return await GetJsonAsync<PaginatedResult<PackageRegistryPackageDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/package-registry", query), filters), ct)
             .ConfigureAwait(false) ?? new();

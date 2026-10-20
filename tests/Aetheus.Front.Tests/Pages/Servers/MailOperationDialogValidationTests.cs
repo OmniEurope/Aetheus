@@ -9,12 +9,8 @@ using Microsoft.Extensions.Localization;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// Recette R1-5, R1-6 and R1-15, proved through the dialog as the user meets it, with the application's real
-/// resources in French (the test localizer elsewhere answers keys, so it could not tell a key from a text):
-/// a validation message is a French sentence, never its key; the mail password rule is written out; the
-/// Let's Encrypt address is optional; a new account takes a name alone and completes it with the chosen domain.
-/// </summary>
+/// <summary>Rendered dialog tests use the application's French resources to verify localized
+/// validation, optional certificate contact and domain-completed account names.</summary>
 public sealed class MailOperationDialogValidationTests : BunitContext
 {
     private static readonly MailDomainDto ExampleCom = new() { Id = 1, Name = "example.com" };

@@ -122,4 +122,107 @@ public class DockerExecutorTests
     [InlineData("INVALID\nNAME", false)]
     public void IsValidShellKey_RequiresPosixIdentifier(string key, bool expected) =>
         Assert.Equal(expected, DockerExecutor.IsValidShellKey(key));
+
+    private async Task<(ExecutorResult Result, List<(string Message, TaskLogLevel Level)> Output)> ExecuteAsync(
+        DockerExecutor executor, string command, Dictionary<string, string> environment)
+    {
+        var output = new List<(string Message, TaskLogLevel Level)>();
+        var result = await executor.ExecuteAsync(
+            command, environment, 30,
+            (message, level) => { lock (output) output.Add((message, level)); return Task.CompletedTask; },
+            TestContext.Current.CancellationToken);
+        return (result, output);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MalformedContainerId_IsRefusedAndLogged()
+    {
+        var (result, output) = await ExecuteAsync(_sut, "bad;id echo hi", []);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Equal(("Invalid container ID format", TaskLogLevel.Error), Assert.Single(output));
+        _loggerMock.ReceivedWithAnyArgs(1).Log(LogLevel.Warning, default, default(object)!, default, default!);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CommandRefusedByTheValidator_IsBlockedWithItsReason()
+    {
+        _validatorMock.IsAllowed("rm -rf /").Returns(false);
+        _validatorMock.GetRejectionReason("rm -rf /").Returns("destructive command");
+
+        var (result, output) = await ExecuteAsync(_sut, "web-1 rm -rf /", []);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Equal(("Command blocked by security policy - destructive command", TaskLogLevel.Error), Assert.Single(output));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CommandRefusedWithoutAReason_SaysUnknown()
+    {
+        _validatorMock.IsAllowed("odd").Returns(false);
+        _validatorMock.GetRejectionReason("odd").Returns((string?)null);
+
+        var (_, output) = await ExecuteAsync(_sut, "web-1 odd", []);
+
+        Assert.Equal("Command blocked by security policy - Unknown", Assert.Single(output).Message);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DangerousEnvironmentVariables_AreBlockedByName()
+    {
+        var environment = new Dictionary<string, string> { ["LD_PRELOAD"] = "/x.so", ["PATH"] = "/tmp" };
+        _validatorMock.GetDangerousEnvironmentVariableNames(environment).Returns(["LD_PRELOAD", "PATH"]);
+
+        var (result, output) = await ExecuteAsync(_sut, "web-1 echo hi", environment);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Equal(
+            ("Blocked dangerous environment variable(s): LD_PRELOAD, PATH. Rename application settings to a scoped name such as DEPLOY_ENV.", TaskLogLevel.Error),
+            Assert.Single(output));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EnvironmentNamesThatAreNotShellIdentifiers_AreBlocked()
+    {
+        var environment = new Dictionary<string, string> { ["GOOD"] = "1", ["BAD-NAME"] = "2", ["9X"] = "3" };
+
+        var (result, output) = await ExecuteAsync(_sut, "web-1 echo hi", environment);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Equal(("Blocked invalid environment variable name(s): BAD-NAME, 9X.", TaskLogLevel.Error), Assert.Single(output));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ValidCommand_ExecsTheContainerShell_FeedsTheScriptOnStandardInput_AndReturnsItsExitCode()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "aetheus-docker-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var executor = new DockerExecutor(
+                _validatorMock,
+                Options.Create(new AetheusAgentOptions()),
+                new ExecutorProcessRunner(new AgentRuntimeHealth(TimeProvider.System), NullLogger<ExecutorProcessRunner>.Instance),
+                _loggerMock)
+            {
+                DockerProgram = StandInProgram.Write(directory, "docker",
+                    "echo ARGS %*\r\nfindstr \"^\"\r\nexit /b 3",
+                    "echo ARGS \"$@\"\ncat\nexit 3"),
+            };
+
+            var (result, output) = await ExecuteAsync(
+                executor, "web-1 printf done", new Dictionary<string, string> { ["TOKEN"] = "top secret" });
+
+            Assert.Equal(3, result.ExitCode);
+            Assert.False(result.TimedOut);
+            var lines = output.Where(line => line.Level == TaskLogLevel.Info).Select(line => line.Message.TrimEnd()).ToList();
+            // The secret travels on standard input only, never in the argument list (the runner then
+            // appends its own resource-usage lines).
+            Assert.Equal(["ARGS exec -i web-1 /bin/sh", "export TOKEN='top secret'", "printf done"], lines.Take(3));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }

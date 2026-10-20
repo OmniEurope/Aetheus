@@ -14,7 +14,7 @@ public partial class RunTimelineTree
 {
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
-    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private IUserPreferences Preferences { get; set; } = default!;
     // Keep child navigation as a native link: it remains usable even while Blazor is reconnecting.
     // stopPropagation in the markup prevents the containing expandable row from consuming the click.
     private string ChildRunHref(int childRunId) => PipelineRunPresentation.Href(childRunId, ProjectId, ServerId);
@@ -28,7 +28,7 @@ public partial class RunTimelineTree
     // Child runs already fetched by the parent page (keyed by run id): seeds this tree so expansion is
     // instant and the branch containing SelectedStepId can be auto-revealed without a per-click fetch.
     [Parameter] public IReadOnlyDictionary<int, PipelineRunDto>? PreloadedChildren { get; set; }
-    // PLAN-003 lot 20: usual durations per run id (this run and its children), from the page loader.
+    // Usual durations per run id (this run and its children), from the page loader.
     [Parameter] public IReadOnlyDictionary<int, RunStageBaselinesDto>? Baselines { get; set; }
 
     // Belt-and-braces bound on recursion + the per-child fetch (the trigger cycle-guard already prevents loops).
@@ -42,7 +42,8 @@ public partial class RunTimelineTree
 
     // S-FEAT-EXST: which child-run nodes the user had open, persisted per run id so a SignalR reload or
     // a navigation away-and-back doesn't re-collapse the tree the user expanded during a live run.
-    private string StorageKey => $"run-tl-exp-{Run.Id}";
+    private RunTimelineExpansionStore? _expansionStore;
+    private RunTimelineExpansionStore ExpansionStore => _expansionStore ??= new(Preferences);
 
     // Once the selected step's branch has been auto-expanded, don't fight the user re-collapsing it.
     private int? _autoExpandedFor;
@@ -112,13 +113,7 @@ public partial class RunTimelineTree
         if (!firstRender || _restored) return;
         _restored = true;
 
-        int[]? saved = null;
-        try
-        {
-            var json = await JS.InvokeAsync<string?>("localStorage.getItem", StorageKey);
-            if (!string.IsNullOrEmpty(json)) saved = JsonSerializer.Deserialize<int[]>(json);
-        }
-        catch (Exception ex) when (ex is JSException or JsonException) { /* no/invalid persisted state */ }
+        var saved = await ExpansionStore.LoadAsync(Run.Id);
         if (saved is null || saved.Length == 0) return;
 
         // Only re-open ids that are genuinely trigger children of THIS run (guards stale/foreign ids).
@@ -161,12 +156,8 @@ public partial class RunTimelineTree
     private bool IsLoading(int childRunId) => _loading.Contains(childRunId);
     private PipelineRunDto? ChildRun(int childRunId) => _childRuns.GetValueOrDefault(childRunId);
 
-    /// <summary>
-    /// PLAN-003 lot 20 / D26: the only figure the list keeps beside a step's duration, and only while
-    /// the step runs: how long it usually takes, averaged over the last successful runs. CPU, memory
-    /// and I/O moved to the progression bars above, where they sit in aligned columns, and the
-    /// previous-run duration and drift chips gave way to that average.
-    /// </summary>
+    /// <summary>Running steps show their average duration from successful runs; resource
+    /// measurements belong in the aligned progression columns.</summary>
     private string? UsualDuration(PipelineStepRunDto step)
     {
         if (step.Status != TaskExecutionStatus.Running || step.TriggeredRunId is not null) return null;
@@ -198,16 +189,12 @@ public partial class RunTimelineTree
             && cached is not null && PipelineRunFormatting.IsTerminal(cached.Status)) return;
 
         _loading.Add(childRunId);
-        // Null on any transport/shape failure → the "child run not found" note, never an unhandled crash
-        // that would tear down the whole timeline (JsonException on a malformed body was previously uncaught).
+        // Returns null on transport or payload errors so the timeline shows child-run
+        // unavailability without crashing.
         try { _childRuns[childRunId] = await Api.Pipelines.GetPipelineRunAsync(childRunId); }
         catch (Exception ex) when (ex is HttpRequestException or JsonException) { _childRuns[childRunId] = null; }
         finally { _loading.Remove(childRunId); }
     }
 
-    private async Task PersistExpandedAsync()
-    {
-        try { await JS.InvokeVoidAsync("localStorage.setItem", StorageKey, JsonSerializer.Serialize(_expanded)); }
-        catch (JSException) { /* storage unavailable (private mode / quota) - persistence is best-effort */ }
-    }
+    private Task PersistExpandedAsync() => ExpansionStore.SaveAsync(Run.Id, _expanded);
 }

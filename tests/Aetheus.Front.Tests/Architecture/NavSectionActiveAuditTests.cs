@@ -62,10 +62,8 @@ public class NavSectionActiveAuditTests
             + string.Join("\n  ", violations));
     }
 
-    // Maps each group key to its static (non-parameterized) child Paths, read from the body of the
-    // group item opened with Expanded="@IsOnSection("group")" (recette R-012: a group is open in its
-    // section and its entries are always rendered). The entries are leaf items, so the body ends at
-    // the first closing </OmniPanelMenuItem> after the group's opening tag.
+    // Maps navigation groups to static child paths inside their section-expanded markup; leaf items
+    // delimit the group body.
     private static List<(string Group, List<string> ChildPaths)> ExtractGroups(string razor)
     {
         var result = new List<(string, List<string>)>();

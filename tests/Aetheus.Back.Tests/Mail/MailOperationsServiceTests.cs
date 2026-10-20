@@ -14,8 +14,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>PLAN-005 lots 3, 4 and 6: typed dispatch of TLS / spam / delivery / queue operations and the
-/// guarded ingestion of a mailbox usage report.</summary>
+/// <summary>Verify typed TLS, spam, delivery and queue dispatch plus guarded mailbox-usage
+/// ingestion.</summary>
 public sealed class MailOperationsServiceTests : IDisposable
 {
     private const int ServerId = 4;

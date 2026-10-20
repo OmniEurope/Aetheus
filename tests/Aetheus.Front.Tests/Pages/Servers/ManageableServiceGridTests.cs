@@ -5,10 +5,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// Recette R2-030 (a moving bar on the row while its action runs) and R2-032 (open management and
-/// Start are the row's blue buttons) on the grid of manageable services.
-/// </summary>
+/// <summary>Covers visible service-operation progress and primary management or Start
+/// actions.</summary>
 public class ManageableServiceGridTests : BunitContext
 {
     public ManageableServiceGridTests() => BunitTestHelper.RegisterServices(this);
@@ -40,7 +38,7 @@ public class ManageableServiceGridTests : BunitContext
     {
         var cut = RenderGrid(Svc("nginx", running: false), new ServiceActionState(9, "Start", phase));
 
-        // Recette R2-030 (2026-10-02): said above the grid, with the bar, not only under the status.
+        // Running work is identified with a progress bar above the grid.
         var banner = cut.Find(".service-actions-in-flight");
         Assert.Contains(textKey + "Banner", banner.TextContent, StringComparison.Ordinal);
         Assert.Equal("/tasks/9", banner.QuerySelector("a")!.GetAttribute("href"));
@@ -127,5 +125,64 @@ public class ManageableServiceGridTests : BunitContext
         Assert.NotEmpty(controls);
         foreach (var control in controls)
             Aetheus.Front.Tests.TestDoubles.RowEventIsolation.AssertRowDoesNotReceive(control, "onclick", "onkeydown");
+    }
+
+    [Fact]
+    public void PostfixOfAManagedMailStack_CannotBeUninstalledHere_AndSaysWhere()
+    {
+        // Recette R3-24/R3-25: the Mail page reinstalls or removes the stack whole.
+        var cut = Render<ManageableServiceGrid>(parameters => parameters
+            .Add(grid => grid.Services, [Svc("postfix", running: true)])
+            .Add(grid => grid.Installed, true)
+            .Add(grid => grid.CanManagePackages, true)
+            .Add(grid => grid.MailStackManaged, true)
+            .Add(grid => grid.ServerOnline, true)
+            .Add(grid => grid.ServerId, 1));
+
+        var uninstall = cut.FindMenuItem("Uninstall")!;
+        Assert.True(uninstall.HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void R353_TheInstalledGrid_DrawsTheFooterBarWithTheExport()
+    {
+        var cut = RenderGrid(Svc("nginx", running: true));
+
+        // R3-53: the bar under the rows (OE frame) carries the Markdown export, like the other grids.
+        Assert.NotEmpty(cut.FindAll(".omni-data-grid__frame"));
+    }
+
+    [Fact]
+    public void R3_41_ARunningRow_KeepsStopVisible_AndRestartLogsAndUninstallInItsMenu()
+    {
+        var cut = RenderGrid(Svc("nginx", running: true));
+
+        var row = cut.Find("button[title='Stop']").ParentElement!;
+        var standalone = row.QuerySelectorAll("button:not(.omni-menu__item):not(.omni-overflow-menu__trigger)")
+            .Select(b => b.GetAttribute("title")).ToList();
+        Assert.Contains("Stop", standalone);
+        Assert.DoesNotContain("Restart", standalone);
+        Assert.DoesNotContain("ViewLogs", standalone);
+        Assert.DoesNotContain("Uninstall", standalone);
+        Assert.NotNull(cut.FindMenuItem("Restart"));
+        Assert.NotNull(cut.FindMenuItem("ViewLogs"));
+        Assert.NotNull(cut.FindMenuItem("Uninstall"));
+    }
+
+    [Fact]
+    public void R3_41_TheBulkBar_ShowsStartAsTheOneAction_AndKeepsTheOthersInItsMenu()
+    {
+        var cut = RenderGrid(Svc("nginx", running: true));
+
+        cut.Find("input[aria-label='nginx']").Change(true);
+
+        var bar = cut.Find(".service-bulk-bar");
+        var standalone = bar.QuerySelectorAll("button:not(.omni-menu__item):not(.omni-overflow-menu__trigger)")
+            .Select(b => b.TextContent.Trim()).ToList();
+        Assert.Equal(["Start"], standalone);
+        Assert.NotNull(cut.FindMenuItem("Stop"));
+        Assert.NotNull(cut.FindMenuItem("Restart"));
+        Assert.NotNull(cut.FindMenuItem("Uninstall"));
+        Assert.NotNull(cut.FindMenuItem("ClearSelection"));
     }
 }

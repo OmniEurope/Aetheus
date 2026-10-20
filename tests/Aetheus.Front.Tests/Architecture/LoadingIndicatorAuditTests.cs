@@ -15,8 +15,8 @@ public sealed class LoadingIndicatorAuditTests
 
         foreach (var file in RepositoryScan.Enumerate(frontDir, "*.razor"))
         {
-            // Recette R-333: the page-load bar under the top bar is the one indeterminate OE bar the user
-            // asked for; every wait inside a page still renders AetheusLoader.
+            // The top-bar page-load indicator uses an indeterminate OE bar; in-page waits use
+            // AetheusLoader.
             if (Path.GetFileName(file) == "PageLoadProgressBar.razor") continue;
             var source = File.ReadAllText(file);
             foreach (Match match in Regex.Matches(source, @"<OmniProgressBar\b(?:(?:""[^""]*"")|[^>])*?/>", RegexOptions.CultureInvariant))
@@ -24,8 +24,9 @@ public sealed class LoadingIndicatorAuditTests
                 if (match.Value.Contains("Value=", StringComparison.Ordinal)) continue;
                 // Recette R2-030 (2026-10-01): the user asked for a bar on a service row while its
                 // operation runs. Only that one shape is allowed, a labelled linear bar (nothing spins,
-                // decision D11 holds); any other valueless bar in the file is still refused.
-                if (Path.GetFileName(file) == "ManageableServiceGrid.razor"
+                // decision D11 holds); any other valueless bar in the file is still refused. Recette R3-22
+                // moved that one banner, unchanged, out of the grid into its own component.
+                if (Path.GetFileName(file) == "ServiceActionsInFlightBanner.razor"
                     && match.Value.Contains("Shape=\"OmniProgressShape.Linear\"", StringComparison.Ordinal)
                     && match.Value.Contains("Label=", StringComparison.Ordinal)) continue;
                 var line = source.AsSpan(0, match.Index).Count('\n') + 1;
@@ -38,11 +39,8 @@ public sealed class LoadingIndicatorAuditTests
             + string.Join("\n  ", violations));
     }
 
-    /// <summary>
-    /// Recette R-536 (decision of 2026-10-01): the one indicator is OE's logo loader holding the plane. The
-    /// wrapper draws no mark and no motion of its own, every other file goes through it so the logo and
-    /// the words stay the product's, and the stylesheet no longer animates a local copy.
-    /// </summary>
+    /// <summary>Loading uses the shared wrapper around OE's logo loader so product mark and wording
+    /// stay consistent.</summary>
     [Fact]
     public void AetheusLoader_IsTheOeLogoLoaderHoldingThePlane()
     {
@@ -51,7 +49,7 @@ public sealed class LoadingIndicatorAuditTests
         var loader = File.ReadAllText(loaderFile);
 
         Assert.Matches(@"<OmniLogoLoader\b", loader);
-        // R2-075 (OE 1.5.0): the splash's animated plane, played as it is, its motion in CSS keyframes only.
+        // The animated splash plane uses CSS keyframes.
         Assert.Matches(@"<OmniLogoLoader\b[^>]*\bAnimatedMark=""true""", loader);
         Assert.Contains("class=\"p-ship\"", loader, StringComparison.Ordinal);
         Assert.DoesNotMatch(@"<(animate|animateTransform|animateMotion|set)\b", loader);
@@ -68,6 +66,38 @@ public sealed class LoadingIndicatorAuditTests
         var css = File.ReadAllText(Path.Combine(frontDir, "wwwroot", "css", "app.css"));
         Assert.DoesNotMatch(@"@keyframes\s+aetheus-loader", css);
     }
+
+    /// <summary>Merged from the former backend-side copy of this guard: no valueless Mode-based bar either.</summary>
+    [Fact]
+    public void No_Indeterminate_Progress_Bar_Is_Used_As_A_Loader()
+    {
+        var offenders = FrontRazorFiles()
+            .Where(file => file.Text.Contains("ProgressBarMode.Indeterminate", StringComparison.Ordinal))
+            .Select(file => file.Name)
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            $"These use an indeterminate bar where AetheusLoader is the app's loading indicator: {string.Join(", ", offenders)}");
+    }
+
+    [Fact]
+    public void Nothing_Rotates_In_The_Stylesheet()
+    {
+        var css = File.ReadAllText(Path.Combine(
+            RepositoryScan.Root, "src", "Aetheus.Front", "wwwroot", "css", "app.css"));
+
+        Assert.DoesNotContain("rotate(360deg)", css, StringComparison.Ordinal);
+        Assert.DoesNotContain("@keyframes spin", css, StringComparison.Ordinal);
+
+        // The shared loading plane must not hide the empty states of every other grid.
+        Assert.Contains(".omni-data-grid__state", css, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"\.omni-data-grid__state\s*\{[^}]*display\s*:\s*none", css);
+    }
+
+    private static IEnumerable<(string Name, string Text)> FrontRazorFiles() =>
+        RepositoryScan.Enumerate(Path.Combine(RepositoryScan.Root, "src", "Aetheus.Front"), "*.razor")
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Select(path => (Name: Path.GetFileName(path), Text: File.ReadAllText(path)));
 
     private static string FindRepoRoot() => Aetheus.Front.Tests.Architecture.RepositoryScan.Root;
 }

@@ -1,0 +1,8 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* Warn when the pipeline owner is missing or inactive because chained runs cannot be authorized. *@
+@if (OwnerInactive)
+{
+    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="pipeline-owner-inactive-badge"
+               title="@string.Format(L["PipelineOwnerInactiveHint"].Value, OwnerUsername ?? L["PipelineOwnerMissing"].Value)">@(string.IsNullOrWhiteSpace(OwnerUsername) ? L["PipelineOwnerMissing"] : L["PipelineOwnerInactive"])</OmniBadge>
+}

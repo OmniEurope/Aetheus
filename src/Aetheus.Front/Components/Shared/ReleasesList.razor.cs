@@ -48,9 +48,9 @@ public partial class ReleasesList : IAsyncDisposable
     private bool _loading;
     private bool _syncing;
     private bool _canWrite;
-    private int? _projectFilter; // global scope only
-    // Recette R-224: the column header filters, sent to the API, and the names the Project and Pipeline
-    // columns offer across the scope's releases.
+    private bool _canAdminProject;
+    private int? _projectFilter; // Offer project choices only in global scope and send column filters to the API so the
+    // displayed releases and filter options share the list's scope.
     private List<Aetheus.Shared.Components.Shared.GridFilter> _columnFilters = [];
     private ReleaseFilterValuesDto _filterValues = new();
     private Func<string, string>? _statusText;
@@ -68,7 +68,7 @@ public partial class ReleasesList : IAsyncDisposable
     private string PagedCacheKey(int page, int pageSize, int? projectId, string? sortBy = null, bool sortDescending = true) =>
         $"releases:paged:{projectId}:{page}:{pageSize}:{GridColumnFilters.CacheText(_columnFilters)}:{sortBy}:{sortDescending}";
 
-    /// <summary>Recette R-224: the project and pipeline names across the releases of this list's scope.</summary>
+    /// <summary>The project and pipeline names across the releases of this list's scope.</summary>
     private async Task LoadFilterValuesAsync()
     {
         try
@@ -123,7 +123,7 @@ public partial class ReleasesList : IAsyncDisposable
             await ConnectToHub();
     }
 
-    // Recette R-226: the project loader's change is live data, so the grid refreshes quietly.
+    // The project loader's change is live data, so the grid refreshes quietly.
     private void OnProjectLoaderChanged() => InvokeAsync(RefreshGrid);
 
     private string ServerPagedCacheKey(int page, int pageSize, string? sortBy = null, bool sortDescending = true) =>
@@ -135,12 +135,16 @@ public partial class ReleasesList : IAsyncDisposable
         InvokeAsync(StateHasChanged);
     }
 
-    private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.Release);
+    private void RefreshCanWrite()
+    {
+        _canWrite = Permissions.CanWrite(ResourceType.Release);
+        _canAdminProject = IsProjectScope && Permissions.CanAdmin(ResourceType.Project, ProjectId);
+    }
 
-    // Every scope pages server-side. A360-18: the server scope used to hold the whole list in memory
-    // and page it in the browser, so opening a server's Releases tab transferred every release of every
-    // project that server had ever touched before showing the first twenty-five.
-    /// <summary>Recette R2-124: one page of the export, in the scope of the list, with the grid's sort and column filters.</summary>
+    // Page every scope on the server so opening a release list does not transfer the entire release
+    // history.
+    /// <summary>One page of the export, in the scope of the list, with the grid's sort and column
+    /// filters.</summary>
     private Task<PaginatedResult<ReleaseDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -209,6 +213,19 @@ public partial class ReleasesList : IAsyncDisposable
         _syncing = false;
     }
 
+    /// <summary>An administrator fixes the release number the next release of a version series takes:
+    /// 1.4 and 0 make it 1.4.0. The dialog sends the number and stays open when the API refuses one a run of the series already took.</summary>
+    private async Task SetNextVersion()
+    {
+        if (ProjectId is not { } projectId) return;
+        var known = await Api.Projects.GetReleaseSeriesAsync(projectId) ?? [];
+        // The dialog saves the number and announces it itself.
+        await Dialog.OpenAsync<NextReleaseVersionDialog>(
+            L["SetNextVersion"].Value,
+            new Dictionary<string, object?> { ["KnownSeries"] = known, ["ProjectId"] = projectId },
+            new OmniDialogOptions { Width = "480px", AutoFocusFirstElement = false });
+    }
+
     private async Task TriggerBuild(ReleaseDto release)
     {
         var pipelines = await Api.Pipelines.GetPipelinesAsync(pageSize: 100);
@@ -233,6 +250,9 @@ public partial class ReleasesList : IAsyncDisposable
             }
         }
     }
+
+    private Task RelaunchFromCommit(ReleaseDto release) =>
+        new Releases.ArchivedReleaseRelauncher(Api, Dialog, Toast, Nav, L).RelaunchAsync(release);
 
     private async Task RollbackRelease(ReleaseDto release)
     {
@@ -281,8 +301,8 @@ public partial class ReleasesList : IAsyncDisposable
         }
     }
 
-    /// <summary>PLAN-007 lot 5: redeploys the release production ran before the live one, through the
-    /// pipeline that deployed the live one. The deploy gate still decides; approval still applies.</summary>
+    /// <summary>Redeploy the previous production release through the pipeline that deployed the
+    /// live one so deployment gates and approvals remain authoritative.</summary>
     private async Task RedeployRelease(ReleaseDto release)
     {
         if (release.RedeployPipelineId is not { } pipelineId) return;
@@ -295,8 +315,8 @@ public partial class ReleasesList : IAsyncDisposable
         await TriggerRunAsync(pipelineId, new Dictionary<string, string> { ["candidateVersion"] = release.Version });
     }
 
-    /// <summary>PLAN-003 2.7: puts traffic back on the colour the last deployment kept in reserve, through
-    /// the project's revert pipeline. Seconds, no rebuild; the agent refuses it when that colour is gone.</summary>
+    /// <summary>Switch traffic through the project's revert pipeline to the retained reserve colour
+    /// without rebuilding; the agent refuses when that colour is unavailable.</summary>
     private async Task RollbackToPreviousColour(ReleaseDto release)
     {
         if (release.RevertPipelineId is not { } pipelineId) return;
@@ -356,8 +376,8 @@ public partial class ReleasesList : IAsyncDisposable
     // (or in the server-scope in-memory list), where a targeted patch can't stay consistent.
     private Task OnReleaseStatusChanged(ReleaseDto release)
     {
-        // Recette R-224: under a column filter the new status may take the row out of (or into) the
-        // filtered set, so only the server can say what the page holds now.
+        // Under a column filter the new status may take the row out of (or into) the filtered set,
+        // so only the server can say what the page holds now.
         var pageIdx = _releases.FindIndex(r => r.Id == release.Id);
         if (pageIdx < 0 || _columnFilters.Count > 0)
             return HubReloadAsync();
@@ -378,7 +398,7 @@ public partial class ReleasesList : IAsyncDisposable
             if ((IsProjectScope && release.ProjectId != ProjectId)
                 || (IsGlobal && _projectFilter is > 0 && release.ProjectId != _projectFilter))
                 return;
-            // Recette R-224: a new release may not match the column filters; the server decides.
+            // A new release may not match the column filters; the server decides.
             if (IsServerScope || _columnFilters.Count > 0)
             {
                 _ = HubReloadAsync();
@@ -397,7 +417,7 @@ public partial class ReleasesList : IAsyncDisposable
         {
             try
             {
-                // Recette R-226: live data refreshes quietly (rows, page, scroll and filters kept).
+                // Live data refreshes quietly (rows, page, scroll and filters kept).
                 await RefreshGrid();
             }
             catch (HttpRequestException) { } // hub-triggered refresh - silent on auth failure
@@ -419,6 +439,6 @@ public partial class ReleasesList : IAsyncDisposable
             await _hubConnection.DisposeAsync();
     }
 
-    /// <summary>Recette R2-124: the export writes the name of every artifact of the release.</summary>
+    /// <summary>The export writes the name of every artifact of the release.</summary>
     private static readonly Func<ReleaseDto, object?> ArtifactExport = release => string.Join(", ", release.Artifacts.Select(artifact => artifact.Name));
 }

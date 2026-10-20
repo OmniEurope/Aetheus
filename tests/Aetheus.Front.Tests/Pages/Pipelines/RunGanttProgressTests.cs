@@ -5,10 +5,8 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// PLAN-003 lot 20 / D26: the columns beside each progression bar, and the fill of a running stage up
-/// to its usual duration, then the second layer that restarts from the left past it.
-/// </summary>
+/// <summary>Covers aligned progression metrics and running-stage fill before and beyond usual
+/// duration.</summary>
 public sealed class RunGanttProgressTests : BunitContext
 {
     private static readonly DateTime Origin = new(2026, 9, 8, 10, 0, 0, DateTimeKind.Utc);

@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Shared.Components.Mail;
 
-// PLAN-005: mail stack inventory, TLS, spam filter, DNS verification, delivery proof and diagnostics.
+// Mail inventory, TLS, spam filtering, DNS verification, delivery and diagnostics.
 
 /// <summary>DKIM key referenced by the OpenDKIM KeyTable of the server.</summary>
 public sealed record MailDkimKeyDto
@@ -44,6 +44,49 @@ public sealed record MailSpamFilterStateDto
     public double? RejectScore { get; init; }
     public double? AddHeaderScore { get; init; }
     public double? GreylistScore { get; init; }
+}
+
+/// <summary>Why one recipient of a queued message is still waiting (a deferred queue entry of
+/// <c>postqueue -j</c>), so a deferral such as Gmail's 421-4.7.28 is readable without a shell on the host.</summary>
+public sealed record MailDeferredMessageDto
+{
+    [StringLength(32)]
+    public string QueueId { get; init; } = string.Empty;
+    [StringLength(254)]
+    public string Recipient { get; init; } = string.Empty;
+    /// <summary>The remote answer Postfix recorded for the last attempt, truncated.</summary>
+    [StringLength(MailInventoryLimits.MaxDeferralReasonLength)]
+    public string Reason { get; init; } = string.Empty;
+    public DateTime? ArrivalTime { get; init; }
+}
+
+/// <summary>Outbound delivery settings and state that explain a deferral: the Postfix IP protocol policy,
+/// the retry timings, the deferred queue entries and the global IPv6 addresses of the host (display only).</summary>
+public sealed record MailDeliveryStateDto
+{
+    [StringLength(40)]
+    public string InetProtocols { get; init; } = string.Empty;
+    [StringLength(40)]
+    public string SmtpAddressPreference { get; init; } = string.Empty;
+    [StringLength(40)]
+    public string MinimalBackoffTime { get; init; } = string.Empty;
+    [StringLength(40)]
+    public string MaximalBackoffTime { get; init; } = string.Empty;
+    [StringLength(40)]
+    public string QueueRunDelay { get; init; } = string.Empty;
+    [MaxLength(MailInventoryLimits.MaxDeferredMessages)]
+    public List<MailDeferredMessageDto> Deferred { get; init; } = [];
+    /// <summary>Global-scope IPv6 addresses of the host (link-local, unique-local and loopback excluded);
+    /// empty when the host has none.</summary>
+    [MaxLength(MailInventoryLimits.MaxHostIpv6Addresses)]
+    [MaxItemStringLength(45)]
+    public List<string> HostIpv6Addresses { get; init; } = [];
+
+    /// <summary>True when the agent reported nothing (older agent, or nothing readable).</summary>
+    public bool IsEmpty =>
+        string.IsNullOrEmpty(InetProtocols) && string.IsNullOrEmpty(SmtpAddressPreference)
+        && string.IsNullOrEmpty(MinimalBackoffTime) && string.IsNullOrEmpty(MaximalBackoffTime)
+        && string.IsNullOrEmpty(QueueRunDelay) && Deferred.Count == 0 && HostIpv6Addresses.Count == 0;
 }
 
 /// <summary>Spam filter state and thresholds as exposed by the API.</summary>
@@ -98,10 +141,8 @@ public sealed record MailCertificateDto
 /// <summary>Requests a Let's Encrypt certificate for the mail hostname, then installs it for Postfix and Dovecot.</summary>
 public sealed record RequestMailCertificateRequest
 {
-    /// <summary>
-    /// The Let's Encrypt account contact, which only receives expiry notices. Optional (recette R1-6): null
-    /// registers the account without an address, as the certbot helper already allows.
-    /// </summary>
+    /// <summary>Optional certificate-account contact address for expiry notices; null registers
+    /// without an address.</summary>
     [EmailAddress]
     [StringLength(254)]
     public string? Email { get; init; }
@@ -131,7 +172,7 @@ public sealed record MailDnsRecordCheckDto
     public MailCheckVerdict Verdict { get; init; }
     public string Detail { get; init; } = string.Empty;
 
-    /// <summary>Recette R1-14: for an MX that still shows another host, the remaining time-to-live (seconds) of
+    /// <summary>For an MX that still shows another host, the remaining time-to-live (seconds) of
     /// the answer seen, as the resolver reported it; null when it was not reported.</summary>
     public int? TimeToLiveSeconds { get; init; }
 }
@@ -180,8 +221,8 @@ public sealed record MailDiagnosticItemDto
     public MailCheckVerdict Verdict { get; init; }
     public string Detail { get; init; } = string.Empty;
 
-    /// <summary>Recette R2-090: for a DNS line (A, PTR, MX, SPF, DKIM, DMARC), the record the line expects,
-    /// so the page shows exactly what to publish. Empty for the other lines.</summary>
+    /// <summary>For a DNS line (A, PTR, MX, SPF, DKIM, DMARC), the record the line expects, so the
+    /// page shows exactly what to publish. Empty for the other lines.</summary>
     public string RecordName { get; init; } = string.Empty;
 
     /// <summary>DNS type of <see cref="RecordValue"/>: <c>A</c>, <c>AAAA</c>, <c>PTR</c>, <c>MX</c> or <c>TXT</c>.</summary>
@@ -190,7 +231,7 @@ public sealed record MailDiagnosticItemDto
     /// <summary>Expected value; empty when it is not known yet (a DKIM key the agent has not read).</summary>
     public string RecordValue { get; init; } = string.Empty;
 
-    /// <summary>Recette R1-14: on a red MX line, the remaining time-to-live (seconds) of the answer seen, as the
+    /// <summary>On a red MX line, the remaining time-to-live (seconds) of the answer seen, as the
     /// resolver reported it; null when it was not reported.</summary>
     public int? TimeToLiveSeconds { get; init; }
 }
@@ -208,14 +249,17 @@ public sealed record MailTaskQueuedDto
     public int TaskId { get; init; }
 }
 
-/// <summary>
-/// "Réinstaller la messagerie" (recette R2-083 / R2-088): erases the whole mail stack of the server. The
-/// caller types back the mail domain (or the mail host name when no domain is known) as proof of intent;
-/// the backend refuses any other word.
-/// </summary>
+/// <summary>Requests full mail-stack erasure after the caller repeats the known domain or, if
+/// absent, the mail hostname. Reject any other confirmation.</summary>
 public sealed record MailPurgeRequest
 {
     [Required]
     [StringLength(253, MinimumLength = 1)]
     public string Confirmation { get; init; } = string.Empty;
+}
+
+/// <summary>Recette R3-49: how many Aetheus mailbox rows the server no longer reports were deleted.</summary>
+public sealed record MailAccountPurgeResultDto
+{
+    public int Removed { get; init; }
 }

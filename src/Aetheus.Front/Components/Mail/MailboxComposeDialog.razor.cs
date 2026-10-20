@@ -4,7 +4,8 @@ using System.Globalization;
 
 namespace Aetheus.Front.Components.Mail;
 
-/// <summary>Recette R1-17, R1-38: writes and sends a message, with the files the writer attached; closes with the <see cref="MailboxSendResultDto"/> once sent.</summary>
+/// <summary>Composes and sends a message with attachments, closing with <see
+/// cref="MailboxSendResultDto"/> after sending.</summary>
 public partial class MailboxComposeDialog
 {
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -26,8 +27,8 @@ public partial class MailboxComposeDialog
 
     internal IReadOnlyList<MailboxAttachmentDto> ForwardedAttachments => Draft.ForwardedAttachments;
 
-    // Recette R1-38: the files the writer attached, each list entry of the upload field paired with the
-    // bytes read for it. The bytes are only held to be sent: never opened, previewed or rendered.
+    // The files the writer attached, each list entry of the upload field paired with the bytes read
+    // for it. The bytes are only held to be sent: never opened, previewed or rendered.
     private List<(OmniUploadFile Entry, MailboxOutgoingAttachment File)> _attachments = [];
     private List<MailboxOutgoingAttachment> _pending = [];
 
@@ -83,7 +84,7 @@ public partial class MailboxComposeDialog
         _pending = [];
     }
 
-    // R-511: OmniDialog re-renders on every key press with the same parameters: the draft is copied once.
+    // OmniDialog re-renders on every key press with the same parameters: the draft is copied once.
     protected override void OnInitialized() => _model = new MailboxComposeModel
     {
         To = Draft.To,

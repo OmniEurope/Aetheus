@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Artifacts;
+using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
@@ -26,7 +27,8 @@ public interface IPipelineReleaseArtifactPreflight
 /// thing that could change the answer during the run is another deployment or publication of this
 /// project, which the refusal names as the way out.
 /// </summary>
-public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifacts) : IPipelineReleaseArtifactPreflight
+public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifacts, IArtifactStorageService storage)
+    : IPipelineReleaseArtifactPreflight
 {
     public async Task<IReadOnlyList<string>> FindProblemsAsync(
         PipelineYamlDefinition definition,
@@ -64,10 +66,10 @@ public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifac
             artifacts, projectId, commit, selector, name, ct).ConfigureAwait(false);
         if (artifact is not null)
         {
-            return artifact.Sha256 is { Length: 64 } sha && sha.All(Uri.IsHexDigit)
-                ? null
-                : $"the retained artifact '{artifact.Name}' of release '{selector}' has no valid SHA-256, "
-                  + "so the restore would be refused. Republish the release that carries it.";
+            if (artifact.Sha256 is not { Length: 64 } sha || !sha.All(Uri.IsHexDigit))
+                return $"the retained artifact '{artifact.Name}' of release '{selector}' has no valid SHA-256, "
+                    + "so the restore would be refused. Republish the release that carries it.";
+            return await FindMissingPayloadAsync(artifact, selector, ct).ConfigureAwait(false);
         }
 
         var skippable = step.AllowMissing
@@ -82,6 +84,25 @@ public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifac
             : string.Empty;
         return $"release '{selector}' has no retained artifact '{name}' in this project.{why} "
             + "The step would fail. Deploy or publish a release that retains this artifact before launching.";
+    }
+
+    /// <summary>
+    /// The row alone does not prove the restore: the agent downloads the payload file, and a row whose
+    /// file is gone answers 404 in the middle of the run. That is refused here, never skipped through
+    /// <c>allow_missing</c>: the release exists, so a missing V-1 payload is a fault, not a bootstrap.
+    /// </summary>
+    private async Task<string?> FindMissingPayloadAsync(PipelineArtifact artifact, string selector, CancellationToken ct)
+    {
+        await using (var payload = storage.OpenArtifact(artifact.FilePath))
+        {
+            if (payload is not null) return null;
+        }
+        var version = await artifacts.FindNewestReleaseVersionAsync(artifact.Id, ct).ConfigureAwait(false);
+        var release = version is null ? $"release '{selector}'" : $"release '{selector}' (version {version})";
+        return $"{release} resolves to artifact #{artifact.Id} '{artifact.Name}', whose payload file is missing "
+            + "from the artifact storage, so the restore would fail with a 404 during the run. "
+            + "allow_missing does not apply: the release exists, only its file is gone. "
+            + "Deploy again a release that retains this artifact, or restore the file in the artifact storage, before launching.";
     }
 
     private static bool IsReleaseRestore(PipelineStepDefinition step) =>

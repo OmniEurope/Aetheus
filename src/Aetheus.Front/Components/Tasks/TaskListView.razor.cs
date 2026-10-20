@@ -30,7 +30,7 @@ public partial class TaskListView : IAsyncDisposable
     private bool _hasLoadedServerId;
     private int? _loadedServerId;
 
-    // Recette R-212: the column header filters, sent to the API, and the server names the Server column offers.
+    // The column header filters, sent to the API, and the server names the Server column offers.
     private List<Aetheus.Shared.Components.Shared.GridFilter> _columnFilters = [];
     private TaskFilterValuesDto _filterValues = new();
     private Func<string, string>? _executorText;
@@ -99,8 +99,8 @@ public partial class TaskListView : IAsyncDisposable
         try
         {
             // Task lifecycle events ride the servers hub (AllServers group). Any of them refreshes
-            // the grid so a new/started/finished task surfaces without a manual reload. Recette R-226:
-            // a quiet refresh, the rows, page, scroll and filters stay put and a new row shows in bold.
+            // the grid so a new/started/finished task surfaces without a manual reload. a quiet
+            // refresh, the rows, page, scroll and filters stay put and a new row shows in bold.
             _hubConnection = HubFactory.Create("servers");
             _hubConnection.On<object>("TaskQueued", _ => InvokeAsync(InvalidateAndRefreshGridAsync));
             _hubConnection.On<object>("TaskStarted", _ => InvokeAsync(InvalidateAndRefreshGridAsync));
@@ -128,7 +128,7 @@ public partial class TaskListView : IAsyncDisposable
         if (_grid is not null) await _grid.Refresh();
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<ServerTaskDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -183,6 +183,7 @@ public partial class TaskListView : IAsyncDisposable
     internal static OmniIconName GetFailureIcon(string failureCode) => failureCode switch
     {
         TaskFailureCodes.InfrastructureMismatch => OmniIconName.Wrench,
+        TaskFailureCodes.AgentIncompatible => OmniIconName.Download,
         TaskFailureCodes.TestsFailed => OmniIconName.Flask,
         TaskFailureCodes.BuildFailed => OmniIconName.Wrench,
         _ => OmniIconName.Warning
@@ -198,7 +199,7 @@ public partial class TaskListView : IAsyncDisposable
         }
     }
 
-    /// <summary>Recette R2-124: the export writes the source the cell links to.</summary>
+    /// <summary>The export writes the source the cell links to.</summary>
     private Func<ServerTaskDto, object?> SourceExport => _sourceExport ??= task => task.PipelineRunId is { } pipelineRunId
         ? $"{L["PipelineRun"]} #{pipelineRunId}"
         : $"{L["Server"]}: {GetSourceServerName(task)}";

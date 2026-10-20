@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -151,18 +152,9 @@ internal static class PipelineArtifactRestorer
         return new ExecutorResult(0, false);
     }
 
-    /// <summary>
-    /// D-04: proves the restored artifact was built from the revision this run was launched on.
-    ///
-    /// The archive's SHA-256 above proves it arrived intact; it says nothing about WHICH build it is.
-    /// Without this, a consumer restores a previous run's artifacts and then scans, grades or ships a
-    /// revision it never looked at, which is exactly the class of defect the sealed delivery contract
-    /// exists to prevent. Every consumer used to rewrite the comparison in shell afterwards, so a
-    /// consumer that forgot the stage got no warning at all.
-    ///
-    /// Returns null when there is nothing to check (a release selector deliberately restores another
-    /// commit) or when the artifact checks out; otherwise the reason to refuse it.
-    /// </summary>
+    /// <summary>Checks that restored artifacts belong to the requested revision, independently of
+    /// their transport hash. Explicit cross-commit release selectors are exempt; mismatches return
+    /// a refusal reason.</summary>
     private static string? VerifyProvenance(ZipArchive archive, string? expectedSourceCommit)
     {
         if (string.IsNullOrWhiteSpace(expectedSourceCommit)) return null;
@@ -246,7 +238,7 @@ internal static class PipelineArtifactRestorer
 
     private sealed record ArtifactHashResult(string Sha256, TimeSpan Duration, long Bytes);
 
-    private sealed record DeployedBaseline(string CandidateVersion, string SourceSha, string ContractSha256);
+    internal sealed record DeployedBaseline(string CandidateVersion, string SourceSha, string ContractSha256);
 
     /// <summary>A delivery contract is a few hundred bytes; past this it is not one.</summary>
     private const long MaxDeliveryContractBytes = 1024 * 1024;
@@ -267,24 +259,17 @@ internal static class PipelineArtifactRestorer
             stream.CopyTo(buffer);
             bytes = buffer.ToArray();
         }
-        using var document = JsonDocument.Parse(bytes);
-        if (document.RootElement.ValueKind != JsonValueKind.Object
-            || !document.RootElement.TryGetProperty("candidateVersion", out var candidateVersionElement)
-            || candidateVersionElement.ValueKind != JsonValueKind.String
-            || !document.RootElement.TryGetProperty("sourceSha", out var sourceShaElement)
-            || sourceShaElement.ValueKind != JsonValueKind.String)
-        {
-            throw new InvalidDataException(
-                $"The {releaseSelector} delivery contract has no valid candidateVersion or sourceSha.");
-        }
+        return ParseDeliveryContract(bytes, releaseSelector);
+    }
 
-        var candidateVersion = candidateVersionElement.GetString()?.Trim();
-        var sourceSha = sourceShaElement.GetString()?.Trim();
-        if (string.IsNullOrWhiteSpace(candidateVersion)
-            || candidateVersion.Length > 256
-            || candidateVersion.IndexOfAny(['\r', '\n']) >= 0
-            || sourceSha is not { Length: 40 }
-            || sourceSha.Any(character => !Uri.IsHexDigit(character)))
+    /// <summary>The candidate version and the 40-hex source commit of a delivery contract, with the
+    /// contract's own SHA-256; anything else is refused.</summary>
+    internal static DeployedBaseline ParseDeliveryContract(byte[] bytes, string releaseSelector)
+    {
+        using var document = JsonDocument.Parse(bytes);
+        var candidateVersion = ReadContractString(document.RootElement, "candidateVersion");
+        var sourceSha = ReadContractString(document.RootElement, "sourceSha");
+        if (!IsValidCandidateVersion(candidateVersion) || !IsFullSha(sourceSha))
         {
             throw new InvalidDataException(
                 $"The {releaseSelector} delivery contract has no valid candidateVersion or sourceSha.");
@@ -294,6 +279,21 @@ internal static class PipelineArtifactRestorer
             candidateVersion, sourceSha.ToLowerInvariant(),
             Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
     }
+
+    private static string? ReadContractString(JsonElement root, string name) =>
+        root.ValueKind == JsonValueKind.Object
+        && root.TryGetProperty(name, out var element)
+        && element.ValueKind == JsonValueKind.String
+            ? element.GetString()?.Trim()
+            : null;
+
+    private static bool IsValidCandidateVersion([NotNullWhen(true)] string? candidateVersion) =>
+        !string.IsNullOrWhiteSpace(candidateVersion)
+        && candidateVersion.Length <= 256
+        && candidateVersion.IndexOfAny(['\r', '\n']) < 0;
+
+    private static bool IsFullSha([NotNullWhen(true)] string? sourceSha) =>
+        sourceSha is { Length: 40 } && sourceSha.All(Uri.IsHexDigit);
 
     private static async Task ExportDeployedBaselineAsync(
         DeployedBaseline baseline, Func<string, TaskLogLevel, Task> onOutput)

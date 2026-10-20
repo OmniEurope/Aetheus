@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>PLAN-013 lot 5: the storage budget of each project, its usage and its enforcement.</summary>
+/// <summary>The storage budget of each project, its usage and its enforcement.</summary>
 public interface IProjectStorageBudgetService
 {
     /// <summary>The usage of the projects the caller can read (all of them when null).</summary>

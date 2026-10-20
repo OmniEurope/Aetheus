@@ -1,11 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@*
-    PLAN-003 lot 24 / D14: one phrase per port, relative to the project being checked.
-
-    Before this, the same row carried three fragments read side by side ("UNUSABLE", "Free",
-    "Yes - atlas-prod-front"): each one true, the three together meaningless. The verdict answers the
-    only question the reader has, which is whether this port is a problem for them.
-*@
+@* Express one verdict relative to the checked project so registry claims and listener state form
+   an understandable answer. *@
 <OmniBadge Fill="OmniFill.Solid" Tone="@Variant" title="@Title">@Text</OmniBadge>
 

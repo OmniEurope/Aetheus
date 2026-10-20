@@ -25,14 +25,8 @@ internal static class IngestKeyRotation
         TimeProvider timeProvider) =>
         Rotate(app, plaintext, hasher, configuration, timeProvider, keepSecondPrevious: false);
 
-    /// <summary>
-    /// Recette R2-013: the rotation a deployment run performs. Blue-green keeps two colours alive and
-    /// each holds the key of the run that started it, so when a new run rotates, the active colour holds
-    /// the previous key and the idle colour the one before, until the run replaces that colour. Keeping
-    /// a single previous key refused the idle colour's telemetry (401) from the rotation until its
-    /// restart. The key before the previous one is kept with the deadline it received when it stopped
-    /// being current: nothing lives longer than the overlap window it was already given.
-    /// </summary>
+    /// <summary>Deployment rotation retains keys for both live blue-green colours until their
+    /// original overlap deadlines. Keeping the earlier key does not extend its lifetime.</summary>
     public static IngestKeyRotationResult ApplyForDeploy(
         MonitoredApp app,
         string plaintext,

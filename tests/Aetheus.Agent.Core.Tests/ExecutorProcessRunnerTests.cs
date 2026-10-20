@@ -60,7 +60,7 @@ public sealed class ExecutorProcessRunnerTests
             var startupWait = Stopwatch.StartNew();
             while (health.ActiveProcessCount == 0
                 && !execution.IsCompleted
-                && startupWait.Elapsed < TimeSpan.FromSeconds(2))
+                && startupWait.Elapsed < TimeSpan.FromSeconds(10))
                 await Task.Delay(TimeSpan.FromMilliseconds(25), TestContext.Current.CancellationToken);
             Assert.False(execution.IsCompleted, "The descendant command exited before cancellation.");
             Assert.Equal(1, health.ActiveProcessCount);
@@ -84,7 +84,7 @@ public sealed class ExecutorProcessRunnerTests
             Assert.Equal(0, health.ActiveProcessCount);
             Assert.True(health.IsIdle);
 
-            await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+            await Task.Delay(TimeSpan.FromSeconds(WitnessDelaySeconds + 1), TestContext.Current.CancellationToken);
             Assert.False(
                 File.Exists(survivorMarker),
                 "A descendant survived external cancellation and wrote its marker.");
@@ -94,6 +94,10 @@ public sealed class ExecutorProcessRunnerTests
             File.Delete(survivorMarker);
         }
     }
+
+    // The descendant must outlive the cancel-to-check window by seconds, never by tens of
+    // milliseconds, or a loaded CI machine lets it either finish early or hide a surviving tree.
+    private const int WitnessDelaySeconds = 3;
 
     private static ProcessStartInfo BuildDescendantCommand(string survivorMarker)
     {
@@ -109,7 +113,7 @@ public sealed class ExecutorProcessRunnerTests
         {
             var windowsSurvivor = survivorMarker.Replace("'", "''", StringComparison.Ordinal);
             var child = "powershell.exe -NoLogo -NoProfile -NonInteractive -Command "
-                + "\"Start-Sleep -Milliseconds 700; "
+                + $"\"Start-Sleep -Seconds {WitnessDelaySeconds}; "
                 + $"[IO.File]::WriteAllText('{windowsSurvivor}', 'survived')\"";
             startInfo.FileName = "cmd.exe";
             startInfo.ArgumentList.Add("/d");
@@ -123,7 +127,7 @@ public sealed class ExecutorProcessRunnerTests
         startInfo.FileName = "/bin/sh";
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add(
-            $"/bin/sh -c 'sleep 0.7; printf survived > \"{linuxSurvivor}\"' & wait");
+            $"/bin/sh -c 'sleep {WitnessDelaySeconds}; printf survived > \"{linuxSurvivor}\"' & wait");
         return startInfo;
     }
 

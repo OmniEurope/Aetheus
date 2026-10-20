@@ -1,0 +1,28 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Releases
+@* Fixes the release number the next release of a version series takes: 1.4 and 0 make the next
+   release 1.4.0. The series may be one the project has not released in yet. *@
+<OmniTemplateForm TModel="NextVersionModel" Model="@_model" OnValidSubmit="@Submit">
+    <OmniDataAnnotationsValidator Localizer="@L" />
+    <OmniStack Gap="OmniSpacing.Large">
+        <OmniFormField Label="@L["Series"]" Required="true" Help="@SeriesHelp" Class="omni-u-w-100" For="next-version-series">
+            <OmniTextBox Id="next-version-series" @bind-Value="_model.Series" Placeholder="1.4" Class="omni-u-w-100" />
+        </OmniFormField>
+        <ValidationMessage For="@(() => _model.Series)" />
+        <OmniFormField Label="@L["ReleaseNumber"]" Required="true" Class="omni-u-w-100" For="next-version-number">
+            <OmniNumeric TValue="int" Id="next-version-number" @bind-Value="_model.NextNumber" Minimum="0" Maximum="@ReleaseSeries.MaxNumber" Class="omni-u-w-100" />
+        </OmniFormField>
+        <ValidationMessage For="@(() => _model.NextNumber)" />
+        @if (Version is { } version)
+        {
+            <OmniAlert Severity="OmniSeverity.Info">@string.Format(L["NextVersionPreview"].Value, version)</OmniAlert>
+        }
+        @if (_refusal is not null)
+        {
+            <OmniAlert Severity="OmniSeverity.Danger" Live="true">@_refusal</OmniAlert>
+        }
+        <DialogFooter OnCancel="@(() => Dialog.Close())">
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_saving"><OmniIcon Name="OmniIconName.Check" /> <span>@L["Apply"]</span></OmniButton>
+        </DialogFooter>
+    </OmniStack>
+</OmniTemplateForm>

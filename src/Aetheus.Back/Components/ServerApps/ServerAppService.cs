@@ -3,11 +3,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.ServerApps;
 
-/// <summary>
-/// PLAN-005 lot 6: an app's port is announced on every write so the registry can record it. It used
-/// to be a field of its own that nothing else could see, so a port an app held was invisible to the
-/// preflight guard and to the "is this port free?" question.
-/// </summary>
+/// <summary>Announces each application's port on writes so the port registry can enforce
+/// reservations and answer availability checks.</summary>
 public class ServerAppService(
     IServerAppRepository repo,
     IAuditService audit,
@@ -36,7 +33,7 @@ public class ServerAppService(
         };
     }
 
-    /// <summary>Recette R-210: what the applications grid's checkable Source filter offers.</summary>
+    /// <summary>What the applications grid's checkable Source filter offers.</summary>
     public async Task<ServerAppFilterValuesDto> GetFilterValuesAsync(int serverId, CancellationToken ct = default) =>
         new() { Sources = await repo.GetSourcesAsync(serverId, ct).ConfigureAwait(false) };
 

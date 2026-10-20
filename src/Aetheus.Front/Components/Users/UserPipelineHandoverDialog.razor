@@ -1,0 +1,56 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Deactivating or deleting a pipeline owner names who takes the pipelines over (default: the
+   acting administrator), or explicitly leaves them with an inactive owner. *@
+<OmniStack Gap="OmniSpacing.Medium">
+    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Message</OmniText>
+    @if (Phase is { } phase)
+    {
+        <div role="status" aria-live="polite" class="user-handover-phase">
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@phase</OmniText>
+        </div>
+    }
+    @if (_error is not null)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger" Title="@L["Error"]">@_error</OmniAlert>
+    }
+    @if (_loading)
+    {
+        <AetheusLoader />
+    }
+    else if (_owned.Count > 0)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning" Title="@string.Format(L["UserOwnsPipelinesTitle"].Value, Username, _owned.Count)">
+            <OmniStack Gap="OmniSpacing.XSmall">
+                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["UserOwnsPipelinesWarning"]</OmniText>
+                @foreach (var pipeline in _owned)
+                {
+                    <OmniText Element="OmniTextElement.Small" Class="omni-u-m-0 user-owned-pipeline-item">@pipeline.PipelineName@(pipeline.ProjectName is null ? null : $" ({pipeline.ProjectName})")</OmniText>
+                }
+            </OmniStack>
+        </OmniAlert>
+        <OmniFormField Label="@L["TransferPipelinesTo"]" For="user-pipeline-handover-target">
+            <OmniDropDown Id="user-pipeline-handover-target" TValue="string" Filterable="true" AllowEmpty="true"
+                Options="@(_candidates.ToOptions(item => item.Username, item => item.Username))"
+                Value="@_target" ValueExpression="@(() => _target)" ValueChanged="@OnTargetChangedAsync"
+                Disabled="@_force" Placeholder="@L["SelectUser"]" />
+        </OmniFormField>
+        @if (!_force && _missingAdmin.Count > 0)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning" Title="@L["PipelineOwnerLacksServerAdminTitle"]">
+                <OmniStack Gap="OmniSpacing.XSmall">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["PipelineOwnerLacksServerAdmin"].Value, _target)</OmniText>
+                    @foreach (var item in _missingAdmin)
+                    {
+                        <OmniText Element="OmniTextElement.Small" Class="omni-u-m-0">@item.PipelineName : @string.Join(", ", item.ServersMissingAdmin)</OmniText>
+                    }
+                </OmniStack>
+            </OmniAlert>
+        }
+        <OmniCheckBox TValue="bool" Value="@_force" ValueExpression="@(() => _force)" ValueChanged="@OnForceChanged">@L["ForceWithOwnedPipelines"]</OmniCheckBox>
+    }
+    <DialogFooter OnCancel="@(() => Dialog.Close())">
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnConfirm" Busy="@(Phase is not null)" Disabled="@(!CanConfirm)">
+            <OmniIcon Name="@(Delete ? OmniIconName.Delete : OmniIconName.Close)" /> <span>@(Delete ? L["Delete"] : L["Deactivate"])</span>
+        </OmniButton>
+    </DialogFooter>
+</OmniStack>

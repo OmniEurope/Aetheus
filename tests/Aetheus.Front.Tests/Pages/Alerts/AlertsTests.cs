@@ -26,6 +26,27 @@ public class AlertsTests : BunitContext
 
         answer.SetResult([]);
 
+        // Loaded-machine ceiling: the rules no longer wait for the hub (see the test below); the failures
+        // left here were measured as the answer's hop and the render it queues landing at 1.1 to 1.8 s,
+        // the page already out of its loading state, never a state that stayed wrong.
+        cut.WaitForAssertion(() => Assert.Contains("NoAlertsDescription", cut.Markup));
+    }
+
+    [Fact]
+    public void ALiveConnectionThatNeverAnswers_DoesNotHoldTheRulesBack()
+    {
+        // The alerts hub is a refresh channel: the rules are drawn from their HTTP read, not after the
+        // hub has started (a negotiate that hangs kept the grid loading).
+        Services.AddSingleton<HubConnectionFactory>(sp => new BunitTestHelper.BlockingHubConnectionFactory(
+            sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(),
+            sp.GetRequiredService<AuthStateProvider>()));
+        var answer = new TaskCompletionSource<List<AlertRuleDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/alerts", _ => answer.Task);
+        var cut = Render<Alerts>();
+        Assert.DoesNotContain("NoAlertsDescription", cut.Markup);
+
+        answer.SetResult([]);
+
         cut.WaitForAssertion(() => Assert.Contains("NoAlertsDescription", cut.Markup));
     }
 
@@ -69,7 +90,7 @@ public class AlertsTests : BunitContext
     [Fact]
     public void CreateButton_Rendered()
     {
-        // X4D8: the Create button now opens AlertEditDialog (the form is no longer inline).
+        // The Create action opens AlertEditDialog.
         _handler.SetJsonResponse("api/alerts", new List<AlertRuleDto>());
         var cut = Render<Alerts>();
         cut.WaitForState(() => cut.Markup.Contains("Create"));

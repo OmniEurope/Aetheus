@@ -13,9 +13,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>"Réinstaller la messagerie" (recette R2-083 / R2-088): the purge is queued only with the typed
-/// domain, a helper that knows the command and no setup or purge already running; it drops the rows that
-/// mirror the erased stack and is audited.</summary>
+/// <summary>Queue purge only after exact domain confirmation, supported helper capability and
+/// absence of concurrent setup or purge. Remove mirrored rows and audit the action.</summary>
 public sealed class MailStackPurgeServiceTests : IDisposable
 {
     private const int ServerId = 6;
@@ -129,7 +128,7 @@ public sealed class MailStackPurgeServiceTests : IDisposable
     [InlineData(OperationKind.MailPurge)]
     public async Task WhileASetupOrPurgeRuns_ASecondIsRefused(OperationKind running)
     {
-        // Recette R2-085: two full setups 3 s apart. A second click must not start a second rebuild.
+        // A repeated request must not start a concurrent rebuild.
         await SeedStackAsync();
         _db.Tasks.Add(new ServerTask { ServerId = ServerId, Name = "running", Operation = running, Command = "-", Status = TaskExecutionStatus.Running });
         await _db.SaveChangesAsync(Ct);

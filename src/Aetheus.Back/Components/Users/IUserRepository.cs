@@ -44,5 +44,28 @@ public interface IUserRepository
     /// </summary>
     Task<int> RevokePersonalAccessTokensAsync(int userId, DateTime revokedAt, CancellationToken ct = default);
 
+    /// <summary>
+    /// Audit AUD-01 (recette R1-50): marks every refresh token of the user still valid as revoked, in
+    /// the tracked context (saved by the next <see cref="SaveChangesAsync"/>). A rotated security stamp
+    /// refuses the access tokens, but a refresh token is checked against its own row and would mint a
+    /// fresh access token carrying the new stamp. Returns how many were revoked.
+    /// </summary>
+    Task<int> RevokeRefreshTokensAsync(int userId, DateTime revokedAt, CancellationToken ct = default);
+
+    /// <summary>
+    /// Audit AUD-05 (recette R1-50): serializes every change that can remove an active administrator
+    /// (role removal, deactivation, deletion) across requests and backend colours, so the "last active
+    /// administrator" count is read after the previous such change has committed. Dispose to release.
+    /// A provider without transactions (InMemory unit tests) gets a lock that does nothing.
+    /// </summary>
+    Task<IAsyncDisposable> LockAdministratorSetAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Names of the pipelines whose automated-run owner (<c>Pipeline.CreatedByUsername</c>) is
+    /// <paramref name="username"/>, sorted. An own-read over the shared entity: deactivating or deleting
+    /// that user would make the F-EXEC-1b gate refuse every chained run of these pipelines.
+    /// </summary>
+    Task<string[]> GetOwnedPipelineNamesAsync(string username, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }

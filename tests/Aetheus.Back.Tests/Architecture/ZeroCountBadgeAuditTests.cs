@@ -4,11 +4,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 lot 7: a counter badge reading "0" says nothing the empty list beside it does not already
-/// say, and it costs a line of room on every row. <c>CountBadge</c> makes the rule structural, so this
-/// refuses a raw <c>OmniBadge</c> whose text is a plain count - the shape that keeps coming back.
-/// </summary>
+/// <summary>CountBadge suppresses empty counts structurally; raw count badges are
+/// rejected.</summary>
 public sealed class ZeroCountBadgeAuditTests
 {
     [Fact]
@@ -28,8 +25,7 @@ public sealed class ZeroCountBadgeAuditTests
     [Fact]
     public void No_Tile_Moves_Under_The_Pointer()
     {
-        // PLAN-003 lots 8, 10 and 26: a card that lifts on hover shifts the text the reader is aiming
-        // at. The tint and the border already say "clickable".
+        // Card hover changes tint and border without moving the targeted text.
         var css = File.ReadAllText(Path.Combine(
             RepositoryScan.Root, "src", "Aetheus.Front", "wwwroot", "css", "app.css"));
 

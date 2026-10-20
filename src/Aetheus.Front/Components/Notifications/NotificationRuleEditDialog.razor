@@ -10,10 +10,9 @@
             </OmniFormField>
         </OmniColumn>
         <OmniColumn Span="12">
-            <OmniFormField For="oe-pages-notifications-notificationruleeditdialog-2" Class="omni-u-w-100"><LabelContent>@L["EventType"]</LabelContent><ChildContent>
+            <OmniFormField For="oe-pages-notifications-notificationruleeditdialog-2" Help="@L["NotificationEventTypeHint"]" Class="omni-u-w-100"><LabelContent>@L["EventType"]</LabelContent><ChildContent>
                 <OmniTextBox @bind-Value="_model.EventType" Placeholder="@L["PlaceholderEventType"]" Id="oe-pages-notifications-notificationruleeditdialog-2" />
             </ChildContent></OmniFormField>
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["NotificationEventTypeHint"]</OmniText>
             <ValidationMessage For="@(() => _model.EventType)" />
         </OmniColumn>
         @if (IsEdit)
@@ -23,10 +22,9 @@
             </OmniColumn>
         }
         <OmniColumn Span="12">
-            <OmniFormField For="oe-pages-notifications-notificationruleeditdialog-3" Class="omni-u-w-100"><LabelContent>@L["NotificationFilter"]</LabelContent><ChildContent>
+            <OmniFormField For="oe-pages-notifications-notificationruleeditdialog-3" Help="@L["NotificationFilterHint"]" Class="omni-u-w-100"><LabelContent>@L["NotificationFilter"]</LabelContent><ChildContent>
                 <OmniTextArea @bind-Value="_model.FilterJson" Rows="3" Class="text-mono" Id="oe-pages-notifications-notificationruleeditdialog-3" />
             </ChildContent></OmniFormField>
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["NotificationFilterHint"]</OmniText>
         </OmniColumn>
     </OmniRow>
     <DialogFooter OnCancel="@Cancel">

@@ -20,9 +20,8 @@ else
         <section class="analysis-workspace-panel" role="tabpanel">
         @if (_qualitySectionIndex == 0)
         {
-                @* Recette R-174: the hero is one band, the letter then a single reading line (title,
-                   limiting domain, commit, date). The letter keeps its size through
-                   analysis-grade-letter and its colour from the shared badge scale. *@
+                @* The quality hero uses the shared grade colours with its own larger letter
+                   sizing. *@
                 <OmniCard Class="analysis-grade-overview">
                     <div class="analysis-grade-primary">
                         <GradeBadge Value="@_summary.Grade?.OverallGrade" Title="@L["AnalysisGlobalGrade"]"
@@ -38,9 +37,8 @@ else
                                 <OmniText Element="OmniTextElement.Span">@L["AnalysisGradeIncomplete"]</OmniText>
                             }
                         </div>
-                        @* Recette R2-143 (replaces the R-174 strip): commit, date, latest analysis run and
-                           latest release as aligned tiles; R-430's links are kept, each tile opens its page.
-                           Recette R2-139: no "limiting domain" sentence, the breakdown bolds it. *@
+                        @* Linked commit, date, analysis-run and release tiles align beside the
+                           grade; the breakdown highlights limiting domains. *@
                         <div class="analysis-grade-meta-tiles">
                             @if (GradeCommitHref is { } commitHref)
                             {
@@ -61,11 +59,11 @@ else
                             }
                         </div>
                     </div>
-                    @* Recette R2-052: the breakdown is shared with a run's Quality tab. *@
+                    @* The breakdown is shared with a run's Quality tab. *@
                     <AnalysisGradeBreakdown Grade="@_summary.Grade" CrapScore="@_complexity.LastOrDefault()?.Crap" />
                 </OmniCard>
 
-                @* Recette R-311: a count card shows only when its count is at least one. *@
+                @* A count card shows only when its count is at least one. *@
                 <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mb-lg analysis-summary-row">
                     @if (_summary.OpenCount > 0)
                     {
@@ -140,12 +138,12 @@ else
         }
         else
         {
-                @* Recette R-221: no search row; the column header filters are the only filters. Recette
-                   R2-054 (2026-10-02): "Export all" is back under the table, the blue Markdown button of
-                   every grid's export bar, and leaves the "..." menu R-431 had put it in. *@
+                @* Column headers own filtering, and Markdown export belongs beneath the findings
+                   grid. *@
                  <AetheusDataGrid ShowFooterBar="true" @ref="_findingsGrid" Data="@_findings" Count="@_findingCount" TItem="AnalysisFindingDto" LoadData="LoadFindingsAsync" ExportRead="@ReadFindingsAsync" ExportName="@L["AnalysisFindings"]" RowClick="OpenFinding" AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" PageSize="25" class="analysis-table aetheus-clickable-rows aetheus-grid-fullheight" AllowColumnResize="true" Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<AnalysisFindingDto>(_findings, _findingCount))" FullHeight="true" VirtualizationOverscanCount="3">
                     <Columns>
-                        @* Recette R-502: the one definition of a findings list, shared with the Gate tab of a run. *@
+                        @* The one definition of a findings list, shared with the Gate tab of a
+                           run. *@
                         <AnalysisFindingColumns Defaults="@_findingDefaults" />
                     </Columns>
                 </AetheusDataGrid>

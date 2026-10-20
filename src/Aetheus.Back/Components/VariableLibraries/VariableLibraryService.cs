@@ -12,7 +12,7 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
     private static readonly TimeSpan CacheDuration = BackendRuntimeDefaults.ReferenceDataCacheDuration;
     private readonly ConcurrentDictionary<string, byte> _activeNameKeys = new();
 
-    /// <summary>Recette R-210: the project names the variable libraries list's checkable filter offers.</summary>
+    /// <summary>The project names the variable libraries list's checkable filter offers.</summary>
     public Task<VariableLibraryFilterValuesDto> GetFilterValuesAsync(List<int>? accessibleIds, CancellationToken ct = default) =>
         repo.GetFilterValuesAsync(accessibleIds, ct);
 
@@ -167,10 +167,8 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
         return true;
     }
 
-    /// <summary>
-    /// Recette R2-065: a key already in the library is refused with its reason. The unique index
-    /// (VariableLibraryId, Key) used to reject it as an unexplained server error.
-    /// </summary>
+    /// <summary>Reject duplicate library keys with an explicit reason before relying on the unique
+    /// index.</summary>
     private async Task EnsureKeyIsFreeAsync(int libraryId, string key, int? exceptEntryId, CancellationToken ct)
     {
         if (await repo.EntryKeyExistsAsync(libraryId, key, exceptEntryId, ct).ConfigureAwait(false))

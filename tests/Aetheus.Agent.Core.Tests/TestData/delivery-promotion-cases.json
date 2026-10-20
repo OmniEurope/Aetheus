@@ -1,0 +1,1020 @@
+{
+  "node": "v24.7.0",
+  "locale": "fr-FR",
+  "cases": [
+    {
+      "name": "bootstrap-verifies-exact-bytes",
+      "description": "delivery-contract.test.mjs: a bootstrap contract verifies its exact candidate bytes.",
+      "files": {
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/contract.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"1edbcf8ba00cb4626cf74e458b4005713864ede2dc505a5f8a199dda17c3c03a\",\n  \"candidateVersion\": \"c-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-1edbcf8ba00c\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n}\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-1edbcf8ba00c (1edbcf8ba00cb4626cf74e458b4005713864ede2dc505a5f8a199dda17c3c03a)."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "different-manifest-different-candidate",
+      "description": "delivery-contract.test.mjs: the same source with another injection manifest is another candidate; both verify.",
+      "files": {
+        ".pipeline-artifacts/first.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"first.tar\": \"4e915c5a7d5cd847acbae669b36ca57dcb700728d61d1875d1e4528a2517d61c\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"eb16f33afe27b5fafb5dc3b70955f6cd2aad96062137a8ea1965ef30ec214e68\",\n  \"candidateVersion\": \"c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-eb16f33afe27\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n}\n",
+        ".pipeline-artifacts/first.tar": "artifact-b\n",
+        ".pipeline-artifacts/second.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"second.tar\": \"4e915c5a7d5cd847acbae669b36ca57dcb700728d61d1875d1e4528a2517d61c\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"94e1f46d75f7e4d640098f04495b2944441de4ea0ed5065ae2bdd8d596bf05ce\",\n  \"candidateVersion\": \"c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-94e1f46d75f7\",\n  \"injection\": {\n    \"manifestSha256\": \"43e3a0af96053a09e84e770eb083a569394f0b65d98b368204b13568174df08c\",\n    \"packages\": [\n      {\n        \"id\": \"Aetheus.Telemetry\",\n        \"sha256\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\n        \"version\": \"1.2.3\"\n      }\n    ]\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n}\n",
+        ".pipeline-artifacts/second.tar": "artifact-b\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/first.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-eb16f33afe27 (eb16f33afe27b5fafb5dc3b70955f6cd2aad96062137a8ea1965ef30ec214e68)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/second.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-94e1f46d75f7 (94e1f46d75f7e4d640098f04495b2944441de4ea0ed5065ae2bdd8d596bf05ce)."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "schema-states",
+      "description": "delivery-contract.test.mjs: promotion follows the schema state (before, after, rogue), and a missing state is refused.",
+      "files": {
+        ".pipeline-artifacts/candidate.tar": "candidate\n",
+        ".pipeline-artifacts/contract.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"candidate.tar\": \"1e81270f1a47dce22a2e4985250c74b2e3374443734f1492b03ea2cd2af4ec48\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    },\n    \"schemaBefore\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"5b6e182704d4ab37bd7963c4d9654366387780aa4bf1682973b507da04baf35e\",\n  \"candidateVersion\": \"c-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-5b6e182704d4\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"\n}\n",
+        "schema-after": "20260101000000_InitialCreate\n20260202000000_AddThing\n",
+        "schema-before": "20260101000000_InitialCreate\n",
+        "schema-empty": "",
+        "schema-rogue": "20260101000000_InitialCreate\n20260202000000_AddThing\n20260303000000_Unqualified\n",
+        "schema-unsorted-with-blanks": "\n  20260202000000_AddThing\r\n\n﻿20260101000000_InitialCreate\n\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "schema-before",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Production stands on the proven pre-migration schema 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations); migrating deploy.",
+            "Verified immutable candidate c-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-5b6e182704d4 (5b6e182704d4ab37bd7963c4d9654366387780aa4bf1682973b507da04baf35e)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "schema-after",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Production already stands on the proven post-migration schema 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations); the migration is a no-op and only the binaries move.",
+            "Verified immutable candidate c-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-5b6e182704d4 (5b6e182704d4ab37bd7963c4d9654366387780aa4bf1682973b507da04baf35e)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "schema-rogue",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : 7d176a26ddd54abc37eecb6a7925401e7d3cb07dea634017173ba8e34b2f2fd5 (3 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema state required to verify this candidate is missing."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "schema-unsorted-with-blanks",
+            ".pipeline-artifacts",
+            "-"
+          ],
+          "stdout": [
+            "Production already stands on the proven post-migration schema 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations); the migration is a no-op and only the binaries move.",
+            "Verified immutable candidate c-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-5b6e182704d4 (5b6e182704d4ab37bd7963c4d9654366387780aa4bf1682973b507da04baf35e)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "schema-empty",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (0 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        }
+      ]
+    },
+    {
+      "name": "schema-1-refused",
+      "description": "A schema 1 contract carries no schema fingerprints.",
+      "files": {
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/contract.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"63b87c6c300b41ce17334848222528ddb9d29b9d3bfcf105fef719998b8cc189\",\n  \"candidateVersion\": \"c-1111111111111111111111111111111111111111-63b87c6c300b\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 1,\n  \"sourceSha\": \"1111111111111111111111111111111111111111\"\n}\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "This candidate was sealed under the old identity-based contract (schema 1) and carries no schema fingerprints. Requalify it to obtain a schema-sealed contract."
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-contracts",
+      "description": "Not a schema 2 contract, or no candidateId.",
+      "files": {
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/array.json": "[2]\n",
+        ".pipeline-artifacts/emptyid.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"\",\n  \"candidateVersion\": \"c-2222222222222222222222222222222222222222-8f2e26571033\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"2222222222222222222222222222222222222222\"\n}\n",
+        ".pipeline-artifacts/noid.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateVersion\": \"c-2222222222222222222222222222222222222222-8f2e26571033\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"2222222222222222222222222222222222222222\"\n}\n",
+        ".pipeline-artifacts/null.json": "null\n",
+        ".pipeline-artifacts/number.json": "2\n",
+        ".pipeline-artifacts/s2text.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"159b30da95a5d46da5fd852d74d6a8de30f42e21bafd5837399213f1ff478193\",\n  \"candidateVersion\": \"c-2222222222222222222222222222222222222222-159b30da95a5\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": \"2\",\n  \"sourceSha\": \"2222222222222222222222222222222222222222\"\n}\n",
+        ".pipeline-artifacts/s3.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"30889a8b5676087a42f4583c982f2c18403babc0973c66a7442dc2d869abe747\",\n  \"candidateVersion\": \"c-2222222222222222222222222222222222222222-30889a8b5676\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 3,\n  \"sourceSha\": \"2222222222222222222222222222222222222222\"\n}\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/s3.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate delivery contract is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/s2text.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate delivery contract is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/noid.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate delivery contract is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/emptyid.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate delivery contract is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/null.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "Cannot read properties of null (reading 'schema')"
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/array.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate delivery contract is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/number.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate delivery contract is invalid."
+          }
+        }
+      ]
+    },
+    {
+      "name": "invalid-identity",
+      "description": "A field changed after sealing.",
+      "files": {
+        ".pipeline-artifacts/a.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"2\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"58bc3cb0afe5291126a85d5cb2f90f46ae71c61f6b3d45536024207bb88a5cf7\",\n  \"candidateVersion\": \"c-3333333333333333333333333333333333333333-58bc3cb0afe5\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"3333333333333333333333333333333333333333\"\n}\n",
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/b.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"58BC3CB0AFE5291126A85D5CB2F90F46AE71C61F6B3D45536024207BB88A5CF7\",\n  \"candidateVersion\": \"c-3333333333333333333333333333333333333333-58bc3cb0afe5\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"3333333333333333333333333333333333333333\"\n}\n",
+        ".pipeline-artifacts/c.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"58bc3cb0afe5291126a85d5cb2f90f46ae71c61f6b3d45536024207bb88a5cf7\",\n  \"candidateVersion\": \"c-3333333333333333333333333333333333333333-58bc3cb0afe5\",\n  \"extra\": 1,\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"3333333333333333333333333333333333333333\"\n}\n",
+        ".pipeline-artifacts/d.json": "{\"sourceSha\":\"3333333333333333333333333333333333333333\",\"schema\":2,\"injection\":{\"manifestSha256\":\"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\"packages\":[]},\"candidateVersion\":\"c-3333333333333333333333333333333333333333-58bc3cb0afe5\",\"candidateId\":\"58bc3cb0afe5291126a85d5cb2f90f46ae71c61f6b3d45536024207bb88a5cf7\",\"baseline\":{\"bootstrap\":true,\"schemaAfter\":{\"hash\":\"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\"migrations\":[\"20260101000000_InitialCreate\"]}},\"artifacts\":{\"application.tar\":\"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"},\"adapter\":{\"name\":\"test-adapter\",\"version\":\"1\"}}"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/a.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate delivery contract identity is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/b.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate delivery contract identity is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/c.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate delivery contract identity is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/d.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-3333333333333333333333333333333333333333-58bc3cb0afe5 (58bc3cb0afe5291126a85d5cb2f90f46ae71c61f6b3d45536024207bb88a5cf7)."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "release-version",
+      "description": "The release version must be c-<sourceSha> or c-<sourceSha>-<12 id characters>.",
+      "files": {
+        ".pipeline-artifacts/absent.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"cb95806f9e2d2e0c0e7d35c3d95b1c9ff3512bdcfeb86ee5c7e9f5e81a7a6901\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"4444444444444444444444444444444444444444\"\n}\n",
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/array-sha.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"ada200e4a0c341f5d5a073bf81d8ecb447b30ec612a6a3f7d34cb4b8bb157b06\",\n  \"candidateVersion\": \"c-a,,1.5\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": [\n    \"a\",\n    null,\n    1.5\n  ]\n}\n",
+        ".pipeline-artifacts/number-sha.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"24bf493465be12502b89750082b3ccb59a3df659ddba73b94019e5de19673aae\",\n  \"candidateVersion\": \"c-12\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": 12\n}\n",
+        ".pipeline-artifacts/object-sha.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"8101380a9ce5c714a3b24167a87b4a8ceebc2ff0d8d9a0ab7ce7932e19a0e537\",\n  \"candidateVersion\": \"c-[object Object]\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": {\n    \"a\": 1\n  }\n}\n",
+        ".pipeline-artifacts/other.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"cb95806f9e2d2e0c0e7d35c3d95b1c9ff3512bdcfeb86ee5c7e9f5e81a7a6901\",\n  \"candidateVersion\": \"c-5555555555555555555555555555555555555555\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"4444444444444444444444444444444444444444\"\n}\n",
+        ".pipeline-artifacts/short.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"cb95806f9e2d2e0c0e7d35c3d95b1c9ff3512bdcfeb86ee5c7e9f5e81a7a6901\",\n  \"candidateVersion\": \"c-4444444444444444444444444444444444444444-cb95806f9e2\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"4444444444444444444444444444444444444444\"\n}\n",
+        ".pipeline-artifacts/source-mode.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"cb95806f9e2d2e0c0e7d35c3d95b1c9ff3512bdcfeb86ee5c7e9f5e81a7a6901\",\n  \"candidateVersion\": \"c-4444444444444444444444444444444444444444\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"4444444444444444444444444444444444444444\"\n}\n",
+        ".pipeline-artifacts/tostring-sha.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"3b69ee075e169708e807eb6f38da792398eccca767371ea7b8fbc0842c4c63ee\",\n  \"candidateVersion\": \"c-[object Object]\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": {\n    \"toString\": 1\n  }\n}\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/source-mode.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-4444444444444444444444444444444444444444 (cb95806f9e2d2e0c0e7d35c3d95b1c9ff3512bdcfeb86ee5c7e9f5e81a7a6901)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/other.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate release version does not match its immutable identity."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/short.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate release version does not match its immutable identity."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/absent.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The candidate release version does not match its immutable identity."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/number-sha.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-12 (24bf493465be12502b89750082b3ccb59a3df659ddba73b94019e5de19673aae)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/array-sha.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-a,,1.5 (ada200e4a0c341f5d5a073bf81d8ecb447b30ec612a6a3f7d34cb4b8bb157b06)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/object-sha.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-[object Object] (8101380a9ce5c714a3b24167a87b4a8ceebc2ff0d8d9a0ab7ce7932e19a0e537)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/tostring-sha.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "Cannot convert object to primitive value"
+          }
+        }
+      ]
+    },
+    {
+      "name": "artifact-digests",
+      "description": "Every sealed artifact must hash to its digest.",
+      "files": {
+        ".pipeline-artifacts/0": "x",
+        ".pipeline-artifacts/1": "y",
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/browser.tar.gz": "browser\n",
+        ".pipeline-artifacts/contract.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\",\n    \"browser.tar.gz\": \"35802ec7e9607b3da0ca67809845f3ba9fb9a2120feee9ab7047a06a292ad305\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"93e4b2304eeee108b7527f8508e5bfdc5d78f02e9eb13e9099c31ad14bcd4bb8\",\n  \"candidateVersion\": \"c-6666666666666666666666666666666666666666-93e4b2304eee\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"6666666666666666666666666666666666666666\"\n}\n",
+        ".pipeline-artifacts/gone.tar": "x\n",
+        ".pipeline-artifacts/missing.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"absent.tar\": \"0000000000000000000000000000000000000000000000000000000000000000\",\n    \"gone.tar\": \"73cb3858a687a8494ca3323053016282f3dad39d42cf62ca4e79dda2aac7d9ac\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"33580f4df1ad9e98d4c84054d5ead33fab8652e7d0bb7315a4b53d4d9b7537fc\",\n  \"candidateVersion\": \"c-6666666666666666666666666666666666666666-33580f4df1ad\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"6666666666666666666666666666666666666666\"\n}\n",
+        ".pipeline-artifacts/null-artifacts.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": null,\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"b97a34bb4e358abe9e187532f52cd99abeb1af60e2e8ffbae05629521d96eec3\",\n  \"candidateVersion\": \"c-6666666666666666666666666666666666666666-b97a34bb4e35\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"6666666666666666666666666666666666666666\"\n}\n",
+        ".pipeline-artifacts/number-artifacts.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": 7,\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"fa73edb00b228dc5d7ddd72583c57f5dda74e697c929c51bc9475afade104606\",\n  \"candidateVersion\": \"c-6666666666666666666666666666666666666666-fa73edb00b22\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"6666666666666666666666666666666666666666\"\n}\n",
+        ".pipeline-artifacts/smoke.tar.gz": "tampered\n",
+        ".pipeline-artifacts/string-artifacts.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": \"ab\",\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"bb2a2b30aed506e613ae3004f55114c242875a1291d626aba2600669d17824c7\",\n  \"candidateVersion\": \"c-6666666666666666666666666666666666666666-bb2a2b30aed5\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"6666666666666666666666666666666666666666\"\n}\n",
+        ".pipeline-artifacts/tampered.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\",\n    \"smoke.tar.gz\": \"8d76ef077804e6a447df0c830543423673470031678ea8fe740c1eec4b5f0eb3\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"98d60f1ed37e3754d732f204a8076ec97389faf9d14e236b201bc3450b314e2b\",\n  \"candidateVersion\": \"c-6666666666666666666666666666666666666666-98d60f1ed37e\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"6666666666666666666666666666666666666666\"\n}\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-6666666666666666666666666666666666666666-93e4b2304eee (93e4b2304eeee108b7527f8508e5bfdc5d78f02e9eb13e9099c31ad14bcd4bb8)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/tampered.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "Candidate artifact 'smoke.tar.gz' differs from the validated digest."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/missing.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "ENOENT: no such file or directory, open '<workspace>\\.pipeline-artifacts\\absent.tar'",
+            "code": "ENOENT"
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/null-artifacts.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-6666666666666666666666666666666666666666-b97a34bb4e35 (b97a34bb4e358abe9e187532f52cd99abeb1af60e2e8ffbae05629521d96eec3)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/number-artifacts.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-6666666666666666666666666666666666666666-fa73edb00b22 (fa73edb00b228dc5d7ddd72583c57f5dda74e697c929c51bc9475afade104606)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/string-artifacts.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "Candidate artifact '0' differs from the validated digest."
+          }
+        }
+      ]
+    },
+    {
+      "name": "locale-ordered-keys",
+      "description": "Artifact names whose localeCompare order differs from the ordinal one (punctuation, case, digits, integer keys); a stray control character is ignorable.",
+      "files": {
+        ".pipeline-artifacts/10": "10\n",
+        ".pipeline-artifacts/9": "9\n",
+        ".pipeline-artifacts/a b": "a b\n",
+        ".pipeline-artifacts/a$b": "a$b\n",
+        ".pipeline-artifacts/a-b.tar": "a-b.tar\n",
+        ".pipeline-artifacts/a.b.tar": "a.b.tar\n",
+        ".pipeline-artifacts/A.tar": "a.tar\n",
+        ".pipeline-artifacts/a.tar": "a.tar\n",
+        ".pipeline-artifacts/a1.tar": "a1.tar\n",
+        ".pipeline-artifacts/a@b": "a@b\n",
+        ".pipeline-artifacts/a_b.tar": "a_b.tar\n",
+        ".pipeline-artifacts/a~b": "a~b\n",
+        ".pipeline-artifacts/B.tar": "b.tar\n",
+        ".pipeline-artifacts/b.tar": "b.tar\n",
+        ".pipeline-artifacts/contract.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"9\": \"2e6d31a5983a91251bfae5aefa1c0a19d8ba3cf601d0e8a706b4cfa9661a6b8a\",\n    \"10\": \"917df3320d778ddbaa5c5c7742bc4046bf803c36ed2b050f30844ed206783469\",\n    \"_x\": \"02fbb73a063b6d9b1e566759cfca544e41ee4b10091ff189ceb96ce245e59417\",\n    \"a b\": \"01186fcf04b4b447f393e552964c08c7b419c1ad7a25c342a0b631b1967d3a27\",\n    \"a_b.tar\": \"8438ae0b568197d3f454059c8f1836371b36290d4ad439a4e7bf1388b9ff248e\",\n    \"a-b.tar\": \"c78e8ba3cb882e6bbdbb7474990c33b178dc55fb141c90332dab19f721e4d808\",\n    \"a.b.tar\": \"dc3e5104aea71090a716890592ea0066f2596a1232889ddbead1bc9b544c5b7f\",\n    \"a.tar\": \"da4a8d19a6dc851b8c7c5c497e1042d58738037ecb9e71945b04ba10a517db39\",\n    \"A.tar\": \"da4a8d19a6dc851b8c7c5c497e1042d58738037ecb9e71945b04ba10a517db39\",\n    \"a@b\": \"d2914e02fcce94858733d2d2bc20fddfba876bfe008cf889c135895b2c39aecd\",\n    \"a~b\": \"10cf0d5f3c59e15a228b69c5b58c1d76de52015b4f7cc7410af5c4e34a03f5f4\",\n    \"a$b\": \"975a2301e68b0481f66b8c705cc596c50d93eb2de26ce47f628c0c327a8dbd43\",\n    \"a1.tar\": \"f60e8b91c43475a84a2fab4a1d580c2f15d0d0cc8978810ffda8f133cc15185c\",\n    \"b.tar\": \"cec63db39c61d51d909b56df32b82c4fc52159d96090c0c9ec1f8777a5d19e69\",\n    \"B.tar\": \"cec63db39c61d51d909b56df32b82c4fc52159d96090c0c9ec1f8777a5d19e69\",\n    \"Zeta.tar\": \"97aaaeec07c8411ce7e72c5c76918998b7684530f55b723dbac2e35144848ee9\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"ce692e8b8808604599a9e8958cd7b48c2c02fc93570d4296cec0e6a8ab213b47\",\n  \"candidateVersion\": \"c-7777777777777777777777777777777777777777-ce692e8b8808\",\n  \"injection\": {\n    \"manifestSha256\": \"1aaa8c9c367845a098a595a99cf5d5af4d17ad3df3c34ce71d4da052b852d51a\",\n    \"packages\": [\n      {\n        \"id\": \"A_Pkg\",\n        \"sha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\n        \"version\": \"1\"\n      },\n      {\n        \"id\": \"a-Pkg\",\n        \"sha256\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\n        \"version\": \"1\"\n      },\n      {\n        \"id\": \"b.Pkg\",\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n        \"version\": \"1\"\n      }\n    ]\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"7777777777777777777777777777777777777777\"\n}\n",
+        ".pipeline-artifacts/extra.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"x.tar\": \"73cb3858a687a8494ca3323053016282f3dad39d42cf62ca4e79dda2aac7d9ac\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"47878dd054ad6f37bdae0ea4102bf402558f524667456f7b7dabdd360a863b53\",\n  \"candidateVersion\": \"c-7777777777777777777777777777777777777777-47878dd054ad\",\n  \"injection\": {\n    \"extra\": {\n      \"a\\u0001\": 1,\n      \"a\": 2,\n      \"\\u0001a\": 3,\n      \"B\": {\n        \"x\": [\n          {\n            \"A\": 2,\n            \"b\": 1\n          }\n        ],\n        \"y\": 1,\n        \"Y\": 2\n      }\n    },\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"7777777777777777777777777777777777777777\"\n}\n",
+        ".pipeline-artifacts/x.tar": "x\n",
+        ".pipeline-artifacts/Zeta.tar": "Zeta.tar\n",
+        ".pipeline-artifacts/_x": "_x\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-7777777777777777777777777777777777777777-ce692e8b8808 (ce692e8b8808604599a9e8958cd7b48c2c02fc93570d4296cec0e6a8ab213b47)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/extra.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-7777777777777777777777777777777777777777-47878dd054ad (47878dd054ad6f37bdae0ea4102bf402558f524667456f7b7dabdd360a863b53)."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "non-ascii-key",
+      "description": "A non-ASCII key the script sorts and accepts; the port refuses it rather than guess its collation.",
+      "files": {
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/contract.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"b249aa5dabad8ba0265a45463d6d4f92b45ca1d7729f568187a4ee5c7703934c\",\n  \"candidateVersion\": \"c-8888888888888888888888888888888888888888-b249aa5dabad\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"notes\": {\n      \"e\": 2,\n      \"é\": 1\n    },\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"8888888888888888888888888888888888888888\"\n}\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "-",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Bootstrap delivery onto a host with no database yet.",
+            "Verified immutable candidate c-8888888888888888888888888888888888888888-b249aa5dabad (b249aa5dabad8ba0265a45463d6d4f92b45ca1d7729f568187a4ee5c7703934c)."
+          ]
+        }
+      ],
+      "difference": "The port refuses an object to sort that holds a key outside ASCII (JsLocaleCompare fails closed)."
+    },
+    {
+      "name": "bootstrap-database-states",
+      "description": "A bootstrap candidate accepts an empty database or exactly its own schemaAfter.",
+      "files": {
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/bad-after.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": null\n    }\n  },\n  \"candidateId\": \"5a59f2a2ba6d7e4bc68ab1ec14f022a7af189be94a2596527811b7844783d7a4\",\n  \"candidateVersion\": \"c-9999999999999999999999999999999999999999-5a59f2a2ba6d\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"9999999999999999999999999999999999999999\"\n}\n",
+        ".pipeline-artifacts/contract.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    }\n  },\n  \"candidateId\": \"4da5a74d3103d78ecc8219e037d9b48d14e477654de05281e00161bf11614844\",\n  \"candidateVersion\": \"c-9999999999999999999999999999999999999999-4da5a74d3103\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"9999999999999999999999999999999999999999\"\n}\n",
+        ".pipeline-artifacts/no-after.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true\n  },\n  \"candidateId\": \"74420d2e578bc6884f9dca87a9957a5e829ab8c094b0988673d616b3812288bd\",\n  \"candidateVersion\": \"c-9999999999999999999999999999999999999999-74420d2e578b\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"9999999999999999999999999999999999999999\"\n}\n",
+        "empty": "",
+        "other": "20260101000000_InitialCreate\n",
+        "other2": "20260101000000_InitialCreate\n",
+        "other3": "20260303000000_AddOther\n",
+        "same": "20260202000000_AddThing\n20260101000000_InitialCreate\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "empty",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Verified immutable candidate c-9999999999999999999999999999999999999999-4da5a74d3103 (4da5a74d3103d78ecc8219e037d9b48d14e477654de05281e00161bf11614844)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "same",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [
+            "Verified immutable candidate c-9999999999999999999999999999999999999999-4da5a74d3103 (4da5a74d3103d78ecc8219e037d9b48d14e477654de05281e00161bf11614844)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/contract.json",
+            "other",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "A bootstrap candidate cannot replace an existing schema.\n  live         : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)"
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/no-after.json",
+            "other2",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "Cannot read properties of undefined (reading 'hash')"
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/bad-after.json",
+            "other3",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "Cannot read properties of null (reading 'length')"
+          }
+        }
+      ]
+    },
+    {
+      "name": "baseline-malformed",
+      "description": "A non-bootstrap candidate whose baseline cannot be read fails like the script.",
+      "files": {
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/nobaseline.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"candidateId\": \"3b3daba00c5dcd41782ffee313b9a08dd7df127690d8ef0c1c3c54737d8f7bf6\",\n  \"candidateVersion\": \"c-cccccccccccccccccccccccccccccccccccccccc-3b3daba00c5d\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"cccccccccccccccccccccccccccccccccccccccc\"\n}\n",
+        ".pipeline-artifacts/nobefore.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    }\n  },\n  \"candidateId\": \"6455a2daa48fcbb34359987c3da7dc9f801b1fec90ca62d72325d5a5eda7fff1\",\n  \"candidateVersion\": \"c-cccccccccccccccccccccccccccccccccccccccc-6455a2daa48f\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"cccccccccccccccccccccccccccccccccccccccc\"\n}\n",
+        ".pipeline-artifacts/string-count.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": {\n        \"length\": \"4\"\n      }\n    },\n    \"schemaBefore\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": \"xyz\"\n    }\n  },\n  \"candidateId\": \"a55ab3d31cc606da68197e6a76def4f36946c7f37f96a7d31745d99feb801554\",\n  \"candidateVersion\": \"c-cccccccccccccccccccccccccccccccccccccccc-a55ab3d31cc6\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"cccccccccccccccccccccccccccccccccccccccc\"\n}\n",
+        "live": "20260101000000_InitialCreate\n",
+        "rogue": "20260303000000_AddOther\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/nobaseline.json",
+            "live",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "Cannot read properties of undefined (reading 'schemaBefore')"
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/nobefore.json",
+            "live",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "Cannot read properties of undefined (reading 'hash')"
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/string-count.json",
+            "rogue",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : be8291eccc3364cf07a7a6247d1c474d5c4b14b29a44feb4fde71b289cb277af (1 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (3 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (4 migrations)\nRequalify the candidate against the current production schema."
+          }
+        }
+      ]
+    },
+    {
+      "name": "previous-release",
+      "description": "The previous-release branch: valid, schema-1 live contract, invalid live identity, non-prefix history, bootstrap or absent live contract.",
+      "files": {
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/candidate.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    },\n    \"schemaBefore\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"ae35b844ce705711e8b415736eef0d76c8dc6ed0dcfe596ddfd451d7c45191d9\",\n  \"candidateVersion\": \"c-dddddddddddddddddddddddddddddddddddddddd-ae35b844ce70\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"dddddddddddddddddddddddddddddddddddddddd\"\n}\n",
+        ".pipeline-artifacts/live-bootstrap.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": true,\n    \"schemaAfter\": {\n      \"hash\": \"411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\",\n        \"20260303000000_AddOther\"\n      ]\n    }\n  },\n  \"candidateId\": \"f09fb4575caf5ed55551efb248f252512e611fd42b92e1cf93d3c48d7e1d9806\",\n  \"candidateVersion\": \"c-ffffffffffffffffffffffffffffffffffffffff-f09fb4575caf\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"ffffffffffffffffffffffffffffffffffffffff\"\n}\n",
+        ".pipeline-artifacts/live-other.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\",\n        \"20260303000000_AddOther\"\n      ]\n    },\n    \"schemaBefore\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"e9389ebe08c7459841dd455a124e2f9ee5c4b2528ecb2eaa93d8d1f6e75ffdd5\",\n  \"candidateVersion\": \"c-ffffffffffffffffffffffffffffffffffffffff-e9389ebe08c7\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"ffffffffffffffffffffffffffffffffffffffff\"\n}\n",
+        ".pipeline-artifacts/live.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"live.tar\": \"7a0c3ac0d35f7d3b985ef0e678fab3f36ef28c158cc62d095183e9589d084ae5\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\",\n        \"20260303000000_AddOther\"\n      ]\n    },\n    \"schemaBefore\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    }\n  },\n  \"candidateId\": \"1aeaf36ac1751e861adcd7b70717b1a6c3705528bc4b96b8a697f18f22c80a9a\",\n  \"candidateVersion\": \"c-ffffffffffffffffffffffffffffffffffffffff-1aeaf36ac175\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"ffffffffffffffffffffffffffffffffffffffff\"\n}\n",
+        ".pipeline-artifacts/live.tar": "live\n",
+        "live-ahead": "20260101000000_InitialCreate\n20260202000000_AddThing\n20260303000000_AddOther\n20260404000000_Later\n",
+        "live-array-version.json": "{\"adapter\":{\"name\":\"test-adapter\",\"version\":\"1\"},\"artifacts\":{\"live.tar\":\"7a0c3ac0d35f7d3b985ef0e678fab3f36ef28c158cc62d095183e9589d084ae5\"},\"baseline\":{\"bootstrap\":false,\"schemaAfter\":{\"hash\":\"411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\",\"20260303000000_AddOther\"]},\"schemaBefore\":{\"hash\":\"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\"]}},\"candidateId\":\"1aeaf36ac1751e861adcd7b70717b1a6c3705528bc4b96b8a697f18f22c80a9a\",\"candidateVersion\":[\"r\",1],\"injection\":{\"manifestSha256\":\"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\"packages\":[]},\"schema\":2,\"sourceSha\":\"ffffffffffffffffffffffffffffffffffffffff\"}",
+        "live-noid.json": "{\"adapter\":{\"name\":\"test-adapter\",\"version\":\"1\"},\"artifacts\":{\"live.tar\":\"7a0c3ac0d35f7d3b985ef0e678fab3f36ef28c158cc62d095183e9589d084ae5\"},\"baseline\":{\"bootstrap\":false,\"schemaAfter\":{\"hash\":\"411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\",\"20260303000000_AddOther\"]},\"schemaBefore\":{\"hash\":\"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\"]}},\"candidateId\":\"\",\"candidateVersion\":\"c-ffffffffffffffffffffffffffffffffffffffff-1aeaf36ac175\",\"injection\":{\"manifestSha256\":\"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\"packages\":[]},\"schema\":2,\"sourceSha\":\"ffffffffffffffffffffffffffffffffffffffff\"}",
+        "live-null-version.json": "{\"adapter\":{\"name\":\"test-adapter\",\"version\":\"1\"},\"artifacts\":{\"live.tar\":\"7a0c3ac0d35f7d3b985ef0e678fab3f36ef28c158cc62d095183e9589d084ae5\"},\"baseline\":{\"bootstrap\":false,\"schemaAfter\":{\"hash\":\"411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\",\"20260303000000_AddOther\"]},\"schemaBefore\":{\"hash\":\"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\"]}},\"candidateId\":\"1aeaf36ac1751e861adcd7b70717b1a6c3705528bc4b96b8a697f18f22c80a9a\",\"candidateVersion\":null,\"injection\":{\"manifestSha256\":\"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\"packages\":[]},\"schema\":2,\"sourceSha\":\"ffffffffffffffffffffffffffffffffffffffff\"}",
+        "live-null.json": "null",
+        "live-object-version.json": "{\"adapter\":{\"name\":\"test-adapter\",\"version\":\"1\"},\"artifacts\":{\"live.tar\":\"7a0c3ac0d35f7d3b985ef0e678fab3f36ef28c158cc62d095183e9589d084ae5\"},\"baseline\":{\"bootstrap\":false,\"schemaAfter\":{\"hash\":\"411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\",\"20260303000000_AddOther\"]},\"schemaBefore\":{\"hash\":\"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\"]}},\"candidateId\":\"1aeaf36ac1751e861adcd7b70717b1a6c3705528bc4b96b8a697f18f22c80a9a\",\"candidateVersion\":{\"toString\":2},\"injection\":{\"manifestSha256\":\"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\"packages\":[]},\"schema\":2,\"sourceSha\":\"ffffffffffffffffffffffffffffffffffffffff\"}",
+        "live-schema": "20260101000000_InitialCreate\n20260202000000_AddThing\n20260303000000_AddOther\n",
+        "live-schema-1.json": "{\"adapter\":{\"name\":\"test-adapter\",\"version\":\"1\"},\"artifacts\":{\"live.tar\":\"7a0c3ac0d35f7d3b985ef0e678fab3f36ef28c158cc62d095183e9589d084ae5\"},\"baseline\":{\"bootstrap\":false,\"schemaAfter\":{\"hash\":\"411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\",\"20260303000000_AddOther\"]},\"schemaBefore\":{\"hash\":\"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\"]}},\"candidateId\":\"1aeaf36ac1751e861adcd7b70717b1a6c3705528bc4b96b8a697f18f22c80a9a\",\"candidateVersion\":\"c-ffffffffffffffffffffffffffffffffffffffff-1aeaf36ac175\",\"injection\":{\"manifestSha256\":\"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\"packages\":[]},\"schema\":1,\"sourceSha\":\"ffffffffffffffffffffffffffffffffffffffff\"}",
+        "live-tampered.json": "{\"adapter\":{\"name\":\"test-adapter\",\"version\":\"1\"},\"artifacts\":{\"live.tar\":\"7a0c3ac0d35f7d3b985ef0e678fab3f36ef28c158cc62d095183e9589d084ae5\"},\"baseline\":{\"bootstrap\":false,\"schemaAfter\":{\"hash\":\"411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\",\"20260303000000_AddOther\"]},\"schemaBefore\":{\"hash\":\"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\"migrations\":[\"20260101000000_InitialCreate\",\"20260202000000_AddThing\"]}},\"candidateId\":\"1aeaf36ac1751e861adcd7b70717b1a6c3705528bc4b96b8a697f18f22c80a9a\",\"candidateVersion\":\"c-ffffffffffffffffffffffffffffffffffffffff-1aeaf36ac175\",\"injection\":{\"manifestSha256\":\"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\"packages\":[]},\"schema\":2,\"sourceSha\":\"0000000000000000000000000000000000000000\"}"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            ".pipeline-artifacts/live.json"
+          ],
+          "stdout": [
+            "Previously deployed release: production runs c-ffffffffffffffffffffffffffffffffffffffff-1aeaf36ac175 on 411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4 (3 migrations), whose QA exercised the release before it on that schema from 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations); the migration is a no-op and only the binaries move back.",
+            "Verified immutable candidate c-dddddddddddddddddddddddddddddddddddddddd-ae35b844ce70 (ae35b844ce705711e8b415736eef0d76c8dc6ed0dcfe596ddfd451d7c45191d9)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : 411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4 (3 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            "-"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : 411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4 (3 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            "live-schema-1.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : 411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4 (3 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            "live-tampered.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The delivery contract of the release production runs is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            "live-noid.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The delivery contract of the release production runs is invalid."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            "live-null-version.json"
+          ],
+          "stdout": [
+            "Previously deployed release: production runs 1aeaf36ac1751e861adcd7b70717b1a6c3705528bc4b96b8a697f18f22c80a9a on 411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4 (3 migrations), whose QA exercised the release before it on that schema from 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations); the migration is a no-op and only the binaries move back.",
+            "Verified immutable candidate c-dddddddddddddddddddddddddddddddddddddddd-ae35b844ce70 (ae35b844ce705711e8b415736eef0d76c8dc6ed0dcfe596ddfd451d7c45191d9)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            ".pipeline-artifacts/live-bootstrap.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : 411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4 (3 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            ".pipeline-artifacts/live-other.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : 411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4 (3 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-ahead",
+            ".pipeline-artifacts",
+            ".pipeline-artifacts/live.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : cee7a410a79374790b3c14039f84f7e481df36f2a6580361e7b791c8594699f6 (4 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            "live-object-version.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "Cannot convert object to primitive value"
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            "live-array-version.json"
+          ],
+          "stdout": [
+            "Previously deployed release: production runs r,1 on 411106a8a31ab666a189dbeb85e0a8864fe7891be931191a5ec475a01fc9a9b4 (3 migrations), whose QA exercised the release before it on that schema from 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations); the migration is a no-op and only the binaries move back.",
+            "Verified immutable candidate c-dddddddddddddddddddddddddddddddddddddddd-ae35b844ce70 (ae35b844ce705711e8b415736eef0d76c8dc6ed0dcfe596ddfd451d7c45191d9)."
+          ]
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            "live-null.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "Cannot read properties of null (reading 'schema')"
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            "absent-live.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "ENOENT: no such file or directory, open '<workspace>\\absent-live.json'",
+            "code": "ENOENT"
+          }
+        }
+      ]
+    },
+    {
+      "name": "previous-release-non-prefix",
+      "description": "The live history inserts a migration before the candidate's: not an exact prefix.",
+      "files": {
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/candidate.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    },\n    \"schemaBefore\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    }\n  },\n  \"candidateId\": \"ae35b844ce705711e8b415736eef0d76c8dc6ed0dcfe596ddfd451d7c45191d9\",\n  \"candidateVersion\": \"c-dddddddddddddddddddddddddddddddddddddddd-ae35b844ce70\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"dddddddddddddddddddddddddddddddddddddddd\"\n}\n",
+        ".pipeline-artifacts/live.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"live.tar\": \"7a0c3ac0d35f7d3b985ef0e678fab3f36ef28c158cc62d095183e9589d084ae5\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0294c69371a70ad429c96d69d33d7435f3878e96f6eb2b1c8efeab0c4fce4b1b\",\n      \"migrations\": [\n        \"20251201000000_Earlier\",\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    },\n    \"schemaBefore\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    }\n  },\n  \"candidateId\": \"83781815c79dcb92df40e29c22d1e991b25b56ad2e3033d63628a85476449bf2\",\n  \"candidateVersion\": \"c-ffffffffffffffffffffffffffffffffffffffff-83781815c79d\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"ffffffffffffffffffffffffffffffffffffffff\"\n}\n",
+        ".pipeline-artifacts/live.tar": "live\n",
+        "live-schema": "20251201000000_Earlier\n20260101000000_InitialCreate\n20260202000000_AddThing\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            ".pipeline-artifacts/live.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : 0294c69371a70ad429c96d69d33d7435f3878e96f6eb2b1c8efeab0c4fce4b1b (3 migrations)\n  schemaBefore : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        }
+      ]
+    },
+    {
+      "name": "previous-release-crafted",
+      "description": "Crafted predecessor proofs: a live history no longer than the candidate's, a prefix that is not an array.",
+      "files": {
+        ".pipeline-artifacts/application.tar": "app\n",
+        ".pipeline-artifacts/candidate.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    },\n    \"schemaBefore\": {\n      \"hash\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n      \"migrations\": []\n    }\n  },\n  \"candidateId\": \"3e8b171b8c78cc547c54c3c04679b263a6b958e032ccca045cf812d3cc389ca9\",\n  \"candidateVersion\": \"c-dddddddddddddddddddddddddddddddddddddddd-3e8b171b8c78\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"dddddddddddddddddddddddddddddddddddddddd\"\n}\n",
+        ".pipeline-artifacts/live-text.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"cee51bf391d82e605d84f3e25f1d5bf051c63c334fb909ad6034a46462bc77e1\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260303000000_AddOther\"\n      ]\n    },\n    \"schemaBefore\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": []\n    }\n  },\n  \"candidateId\": \"1acd8a131774517720847c02d605a103a47c0298eb84b2259a137526ca9799e4\",\n  \"candidateVersion\": \"c-ffffffffffffffffffffffffffffffffffffffff-1acd8a131774\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"ffffffffffffffffffffffffffffffffffffffff\"\n}\n",
+        ".pipeline-artifacts/live.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\"\n      ]\n    },\n    \"schemaBefore\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": [\n        \"20260101000000_InitialCreate\",\n        \"20260202000000_AddThing\"\n      ]\n    }\n  },\n  \"candidateId\": \"d15e88220f91d7d7f949ba99789d4c89f0c3f4f0b6c31d1637e8b0058f553b6a\",\n  \"candidateVersion\": \"c-ffffffffffffffffffffffffffffffffffffffff-d15e88220f91\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"ffffffffffffffffffffffffffffffffffffffff\"\n}\n",
+        ".pipeline-artifacts/object-prefix-short.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": {\n        \"length\": [\n          1\n        ]\n      }\n    },\n    \"schemaBefore\": {\n      \"hash\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n      \"migrations\": []\n    }\n  },\n  \"candidateId\": \"d29401d9892ad90f01806610b586463753d6810628f3cb4cc0aa48c707a3eaed\",\n  \"candidateVersion\": \"c-dddddddddddddddddddddddddddddddddddddddd-d29401d9892a\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"dddddddddddddddddddddddddddddddddddddddd\"\n}\n",
+        ".pipeline-artifacts/object-prefix.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": {\n        \"length\": \"0x10\"\n      }\n    },\n    \"schemaBefore\": {\n      \"hash\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n      \"migrations\": []\n    }\n  },\n  \"candidateId\": \"3587ca21ddd3c7db103384fe9c13506b5ab2661a2fdcd9fc6cdb9a5e57d53e5f\",\n  \"candidateVersion\": \"c-dddddddddddddddddddddddddddddddddddddddd-3587ca21ddd3\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"dddddddddddddddddddddddddddddddddddddddd\"\n}\n",
+        ".pipeline-artifacts/text-prefix.json": "{\n  \"adapter\": {\n    \"name\": \"test-adapter\",\n    \"version\": \"1\"\n  },\n  \"artifacts\": {\n    \"application.tar\": \"8a8f60ecb09b7e64c6d5214a8043865e608507db8c3f61f995eae6d078875901\"\n  },\n  \"baseline\": {\n    \"bootstrap\": false,\n    \"schemaAfter\": {\n      \"hash\": \"0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece\",\n      \"migrations\": \"x\"\n    },\n    \"schemaBefore\": {\n      \"hash\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n      \"migrations\": []\n    }\n  },\n  \"candidateId\": \"4ac134d5653669efb88175642a501f18a2e2bd5643de3c03f3f8bf8b8050511a\",\n  \"candidateVersion\": \"c-dddddddddddddddddddddddddddddddddddddddd-4ac134d56536\",\n  \"injection\": {\n    \"manifestSha256\": \"04727424a7da455e281731cfd3d02dbdfe2abd5fd8f8fbb338e4bc423f2dc7c6\",\n    \"packages\": []\n  },\n  \"schema\": 2,\n  \"sourceSha\": \"dddddddddddddddddddddddddddddddddddddddd\"\n}\n",
+        "live-schema": "20260101000000_InitialCreate\n",
+        "live-two": "20260101000000_InitialCreate\n20260303000000_AddOther\n",
+        "live-two-b": "20260101000000_InitialCreate\n20260303000000_AddOther\n",
+        "live-two-c": "20260101000000_InitialCreate\n20260303000000_AddOther\n"
+      },
+      "runs": [
+        {
+          "args": [
+            ".pipeline-artifacts/candidate.json",
+            "live-schema",
+            ".pipeline-artifacts",
+            ".pipeline-artifacts/live.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : 13f9560b83d20d5800ed7ddc7db26bd5669f07300b95b3afc6fbdd600f272304 (1 migrations)\n  schemaBefore : e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (0 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (2 migrations)\nRequalify the candidate against the current production schema."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/text-prefix.json",
+            "live-two",
+            ".pipeline-artifacts",
+            ".pipeline-artifacts/live-text.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "prefix.some is not a function"
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/object-prefix.json",
+            "live-two-b",
+            ".pipeline-artifacts",
+            ".pipeline-artifacts/live-text.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "Error",
+            "message": "The production schema is neither state this candidate was proven against.\n  live         : cee51bf391d82e605d84f3e25f1d5bf051c63c334fb909ad6034a46462bc77e1 (2 migrations)\n  schemaBefore : e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (0 migrations)\n  schemaAfter  : 0a984c9a3f411842af98ca417f34fb8c139c885834d0df5f6438ff50da76aece (0x10 migrations)\nRequalify the candidate against the current production schema."
+          }
+        },
+        {
+          "args": [
+            ".pipeline-artifacts/object-prefix-short.json",
+            "live-two-c",
+            ".pipeline-artifacts",
+            ".pipeline-artifacts/live-text.json"
+          ],
+          "stdout": [],
+          "error": {
+            "kind": "TypeError",
+            "message": "prefix.some is not a function"
+          }
+        }
+      ]
+    }
+  ]
+}

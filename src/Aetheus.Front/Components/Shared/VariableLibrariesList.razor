@@ -1,8 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
 @using Microsoft.AspNetCore.Components.Sections
-@* Recette R-218/R-221: the create action sits on the title line (the host's page header), and the
-   column header filters replace the search row. *@
+@* Place Create in the host's page header and filter through column headers so the list shares the
+   surrounding page structure. *@
 @if (IsGlobal || IsProjectScope)
 {
     <SectionContent SectionName="@PipelinesList.HeaderActionsSection">
@@ -38,8 +38,7 @@
                 </OmniStack>
             </Template>
         </OmniDataGridColumn>
-        @* PLAN-003 lot 25: the owning project is a column of its own. Squeezed under the name it was
-           truncated on every row, and there was no way to sort on it. *@
+        @* Give the owning project a dedicated column so its name remains readable and sortable. *@
         @if (!IsProjectScope)
         {
             <OmniDataGridColumn TItem="VariableLibraryDto" Property="ProjectName" Title="@L["Project"]" MinWidth="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ProjectNames" FilterSearchable="true" />

@@ -19,7 +19,8 @@ public sealed class ServerOfflineNotificationHandler(IHubContext<AlertHub> hub)
         var payload = new ServerOfflineNotificationPayload(
             domainEvent.ServerId,
             domainEvent.ServerName,
-            domainEvent.LastHeartbeat);
+            domainEvent.LastHeartbeat,
+            domainEvent.Reachability);
 
         await hub.Clients.Group(HubGroups.Alerts)
             .SendAsync("ServerOffline", payload, ct)

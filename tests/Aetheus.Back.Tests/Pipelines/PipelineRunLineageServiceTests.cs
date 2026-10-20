@@ -6,7 +6,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>Recette R-498: who launched a run and which runs it started.</summary>
+/// <summary>Who launched a run and which runs it started.</summary>
 public sealed class PipelineRunLineageServiceTests
 {
     private static readonly DateTime Started = new(2026, 9, 30, 8, 0, 0, DateTimeKind.Utc);

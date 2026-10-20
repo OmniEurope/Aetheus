@@ -5,7 +5,8 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Back.Tests.AppMonitoring;
 
-/// <summary>Recette R2-013: a refused ingestion key is one warning per key and period, not one per request.</summary>
+/// <summary>A refused ingestion key is one warning per key and period, not one per
+/// request.</summary>
 public sealed class IngestKeyRejectionLogTests
 {
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 1, 5, 21, 0, TimeSpan.Zero));
@@ -80,5 +81,28 @@ public sealed class IngestKeyRejectionLogTests
 
         Assert.Equal(IngestKeyRejectionLog.MaxTrackedKeys + 1, _log.Entries.Count);
         Assert.Contains(IngestKeyRejectionLog.OtherKeys, _log.Entries[^1].Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheWarning_NamesTheOriginOfTheSender()
+    {
+        Log().Record("hash-a", "203.0.113.9 (user-agent \"OTel-OTLP-Exporter\", path /v1/metrics)");
+
+        var message = Assert.Single(_log.Entries).Message;
+        Assert.Contains("203.0.113.9", message, StringComparison.Ordinal);
+        Assert.Contains("OTel-OTLP-Exporter", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TwoSendersHoldingTheSameStaleKey_AreReportedSeparately()
+    {
+        var log = Log();
+        log.Record("hash-a", "198.51.100.1");
+        log.Record("hash-a", "198.51.100.2");
+        log.Record("hash-a", "198.51.100.1");
+
+        Assert.Equal(2, _log.Entries.Count);
+        Assert.Contains("198.51.100.1", _log.Entries[0].Message, StringComparison.Ordinal);
+        Assert.Contains("198.51.100.2", _log.Entries[1].Message, StringComparison.Ordinal);
     }
 }

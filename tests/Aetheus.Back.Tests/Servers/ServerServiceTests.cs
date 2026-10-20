@@ -551,7 +551,7 @@ public class ServerServiceTests
         Assert.Equal("Started", result.Items[0].Message);
     }
 
-    /// <summary>Recette R-210 / R-224: the grid's column filters and its single sort key reach the repository.</summary>
+    /// <summary>The grid's column filters and its single sort key reach the repository.</summary>
     [Fact]
     public async Task GetServerLogsAsync_PassesFiltersAndSortToTheRepository()
     {

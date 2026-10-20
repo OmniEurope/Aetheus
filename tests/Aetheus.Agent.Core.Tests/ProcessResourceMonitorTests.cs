@@ -57,9 +57,17 @@ public sealed class ProcessResourceMonitorTests
         using var child = Process.Start(startInfo)!;
         try
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
+            // The child is visible to the tree walk only once the OS has registered it: poll for that
+            // (bounded at 10 s) instead of guessing it takes less than 250 ms on a loaded machine.
             using var root = Process.GetCurrentProcess();
             var samples = ProcessResourceMonitor.CaptureTree(root);
+            var polling = Stopwatch.StartNew();
+            while (!samples.Any(sample => sample.ProcessId == child.Id) && polling.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+                samples = ProcessResourceMonitor.CaptureTree(root);
+            }
+
             var childSample = Assert.Single(samples, sample => sample.ProcessId == child.Id);
             Assert.True(childSample.WorkingSetBytes > 0);
 

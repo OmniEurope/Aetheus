@@ -9,8 +9,8 @@ public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto
 
     private List<AiRunnerProfileDto> _profiles = [];
 
-    // Recette R-224: the binaries the Binary column's checkable filter offers, and the yes/no texts.
-    private IReadOnlyList<string> _binaries = [];
+    // The models the Model column's checkable filter offers, and the yes/no texts.
+    private IReadOnlyList<string> _models = [];
     private Func<string, string>? _yesNoText;
     private Func<string, string> YesNoText => _yesNoText ??= GridFilterText.YesNo(L);
 
@@ -27,30 +27,40 @@ public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto
         await LoadFilterValuesAsync();
     }
 
-    /// <summary>Every binary across the profiles, read from the profile options (an admin sees them all).</summary>
+    /// <summary>Every model across the profiles, read from the profile options (an admin sees them all).</summary>
     private async Task LoadFilterValuesAsync()
     {
         try
         {
             var options = await Api.Ai.GetAiRunnerProfileOptionsAsync();
-            _binaries = [.. options.Select(profile => profile.Binary)
-                .Where(binary => !string.IsNullOrWhiteSpace(binary))
+            _models = [.. options.Select(profile => profile.Model)
+                .Where(model => !string.IsNullOrWhiteSpace(model))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Order(StringComparer.OrdinalIgnoreCase)];
         }
         catch (HttpRequestException)
         {
-            _binaries = [];
+            _models = [];
         }
     }
 
+    private string ProviderName(AiProvider? provider) => provider switch
+    {
+        AiProvider.Anthropic => L["AiProviderAnthropic"],
+        AiProvider.OpenAi => L["AiProviderOpenAi"],
+        _ => string.Empty
+    };
+
+    // Most preferred profile first: the order a pipeline AI step tries them in.
+    protected override string DefaultSortField => "Priority";
+
     internal Task LoadDataAsync(GridLoadArgs args) => LoadPageFromArgsAsync(args);
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort and column filters.</summary>
     internal Task<PaginatedResult<AiRunnerProfileDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(25);
-        var (sortBy, sortDescending) = args.ToSortRequest("Name");
+        var (sortBy, sortDescending) = args.ToSortRequest(DefaultSortField);
         return Api.Ai.GetAiRunnerProfilesAsync(page, pageSize, filters: args.ToApiFilters(),
             sortBy: sortBy, sortDescending: sortDescending);
     }

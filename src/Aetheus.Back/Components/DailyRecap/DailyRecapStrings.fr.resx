@@ -94,4 +94,7 @@
   <data name="QuietDayTitle" xml:space="preserve"><value>Rien à signaler</value></data>
   <data name="QuietDaySummary" xml:space="preserve"><value>Rien ne s'est passé ce jour-là dans les sections suivies par ce récap.</value></data>
   <data name="SettingsLink" xml:space="preserve"><value>Régler le récap</value></data>
+  <data name="EmailLabel" xml:space="preserve"><value>Votre panorama quotidien</value></data>
+  <data name="RunLink" xml:space="preserve"><value>Voir l’exécution et les journaux</value></data>
+  <data name="ServerLink" xml:space="preserve"><value>Voir le serveur</value></data>
 </root>

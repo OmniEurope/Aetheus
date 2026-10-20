@@ -16,6 +16,11 @@ public class AgentUpdateRequest
     public bool IsActive { get; set; }
     public int? TaskId { get; set; }
     public string ExpectedCapabilitiesJson { get; set; } = "[]";
+
+    /// <summary>R3-58: comma-separated <see cref="AgentEnableableCapabilities"/> tokens the update must also
+    /// grant on the host (the whitelisted sudo grants only), null when the update grants nothing. Persisted
+    /// because the task is created later when the server is busy, and so the request keeps what was asked.</summary>
+    public string? EnableCapabilities { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? HandoffAt { get; set; }
     public DateTime? ConfirmedAt { get; set; }

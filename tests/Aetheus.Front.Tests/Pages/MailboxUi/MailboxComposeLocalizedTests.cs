@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.MailboxUi;
 
-/// <summary>Recette R1-17: the sentences the reader sees, rendered with the real English resources.</summary>
+/// <summary>The sentences the reader sees, rendered with the real English resources.</summary>
 public sealed class MailboxComposeLocalizedTests : BunitContext
 {
     private readonly CultureInfo _previousUiCulture = CultureInfo.CurrentUICulture;

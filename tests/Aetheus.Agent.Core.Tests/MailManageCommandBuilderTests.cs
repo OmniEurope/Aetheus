@@ -3,8 +3,8 @@ using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>PLAN-005: every Mail operation kind maps to one exact mail-manage / mail-setup argv, and every
-/// malformed field is refused before any process is spawned.</summary>
+/// <summary>Map each mail operation to exact helper argv and reject malformed fields before
+/// spawning a process.</summary>
 public class MailManageCommandBuilderTests
 {
     private const string Manage = "/usr/local/lib/aetheus/mail-manage";
@@ -67,6 +67,31 @@ public class MailManageCommandBuilderTests
             Argv(OperationKind.MailAddDomain, "example.com", new() { [MailSetupEnv.DkimSelector] = "s2026" }));
         Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailAddDomain, "example.com",
             new Dictionary<string, string> { [MailSetupEnv.DkimSelector] = "bad selector" }));
+    }
+
+    [Fact]
+    public void SetQuota_TargetsTheAddressWithTheQuotaFromEnv()
+    {
+        Assert.Equal(["-n", Manage, "set-quota", "bob@example.com", "512"],
+            Argv(OperationKind.MailSetQuota, "bob@example.com", new() { [MailSetupEnv.QuotaMb] = "512" }));
+        Assert.Equal(["-n", Manage, "set-quota", "bob@example.com", "0"],
+            Argv(OperationKind.MailSetQuota, "bob@example.com", new() { [MailSetupEnv.QuotaMb] = "0" }));
+        Assert.True(OperationTargetValidator.IsValid(OperationKind.MailSetQuota, "bob@example.com"));
+        Assert.False(OperationTargetValidator.IsValid(OperationKind.MailSetQuota, "-"));
+        Assert.Equal(AgentCapabilities.MailManagement, AgentCapabilities.RequiredFor(OperationKind.MailSetQuota));
+    }
+
+    [Theory]
+    [InlineData("bob@example.com", null)]          // no quota
+    [InlineData("bob@example.com", "-1")]          // negative
+    [InlineData("bob@example.com", "1048577")]     // above the validated range
+    [InlineData("bob@example.com", "1;id")]        // shell metacharacters
+    [InlineData("not-an-address", "512")]          // invalid target
+    public void SetQuota_RefusesInvalidAddressOrQuota(string email, string? quota)
+    {
+        var env = new Dictionary<string, string>();
+        if (quota is not null) env[MailSetupEnv.QuotaMb] = quota;
+        Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailSetQuota, email, env));
     }
 
     [Fact]
@@ -158,7 +183,7 @@ public class MailManageCommandBuilderTests
     [Fact]
     public void Purge_RunsTheManageHelperPurgeOnTheDashTargetOnly()
     {
-        // "Réinstaller la messagerie" (R2-083 / R2-088): one fixed argv, nothing from the request reaches it.
+        // Mail reinstallation uses fixed purge argv with no request-supplied arguments.
         Assert.Equal(["-n", Manage, "purge"], Argv(OperationKind.MailPurge, "-"));
         Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailPurge, "example.com", NoEnv));
         Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailPurge, "-;id", NoEnv));
@@ -207,4 +232,122 @@ public class MailManageCommandBuilderTests
         Assert.Contains(OperationKind.MailQuotaReport, mailKinds);
         Assert.All(mailKinds, kind => Assert.True(executor.CanHandle(kind), $"{kind} is not handled"));
     }
+
+    [Fact]
+    public void RetryTuning_RunsTheFixedSubCommandOnTheDashTargetOnly()
+    {
+        // The three timings are fixed in the helper, so neither the target nor the env can carry a value.
+        Assert.Equal(["-n", Manage, "retry-tuning"], Argv(OperationKind.MailRetryTuning, "-"));
+        var env = new Dictionary<string, string> { ["AETHEUS_MAIL_QUEUE_RUN_DELAY"] = "1s" };
+        Assert.Equal(["-n", Manage, "retry-tuning"], Argv(OperationKind.MailRetryTuning, "-", env));
+        Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailRetryTuning, "60s", NoEnv));
+        Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailRetryTuning, "-;id", NoEnv));
+    }
+
+    [Fact]
+    public void RetryTuning_IsAMailManagementKindTheMailExecutorClaims()
+    {
+        var executor = new MailOperationExecutor(
+            Microsoft.Extensions.Options.Options.Create(new Aetheus.Agent.Core.Configuration.AetheusAgentOptions()),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MailOperationExecutor>.Instance);
+        Assert.Equal(AgentCapabilities.MailManagement, AgentCapabilities.RequiredFor(OperationKind.MailRetryTuning));
+        Assert.True(executor.CanHandle(OperationKind.MailRetryTuning));
+        Assert.True(OperationTargetValidator.IsValid(OperationKind.MailRetryTuning, "-"));
+        Assert.False(OperationTargetValidator.IsValid(OperationKind.MailRetryTuning, "60s"));
+    }
+
+    // --- Recette R1-41 / R3-50: the Dovecot master user ---
+
+    private static Dictionary<string, string> SetupEnv() => new()
+    {
+        [MailSetupEnv.Hostname] = "mail.example.com",
+        [MailSetupEnv.DkimSelector] = "default",
+        [MailSetupEnv.AdminEmail] = "admin@example.com",
+        [MailSetupEnv.QuotaMb] = "1024",
+        [MailSetupEnv.AdminPassword] = "SecureP@ss123!",
+        [MailSetupEnv.SpamFilter] = "none"
+    };
+
+    [Fact]
+    public void MasterAccess_SendsThePasswordOnStdinOnly()
+    {
+        var env = new Dictionary<string, string> { [MailSetupEnv.MasterPassword] = "GeneratedMasterPassword0123456789abcdEF" };
+
+        var command = MailManageCommandBuilder.Build(OperationKind.MailMasterAccess, "-", env);
+
+        Assert.NotNull(command);
+        Assert.Equal(["-n", Manage, "master-set"], command.Argv);
+        Assert.Equal("GeneratedMasterPassword0123456789abcdEF\n", command.Stdin);
+        Assert.DoesNotContain(command.Argv, arg => arg.Contains("GeneratedMaster", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("-", null)]            // no password
+    [InlineData("-", "short")]         // under the policy minimum
+    [InlineData("-", "line\nbreak-password")] // a second stdin line smuggled in
+    [InlineData("all", "GeneratedMasterPassword0123456789abcdEF")] // any target but "-"
+    public void MasterAccess_RefusesAMissingOrInvalidPasswordOrTarget(string target, string? password)
+    {
+        var env = new Dictionary<string, string>();
+        if (password is not null) env[MailSetupEnv.MasterPassword] = password;
+        Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailMasterAccess, target, env));
+    }
+
+    [Fact]
+    public void Setup_AppendsTheMasterPasswordAsTheSecondStdinLine_WhenGiven()
+    {
+        var withoutMaster = MailManageCommandBuilder.Build(OperationKind.MailSetup, "example.com", SetupEnv());
+        var env = SetupEnv();
+        env[MailSetupEnv.MasterPassword] = "GeneratedMasterPassword0123456789abcdEF";
+        var withMaster = MailManageCommandBuilder.Build(OperationKind.MailSetup, "example.com", env);
+
+        Assert.Equal("SecureP@ss123!\n", withoutMaster?.Stdin);
+        Assert.Equal("SecureP@ss123!\nGeneratedMasterPassword0123456789abcdEF\n", withMaster?.Stdin);
+        Assert.Equal(withoutMaster?.Argv, withMaster?.Argv);
+        env[MailSetupEnv.MasterPassword] = "bad\nline-password";
+        Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailSetup, "example.com", env));
+    }
+
+    [Fact]
+    public void MasterAccess_IsAMailManagementKindTheMailExecutorClaims()
+    {
+        var executor = new MailOperationExecutor(
+            Microsoft.Extensions.Options.Options.Create(new Aetheus.Agent.Core.Configuration.AetheusAgentOptions()),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MailOperationExecutor>.Instance);
+        Assert.Equal(AgentCapabilities.MailManagement, AgentCapabilities.RequiredFor(OperationKind.MailMasterAccess));
+        Assert.True(executor.CanHandle(OperationKind.MailMasterAccess));
+        Assert.False(executor.CanHandle(OperationKind.MailOutboundProbe));
+        Assert.True(OperationTargetValidator.IsValid(OperationKind.MailMasterAccess, "-"));
+        Assert.False(OperationTargetValidator.IsValid(OperationKind.MailMasterAccess, "x"));
+    }
+
+    private static Dictionary<string, string> AccountEnv(string? domain = "example.com", string? quota = "512", string? password = "correct-horse-battery") =>
+        new Dictionary<string, string?>
+        {
+            [MailSetupEnv.Domain] = domain,
+            [MailSetupEnv.QuotaMb] = quota,
+            [MailSetupEnv.AccountPassword] = password,
+        }.Where(entry => entry.Value is not null).ToDictionary(entry => entry.Key, entry => entry.Value!);
+
+    [Fact]
+    public void AddAccount_PassesThePasswordOnStdinOnly()
+    {
+        var command = MailManageCommandBuilder.Build(OperationKind.MailAddAccount, "jane@example.com", AccountEnv());
+
+        Assert.NotNull(command);
+        Assert.Equal(["-n", Manage, "add-account", "jane@example.com", "example.com", "512"], command.Argv);
+        Assert.Equal("correct-horse-battery\n", command.Stdin);
+    }
+
+    [Theory]
+    [InlineData("not-an-email", "example.com", "512", "correct-horse-battery")]
+    [InlineData("jane@example.com", null, "512", "correct-horse-battery")]
+    [InlineData("jane@example.com", "bad domain", "512", "correct-horse-battery")]
+    [InlineData("jane@example.com", "example.com", null, "correct-horse-battery")]
+    [InlineData("jane@example.com", "example.com", "-1", "correct-horse-battery")]
+    [InlineData("jane@example.com", "example.com", "2000000", "correct-horse-battery")]
+    [InlineData("jane@example.com", "example.com", "512", null)]
+    [InlineData("jane@example.com", "example.com", "512", "short")]
+    public void AddAccount_RefusesAnInvalidField(string email, string? domain, string? quota, string? password) =>
+        Assert.Null(MailManageCommandBuilder.Build(OperationKind.MailAddAccount, email, AccountEnv(domain, quota, password)));
 }

@@ -6,12 +6,9 @@ using Aetheus.Back.Services.DomainEvents;
 
 namespace Aetheus.Back.Components.Servers.Handlers;
 
-/// <summary>
-/// Audit R2-023 follow-up: records a sudoers drift as a persistent notification of every active
-/// administrator (a server attached to no project has no subscriber, and Aetheus keeps no alert
-/// history), then hands it to the notification rules of <c>alert.triggered</c>, like the threshold
-/// alerts, so a configured mail or webhook channel receives it too.
-/// </summary>
+/// <summary>Persists sudoers-drift notifications for active administrators, including servers
+/// without project followers. Also publishes <c>alert.triggered</c> for configured mail and webhook
+/// channels.</summary>
 public sealed class SudoersDriftNotificationHandler(
     IUserNotificationService userNotifications,
     INotificationService notifications) : IDomainEventHandler<SudoersDriftDetectedEvent>

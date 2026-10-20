@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Git;
 
-/// <summary>
-/// One server-paged list of the repository page (commits, pull requests): the rows its grid shows, their
-/// total, and the loading and error states its tab renders. Recette R-327: the grid scrolls (remote
-/// virtualization), so <see cref="Items"/> is the block the grid asked for last.
-/// FRONT-003: only the latest request applies its answer. <see cref="Clear"/> (the page switching to another
-/// repository) and every new load retire the requests still in flight, so a late answer from the previous
-/// repository, or from an older block, never overwrites the rows on screen.
-/// </summary>
-/// <param name="isLoadFailure">The exceptions the tab reports as a failed load; any other one propagates.</param>
+/// <summary>The list retains the latest requested block and its loading state. New loads and
+/// repository changes invalidate prior requests so late responses cannot replace current
+/// rows.</summary> <param name="isLoadFailure">Exceptions exposed as load failures; others
+/// propagate.</param>
 internal sealed class GitPagedList<T>(Func<Exception, bool> isLoadFailure)
 {
     private int _request;

@@ -338,24 +338,6 @@ public class ServerDockerSectionDeepTests : BunitContext
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("docker/containers/browse"));
     }
 
-    // ── Test 13: BrowseParentAsync from a subdirectory walks one level up ────
-
-    [Fact]
-    public async Task BrowseParentAsync_FromSubdir_GoesUpAndReBrowses()
-    {
-        var cut = RenderSection(13);
-        var tab = cut.FindComponent<DockerContainersTab>();
-        typeof(DockerContainersTab).GetField("_browseContainerId", BF)!.SetValue(tab.Instance, "abc123def456ghi");
-        typeof(DockerContainersTab).GetField("_browsePath", BF)!.SetValue(tab.Instance, "/etc/nginx");
-
-        var method = typeof(DockerContainersTab).GetMethod("BrowseParentAsync", BF)!;
-        await cut.InvokeAsync(() => (Task)method.Invoke(tab.Instance, [])!);
-
-        var path = (string)typeof(DockerContainersTab).GetField("_browsePath", BF)!.GetValue(tab.Instance)!;
-        Assert.Equal("/etc", path);
-        Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("docker/containers/browse"));
-    }
-
     // ── Test 14: OpenComposeEditorAsync opens the editor and fetches the file ─
 
     [Fact]

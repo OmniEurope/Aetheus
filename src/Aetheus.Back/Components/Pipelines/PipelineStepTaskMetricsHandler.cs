@@ -11,7 +11,7 @@ namespace Aetheus.Back.Components.Pipelines;
 /// The dispatch is strict: metrics dropped by a caught-and-logged handler would make a run page
 /// under-report while every step still reported success.
 /// </summary>
-internal sealed class PipelineStepTaskMetricsHandler(IPipelineRepository repo)
+internal sealed class PipelineStepTaskMetricsHandler(IPipelineQualityResultRepository repo)
     : IDomainEventHandler<PipelineStepTaskMetricsCollectedEvent>
 {
     public async Task HandleAsync(

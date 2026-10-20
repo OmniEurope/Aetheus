@@ -24,6 +24,8 @@ public partial class DockerImagesTab
     /// <summary>BACK-012: the backend takes Server.Admin for this tab's agent-reaching writes (compose
     /// deploy, image build and delete, container shell); without it they are not offered.</summary>
     [Parameter] public bool CanAdmin { get; set; }
+
+    private ServerTaskFollower? _follower;
     [Parameter, EditorRequired] public IReadOnlyList<DockerImageDto> Images { get; set; } = [];
 
     // SITE-OFFLINE-001: every action of this tab queues a task only the agent can claim. The parent passes
@@ -35,7 +37,7 @@ public partial class DockerImagesTab
 
     private string _imageSearch = string.Empty;
 
-    // Recette R-227: each heartbeat brings a new image list; images that were not there read bold.
+    // Each heartbeat brings a new image list; images that were not there read bold.
     private OmniDataGrid<DockerImageDto>? _grid;
     private readonly LiveGridRows _liveRows = new();
 
@@ -68,6 +70,8 @@ public partial class DockerImagesTab
         if (string.IsNullOrWhiteSpace(_pullImageName)) return;
         _imagePulling = true;
         var request = new DockerPullImageRequest { Image = _pullImageName.Trim() };
+        // Recette R3-37: the follower shows what becomes of the task, in place of a lone "queued" toast.
+        _follower?.Expect($"{L["DockerPull"]} {request.Image}");
         var success = await Api.ServerTools.PullDockerImageAsync(ServerId, request);
         if (success)
         {
@@ -76,6 +80,7 @@ public partial class DockerImagesTab
         }
         else
         {
+            _follower?.Forget();
             Toast.Error("Docker", "DockerPullFailed");
         }
         _imagePulling = false;
@@ -98,6 +103,7 @@ public partial class DockerImagesTab
     private async Task RemoveImageAsync(string imageId)
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect($"{L["Delete"]} {imageId[..Math.Min(12, imageId.Length)]}");
         var success = await Api.ServerTools.RemoveDockerImageAsync(ServerId, imageId);
         if (success)
         {
@@ -105,6 +111,7 @@ public partial class DockerImagesTab
         }
         else
         {
+            _follower?.Forget();
             Toast.Error("Docker", "DockerRemoveImageFailed");
         }
     }
@@ -119,6 +126,7 @@ public partial class DockerImagesTab
             ImageTag = _buildImageTag.Trim(),
             DockerfileContent = _buildDockerfileContent
         };
+        _follower?.Expect($"{L["DockerBuild"]} {request.ImageTag}");
         var success = await Api.ServerTools.BuildImageAsync(ServerId, request);
         if (success)
         {
@@ -128,11 +136,13 @@ public partial class DockerImagesTab
         }
         else
         {
+            _follower?.Forget();
             Toast.Error("DockerBuild", "DockerBuildFailed");
         }
         _buildingImage = false;
     }
 
-    /// <summary>Recette R2-124: the export writes the whole image id, the cell its first twelve characters.</summary>
+    /// <summary>The export writes the whole image id, the cell its first twelve
+    /// characters.</summary>
     private static readonly Func<DockerImageDto, object?> IdExport = image => image.ImageId;
 }

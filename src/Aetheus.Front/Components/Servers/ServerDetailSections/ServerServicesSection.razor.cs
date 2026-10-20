@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
@@ -36,8 +37,8 @@ public partial class ServerServicesSection : IAsyncDisposable
     // (a freshly-installed service stays `dead` until an explicit start, e.g. inside the VPS-sim container).
     private string? _pendingStartAfterInstall;
 
-    // Recette R-510: every action launched from this page, followed per service by its task id (a
-    // name suffix collides when two operations target the same service).
+    // Every action launched from this page, followed per service by its task id (a name suffix
+    // collides when two operations target the same service).
     private readonly ServiceActionTracker _actions = new();
     internal ServiceActionTracker Actions => _actions;
     private Func<string, ServiceActionState?>? _actionStateOf;
@@ -95,16 +96,16 @@ public partial class ServerServicesSection : IAsyncDisposable
     internal static bool HasDedicatedModule(string serviceName) =>
         ServerServiceModuleCatalog.Contains(serviceName);
 
-    // Recette R-210: header filter texts, built once so the columns see the same delegates on every render.
+    // Header filter texts, built once so the columns see the same delegates on every render.
     private Func<string, string>? _typeText;
     private Func<string, string> TypeText => _typeText ??= GridFilterText.ForEnum<ServiceType>(L);
     private Func<string, string>? _yesNoText;
     private Func<string, string> YesNoText => _yesNoText ??= GridFilterText.YesNo(L);
-    // Recette R-507: the system grid shows the same translated status as the manageable ones.
+    // The system grid shows the same translated status as the manageable ones.
     private string StatusText(string status) =>
         ServiceStatusPresentation.LabelKey(status, isRunning: false) is { } key ? L[key] : status;
 
-    // Recette R-227: each heartbeat brings a new service list; system services that were not there read bold.
+    // Each heartbeat brings a new service list; system services that were not there read bold.
     private OmniDataGrid<ServiceInfoDto>? _systemGrid;
     private readonly LiveGridRows _systemRows = new();
 
@@ -116,8 +117,8 @@ public partial class ServerServicesSection : IAsyncDisposable
             LiveTasks.OnChanged += OnLiveTasksChanged;
             _followingLiveTasks = true;
         }
-        // A new service list is the state the last successes produced: their "succeeded" line has served
-        // once it has been read (recette R2-030).
+        // A new service list is the state the last successes produced: their "succeeded" line has
+        // served once it has been read.
         if (_servicesSeen is not null && !ReferenceEquals(_servicesSeen, Server.Services))
             _actions.ForgetSucceeded(Clock.GetUtcNow());
         _servicesSeen = Server.Services;
@@ -175,16 +176,28 @@ public partial class ServerServicesSection : IAsyncDisposable
         var matchesLog = _currentLogTaskId == notification.TaskId;
         if (matchesLog)
         {
-            _logsLoading = false;
-            _logTaskPending = false;
-            if (string.IsNullOrEmpty(_logsContent))
-                _logsContent = notification.Output ?? L["NoLogsAvailable"];
+            // Recette R3-44: the notification carries no output, so the log a task read is fetched from
+            // the task's own log; the pane stays busy until it arrives.
+            _ = InvokeAsync(() => ShowLogOutputAsync(notification));
         }
 
         // Fired from a SignalR callback (off the render loop) - re-render so the cleared busy
         // spinner / refreshed log pane actually appear without waiting for another interaction.
         if (matchesBusy || matchesLog)
             _ = InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ShowLogOutputAsync(TaskCompletedNotification notification)
+    {
+        string output;
+        try { output = await ServerTaskOutputLoader.ReadAsync(Api, notification.TaskId); }
+        catch (HttpRequestException) { output = L["TaskOutputUnavailable"]; }
+        if (notification.Status != TaskExecutionStatus.Success)
+            output = L["TaskFailed"] + "\n" + output;
+        _logsContent = string.IsNullOrWhiteSpace(output) ? L["NoLogsAvailable"] : output;
+        _logsLoading = false;
+        _logTaskPending = false;
+        StateHasChanged();
     }
 
     internal void TrackPendingInstall(string serviceName, int taskId)
@@ -251,6 +264,9 @@ public partial class ServerServicesSection : IAsyncDisposable
         await OnServiceChanged.InvokeAsync();
     }
 
+    // Recette R3-37: what became of the task an action of this page launched.
+    private ServerTaskFollower? _follower;
+
     private async Task ExecuteActionAsync(ServiceAction action, string serviceName)
     {
         var taskId = await Api.Auth.ExecuteServiceActionAsync(ServerId, new ServiceActionRequest
@@ -262,6 +278,7 @@ public partial class ServerServicesSection : IAsyncDisposable
         if (taskId is not null)
         {
             _actions.Track(serviceName, taskId.Value, action.ToString());
+            _follower?.Follow($"{action} - {serviceName}", taskId.Value);
             Toast.Success(L["TaskQueued"], $"{action} - {serviceName}");
         }
         else
@@ -310,6 +327,7 @@ public partial class ServerServicesSection : IAsyncDisposable
         if (taskId is not null)
         {
             TrackPendingInstall(serviceName, taskId.Value);   // S-UX-INST: offer to start it once the install lands
+            _follower?.Follow($"Install - {serviceName}", taskId.Value);
             Toast.Success(L["TaskQueued"], $"Install - {serviceName}");
         }
         else
@@ -345,6 +363,7 @@ public partial class ServerServicesSection : IAsyncDisposable
         if (taskId is not null)
         {
             _actions.Track(serviceName, taskId.Value, "Uninstall");
+            _follower?.Follow($"Uninstall - {serviceName}", taskId.Value);
             Toast.Success(L["TaskQueued"], $"Uninstall - {serviceName}");
         }
         else
@@ -400,17 +419,7 @@ public partial class ServerServicesSection : IAsyncDisposable
             var serviceName = _logsServiceName;
             await LeaveCurrentLogGroupCoreAsync();
 
-            // A renewed follow session keeps the lines on screen until the new session's first line
-            // replaces them (it re-sends the last N lines), instead of flashing an empty pane.
-            if (keepContentUntilFirstLine)
-                _logBuffer.ReplaceOnNextLine();
-            else
-            {
-                _logBuffer.Clear();
-                _logsContent = string.Empty;
-                _logsLoading = true;
-                StateHasChanged();
-            }
+            ResetLogPane(keepContentUntilFirstLine);
 
             var taskId = await Api.Security.RequestServiceLogsAsync(
                 serverId, serviceName, _logLines, follow: false, _lifetimeCts.Token);
@@ -430,20 +439,41 @@ public partial class ServerServicesSection : IAsyncDisposable
                 _logsLoading = false;
                 return;
             }
-            try
-            {
-                await _logHub!.InvokeAsync("JoinTaskGroup", taskId, _lifetimeCts.Token);
-            }
-            catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested) { }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "[ServerServices] JoinTaskGroup failed");
-            }
+            await JoinLogTaskGroupAsync(taskId.Value);
         }
         catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested) { }
         finally
         {
             _logStreamGate.Release();
+        }
+    }
+
+    // A renewed follow session keeps the lines on screen until the new session's first line replaces
+    // them (it re-sends the last N lines), instead of flashing an empty pane.
+    private void ResetLogPane(bool keepContentUntilFirstLine)
+    {
+        if (keepContentUntilFirstLine)
+        {
+            _logBuffer.ReplaceOnNextLine();
+            return;
+        }
+        _logBuffer.Clear();
+        _logsContent = string.Empty;
+        _logsLoading = true;
+        StateHasChanged();
+    }
+
+    // Follows the log task's lines; a failed join is logged, the page keeps working.
+    private async Task JoinLogTaskGroupAsync(int taskId)
+    {
+        try
+        {
+            await _logHub!.InvokeAsync("JoinTaskGroup", taskId, _lifetimeCts.Token);
+        }
+        catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "[ServerServices] JoinTaskGroup failed");
         }
     }
 
@@ -588,7 +618,7 @@ public partial class ServerServicesSection : IAsyncDisposable
         }
     }
 
-    // Every confirmation names its verb (recette R-407): red when destructive, blue otherwise.
+    // Every confirmation names its verb : red when destructive, blue otherwise.
     private OmniConfirmOptions ConfirmOptions(bool destructive, string verb, OmniIconName? icon = null) => new()
     {
         Destructive = destructive,

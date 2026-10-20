@@ -8,8 +8,8 @@ public sealed class TeamspeakDataCoordinatorTests
     [Fact]
     public async Task RefreshState_FetchesAndPublishesNewServerState()
     {
-        // R-181 / R-226: the server's heartbeat push refreshes the state here; the grids on screen then
-        // refresh themselves quietly through their own LoadData (see ServerTeamspeakSectionRenderTests).
+        // The server's heartbeat push refreshes the state here; the grids on screen then refresh
+        // themselves quietly through their own LoadData (see ServerTeamspeakSectionRenderTests).
         var handler = new BunitTestHelper.TestHandler();
         handler.SetJsonResponse("api/servers/5/teamspeak",
             new TeamspeakDataDto { IsInstalled = true, ServerName = "Before" });
@@ -34,7 +34,7 @@ public sealed class TeamspeakDataCoordinatorTests
     [Fact]
     public async Task LoadBans_SendsTheGridHeaderFiltersToTheApi()
     {
-        // Recette R-210: a header filter of the bans grid reaches the endpoint as a column filter.
+        // A header filter of the bans grid reaches the endpoint as a column filter.
         var handler = new BunitTestHelper.TestHandler();
         handler.SetJsonResponse("api/servers/5/teamspeak", new TeamspeakDataDto { IsInstalled = true });
         handler.SetPaginatedJsonResponse("api/servers/5/teamspeak/bans",

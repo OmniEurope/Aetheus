@@ -47,9 +47,11 @@ public sealed class ContainerRunExecutor(
         Dictionary<string, string> environmentVariables,
         int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<ContainerReadOnlyMount>? readOnlyMounts = null)
     {
         var runtimeFailure = await ValidateRuntimeAsync(spec.Runtime, onOutput).ConfigureAwait(false);
+        runtimeFailure ??= await ValidateMountsAsync(readOnlyMounts, onOutput).ConfigureAwait(false);
         if (runtimeFailure is not null) return runtimeFailure;
 
         timeoutSeconds = Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
@@ -59,23 +61,9 @@ public sealed class ContainerRunExecutor(
         // fallback. Never accept an arbitrary path from the task environment: only the exact
         // deterministic path derived from WorkspaceKey is eligible.
         var preparedWorkspace = ResolveHostWorkspace(spec, environmentVariables);
-        var fallbackWorkspace = Path.Combine(_options.WorkDirectory, "cw", spec.WorkspaceKey.ToString());
-        var materialized = await ContainerWorkspaceMaterializer.MaterializeAsync(
-            spec.WorkspaceKey,
-            preparedWorkspace,
-            fallbackWorkspace,
-            logger,
-            cancellationToken).ConfigureAwait(false);
-        if (!materialized.IsSuccess)
-        {
-            await onOutput($"InfrastructureMismatch: {materialized.FailureReason}", TaskLogLevel.Error)
-                .ConfigureAwait(false);
-            return new ExecutorResult(
-                ToolchainResolution.InfrastructureMismatchExitCode,
-                false,
-                ToolchainResolution.InfrastructureMismatchCode,
-                materialized.FailureReason);
-        }
+        var materialized = await MaterializeWorkspaceAsync(spec, preparedWorkspace, onOutput, cancellationToken)
+            .ConfigureAwait(false);
+        if (materialized.Failure is not null) return materialized.Failure;
 
         var hostWorkspace = materialized.Workspace;
         Directory.CreateDirectory(hostWorkspace);
@@ -139,7 +127,8 @@ public sealed class ContainerRunExecutor(
             containerName,
             envFilePath,
             secretsFilePath,
-            ResolveHostDockerInternalAddress());
+            ResolveHostDockerInternalAddress(),
+            readOnlyMounts);
 
         logger.LogDebug(
             "Container run: image={Image} toolchain={Toolchain} runtime={Runtime} network={Network} (timeout={Timeout}s)",
@@ -154,24 +143,8 @@ public sealed class ContainerRunExecutor(
             psi, resolution, secrets, containerName, scriptPath, envFilePath, secretsFilePath,
             timeoutSeconds, onOutput, cancellationToken).ConfigureAwait(false);
 
-        using var publicationCts = new CancellationTokenSource(OutputPublicationTimeout);
-        var synchronized = await ContainerWorkspaceMaterializer.SynchronizeBackAsync(
-            spec.WorkspaceKey,
-            hostWorkspace,
-            preparedWorkspace,
-            publicationCts.Token).ConfigureAwait(false);
-        if (!synchronized.IsSuccess)
-        {
-            var reason = synchronized.FailureReason
-                         ?? "Container outputs could not be published to the pipeline workspace.";
-            await onOutput($"InfrastructureMismatch: {reason}", TaskLogLevel.Error)
-                .ConfigureAwait(false);
-            executionResult = new ExecutorResult(
-                ToolchainResolution.InfrastructureMismatchExitCode,
-                false,
-                ToolchainResolution.InfrastructureMismatchCode,
-                reason);
-        }
+        executionResult = await PublishOutputsAsync(
+            spec, hostWorkspace, preparedWorkspace, executionResult, onOutput).ConfigureAwait(false);
 
         // Run cleanup step: remove the per-run daemon-visible workspace. The in-container `rm -rf /w`
         // only empties the bind mount - the host mount-point dir would otherwise leak per run.
@@ -179,6 +152,55 @@ public sealed class ContainerRunExecutor(
             PurgeWorkspace(hostWorkspace, stateRoot);
 
         return executionResult;
+    }
+
+    // Brings the prepared checkout into a directory the container daemon can mount; a failure ends the
+    // step as an infrastructure mismatch before any container starts.
+    private async Task<(string Workspace, ExecutorResult? Failure)> MaterializeWorkspaceAsync(
+        ContainerSpec spec, string preparedWorkspace, Func<string, TaskLogLevel, Task> onOutput,
+        CancellationToken cancellationToken)
+    {
+        var fallbackWorkspace = Path.Combine(_options.WorkDirectory, "cw", spec.WorkspaceKey.ToString());
+        var materialized = await ContainerWorkspaceMaterializer.MaterializeAsync(
+            spec.WorkspaceKey,
+            preparedWorkspace,
+            fallbackWorkspace,
+            logger,
+            WorkspacePlatform,
+            cancellationToken).ConfigureAwait(false);
+        if (materialized.IsSuccess) return (materialized.Workspace, null);
+        await onOutput($"InfrastructureMismatch: {materialized.FailureReason}", TaskLogLevel.Error)
+            .ConfigureAwait(false);
+        return (materialized.Workspace, new ExecutorResult(
+            ToolchainResolution.InfrastructureMismatchExitCode,
+            false,
+            ToolchainResolution.InfrastructureMismatchCode,
+            materialized.FailureReason));
+    }
+
+    // Publishes the container's outputs back to the prepared checkout on a budget of its own; a failed
+    // publication replaces the step's result, since the next stage would read stale outputs.
+    private async Task<ExecutorResult> PublishOutputsAsync(
+        ContainerSpec spec, string hostWorkspace, string preparedWorkspace, ExecutorResult executionResult,
+        Func<string, TaskLogLevel, Task> onOutput)
+    {
+        using var publicationCts = new CancellationTokenSource(OutputPublicationTimeout);
+        var synchronized = await ContainerWorkspaceMaterializer.SynchronizeBackAsync(
+            spec.WorkspaceKey,
+            hostWorkspace,
+            preparedWorkspace,
+            WorkspacePlatform,
+            publicationCts.Token).ConfigureAwait(false);
+        if (synchronized.IsSuccess) return executionResult;
+        var reason = synchronized.FailureReason
+                     ?? "Container outputs could not be published to the pipeline workspace.";
+        await onOutput($"InfrastructureMismatch: {reason}", TaskLogLevel.Error)
+            .ConfigureAwait(false);
+        return new ExecutorResult(
+            ToolchainResolution.InfrastructureMismatchExitCode,
+            false,
+            ToolchainResolution.InfrastructureMismatchCode,
+            reason);
     }
 
     /// <summary>
@@ -220,8 +242,25 @@ public sealed class ContainerRunExecutor(
         return new ExecutorResult(-1, false);
     }
 
-    private static ContainerSecrets ClassifySecrets(Dictionary<string, string> environmentVariables)
+    private static async Task<ExecutorResult?> ValidateMountsAsync(
+        IReadOnlyList<ContainerReadOnlyMount>? readOnlyMounts, Func<string, TaskLogLevel, Task> onOutput)
     {
+        if (readOnlyMounts?.FirstOrDefault(mount => !mount.IsValid) is not { } invalidMount) return null;
+        await onOutput(
+            $"Read-only container mount '{invalidMount.ContainerPath}' is invalid - blocked.",
+            TaskLogLevel.Error).ConfigureAwait(false);
+        return new ExecutorResult(-1, false);
+    }
+
+    // A stage-qualified output ("Toolchain.Resolve source languages.HAS_DOTNET") names a variable for the
+    // server's $(...) expansion; no shell can read it, and docker refuses an env-file key holding
+    // whitespace, which failed every container step of a run whose earlier stage published outputs.
+    // Only those names are left out: any other unusable key still fails the step below.
+    internal static ContainerSecrets ClassifySecrets(Dictionary<string, string> environmentVariables)
+    {
+        environmentVariables = environmentVariables
+            .Where(kv => !IsStageQualifiedOutputName(kv.Key))
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
         var environment = environmentVariables
             .Where(kv => IsEnvFileRepresentable(kv.Key, kv.Value)).ToList();
         var mounted = environmentVariables
@@ -233,7 +272,7 @@ public sealed class ContainerRunExecutor(
         return new ContainerSecrets(environment, mounted, invalidKeys);
     }
 
-    private async Task<ExecutorResult> RunContainerAsync(
+    internal async Task<ExecutorResult> RunContainerAsync(
         ProcessStartInfo startInfo,
         ToolchainResolution resolution,
         ContainerSecrets secrets,
@@ -289,12 +328,12 @@ public sealed class ContainerRunExecutor(
                 $"Toolchain '{resolution.Toolchain}' did not report the locked version '{resolution.Version}'.")
             : new ExecutorResult(exitCode, false);
 
-    private sealed record ContainerSecrets(
+    internal sealed record ContainerSecrets(
         List<KeyValuePair<string, string>> Environment,
         List<KeyValuePair<string, string>> Mounted,
         List<string> InvalidKeys);
 
-    private async Task CleanupRunFilesAsync(
+    internal async Task CleanupRunFilesAsync(
         string containerName,
         string scriptPath,
         string? envFilePath,
@@ -342,14 +381,15 @@ public sealed class ContainerRunExecutor(
         string containerName,
         string? envFilePath,
         string? secretsFilePath,
-        string? hostDockerInternalAddress = null)
+        string? hostDockerInternalAddress = null,
+        IReadOnlyList<ContainerReadOnlyMount>? readOnlyMounts = null)
     {
         if (!IsShellSafeScriptName(scriptName))
             throw new ArgumentException("Container step script name is not a shell-safe token.", nameof(scriptName));
 
         var psi = new ProcessStartInfo
         {
-            FileName = "docker",
+            FileName = DockerProgram,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -408,6 +448,7 @@ public sealed class ContainerRunExecutor(
             a.Add("-v"); a.Add($"{secretsFilePath}:{ContainerSecretsPath}:ro");
         }
         a.Add("-v"); a.Add($"{hostWorkspace}:/w");
+        AddReadOnlyMounts(a, readOnlyMounts);
         if (OperatingSystem.IsWindows())
         {
             a.Add("--tmpfs");
@@ -449,6 +490,22 @@ public sealed class ContainerRunExecutor(
         return psi;
     }
 
+    /// <summary>Agent-owned directories mounted read-only (<c>:ro</c>): the step runs what they hold,
+    /// never changes it. An invalid mount is refused rather than dropped, so a step never runs without
+    /// what it was promised.</summary>
+    private static void AddReadOnlyMounts(
+        ICollection<string> arguments, IReadOnlyList<ContainerReadOnlyMount>? readOnlyMounts)
+    {
+        foreach (var mount in readOnlyMounts ?? [])
+        {
+            if (!mount.IsValid)
+                throw new ArgumentException(
+                    $"Read-only container mount '{mount.ContainerPath}' is invalid.", nameof(readOnlyMounts));
+            arguments.Add("-v");
+            arguments.Add($"{mount.HostPath}:{mount.ContainerPath}:ro");
+        }
+    }
+
     private static void AddResourceLimits(ICollection<string> arguments, ContainerSpec spec)
     {
         // S-UX-35: optional per-run resource ceilings (validated server-side before reaching here).
@@ -472,6 +529,10 @@ public sealed class ContainerRunExecutor(
             spec.WorkspaceKey,
             environmentVariables.GetValueOrDefault(HostWorkspaceVariable),
             _options.WorkDirectory);
+
+    // "<stage>.<step>.<NAME>": the server's qualified spelling of a step output, never a shell variable.
+    internal static bool IsStageQualifiedOutputName(string key) =>
+        key.Count(c => c == '.') >= 2 && !key.Contains('\n') && !key.Contains('=');
 
     // The docker env-file format is line-based: multi-line values (e.g. PEM secrets) cannot be
     // represented and a key containing '=' or a newline would corrupt neighbouring entries.
@@ -552,7 +613,18 @@ public sealed class ContainerRunExecutor(
                 purpose,
                 failedDirectory));
 
-    private async Task ForceRemoveContainerAsync(string containerName)
+    // Replaceable so a timeout or cancellation is shown to remove the named container without a Docker daemon.
+    internal Func<string, Task>? RemoveContainerAsync { get; init; }
+
+    // Replaceable so a whole step runs in a test against a stand-in program; the defaults are the real
+    // docker CLI and the agent's own platform.
+    internal string DockerProgram { get; init; } = "docker";
+    internal WorkspaceSyncPlatform WorkspacePlatform { get; init; } = WorkspaceSyncPlatform.Current;
+
+    private Task ForceRemoveContainerAsync(string containerName) =>
+        RemoveContainerAsync is { } remove ? remove(containerName) : DockerForceRemoveAsync(containerName);
+
+    private async Task DockerForceRemoveAsync(string containerName)
     {
         try
         {

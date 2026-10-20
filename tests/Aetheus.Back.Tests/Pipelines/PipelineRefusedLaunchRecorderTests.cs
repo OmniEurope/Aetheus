@@ -12,11 +12,8 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Recette R-522, audit of 2026-09-30: a refused automated launch becomes a failed run carrying the
-/// reason. Never inside a caller's transaction, whose rollback would erase it after its events went
-/// out; and a side effect that fails never takes the place of the refusal the caller rethrows.
-/// </summary>
+/// <summary>Refused automated launches are recorded outside the caller's transaction so rollback
+/// cannot erase their evidence. Ancillary failures must not replace the original refusal.</summary>
 public sealed class PipelineRefusedLaunchRecorderTests
 {
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();
@@ -82,7 +79,7 @@ public sealed class PipelineRefusedLaunchRecorderTests
         Assert.Equal(2, warnings.Length);
         Assert.StartsWith("Refused 3 times, last at ", warnings[1], StringComparison.Ordinal);
         Assert.NotNull(refused.CompletedAt);
-        // Each refusal stays audited (R-522); the subscribers were told the first time only.
+        // Each refusal stays audited; the subscribers were told the first time only.
         await _audit.Received(2).LogAsync("LaunchRefused", "PipelineRun", 40, Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _notifications.DidNotReceive().RecordProjectEventAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }

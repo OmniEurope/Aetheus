@@ -59,7 +59,7 @@ public class AuditRepository(AppDbContext db) : IAuditRepository
         if (dateTo.HasValue)
             query = query.Where(a => a.Timestamp <= dateTo.Value);
 
-        // Recette R-238: the grid's header filters, next to the typed parameters older callers send.
+        // Applies grid header filters alongside the typed query parameters.
         return AuditLogQuery.Columns.ApplyFilters(query, filters);
     }
 

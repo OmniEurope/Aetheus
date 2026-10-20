@@ -62,33 +62,23 @@ public sealed class FrontendCachePolicyAuditTests
         var program = File.ReadAllText(Path.Combine(root, "deploy", "docker", "StaticServer.Program.cs"));
         var index = File.ReadAllText(Path.Combine(root, "src", "Aetheus.Front", "wwwroot", "index.html"));
 
-        // Recette R-250: deploy/apache/aetheus.conf, a vhost no pipeline ever installed, is gone with
-        // its copy of the policy; the policy the site serves is the static server's, checked here.
+        // Cache policy is verified at the static server that serves the frontend.
         Assert.DoesNotContain("style-src 'self' 'unsafe-inline'", program, StringComparison.Ordinal);
-        // Recette R-526: no inline style element either, now that Monaco has its own document and policy.
+        // The shell forbids inline style elements; Monaco owns its separate document policy.
         Assert.Contains("\"style-src-elem 'self'; \"", program, StringComparison.Ordinal);
         Assert.DoesNotContain("'unsafe-inline'; \" +", program, StringComparison.Ordinal);
         var api = File.ReadAllText(Path.Combine(root, "src", "Aetheus.Back", "Extensions", "SecurityHeadersExtensions.cs"));
         Assert.Contains("\"style-src 'self'; \"", api, StringComparison.Ordinal);
         Assert.DoesNotContain("style-src 'self' 'unsafe-inline'", api, StringComparison.Ordinal);
-        // PLAN-008 lot 44: style attributes are refused outright. The last three dependencies were
-        // lifted rather than excused, so this is a fact about the product, not a preference: a style
-        // attribute reappearing in markup breaks the page it is on.
+        // Style attributes are forbidden by CSP, so markup must not introduce them.
         Assert.Contains("style-src-attr 'none'", program, StringComparison.Ordinal);
         Assert.DoesNotContain("style-src-attr 'unsafe-inline'", program, StringComparison.Ordinal);
         Assert.DoesNotContain("<style", index, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("style=", index, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// PLAN-003 lot 14 / D16: a violation on a FRONT page is refused by the front document's policy,
-    /// which is this one. Until it named a collector, those violations were reported nowhere, and the
-    /// blocked inline script on a run page could not be identified at all.
-    ///
-    /// Recette R2-108 (ZAP 10055-3, "CSP: Notices", finding 1229): the collector is named by report-to
-    /// and the Reporting-Endpoints header, never by report-uri, which the scanner's CSP parser reports
-    /// as deprecated on its own. Both front documents (the shell and the Monaco frame) say it the same way.
-    /// </summary>
+    /// <summary>The shell and Monaco documents report policy violations through report-to and
+    /// Reporting-Endpoints.</summary>
     [Fact]
     public void Frontend_Csp_ReportsItsViolationsToTheApiCollector()
     {

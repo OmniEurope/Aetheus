@@ -36,8 +36,7 @@ public partial class PackageFeedPackagesDialog : ComponentBase, IAsyncDisposable
             () => InvokeAsync(() => _realtimeReload.RequestAsync(RefreshFromPushAsync)));
     }
 
-    /// <summary>
-    /// Recette R-227: a live change re-reads the feed without the loader; the grid notes the rows it
+    /// <summary> A live change re-reads the feed without the loader; the grid notes the rows it
     /// holds before the new list lands, so a package added elsewhere reads bold for a few seconds.
     /// </summary>
     private async Task RefreshFromPushAsync()

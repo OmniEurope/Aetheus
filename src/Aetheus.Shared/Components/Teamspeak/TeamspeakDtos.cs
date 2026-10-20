@@ -298,10 +298,9 @@ public sealed record TeamspeakLogRequest
     public int Lines { get; init; } = 100;
 }
 
-/// <summary>
-/// Recette R-210: the values the clients grid's checkable Platform filter offers. The grid is loaded page
-/// by page, so the platforms present across every connected client of the server come from the API.
-/// </summary>
+/// <summary> The values the clients grid's checkable Platform filter offers. The grid is loaded
+/// page by page, so the platforms present across every connected client of the server come from the
+/// API. </summary>
 public sealed record TeamspeakFilterValuesDto
 {
     public List<string> Platforms { get; init; } = [];

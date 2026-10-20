@@ -2,6 +2,8 @@
 using System.Reflection;
 using Aetheus.Front.Layout;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Front.Tests.Layout;
 
@@ -11,17 +13,25 @@ namespace Aetheus.Front.Tests.Layout;
 /// </summary>
 public sealed class MainLayoutSyncIndicatorTests : BunitContext
 {
-    public MainLayoutSyncIndicatorTests() => BunitTestHelper.RegisterServices(this);
+    public MainLayoutSyncIndicatorTests()
+    {
+        BunitTestHelper.RegisterServices(this);
+        // The test hub never connects and the backend answers "not live", so on the wall clock the
+        // layout's 2 second grace opened the real overlay by itself whenever a loaded machine took
+        // longer than that to reach the first assertion. A clock that does not move keeps the overlay
+        // in the hands of the test.
+        Services.AddSingleton<TimeProvider>(new FakeTimeProvider());
+    }
 
     [Fact]
-    public void SignedInLayout_RendersTheIndicator_AndPassesItTheOverlayState()
+    public async Task SignedInLayout_RendersTheIndicator_AndPassesItTheOverlayState()
     {
         var cut = Render<MainLayout>();
-        cut.WaitForAssertion(() => Assert.False(cut.FindComponent<RealtimeSyncIndicator>().Instance.OfflineOverlayShown),
-            TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => Assert.False(cut.FindComponent<RealtimeSyncIndicator>().Instance.OfflineOverlayShown));
 
-        typeof(MainLayout).GetField("_showOfflineDialog", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(cut.Instance, true);
+        await cut.InvokeAsync(() => typeof(MainLayout)
+            .GetField("_showOfflineDialog", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(cut.Instance, true));
         cut.Render();
 
         Assert.True(cut.FindComponent<RealtimeSyncIndicator>().Instance.OfflineOverlayShown);

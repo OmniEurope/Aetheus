@@ -54,19 +54,18 @@ public sealed class TaskTrackerService : IAsyncDisposable
     // The shared schedule is surfaced to the UI countdown before returning each delay to the transport.
     private static IReadOnlyList<TimeSpan> RetryDelays => FrontendRuntimeDefaults.SignalRRetryDelays;
 
-    /// <summary>
-    /// Why the last connection attempt failed, for the connection-lost dialog. Null once connected.
-    /// The dialog used to say only "connection lost", which is what made a real incident
-    /// undebuggable without F12.
-    /// </summary>
+    /// <summary>Expose the last connection failure reason so the connection-lost dialog can explain
+    /// the problem; clear it after a successful connection.</summary>
     public string? LastFailureReason { get; private set; }
 
     /// <summary>How long one connection attempt may wait for the server before it counts as failed.</summary>
     internal TimeSpan ConnectAttemptTimeout { get; init; } = FrontendRuntimeDefaults.SignalRStartTimeout;
 
-    // Cut short by RequestImmediateReconnect. The schedule clamps at 30s, so a browser that comes
-    // back online one second into that step used to wait the remaining 29 for a network condition
-    // that no longer applied.
+    /// <summary>The clock the attempt deadline and the retry backoff run on.</summary>
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
+
+    // Allow immediate reconnection to interrupt the bounded backoff so restored network access does
+    // not wait for the remaining delay.
     private TaskCompletionSource _wakeSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _pendingWake;
 
@@ -132,9 +131,8 @@ public sealed class TaskTrackerService : IAsyncDisposable
         _hub.On<ServerTaskDto>("TaskQueued", task => Upsert(task));
         _hub.On<TaskStartedEvent>("TaskStarted", evt => MarkRunning(evt.TaskId, evt.StartedAt));
         _hub.On<TaskCompletedNotification>("TaskCompleted", HandleTerminal);
-        // Recette R2-056: an agent update ends its task on the new agent's first heartbeat (or its
-        // deadline), a path that sends AgentUpdateConfirmed/Failed and no TaskCompleted, so the chip
-        // stayed until a reload. Either event re-reads the active tasks.
+        // Refresh active tasks on agent-update confirmation or failure because that lifecycle
+        // completes through heartbeat or deadline events rather than TaskCompleted.
         _hub.On<int, int>("AgentUpdateConfirmed", (_, _) => SeedActiveAsync(CancellationToken.None));
         _hub.On<int, int>("AgentUpdateFailed", (_, _) => SeedActiveAsync(CancellationToken.None));
 
@@ -143,11 +141,9 @@ public sealed class TaskTrackerService : IAsyncDisposable
         _hub.Closed += _ =>
         {
             OnConnectionStateChanged?.Invoke();
-            // Closed used to only notify, and that was the bug: SignalR raises it once its automatic
-            // reconnect has given up, so nothing was left to try again and the overlay stayed up
-            // forever until the user reloaded the page. Re-arm the same loop that drives the initial
-            // connect. StopAsync nulls _hub before disposing it, so a deliberate teardown is not
-            // mistaken for a drop and does not resurrect the connection.
+            // Restart the initial connection loop when automatic reconnect gives up so recovery
+            // continues; clear _hub before intentional disposal so teardown cannot resurrect the
+            // connection.
             if (_hub is not null && _auth.IsAuthenticated) ScheduleInitialRetry();
             return Task.CompletedTask;
         };
@@ -173,17 +169,20 @@ public sealed class TaskTrackerService : IAsyncDisposable
 
     private async Task<bool> ConnectOnceAsync(CancellationToken ct)
     {
-        if (_hub is null) return false;
+        // The connection this attempt is for. The layout no longer awaits the first start, so a sign-out
+        // or an account switch can replace _hub while it runs: what follows acts on this one only.
+        var hub = _hub;
+        if (hub is null) return false;
         try
         {
             // Bounded: a negotiate that never answers held the attempt forever, so the loop scheduled
             // nothing more, the countdown ran out and the overlay stayed with no reason to show.
-            using (var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            using (var deadline = new CancellationTokenSource(ConnectAttemptTimeout, Clock))
+            using (var attempt = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token))
             {
-                attempt.CancelAfter(ConnectAttemptTimeout);
                 try
                 {
-                    await _hub.StartAsync(attempt.Token).ConfigureAwait(false);
+                    await hub.StartAsync(attempt.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
@@ -193,12 +192,14 @@ public sealed class TaskTrackerService : IAsyncDisposable
             }
             LastFailureReason = null;
             OnConnectionStateChanged?.Invoke();
-            await _hub.InvokeAsync("JoinAllServers", ct).ConfigureAwait(false);
+            await hub.InvokeAsync("JoinAllServers", ct).ConfigureAwait(false);
             await SeedActiveAsync(ct).ConfigureAwait(false);
             return true;
         }
         catch (Exception ex)
         {
+            // A connection torn down meanwhile failed because it was disposed: nothing to report.
+            if (!ReferenceEquals(hub, _hub)) return false;
             // The tracker is a UI affordance - don't fail the whole login if the hub is sour.
             _logger.LogWarning(ex, "[TaskTracker] StartAsync failed; widget will stay empty");
             // Surfaced by the connection-lost dialog. A message the user can read and quote is the
@@ -229,7 +230,8 @@ public sealed class TaskTrackerService : IAsyncDisposable
             delay => OnReconnectAttempt?.Invoke(delay),
             () => _hub is not null && _auth.IsAuthenticated,
             token,
-            ArmWake).ConfigureAwait(false);
+            ArmWake,
+            Clock).ConfigureAwait(false);
         if (connected)
         {
             // Connected: retire the retry CTS instead of leaking it until the next Stop/Dispose.
@@ -244,7 +246,8 @@ public sealed class TaskTrackerService : IAsyncDisposable
         Action<int> onAttempt,
         Func<bool> canRetry,
         CancellationToken token,
-        Func<Task>? armWake = null)
+        Func<Task>? armWake = null,
+        TimeProvider? clock = null)
     {
         var attempt = 0;
         while (!token.IsCancellationRequested && canRetry())
@@ -254,7 +257,7 @@ public sealed class TaskTrackerService : IAsyncDisposable
             var woken = armWake?.Invoke();
             using (var sleepCts = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
-                var sleeping = Task.Delay(delay, sleepCts.Token);
+                var sleeping = Task.Delay(delay, clock ?? TimeProvider.System, sleepCts.Token);
                 if (woken is null)
                 {
                     try { await sleeping.ConfigureAwait(false); }
@@ -297,14 +300,14 @@ public sealed class TaskTrackerService : IAsyncDisposable
         }
     }
 
-    private void Upsert(ServerTaskDto task)
+    internal void Upsert(ServerTaskDto task)
     {
         lock (_gate)
             _byId[task.Id] = task;
         OnChanged?.Invoke();
     }
 
-    private void MarkRunning(int taskId, DateTime? startedAt)
+    internal void MarkRunning(int taskId, DateTime? startedAt)
     {
         lock (_gate)
         {
@@ -318,7 +321,7 @@ public sealed class TaskTrackerService : IAsyncDisposable
         OnChanged?.Invoke();
     }
 
-    private void HandleTerminal(TaskCompletedNotification notification)
+    internal void HandleTerminal(TaskCompletedNotification notification)
     {
         bool removed;
         lock (_gate)

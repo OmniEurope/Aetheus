@@ -3,12 +3,8 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// PLAN-007 lot 7: the approvals still waiting for a decision, for the home page and the top bar. A
-/// deployment parked on an approval used to be invisible until someone opened that very run. One
-/// singleton, like <see cref="TaskTrackerService"/>, so both views share one list and one hub
-/// connection for the whole session.
-/// </summary>
+/// <summary>Share one approvals list and hub connection between home and the top bar so pending
+/// decisions remain visible across the session.</summary>
 public sealed class PendingApprovalsService : IAsyncDisposable
 {
     private readonly ApiClient _api;

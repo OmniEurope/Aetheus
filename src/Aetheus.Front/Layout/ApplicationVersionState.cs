@@ -3,11 +3,10 @@ using System.Text.Json;
 
 namespace Aetheus.Front.Layout;
 
-/// <summary>
-/// Recette R2-021: whether a newer Aetheus front than the one running in this tab has been deployed.
-/// The layout's <see cref="ApplicationVersionMonitor"/> marks it on its periodic check; a page about to
-/// let the user answer an approval asks for an immediate check, because the approval that confirms a
-/// production switch is requested right after the switch, sooner than the next periodic check.
+/// <summary> Whether a newer Aetheus front than the one running in this tab has been deployed. The
+/// layout's <see cref="ApplicationVersionMonitor"/> marks it on its periodic check; a page about to
+/// let the user answer an approval asks for an immediate check, because the approval that confirms
+/// a production switch is requested right after the switch, sooner than the next periodic check.
 /// </summary>
 public sealed class ApplicationVersionState(Func<HttpClient> createClient, Uri baseAddress, string currentVersion)
 {

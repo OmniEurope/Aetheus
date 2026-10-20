@@ -4,11 +4,8 @@ using AngleSharp.Dom;
 
 namespace Aetheus.Front.Tests;
 
-/// <summary>
-/// PLAN-003 lot 4 / D9: a button inside a data row shows only its icon, and carries its name in
-/// <c>title</c> and <c>aria-label</c>. Tests that used to find a row action by its visible text now
-/// look at everything that names it, so they keep testing the same action rather than the same markup.
-/// </summary>
+/// <summary>Find icon-only row actions by their title and aria-label as well as visible text, so
+/// tests identify the action independently of markup.</summary>
 internal static class ElementNames
 {
     /// <summary>Visible text plus the accessible names of the element, joined for a substring search.</summary>

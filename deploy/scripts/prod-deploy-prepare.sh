@@ -25,10 +25,9 @@ fail() {
 # --- 1. Provenance -------------------------------------------------------------------------------
 [ "${AETHEUS_USE_PIPELINE_ARTIFACTS:-false}" = true ] \
   || fail "Production deployment requires the immutable CI artifact; local image builds are forbidden."
-# F4: main no longer leads a deployment, it trails it - fast-forwarded to the deployed commit only
-# AFTER a successful deploy (by the backend, once the release is recorded as deployed). The pipeline's own
-# source_branch is develop now, so this guard checks that instead of main; verify-release-ancestry.sh
-# still proves the checked-out branch actually contains the release commit being deployed.
+# Require the deployment instructions from develop and verify that it contains the release revision;
+# main advances only after successful deployment so it records the live version. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 [ "${BUILD_SOURCEBRANCH:-}" = develop ] \
   || fail "Production deployment workflow must run from the develop branch."
 
@@ -42,8 +41,8 @@ case "$ARTIFACT_COMMIT" in *[!0-9a-fA-F]*) fail "CI artifact source revision is 
 # promoted. They are legitimately different.
 echo ">>> Deploy workflow ${BUILD_SOURCEVERSION:-unknown} is promoting immutable candidate source $ARTIFACT_COMMIT"
 
-# --- 2. Production state directory ----------------------------------------------------------------
-# ENV_FILE, LEGACY_ENV_FILE and STATE_DIR come from the aetheus.prod library (PLAN-003 2.1).
+# Resolve production state paths from the environment library so host-specific locations remain
+# configurable. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 ENV_FILE="${ENV_FILE:?ENV_FILE is required}"
 LEGACY_ENV_FILE="${LEGACY_ENV_FILE:-}"
 DECLARED_STATE_DIR="${STATE_DIR:-}"
@@ -93,10 +92,9 @@ for image in "$AETHEUS_BACK_IMAGE" "$AETHEUS_FRONT_IMAGE" "$AETHEUS_BROWSER_SMOK
     = "$ARTIFACT_COMMIT" ] || fail "Image revision is invalid: $image"
 done
 
-# The version is the candidate's, read from the agent manifest the CI built into the verified backend
-# image: the backend, both agents and the manifest were stamped with it, so the site now shows the
-# version the agents carry (ADR-033, recette R2-076). It used to be recomputed from this deploy's own
-# run counter (1.2.118 on the site against 1.2.402 for the agents, 2026-10-03).
+# Read the version from the verified candidate image's agent manifest so the site and both agents
+# report the same built version (ADR-033). See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 APP_VERSION="$(docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
   --entrypoint cat "$AETHEUS_BACK_IMAGE" /app/wwwroot/downloads/agent-release-manifest.json \
   | sed -n 's/^[[:space:]]*"softwareVersion":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
@@ -202,9 +200,9 @@ if [ ! -f "$ENV_FILE" ]; then
   PREPARE_UMASK="$(umask)"
   umask 177
   ENV_FILE_TMP="$ENV_FILE.first-deploy.$$"
-  # R-248: the keys, their order and the non-secret values come from the versioned template; the
-  # secrets it marks (#{SECRET_HEX_<N>}#) are generated here by `openssl rand -hex <N>` and exist
-  # nowhere else. The template travels with the checkout, like this script.
+  # Render keys and non-secret values from the versioned template; generate each declared secret
+  # locally so secrets never enter the repository. See
+  # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
   ENV_SAMPLE="$WORKSPACE/deploy/env/prod.env.sample"
   if ! PUBLIC_API_URL="${PUBLIC_API_URL:?PUBLIC_API_URL is required}" \
     APP_VERSION="${APP_VERSION:?APP_VERSION is required}" \
@@ -225,12 +223,9 @@ else
   echo ">>> Reusing existing secrets at $ENV_FILE (not regenerated)."
 fi
 umask "${PREPARE_UMASK:-$(umask)}"
-# Back-fill, not regeneration. Every environment file created before A360-59 predates
-# Deployment:BootstrapIdentityKey, and nothing ever rewrites this file, so on those hosts the key
-# could not appear by any route: the deployment reached its blocking smoke and the control plane
-# refused to derive an identity, run after run. Appending a key that has never existed is safe in a
-# way that rotating one is not - it decrypts nothing, so no stored row and no live session depends on
-# its previous value.
+# Back-fill a missing bootstrap identity key so persistent environments can derive the smoke
+# identity without rotating existing secrets or sessions. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 if ! grep -q "^DEPLOYMENT_BOOTSTRAP_IDENTITY_KEY=.\+" "$ENV_FILE"; then
   echo ">>> Back-filling DEPLOYMENT_BOOTSTRAP_IDENTITY_KEY in $ENV_FILE"
   ENV_BACKFILL_BACKUP="$STATE_DIR/$ENV_BACKUP_PREFIX-$(date -u +"%Y%m%dT%H%M%SZ")"
@@ -275,10 +270,9 @@ if ! grep -q "^GIT_RUN_TOKEN_KEY=.\+" "$ENV_FILE"; then
   umask "$PREPARE_UMASK"
 fi
 # --- end of GIT_RUN_TOKEN_KEY back-fill ---
-# The public URLs follow the libraries, the secrets do not move. API_BASE_URL is what the front calls
-# and FRONT_URL what the API accepts as an origin; both were written once at the first deploy, so a
-# host renamed in the library (api.aetheus, PLAN-003 2.1) would otherwise never reach them. Only these
-# two lines are rewritten, after a dated copy, through a temporary file moved into place.
+# Refresh only API_BASE_URL and FRONT_URL from the libraries, preserving secrets; keep a dated copy
+# and replace the file atomically to avoid a partial environment. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 sh "$WORKSPACE/deploy/scripts/reconcile-env-urls.sh" "$ENV_FILE" \
   "API_BASE_URL=${PUBLIC_API_URL:?PUBLIC_API_URL is required}" \
   "FRONT_URL=${PUBLIC_APP_URL:?PUBLIC_APP_URL is required}"
@@ -327,6 +321,8 @@ UPSTREAM_DEFINE="${UPSTREAM_DEFINE:?UPSTREAM_DEFINE is required}" \
 # run log, so it is derived by the control plane for the two steps that need it instead of travelling.
 echo "##aetheus[setvariable name=AETHEUS_BACK_IMAGE]$AETHEUS_BACK_IMAGE"
 echo "##aetheus[setvariable name=AETHEUS_FRONT_IMAGE]$AETHEUS_FRONT_IMAGE"
+echo "##aetheus[setvariable name=BACK_IMAGE_REPO]$BACK_IMAGE_REPO"
+echo "##aetheus[setvariable name=FRONT_IMAGE_REPO]$FRONT_IMAGE_REPO"
 echo "##aetheus[setvariable name=SOURCE_COMMIT]$ARTIFACT_COMMIT"
 echo "##aetheus[setvariable name=AETHEUS_BROWSER_SMOKE_IMAGE]$AETHEUS_BROWSER_SMOKE_IMAGE"
 echo "Production host prepared for $ARTIFACT_COMMIT; the cutover steps own the environment from here."

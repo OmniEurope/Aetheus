@@ -7,12 +7,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// Recette R2-035: on a reload of a server page the trail read "Servers / (empty) / Services" beside a
-/// lone loader. The layout is now OE's detail frame: the header and its trail are painted at once, the
-/// server segment is a skeleton until the name is known, a skeleton stands for the content, and the
-/// section pages stay mounted (hidden) so they can start the load.
-/// </summary>
+/// <summary>The detail frame renders header and breadcrumb skeletons immediately while hidden
+/// section pages remain mounted to initiate loading.</summary>
 public class ServerDetailLayoutLoadingTests : BunitContext
 {
     public ServerDetailLayoutLoadingTests()

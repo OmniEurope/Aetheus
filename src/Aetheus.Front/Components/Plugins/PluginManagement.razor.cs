@@ -26,7 +26,7 @@ public partial class PluginManagement : IAsyncDisposable
     // RT4M: shared admin-hub subscription wrapper, owned and disposed by this page.
     private AdminEntitySubscription? _adminRt;
 
-    // Recette R-224: the grid's header filters, sent with every page request, and the values they offer.
+    // The grid's header filters, sent with every page request, and the values they offer.
     private List<GridFilter> _columnFilters = [];
     private PluginFilterValuesDto _filterValues = new();
     private Func<string, string>? _typeText;
@@ -46,12 +46,13 @@ public partial class PluginManagement : IAsyncDisposable
         Breadcrumb.Set(
             new BreadcrumbItem(L["Administration"], "/admin"),
             new BreadcrumbItem(L["Plugins"]));
-        await LoadPageAsync();
+        // The first page is the grid's own first request (LoadData): reading it here as well fetched it
+        // twice, both loads sharing _loading, and the grid then reloaded once more when this one settled.
         await LoadFilterValuesAsync();
         // Realtime: refresh the list when plugins are registered/updated/unregistered (e.g. an agent
         // registering a plugin), so the management view reflects changes without a manual reload. RT4M.
         _adminRt = new AdminEntitySubscription(HubFactory);
-        // Recette R-226: the grid refreshes in place (page, sort and filters kept, new rows highlighted).
+        // The grid refreshes in place (page, sort and filters kept, new rows highlighted).
         await _adminRt.StartAsync(AdminEntities.Plugin, () => InvokeAsync(async () =>
         {
             await LoadFilterValuesAsync();
@@ -85,7 +86,8 @@ public partial class PluginManagement : IAsyncDisposable
         catch (HttpRequestException) { _filterValues = new PluginFilterValuesDto(); }
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// grid.</summary>
     internal Task<PaginatedResult<PluginRegistrationDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -107,8 +109,8 @@ public partial class PluginManagement : IAsyncDisposable
         return ReloadGridAsync();
     }
 
-    // Recette R-327: the grid scrolls (remote virtualization) and only shows what it fetched itself, so a
-    // change goes through it: a new search or a registration from the first row, a toggle in place.
+    // The grid scrolls (remote virtualization) and only shows what it fetched itself, so a change
+    // goes through it: a new search or a registration from the first row, a toggle in place.
     private Task ReloadGridAsync() => _grid is not null ? _grid.GoToPage(0, forceReload: true) : LoadPageAsync();
     private Task RefreshGridAsync() => _grid is not null ? _grid.Refresh() : LoadPageAsync();
 

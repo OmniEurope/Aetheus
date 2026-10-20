@@ -7,7 +7,7 @@ internal static class MonacoFramePolicy
 
     internal static string Build(string? reportUri) =>
         "default-src 'self'; " +
-        "script-src 'self' blob:; " +
+        "script-src 'self' blob: 'report-sample'; " +
         "worker-src 'self' blob:; " +
         "style-src 'self'; " +
         "style-src-elem 'self' 'unsafe-inline'; " +

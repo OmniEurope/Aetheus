@@ -13,14 +13,9 @@ using NSubstitute;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// The architecture metrics report of candidate #2328 carried 39,240 records and took 130 s to publish
-/// (PLAN-007 lot 6). This ingests a report of that size on PostgreSQL, twice on the default branch so
-/// the second one also resolves a baseline; the durations are written to the test output as the
-/// measurement. Since PLAN-013 lot 3 an analysis writes only its totals, the 50 worst rows of each key
-/// and the rows over a policy threshold: at least ten times fewer rows, with the grade and the Gate
-/// those of the whole report.
-/// </summary>
+/// <summary>Publishes a large report twice on PostgreSQL and records timings while checking
+/// baseline resolution. Retention keeps totals, worst rows and threshold violations while
+/// preserving full-report grading.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class AnalysisMetricIngestionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

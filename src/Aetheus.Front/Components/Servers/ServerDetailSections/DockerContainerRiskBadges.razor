@@ -1,0 +1,19 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* PLAN-010 lot 1: a container's host-escape settings. Red when nothing explains them, neutral when the
+   Aetheus role named beside them needs them. Nothing is drawn for a container the agent did not
+   inspect: the tab says once that those settings are unknown. *@
+@if (Container.SecurityInspected && (Container.Risks != DockerContainerRisks.None || Container.AetheusRole != AetheusContainerRole.None))
+{
+    <OmniRow Gap="OmniSpacing.XSmall" Class="docker-risk-badges">
+        @if (RoleLabel is { } role)
+        {
+            <OmniBadge Fill="OmniFill.Tonal" Tone="OmniTone.Info" title="@L["DockerRoleHint"]" data-docker-role="@Container.AetheusRole">@role</OmniBadge>
+        }
+        @foreach (var flag in Flags)
+        {
+            <OmniBadge Fill="OmniFill.Tonal" Tone="@(flag.Expected ? OmniTone.Neutral : OmniTone.Danger)"
+                title="@(flag.Expected ? $"{flag.Hint} {L["DockerRiskExpected"]}" : flag.Hint)"
+                data-docker-risk="@flag.Risk" data-expected="@(flag.Expected ? "true" : "false")">@flag.Label</OmniBadge>
+        }
+    </OmniRow>
+}

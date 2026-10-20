@@ -4,12 +4,9 @@ using MimeKit;
 
 namespace Aetheus.Back.Components.Mail.Mailbox;
 
-/// <summary>
-/// Recette R1-38: the files a writer attaches to a message. The limits of <see cref="MailboxLimits"/> are
-/// checked again here, whatever the browser checked. The bytes are only copied into the MIME message, never
-/// opened, parsed or rendered. The browser's content type does not travel: the type written in the message
-/// comes from the sanitized name's extension, and is only a label for the recipient's client.
-/// </summary>
+/// <summary>Recheck attachment limits and copy bytes into MIME without opening, parsing or
+/// rendering them. Derive the MIME label from the sanitized filename extension rather than browser
+/// content type.</summary>
 public static class MailboxOutgoingAttachments
 {
     private static readonly char[] s_separators = ['/', '\\'];
@@ -62,24 +59,34 @@ public static class MailboxOutgoingAttachments
     /// </summary>
     public static string SanitizeFileName(string? fileName, int index)
     {
-        var raw = fileName ?? string.Empty;
-        var lastSeparator = raw.LastIndexOfAny(s_separators);
-        if (lastSeparator >= 0) raw = raw[(lastSeparator + 1)..];
+        var name = ReplaceRefusedCharacters(LastPathSegment(fileName ?? string.Empty)).Trim().Trim('.', ' ');
+        if (name.Length == 0 || name.All(character => character == '_')) return $"attachment-{index + 1}";
+        return name.Length <= MailboxLimits.MaxAttachmentNameLength ? name : Shorten(name);
+    }
 
+    private static string LastPathSegment(string raw)
+    {
+        var lastSeparator = raw.LastIndexOfAny(s_separators);
+        return lastSeparator >= 0 ? raw[(lastSeparator + 1)..] : raw;
+    }
+
+    /// <summary>Each control, format or file-system-refused character becomes an underscore.</summary>
+    private static string ReplaceRefusedCharacters(string raw)
+    {
         var builder = new StringBuilder(raw.Length);
         foreach (var character in raw.Normalize(NormalizationForm.FormC))
-        {
-            if (char.IsControl(character) || character is '"' or '*' or ':' or '<' or '>' or '?' or '|'
-                || char.GetUnicodeCategory(character) is System.Globalization.UnicodeCategory.Format)
-                builder.Append('_');
-            else
-                builder.Append(character);
-        }
+            builder.Append(IsRefusedCharacter(character) ? '_' : character);
+        return builder.ToString();
+    }
 
-        var name = builder.ToString().Trim().Trim('.', ' ');
-        if (name.Length == 0 || name.All(character => character == '_')) return $"attachment-{index + 1}";
-        if (name.Length <= MailboxLimits.MaxAttachmentNameLength) return name;
+    private static bool IsRefusedCharacter(char character) =>
+        char.IsControl(character) || character is '"' or '*' or ':' or '<' or '>' or '?' or '|'
+        || char.GetUnicodeCategory(character) is System.Globalization.UnicodeCategory.Format;
 
+    /// <summary>Cuts a too-long name to the limit, keeping its extension unless that would take half of it,
+    /// and never splitting a surrogate pair.</summary>
+    private static string Shorten(string name)
+    {
         var extension = Path.GetExtension(name);
         if (extension.Length >= MailboxLimits.MaxAttachmentNameLength / 2) extension = string.Empty;
         var keep = MailboxLimits.MaxAttachmentNameLength - extension.Length;

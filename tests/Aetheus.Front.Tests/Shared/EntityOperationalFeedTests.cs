@@ -4,7 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>R-181: the helper that reloads a monitored app's Logs and Errors tabs on AppTelemetryChanged.</summary>
+/// <summary>The helper that reloads a monitored app's Logs and Errors tabs on
+/// AppTelemetryChanged.</summary>
 public sealed class EntityOperationalFeedTests : BunitContext
 {
     private readonly HubConnectionFactory _hubFactory;

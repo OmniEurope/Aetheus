@@ -1,0 +1,24 @@
+#!/bin/sh
+# SPDX-License-Identifier: EUPL-1.2
+# Fixed-purpose root-owned helper for RKHunter, invoked via /etc/sudoers.d/aetheus-rkhunter (NOPASSWD).
+# rkhunter is a shell script that execs grep, tr, cut, id and many more for every check, so it cannot
+# run under sudo noexec: each of those execs failed with "Permission denied" and rkhunter stopped on
+# "Unable to determine if you are root" (recette R3-36). This helper is the ADR-019 exception: one
+# word chosen from a closed list, no other argument, no environment-controlled path, fixed rkhunter argv.
+set -u
+[ "$#" -eq 1 ] || { echo "aetheus-rkhunter takes exactly one argument: check, update or propupd" >&2; exit 2; }
+case "$1" in
+    check)   /usr/bin/rkhunter --check --skip-keypress --nocolors --report-warnings-only ;;
+    update)  /usr/bin/rkhunter --update --nocolors ;;
+    propupd) /usr/bin/rkhunter --propupd --nocolors ;;
+    *) echo "aetheus-rkhunter: unknown action (expected check, update or propupd)" >&2; exit 2 ;;
+esac
+rc=$?
+# rkhunter recreates its log mode 0600 on every run, so the unprivileged agent could read neither the
+# last scan nor its warnings (the "RKHunter - logs" task failed the same day). Read access only, for the
+# agent account alone; rkhunter's exit code is returned unchanged.
+LOG=/var/log/rkhunter.log
+if [ -f "$LOG" ]; then
+    setfacl -m "u:#{AGENT_USER}#:r" "$LOG" || echo "aetheus-rkhunter: could not grant the agent read access to $LOG" >&2
+fi
+exit "$rc"

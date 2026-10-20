@@ -11,11 +11,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-013 lot 6 on PostgreSQL: after a purge the table keeps its size on disk; « Récupérer la place »
-/// runs the real <c>VACUUM FULL</c> and the size measured after is smaller than before, while a running
-/// pipeline refuses it.
-/// </summary>
+/// <summary>PostgreSQL reclamation must reduce physical table size after purging and refuse while a
+/// pipeline runs.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class ReclaimSpaceIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

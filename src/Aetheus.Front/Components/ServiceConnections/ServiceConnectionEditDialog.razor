@@ -33,10 +33,9 @@ else
                 </ChildContent></OmniFormField>
             </OmniColumn>
             <OmniColumn Span="12">
-                <OmniFormField For="oe-pages-serviceconnections-serviceconnectioneditdialog-5" Class="omni-u-w-100"><LabelContent>@L["Credentials"]</LabelContent><ChildContent>
+                <OmniFormField For="oe-pages-serviceconnections-serviceconnectioneditdialog-5" Help="@L["ServiceConnectionCredentialsHint"]" Class="omni-u-w-100"><LabelContent>@L["Credentials"]</LabelContent><ChildContent>
                     <OmniTextArea @bind-Value="_model.ConfigurationJson" Rows="5" Class="text-mono" Id="oe-pages-serviceconnections-serviceconnectioneditdialog-5" />
                 </ChildContent></OmniFormField>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["ServiceConnectionCredentialsHint"]</OmniText>
                 <ValidationMessage For="@(() => _model.ConfigurationJson)" />
             </OmniColumn>
         </OmniRow>

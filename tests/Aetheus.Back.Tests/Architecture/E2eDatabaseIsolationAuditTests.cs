@@ -166,22 +166,26 @@ public sealed class E2eDatabaseIsolationAuditTests
         var launcher = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "launch-core.ps1"));
 
         Assert.Contains("Aetheus\\shared-development", launcher, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(launcher, "$env:ArtifactStorage__BasePath"));
-        Assert.Equal(2, CountOccurrences(launcher, "$env:PackageRegistry__BasePath"));
-        Assert.Equal(2, CountOccurrences(launcher, "$env:GitLight__RepositoriesPath"));
+        Assert.Contains("$env:ArtifactStorage__BasePath", launcher, StringComparison.Ordinal);
+        Assert.Contains("$env:PackageRegistry__BasePath", launcher, StringComparison.Ordinal);
+        Assert.Contains("$env:GitLight__RepositoriesPath", launcher, StringComparison.Ordinal);
     }
 
-    private static int CountOccurrences(string value, string fragment)
+    [Fact]
+    public void R3_7_E2eAndQaHosts_SwitchOffTheNightlyAiModelListRead_ProductionKeepsIt()
     {
-        var count = 0;
-        var offset = 0;
-        while ((offset = value.IndexOf(fragment, offset, StringComparison.Ordinal)) >= 0)
-        {
-            count++;
-            offset += fragment.Length;
-        }
+        // Recette R3-7: the E2E backends (both ylaunch branches, ybaunch) and the QA stack hold seeded
+        // profiles with fake keys, and the nightly QA runs inside the 01:00-05:00 UTC read window. The QA
+        // stack sets AI_MODEL_LIST_REFRESH_ENABLED=false in its pipeline definitions, which tests do not read
+        // (AGENTS.md); the compose default below is what that variable switches.
+        var root = RepoRoot();
+        var windowsLauncher = File.ReadAllText(Path.Combine(root, "scripts", "launch-core.ps1"));
+        var linuxLauncher = File.ReadAllText(Path.Combine(root, "launch-linux.sh"));
+        var remoteCompose = File.ReadAllText(Path.Combine(root, "deploy", "compose", "remote.compose.yml"));
 
-        return count;
+        Assert.Contains("$env:AiTasks__ModelListRefresh__Enabled = \"false\"", windowsLauncher, StringComparison.Ordinal);
+        Assert.Contains("export AiTasks__ModelListRefresh__Enabled=\"false\"", linuxLauncher, StringComparison.Ordinal);
+        Assert.Contains("AiTasks__ModelListRefresh__Enabled=${AI_MODEL_LIST_REFRESH_ENABLED:-true}", remoteCompose, StringComparison.Ordinal);
     }
 
     private static string RepoRoot()

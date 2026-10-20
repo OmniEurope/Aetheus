@@ -20,7 +20,8 @@ public class SettingsService(ISettingsRepository repo, IEncryptionService encryp
         "Notifications:WebhookEnabled",
         "Pipelines:DefaultRetentionDays",
         "Metrics:RetentionDays",
-        "Retention:LogDays"
+        "Retention:LogDays",
+        PipelineRunToEndSetting.Key
     };
 
     // L9QM: operational settings that should always be visible/editable in the admin Settings page
@@ -30,7 +31,9 @@ public class SettingsService(ISettingsRepository repo, IEncryptionService encryp
     // the SystemLogs purge reads it via GetSettingValueAsync (falling back to the same default).
     private static readonly Dictionary<string, string> DefaultSettingValues = new(StringComparer.Ordinal)
     {
-        ["Retention:LogDays"] = "30"
+        ["Retention:LogDays"] = "30",
+        // Off until an administrator turns it on: "run to end" lets a deployment run after failed tests.
+        [PipelineRunToEndSetting.Key] = "false"
     };
 
     internal const string DailyRecapRowPrefix = "DailyRecap:";
@@ -38,8 +41,9 @@ public class SettingsService(ISettingsRepository repo, IEncryptionService encryp
     public async Task<List<AppSettingDto>> GetSettingsAsync(CancellationToken ct = default)
     {
         var settings = await repo.GetAllSettingsAsync(ct).ConfigureAwait(false);
-        // R1-16: the e-mail sender has its own tab and endpoint; its rows are not free-form settings.
-        // The daily recap neither (DailyRecapSettingKeys.Prefix, spelled here so Settings does not depend on that module).
+        // The e-mail sender has its own tab and endpoint; its rows are not free-form settings. The
+        // daily recap neither (DailyRecapSettingKeys.Prefix, spelled here so Settings does not
+        // depend on that module).
         var result = settings
             .Where(s => !s.Key.StartsWith(EmailSenderSettingKeys.Prefix, StringComparison.Ordinal)
                 && !s.Key.StartsWith(DailyRecapRowPrefix, StringComparison.Ordinal))
@@ -57,6 +61,9 @@ public class SettingsService(ISettingsRepository repo, IEncryptionService encryp
     {
         if (!AllowedSettingKeys.Contains(key))
             throw new BadRequestException($"Setting key '{key}' is not allowed.");
+        // A switch, not free text: a typo must not leave an administrator believing it is off or on.
+        if (key == PipelineRunToEndSetting.Key && !bool.TryParse(value, out _))
+            throw new BadRequestException($"Setting '{key}' must be 'true' or 'false'.");
 
         var setting = await repo.FindSettingByKeyAsync(key, ct).ConfigureAwait(false);
         if (setting is null)

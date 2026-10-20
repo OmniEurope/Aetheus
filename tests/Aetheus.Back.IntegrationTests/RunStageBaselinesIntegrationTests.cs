@@ -6,10 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-003 lot 20 / D26, on a real PostgreSQL: the baseline query samples only SUCCESSFUL runs of
-/// the same pipeline, started before the viewed run, at most N of them.
-/// </summary>
+/// <summary>The baseline query selects at most the requested number of successful same-pipeline
+/// runs started before the viewed run.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class RunStageBaselinesIntegrationTests(PostgresFixture fixture)
 {

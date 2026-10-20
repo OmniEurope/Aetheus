@@ -58,7 +58,9 @@ internal static class LinuxAgentRollbackGuardScript
             printf '%s\n' "No confirming heartbeat arrived; previous binaries restored automatically." >> "$log_path"
             exit 4
             """;
-        File.WriteAllText(scriptPath, script);
+        // sh reads a CR as part of the command: an agent built from a Windows checkout would
+        // otherwise write a CRLF script and the guard would fail on its first line.
+        File.WriteAllText(scriptPath, script.ReplaceLineEndings("\n"));
         return scriptPath;
     }
 }

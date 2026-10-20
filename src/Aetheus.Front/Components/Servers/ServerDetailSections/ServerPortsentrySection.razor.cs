@@ -39,6 +39,7 @@ public partial class ServerPortsentrySection
     private Aetheus.Front.Components.Shared.AetheusDataGrid<PortsentryBlockedIpDto>? _blockedGrid;
     private Aetheus.Front.Components.Shared.AetheusDataGrid<PortsentryWhitelistIpDto>? _whitelistGrid;
     private List<string> _protocolValues = [];
+    private ServerTaskFollower? _follower;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -59,7 +60,7 @@ public partial class ServerPortsentrySection
         await Task.WhenAll(blockedReload, whitelistReload, LoadProtocolValuesAsync());
     }
 
-    // Recette R-210: the protocols the Protocol header filter offers, across every blocked IP of the server.
+    // The protocols the Protocol header filter offers, across every blocked IP of the server.
     private async Task LoadProtocolValuesAsync()
     {
         var serverId = ServerId;
@@ -75,7 +76,7 @@ public partial class ServerPortsentrySection
         }
     }
 
-    // Recette R2-124: one page of each list's export, with the grid's sort and column filters.
+    // One page of each list's export, with the grid's sort and column filters.
     private Task<PaginatedResult<PortsentryBlockedIpDto>> ReadBlockedExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -96,7 +97,7 @@ public partial class ServerPortsentrySection
         var generation = _loadGeneration;
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, descending) = GetSort(args, "BlockedAt", fallbackDescending: true);
-        // Recette R-210 / R-224: the header filters, applied by the API.
+        // The header filters, applied by the API.
         var filters = args.ToApiFilters();
         _blockedLoading = true;
         try
@@ -130,7 +131,7 @@ public partial class ServerPortsentrySection
         var generation = _loadGeneration;
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, descending) = GetSort(args, "IpAddress", fallbackDescending: false);
-        // Recette R-210 / R-224: the header filters, applied by the API.
+        // The header filters, applied by the API.
         var filters = args.ToApiFilters();
         _whitelistLoading = true;
         try
@@ -170,6 +171,8 @@ public partial class ServerPortsentrySection
     {
         if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
+        // Recette R3-37: the follower shows what becomes of the task, in place of a lone "Task created".
+        _follower?.Expect(L[action.ToString()]);
         try
         {
             var success = await Api.Security.ExecutePortsentryActionAsync(ServerId, new PortsentryActionRequest { Action = action });
@@ -179,10 +182,14 @@ public partial class ServerPortsentrySection
                 await OnRefreshRequested.InvokeAsync();
             }
             else
+            {
+                _follower?.Forget();
                 Toast.Error("Error", "ActionFailed");
+            }
         }
         catch (HttpRequestException)
         {
+            _follower?.Forget();
             Toast.Error("Error", "ActionFailed");
         }
         finally
@@ -200,8 +207,7 @@ public partial class ServerPortsentrySection
             TcpPorts = _setupTcpPorts,
             UdpPorts = _setupUdpPorts
         };
-        var success = await Api.Security.SetupPortsentryAsync(ServerId, request);
-        if (success)
+        if (await ServerTaskLaunch.FollowAsync(_follower, L["PortsentrySetup"], () => Api.Security.SetupPortsentryAsync(ServerId, request)))
         {
             Toast.Success("TaskCreated");
             await OnRefreshRequested.InvokeAsync();
@@ -231,9 +237,15 @@ public partial class ServerPortsentrySection
     private async Task GetLogsAsync()
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect(L["ViewLogs"]);
         var success = await Api.Security.GetPortsentryLogsAsync(ServerId, new PortsentryLogRequest());
         if (success)
             Toast.Success("TaskCreated");
+        else
+        {
+            _follower?.Forget();
+            Toast.Error("Error", "ActionFailed");
+        }
     }
 
     private async Task UnblockIpAsync(string ip)
@@ -245,6 +257,7 @@ public partial class ServerPortsentrySection
             new OmniConfirmOptions { OkButtonText = L["Unblock"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
+        _follower?.Expect($"{L["Unblock"]} {ip}");
         var success = await Api.Security.UnblockPortsentryIpAsync(ServerId, new PortsentryUnblockRequest { IpAddress = ip });
         if (success)
         {
@@ -252,7 +265,10 @@ public partial class ServerPortsentrySection
             await OnRefreshRequested.InvokeAsync();
         }
         else
+        {
+            _follower?.Forget();
             Toast.Error("Error", "ActionFailed");
+        }
     }
 
     private async Task AddWhitelistIpAsync()

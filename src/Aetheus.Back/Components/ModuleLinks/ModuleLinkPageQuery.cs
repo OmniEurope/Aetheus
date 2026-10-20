@@ -5,11 +5,10 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.ModuleLinks;
 
-/// <summary>
-/// Recette R-210: the column filters of a resource's links grid. A row shows the other side of the link
-/// (the target when the resource is the source, the source otherwise), so the Type and Resource keys read
-/// that side; the map is built per request because which side is "the other one" depends on it.
-/// </summary>
+/// <summary> The column filters of a resource's links grid. A row shows the other side of the link
+/// (the target when the resource is the source, the source otherwise), so the Type and Resource
+/// keys read that side; the map is built per request because which side is "the other one" depends
+/// on it. </summary>
 internal static class ModuleLinkPageQuery
 {
     internal static GridQueryMap<ModuleLink> Columns(ModuleLinkType sourceType, List<string> identifiers)

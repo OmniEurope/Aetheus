@@ -41,8 +41,8 @@
     @if (CanWrite)
     {
         <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
-            @* Recette R-445 (user decision 2026-09-28): regenerating the key is red, since the old key stops
-               working; the first generation is the zone's main action, blue. *@
+            @* Use red for regeneration because it invalidates the existing key; initial generation
+               is the area's primary blue action. *@
             <OmniButton Variant="@(App?.HasIngestKey == true ? OmniButtonVariant.Danger : OmniButtonVariant.Primary)" OnClick="@GenerateKeyAsync" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Key" /> <span>@(App?.HasIngestKey == true ? L["RegenerateKey"] : L["GenerateKey"])</span></OmniButton>
             @if (App?.HasIngestKey == true)
             {
@@ -84,8 +84,8 @@
                 <OmniLabel For="analytics-storage-budget">@L["AnalyticsStorageBudgetBytes"]</OmniLabel>
                 <OmniNumeric Id="analytics-storage-budget" TValue="long" @bind-Value="_analyticsStorageBudgetBytes"
                                Minimum="1048576" Maximum="10737418240" Disabled="@(!CanWrite)" Class="w-rem-20" />
-                @* Recette R2-007: what the audience data weighs against this budget, on one line (the card of
-                   the Visitors tab went). At the budget the oldest raw rows roll off instead of new events being refused. *@
+                @* Show audience storage beside its budget so retention is understandable; reaching
+                   the budget removes the oldest raw rows rather than refusing new events. *@
                 @if (StorageUsageText is { } storageUsage)
                 {
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted web-analytics-storage-usage">@storageUsage</OmniText>
@@ -108,9 +108,12 @@
             {
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveAnalyticsConfigurationAsync" Class="@(_analyticsBusy ? "btn-busy" : null)" Busy="@(_analyticsBusy)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+                    @* STD-BTN detection 11: Save visible, the other actions in the menu. *@
                     @if ((_analyticsConfiguration?.PseudonymKeyVersion ?? 0) > 0)
                     {
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RotateAnalyticsKeyAsync" Class="@(_analyticsBusy ? "btn-busy" : null)" Busy="@(_analyticsBusy)" title="@L["RotateAnalyticsKey"]"><OmniIcon Name="OmniIconName.Key" /> <span>@L["Renew"]</span></OmniButton>
+                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                            <OmniMenuItem OnClick="@RotateAnalyticsKeyAsync" Disabled="@_analyticsBusy"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>@L["RotateAnalyticsKey"]</ChildContent></OmniMenuItem>
+                        </OmniOverflowMenu>
                     }
                 </OmniStack>
             }
@@ -127,7 +130,7 @@
             <Template Context="t">@L.Localize(t.Operator)</Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="AppMetricThresholdDto" Property="Threshold" Title="@L["Threshold"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
-        @* Recette R-210: the status column reads IsBreached, so it filters on breached / OK. *@
+        @* The status column reads IsBreached, so it filters on breached / OK. *@
         <OmniDataGridColumn TItem="AppMetricThresholdDto" Property="IsBreached" Title="@L["Status"]" Width="7.5rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@BreachedText">
             <Template Context="t">
                 <OmniBadge Fill="OmniFill.Solid" Tone="@(t.IsBreached ? OmniTone.Danger : OmniTone.Success)">@(t.IsBreached ? L["Breached"] : L["OK"])</OmniBadge>

@@ -10,15 +10,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// R-368: a release graded F started a deployment whose declared threshold is E. The threshold only
-/// existed as a variable read by a script in aetheus-deploy-prod's second stage (Verify candidate),
-/// while the first stage (Restore candidate) is bound to <c>environment: prod</c>: the control plane
-/// therefore asked for the production approval, then ran the System prepare and the restore on the
-/// production agent, before anything compared the grade with the threshold. The grade gate is now
-/// evaluated by the control plane before the first dispatch of the run, so before any approval and any
-/// action on a target, and a mismatch ends the attempt at once with the grade and the threshold named.
-/// </summary>
+/// <summary>The control-plane grade gate refuses an insufficient release before approvals or
+/// dispatch and reports the grade and threshold.</summary>
 public class PipelineDeploymentGradeGateTests
 {
     private const int RunId = 9368;

@@ -12,7 +12,7 @@ else if (_detail is null)
     <OmniPageHeader Title="@L["Commit"]" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("commit")" /></Icon>
     </OmniPageHeader>
-    @* Recette R-319: the repository answered, it just does not hold this commit; say which one. *@
+    @* The repository answered, it just does not hold this commit; say which one. *@
     <OmniAlert Severity="OmniSeverity.Warning" Class="commit-not-in-repository">
         @string.Format(System.Globalization.CultureInfo.CurrentCulture, L["CommitNotInRepository"], Short(Sha))
     </OmniAlert>

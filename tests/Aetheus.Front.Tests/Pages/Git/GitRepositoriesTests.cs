@@ -24,11 +24,9 @@ public class GitRepositoriesTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/git/repos", new List<GitLightRepoDto>());
 
         var cut = Render<GitRepositories>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
-        // The page renders its toolbar (New Repository action + project filter) and, with no repos,
-        // the empty grid state (no longer a "select a project first" gate).
-        // PLAN-003 lot 5: the button says "Create"; the page title carries the context.
+        // Render Create and the project filter with an empty grid state when no repositories exist.
         Assert.Contains("GitRepositories", cut.Markup);
         Assert.Contains(">Create<", cut.Markup);
         Assert.Contains("SelectProject", cut.Markup);
@@ -49,7 +47,7 @@ public class GitRepositoriesTests : BunitContext
         });
 
         var cut = Render<GitRepositories>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // No project selected: the page now fetches the cross-project list (GET api/git/repos, no
         // projectId) and shows every accessible repo.
@@ -165,8 +163,7 @@ public class GitRepositoriesTests : BunitContext
         Assert.Equal(reposLoadsBefore, reposLoadsAfter);
     }
 
-    /// <summary>R2-037 (2026-10-01): Open is the row's main action, blue by the user's choice (R-533);
-    /// Delete stays red.</summary>
+    /// <summary>Open is the primary blue row action; Delete remains red.</summary>
     [Fact]
     public void RepositoryRow_OpenIsBlue_DeleteStaysRed()
     {
@@ -182,6 +179,6 @@ public class GitRepositoriesTests : BunitContext
         {
             Assert.Contains("omni-button--primary", cut.FindAll("button[title='View']").Single().ClassName, StringComparison.Ordinal);
             Assert.Contains("omni-button--danger", cut.FindAll("button[title='Delete']").Single().ClassName, StringComparison.Ordinal);
-        }, TimeSpan.FromSeconds(3));
+        });
     }
 }

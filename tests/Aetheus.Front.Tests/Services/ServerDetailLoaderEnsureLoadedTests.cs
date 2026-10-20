@@ -69,7 +69,7 @@ public class ServerDetailLoaderEnsureLoadedTests : BunitContext
         Rkhunter = new RkhunterDataDto()
     };
 
-    // ── Recette R-514: leaving, then coming back before the leave has finished ──────────────
+    // Leaving and returning before asynchronous disposal completes.
 
     [Fact]
     public async Task ALeaveTeardownThatRunsAfterTheReaderCameBack_KeepsTheLoadedServer()
@@ -141,7 +141,7 @@ public class ServerDetailLoaderEnsureLoadedTests : BunitContext
             NullLogger<ServerDetailLoader>.Instance);
 
         await sut.EnsureLoadedAsync(11, Xunit.TestContext.Current.CancellationToken)
-            .WaitAsync(TimeSpan.FromSeconds(1), Xunit.TestContext.Current.CancellationToken);
+            .WaitAsync(Aetheus.Front.Tests.TestDoubles.HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
 
         Assert.Equal(11, sut.Server?.Id);
         Assert.True(sut.InitialLoadCompleted);
@@ -286,7 +286,7 @@ public class ServerDetailLoaderEnsureLoadedTests : BunitContext
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             sut.EnsureLoadedAsync(9, cts.Token)
-                .WaitAsync(TimeSpan.FromSeconds(2), Xunit.TestContext.Current.CancellationToken));
+                .WaitAsync(Aetheus.Front.Tests.TestDoubles.HangGuard.Limit, Xunit.TestContext.Current.CancellationToken));
         Assert.Null(sut.Server);
         Assert.False(sut.InitialLoadCompleted);
     }

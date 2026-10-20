@@ -8,7 +8,7 @@
     <!-- Two runners, on purpose. In the repository, global.json puts `dotnet test` in
          Microsoft.Testing.Platform mode, which refuses any project that is not on it: the NUnit runner
          does that. The browser image (Dockerfile.e2e) carries no global.json and is driven with the
-         VSTest arguments of run-qa-e2e-suite.sh and of the agent's production smoke step, and that
+         VSTest arguments of the run-qa-e2e-suite function and of the agent's production smoke step, and that
          agent is the one already installed on the host when a release reaches it: Microsoft.NET.Test.Sdk
          keeps that invocation working. Both are set here and not only in tests/Directory.Build.props,
          because the image receives the root Directory.Build.props and this project, not the tests/

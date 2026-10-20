@@ -9,11 +9,15 @@ namespace Aetheus.Agent.Core.Executors;
 /// </summary>
 public interface IContainerExecutor
 {
+    /// <param name="readOnlyMounts">Agent-owned directories to bind-mount read-only into the step
+    /// container (the <c>aetheus-fn</c> executables of a <c>type: aetheus</c> step); none for an
+    /// ordinary shell step.</param>
     Task<ExecutorResult> ExecuteAsync(
         ContainerSpec spec,
         string command,
         Dictionary<string, string> environmentVariables,
         int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlyList<ContainerReadOnlyMount>? readOnlyMounts = null);
 }

@@ -196,12 +196,10 @@ public class VaultEditTests : BunitContext
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(
             () => typeof(VaultEdit).GetField("_detail", BindingFlags.NonPublic | BindingFlags.Instance)!
-                .GetValue(cut.Instance) is not null,
-            TimeSpan.FromSeconds(3));
+                .GetValue(cut.Instance) is not null);
 
-        // The existing-vault branch renders the delete button (localized "Delete" label + delete
-        // icon); a new vault omits it. Target that button specifically rather than "any button exists".
-        // Recette R-287: the vault's Delete sits in the tools menu, which renders its items once open.
+        // Only existing vaults expose Delete in the tools menu. Open the menu before locating the
+        // localized action and delete icon.
         cut.Find(".omni-overflow-menu__trigger").Click();
         Assert.Contains(cut.FindAll(".omni-menu__item"), item => item.TextContent.Contains("Delete"));
     }

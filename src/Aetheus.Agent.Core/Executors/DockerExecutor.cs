@@ -16,6 +16,9 @@ public sealed partial class DockerExecutor(
 
     public ExecutorType Type => ExecutorType.Docker;
 
+    // The docker client, replaceable so the exec path runs against a stand-in program in tests.
+    internal string DockerProgram { get; init; } = "docker";
+
     public async Task<ExecutorResult> ExecuteAsync(
         string command,
         Dictionary<string, string> environmentVariables,
@@ -69,7 +72,7 @@ public sealed partial class DockerExecutor(
         }
 
         timeoutSeconds = Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
-        var psi = BuildDockerExec(containerId);
+        var psi = BuildDockerExec(containerId, DockerProgram);
         var standardInputScript = BuildStandardInputScript(environmentVariables, innerCommand);
 
         logger.LogDebug("Docker exec: container={Container} (timeout={Timeout}s)", containerId, timeoutSeconds);
@@ -83,11 +86,11 @@ public sealed partial class DockerExecutor(
                     .ConfigureAwait(false)).ConfigureAwait(false);
     }
 
-    internal static ProcessStartInfo BuildDockerExec(string containerId)
+    internal static ProcessStartInfo BuildDockerExec(string containerId, string dockerProgram = "docker")
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = "docker",
+            FileName = dockerProgram,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

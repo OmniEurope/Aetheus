@@ -134,6 +134,8 @@ public sealed class HelpService
         new("logs", "logs/", "logs"),
         new("alerts", "alerts/", "alerts"),
         new("monitoring", "monitoring/", "supervision"),
+        // Recette R1-41: the "Messagerie" page lists the mailboxes of the servers; the servers article explains them.
+        new("mail", "mail/", "servers"),
         new("dashboards", "dashboards/", "dashboards"),
         new("plugins", "plugins/", "plugins"),
         new("admin/dashboards", "admin/dashboards", "dashboards"),
@@ -155,7 +157,8 @@ public sealed class HelpService
         new("audit", "audit/", "audit"),
         new("api-reference", "api-reference", "api-reference"),
         new("settings", "settings/", "settings"),
-        // R-114: the notification preferences that decide what reaches /notifications live in the settings article.
+        // The notification preferences that decide what reaches /notifications live in the settings
+        // article.
         new("notifications", "notifications/", "settings"),
     ];
 

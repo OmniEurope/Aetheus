@@ -12,12 +12,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.AppMonitoring;
 
-/// <summary>
-/// Audit R2-007 follow-up: at its storage budget an application rolls its oldest audience rows off only
-/// while the events it accepted over the last rolling hour stay under the cap. Past it the anonymous
-/// ingest is a flood: the batch is refused (reason <c>flood</c>) and nothing is deleted. The hour is read
-/// from the accepted volumes saved in the database, so a volume another blue-green colour saved counts.
-/// </summary>
+/// <summary>Reject audience batches above the rolling-hour flood cap without deleting stored rows.
+/// Database-backed accepted volumes include ingestion across both blue-green colours.</summary>
 public sealed class AppWebAnalyticsFloodCapTests : IDisposable
 {
     private const int StoredEvents = 10;

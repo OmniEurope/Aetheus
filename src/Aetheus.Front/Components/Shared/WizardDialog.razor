@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* Recette R-396: the assistant is OE's OmniWizard (progress, the steps in a row at the top, one body,
-   Previous / Next / Finish / Cancel at the foot). This component only hands it Aetheus' steps and keeps
+@* The assistant is OE's OmniWizard (progress, the steps in a row at the top, one body, Previous /
+   Next / Finish / Cancel at the foot). This component only hands it Aetheus' steps and keeps
    Escape as Cancel on a page, where no OmniDialog owns Escape: the key bubbles up from whatever
    control of the wizard has the focus (STD-FOCUS: nothing is focused on render). *@
 <div class="wizard-dialog" @onkeydown="OnKeyDown">

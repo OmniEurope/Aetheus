@@ -44,7 +44,7 @@ public class OrganizationsListTests : BunitContext
 
         var cut = Render<OrganizationsPage>();
         // FRONTTEST-004: the grid says it is empty only once the load has settled.
-        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecords", cut.Markup));
         Assert.Contains("Organizations", cut.Markup);
     }
 
@@ -83,7 +83,7 @@ public class OrganizationsListTests : BunitContext
         });
 
         var cut = Render<OrganizationsPage>();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);
     }

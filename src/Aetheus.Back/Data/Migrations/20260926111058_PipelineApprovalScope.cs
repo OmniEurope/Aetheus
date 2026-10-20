@@ -10,16 +10,10 @@ namespace Aetheus.Back.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: widening only (recette R-370). DROP NOT NULL accepts
-            // every row the previous colour writes (it always sets an environment) and changes no stored
-            // value; EF would emit it as AlterColumn, which the gate cannot tell from a narrowing, hence
-            // the raw statement. The FK and its index are untouched. What the previous colour cannot read
-            // is a row without environment: only this version writes one, and only for a pipeline that
-            // declares approval_timeout_minutes on a stage without environment. The previous colour's
-            // approval reads join the environment (required navigation, inner join), so it does not crash
-            // on such rows but cannot see them: a run waiting on one would neither show its approval nor
-            // expire there. Before a rollback to the previous colour, cancel the runs waiting on an
-            // environment-less approval.
+            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: DROP NOT NULL widens accepted rows without
+            // changing existing data, foreign keys or indexes. The preceding release hides
+            // environment-less approvals through its required join, so cancel runs awaiting those
+            // approvals before rollback.
             migrationBuilder.Sql("ALTER TABLE \"PipelineApprovals\" ALTER COLUMN \"EnvironmentId\" DROP NOT NULL;");
 
             migrationBuilder.AddColumn<int>(

@@ -12,7 +12,7 @@
 
 <a href="#main-content" class="skip-link">@L["SkipToContent"]</a>
 
-@* Recette R-242: the package tooltip for every title attribute, instead of the browser box. *@
+@* The package tooltip for every title attribute, instead of the browser box. *@
 <OmniTitleTooltips />
 
 <OmniLayout data-testid="blazor-ready"
@@ -23,8 +23,8 @@
                    Gap="OmniSpacing.None" Class="header-bar">
             @if (AuthenticatedChromeReady)
             {
-                @* Recette R-043, STD-SHELL: given the sidebar's reveal, OE's toggle keeps the menu glyph while
-                   the sidebar is pushed and shows a close cross while the drawer covers the page. *@
+                @* STD-SHELL: OE shows the menu glyph for a pushed sidebar and a close glyph for an
+                   overlay drawer. *@
                 <OmniSidebarToggle Controls="app-sidebar" Open="@_sidebarExpanded" Reveal="@SidebarReveal"
                                    OpenChanged="@OnSidebarOpenChanged"
                                    Label="@L["ToggleSidebar"]" />
@@ -68,7 +68,9 @@
                            Gap="OmniSpacing.XSmall" Class="header-actions">
                     @{
                         var connected = BackendConnected;
-                        var reconnecting = _signalRState == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Reconnecting;
+                        // The first connection, started without holding the page, reads as an attempt in progress like a reconnection.
+                        var reconnecting = _signalRState is Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Reconnecting
+                            or Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connecting;
                         var connClass = connected ? "header-conn-online" : reconnecting ? "header-conn-warning" : "header-conn-offline";
                     }
                     <OmniIcon Name="@(connected ? OmniIconName.WifiHigh : OmniIconName.WifiSlash)"
@@ -83,17 +85,14 @@
                     </OmniButton>
                     <PendingApprovalsIndicator />
                     <TaskTrackerWidget />
-                    @* R-112: notification bell, next to the task tracker and built like it. *@
+                    @* Notification bell, next to the task tracker and built like it. *@
                     <Aetheus.Front.Components.Notifications.NotificationBell />
-                    @* STD-SHELL, recette R2-022 (OE 1.4.0): the end of the bar is the package's application menu,
-                       the same in every application: who is signed in and their role, the organisation (the
-                       application's own row), the language, the mode, the theme (the appearance window), the
-                       settings, then the version and signing out. *@
+                    @* STD-SHELL: the shared application menu groups account, organisation,
+                       language, appearance, settings, version and sign-out actions. *@
                     <OmniAppMenu Class="header-app-menu" Open="@_userMenuOpen" OpenChanged="@(open => _userMenuOpen = open)"
                                  UserName="@Auth.Username" Role="@(Auth.IsAdmin ? L["Admin"] : L["User"])"
                                  Languages="@Languages" Language="@CurrentLanguage" LanguageChanged="@OnLanguageChanged"
-                                 Appearance="@Appearance.Appearance" AppearanceChanged="@Appearance.SetAppearanceAsync"
-                                 Preset="@Appearance.Preset" OnTheme="@OnThemeMenuClick" OnSettings="@OnSettingsMenuClick"
+                                 OnTheme="@OnThemeMenuClick" OnSettings="@OnSettingsMenuClick"
                                  Version="@($"Aetheus v{_version}")" OnSignOut="@OnLogout">
                         @if (Orgs.IsLoaded && Orgs.Available.Count > 0)
                         {
@@ -122,12 +121,11 @@
             }
             else if (!Auth.IsAuthenticated)
             {
-                @* Signed out (the login page): the same menu without an account, its trigger an icon; the mode,
-                   the theme and the language stay at the right of the bar (recette R-006). *@
+                @* Signed out (the login page): the same menu without an account, its trigger an
+                   icon; the mode, the theme and the language stay at the right of the bar. *@
                 <OmniAppMenu Class="header-app-menu" Open="@_userMenuOpen" OpenChanged="@(open => _userMenuOpen = open)"
                              Languages="@Languages" Language="@CurrentLanguage" LanguageChanged="@OnLanguageChanged"
-                             Appearance="@Appearance.Appearance" AppearanceChanged="@Appearance.SetAppearanceAsync"
-                             Preset="@Appearance.Preset" OnTheme="@OnThemeMenuClick" />
+                             OnTheme="@OnThemeMenuClick" />
             }
         </OmniStack>
         <PageLoadProgressBar />
@@ -143,9 +141,8 @@
                      Transition="OmniSidebarTransition.Smooth"
                      Backdrop="@_isMobile" Class="sidebar-width" Label="@L["MainNavigation"]"
                      CloseLabel="@L["CloseSidebar"]">
-            @* Recette R-042 (ASTRAIA parity): the open phone drawer rises over the app bar to the top of
-               the screen and carries its corner, a close cross and the logo. OE shows this header only
-               while the panel floats open, so the pushed desktop sidebar is unchanged. *@
+            @* The mobile drawer overlays the app bar and exposes its own close button and logo. OE
+               hides this header when the desktop sidebar is pushed. *@
             <Header>
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
                            Gap="OmniSpacing.None" Class="header-bar sidebar-drawer-header">
@@ -185,8 +182,8 @@
             }
             else if (_initialized)
             {
-                @* PLAN-003 lot 1: the trail moved inside PageHeader (one framed block per page), which
-                   also installs the route fallback it reads its title from. *@
+                @* PageHeader contains the breadcrumb and installs the route fallback used for its
+                   title. *@
                 @if (CanAccessCurrentRoute)
                 {
                     <LoggedErrorBoundary @ref="_errorBoundary">
@@ -219,7 +216,7 @@
         </div>
     </OmniMain>
     </OmniBody>
-    @* Recette R-390: the window the user menu's "Theme" opens (theme, palette, density). *@
+    @* The window the user menu's "Theme" opens (theme, palette, density). *@
     <Aetheus.Front.Components.Settings.SiteAppearanceWindow @ref="_appearanceWindow" />
 </OmniLayout>
 

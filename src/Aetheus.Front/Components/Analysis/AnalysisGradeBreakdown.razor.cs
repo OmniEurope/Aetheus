@@ -3,8 +3,8 @@ using System.Globalization;
 
 namespace Aetheus.Front.Components.Analysis;
 
-/// <summary>Recette R2-052: one grade's breakdown, shared by the project's Quality page and a run's
-/// Quality tab. Moved out of <c>ProjectQualitySection</c> unchanged.</summary>
+/// <summary>Shares a grade breakdown between the project Quality page and a pipeline run Quality
+/// tab.</summary>
 public partial class AnalysisGradeBreakdown
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -12,22 +12,49 @@ public partial class AnalysisGradeBreakdown
     /// <summary>The grade to break down; null renders nothing.</summary>
     [Parameter] public AnalysisGradeSummaryDto? Grade { get; set; }
 
-    /// <summary>Recette R2-139: the run's letter came from the assurance seal because of blocking tests,
-    /// so the code-and-tests domain limits it too, whatever its analysis letter.</summary>
+    /// <summary>The run's letter came from the assurance seal because of blocking tests, so the
+    /// code-and-tests domain limits it too, whatever its analysis letter.</summary>
     [Parameter] public bool SealBlockedByTests { get; set; }
 
     /// <summary>The project's latest average CRAP score, shown (advisory) under code quality.</summary>
     [Parameter] public double? CrapScore { get; set; }
 
     // Recette R-176: a domain with neither a measure nor a CRAP score is a compact line, not a card.
-    private static bool HasDetails(DomainView domain) => domain.Measures.Count > 0 || domain.CrapScore.HasValue;
+    private static bool HasDetails(DomainView domain) => domain.Measures.Any(IsShown) || domain.CrapScore.HasValue;
 
-    // Recette R2-139: every domain whose letter is the overall one sets the grade, several when they tie;
-    // nothing limits an A, and an incomplete grade has no limiting domain yet.
+    // Every domain whose letter is the overall one sets the grade, several when they tie; nothing
+    // limits an A, and an incomplete grade has no limiting domain yet.
     private bool IsLimiting(DomainView domain) =>
         (SealBlockedByTests && domain.CodeAndTests)
         || (Grade is { OverallGrade: > AnalysisGrade.A, Completeness: AnalysisGradeCompleteness.Complete }
             && domain.Grade == Grade.OverallGrade);
+
+    /// <summary>
+    /// Recette R1-60: the one measure the headline names as the cause of the grade: the first measure, in
+    /// the domains' display order, whose letter is the overall one. Null for an A, an incomplete grade or a
+    /// grade no measure explains (it then reads from the breakdown below).
+    /// </summary>
+    internal static AnalysisGradeMeasureDto? FirstLimitingMeasure(AnalysisGradeSummaryDto? grade)
+    {
+        if (grade is not { OverallGrade: > AnalysisGrade.A, Completeness: AnalysisGradeCompleteness.Complete }) return null;
+        AnalysisGradeDomain[] order =
+        [
+            AnalysisGradeDomain.Security, AnalysisGradeDomain.Reliability, AnalysisGradeDomain.CodeQuality,
+            AnalysisGradeDomain.Architecture, AnalysisGradeDomain.Performance
+        ];
+        return order
+            .SelectMany(domain => grade.Domains.Where(candidate => candidate.Domain == domain))
+            .SelectMany(domain => domain.Measures)
+            .FirstOrDefault(measure => measure.Grade == grade.OverallGrade);
+    }
+
+    /// <summary>Recette R1-61: a count at zero says nothing; the tested lines and the most complex path
+    /// stay even at zero, and a measure never observed stays to say so.</summary>
+    internal static bool IsShown(AnalysisGradeMeasureDto measure) =>
+        measure.Key is "grade.coverage.line" or "grade.complexity.maximum"
+        || !measure.ObservedValue.HasValue
+        || measure.ObservedValue.Value != 0
+        || measure.Grade is > AnalysisGrade.A;
 
     // The distance to the next letter is in the unit of the value shown: a weighted finding score shows
     // the number of findings (recette R1-4), so its distance, in weighted points, would not match it.
@@ -63,8 +90,7 @@ public partial class AnalysisGradeBreakdown
             }
 
             AddDomain(result, source, AnalysisGradeDomain.Architecture);
-            // Recette R2-142: runtime performance shows only once a measure of it was really observed;
-            // no project measures it yet, and an empty "Incomplete" line only says that.
+            // Show runtime performance only when a measurement has been observed.
             if (source.Any(domain => domain.Domain == AnalysisGradeDomain.Performance
                     && domain.Measures.Any(measure => measure.Observed)))
                 AddDomain(result, source, AnalysisGradeDomain.Performance);
@@ -82,12 +108,14 @@ public partial class AnalysisGradeBreakdown
         _ => localizer["NotAvailable"]
     };
 
-    private string MeasureLabel(string key) => key switch
+    private string MeasureLabel(string key) => MeasureLabel(L, key);
+
+    internal static string MeasureLabel(IStringLocalizer<AppStrings> L, string key) => key switch
     {
         "grade.security.critical" => L["AnalysisCriticalVulnerabilities"],
         "grade.security.high" => L["AnalysisHighVulnerabilities"],
         "grade.security.medium" => L["AnalysisMediumVulnerabilities"],
-        // Recettes R2-140 and R1-4: the open findings, as a number, in the security and the quality gates.
+        // Show open finding counts in the security and quality gates.
         "grade.security.findings" or "grade.quality.findings" => L["AnalysisOpenFindingCount"],
         "grade.coverage.line" => L["AnalysisTestedLines"],
         "grade.coverage.branch" => L["AnalysisTestedBranches"],
@@ -99,10 +127,10 @@ public partial class AnalysisGradeBreakdown
             : key
     };
 
-    private static string MeasureText(AnalysisGradeMeasureDto measure)
+    internal static string MeasureText(AnalysisGradeMeasureDto measure)
     {
         if (!measure.ObservedValue.HasValue) return "-";
-        // Recette R1-4: a finding score shows the number of open findings, the number the list shows.
+        // A finding score shows the number of open findings, the number the list shows.
         if (measure.FindingCounts is { } counts) return AnalysisFindingScore.Total(counts).ToString(CultureInfo.CurrentCulture);
         var value = measure.ObservedValue.Value.ToString("0.##");
         if (string.Equals(measure.Unit, "percent", StringComparison.OrdinalIgnoreCase)) return $"{value} %";

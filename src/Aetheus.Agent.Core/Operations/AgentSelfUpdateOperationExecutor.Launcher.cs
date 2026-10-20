@@ -31,7 +31,7 @@ internal static class AgentSelfUpdateLauncher
         return process;
     }
 
-    private static ProcessStartInfo BuildLinuxUpdaterProcess(
+    internal static ProcessStartInfo BuildLinuxUpdaterProcess(
         string scriptPath, IReadOnlyList<string>? scriptArgs)
     {
         var setsidPath = File.Exists("/usr/bin/setsid")

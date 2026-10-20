@@ -47,7 +47,7 @@ public class AuditLogsTests : BunitContext
 
         var cut = Render<AuditLogs>();
         // The seeded audit row renders its username and entity type in the grid.
-        cut.WaitForState(() => cut.Markup.Contains("admin"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("admin"));
         Assert.Contains("admin", cut.Markup);
         Assert.Contains("Server", cut.Markup);
     }

@@ -2,7 +2,8 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-public sealed record ServerOfflineNotificationPayload(int ServerId, string ServerName, DateTime? LastHeartbeat);
+public sealed record ServerOfflineNotificationPayload(
+    int ServerId, string ServerName, DateTime? LastHeartbeat, ServerReachability Reachability = ServerReachability.NotProbed);
 
 public sealed class AlertNotificationService : IAsyncDisposable
 {

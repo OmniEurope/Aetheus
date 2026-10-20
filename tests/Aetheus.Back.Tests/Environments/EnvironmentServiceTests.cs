@@ -165,7 +165,7 @@ public class EnvironmentServiceTests
         Assert.NotSame(source.Checks[0], Assert.Single(added.Checks));
         Assert.Equal("readiness", added.Checks[0].Name);
         Assert.Equal(12, Assert.Single(added.LinkedProjectServers).ProjectServerId);
-        // Recette R1-29: the structure is copied (names), never the values.
+        // The structure is copied (names), never the values.
         Assert.NotSame(source.Libraries[0], Assert.Single(added.Libraries));
         var entry = Assert.Single(added.Libraries[0].Entries);
         Assert.Equal("REGION", entry.Key);
@@ -178,7 +178,7 @@ public class EnvironmentServiceTests
         Assert.Contains("Fill them in", added.Vaults[0].Description, StringComparison.Ordinal);
         Assert.NotSame(source.Pipelines[0], Assert.Single(added.Pipelines));
         Assert.Equal("steps: []", added.Pipelines[0].YamlDefinition);
-        // Recette R1-29: the copied pipelines are written into the project's repository, as on update.
+        // The copied pipelines are written into the project's repository, as on update.
         _events.Received(1).Publish(Arg.Is<EnvironmentLinkedToProjectEvent>(e =>
             e.EnvironmentName == "target" && e.ProjectId == 3));
     }
@@ -217,8 +217,8 @@ public class EnvironmentServiceTests
     [Fact]
     public async Task UpdateEnvironmentAsync_LinkedToAProject_PublishesTheEvent_PipelinesCopiesOn()
     {
-        // Layer guard (2026-09-25): Environments no longer calls Pipelines' git service; it publishes,
-        // in the background as before, and EnvironmentPipelinesCopyHandler does the copy.
+        // Environments publishes a background copy request handled by
+        // EnvironmentPipelinesCopyHandler, keeping it independent of the Pipelines Git service.
         var env = new Environment { Id = 1, Name = "staging", Servers = [] };
         _repo.FindEnvironmentAsync(1, Arg.Any<CancellationToken>()).Returns(env);
         _repo.GetEnvironmentWithServersAsync(1, Arg.Any<CancellationToken>()).Returns(env);

@@ -1,0 +1,5 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+<OmniFormField For="pipeline-ai-profile" Label="@L["PipelineAiProfile"]" Help="@L["PipelineAiProfileHint"]" Id="pipeline-ai-profile-field" Class="omni-u-w-100">
+    <OmniDropDown Id="pipeline-ai-profile" TValue="int?" Options="@Options" Value="@Value" ValueChanged="@ValueChanged" ValueExpression="@(() => Value)"
+                  AllowEmpty="true" Placeholder="@L["PipelineAiProfileAutomatic"]" Class="omni-u-w-100" />
+</OmniFormField>

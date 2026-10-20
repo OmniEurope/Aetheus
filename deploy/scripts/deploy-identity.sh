@@ -1,14 +1,7 @@
 # SPDX-License-Identifier: EUPL-1.2
-#
-# Sourced, never run: the names a deployment script would otherwise write as literals (PLAN-003 2.1,
-# "zéro nom en dur"). Everything here is derived from what the run already knows.
-#
-# Inputs, read from the environment:
-#   BUILD_PROJECTNAME  the project name the control plane injects into every run (for the images)
-#   AGENT_HELPERS_DIR  published by the agent to every task on Linux (optional, see below)
-#
-# Defines AGENT_HELPERS_DIR, and the function deploy_image_repos, which defines PROJECT_SLUG,
-# BACK_IMAGE_REPO and FRONT_IMAGE_REPO or ends the script.
+# Derive deployment identity from the owning project and agent so copied scripts cannot silently
+# target another installation; source this file rather than executing it. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 
 # The images CI builds are named after the product, lower-cased: aetheus-back, aetheus-front. Same
 # derivation as qa-stack-identity.sh, so a second project gets its own names without an edit.

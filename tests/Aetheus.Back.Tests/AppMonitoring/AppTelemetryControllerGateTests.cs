@@ -176,4 +176,99 @@ public class AppTelemetryControllerGateTests
         await _authz.DidNotReceive().HasPermissionAsync(
             Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 1, Arg.Any<Permission>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task DeleteThreshold_OfAnUnknownThreshold_IsNotFoundWithoutAnyCheck()
+    {
+        _telemetry.GetThresholdAppIdAsync(5, Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        Assert.IsType<NotFoundResult>(await Build().DeleteThreshold(5, TestContext.Current.CancellationToken));
+        await _telemetry.DidNotReceiveWithAnyArgs().DeleteThresholdAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DeleteThreshold_NeedsWriteOnTheParentProject()
+    {
+        _telemetry.GetThresholdAppIdAsync(5, Arg.Any<CancellationToken>()).Returns(3);
+        AppBelongsToProject(3, 7);
+        Grant(7, Permission.Read);
+
+        Assert.IsType<ForbidResult>(await Build().DeleteThreshold(5, TestContext.Current.CancellationToken));
+        await _telemetry.DidNotReceiveWithAnyArgs().DeleteThresholdAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    [Theory]
+    [InlineData(true, typeof(NoContentResult))]
+    [InlineData(false, typeof(NotFoundResult))]
+    public async Task DeleteThreshold_AWriter_LearnsWhetherItWasDeleted(bool deleted, Type expected)
+    {
+        _telemetry.GetThresholdAppIdAsync(5, Arg.Any<CancellationToken>()).Returns(3);
+        AppBelongsToProject(3, 7);
+        Grant(7, Permission.Write);
+        _telemetry.DeleteThresholdAsync(5, Arg.Any<CancellationToken>()).Returns(deleted);
+
+        Assert.IsType(expected, await Build().DeleteThreshold(5, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task GetLogs_And_GetErrors_NeedReadOnTheParentProject()
+    {
+        AppBelongsToProject(1, 7); // no Grant
+
+        var logs = await Build().GetLogs(1, ct: TestContext.Current.CancellationToken);
+        var errors = await Build().GetErrors(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(logs.Result);
+        Assert.IsType<ForbidResult>(errors.Result);
+        await _telemetry.DidNotReceiveWithAnyArgs().GetLogsAsync(default, default, default, default, default, default, TestContext.Current.CancellationToken);
+        await _telemetry.DidNotReceiveWithAnyArgs().GetErrorsAsync(default, default, default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task GetLogs_PassesTheGridSortAndFiltersToTheService_AndAnEmptyFilterListAsNull()
+    {
+        AppBelongsToProject(1, 7);
+        Grant(7, Permission.Read);
+        var page = new PaginatedResult<AppLogEntryDto> { Items = [], TotalCount = 0 };
+        _telemetry.GetLogsAsync(1, 6, 3, "boom", 2, 25, Arg.Any<CancellationToken>(),
+                Arg.Any<IReadOnlyList<GridFilter>?>(), "timestamp", false)
+            .Returns(page);
+        GridFilter[] filters = [new() { Field = "severity", Value = "3" }];
+
+        var filtered = await Build().GetLogs(1, 6, 3, "boom", 2, 25, "timestamp", false,
+            TestContext.Current.CancellationToken, [.. filters]);
+        var unfiltered = await Build().GetLogs(1, 6, 3, "boom", 2, 25, "timestamp", false,
+            TestContext.Current.CancellationToken, []);
+
+        Assert.Same(page, Assert.IsType<OkObjectResult>(filtered.Result).Value);
+        Assert.Same(page, Assert.IsType<OkObjectResult>(unfiltered.Result).Value);
+        await _telemetry.Received(1).GetLogsAsync(1, 6, 3, "boom", 2, 25, Arg.Any<CancellationToken>(),
+            Arg.Is<IReadOnlyList<GridFilter>?>(f => f != null && f.Count == 1 && f[0].Field == "severity"), "timestamp", false);
+        await _telemetry.Received(1).GetLogsAsync(1, 6, 3, "boom", 2, 25, Arg.Any<CancellationToken>(),
+            null, "timestamp", false);
+    }
+
+    [Fact]
+    public async Task GetErrors_PassesTheGridSortAndFiltersToTheService_AndAnEmptyFilterListAsNull()
+    {
+        AppBelongsToProject(1, 7);
+        Grant(7, Permission.Read);
+        var page = new PaginatedResult<AppErrorEventDto> { Items = [], TotalCount = 0 };
+        _telemetry.GetErrorsAsync(1, 3, 10, Arg.Any<CancellationToken>(),
+                Arg.Any<IReadOnlyList<GridFilter>?>(), "occurredAt", true)
+            .Returns(page);
+        GridFilter[] filters = [new() { Field = "exceptionType", Value = "IOException" }];
+
+        var filtered = await Build().GetErrors(1, 3, 10, "occurredAt", true,
+            TestContext.Current.CancellationToken, [.. filters]);
+        var unfiltered = await Build().GetErrors(1, 3, 10, "occurredAt", true,
+            TestContext.Current.CancellationToken, []);
+
+        Assert.Same(page, Assert.IsType<OkObjectResult>(filtered.Result).Value);
+        Assert.Same(page, Assert.IsType<OkObjectResult>(unfiltered.Result).Value);
+        await _telemetry.Received(1).GetErrorsAsync(1, 3, 10, Arg.Any<CancellationToken>(),
+            Arg.Is<IReadOnlyList<GridFilter>?>(f => f != null && f.Count == 1 && f[0].Field == "exceptionType"), "occurredAt", true);
+        await _telemetry.Received(1).GetErrorsAsync(1, 3, 10, Arg.Any<CancellationToken>(),
+            null, "occurredAt", true);
+    }
 }

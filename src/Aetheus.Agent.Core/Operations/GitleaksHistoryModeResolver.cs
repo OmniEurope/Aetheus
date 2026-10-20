@@ -19,7 +19,7 @@ internal static class GitleaksHistoryModeResolver
         ".aetheus/security-rules/",
         "src/Aetheus.Agent.Core/AnalysisRules/",
         ".pipeline/aetheus-security.yaml",
-        // The Git-history scan itself lives here since PLAN-007 lot 2.
+        // Runs the Git-history scan.
         ".pipeline/aetheus-security-history.yaml"
     ];
 
@@ -36,34 +36,37 @@ internal static class GitleaksHistoryModeResolver
         if (!IsCommit(head))
             throw new InvalidDataException("Gitleaks history requires a full immutable BUILD_SOURCEVERSION.");
         if (requested == "full")
-            return new GitleaksHistorySelection("full", null, head.ToLowerInvariant(), null, "explicit-full");
+            return Full(null, head, "explicit-full");
 
         var baseline = Value(envVars, "DELIVERY_BASELINE_SOURCE_SHA") ?? string.Empty;
         if (!IsCommit(baseline))
-            return new GitleaksHistorySelection("full", null, head.ToLowerInvariant(), null, "missing-baseline");
+            return Full(null, head, "missing-baseline");
 
+        return await ResolveReleaseRangeAsync(sourceDirectory, envVars, baseline, head, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<GitleaksHistorySelection> ResolveReleaseRangeAsync(
+        string sourceDirectory,
+        IReadOnlyDictionary<string, string> envVars,
+        string baseline,
+        string head,
+        CancellationToken ct)
+    {
         var actualHead = await GitOutputAsync(sourceDirectory, ct, "rev-parse", "HEAD").ConfigureAwait(false);
         if (!string.Equals(actualHead, head, StringComparison.OrdinalIgnoreCase))
-            return new GitleaksHistorySelection("full", baseline.ToLowerInvariant(), head.ToLowerInvariant(), null, "head-mismatch");
+            return Full(baseline, head, "head-mismatch");
 
-        if (!await GitSucceedsAsync(sourceDirectory, ct, "cat-file", "-e", $"{baseline}^{{commit}}").ConfigureAwait(false))
-        {
-            var deepen = ParseDepth(Value(envVars, "AETHEUS_GIT_HISTORY_DEPTH"));
-            _ = await GitSucceedsAsync(sourceDirectory, ct, "fetch", "--deepen", deepen.ToString(), "origin")
-                .ConfigureAwait(false);
-        }
-        if (!await GitSucceedsAsync(sourceDirectory, ct, "cat-file", "-e", $"{baseline}^{{commit}}").ConfigureAwait(false))
-            return new GitleaksHistorySelection("full", baseline.ToLowerInvariant(), head.ToLowerInvariant(), null, "baseline-unavailable");
+        if (!await EnsureBaselineAsync(sourceDirectory, envVars, baseline, ct).ConfigureAwait(false))
+            return Full(baseline, head, "baseline-unavailable");
         if (!await GitSucceedsAsync(sourceDirectory, ct, "merge-base", "--is-ancestor", baseline, head).ConfigureAwait(false))
-            return new GitleaksHistorySelection("full", baseline.ToLowerInvariant(), head.ToLowerInvariant(), null, "baseline-not-ancestor");
+            return Full(baseline, head, "baseline-not-ancestor");
 
         var changed = await GitOutputAsync(sourceDirectory, ct, "diff", "--name-only", $"{baseline}..{head}")
             .ConfigureAwait(false);
-        if (changed is null || changed.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .Any(path => FullScanTriggers.Any(trigger =>
-                    path.Trim().StartsWith(trigger, StringComparison.OrdinalIgnoreCase))))
-            return new GitleaksHistorySelection("full", baseline.ToLowerInvariant(), head.ToLowerInvariant(), null,
-                changed is null ? "change-detection-failed" : "scanner-contract-changed");
+        if (changed is null)
+            return Full(baseline, head, "change-detection-failed");
+        if (TouchesScannerContract(changed))
+            return Full(baseline, head, "scanner-contract-changed");
 
         return new GitleaksHistorySelection(
             "release-range",
@@ -72,6 +75,30 @@ internal static class GitleaksHistoryModeResolver
             $"{baseline.ToLowerInvariant()}..{head.ToLowerInvariant()}",
             "validated-release-range");
     }
+
+    // A shallow checkout may not hold the baseline yet: deepen once, within the bound, then ask again.
+    private static async Task<bool> EnsureBaselineAsync(
+        string sourceDirectory,
+        IReadOnlyDictionary<string, string> envVars,
+        string baseline,
+        CancellationToken ct)
+    {
+        if (!await GitSucceedsAsync(sourceDirectory, ct, "cat-file", "-e", $"{baseline}^{{commit}}").ConfigureAwait(false))
+        {
+            var deepen = ParseDepth(Value(envVars, "AETHEUS_GIT_HISTORY_DEPTH"));
+            _ = await GitSucceedsAsync(sourceDirectory, ct, "fetch", "--deepen", deepen.ToString(), "origin")
+                .ConfigureAwait(false);
+        }
+        return await GitSucceedsAsync(sourceDirectory, ct, "cat-file", "-e", $"{baseline}^{{commit}}").ConfigureAwait(false);
+    }
+
+    private static bool TouchesScannerContract(string changedPaths) =>
+        changedPaths.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Any(path => FullScanTriggers.Any(trigger =>
+                path.Trim().StartsWith(trigger, StringComparison.OrdinalIgnoreCase)));
+
+    private static GitleaksHistorySelection Full(string? baseline, string head, string reason) =>
+        new("full", baseline?.ToLowerInvariant(), head.ToLowerInvariant(), null, reason);
 
     internal static async Task<IReadOnlyDictionary<string, string>> ResolveEnvironmentAsync(
         ScannerManifestEntry scanner,

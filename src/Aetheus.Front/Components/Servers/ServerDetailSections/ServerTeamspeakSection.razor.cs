@@ -20,13 +20,13 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
     private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
     private TeamspeakDataCoordinator _data = default!;
     private TeamspeakOperationRunner _operations = default!;
+    private ServerTaskFollower? _follower;
     private AetheusDataGrid<TeamspeakClientDto>? _clientsGrid;
     private AetheusDataGrid<TeamspeakChannelDto>? _channelsGrid;
     private AetheusDataGrid<TeamspeakBanDto>? _bansGrid;
     private List<string> _platformValues = [];
     private int? _loadedServerId;
-    // R-181: replaces the Refresh button and the former 30 s timer. Heartbeats only: TeamSpeak task
-    // completions already reach HandleTaskCompletedAsync through the page's loader.
+    // Heartbeats refresh TeamSpeak state; task completion already arrives through the page loader.
     private ServerLiveFeed? _liveFeed;
     internal ServerLiveFeed? LiveFeed => _liveFeed;
 
@@ -84,7 +84,7 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
     protected override void OnInitialized()
     {
         _data = new TeamspeakDataCoordinator(Api);
-        _operations = new TeamspeakOperationRunner(Toast, () => AgentOfflineGuard.Blocks(Server, Toast));
+        _operations = new TeamspeakOperationRunner(Toast, () => AgentOfflineGuard.Blocks(Server, Toast), () => _follower);
         _gracefulRestartMessage = L["TeamspeakGracefulRestartMessage"];
     }
 
@@ -99,8 +99,8 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
             () => InvokeAsync(RefreshLiveAsync));
         await _data.ResetAsync(ServerId, Server.Teamspeak, () => InvokeAsync(StateHasChanged));
         await LoadPlatformValuesAsync();
-        // Recette R-327: the grids scroll (remote virtualization) and only show what they fetched
-        // themselves, so another server reloads the ones already on screen from their first row.
+        // The grids scroll (remote virtualization) and only show what they fetched themselves, so
+        // another server reloads the ones already on screen from their first row.
         if (!serverChanged) return;
         if (_clientsGrid is not null) await _clientsGrid.Reload();
         if (_channelsGrid is not null) await _channelsGrid.Reload();
@@ -116,8 +116,9 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
         await InvokeAsync(RefreshLiveAsync);
     }
 
-    // Recette R-226: a heartbeat or a TeamSpeak task is live data. The state is fetched again and each grid
-    // on screen refreshes quietly through its own LoadData, so its page, sort and header filters are kept.
+    // A heartbeat or a TeamSpeak task is live data. The state is fetched again and each grid on
+    // screen refreshes quietly through its own LoadData, so its page, sort and header filters are
+    // kept.
     private async Task RefreshLiveAsync()
     {
         await _data.RefreshStateAsync();
@@ -127,7 +128,7 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
         if (_bansGrid is not null) await _bansGrid.Refresh();
     }
 
-    // Recette R-210: the platforms the clients grid's Platform header filter offers, across every client.
+    // The platforms the clients grid's Platform header filter offers, across every client.
     private async Task LoadPlatformValuesAsync()
     {
         var serverId = ServerId;
@@ -190,7 +191,7 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
         {
             await _operations.RunOperationAsync(
                 () => Api.Teamspeak.ExecuteTeamspeakActionAsync(ServerId, new TeamspeakActionRequest { Action = action }),
-                action.ToString());
+                L[action.ToString()]);
         }
         finally { _actionRunning = false; }
     }
@@ -486,6 +487,10 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
             });
     }
 
+    // Recette R3-35: clicking a channel edits it, when its Edit button would be enabled (agent online).
+    private Task OpenChannelFromRowAsync(TeamspeakChannelDto ch) =>
+        AgentOffline ? Task.CompletedTask : ShowEditChannelDialog(ch);
+
     private async Task ShowEditChannelDialog(TeamspeakChannelDto ch)
     {
         var result = await OpenDialogAsync(TeamspeakDialogMode.EditChannel, L["EditChannel"], new TeamspeakDialogModel { ChannelId = ch.Id, Name = ch.Name, MaxClients = ch.MaxClients == -1 ? null : ch.MaxClients });
@@ -581,7 +586,7 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
             : $"{ts.Hours}h {ts.Minutes}m";
     }
 
-    /// <summary>Recette R2-124: the export writes the channel as the cell does.</summary>
+    /// <summary>The export writes the channel as the cell does.</summary>
     private static readonly Func<TeamspeakClientDto, object?> ChannelExport = client =>
         string.IsNullOrEmpty(client.ChannelName) ? client.ChannelId.ToString(System.Globalization.CultureInfo.InvariantCulture) : client.ChannelName;
 }

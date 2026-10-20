@@ -6,13 +6,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Agent.Core.Collectors;
 
-/// <summary>
-/// PLAN-005: read-only inventory of an existing mail configuration, for the unprivileged agent. Reads
-/// the Postfix map sources, the OpenDKIM KeyTable and public keys, the Postfix certificate, the rspamd
-/// thresholds and the Aetheus ownership marker directly from disk (no shell, no sudo). A source that
-/// exists but cannot be read is reported as a diagnostic (<c>code|parameter</c>, localised by the UI)
-/// and its "collected" flag stays false so the backend never deactivates rows from partial data.
-/// </summary>
+/// <summary>Read mail configuration directly without shell or sudo. Mark unreadable sources as
+/// uncollected with diagnostics so partial inventory cannot deactivate stored rows.</summary>
 internal sealed partial class MailInventoryReader(Func<string, string?> readText, Func<string, bool> fileExists)
 {
     internal const string ManagedMarkerPath = "/etc/aetheus/mail-stack.managed";

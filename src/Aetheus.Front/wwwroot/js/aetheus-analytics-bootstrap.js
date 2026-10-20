@@ -1,21 +1,14 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 const configurationEndpoint = "/aetheus-analytics/v1/configuration";
-const analyticsModule = "/_content/Aetheus.WebAnalytics/0.1.0/aetheus-web-analytics.js";
+const analyticsModule = "/_content/Aetheus.WebAnalytics/1.1.0/aetheus-web-analytics.js";
 
-// Only known Aetheus top-level routes are measured. Every non-static nested segment is
-// replaced before it can leave the browser, covering numeric ids, SHAs, slugs, branch names,
-// settings tabs, and future route parameters without maintaining a list of user values.
-// Recette R-471: the sign-in page is not measured. It is the one page a visitor sees before the
-// application knows who they are; counted, it would add an anonymous visitor beside the account the
-// same person signs in with a moment later.
-// Recette R2-008: both lists follow the @page routes of Aetheus.Front (a front test fails when a
-// static segment of a route is missing); `monitoring` and `notifications` were missing, so those
-// pages were never counted.
+// Measures only known routes, replacing dynamic segments before they leave the browser. Sign-in
+// pages are excluded to avoid counting one person both anonymously and as an authenticated visitor.
 const topLevelSegments = new Set([
   "account", "admin", "ai-tasks", "alerts", "analysis", "api-reference", "artifacts",
   "audit", "backups", "dashboards", "environments", "git", "git-repositories", "help",
-  "logs", "monitoring", "not-found", "notifications", "pipelines", "plugins", "projects",
+  "logs", "mail", "monitoring", "not-found", "notifications", "pipelines", "plugins", "projects",
   "releases", "servers", "service-connections", "settings", "tasks", "templates", "users",
   "variable-libraries", "vaults"
 ]);
@@ -24,7 +17,7 @@ const staticNestedSegments = new Set([
   "accounts", "add-agent", "ai-profiles", "ai-tasks", "apache", "api-reference", "apps", "artifacts", "audit",
   "backups", "board", "branches", "certbot", "change-password", "commits", "configuration",
   "cron", "dashboards", "docker", "edit", "environments", "external-repo", "extract",
-  "findings", "firewall", "fleet", "libraries", "logs", "mail", "mailbox", "modules", "monitoring",
+  "findings", "firewall", "fleet", "libraries", "logs", "mail", "mail-templates", "mailbox", "modules", "monitoring",
   "new", "notifications", "organizations", "overview", "package-feeds", "package-registry",
   "performance", "pipelines", "plugins", "ports", "portsentry", "projects", "promote",
   "properties", "quality", "releases", "rkhunter", "roles", "runs", "servers", "services",
@@ -32,10 +25,8 @@ const staticNestedSegments = new Set([
   "users", "vaults", "versions"
 ]);
 
-// Recette R2-008: a `?tab=` (or any query) never enters the route label. The label is the page's
-// route, a closed set the server accepts without a query string; the query can carry user values
-// (`?projectId=`, `?app=`). A tab switch still counts as a page view of its page: the package only
-// skips the same address twice in a row.
+// Excludes query strings from route labels because they can contain user values. Tab navigation
+// still counts as a page view when the URL changes.
 export function resolveAetheusAnalyticsRoute(pathname) {
   if (pathname === "/") return "/";
   if (typeof pathname !== "string" || pathname.length > 256 || !pathname.startsWith("/")) {
@@ -53,9 +44,8 @@ export function resolveAetheusAnalyticsRoute(pathname) {
   }).join("/")}`;
 }
 
-// Recette R-471: how long the application may take to say whether someone is signed in. Recette
-// R2-008: the page views of that wait are no longer lost; they are held by the package and sent with
-// the identity once it is known (or anonymously when the wait ends without an answer).
+// Bounds the wait for application identity; buffered page views use that identity when available or
+// become anonymous when the wait expires.
 const sessionWaitMilliseconds = 20000;
 
 export function sessionKnown(waitMilliseconds = sessionWaitMilliseconds) {
@@ -78,11 +68,8 @@ function visitor() {
   }
 }
 
-/**
- * Recette R2-008: installs the measurement at once, so every navigation from the first page on is
- * seen, and identifies the visitor once the application knows who is signed in. Until then the
- * package holds the events (holdUntilIdentified) instead of sending them anonymously.
- */
+/* Installs navigation measurement immediately and buffers events until visitor identification
+   completes. */
 export async function startAetheusAnalytics(createAetheusAnalytics, waitForSession = sessionKnown) {
   const analytics = createAetheusAnalytics({
     routeResolver: resolveAetheusAnalyticsRoute,
@@ -94,8 +81,8 @@ export async function startAetheusAnalytics(createAetheusAnalytics, waitForSessi
   });
   analytics.install();
   await waitForSession();
-  // The opaque identifier of the signed-in account (R-471), asked of the running app like the yes/no
-  // above and again whenever the app says the visitor changed.
+  // Reads the opaque visitor identifier from the application initially and whenever the signed-in
+  // visitor changes.
   analytics.identify(visitor());
   globalThis.Aetheus ??= {};
   globalThis.Aetheus._onAnalyticsIdentity = () => analytics.identify(visitor());

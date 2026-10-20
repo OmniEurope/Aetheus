@@ -139,6 +139,29 @@ public sealed class ArchitectureAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_WithoutAProjectFile_InfersTheProjectFromTheFolders()
+    {
+        // Folders that do not exist: no .csproj can be found above them.
+        var root = Path.Combine(Path.GetTempPath(), $"aetheus-no-project-{Guid.NewGuid():N}");
+        var sources = new[]
+        {
+            (Path.Combine(root, "src", "Product.Core", "Domain.cs"),
+                "namespace Product.Core; public sealed class Domain { public Product.Store.Store Store { get; set; } = new(); public Product.Other.Other Other { get; set; } = new(); }"),
+            (Path.Combine(root, "src", "Product.Core", "Second.cs"),
+                "namespace Product.Core; public sealed class Second { public Product.Store.Store Store { get; set; } = new(); }"),
+            (Path.Combine(root, "lib", "Alpha", "Store.cs"), "namespace Product.Store; public sealed class Store { }"),
+            (Path.Combine(root, "tests", "Beta", "Other.cs"), "namespace Product.Other; public sealed class Other { }")
+        };
+
+        var report = ArchitectureAnalyzer.Analyze(sources);
+
+        var projectEdges = report.Graphs["project"].Edges.Select(edge => (edge.Source, edge.Target)).ToHashSet();
+        Assert.Equal([("Product.Core", "Alpha"), ("Product.Core", "Beta")], projectEdges.Order());
+        var assemblyEdges = report.Graphs["assembly"].Edges.Select(edge => (edge.Source, edge.Target)).ToHashSet();
+        Assert.Equal(projectEdges, assemblyEdges);
+    }
+
+    [Fact]
     public void RepositoryProductGraph_HasNoUnacceptedArchitectureViolations()
     {
         var root = FindRepoRoot();
@@ -146,7 +169,8 @@ public sealed class ArchitectureAnalyzerTests
             .Where(path => !path.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
                 && !path.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase)
                 && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-                && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                && !RepositoryPathFilter.IsNestedCheckout(root, path))
             .Select(path => (path, File.ReadAllText(path)))
             .ToList();
         var productSources = ArchitectureAnalysisPublisher.SelectProductSources(root, sources);

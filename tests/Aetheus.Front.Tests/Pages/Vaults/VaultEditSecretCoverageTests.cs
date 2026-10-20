@@ -114,8 +114,7 @@ public class VaultEditSecretCoverageTests : BunitContext
         SetupVault(1);
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(
-            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null,
-            TimeSpan.FromSeconds(3));
+            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null);
 
         // The form model key is empty by default.
         await cut.InvokeAsync(() => InvokeFormSubmitAsync(cut.Instance, "AddSecret", "_newSecret"));
@@ -138,8 +137,7 @@ public class VaultEditSecretCoverageTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(
-            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null,
-            TimeSpan.FromSeconds(3));
+            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null);
 
         SetFormValue(cut.Instance, "_newSecret", "Key", "NEW_KEY");
         SetFormValue(cut.Instance, "_newSecret", "Value", "secret-value");
@@ -163,8 +161,7 @@ public class VaultEditSecretCoverageTests : BunitContext
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 0));
         cut.WaitForState(
             () => Priv_Get<bool>(cut.Instance, "_saving") == false
-                  && Priv_Get<List<ProjectDto>>(cut.Instance, "_projects")?.Count > 0,
-            TimeSpan.FromSeconds(3));
+                  && Priv_Get<List<ProjectDto>>(cut.Instance, "_projects")?.Count > 0);
 
         // Set the model
         var model = Priv_Get<object>(cut.Instance, "_model");
@@ -193,8 +190,7 @@ public class VaultEditSecretCoverageTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(
-            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null,
-            TimeSpan.FromSeconds(3));
+            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null);
 
         var method = typeof(VaultEdit).GetMethod("OnSubmit", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -217,8 +213,7 @@ public class VaultEditSecretCoverageTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(
-            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null,
-            TimeSpan.FromSeconds(3));
+            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null);
 
         // Change what the API returns, then null out _detail so a re-populated value proves the refetch
         // happened (rather than reading a value that was already there before the call).
@@ -253,8 +248,7 @@ public class VaultEditSecretCoverageTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(
-            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null,
-            TimeSpan.FromSeconds(3));
+            () => Priv_Get<VaultDetailDto?>(cut.Instance, "_detail") is not null);
 
         // The key is shown, the value is masked, and no plaintext secret value appears anywhere.
         Assert.Contains("DB_PASS", cut.Markup);

@@ -9,6 +9,16 @@ public partial class InboxNotificationDialog
 
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private string? Target => NotificationTargets.Path(Notification.EventType, Notification.PayloadJson);
+
+    private void Open()
+    {
+        if (Target is not { } target) return;
+        Dialog.Close();
+        Nav.NavigateTo(target);
+    }
 
     private IReadOnlyList<(string Name, string Value)> Elements { get; set; } = [];
 

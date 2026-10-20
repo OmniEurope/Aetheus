@@ -2,11 +2,8 @@
 
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>
-/// PLAN-003 2.4: the categories a <c>type: lint</c> step may publish its SARIF under
-/// (<c>analysis_category</c>). Code quality stays the default; accessibility is the axe-core report of
-/// the E2E suite. Both are quality-scoped, so the lint producer keeps satisfying the same gate.
-/// </summary>
+/// <summary>Defines lint SARIF categories: code quality by default, or accessibility for axe-core
+/// E2E reports. Both belong to the quality gate scope.</summary>
 public static class LintAnalysisCategories
 {
     /// <summary>The task variable carrying the category from the control plane to the agent.</summary>

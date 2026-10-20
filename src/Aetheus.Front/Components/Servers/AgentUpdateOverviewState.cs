@@ -2,16 +2,9 @@
 
 namespace Aetheus.Front.Components.Servers;
 
-/// <summary>
-/// Recette R2-111: what the Overview says under the agent version once an update was asked. In
-/// progress (the button busy and "Update in progress to x.y.z") from the confirmation until the agent
-/// reports the target version or the request fails; failed, with the reason, when it did.
-/// <para>
-/// Read from what the page already holds: the request this view just queued (target and id), and the
-/// server's persisted <see cref="ServerDetailDto.AgentUpdateRequest"/>, which the detail loader reloads
-/// on every agent-update event and which keeps a running update visible after a reload.
-/// </para>
-/// </summary>
+/// <summary>Derives overview update progress and failure from the locally queued request and
+/// persisted <see cref="ServerDetailDto.AgentUpdateRequest"/>. Persisted state keeps an active
+/// update visible after reloading.</summary>
 internal sealed record AgentUpdateOverviewState(string? InProgressTarget, bool Failed, string? FailureDiagnostic)
 {
     internal static readonly AgentUpdateOverviewState None = new(null, false, null);

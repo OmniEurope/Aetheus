@@ -10,7 +10,7 @@ public interface IServiceConnectionRepository
         string? sortBy = null, bool sortDescending = false,
         IReadOnlyList<GridFilter>? columnFilters = null);
 
-    /// <summary>Recette R-224: the distinct project names of the connections in scope.</summary>
+    /// <summary>The distinct project names of the connections in scope.</summary>
     Task<List<string>> GetProjectNamesAsync(List<int>? accessibleIds, CancellationToken ct = default);
     Task<ServiceConnection?> GetDetailAsync(int id, CancellationToken ct = default);
     Task<ServiceConnection?> FindAsync(int id, CancellationToken ct = default);

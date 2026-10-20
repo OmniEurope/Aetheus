@@ -117,11 +117,8 @@ public class PipelineStepTaskDispatcherWorkspaceTests
         Assert.Equal(PipelineCommandBuilder.GetDefaultWorkspace(42, isWindows: true), vars["WORKSPACE"]);
     }
 
-    /// <summary>
-    /// The quirk this test used to pin is fixed: an absent BUILD_BUILDID no longer defaults to "0"
-    /// (which parsed and sent the leg to the workspace of run 0). Absent and unparsable now both
-    /// fall back to the run id, the only identity the leg actually has.
-    /// </summary>
+    /// <summary>Missing or invalid BUILD_BUILDID values fall back to the run identifier so work
+    /// uses the correct workspace.</summary>
     [Fact]
     public void AbsentBuildId_FallsBackToTheRunId_NeverToRunZero()
     {

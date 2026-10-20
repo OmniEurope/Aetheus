@@ -145,9 +145,8 @@ public sealed class GitPushPipelineTriggerHandlerTests
         Assert.Null(exception);
     }
 
-    // --- PLAN-006 lot 8.5: paths_ignore is evaluated on the wiring, not only on the pure filter. A
-    // skipped run is invisible, so every uncertainty here must build (fail-open), and only a push whose
-    // full range is known and entirely ignored may skip. ---
+    // The push handler skips only a fully known diff whose paths are all ignored; uncertainty must
+    // trigger a run.
 
     private const string DocsOnlyYaml = """
         name: candidate

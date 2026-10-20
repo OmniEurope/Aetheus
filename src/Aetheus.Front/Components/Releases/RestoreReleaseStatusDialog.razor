@@ -1,0 +1,24 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Releases
+@* Recette R-13: puts a release whose recorded status is wrong back to a status its deployment history can
+   end in. Nothing is deployed; the reason goes to the audit log. *@
+<OmniTemplateForm TModel="RestoreModel" Model="@_model" OnValidSubmit="@Submit">
+    <OmniDataAnnotationsValidator Localizer="@L" />
+    <OmniStack Gap="OmniSpacing.Large">
+        <OmniAlert Severity="OmniSeverity.Info">@string.Format(L["ReleaseStatusRestoreSummary"].Value, Version, L.Localize(CurrentStatus))</OmniAlert>
+        <OmniFormField Label="@L["ReleaseStatusRestoreTarget"]" Required="true" Class="omni-u-w-100" For="release-status-restore-target">
+            <OmniDropDown TValue="ReleaseStatus" Id="release-status-restore-target" @bind-Value="_model.Status" Options="@TargetOptions" Class="omni-u-w-100" />
+        </OmniFormField>
+        @if (_model.Status == ReleaseStatus.Deployed)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning">@L["ReleaseStatusRestoreDeployedHint"]</OmniAlert>
+        }
+        <OmniFormField Label="@L["Reason"]" Required="true" Class="omni-u-w-100" For="release-status-restore-reason">
+            <OmniTextArea Id="release-status-restore-reason" @bind-Value="_model.Reason" Rows="3" Class="omni-u-w-100" />
+        </OmniFormField>
+        <ValidationMessage For="@(() => _model.Reason)" />
+        <DialogFooter OnCancel="@(() => Dialog.Close())">
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Restore" /> <span>@L["ReleaseStatusRestore"]</span></OmniButton>
+        </DialogFooter>
+    </OmniStack>
+</OmniTemplateForm>

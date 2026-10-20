@@ -28,11 +28,11 @@ public class ServerService(
     // No IPipelineRepository: its single use was enriching server releases with their source
     // pipeline, and that whole endpoint now lives in Releases, which already sits above Pipelines.
     IAgentUpdateConfirmationService? updateConfirmation = null,
-    // PLAN-005 lot 2: optional so the many unit tests that new-up this service directly keep compiling;
-    // when absent the heartbeat simply carries no port observation.
+    // Optional for direct unit-test construction; without this dependency the heartbeat carries no
+    // port observations.
     PortRegistry.IPortRegistryService? portRegistry = null,
-    // PLAN-005: publishes MailInventoryReportedEvent from the heartbeat; optional so direct unit-test
-    // construction keeps working (DI always injects the real dispatcher).
+    // Dispatches MailInventoryReportedEvent from heartbeats; optional for direct test construction,
+    // with the real dispatcher supplied by DI.
     Services.DomainEvents.IDomainEventDispatcher? domainEvents = null)
     : IServerLifecycleService, IServerHeartbeatService, IServerServiceManagementService,
       IServerAgentContactService, IServerDiagnosticService
@@ -65,7 +65,7 @@ public class ServerService(
                 .ToList();
         }
 
-        // Recette R-211: the tag and agent columns resolve to server ids here; the others reach the query.
+        // The tag and agent columns resolve to server ids here; the others reach the query.
         var columnFilters = request.Filters ?? [];
         foreach (var filter in columnFilters.Where(ServerListQuery.IsResolvedInMemory))
         {
@@ -105,7 +105,7 @@ public class ServerService(
             compatibilityPolicy is null ? (AgentCompatibilityStatus?)null : compatibilityPolicy.Evaluate(server).Status)));
     }
 
-    /// <summary>Recette R-211: the OS, versions and tags present across the servers the caller can read.</summary>
+    /// <summary>The OS, versions and tags present across the servers the caller can read.</summary>
     public async Task<ServerFilterValuesDto> GetServerFilterValuesAsync(List<int>? accessibleIds, CancellationToken ct = default)
     {
         var facts = await repo.GetServerFilterFactsAsync(accessibleIds, ct).ConfigureAwait(false);
@@ -185,6 +185,9 @@ public class ServerService(
             CreatedAt = server.CreatedAt,
             OrganizationId = server.OrganizationId,
             AgentInstalledAt = server.AgentInstalledAt,
+            ExternalProbe = server.ExternalProbe,
+            ExternalProbeAt = server.ExternalProbeAt,
+            ExternalProbeTarget = server.ExternalProbeTarget,
             PipelineRunnerEnabled = server.PipelineRunnerEnabled,
             DockerAvailable = server.DockerAvailable,
             PackageManagementAvailable = server.PackageManagementAvailable,
@@ -193,11 +196,15 @@ public class ServerService(
             TeamspeakSetupAvailable = server.TeamspeakSetupAvailable,
             RequireContainerIsolation = server.RequireContainerIsolation,
             InsecureTls = server.InsecureTls,
+            OomKillsSinceBoot = server.OomKillCount,
             CpuPercent = latestMetric?.CpuPercent ?? 0,
             MemoryUsedMb = latestMetric?.MemoryUsedMb ?? 0,
             MemoryTotalMb = latestMetric?.MemoryTotalMb ?? 0,
             DiskUsedGb = latestMetric?.DiskUsedGb ?? 0,
             DiskTotalGb = latestMetric?.DiskTotalGb ?? 0,
+            InodeUsedPercent = latestMetric?.InodeUsedPercent,
+            ClockOffsetMs = latestMetric?.ClockOffsetMs,
+            ClockOffsetUncertaintyMs = latestMetric?.ClockOffsetUncertaintyMs,
             StorageDiagnostics = latestMetric is null
                 ? new StorageDiagnosticsDto()
                 : new StorageDiagnosticsDto
@@ -228,7 +235,8 @@ public class ServerService(
             Mail = ServerDataMapper.MapMailDataDto(server),
             Teamspeak = ServerDataMapper.MapTeamspeakDataDto(server),
             Portsentry = ServerDataMapper.MapPortsentryDataDto(server),
-            Rkhunter = ServerDataMapper.MapRkhunterDataDto(server)
+            Rkhunter = ServerDataMapper.MapRkhunterDataDto(server),
+            SshConfig = SshConfigMonitor.Read(server.SshConfigStateJson)
         };
         return detail with { AgentCompatibility = compatibilityPolicy?.Evaluate(detail) };
     }
@@ -426,6 +434,9 @@ public class ServerService(
 
     public Task<int> CreateServiceLogsTaskAsync(int serverId, string serviceName, int lines, bool follow, CancellationToken ct = default)
         => _serviceManager.CreateServiceLogsTaskAsync(serverId, serviceName, lines, follow, ct);
+
+    public Task<int> ListInstalledPackagesAsync(int serverId, CancellationToken ct = default)
+        => _serviceManager.ListInstalledPackagesAsync(serverId, ct);
 
     public Task<int> UpgradeSystemAsync(int serverId, bool dryRun, CancellationToken ct = default)
         => _serviceManager.UpgradeSystemAsync(serverId, dryRun, ct);

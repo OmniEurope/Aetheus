@@ -20,13 +20,14 @@ public sealed record MailDataDto
     [MaxLength(MailInventoryLimits.MaxAccounts)]
     public List<MailAccountDto> Accounts { get; init; } = [];
 
-    // --- PLAN-005: inventory of an existing (possibly adopted) configuration ---
+    // Inventory of an existing or adopted mail configuration.
     [StringLength(253)]
     public string Hostname { get; init; } = string.Empty;
     public bool IsOpenDkimRunning { get; init; }
     /// <summary>True when <c>/etc/aetheus/mail-stack.managed</c> exists (stack provisioned by Aetheus).</summary>
     public bool IsManagedByAetheus { get; init; }
-    /// <summary>Version of the root-owned mail-manage helper (0 = absent or pre-PLAN-005).</summary>
+    /// <summary>Reported root-owned mail-manage helper version; zero means absent or not
+    /// versioned.</summary>
     public int HelperVersion { get; init; }
     /// <summary>The inventory flags are true only when the source was fully read. The backend never
     /// deactivates records from a list whose source could not be read.</summary>
@@ -39,6 +40,7 @@ public sealed record MailDataDto
     public List<MailDkimKeyDto> DkimKeys { get; init; } = [];
     public MailTlsStateDto Tls { get; init; } = new();
     public MailSpamFilterStateDto SpamFilter { get; init; } = new();
+    public MailDeliveryStateDto Delivery { get; init; } = new();
     [MaxLength(MailInventoryLimits.MaxDiagnostics)]
     [MaxItemStringLength(500)]
     public List<string> Diagnostics { get; init; } = [];

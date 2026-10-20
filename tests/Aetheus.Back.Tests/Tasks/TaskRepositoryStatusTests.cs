@@ -202,6 +202,47 @@ public class TaskRepositoryStatusTests : IDisposable
         Assert.Equal(TaskExecutionStatus.Assigned, task.Status);
     }
 
+    [Theory]
+    [InlineData(OperationKind.PipelineFunction, AgentCapabilities.PipelineFunctions, true)]
+    [InlineData(OperationKind.PipelineDeploymentFunction, AgentCapabilities.PipelineFunctions, false)]
+    [InlineData(OperationKind.PipelineDeploymentFunction, AgentCapabilities.DeploymentFunctions, true)]
+    [InlineData(OperationKind.PipelineFunction, AgentCapabilities.DeploymentFunctions, false)]
+    public async Task ClaimPendingTasksAsync_AFunctionTaskNeedsTheCapabilityOfItsAccessLevel(
+        OperationKind operation, string capability, bool claimable)
+    {
+        _db.Servers.Add(new Server
+        {
+            Id = 1,
+            Name = "function-runner",
+            Hostname = "function-runner",
+            Status = ServerStatus.Online,
+            AgentProtocolVersion = AgentProtocol.CurrentVersion,
+            AgentCapabilitiesJson = $"[\"{capability}\"]"
+        });
+        _db.Tasks.Add(new ServerTask
+        {
+            Id = 1,
+            ServerId = 1,
+            Name = "function",
+            Command = "detect-project-languages",
+            Operation = operation,
+            Status = TaskExecutionStatus.Pending,
+            CreatedAt = new DateTime(2026, 10, 13, 0, 0, 0, DateTimeKind.Utc)
+        });
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var claimed = await _repo.ClaimPendingTasksAsync(
+            1,
+            take: 1,
+            agentSessionId: "11111111111111111111111111111111",
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(claimable ? 1 : 0, claimed.Count);
+        Assert.Equal(
+            claimable ? TaskExecutionStatus.Assigned : TaskExecutionStatus.Pending,
+            (await _db.Tasks.FindAsync([1], TestContext.Current.CancellationToken))!.Status);
+    }
+
     [Fact]
     public async Task ClaimPendingTasksAsync_PreviousProtocolCannotClaimNormalWork()
     {
@@ -654,8 +695,8 @@ public class TaskRepositoryStatusTests : IDisposable
         Assert.Equal([2, 4], stale.Select(task => task.Id).Order());
     }
 
-    // Recette R1-42: the agent exits at the end of its self-update, so nothing else is handed to it
-    // while that update is claimed or running; the work stays Pending for the new agent.
+    // The agent exits at the end of its self-update, so nothing else is handed to it while that
+    // update is claimed or running; the work stays Pending for the new agent.
     [Theory]
     [InlineData(TaskExecutionStatus.Assigned)]
     [InlineData(TaskExecutionStatus.Running)]

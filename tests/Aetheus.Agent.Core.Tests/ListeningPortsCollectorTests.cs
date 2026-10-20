@@ -6,11 +6,9 @@ using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// PLAN-005 lot 6: the scan reads TCP and UDP, and keeps them apart. Both platform probes are stubbed
-/// in every test so the assertions hold wherever the suite runs; the collector picks one pair by OS
-/// and the other pair is simply never called.
-/// </summary>
+/// <summary> The scan reads TCP and UDP, and keeps them apart. Both platform probes are stubbed in
+/// every test so the assertions hold wherever the suite runs; the collector picks one pair by OS
+/// and the other pair is simply never called. </summary>
 public class ListeningPortsCollectorTests
 {
     private readonly IShellRunner _shell = Substitute.For<IShellRunner>();

@@ -9,12 +9,10 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Recette R-534: the <c>source:</c> block of a definition. The workspace comes from another
-/// repository of the project, pinned to a commit, and a run is refused rather than started on a
-/// source that cannot be trusted. The comparison runs against real git repositories: a blob id is
-/// what makes "identical" a fact, and only git computes it.
-/// </summary>
+/// <summary> The <c>source:</c> block of a definition. The workspace comes from another repository
+/// of the project, pinned to a commit, and a run is refused rather than started on a source that
+/// cannot be trusted. The comparison runs against real git repositories: a blob id is what makes
+/// "identical" a fact, and only git computes it. </summary>
 public sealed class PipelineWorkspaceSourceResolverTests : IDisposable
 {
     private const string DefinitionCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

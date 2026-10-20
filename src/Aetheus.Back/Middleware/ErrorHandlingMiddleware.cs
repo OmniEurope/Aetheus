@@ -43,8 +43,8 @@ public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorH
         }
     }
 
-    /// <summary>R-464: the reason of a refused request, kept for <see cref="RequestErrorLoggingMiddleware"/>
-    /// so its warning says why (a 400 of the template resolver used to say only "HTTP 400").</summary>
+    /// <summary>Retain the refusal reason for RequestErrorLoggingMiddleware so request logs explain
+    /// the status.</summary>
     public const string ErrorReasonItem = "Aetheus.ErrorReason";
 
     private static async Task WriteErrorAsync(HttpContext context, HttpStatusCode statusCode, string message)

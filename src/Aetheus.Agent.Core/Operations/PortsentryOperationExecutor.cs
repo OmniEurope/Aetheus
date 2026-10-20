@@ -17,6 +17,14 @@ public sealed class PortsentryOperationExecutor(
 {
     private readonly AetheusAgentOptions _options = options.Value;
 
+    internal bool IsLinux { get; init; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+
+    // The process runner, replaceable so each operation's argv is asserted without spawning anything.
+    internal Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>>
+        RunProcessAsync
+    { get; init; } = static (startInfo, timeoutSeconds, onOutput, processLogger, ct) =>
+            ProcessRunner.RunAsync(startInfo, timeoutSeconds, onOutput, processLogger, ct);
+
     // Root-owned helper deposited by install-agent-linux.sh (--module server-management). The
     // matching /etc/sudoers.d/aetheus-portsentry grants exactly this binary, NOPASSWD. It removes
     // the IP from iptables/ip6tables and /etc/hosts.deny - keeping /etc/hosts.deny (a 'spawn'-capable
@@ -59,7 +67,7 @@ public sealed class PortsentryOperationExecutor(
         CancellationToken cancellationToken)
     {
         var platformFailure = await OperationPlatformGuard.RequireLinuxAsync(
-            onOutput, "Portsentry operations are only supported on Linux").ConfigureAwait(false);
+            onOutput, "Portsentry operations are only supported on Linux", IsLinux).ConfigureAwait(false);
         if (platformFailure is not null) return platformFailure;
 
         timeoutSeconds = Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
@@ -71,14 +79,14 @@ public sealed class PortsentryOperationExecutor(
             return await UnblockAsync(target, timeoutSeconds, onOutput, cancellationToken).ConfigureAwait(false);
 
         return await OperationProcessRunner.RunOptionalAsync(
-            BuildPsi(kind), timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+            BuildPsi(kind), RunProcessAsync, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Maps a Portsentry operation kind to a fully-resolved argv. Service control operations go
     /// through sudo; status check uses <c>systemctl is-active</c> (no sudo needed).
     /// </summary>
-    private static ProcessStartInfo? BuildPsi(OperationKind kind)
+    internal static ProcessStartInfo? BuildPsi(OperationKind kind)
     {
         switch (kind)
         {
@@ -140,7 +148,7 @@ public sealed class PortsentryOperationExecutor(
         psi.ArgumentList.Add("100");
         psi.ArgumentList.Add("--no-pager");
 
-        return await ProcessRunner.RunAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+        return await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -170,7 +178,7 @@ public sealed class PortsentryOperationExecutor(
         psi.ArgumentList.Add(UnblockHelperPath);
         psi.ArgumentList.Add(target);
 
-        var result = await ProcessRunner.RunAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+        var result = await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode == 0 && !result.TimedOut)
             await onOutput($"Unblocked {target}", TaskLogLevel.Info).ConfigureAwait(false);
         return result;
@@ -205,7 +213,7 @@ public sealed class PortsentryOperationExecutor(
         }
 
         var platformFailure = await OperationPlatformGuard.RequireLinuxAsync(
-            onOutput, "Portsentry operations are only supported on Linux").ConfigureAwait(false);
+            onOutput, "Portsentry operations are only supported on Linux", IsLinux).ConfigureAwait(false);
         if (platformFailure is not null) return platformFailure;
 
         timeoutSeconds = Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
@@ -219,6 +227,6 @@ public sealed class PortsentryOperationExecutor(
         psi.ArgumentList.Add(udpPorts!);
 
         await onOutput($"Configuring portsentry (mode {mode})…", TaskLogLevel.Info).ConfigureAwait(false);
-        return await ProcessRunner.RunAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+        return await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
     }
 }

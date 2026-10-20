@@ -2,16 +2,10 @@
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// A run that acts on an environment holds it alone; another run that needs it waits (decision of
-/// 2026-10-02). The lock is taken by the first stage that names an environment or deploys, for every
-/// environment the run declares at once, so two runs can never each hold half of what they need.
-/// It is taken after the approval gate: a run waiting for a human does not keep others out.
-/// Nothing releases it but the end of the run (<see cref="PipelineRunFinalizer"/>), and a run that is
-/// no longer active never blocks (<see cref="PipelineResourceLockRepository"/>), so an error, a
-/// cancellation or a timeout frees it like a success does.
-/// </summary>
-internal sealed class PipelineEnvironmentLockGate(IPipelineRepository repo, IPipelineResourceLockRepository locks)
+/// <summary>Acquires all declared environment locks after approval to avoid partial-lock deadlocks
+/// and blocking other runs during human review (ADR-049). Locks remain effective only while their
+/// run is active.</summary>
+internal sealed class PipelineEnvironmentLockGate(IPipelineEnvironmentReader repo, IPipelineResourceLockRepository locks)
 {
     /// <summary>The fragment every lock wait carries; the stuck-run sweep spares runs that show it.</summary>
     internal const string WaitMarker = "waits for environment '";

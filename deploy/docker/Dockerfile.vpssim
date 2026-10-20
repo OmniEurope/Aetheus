@@ -20,11 +20,11 @@
 # --- Agent build stage: publish the Linux agent SELF-CONTAINED so the box needs
 #     no .NET runtime — the install script's systemd unit launches the native
 #     apphost directly. Bundled with install-agent-linux.sh into /agentpkg.
-FROM mcr.microsoft.com/dotnet/sdk:10.0.100@sha256:c7445f141c04f1a6b454181bd098dcfa606c61ba0bd213d0a702489e5bd4cd71 AS agent-build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.402@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS agent-build
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props NuGet.config ./
 COPY scanner-manifest.json ./
-COPY .aetheus/security-rules/opengrep/aetheus-security.yml .aetheus/security-rules/opengrep/aetheus-security.yml
+COPY .aetheus/security-rules/opengrep/ .aetheus/security-rules/opengrep/
 COPY deploy/scripts/zap-active-automation.sh deploy/scripts/zap-active-automation.sh
 COPY deploy/scripts/publish-observability-package.sh deploy/scripts/publish-observability-package.sh
 COPY deploy/scripts/promote-observability-packages.sh deploy/scripts/promote-observability-packages.sh
@@ -32,18 +32,31 @@ COPY src/Aetheus.Shared/Aetheus.Shared.csproj src/Aetheus.Shared/
 COPY src/Aetheus.Analyzers/Aetheus.Analyzers.csproj src/Aetheus.Analyzers/
 COPY src/Aetheus.Agent.Core/Aetheus.Agent.Core.csproj src/Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj src/Aetheus.Agent.Linux/
-RUN dotnet restore src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj -r linux-x64
+COPY src/Aetheus.Agent.Functions.Cli/Aetheus.Agent.Functions.Cli.csproj src/Aetheus.Agent.Functions.Cli/
+RUN dotnet restore src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj -r linux-x64 \
+    && dotnet restore src/Aetheus.Agent.Functions.Cli/Aetheus.Agent.Functions.Cli.csproj
 COPY src/Aetheus.Shared/ src/Aetheus.Shared/
 COPY src/Aetheus.Analyzers/ src/Aetheus.Analyzers/
 COPY src/Aetheus.Agent.Core/ src/Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/ src/Aetheus.Agent.Linux/
+COPY src/Aetheus.Agent.Functions.Cli/ src/Aetheus.Agent.Functions.Cli/
 COPY deploy/scripts/zap-active-automation.sh deploy/scripts/zap-active-automation.sh
 COPY deploy/scripts/publish-observability-package.sh deploy/scripts/publish-observability-package.sh
 COPY deploy/scripts/promote-observability-packages.sh deploy/scripts/promote-observability-packages.sh
+# aetheus-fn (PLAN-002 lot 1.0g), as Dockerfile.back ships it: the pipeline functions that run inside a
+# step container, one binary per Linux C library, at <agent dir>/aetheus-fn/<rid>/aetheus-fn.
 RUN dotnet publish src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj \
-        -c Release -r linux-x64 --self-contained true -o /agentpkg
+        -c Release -r linux-x64 --self-contained true -o /agentpkg \
+    && for rid in linux-x64 linux-musl-x64; do \
+        dotnet publish src/Aetheus.Agent.Functions.Cli/Aetheus.Agent.Functions.Cli.csproj \
+            -c Release -r "$rid" -o "/agentpkg/aetheus-fn/$rid" \
+        && test -f "/agentpkg/aetheus-fn/$rid/aetheus-fn" \
+        && rm -f "/agentpkg/aetheus-fn/$rid"/*.pdb \
+        && chmod 755 "/agentpkg/aetheus-fn/$rid/aetheus-fn" \
+        || exit 1; \
+    done
 COPY deploy/scripts/install-agent-linux.sh /agentpkg/install-agent-linux.sh
-# R-249: the host configuration templates the installer renders, next to it as in the agent archive.
+# Ships host-configuration templates beside the installer so it can render the agent configuration.
 COPY deploy/agent-host-config/ /agentpkg/agent-host-config/
 
 FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
@@ -126,7 +139,7 @@ RUN mkdir -p /etc/letsencrypt/live/vpssim.local \
 
 # --- Nightly demo: the same Let's Encrypt layout for the demo hostname, plus the trust that makes
 #     it usable. vpssim.compose.yml already resolves demo.app.aetheus.sonytumen.com to this box, and
-#     nightly-demo-prepare.sh only calls the certbot helper when the live directory is missing - so
+#     the demo prepare step only calls the certbot helper when the live directory is missing - so
 #     shipping the certificate here keeps ACME out of the simulation without forking the script.
 #     Registering it as a local CA is what the real host gets for free from Let's Encrypt: without
 #     it the deployment's own smoke probe reached a correctly deployed demo and refused it with
@@ -266,7 +279,7 @@ RUN if [ "$INSTALL_DOTNET" = "1" ]; then \
         && rm -rf /var/lib/apt/lists/* \
         && curl -fsSL "$DOTNET_INSTALLER_URL" -o /tmp/dotnet-install.sh \
         && echo "$DOTNET_INSTALLER_SHA256  /tmp/dotnet-install.sh" | sha256sum -c - \
-        && bash /tmp/dotnet-install.sh --version 10.0.100 --install-dir /usr/share/dotnet \
+        && bash /tmp/dotnet-install.sh --version 10.0.402 --install-dir /usr/share/dotnet \
         && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet \
         && rm -f /tmp/dotnet-install.sh \
         && /usr/local/bin/dotnet --version; \

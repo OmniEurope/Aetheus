@@ -34,7 +34,7 @@ public class ProjectTasksSectionTests : BunitContext
         });
         var cut = Render<ProjectTasksSection>(p =>
             p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Frontend"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Frontend"));
 
         // OnInitializedAsync fetches page 1 of the project's tasks and renders their names.
         Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/projects/1/tasks"));
@@ -73,7 +73,7 @@ public class ProjectTasksSectionTests : BunitContext
         });
         var cut = Render<ProjectTasksSection>(p =>
             p.Add(x => x.ProjectId, 2));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // Empty payload still resolves _result (grid renders) with zero items and shows the empty-state text.
         var result = (PaginatedResult<ServerTaskDto>?)typeof(ProjectTasksSection)
@@ -89,7 +89,7 @@ public class ProjectTasksSectionTests : BunitContext
         _handler.SetJsonResponse("api/projects/3/tasks", new PaginatedResult<ServerTaskDto> { Items = [], TotalCount = 0 });
         var cut = Render<ProjectTasksSection>(p =>
             p.Add(x => x.ProjectId, 3));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         var loading = (bool)typeof(ProjectTasksSection).GetField("_loading", Priv)!.GetValue(cut.Instance)!;
         Assert.False(loading);
     }
@@ -115,7 +115,7 @@ public class ProjectTasksSectionTests : BunitContext
 
         var cut = Render<ProjectTasksSection>(p =>
             p.Add(x => x.ProjectId, 5));
-        cut.WaitForState(() => !(bool)typeof(ProjectTasksSection).GetField("_loading", Priv)!.GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !(bool)typeof(ProjectTasksSection).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
 
         _handler.SetJsonResponse(HttpMethod.Get, "page=2", new PaginatedResult<ServerTaskDto>
         {
@@ -145,7 +145,7 @@ public class ProjectTasksSectionTests : BunitContext
         });
         var cut = Render<ProjectTasksSection>(p =>
             p.Add(x => x.ProjectId, 6));
-        cut.WaitForState(() => !(bool)typeof(ProjectTasksSection).GetField("_loading", Priv)!.GetValue(cut.Instance)!, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !(bool)typeof(ProjectTasksSection).GetField("_loading", Priv)!.GetValue(cut.Instance)!);
         var result = (PaginatedResult<ServerTaskDto>?)typeof(ProjectTasksSection).GetField("_result", Priv)!.GetValue(cut.Instance);
         // OnInitializedAsync populates _result with the single seeded task.
         Assert.NotNull(result);
@@ -155,12 +155,11 @@ public class ProjectTasksSectionTests : BunitContext
     [Fact]
     public async Task HeaderFilters_AreColumnFilters_NotASearchTerm()
     {
-        // Recette R-212: this section's header filters are real column filters of its endpoint; the
-        // first typed value is no longer turned into a search term.
+        // Send the section header filters as endpoint column filters.
         _handler.SetJsonResponse("api/projects/1/tasks/filter-values", new TaskFilterValuesDto { ServerNames = ["build-01"] });
         _handler.SetJsonResponse("api/projects/1/tasks", new PaginatedResult<ServerTaskDto> { Items = [MakeTask(1, "t")], TotalCount = 1 });
         var cut = Render<ProjectTasksSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("t"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("t"));
         var grid = cut.FindComponent<AetheusDataGrid<ServerTaskDto>>();
         var separator = Aetheus.Shared.Components.Shared.GridFilter.ListSeparator;
 

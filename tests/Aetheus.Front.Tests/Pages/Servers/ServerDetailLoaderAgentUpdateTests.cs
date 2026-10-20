@@ -7,8 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// Recette R2-111: an agent-update event reloads the loaded server's update request, agent version and
+/// <summary> An agent-update event reloads the loaded server's update request, agent version and
 /// compatibility, so the Overview's update state ends on the new version or on the failure.
 /// </summary>
 public sealed class ServerDetailLoaderAgentUpdateTests : BunitContext
@@ -70,8 +69,8 @@ public sealed class ServerDetailLoaderAgentUpdateTests : BunitContext
         Assert.Equal(42, loader.Server.CpuPercent);
     }
 
-    // Recette R1-42: a reconnect re-reads the update request, because the confirmation sent while the
-    // tab slept is never replayed; it does so even when the group re-join itself fails.
+    // A reconnect re-reads the update request, because the confirmation sent while the tab slept is
+    // never replayed; it does so even when the group re-join itself fails.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -125,7 +124,7 @@ public sealed class ServerDetailLoaderAgentUpdateTests : BunitContext
             Services.GetRequiredService<NavigationManager>(),
             NullLogger<ServerDetailLoader>.Instance);
         await loader.EnsureLoadedAsync(7, Xunit.TestContext.Current.CancellationToken);
-        var hub = await factory.Created.Task.WaitAsync(TimeSpan.FromSeconds(10), Xunit.TestContext.Current.CancellationToken);
+        var hub = await factory.Created.Task.WaitAsync(Aetheus.Front.Tests.TestDoubles.HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
 
         var answer = new TaskCompletionSource<ServerDetailDto>(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/servers/7", _ => answer.Task);

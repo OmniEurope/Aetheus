@@ -5,21 +5,13 @@ using Aetheus.Back.Services.DomainEvents;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// What a push means for pipelines: synchronise the definitions it carries, then trigger whatever it
-/// should trigger.
-///
-/// This whole body used to live in <c>GitSmartHttpService</c>, which made the transport layer drive
-/// the orchestrator and put Git and Pipelines in the same cycle. Nothing about the behaviour changes
-/// here - the ordering (sync definitions first, so a push that edits a pipeline triggers the edited
-/// one), the per-pipeline lock, the latest-wins replacement and the swallow-and-log failure handling
-/// are all preserved deliberately: a push already written to disk must not be reported as failed
-/// because a downstream trigger did not fire.
-/// </summary>
+/// <summary>Push handling synchronizes definitions before triggering pipelines so modified
+/// definitions apply immediately. Downstream trigger failures are logged without reporting an
+/// already-written Git push as failed.</summary>
 internal sealed class GitPushPipelineTriggerHandler(
     IPipelineService pipelineService,
     IPipelineRunService pipelineRunService,
-    IPipelineRepository pipelineRepo,
+    IPipelineAutoTriggerRepository pipelineRepo,
     IGitLightCliService cli,
     ILogger<GitPushPipelineTriggerHandler> logger)
     : IDomainEventHandler<GitPushProcessedEvent>
@@ -87,13 +79,9 @@ internal sealed class GitPushPipelineTriggerHandler(
         await ReplaceActivePushRunAsync(pipeline, variables, ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Whether the push changed nothing this pipeline cares about (PLAN-006 lot 8.5).
-    ///
-    /// Fail-open at every step, because a skipped run is invisible: a branch this push creates has
-    /// no range to diff, a repository whose diff cannot be read is unknown rather than unchanged,
-    /// and either way the run happens. Only a fully-read list whose every entry matches skips.
-    /// </summary>
+    /// <summary>Skip only when a complete readable diff proves every path irrelevant. New branches
+    /// or unreadable diffs trigger execution because absence of evidence cannot justify an
+    /// invisible skipped run.</summary>
     private async Task<bool> PushOnlyTouchesIgnoredPathsAsync(
         PipelineYamlDefinition definition,
         GitPushProcessedEvent push,

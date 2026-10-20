@@ -10,10 +10,8 @@ public sealed class AnalysisPortfolioTests : BunitContext
 
     public AnalysisPortfolioTests() => _handler = BunitTestHelper.RegisterServices(this);
 
-    /// <summary>
-    /// Recette R-224: the filter bar above the grid is gone; the grid filters itself from its column headers,
-    /// whose checkable lists come from the filter-values endpoint (the rows are loaded page by page).
-    /// </summary>
+    /// <summary>Filter the paged portfolio through column headers with choices from the
+    /// filter-values endpoint.</summary>
     [Fact]
     public void FilterBar_IsReplacedByTheColumnHeaderFilters()
     {
@@ -29,13 +27,13 @@ public sealed class AnalysisPortfolioTests : BunitContext
         var cut = Render<AnalysisPortfolio>();
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request =>
-            request.Url.Contains("api/analysis/portfolio/filter-values", StringComparison.Ordinal)), TimeSpan.FromSeconds(3));
+            request.Url.Contains("api/analysis/portfolio/filter-values", StringComparison.Ordinal)));
         Assert.Empty(cut.FindAll(".analysis-portfolio-filters"));
         Assert.Empty(cut.FindAll("[aria-label='Search']"));
         Assert.Contains("aetheus-grid-fullheight", cut.Find(".analysis-table").ClassList);
     }
 
-    /// <summary>Recette R-224: a header filter reaches the portfolio API as a column filter.</summary>
+    /// <summary>A header filter reaches the portfolio API as a column filter.</summary>
     [Fact]
     public async Task HeaderFilter_ReachesTheApi()
     {
@@ -84,7 +82,7 @@ public sealed class AnalysisPortfolioTests : BunitContext
         {
             Assert.Contains("analysis-portfolio-project-card", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("Aetheus", cut.Markup, StringComparison.Ordinal);
-            // PLAN-003 lot 18: one rendering. The grade is the shared badge, A reading as healthy.
+            // One rendering. The grade is the shared badge, A reading as healthy.
             var grade = cut.Find(".analysis-portfolio-grade");
             Assert.Equal("A", grade.TextContent.Trim());
             Assert.Contains("omni-badge--success", grade.ClassName, StringComparison.Ordinal);
@@ -152,5 +150,31 @@ public sealed class AnalysisPortfolioTests : BunitContext
         Aetheus.Front.Tests.TestDoubles.RowEventIsolation.AssertRowDoesNotReceive(projectLink, "onclick", "onkeydown");
         Aetheus.Front.Tests.TestDoubles.RowEventIsolation.AssertRowDoesNotReceive(
             cut.Find("tr a[href='pipelines/runs/714']"), "onclick", "onkeydown");
+    }
+
+    /// <summary>The export reads the page the grid asks for, in the grid's sort, capped at 200 rows.</summary>
+    [Theory]
+    [InlineData(50, 25, GridSortOrder.Descending, "page=3&pageSize=25", "sortDescending=True")]
+    [InlineData(null, 1000, GridSortOrder.Ascending, "page=1&pageSize=200", "sortDescending=False")]
+    public async Task TheExport_ReadsTheRequestedPageInTheGridsSort(int? skip, int top, GridSortOrder order, string expectedPage, string expectedSort)
+    {
+        _handler.SetJsonResponse("api/analysis/portfolio/projects", new List<AnalysisPortfolioProjectDto>());
+        _handler.SetJsonResponse("api/analysis/portfolio/filter-values", new AnalysisPortfolioFilterValuesDto());
+        _handler.SetPaginatedJsonResponse("api/analysis/portfolio", [new AnalysisPortfolioRowDto { ProjectName = "Website" }]);
+        var cut = Render<AnalysisPortfolio>();
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request => request.Url.Contains("api/analysis/portfolio?", StringComparison.Ordinal)));
+
+        var page = await cut.InvokeAsync(() => cut.Instance.ReadExportAsync(new GridLoadArgs
+        {
+            Skip = skip,
+            Top = top,
+            Sorts = [new GridSortDescriptor("ProjectName", order)],
+        }));
+
+        Assert.Equal("Website", Assert.Single(page.Items).ProjectName);
+        var url = _handler.Requests.Last(request => request.Url.Contains("api/analysis/portfolio?", StringComparison.Ordinal)).Url;
+        Assert.Contains(expectedPage, url, StringComparison.Ordinal);
+        Assert.Contains("sortBy=ProjectName", url, StringComparison.Ordinal);
+        Assert.Contains(expectedSort, url, StringComparison.Ordinal);
     }
 }

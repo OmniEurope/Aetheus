@@ -102,6 +102,12 @@ public sealed class AnalyticsPrivacyTests
         Assert.NotEqual(first.AuthenticatedPseudonym, second.AuthenticatedPseudonym);
         Assert.Equal(first.MonthlyPseudonym, firstElsewhere.MonthlyPseudonym);
         Assert.Equal(first.AuthenticatedPseudonym, firstElsewhere.AuthenticatedPseudonym);
+        // Recette R1-68: but signed in at two places it is two sessions of Current visitors, and two
+        // accounts at one place are two sessions; a second tab at the same place is the same session.
+        var firstAgain = pseudonymizer.Create(Context("203.0.113.10", "ExampleBrowser/1"), source with { EventId = Guid.NewGuid(), AuthenticatedUserId = "account-first" }, "/");
+        Assert.NotEqual(first.SessionPseudonym, firstElsewhere.SessionPseudonym);
+        Assert.NotEqual(first.SessionPseudonym, second.SessionPseudonym);
+        Assert.Equal(first.SessionPseudonym, firstAgain.SessionPseudonym);
         // The identifier is never exported: only pseudonyms derived from it are.
         Assert.DoesNotContain("account-first", System.Text.Json.JsonSerializer.Serialize(first), StringComparison.Ordinal);
     }

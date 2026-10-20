@@ -15,7 +15,7 @@ public partial class AuditDetailDialog : ComponentBase
     private bool _verifying = true;
     private AuditChainVerificationResult? _verification;
 
-    // Recette R-452: the same label and colour as the audit log row the dialog was opened from.
+    // The same label and colour as the audit log row the dialog was opened from.
     private OmniTone ActionBadge => AuditActionPresentation.Badge(Log.Action);
 
     private string ActionLabel => AuditActionPresentation.Label(L, Log.Action);

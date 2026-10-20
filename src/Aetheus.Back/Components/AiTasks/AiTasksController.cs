@@ -7,6 +7,7 @@ namespace Aetheus.Back.Components.AiTasks;
 [Authorize]
 public sealed class AiTasksController(
     IAiTaskService service,
+    IAiRunnerProfileService profiles,
     IResourceAuthorizationService authorization,
     // No IPipelineRunService: the one thing this controller needed from it was the pipeline id behind
     // a run, for an RBAC check. Injecting an orchestrator to read one integer put AiTasks inside the
@@ -17,7 +18,7 @@ public sealed class AiTasksController(
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<PaginatedResult<AiRunnerProfileDto>>> GetProfiles(
         [FromQuery] PaginationRequest request, CancellationToken ct) =>
-        Ok(await service.GetProfilesAsync(request, ct).ConfigureAwait(false));
+        Ok(await profiles.GetProfilesAsync(request, ct).ConfigureAwait(false));
 
     [HttpGet("profile-options")]
     public async Task<ActionResult<List<AiRunnerProfileDto>>> GetProfileOptions(CancellationToken ct)
@@ -26,16 +27,16 @@ public sealed class AiTasksController(
             ? null
             : await authorization.GetUserOrganizationIdsAsync(User, ct).ConfigureAwait(false);
         if (organizationIds is null)
-            return Ok((await service.GetProfilesAsync(
+            return Ok((await profiles.GetProfilesAsync(
                 new PaginationRequest { Page = 1, PageSize = 1000 }, ct).ConfigureAwait(false)).Items);
-        return Ok(await service.GetProfileOptionsAsync(organizationIds, ct).ConfigureAwait(false));
+        return Ok(await profiles.GetProfileOptionsAsync(organizationIds, ct).ConfigureAwait(false));
     }
 
     [HttpGet("profiles/{id:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<AiRunnerProfileDto>> GetProfile(int id, CancellationToken ct)
     {
-        var profile = await service.GetProfileAsync(id, ct).ConfigureAwait(false);
+        var profile = await profiles.GetProfileAsync(id, ct).ConfigureAwait(false);
         return profile is null ? NotFound() : Ok(profile);
     }
 
@@ -44,7 +45,7 @@ public sealed class AiTasksController(
     public async Task<ActionResult<AiRunnerProfileDto>> CreateProfile(
         [FromBody] CreateAiRunnerProfileRequest request, CancellationToken ct)
     {
-        var profile = await service.CreateProfileAsync(request, ct).ConfigureAwait(false);
+        var profile = await profiles.CreateProfileAsync(request, ct).ConfigureAwait(false);
         return CreatedAtAction(nameof(GetProfile), new { id = profile.Id }, profile);
     }
 
@@ -53,14 +54,38 @@ public sealed class AiTasksController(
     public async Task<ActionResult<AiRunnerProfileDto>> UpdateProfile(
         int id, [FromBody] UpdateAiRunnerProfileRequest request, CancellationToken ct)
     {
-        var profile = await service.UpdateProfileAsync(id, request, ct).ConfigureAwait(false);
+        var profile = await profiles.UpdateProfileAsync(id, request, ct).ConfigureAwait(false);
         return profile is null ? NotFound() : Ok(profile);
     }
 
     [HttpDelete("profiles/{id:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteProfile(int id, CancellationToken ct) =>
-        await service.DeleteProfileAsync(id, ct).ConfigureAwait(false) ? NoContent() : NotFound();
+        await profiles.DeleteProfileAsync(id, ct).ConfigureAwait(false) ? NoContent() : NotFound();
+
+    [HttpPost("profiles/test")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<AiConnectionTestDto>> TestProfile(
+        [FromBody] TestAiRunnerProfileRequest request, CancellationToken ct) =>
+        Ok(await profiles.TestConnectionAsync(request, ct).ConfigureAwait(false));
+
+    /// <summary>Recette R3-7: reads the saved profile's model list at its provider now. 429 with
+    /// <c>Retry-After</c> when it was read less than a minute ago.</summary>
+    [HttpPost("profiles/{id:int}/model-list/refresh")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<AiRunnerProfileDto>> RefreshModelList(int id, CancellationToken ct)
+    {
+        var attempt = await profiles.RefreshModelListAsync(id, ct).ConfigureAwait(false);
+        if (attempt is null) return NotFound();
+        if (attempt.RetryAfter is not { } wait) return Ok(attempt.Profile);
+        var seconds = (int)Math.Ceiling(wait.TotalSeconds);
+        Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return StatusCode(StatusCodes.Status429TooManyRequests, new ApiError
+        {
+            Message = $"The model list of this profile was read less than a minute ago. Try again in {seconds} s.",
+            CorrelationId = HttpContext.TraceIdentifier
+        });
+    }
 
     [HttpGet("tasks")]
     public async Task<ActionResult<PaginatedResult<AiTaskDefinitionDto>>> GetDefinitions(
@@ -164,19 +189,6 @@ public sealed class AiTasksController(
         }
         return Ok(await service.GetResultsAsync(
             definitionId, pipelineRunId, request, ct).ConfigureAwait(false));
-    }
-
-    [HttpPost("results/{id:int}/apply")]
-    public async Task<ActionResult<AiPatchApplicationDto>> ApplyProposedPatch(
-        int id, CancellationToken ct)
-    {
-        var result = await service.GetResultAsync(id, ct).ConfigureAwait(false);
-        if (result is null) return NotFound();
-        if (!result.ProjectId.HasValue
-            || !await authorization.HasPermissionAsync(
-                User, ResourceType.Project, result.ProjectId, Permission.Write, ct).ConfigureAwait(false))
-            return Forbid();
-        return Ok(await service.ApplyProposedPatchAsync(id, ct).ConfigureAwait(false));
     }
 
     [HttpGet("consumption")]

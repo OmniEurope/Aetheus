@@ -134,10 +134,8 @@ public class PipelineRunWaitingBannerTests : BunitContext
     [Fact]
     public void TheVerdict_IsABadgeOfTheStatusTile_NotABannerAboveTheTabs()
     {
-        // PLAN-003 D15: up to three banners used to stack between the header and the tabs, pushing
-        // the content down on every run. R-496 and R-497: the verdict is a short badge in the overview's
-        // Status tile (its full sentence is the tooltip), no longer in the header, and the header stops
-        // repeating the pipeline name and the status the tiles already give.
+        // The overview status tile carries the compact verdict with detailed tooltip; the header
+        // avoids repeating overview values.
         ServeSealedRun(87, "false", "agentCompatibility");
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 87));
@@ -298,6 +296,8 @@ public class PipelineRunWaitingBannerTests : BunitContext
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 88));
 
+        // The verdict needs the child run's answer, which the page reads after the root run on thread
+        // pool continuations: wait with the loaded-machine ceiling, not bUnit's implicit second.
         cut.WaitForAssertion(() => Assert.Contains("CandidateNotDeployableTitle", cut.Markup));
         cut.WaitForAssertion(() => Assert.Contains("agentCompatibility", cut.Markup));
     }

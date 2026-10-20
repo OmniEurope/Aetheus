@@ -15,7 +15,7 @@ public class TasksController(ITaskService taskService, IResourceAuthorizationSer
         return Ok(await taskService.GetTasksAsync(request, accessibleIds, ct));
     }
 
-    /// <summary>Recette R-212: the server names the task list's Server column filter offers.</summary>
+    /// <summary>The server names the task list's Server column filter offers.</summary>
     [HttpGet("filter-values")]
     public async Task<ActionResult<TaskFilterValuesDto>> GetTaskFilterValues([FromQuery] int? serverId, CancellationToken ct)
     {

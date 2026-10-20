@@ -13,11 +13,11 @@ public sealed class AiTaskRepository(AppDbContext db) : IAiTaskRepository
         var query = db.AiRunnerProfiles.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(profile => profile.Name.Contains(search));
-        // Recette R-224: the list's column header filters, before the count.
+        // The list's column header filters, before the count.
         query = AiTaskListQuery.ProfileColumns.ApplyFilters(query, columnFilters);
         var total = await query.CountAsync(ct).ConfigureAwait(false);
         var ordered = AiTaskListQuery.ProfileColumns.ApplySorts(query,
-            [new GridSort { Field = sortBy ?? "Name", Descending = sortDescending }])!;
+            [new GridSort { Field = sortBy ?? "priority", Descending = sortDescending }])!;
         var items = await ordered.ThenBy(profile => profile.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(ct).ConfigureAwait(false);
@@ -34,10 +34,13 @@ public sealed class AiTaskRepository(AppDbContext db) : IAiTaskRepository
     public Task<AiRunnerProfile?> FindProfileAsync(int id, CancellationToken ct) =>
         db.AiRunnerProfiles.FirstOrDefaultAsync(profile => profile.Id == id, ct);
 
-    public Task<AiRunnerProfile?> FindProfileByNameAsync(
-        string name, int organizationId, CancellationToken ct) =>
-        db.AiRunnerProfiles.AsNoTracking().FirstOrDefaultAsync(
-            profile => profile.OrganizationId == organizationId && profile.Name == name, ct);
+    public Task<List<AiRunnerProfile>> GetOrganizationProfilesByPriorityAsync(
+        int organizationId, CancellationToken ct) =>
+        db.AiRunnerProfiles.AsNoTracking()
+            .Where(profile => profile.OrganizationId == organizationId)
+            .OrderBy(profile => profile.Priority)
+            .ThenBy(profile => profile.Id)
+            .ToListAsync(ct);
 
     public async Task AddProfileAsync(AiRunnerProfile profile, CancellationToken ct)
     {
@@ -53,6 +56,15 @@ public sealed class AiTaskRepository(AppDbContext db) : IAiTaskRepository
 
     public Task<bool> ProfileHasDefinitionsAsync(int profileId, CancellationToken ct) =>
         db.AiTaskDefinitions.AsNoTracking().AnyAsync(definition => definition.ProfileId == profileId, ct);
+
+    public Task<List<AiRunnerProfile>> GetProfilesDueForModelListAsync(DateTime checkedBefore, CancellationToken ct) =>
+        db.AiRunnerProfiles
+            .Where(profile => (profile.Provider == AiProviderCatalog.AnthropicToken || profile.Provider == AiProviderCatalog.OpenAiToken)
+                && profile.ApiKeyEncrypted != string.Empty
+                && (profile.ModelListCheckedAt == null || profile.ModelListCheckedAt < checkedBefore))
+            .OrderBy(profile => profile.ModelListCheckedAt)
+            .ThenBy(profile => profile.Id)
+            .ToListAsync(ct);
 
     public async Task<(List<AiTaskDefinition> Items, int Total)> GetDefinitionsPageAsync(
         string? search, int page, int pageSize, int? projectId, int? serverId,
@@ -73,7 +85,7 @@ public sealed class AiTaskRepository(AppDbContext db) : IAiTaskRepository
         }
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(definition => definition.Name.Contains(search));
-        // Recette R-224: the list's column header filters, after the scope and before the count.
+        // The list's column header filters, after the scope and before the count.
         query = AiTaskListQuery.DefinitionColumns.ApplyFilters(query, columnFilters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);

@@ -17,8 +17,8 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
     private List<SystemLogFileDto>? _logFiles;
     private List<string> _fileNames = [];
 
-    // Recette R-453: the block the grid last asked for and the size of the whole filtered log. The
-    // grid reads the log block by block as it scrolls (remote virtualization); there is no "Load more".
+    // The block the grid last asked for and the size of the whole filtered log. The grid reads the
+    // log block by block as it scrolls (remote virtualization); there is no "Load more".
     private AetheusDataGrid<SystemLogEntryDto>? _grid;
     private List<SystemLogEntryDto> _items = [];
     private int _total;
@@ -26,8 +26,8 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
     private bool _loadFailed;
     private readonly PushRefresh _pushRefresh = new();
 
-    // Recette R-210: the level filter lists the levels by the same translated names as the page's
-    // level drop-down; built once so the column sees the same delegate on every render.
+    // The level filter lists the levels by the same translated names as the page's level drop-down;
+    // built once so the column sees the same delegate on every render.
     private Func<string, string>? _levelText;
     private Func<string, string> LevelText => _levelText ??= value =>
         LevelsArray.Contains(value, StringComparer.Ordinal) ? L[value].Value : value;
@@ -35,7 +35,11 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
     private string? _selectedFile;
     private string? _selectedLevel;
     private string? _searchText;
-    private DateTime? _dateFrom;
+    /// <summary>The window the page opens on: the last three days across every file of every color. The
+    /// "from" picker shows it, so the bound is explicit and can be moved back.</summary>
+    internal static readonly TimeSpan DefaultWindow = TimeSpan.FromHours(72);
+
+    private DateTime? _dateFrom = DateTime.UtcNow - DefaultWindow;
     private DateTime? _dateTo;
     private bool _isDownloading;
     private bool _initialized;
@@ -64,8 +68,8 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
         {
             // The first block of entries comes from the grid itself, when it renders.
             await LoadLogFilesAsync();
-            // Recette R-181: the back says when the log files changed (at most every 2 s); the grid
-            // then refreshes in place, keeping its scroll position and filters.
+            // The back says when the log files changed (at most every 2 s); the grid then refreshes
+            // in place, keeping its scroll position and filters.
             _liveLogs = new AdminEntitySubscription(HubFactory);
             await _liveLogs.StartAsync(AdminEntities.SystemLog,
                 () => InvokeAsync(() => _liveReload.RequestAsync(RefreshLiveAsync)));
@@ -93,13 +97,8 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
         _fileNames = _logFiles?.Select(f => f.FileName).ToList() ?? [];
     }
 
-    /// <summary>
-    /// Recette R-453: every block the grid asks for goes to the API with the bar filters (file, level,
-    /// dates, search), the column sort and the header filters, so the count and the rows describe the
-    /// whole filtered log.
-    /// </summary>
-    /// <summary>Recette R2-124: one page of the export, with the file, level, search and dates chosen above
-    /// the grid and its sort and column filters.</summary>
+    /// <summary>Exports one page using the selected file, level, search, date range, sort and
+    /// column filters.</summary>
     private Task<PaginatedResult<SystemLogEntryDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(defaultPageSize: 50);
@@ -172,8 +171,8 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
     }
 
-    /// <summary>Recette R-181 / R-227: new log lines refresh the grid in place (rows, scroll position
-    /// and filters kept); the lines it did not hold before read bold for a few seconds.</summary>
+    /// <summary>New log lines refresh the grid in place (rows, scroll position and filters kept);
+    /// the lines it did not hold before read bold for a few seconds.</summary>
     private async Task RefreshLiveAsync()
     {
         if (_disposed || _grid is null) return;

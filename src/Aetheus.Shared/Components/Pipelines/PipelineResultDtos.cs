@@ -41,9 +41,9 @@ public sealed record PipelineCoverageSummaryDto
     public int BranchesCovered { get; init; }
     public int BranchesValid { get; init; }
 
-    /// <summary>Recette R-484: the run this coverage was published on. The run detail carries the figures
-    /// without <see cref="Files"/>; the Coverage tab reads them from <c>GET runs/{RunId}/coverage</c>
-    /// when it opens.</summary>
+    /// <summary>The run this coverage was published on. The run detail carries the figures without
+    /// <see cref="Files"/>; the Coverage tab reads them from <c>GET runs/{RunId}/coverage</c> when
+    /// it opens.</summary>
     public int? RunId { get; init; }
 
     /// <summary>K: per-file line coverage (worst first). Empty for legacy runs captured before per-file

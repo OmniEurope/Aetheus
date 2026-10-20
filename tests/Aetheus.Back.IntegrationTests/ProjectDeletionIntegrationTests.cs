@@ -17,11 +17,8 @@ using Environment = Aetheus.Back.Data.Entities.Environment;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Recette R2-122 on a real PostgreSQL: deleting a project removes everything it owns, through the
-/// RESTRICT and SET NULL foreign keys that made the former delete fail or leave rows detached, while
-/// another project sharing the same server keeps every row it had and the server itself survives.
-/// </summary>
+/// <summary>Project deletion removes owned rows under actual foreign-key rules while preserving
+/// shared servers and unrelated project data.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture), IDisposable
 {

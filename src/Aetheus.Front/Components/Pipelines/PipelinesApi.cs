@@ -16,15 +16,16 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         string? sortBy = null, bool sortDescending = true,
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
-        // Recette R-221: no search or status argument any more, the Name and Status column filters do it.
+        // Name and Status filtering belongs to the grid's column filters.
         var query = PageQuery(page, pageSize, null, sortBy, sortDescending);
         if (serverId.HasValue) query["serverId"] = serverId.Value.ToString();
-        // Recette R-212: the list's column header filters.
+        // The list's column header filters.
         var url = GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/tasks", query), filters);
         return await Http.GetFromJsonAsync<PaginatedResult<ServerTaskDto>>(url, JsonOptions.Web) ?? new();
     }
 
-    /// <summary>Recette R-212: the server names the task list's Server filter offers (one server's when set).</summary>
+    /// <summary>The server names the task list's Server filter offers (one server's when
+    /// set).</summary>
     public async Task<TaskFilterValuesDto> GetTaskFilterValuesAsync(int? serverId = null, CancellationToken ct = default) =>
         await GetJsonAsync<TaskFilterValuesDto>(
             serverId is { } id ? $"api/tasks/filter-values?serverId={id}" : "api/tasks/filter-values", ct).ConfigureAwait(false) ?? new();
@@ -141,27 +142,36 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         {
             // Rolling-deployment compatibility: an older backend only exposes the unpaged graph.
             var legacy = await GetPipelineDependencyGroupsAsync(ct: ct);
-            HashSet<int>? serverPipelineIds = null;
-            if (serverId.HasValue)
-                serverPipelineIds = (await GetServerPipelinesAsync(serverId.Value)).Select(item => item.Id).ToHashSet();
-            var filtered = legacy.Parents.Concat(legacy.Leaves)
-                .Where(item => !projectId.HasValue || item.ProjectId == projectId)
-                .Where(item => serverPipelineIds is null || serverPipelineIds.Contains(item.Id))
-                .Where(item => string.IsNullOrWhiteSpace(search)
-                    || item.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
-                    || (item.ProjectName?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
-                .Where(item => !triggerType.HasValue || item.TriggerType == triggerType)
-                .OrderBy(item => item.Name).ToList();
-            return new PaginatedResult<PipelineDependencyDto>
-            {
-                Items = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
-                TotalCount = filtered.Count,
-                Page = page,
-                PageSize = pageSize
-            };
+            var serverPipelineIds = serverId.HasValue
+                ? (await GetServerPipelinesAsync(serverId.Value)).Select(item => item.Id).ToHashSet()
+                : null;
+            return PageLegacyDependencies(legacy, page, pageSize, search, triggerType, projectId, serverPipelineIds);
         }
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<PaginatedResult<PipelineDependencyDto>>(JsonOptions.Web, ct) ?? new();
+    }
+
+    /// <summary>The page the paged endpoint would have answered, worked out from the whole graph an older
+    /// backend returns: same filters, ordered by name.</summary>
+    internal static PaginatedResult<PipelineDependencyDto> PageLegacyDependencies(
+        PipelineDependencyGroupsDto legacy, int page, int pageSize, string? search,
+        PipelineTriggerType? triggerType, int? projectId, IReadOnlySet<int>? serverPipelineIds)
+    {
+        var filtered = legacy.Parents.Concat(legacy.Leaves)
+            .Where(item => !projectId.HasValue || item.ProjectId == projectId)
+            .Where(item => serverPipelineIds is null || serverPipelineIds.Contains(item.Id))
+            .Where(item => string.IsNullOrWhiteSpace(search)
+                || item.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (item.ProjectName?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
+            .Where(item => !triggerType.HasValue || item.TriggerType == triggerType)
+            .OrderBy(item => item.Name).ToList();
+        return new PaginatedResult<PipelineDependencyDto>
+        {
+            Items = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
+            TotalCount = filtered.Count,
+            Page = page,
+            PageSize = pageSize
+        };
     }
 
 
@@ -174,11 +184,9 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
     public async Task<PipelineSourceDto?> GetPipelineSourceAsync(int id, CancellationToken ct = default)
         => (await LookUpPipelineSourceAsync(id, ct)).Source;
 
-    /// <summary>
-    /// Recette R1-34: the pipeline's Git source, telling "the backend answered that there is none" (the
+    /// <summary> The pipeline's Git source, telling "the backend answered that there is none" (the
     /// definition is kept in Aetheus) apart from "it could not be read" (Loaded false), so the page
-    /// never claims a storage place it did not read.
-    /// </summary>
+    /// never claims a storage place it did not read. </summary>
     public async Task<(bool Loaded, PipelineSourceDto? Source)> LookUpPipelineSourceAsync(int id, CancellationToken ct = default)
     {
         var response = await Http.GetAsync($"api/pipelines/{id}/source", ct);
@@ -201,43 +209,45 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
             new PipelineSetupReadinessRequest { ProjectId = projectId, TemplateNames = [.. templateNames] },
             ct);
 
-    /// <summary>Recette R1-29: what copying a project's pipelines into another one would do (names only).</summary>
+    /// <summary>What copying a project's pipelines into another one would do (names
+    /// only).</summary>
     public Task<PipelineProjectCopyPlanDto?> PlanProjectCopyAsync(PipelineProjectCopyRequest request, CancellationToken ct = default)
         => PostJsonAsync<PipelineProjectCopyRequest, PipelineProjectCopyPlanDto>("api/pipelines/setup/copy-plan", request, ct);
 
-    /// <summary>Recette R1-29: makes the copies; the error payload is kept so the wizard can show why it failed.</summary>
+    /// <summary>Makes the copies; the error payload is kept so the wizard can show why it
+    /// failed.</summary>
     public Task<ApiOutcome<PipelineProjectCopyResultDto, ApiError>> CopyProjectPipelinesAsync(
         PipelineProjectCopyRequest request, CancellationToken ct = default)
         => PostForApiErrorOutcomeAsync<PipelineProjectCopyRequest, PipelineProjectCopyResultDto>("api/pipelines/setup/copy", request, ct);
 
-    /// <summary>Recette R1-28: what would stop the project's existing pipelines from running.</summary>
+    /// <summary>What would stop the project's existing pipelines from running.</summary>
     public Task<PipelineSetupReadinessDto?> GetProjectReadinessAsync(int projectId, CancellationToken ct = default)
         => Http.GetFromJsonAsync<PipelineSetupReadinessDto>(
             $"api/pipelines/setup/project-readiness?projectId={projectId}", JsonOptions.Web, ct);
 
-    /// <summary>Recette R1-28: the same verdict for one pipeline, asked before it is launched.</summary>
+    /// <summary>The same verdict for one pipeline, asked before it is launched.</summary>
     public Task<PipelineSetupReadinessDto?> GetPipelineReadinessAsync(int pipelineId, CancellationToken ct = default)
         => Http.GetFromJsonAsync<PipelineSetupReadinessDto>(
             $"api/pipelines/setup/pipeline-readiness?pipelineId={pipelineId}", JsonOptions.Web, ct);
 
-    /// <summary>PLAN-003 lot 20 / D26: usual stage and step durations over the last successful runs of
-    /// the pipeline that started before this run.</summary>
+    /// <summary>Usual stage and step durations are drawn from successful runs started before this
+    /// run.</summary>
     public Task<RunStageBaselinesDto?> GetStageBaselinesAsync(int pipelineId, int runId, CancellationToken ct = default)
         => Http.GetFromJsonAsync<RunStageBaselinesDto>(
             $"api/pipelines/{pipelineId}/runs/{runId}/stage-baselines", JsonOptions.Web, ct);
 
-    /// <summary>PLAN-003 lot 30: libraries and vaults the project's pipelines require and it lacks.</summary>
+    /// <summary>Libraries and vaults the project's pipelines require and it lacks.</summary>
     public async Task<List<UnmetRequirementDto>> GetUnmetRequirementsAsync(int projectId, CancellationToken ct = default)
         => await Http.GetFromJsonAsync<List<UnmetRequirementDto>>(
             $"api/pipelines/setup/unmet?projectId={projectId}", JsonOptions.Web, ct) ?? [];
 
-    /// <summary>PLAN-003 lot 30: creates what the project's existing pipelines are waiting for.</summary>
+    /// <summary>Creates what the project's existing pipelines are waiting for.</summary>
     public Task<PipelineRequirementsProvisionResultDto?> ProvisionUnmetRequirementsAsync(int projectId, CancellationToken ct = default)
         => PostJsonAsync<object, PipelineRequirementsProvisionResultDto>(
             $"api/pipelines/setup/provision-unmet?projectId={projectId}", new { }, ct);
 
-    /// <summary>PLAN-003 lot 30 / D22: creates the libraries and vaults the templates require, keys
-    /// only, values empty.</summary>
+    /// <summary>Creates the libraries and vaults required by the templates with keys only and empty
+    /// values.</summary>
     public Task<PipelineRequirementsProvisionResultDto?> ProvisionSetupRequirementsAsync(
         int projectId, IReadOnlyList<string> templateNames, CancellationToken ct = default)
         => PostJsonAsync<PipelineSetupReadinessRequest, PipelineRequirementsProvisionResultDto>(
@@ -257,7 +267,8 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
 
     // Optional queue-time parameters and a per-run source-branch override (validated server-side).
     public Task<ApiOutcome<PipelineRunDto, YamlValidationResultDto>> TriggerPipelineRunAsync(
-        int id, Dictionary<string, string>? parameters = null, string? sourceBranch = null, CancellationToken ct = default)
+        int id, Dictionary<string, string>? parameters = null, string? sourceBranch = null, CancellationToken ct = default,
+        bool runToEnd = false)
     {
         // Expand-contract wire shape: old backends expect a top-level dictionary. New backends split the
         // reserved branch key back into PipelineRunRequest.SourceBranch, so both deployment colours work.
@@ -267,9 +278,17 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         if (!string.IsNullOrWhiteSpace(sourceBranch))
             body["AETHEUS_RUN_BRANCH"] = sourceBranch;
         body["AETHEUS_RUN_IDEMPOTENCY_KEY"] = Guid.NewGuid().ToString("N");
+        // Sent only when chosen, and only offered when GetRunOptionsAsync said the backend accepts it.
+        if (runToEnd)
+            body["AETHEUS_RUN_TO_END"] = "true";
         return PostForOutcomeAsync<PipelineRunDto, YamlValidationResultDto>(
             $"api/pipelines/{id}/run", body, ct);
     }
+
+
+    /// <summary>The launch options this instance offers for a manual run ("run to end").</summary>
+    public Task<PipelineRunOptionsDto?> GetRunOptionsAsync(CancellationToken ct = default)
+        => GetJsonAsync<PipelineRunOptionsDto>("api/pipelines/run-options", ct);
 
 
     // P: the queue-time parameters declared by the pipeline's authoritative (git-first) YAML.
@@ -329,13 +348,13 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
             query.Add($"sortBy={Uri.EscapeDataString(sortBy)}");
             query.Add($"sortDescending={sortDescending.ToString().ToLowerInvariant()}");
         }
-        // Recette R-224: the fleet grid's column header filters.
+        // The fleet grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<PipelineFleetItemDto>>(
             GridColumnFilters.AddTo($"api/pipelines/fleet?{string.Join('&', query)}", filters), JsonOptions.Web, ct)
             ?? new PaginatedResult<PipelineFleetItemDto>();
     }
 
-    /// <summary>Recette R-224: the template names the fleet's Template column filter offers.</summary>
+    /// <summary>The template names the fleet's Template column filter offers.</summary>
     public async Task<PipelineFleetFilterValuesDto> GetPipelineFleetFilterValuesAsync(CancellationToken ct = default) =>
         await GetJsonAsync<PipelineFleetFilterValuesDto>("api/pipelines/fleet/filter-values", ct).ConfigureAwait(false) ?? new();
 
@@ -390,7 +409,7 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         if (!string.IsNullOrWhiteSpace(request?.BranchName)) query["branchName"] = request.BranchName;
         if (!string.IsNullOrWhiteSpace(request?.CommitHash)) query["commitHash"] = request.CommitHash;
 
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<PipelineRunDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString($"api/pipelines/{pipelineId}/runs", query), request?.Filters),
             JsonOptions.Web)
@@ -404,10 +423,16 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
     }
 
 
-    /// <summary>Recette R-498: who launched the run and which runs it started.</summary>
+    /// <summary>Who launched the run and which runs it started.</summary>
     public async Task<PipelineRunLineageDto?> GetPipelineRunLineageAsync(int runId, CancellationToken ct = default)
     {
         return await Http.GetFromJsonAsync<PipelineRunLineageDto>($"api/pipelines/runs/{runId}/lineage", JsonOptions.Web, ct);
+    }
+
+    /// <summary>The expand/contract gate verdicts the run's migrate steps reported (recette R1-43).</summary>
+    public async Task<List<PipelineRunMigrationGateDto>> GetPipelineRunMigrationGateAsync(int runId, CancellationToken ct = default)
+    {
+        return await Http.GetFromJsonAsync<List<PipelineRunMigrationGateDto>>($"api/pipelines/runs/{runId}/migration-gate", JsonOptions.Web, ct) ?? [];
     }
 
     public async Task<PipelineRunQueueStateDto?> GetPipelineRunQueueAsync(int runId, CancellationToken ct = default)
@@ -455,15 +480,38 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         => await Http.GetFromJsonAsync<List<PipelineApprovalDto>>(
             $"api/pipelines/runs/{runId}/approvals", JsonOptions.Web, ct) ?? [];
 
-    /// <summary>PLAN-007 lot 7: every approval still waiting, across the pipelines the user may read.</summary>
+    /// <summary>Every approval still waiting, across the pipelines the user may read.</summary>
     public async Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(CancellationToken ct = default)
         => await Http.GetFromJsonAsync<List<PendingApprovalDto>>(
             "api/pipelines/approvals/pending", JsonOptions.Web, ct) ?? [];
 
-    /// <summary>Recette R2-116: a refused decision keeps the reason the backend gives (already decided,
-    /// run ended, run not moved), so the page can say why instead of one generic failure.</summary>
+    /// <summary>A refused decision keeps the reason the backend gives (already decided, run ended,
+    /// run not moved), so the page can say why instead of one generic failure.</summary>
     public Task<ApiOutcome<PipelineApprovalDto, ApiError>> DecideApprovalAsync(
         int approvalId, ApprovalDecisionRequest request, CancellationToken ct = default)
         => PostForApiErrorOutcomeAsync<ApprovalDecisionRequest, PipelineApprovalDto>(
             $"api/pipelines/approvals/{approvalId}/decide", request, ct);
+
+    /// <summary>The pipelines a user owns (administrators only).</summary>
+    public async Task<List<PipelineOwnershipDto>> GetOwnedPipelinesAsync(string owner, CancellationToken ct = default)
+        => await Http.GetFromJsonAsync<List<PipelineOwnershipDto>>(
+            QueryHelpers.AddQueryString("api/pipelines/ownership/owned", "owner", owner), JsonOptions.Web, ct) ?? [];
+
+    /// <summary>The active users a pipeline can be given to.</summary>
+    public async Task<List<PipelineOwnerCandidateDto>> GetOwnerCandidatesAsync(CancellationToken ct = default)
+        => await Http.GetFromJsonAsync<List<PipelineOwnerCandidateDto>>(
+            "api/pipelines/ownership/candidates", JsonOptions.Web, ct) ?? [];
+
+    /// <summary>What an owner transfer would do, with the Server.Admin warnings, without
+    /// writing.</summary>
+    public Task<ApiOutcome<PipelineOwnerTransferResultDto, ApiError>> PreviewOwnerTransferAsync(
+        PipelineOwnerTransferRequest request, CancellationToken ct = default)
+        => PostForApiErrorOutcomeAsync<PipelineOwnerTransferRequest, PipelineOwnerTransferResultDto>(
+            "api/pipelines/ownership/preview", request, ct);
+
+    /// <summary>Changes the owner of the pipelines of the request's scope.</summary>
+    public Task<ApiOutcome<PipelineOwnerTransferResultDto, ApiError>> TransferOwnerAsync(
+        PipelineOwnerTransferRequest request, CancellationToken ct = default)
+        => PostForApiErrorOutcomeAsync<PipelineOwnerTransferRequest, PipelineOwnerTransferResultDto>(
+            "api/pipelines/ownership/transfer", request, ct);
 }

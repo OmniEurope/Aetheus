@@ -160,7 +160,7 @@ public class ServerHubTests
 public class PipelineHubTests
 {
     private readonly PipelineHub _sut;
-    private readonly IPipelineRepository _pipelineRepoMock = Substitute.For<IPipelineRepository>();
+    private readonly IPipelineRunLookupReader _pipelineRepoMock = Substitute.For<IPipelineRunLookupReader>();
     private readonly IResourceAuthorizationService _authzMock = Substitute.For<IResourceAuthorizationService>();
     private readonly HubCallerContext _contextMock = Substitute.For<HubCallerContext>();
     private readonly IGroupManager _groupsMock = Substitute.For<IGroupManager>();
@@ -372,6 +372,42 @@ public class EntityHubTests
 
         await _groupsMock.Received(1).AddToGroupAsync("conn-6", "entity-Pipeline-8", Arg.Any<CancellationToken>());
         await _groupsMock.Received(1).AddToGroupAsync("conn-6", "entity-Pipeline-org-3", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LeaveEntityUpdates_Admin_LeavesTheAggregateGroupOnly()
+    {
+        _authzMock.GetAccessibleResourceIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), ResourceType.Project, Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns((List<int>?)null);
+
+        await _sut.LeaveEntityUpdates(ResourceType.Project);
+
+        await _groupsMock.Received(1).RemoveFromGroupAsync("conn-6", "entity-Project-all", Arg.Any<CancellationToken>());
+        await _groupsMock.Received(1).RemoveFromGroupAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LeaveEntityUpdates_ProjectNonAdmin_LeavesPerResourceAndPerOrgGroups()
+    {
+        _authzMock.GetAccessibleResourceIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), ResourceType.Project, Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 5, 6 });
+        _authzMock.GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 3 });
+
+        await _sut.LeaveEntityUpdates(ResourceType.Project);
+
+        await _groupsMock.Received(1).RemoveFromGroupAsync("conn-6", "entity-Project-5", Arg.Any<CancellationToken>());
+        await _groupsMock.Received(1).RemoveFromGroupAsync("conn-6", "entity-Project-6", Arg.Any<CancellationToken>());
+        await _groupsMock.Received(1).RemoveFromGroupAsync("conn-6", "entity-Project-org-3", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LeaveEntityUpdates_NonOrgScopedType_DoesNotConsultOrganizations()
+    {
+        _authzMock.GetAccessibleResourceIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), ResourceType.Vault, Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 9 });
+
+        await _sut.LeaveEntityUpdates(ResourceType.Vault);
+
+        await _groupsMock.Received(1).RemoveFromGroupAsync("conn-6", "entity-Vault-9", Arg.Any<CancellationToken>());
+        await _groupsMock.Received(1).RemoveFromGroupAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _authzMock.DidNotReceive().GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

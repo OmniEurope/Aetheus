@@ -12,7 +12,7 @@ public class CertbotCertificate
     public string KeyPath { get; set; } = string.Empty;
     public DateTime LastUpdated { get; set; }
 
-    // PLAN-007: how the lineage renews, as the agent read it from its renewal file.
+    // Records the renewal method read by the agent from the lineage renewal file.
     public string Authenticator { get; set; } = string.Empty;
     public string WebrootPath { get; set; } = string.Empty;
     public CertbotRenewalConvention RenewalConvention { get; set; }

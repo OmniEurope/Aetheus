@@ -395,14 +395,14 @@ public class ServerDockerSectionFinalTests : BunitContext
         var cut = RenderSection();
         var tab = cut.FindComponent<DockerContainersTab>();
         typeof(DockerContainersTab).GetField("_inspectContainerId", Priv)!.SetValue(tab.Instance, "aaaaaaaaaaaa1111");
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 1,
             ServerId = 20,
             TaskName = "docker inspect",
             Status = TaskExecutionStatus.Success,
             Output = "{\"Id\":\"aaa\"}"
-        }));
+        })));
         var content = (string?)typeof(DockerContainersTab).GetField("_inspectContent", Priv)!.GetValue(tab.Instance);
         Assert.Contains("aaa", content!);
     }
@@ -415,14 +415,14 @@ public class ServerDockerSectionFinalTests : BunitContext
         typeof(DockerComposeTab).GetField("_composeEditorVisible", Priv)!.SetValue(composeTab.Instance, true);
         typeof(DockerComposeTab).GetField("_composeFileLoading", Priv)!.SetValue(composeTab.Instance, true);
         typeof(DockerComposeTab).GetField("_composeEditorStack", Priv)!.SetValue(composeTab.Instance, "web");
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 2,
             ServerId = 20,
             TaskName = DockerTaskNames.ComposeFile("web"),
             Status = TaskExecutionStatus.Success,
             Output = "version: '3'"
-        }));
+        })));
         var content = (string)typeof(DockerComposeTab).GetField("_composeEditorContent", Priv)!.GetValue(composeTab.Instance)!;
         Assert.Equal("version: '3'", content);
     }
@@ -488,36 +488,6 @@ public class ServerDockerSectionFinalTests : BunitContext
         Assert.Equal("DockerRemoveImageConfirm", dialog.LastConfirmMessage);
         Assert.DoesNotContain(_handler.Requests, request =>
             request.Method == "DELETE" && request.Url.Contains("docker/images"));
-    }
-
-    // === BrowseParentAsync ===
-
-    [Fact]
-    public async Task BrowseParentAsync_AtRoot_Returns()
-    {
-        var cut = RenderSection();
-        var tab = cut.FindComponent<DockerContainersTab>();
-        typeof(DockerContainersTab).GetField("_browsePath", Priv)!.SetValue(tab.Instance, "/");
-        typeof(DockerContainersTab).GetField("_browseContainerId", Priv)!.SetValue(tab.Instance, "aaaaaaaaaaaa1111");
-
-        var method = typeof(DockerContainersTab).GetMethod("BrowseParentAsync", Priv)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(tab.Instance, [])!);
-        var path = (string)typeof(DockerContainersTab).GetField("_browsePath", Priv)!.GetValue(tab.Instance)!;
-        Assert.Equal("/", path);
-    }
-
-    [Fact]
-    public async Task BrowseParentAsync_FromSubDir_GoesUp()
-    {
-        var cut = RenderSection();
-        var tab = cut.FindComponent<DockerContainersTab>();
-        typeof(DockerContainersTab).GetField("_browsePath", Priv)!.SetValue(tab.Instance, "/var/www/html");
-        typeof(DockerContainersTab).GetField("_browseContainerId", Priv)!.SetValue(tab.Instance, "aaaaaaaaaaaa1111");
-
-        var method = typeof(DockerContainersTab).GetMethod("BrowseParentAsync", Priv)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(tab.Instance, [])!);
-        var path = (string)typeof(DockerContainersTab).GetField("_browsePath", Priv)!.GetValue(tab.Instance)!;
-        Assert.Equal("/var/www", path);
     }
 
     // === OnShellKeyDown ===

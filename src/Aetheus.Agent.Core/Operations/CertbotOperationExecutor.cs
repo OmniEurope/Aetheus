@@ -26,6 +26,14 @@ public sealed class CertbotOperationExecutor(
     private const string ManageHelperPath = "/usr/local/lib/aetheus/aetheus-certbot-manage";
     private readonly AetheusAgentOptions _options = options.Value;
 
+    internal bool IsLinux { get; init; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+
+    // The process runner, replaceable so the helper argv and environment are asserted without sudo.
+    internal Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>>
+        RunProcessAsync
+    { get; init; } = static (startInfo, timeoutSeconds, onOutput, processLogger, ct) =>
+            ProcessRunner.RunAsync(startInfo, timeoutSeconds, onOutput, processLogger, ct);
+
     public bool CanHandle(OperationKind kind) => kind is OperationKind.CertbotObtain
         or OperationKind.CertbotRenew or OperationKind.CertbotRenewAll
         or OperationKind.CertbotDelete or OperationKind.CertbotRevoke
@@ -55,7 +63,7 @@ public sealed class CertbotOperationExecutor(
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken ct)
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (!IsLinux)
         {
             await onOutput("Certbot operations are only supported on Linux", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
@@ -86,7 +94,7 @@ public sealed class CertbotOperationExecutor(
         await onOutput(mode == "local"
             ? $"Creating local certificate for {primaryDomain} (ACME disabled)."
             : $"Requesting certificate for {primaryDomain} (real ACME via Apache webroot).", TaskLogLevel.Info).ConfigureAwait(false);
-        return await ProcessRunner.RunAsync(psi, timeoutSeconds, onOutput, logger, ct).ConfigureAwait(false);
+        return await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, ct).ConfigureAwait(false);
     }
 
     // Renew / delete / revoke a certificate by lineage name (or renew all) via the root-owned
@@ -98,7 +106,7 @@ public sealed class CertbotOperationExecutor(
         OperationKind kind, string certName, int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (!IsLinux)
         {
             await onOutput("Certbot operations are only supported on Linux", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
@@ -132,7 +140,7 @@ public sealed class CertbotOperationExecutor(
         foreach (var arg in BuildManageArgv(kind, verb, certName)) psi.ArgumentList.Add(arg);
 
         await onOutput($"certbot {verb}{(IsLineageless(kind) ? " (all)" : $" {certName}")}…", TaskLogLevel.Info).ConfigureAwait(false);
-        return await ProcessRunner.RunAsync(psi, timeoutSeconds, onOutput, logger, ct).ConfigureAwait(false);
+        return await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, ct).ConfigureAwait(false);
     }
 
     // `sudo -n <issue-helper> <domain>` - argv-exact; the helper re-validates the domain.

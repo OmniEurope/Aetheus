@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.AppMonitoring;
 
-/// <summary>
-/// R-455: how long a supervised application's routes take to answer, as its <c>Aetheus.Telemetry</c>
-/// package (0.2.0 or later) last exported them: the 24 hours of requests the application kept in memory,
-/// grouped by route template and method.
-/// </summary>
+/// <summary> How long a supervised application's routes take to answer, as its
+/// <c>Aetheus.Telemetry</c> package (0.2.0 or later) last exported them: the 24 hours of requests
+/// the application kept in memory, grouped by route template and method. </summary>
 public sealed record AppPerformanceReportDto
 {
     /// <summary>When the application last exported these figures. Null when it never did: telemetry off,
     /// or a package older than the per-route export.</summary>
     public DateTime? MeasuredAt { get; init; }
 
-    /// <summary>Recette R-476: the oldest request the figures count, as the application said at that
-    /// export: 24 hours before it at most, later after a restart. Null when the package is older than
-    /// 1.0.0 and does not say.</summary>
+    /// <summary>The oldest request the figures count, as the application said at that export: 24
+    /// hours before it at most, later after a restart. Null when the package is older than 1.0.0
+    /// and does not say.</summary>
     public DateTime? WindowSince { get; init; }
 
     /// <summary>One line per route and method, slowest 95th percentile first.</summary>

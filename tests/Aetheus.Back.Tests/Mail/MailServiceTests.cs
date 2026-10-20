@@ -16,6 +16,7 @@ public class MailServiceTests
     private readonly IEncryptionService _encryption = Substitute.For<IEncryptionService>();
     private readonly IServerRepository _serverRepo = Substitute.For<IServerRepository>();
     private readonly Aetheus.Back.Components.Tasks.ITaskService _taskService = Substitute.For<Aetheus.Back.Components.Tasks.ITaskService>();
+    private readonly IMailMasterSecrets _masterSecrets = Substitute.For<IMailMasterSecrets>();
     private readonly MailService _sut;
 
     public MailServiceTests()
@@ -26,7 +27,9 @@ public class MailServiceTests
         // Default: a mail-setup-capable server so SetupAsync passes the capability gate (F6).
         _serverRepo.FindServerAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Name = "srv", Hostname = "h", MailSetupAvailable = true });
-        _sut = new MailService(_repo, _audit, _encryption, _serverRepo, _taskService);
+        // Default: a helper that enforces quotas (DEP-005); the refusal tests lower it.
+        _repo.GetStateAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new MailState { HelperVersion = MailService.RetryTuningMinimumHelperVersion });
+        _sut = new MailService(_repo, _audit, _encryption, _serverRepo, _taskService, _masterSecrets);
     }
 
     // --- GetStateAsync ---
@@ -266,6 +269,83 @@ public class MailServiceTests
         await _audit.Received(1).LogAsync("MailAddAccount", "Mail", 1, "user@example.com", TestContext.Current.CancellationToken);
     }
 
+    [Fact]
+    public async Task CreateAccountAsync_MailboxGoneFromTheServer_ReusesTheRowAndQueuesTheTask()
+    {
+        _repo.GetDomainsAsync(1, TestContext.Current.CancellationToken).Returns(
+        [
+            new MailDomain { Id = 10, ServerId = 1, Name = "example.com" }
+        ]);
+        var gone = new MailAccount
+        {
+            Id = 7,
+            Email = "user@example.com",
+            IsActive = false,
+            MissingSince = DateTime.UtcNow.AddDays(-1),
+            QuotaMb = 0,
+            MailDomain = new MailDomain { Id = 10, ServerId = 1, Name = "example.com" }
+        };
+        _repo.FindAccountByEmailAsync("user@example.com", TestContext.Current.CancellationToken).Returns(gone);
+
+        var result = await _sut.CreateAccountAsync(1, new CreateMailAccountRequest
+        {
+            Email = "user@example.com",
+            Password = "secure-password",
+            QuotaMb = 100
+        }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(7, result.Id);
+        Assert.True(result.IsActive);
+        Assert.Null(result.MissingSince);
+        Assert.Equal(100, result.QuotaMb);
+        await _repo.DidNotReceive().AddAccountAsync(Arg.Any<MailAccount>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).UpdateAccountAsync(gone, TestContext.Current.CancellationToken);
+        await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t => t.Command.Contains("user@example.com")), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CreateAccountAsync_MailboxAlreadyOnThisServer_IsAConflictWithoutTask()
+    {
+        _repo.GetDomainsAsync(1, TestContext.Current.CancellationToken).Returns(
+        [
+            new MailDomain { Id = 10, ServerId = 1, Name = "example.com" }
+        ]);
+        _repo.FindAccountByEmailAsync("user@example.com", TestContext.Current.CancellationToken).Returns(
+            new MailAccount { Id = 7, Email = "user@example.com", IsActive = true, MailDomain = new MailDomain { Id = 10, ServerId = 1, Name = "example.com" } });
+
+        var exception = await Assert.ThrowsAsync<ConflictException>(() => _sut.CreateAccountAsync(1,
+            new CreateMailAccountRequest { Email = "user@example.com", Password = "secure-password", QuotaMb = 100 },
+            ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("user@example.com", exception.Message, StringComparison.Ordinal);
+        await _repo.DidNotReceive().AddAccountAsync(Arg.Any<MailAccount>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateAccountAsync_AddressOnAnotherServer_IsAConflictEvenWhenFlaggedAbsent()
+    {
+        _repo.GetDomainsAsync(1, TestContext.Current.CancellationToken).Returns(
+        [
+            new MailDomain { Id = 10, ServerId = 1, Name = "example.com" }
+        ]);
+        _repo.FindAccountByEmailAsync("user@example.com", TestContext.Current.CancellationToken).Returns(
+            new MailAccount
+            {
+                Id = 7,
+                Email = "user@example.com",
+                MissingSince = DateTime.UtcNow.AddDays(-1),
+                MailDomain = new MailDomain { Id = 20, ServerId = 2, Name = "example.com" }
+            });
+
+        await Assert.ThrowsAsync<ConflictException>(() => _sut.CreateAccountAsync(1,
+            new CreateMailAccountRequest { Email = "user@example.com", Password = "secure-password", QuotaMb = 100 },
+            ct: TestContext.Current.CancellationToken));
+
+        await _repo.DidNotReceive().UpdateAccountAsync(Arg.Any<MailAccount>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
     // --- UpdateAccountAsync ---
 
     [Fact]
@@ -314,6 +394,107 @@ public class MailServiceTests
 
         Assert.Equal(2048, result.QuotaMb);
         Assert.False(result.IsActive);
+        // DEP-005: the new quota reaches Dovecot through mail-manage set-quota (address target, MiB in env).
+        await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
+            t.Operation == OperationKind.MailSetQuota
+            && t.Command == "user@test.com"
+            && t.EnvironmentVariables != null && t.EnvironmentVariables.Contains("\"2048\"")), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UpdateAccountAsync_UnchangedQuota_QueuesNoQuotaTask()
+    {
+        _repo.GetAccountAsync(1, TestContext.Current.CancellationToken).Returns(
+            new MailAccount { Id = 1, Email = "user@test.com", QuotaMb = 1024, IsActive = true, MailDomain = new MailDomain { ServerId = 1, Name = "test.com" } });
+
+        await _sut.UpdateAccountAsync(1, 1, new UpdateMailAccountRequest { QuotaMb = 1024, IsActive = false }, ct: TestContext.Current.CancellationToken);
+
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdateAccountAsync_QuotaWithoutMailManagement_RefusesAndKeepsTheStoredQuota()
+    {
+        var account = new MailAccount { Id = 1, Email = "user@test.com", QuotaMb = 1024, MailDomain = new MailDomain { ServerId = 1, Name = "test.com" } };
+        _repo.GetAccountAsync(1, TestContext.Current.CancellationToken).Returns(account);
+        _serverRepo.FindServerAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Server { Name = "srv", Hostname = "h", MailSetupAvailable = false });
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.UpdateAccountAsync(1, 1, new UpdateMailAccountRequest { QuotaMb = 10 }, ct: TestContext.Current.CancellationToken));
+
+        Assert.Equal(1024, account.QuotaMb);
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().UpdateAccountAsync(Arg.Any<MailAccount>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(0)]
+    public async Task UpdateAccountAsync_QuotaWithOldHelper_RefusesWithoutTask(int helperVersion)
+    {
+        var account = new MailAccount { Id = 1, Email = "user@test.com", QuotaMb = 1024, MailDomain = new MailDomain { ServerId = 1, Name = "test.com" } };
+        _repo.GetAccountAsync(1, TestContext.Current.CancellationToken).Returns(account);
+        _repo.GetStateAsync(1, Arg.Any<CancellationToken>()).Returns(new MailState { HelperVersion = helperVersion });
+
+        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.UpdateAccountAsync(1, 1, new UpdateMailAccountRequest { QuotaMb = 10 }, ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("Update the agent", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(1024, account.QuotaMb);
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdateAccountAsync_QuotaWithNoInventory_Refuses()
+    {
+        _repo.GetAccountAsync(1, TestContext.Current.CancellationToken).Returns(
+            new MailAccount { Id = 1, Email = "user@test.com", QuotaMb = 1024, MailDomain = new MailDomain { ServerId = 1, Name = "test.com" } });
+        _repo.GetStateAsync(1, Arg.Any<CancellationToken>()).Returns((MailState?)null);
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.UpdateAccountAsync(1, 1, new UpdateMailAccountRequest { QuotaMb = 10 }, ct: TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdateAccountAsync_NonQuotaChangeWithOldHelper_StillWorks()
+    {
+        _repo.GetAccountAsync(1, TestContext.Current.CancellationToken).Returns(
+            new MailAccount { Id = 1, Email = "user@test.com", QuotaMb = 1024, IsActive = true, MailDomain = new MailDomain { ServerId = 1, Name = "test.com" } });
+        _repo.GetStateAsync(1, Arg.Any<CancellationToken>()).Returns(new MailState { HelperVersion = 4 });
+
+        var result = await _sut.UpdateAccountAsync(1, 1, new UpdateMailAccountRequest { IsActive = false }, ct: TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsActive);
+    }
+
+    [Fact]
+    public async Task CreateAccountAsync_LimitedQuotaWithOldHelper_RefusesWithoutAccountOrTask()
+    {
+        _repo.GetDomainsAsync(1, TestContext.Current.CancellationToken).Returns([new MailDomain { Id = 10, Name = "example.com" }]);
+        _repo.GetStateAsync(1, Arg.Any<CancellationToken>()).Returns(new MailState { HelperVersion = 4 });
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.CreateAccountAsync(1,
+            new CreateMailAccountRequest { Email = "user@example.com", Password = "secure-password", QuotaMb = 2048 },
+            ct: TestContext.Current.CancellationToken));
+
+        await _repo.DidNotReceive().AddAccountAsync(Arg.Any<MailAccount>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateAccountAsync_UnlimitedQuotaWithOldHelper_IsAccepted()
+    {
+        _repo.GetDomainsAsync(1, TestContext.Current.CancellationToken).Returns([new MailDomain { Id = 10, Name = "example.com" }]);
+        _repo.GetStateAsync(1, Arg.Any<CancellationToken>()).Returns(new MailState { HelperVersion = 4 });
+
+        var result = await _sut.CreateAccountAsync(1,
+            new CreateMailAccountRequest { Email = "user@example.com", Password = "secure-password", QuotaMb = 0 },
+            ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("user@example.com", result.Email);
+        await _repo.Received(1).AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 
     // --- DeleteAccountAsync ---
@@ -359,6 +540,7 @@ public class MailServiceTests
     [InlineData(MailAction.StartPostfix, OperationKind.MailStartPostfix)]
     [InlineData(MailAction.StopDovecot, OperationKind.MailStopDovecot)]
     [InlineData(MailAction.FlushQueue, OperationKind.MailFlushQueue)]
+    [InlineData(MailAction.ApplyRetryTuning, OperationKind.MailRetryTuning)]
     [InlineData(MailAction.TestConfig, OperationKind.MailTestConfig)]
     public async Task ExecuteActionAsync_CreatesCorrectTask(MailAction action, OperationKind expectedOperation)
     {
@@ -367,6 +549,18 @@ public class MailServiceTests
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
             t.ServerId == 1 && t.Operation == expectedOperation && t.Status == TaskExecutionStatus.Pending), TestContext.Current.CancellationToken);
         await _audit.Received(1).LogAsync($"Mail{action}", "Mail", 1, action.ToString(), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_RetryTuning_RefusesAnOlderHelperWithoutQueueingATask()
+    {
+        _repo.GetStateAsync(1, Arg.Any<CancellationToken>()).Returns(new MailState { HelperVersion = MailService.RetryTuningMinimumHelperVersion - 1 });
+
+        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.ExecuteActionAsync(1, new MailActionRequest { Action = MailAction.ApplyRetryTuning }, ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("retry timings", ex.Message, StringComparison.Ordinal);
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 
     // --- GetLogsAsync ---
@@ -464,6 +658,53 @@ public class MailServiceTests
     }
 
     [Fact]
+    public async Task SetupAsync_CarriesANewMasterPassword_AndStoresTheSameOneOnceQueued()
+    {
+        // Recette R1-41 / R3-50: the administrator access is (re)created with the stack.
+        string? queuedMaster = null;
+        await _repo.AddTaskAsync(Arg.Do<ServerTask>(task =>
+        {
+            var env = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(task.EnvironmentVariables!)!;
+            queuedMaster = env[MailSetupEnv.MasterPassword];
+        }), Arg.Any<CancellationToken>());
+
+        await _sut.SetupAsync(1, new MailSetupRequest
+        {
+            Hostname = "mail.example.com",
+            Domain = "example.com",
+            DkimSelector = "default",
+            AdminEmail = "admin@example.com",
+            AdminPassword = "secure-password",
+            QuotaMb = 1024
+        }, ct: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(queuedMaster);
+        Assert.Equal(40, queuedMaster!.Length);
+        Assert.True(MailValidation.IsValidPassword(queuedMaster));
+        await _masterSecrets.Received(1).StoreAsync(1, queuedMaster, Arg.Any<CancellationToken>());
+        // The audit names the domain, never the master password.
+        Assert.DoesNotContain(_audit.ReceivedCalls(), call => call.GetArguments().OfType<string>().Any(a => a.Contains(queuedMaster)));
+    }
+
+    [Fact]
+    public async Task SetupAsync_Refused_StoresNoMasterPassword()
+    {
+        _repo.HasOpenTaskAsync(Arg.Any<int>(), Arg.Any<IReadOnlyCollection<OperationKind>>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        await Assert.ThrowsAsync<ConflictException>(() => _sut.SetupAsync(1, new MailSetupRequest
+        {
+            Hostname = "mail.example.com",
+            Domain = "example.com",
+            DkimSelector = "default",
+            AdminEmail = "admin@example.com",
+            AdminPassword = "secure-password",
+            QuotaMb = 1024
+        }, ct: TestContext.Current.CancellationToken));
+
+        Assert.Empty(_masterSecrets.ReceivedCalls());
+    }
+
+    [Fact]
     public async Task SetupAsync_CapabilityMissing_Throws_AndQueuesNoTask()
     {
         _serverRepo.FindServerAsync(1, Arg.Any<CancellationToken>())
@@ -488,8 +729,7 @@ public class MailServiceTests
     [Fact]
     public async Task SetupAsync_WhileASetupOrReinstallRuns_IsRefused_AndQueuesNoTask()
     {
-        // Recette R2-085: tasks 23257 and 23258, two full setups of one domain 3 s apart, the second
-        // started while the first ran.
+        // Refuse a second setup while one is already running for the server.
         _repo.HasOpenTaskAsync(1, Arg.Is<IReadOnlyCollection<OperationKind>>(k =>
                 k.Contains(OperationKind.MailSetup) && k.Contains(OperationKind.MailPurge)), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -511,8 +751,8 @@ public class MailServiceTests
     [Fact]
     public async Task R2101_SetupAsync_OnADomainAlreadyRecorded_UpdatesTheRows_ThenQueuesTheTask()
     {
-        // Recette R2-101: a setup re-run on a domain already recorded inserted it again and died on the
-        // unique (ServerId, Name) index with HTTP 500, after its task had been queued.
+        // Reuse recorded domain state and persist it before queuing setup to avoid duplicate
+        // inserts.
         var domain = new MailDomain { Id = 7, ServerId = 1, Name = "example.com", DkimSelector = "old", IsActive = false };
         var account = new MailAccount { Id = 9, MailDomainId = 7, MailDomain = domain, Email = "admin@example.com", QuotaMb = 512, IsActive = false };
         _repo.FindDomainByNameAsync(1, "example.com", Arg.Any<CancellationToken>()).Returns(domain);

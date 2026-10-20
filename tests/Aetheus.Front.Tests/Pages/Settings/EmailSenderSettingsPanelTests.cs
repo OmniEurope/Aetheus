@@ -3,7 +3,7 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages;
 
-/// <summary>Recette R1-16: the platform e-mail sender tab.</summary>
+/// <summary>The platform e-mail sender tab.</summary>
 public sealed class EmailSenderSettingsPanelTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;

@@ -14,6 +14,7 @@ public sealed class ScannerProcessExecutionRunnerTests
         var root = Directory.CreateTempSubdirectory("aetheus-scanner-quota-").FullName;
         var output = Directory.CreateDirectory(Path.Combine(root, "output")).FullName;
         var cache = Directory.CreateDirectory(Path.Combine(root, "cache")).FullName;
+        var processStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var runner = Substitute.For<IScannerProcessRunner>();
         runner.RunAsync(
                 Arg.Any<ProcessStartInfo>(),
@@ -22,6 +23,7 @@ public sealed class ScannerProcessExecutionRunnerTests
                 Arg.Any<CancellationToken>())
             .Returns(async call =>
             {
+                processStarted.TrySetResult();
                 await Task.Delay(Timeout.InfiniteTimeSpan, call.Arg<CancellationToken>());
                 return new ExecutorResult(0, false);
             });
@@ -45,14 +47,15 @@ public sealed class ScannerProcessExecutionRunnerTests
                 30,
                 (_, _) => Task.CompletedTask,
                 TestContext.Current.CancellationToken);
-            await Task.Delay(TimeSpan.FromMilliseconds(100), TestContext.Current.CancellationToken);
+            // The cache grows only once the process is running: wait for that signal, not for 100 ms.
+            await processStarted.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
             await File.WriteAllBytesAsync(
                 Path.Combine(cache, "growing-cache.db"),
                 new byte[16],
                 TestContext.Current.CancellationToken);
 
             var (result, quotaExceeded) = await execution.WaitAsync(
-                TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+                TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
             Assert.True(quotaExceeded);
             Assert.NotEqual(0, result.ExitCode);

@@ -7,11 +7,8 @@ using Microsoft.Extensions.Options;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// Argv-construction coverage for three operation executors that were previously untested
-/// (Certbot / Docker / Rkhunter). The exact argv IS the security boundary (argv-exact sudoers /
-/// docker CLI, no shell), so a drift must break a test, not a production deploy.
-/// </summary>
+/// <summary>Verifies exact Certbot, Docker and Rkhunter argument vectors because they define the
+/// shell-free execution boundary.</summary>
 public class CertbotDockerRkhunterArgvTests
 {
     // ── Certbot ─────────────────────────────────────────────────────────
@@ -114,7 +111,7 @@ public class CertbotDockerRkhunterArgvTests
     {
         var argv = RkhunterOperationExecutor.BuildSudoArgv(OperationKind.RkhunterScan);
         Assert.Equal(
-            new[] { "-n", "/usr/bin/rkhunter", "--check", "--skip-keypress", "--nocolors", "--report-warnings-only" },
+            new[] { "-n", "/usr/local/lib/aetheus/aetheus-rkhunter", "check" },
             argv);
     }
 
@@ -122,14 +119,14 @@ public class CertbotDockerRkhunterArgvTests
     public void Rkhunter_Update_Argv_IsExact()
     {
         var argv = RkhunterOperationExecutor.BuildSudoArgv(OperationKind.RkhunterUpdate);
-        Assert.Equal(new[] { "-n", "/usr/bin/rkhunter", "--update", "--nocolors" }, argv);
+        Assert.Equal(new[] { "-n", "/usr/local/lib/aetheus/aetheus-rkhunter", "update" }, argv);
     }
 
     [Fact]
     public void Rkhunter_Propupd_Argv_IsExact()
     {
         var argv = RkhunterOperationExecutor.BuildSudoArgv(OperationKind.RkhunterPropupd);
-        Assert.Equal(new[] { "-n", "/usr/bin/rkhunter", "--propupd", "--nocolors" }, argv);
+        Assert.Equal(new[] { "-n", "/usr/local/lib/aetheus/aetheus-rkhunter", "propupd" }, argv);
     }
 
     [Fact]

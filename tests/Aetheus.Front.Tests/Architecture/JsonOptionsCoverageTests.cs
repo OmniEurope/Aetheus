@@ -4,21 +4,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Guards the convention that every HttpClient JSON read in
-/// <c>src/Aetheus.Front/Components</c> (where PLAN-009 moved the former <c>Services</c> folder and
-/// the api clients) passes <c>JsonOptions.Web</c>. Without
-/// it the global UTC→Local DateTime converter (wired through that options
-/// instance in <c>Components/Shared/JsonOptions.cs</c>) is bypassed, and timestamps
-/// come back as UTC - silently. Bugs of this class don't fail tests, they
-/// just make the UI show times in the wrong timezone, which is the worst
-/// possible failure mode (no error, just quietly-wrong data).
-///
-/// We scan the source text directly: no Roslyn / Cecil dependency keeps the
-/// test fast and self-contained, and the false-positive rate is zero because
-/// the codebase style centres each call on the helper or literally includes
-/// <c>JsonOptions.Web</c> in its argument list.
-/// </summary>
+/// <summary>HTTP JSON reads in frontend components must use JsonOptions.Web so the shared
+/// UTC-to-local conversion applies consistently. The guard scans call arguments in
+/// source.</summary>
 public class JsonOptionsCoverageTests
 {
     // Matches the start of a generic JSON-deserialize call. Balanced walks locate the
@@ -168,12 +156,9 @@ public class JsonOptionsCoverageTests
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Recette R2-107 (one method per kind of span, under the grade-A cyclomatic threshold): the index
-    /// after the comment (<c>/* */</c>, <c>//</c> and <c>///</c>) or string literal starting at
-    /// <paramref name="i"/>, their line breaks kept in <paramref name="sb"/>; <paramref name="i"/> itself
-    /// when none starts there; -1 for a block comment that never ends (the rest of the source is dropped).
-    /// </summary>
+    /// <summary>Returns the end of a comment or literal starting at <paramref name="i"/>, retaining
+    /// line breaks in <paramref name="sb"/>; unchanged index means no match and -1 means an
+    /// unterminated block.</summary>
     private static int SkipCommentOrString(string source, int i, StringBuilder sb)
     {
         if (string.CompareOrdinal(source, i, "/*", 0, 2) == 0)

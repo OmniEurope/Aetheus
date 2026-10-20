@@ -29,10 +29,9 @@ esac
 
 CONFIG_ARGS=""
 if [ -n "$MAX_PARALLELISM" ]; then
-    # Written to a stable path, not a temporary one: buildx reads this file again whenever the
-    # BuildKit container is restarted, so a deleted temp file would silently drop the cap.
-    # Under the agent account, not /var/lib: the agent runs unprivileged and cannot create a
-    # directory there, which is how run 1181 died on "Permission denied" instead of building.
+    # Store BuildKit configuration at a stable agent-owned path because container restarts reread it
+    # and the unprivileged agent cannot write under /var/lib. See
+    # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
     CONFIG_DIR="${AETHEUS_BUILDX_CONFIG_DIR:-${HOME:-/tmp}/.aetheus/buildx}"
     mkdir -p "$CONFIG_DIR"
     CONFIG_FILE="$CONFIG_DIR/buildkitd-$BUILDER.toml"

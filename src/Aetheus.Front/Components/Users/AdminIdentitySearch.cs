@@ -2,12 +2,10 @@
 
 namespace Aetheus.Front.Components.Users;
 
-/// <summary>
-/// Recette R-316: the one search of the Users, Organizations and Roles pages. The term lives here so it
-/// survives the move from one section to another, and each section's result count is counted once per
-/// term for the section links. The pages filter their grid with <see cref="Search"/> and reload when the
-/// term changes.
-/// </summary>
+/// <summary> The one search of the Users, Organizations and Roles pages. The term lives here so it
+/// survives the move from one section to another, and each section's result count is counted once
+/// per term for the section links. The pages filter their grid with <see cref="Search"/> and reload
+/// when the term changes. </summary>
 public sealed class AdminIdentitySearch(ApiClient api)
 {
     public const string UsersSection = "users";

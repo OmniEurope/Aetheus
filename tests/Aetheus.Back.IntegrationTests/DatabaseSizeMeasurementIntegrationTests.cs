@@ -5,12 +5,8 @@ using Npgsql;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-013 lot 1, control: the database size the Aetheus.Telemetry package measures on a real PostgreSQL
-/// equals what <c>psql</c> reads with <c>pg_database_size</c> and <c>pg_total_relation_size</c>, within
-/// 5 percent, and the row estimate follows <c>reltuples</c>. The measurement runs as the host runs it: the
-/// hosted service started with a connection factory, its gauges read through a <see cref="MeterListener"/>.
-/// </summary>
+/// <summary>Compares hosted database-size gauges with PostgreSQL catalog measurements within the
+/// specified tolerance, including row estimates.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class DatabaseSizeMeasurementIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

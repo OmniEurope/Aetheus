@@ -195,12 +195,8 @@ public sealed class SmokeOperationExecutor(
         return new ReadinessEvidence(true, true);
     }
 
-    /// <summary>
-    /// The frontend contract production already enforces before a cutover: the shell is real HTML,
-    /// and it is not cacheable. A cached deployment-bound shell asks for runtime hashes that the
-    /// retired colour no longer serves, which leaves the app blank. The nightly path never checked
-    /// this, so it could bless a deployment production would have rejected.
-    /// </summary>
+    /// <summary>Requires a real, non-cacheable frontend HTML shell so deployment swaps cannot leave
+    /// browsers requesting runtime assets from a retired colour.</summary>
     private async Task<bool> ProbeFrontendContractAsync(
         string origin, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
     {
@@ -268,6 +264,9 @@ public sealed class SmokeOperationExecutor(
         {
             "run", "--rm", "--network", "host", "--ipc", "host", "--pids-limit", "512",
             "--security-opt", "no-new-privileges",
+            // Names this container as Aetheus's browser smoke in the Docker inventory, where its host
+            // network is shown as expected instead of reported (PLAN-010 lot 1).
+            "--label", "io.aetheus.role=browser-smoke",
             "-e", "E2E_PRESERVE_DATABASE=true",
             "-e", $"E2E_FRONTEND_URL={origin}",
             // The suite logs in against the backend URL. Defaulting it to the application origin is

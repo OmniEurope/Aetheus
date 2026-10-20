@@ -10,12 +10,9 @@ using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// PLAN-003 2.7: the replaced colour stays running in reserve after a commit, "Revenir à N-1" puts
-/// traffic back on it in seconds, the next deployment recycles it, retire stops it, and the host
-/// itself undoes a deployment nobody confirmed in time. Every case runs the real executor against a
-/// real state directory; only Docker, the reload helper and the readiness probe are stood in for.
-/// </summary>
+/// <summary>Exercise reserve, rollback, retirement and confirmation deadlines using the real
+/// executor and a real state directory. Docker, reload and readiness dependencies are test
+/// doubles.</summary>
 public sealed class BlueGreenReserveTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"bg-reserve-{Guid.NewGuid():N}");
@@ -216,6 +213,64 @@ public sealed class BlueGreenReserveTests : IDisposable
         Assert.Equal(BlueGreenJournal.Switched, new BlueGreenJournal(Context(env)).State);
         Assert.Empty(BlueGreenConfirmation.ReadAll(_work));
     }
+
+    [Fact]
+    public async Task Watchdog_AnUnusableEnvironment_DisarmsTheWatchWithoutTouchingTraffic()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 12, 10, 0, 0, TimeSpan.Zero));
+        var env = await SwitchedBlueToGreenAsync("c-new", previousRevision: "c-old");
+        var unusable = new Dictionary<string, string>(env, StringComparer.OrdinalIgnoreCase) { ["AETHEUS_BG_STATE_DIR"] = "relative/state" };
+        BlueGreenConfirmation.Arm(_work, "aetheus-prod", 1, "c-new", unusable, time.GetUtcNow().UtcDateTime);
+
+        time.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal(0, await Watchdog(time).SweepAsync(Ct));
+
+        Assert.Equal("serve green\n", await File.ReadAllTextAsync(_conf, Ct));
+        Assert.Equal(BlueGreenJournal.Switched, new BlueGreenJournal(Context(env)).State);
+        Assert.Empty(BlueGreenConfirmation.ReadAll(_work));
+    }
+
+    [Fact]
+    public async Task Watchdog_WhileAnotherOperationHoldsTheEnvironment_RetriesOnTheNextPass()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 12, 10, 0, 0, TimeSpan.Zero));
+        var env = await SwitchedBlueToGreenAsync("c-new", previousRevision: "c-old");
+        BlueGreenConfirmation.Arm(_work, "aetheus-prod", 1, "c-new", env, time.GetUtcNow().UtcDateTime);
+        var watchdog = Watchdog(time);
+        time.Advance(TimeSpan.FromMinutes(5));
+
+        Assert.True(BlueGreenEnvironmentLease.TryAcquire(Context(env), out var lease, out var error), error);
+        using (lease)
+        {
+            Assert.Equal(0, await watchdog.SweepAsync(Ct));
+            Assert.Equal("serve green\n", await File.ReadAllTextAsync(_conf, Ct));
+            Assert.Single(BlueGreenConfirmation.ReadAll(_work));
+        }
+
+        Assert.Equal(1, await watchdog.SweepAsync(Ct));
+        Assert.Equal("serve blue\n", await File.ReadAllTextAsync(_conf, Ct));
+    }
+
+    [Fact]
+    public async Task Watchdog_WithoutAReloadHelper_KeepsTheJournalAndDisarms()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 12, 10, 0, 0, TimeSpan.Zero));
+        var env = await SwitchedBlueToGreenAsync("c-new", previousRevision: "c-old");
+        env.Remove("AETHEUS_BG_RELOAD_HELPER");
+        BlueGreenConfirmation.Arm(_work, "aetheus-prod", 1, "c-new", env, time.GetUtcNow().UtcDateTime);
+
+        time.Advance(TimeSpan.FromMinutes(5));
+        Assert.Equal(0, await Watchdog(time).SweepAsync(Ct));
+
+        Assert.Equal("serve green\n", await File.ReadAllTextAsync(_conf, Ct));
+        Assert.Equal(BlueGreenJournal.Switched, new BlueGreenJournal(Context(env)).State);
+        Assert.False(File.Exists(Path.Combine(_root, "auto-reverted")));
+        Assert.Empty(BlueGreenConfirmation.ReadAll(_work));
+    }
+
+    private BlueGreenConfirmationWatchdog Watchdog(TimeProvider time) =>
+        new(new RecordingShell(), Options.Create(new AetheusAgentOptions { WorkDirectory = _work }), time,
+            NullLogger<BlueGreenConfirmationWatchdog>.Instance);
 
     // ── Fixtures ────────────────────────────────────────────────────────────────────────────────
 

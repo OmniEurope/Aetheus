@@ -89,7 +89,7 @@ public class ProjectEditSectionTests : BunitContext
     }
 
     [Fact]
-    public void Renders_DeleteButton()
+    public void R3_71_TheFormNoLongerCarriesTheDeletion_ThePagesDangerZoneDoes()
     {
         var project = new ProjectDetailDto
         {
@@ -101,9 +101,8 @@ public class ProjectEditSectionTests : BunitContext
         var cut = Render<ProjectEditSection>(p => p
             .Add(x => x.Project, project));
 
-        // The Delete button carries the localized "Delete" text and the delete icon.
-        Assert.Contains(cut.FindAll("button.omni-button"), b => b.TextContent.Contains("Delete"));
-        Assert.Contains(cut.FindComponents<OmniIcon>(), icon => icon.Instance.Name == OmniIconName.Delete);
+        // Deleting the project moved to the danger zone of the settings page (ProjectSettingsDangerZoneTests).
+        Assert.DoesNotContain(cut.FindAll("button.omni-button"), b => b.TextContent.Contains("Delete"));
     }
 
     [Fact]

@@ -51,7 +51,7 @@ public sealed class PipelineSchedulerService(
     internal async Task CheckScheduledPipelinesAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
-        var pipelineRepo = scope.ServiceProvider.GetRequiredService<IPipelineRepository>();
+        var pipelineRepo = scope.ServiceProvider.GetRequiredService<IPipelineAutoTriggerRepository>();
         var runService = scope.ServiceProvider.GetRequiredService<IPipelineRunService>();
 
         var scheduledPipelines = await memoryCache.GetOrCreateAsync(ScheduledPipelinesCacheKey, async entry =>
@@ -97,8 +97,8 @@ public sealed class PipelineSchedulerService(
             }
             catch (BadRequestException ex)
             {
-                // Information, not Warning (recette R-521): R-522 leaves a failed run that carries the
-                // reasons, and a preflight refusal is already warned, problem by problem, by the preflight.
+                // Logs at Information because the failed run records the reasons and preflight
+                // already warns about each refusal.
                 logger.LogInformation(
                     ex,
                     "Scheduled pipeline {PipelineId} ({PipelineName}) was refused by configuration validation",

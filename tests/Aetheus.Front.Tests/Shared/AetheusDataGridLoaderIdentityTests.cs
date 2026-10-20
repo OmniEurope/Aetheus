@@ -47,7 +47,7 @@ public class AetheusDataGridLoaderIdentityTests : BunitContext
         var loads = 0;
         var cut = RenderGrid(rows, () => loads++);
 
-        cut.WaitForAssertion(() => Assert.True(loads > 0), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(loads > 0));
 
         var afterFirstRender = loads;
         cut.Render(parameters => parameters.Add(p => p.Count, rows.Count));
@@ -93,7 +93,7 @@ public class AetheusDataGridLoaderIdentityTests : BunitContext
             .Add(p => p.Count, rows.Count)
             .Add(p => p.Virtualize, true)
             .Add(p => p.LoadData, _ => { onLoad?.Invoke(); return Task.CompletedTask; })
-            // The export bar (R2-124) is AetheusDataGridExportTests' subject; these grids test the loader.
+            // Loader tests omit export behaviour, which has dedicated coverage.
             .Add(p => p.ExportMarkdown, false)
             .Add(p => p.VirtualData, () => new OmniDataGridResult<Row>(rows, rows.Count))
             .Add(p => p.Columns, BuildColumns(rows)));

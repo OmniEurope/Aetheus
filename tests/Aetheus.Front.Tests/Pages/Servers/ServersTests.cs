@@ -95,7 +95,8 @@ public class ServersTests : BunitContext
         Assert.Contains("Servers", cut.Markup);
     }
 
-    /// <summary>Recette R-211: a tag clicked in a row becomes the Tags column's own filter, sent to the API.</summary>
+    /// <summary>A tag clicked in a row becomes the Tags column's own filter, sent to the
+    /// API.</summary>
     [Fact]
     public async Task FilterByTag_SetsTheTagsColumnFilter()
     {

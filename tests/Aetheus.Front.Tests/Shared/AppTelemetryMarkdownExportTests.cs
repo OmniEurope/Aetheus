@@ -2,12 +2,8 @@
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recettes R-359, R-360 and R-474, then R2-011 and R2-036: what the telemetry exports say about their
-/// rows (the header lines and the values of the columns whose cells show something else) and the names
-/// of the exported files. The files themselves are written by OE's grid export bar; the views' tests
-/// drive it. The Aetheus texts are their resource keys here, so each assertion names the line it reads.
-/// </summary>
+/// <summary>Telemetry export tests cover header lines, displayed column values and filenames;
+/// localized text is represented by resource keys in assertions.</summary>
 public sealed class AppTelemetryMarkdownExportTests
 {
     private static string Text(string key) => key switch

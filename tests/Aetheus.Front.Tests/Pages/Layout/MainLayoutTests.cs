@@ -48,8 +48,7 @@ public class MainLayoutTests : BunitContext
     {
         var cut = Render<MainLayout>();
 
-        // PLAN-003 lot 1: the shell stopped stacking a trail above the page. The trail is line 1 of
-        // the page header, so exactly one component draws it and every page starts at the same Y.
+        // PageHeader alone renders the breadcrumb so the shell adds no duplicate trail.
         Assert.Empty(cut.FindAll(".omni-page-header__trail, .omni-breadcrumb"));
     }
 
@@ -103,15 +102,15 @@ public class MainLayoutTests : BunitContext
 
         await cut.InvokeAsync(async () => await cut.Instance.OnLogout());
 
-        // A voluntary logout keeps no return address (PLAN-005 lot 8): the next person to sign in on
-        // this browser must not land on the page the previous one left.
+        // Voluntary logout clears the return address so another user does not inherit the previous
+        // page.
         Assert.Equal(nav.BaseUri + "login", nav.Uri);
     }
 
     [Fact]
     public async Task OnLogout_TellsTheServerSoItForgetsTheMailboxPasswords()
     {
-        // Recette R1-37: the server is told while the token is still held.
+        // The server is told while the token is still held.
         var cut = Render<MainLayout>();
 
         await cut.InvokeAsync(async () => await cut.Instance.OnLogout());

@@ -43,4 +43,47 @@ public class BrowserBackButtonTests : BunitContext
 
         JSInterop.VerifyInvoke("Aetheus.goBack");
     }
+
+    [Fact]
+    public void Click_OnAPageOpenedFromAPastedAddress_NavigatesToTheRouteParentWithoutTheHistory()
+    {
+        // R3-29: the trail is the route-derived one OE installs before the page names its ancestors.
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/servers/5/mail");
+        var cut = Render<BrowserBackButton>();
+
+        cut.Find("button").Click();
+
+        Assert.Equal("http://localhost/servers/5/overview", nav.Uri);
+        Assert.DoesNotContain(JSInterop.Invocations, invocation => invocation.Identifier == "Aetheus.goBack");
+    }
+
+    [Fact]
+    public void Click_OnTheServerOverview_SkipsTheServerCrumbThatLinksToTheOverviewItself()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/servers/5/overview");
+        Services.GetRequiredService<BreadcrumbService>().Set(
+            new BreadcrumbItem("Servers", "/servers"),
+            new BreadcrumbItem("web-01", "/servers/5/overview"),
+            new BreadcrumbItem("Overview"));
+        var cut = Render<BrowserBackButton>();
+
+        cut.Find("button").Click();
+
+        Assert.Equal("http://localhost/servers", nav.Uri);
+    }
+
+    [Fact]
+    public void Click_OnATopLevelPageWithoutAncestorLink_NavigatesToTheDashboard()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/servers");
+        var cut = Render<BrowserBackButton>();
+
+        cut.Find("button").Click();
+
+        Assert.Equal("http://localhost/", nav.Uri);
+        Assert.DoesNotContain(JSInterop.Invocations, invocation => invocation.Identifier == "Aetheus.goBack");
+    }
 }

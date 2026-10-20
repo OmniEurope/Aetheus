@@ -33,8 +33,7 @@ public partial class HeartbeatPulse : IDisposable
     private ElementReference _progressRef;
     private long _lastPhasedBeatKey = long.MinValue;
 
-    /// <summary>When the loader last refreshed this server's data (browser-local). Rendered as the
-    /// "last updated" caption inside the tile (it used to live in the page header).</summary>
+    /// <summary>The browser-local refresh timestamp displayed inside the server tile.</summary>
     [Parameter] public DateTime? LastUpdated { get; set; }
 
     private string _dashArray = "";

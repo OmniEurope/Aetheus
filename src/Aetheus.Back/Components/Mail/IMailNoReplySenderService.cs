@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.Mail;
 
-/// <summary>Recette R1-16: prepares the no-reply mailbox the platform sends its e-mails from.</summary>
+/// <summary>Prepares the no-reply mailbox the platform sends its e-mails from.</summary>
 public interface IMailNoReplySenderService
 {
     /// <summary>

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>One stage's bar: where it starts and how wide it is, both as percentages of the run.</summary>
-/// <param name="Stage">The stage this bar describes.</param>
-/// <param name="OffsetPercent">Distance from the left edge, 0 to 100.</param>
-/// <param name="WidthPercent">Bar width, never zero for a stage that actually ran.</param>
-/// <param name="IsRunning">Still running, so its right edge is "now" rather than a recorded end.</param>
-/// <param name="Wait">Recette R-154: how long the stage waited, from the end of what it depended on to
-/// its own start. Zero when it started at once (or when clock skew puts that end after the start).</param>
-/// <param name="WaitOffsetPercent">Left edge of the wait segment, 0 to 100.</param>
-/// <param name="WaitWidthPercent">Width of the wait segment. It always ends exactly where the bar
-/// begins, so the two read as one continuous line: waiting, then running.</param>
+/// <summary>One stage's bar: where it starts and how wide it is, both as percentages of the
+/// run.</summary> <param name="Stage">The stage this bar describes.</param> <param
+/// name="OffsetPercent">Distance from the left edge, 0 to 100.</param> <param
+/// name="WidthPercent">Bar width, never zero for a stage that actually ran.</param> <param
+/// name="IsRunning">Still running, so its right edge is "now" rather than a recorded end.</param>
+/// <param name="Wait">how long the stage waited, from the end of what it depended on to its own
+/// start. Zero when it started at once (or when clock skew puts that end after the start).</param>
+/// <param name="WaitOffsetPercent">Left edge of the wait segment, 0 to 100.</param> <param
+/// name="WaitWidthPercent">Width of the wait segment. It always ends exactly where the bar begins,
+/// so the two read as one continuous line: waiting, then running.</param>
 internal sealed record RunGanttBar(
     StageViewModel Stage,
     double OffsetPercent,
@@ -106,8 +106,8 @@ internal static class RunGanttChart
             // A widened short bar at the far right would otherwise run past the axis.
             if (offset + width > 100) offset = Math.Max(0, 100 - width);
 
-            // Recette R-154: the wait is drawn on real time, from the reference end to this start.
-            // The bars themselves never move; the segment only fills the gap before each one.
+            // The wait is drawn on real time, from the reference end to this start. The bars
+            // themselves never move; the segment only fills the gap before each one.
             var waitStart = WaitReference(stage, stages, start);
             var wait = stageStart > waitStart ? stageStart - waitStart : TimeSpan.Zero;
             var waitStartOffset = degenerate ? 0 : Math.Clamp((waitStart - start).TotalSeconds / totalSeconds * 100, 0, 100);
@@ -120,18 +120,9 @@ internal static class RunGanttChart
         return new RunGanttLayout(bars, start, duration, untimed);
     }
 
-    /// <summary>
-    /// Recette R-154: the instant a stage became able to run, as far as the run tells us.
-    /// <list type="number">
-    /// <item>The latest end among the stages of a lower graph depth: those are the ones it depends on,
-    /// directly or not. When one of them "ends" after this stage started (clock skew between the
-    /// control plane and a runner), the wait is simply zero; it is never negative.</item>
-    /// <item>Without a depth (system stages, or a run with no usable definition snapshot), or with
-    /// nothing finished at a lower depth: the latest end among the other stages that had finished by
-    /// the time it started.</item>
-    /// <item>Otherwise the start of the run, which is the chart's left edge.</item>
-    /// </list>
-    /// </summary>
+    /// <summary>A stage becomes runnable at the latest predecessor end, falling back to the latest
+    /// completed stage or run start when dependency information is absent. Clock skew is clamped to
+    /// a zero wait.</summary>
     internal static DateTime WaitReference(StageViewModel stage, IReadOnlyList<StageViewModel> stages, DateTime runStart)
     {
         ArgumentNullException.ThrowIfNull(stage);
@@ -158,11 +149,9 @@ internal static class RunGanttChart
         return previousEnd is { } previous && previous > runStart ? previous : runStart;
     }
 
-    /// <summary>
-    /// Recette R-157: where the run's time went, summed over the stages. Execution plus wait equals the
-    /// span of the axis when stages ran one after the other; stages that overlapped count their time
-    /// once each, so the execution sum can then exceed the span.
-    /// </summary>
+    /// <summary> Where the run's time went, summed over the stages. Execution plus wait equals the
+    /// span of the axis when stages ran one after the other; stages that overlapped count their
+    /// time once each, so the execution sum can then exceed the span. </summary>
     public static RunGanttTotals Totals(RunGanttLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -193,16 +182,13 @@ internal static class RunGanttChart
     }
 }
 
-/// <summary>Recette R-157: cumulative execution and cumulative wait over a run's stages.</summary>
+/// <summary>Cumulative execution and cumulative wait over a run's stages.</summary>
 internal sealed record RunGanttTotals(TimeSpan Execution, TimeSpan Wait);
 
-/// <summary>
-/// PLAN-003 lot 20 / D26: how far a RUNNING stage is through its usual duration.
-/// </summary>
-/// <param name="FillPercent">0 to 100: elapsed time as a share of the average, capped at the average.</param>
-/// <param name="OverrunPercent">0 to 100: once past the average, a second layer restarts from the
-/// left and grows by the time spent beyond it, as a share of the average again. At 100 the stage has
-/// taken twice its usual time; it stays at 100 beyond that, the duration column says how much.</param>
+/// <summary>Running-stage progress compares elapsed time with its usual duration.</summary> <param
+/// name="FillPercent">Elapsed time as a percentage of the average, capped at 100.</param> <param
+/// name="OverrunPercent">Time beyond the average as a percentage of the average, capped at 100; the
+/// duration column shows further overrun.</param>
 internal sealed record RunGanttProgress(double FillPercent, double OverrunPercent)
 {
     public bool IsOverrunning => OverrunPercent > 0;

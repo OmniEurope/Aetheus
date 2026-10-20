@@ -29,7 +29,7 @@ public partial class ServerRkhunterSection : IAsyncDisposable
     private OmniDataGrid<RkhunterWarningDto>? _warningsGrid;
     private OmniDataGrid<RkhunterScanResultDto>? _historyGrid;
 
-    // Recette R-210: the scan status filter shows the same words as the cells, built once.
+    // The scan status filter shows the same words as the cells, built once.
     private Func<string, string>? _scanStatusText;
     private Func<string, string> ScanStatusText => _scanStatusText ??= LocalizeScanStatus;
     private string _scheduleCron = string.Empty;
@@ -37,8 +37,8 @@ public partial class ServerRkhunterSection : IAsyncDisposable
     private int? _loadedServerId;
     private bool _scheduleDirty;
 
-    // R-181: replaces the two Refresh buttons. Heartbeats only: the RKHunter task completions already
-    // reach HandleTaskCompletedAsync through the page's loader, reloading on every task would double them.
+    // Heartbeats refresh RKHunter state; task completion already arrives through the page loader
+    // and must not trigger a duplicate reload.
     private ServerLiveFeed? _liveFeed;
     internal ServerLiveFeed? LiveFeed => _liveFeed;
     internal IReadOnlyList<RkhunterWarningDto> Warnings => _warnings;
@@ -71,10 +71,21 @@ public partial class ServerRkhunterSection : IAsyncDisposable
         _scheduleDirty = true;
     }
 
+    private ServerTaskFollower? _follower;
+
+    private static string ActionLabelKey(RkhunterAction action) => action switch
+    {
+        RkhunterAction.UpdateDatabase => "UpdateDatabase",
+        RkhunterAction.UpdateProperties => "UpdateProperties",
+        _ => "RunScan"
+    };
+
     private async Task ExecuteActionAsync(RkhunterAction action)
     {
         if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
+        // Recette R3-37: the follower shows what becomes of the task, in place of a lone "Task created".
+        _follower?.Expect(L[ActionLabelKey(action)]);
         var success = await Api.Security.ExecuteRkhunterActionAsync(ServerId, new RkhunterActionRequest { Action = action });
         _actionRunning = false;
         if (success)
@@ -83,7 +94,10 @@ public partial class ServerRkhunterSection : IAsyncDisposable
             await OnRefreshRequested.InvokeAsync();
         }
         else
+        {
+            _follower?.Forget();
             Toast.Error("Error", "ActionFailed");
+        }
     }
 
     private async Task SetupAsync()
@@ -93,8 +107,7 @@ public partial class ServerRkhunterSection : IAsyncDisposable
         {
             MailOnWarning = _setupMailOnWarning?.Trim() ?? string.Empty
         };
-        var success = await Api.Security.SetupRkhunterAsync(ServerId, request);
-        if (success)
+        if (await ServerTaskLaunch.FollowAsync(_follower, L["RkhunterSetup"], () => Api.Security.SetupRkhunterAsync(ServerId, request)))
         {
             Toast.Success("TaskCreated");
             await OnRefreshRequested.InvokeAsync();
@@ -122,9 +135,15 @@ public partial class ServerRkhunterSection : IAsyncDisposable
     private async Task GetLogsAsync()
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect(L["ViewLogs"]);
         var success = await Api.Security.GetRkhunterLogsAsync(ServerId, new RkhunterLogRequest());
         if (success)
             Toast.Success("TaskCreated");
+        else
+        {
+            _follower?.Forget();
+            Toast.Error("Error", "ActionFailed");
+        }
     }
 
     private async Task LoadWarningsAsync()
@@ -143,10 +162,9 @@ public partial class ServerRkhunterSection : IAsyncDisposable
         await LoadWarningsAsync();
     }
 
-    /// <summary>
-    /// Recette R-227: the heartbeat and task-completion reloads tell both grids before their new lists
-    /// arrive, so the warnings and scans they did not hold read bold. Nothing re-renders the grids between
-    /// this call and the assignment of the lists, which is the change they compare against.
+    /// <summary> The heartbeat and task-completion reloads tell both grids before their new lists
+    /// arrive, so the warnings and scans they did not hold read bold. Nothing re-renders the grids
+    /// between this call and the assignment of the lists, which is the change they compare against.
     /// </summary>
     private async Task MarkLiveReloadAsync()
     {

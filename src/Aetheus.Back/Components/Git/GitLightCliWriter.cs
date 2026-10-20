@@ -17,10 +17,7 @@ public class GitLightCliWriter(GitProcessRunner git, ILogger<GitLightCliWriter> 
         string commitMessage, string authorName, string authorEmail, CancellationToken ct = default)
         => await CommitFilesAsync(diskPath, branch, [(relativePath, content)], commitMessage, authorName, authorEmail, ct).ConfigureAwait(false);
 
-    /// <summary>
-    /// Commits N files in a single clone + commit + push round-trip (F-007: the env→project
-    /// pipeline copy used to clone once per file inside the HTTP request path).
-    /// </summary>
+    /// <summary>Commits multiple files through one clone, commit and push round trip.</summary>
     public async Task<(bool Success, string? CommitSha, string? Error)> CommitFilesAsync(
         string diskPath, string branch, IReadOnlyList<(string RelativePath, string Content)> files,
         string commitMessage, string authorName, string authorEmail, CancellationToken ct = default)
@@ -175,74 +172,6 @@ public class GitLightCliWriter(GitProcessRunner git, ILogger<GitLightCliWriter> 
     }
 
     private sealed record NormalizedChanges(List<string> Upserts, List<string> Deletions);
-
-    public async Task<(bool Success, string? CommitSha, string? Error)> ApplyPatchAsync(
-        string diskPath, string branch, string patch,
-        string commitMessage, string authorName, string authorEmail, CancellationToken ct = default)
-    {
-        if (!IsValidRefName(branch))
-            return (false, null, "invalid branch name");
-        if (string.IsNullOrWhiteSpace(patch)
-            || patch.Length > 1_000_000
-            || !patch.Contains("diff --git ", StringComparison.Ordinal))
-            return (false, null, "invalid or empty patch");
-
-        var tmp = Path.Combine(Path.GetTempPath(), $"aetheus-ai-patch-{Guid.NewGuid():N}");
-        try
-        {
-            var (cloneCode, _, cloneError) = await git.RunGitAsync(
-                diskPath,
-                ["clone", "--depth", "1", "--single-branch", "--no-tags", "--branch", branch, diskPath, tmp],
-                ct,
-                timeout: BackendRuntimeDefaults.GitWriteTimeout,
-                ignoreExitCode: true).ConfigureAwait(false);
-            if (cloneCode != 0)
-                return (false, null, $"clone failed: {cloneError}");
-
-            await git.RunGitAsync(tmp, ["config", "user.name", authorName], ct).ConfigureAwait(false);
-            await git.RunGitAsync(tmp, ["config", "user.email", authorEmail], ct).ConfigureAwait(false);
-            var patchPath = Path.Combine(tmp, ".aetheus-ai-proposed.patch");
-            await File.WriteAllTextAsync(patchPath, patch, ct).ConfigureAwait(false);
-            var (applyCode, _, applyError) = await git.RunGitAsync(
-                tmp, ["apply", "--index", "--whitespace=nowarn", "--", patchPath],
-                ct, timeout: BackendRuntimeDefaults.GitWriteTimeout, ignoreExitCode: true).ConfigureAwait(false);
-            File.Delete(patchPath);
-            if (applyCode != 0)
-                return (false, null, $"patch apply failed: {applyError}");
-
-            var (commitCode, _, commitError) = await git.RunGitAsync(
-                tmp, ["commit", "-m", commitMessage], ct, ignoreExitCode: true).ConfigureAwait(false);
-            if (commitCode != 0)
-                return (false, null, $"commit failed: {commitError}");
-            var (_, sha, _) = await git.RunGitAsync(
-                tmp, ["rev-parse", "HEAD"], ct, ignoreExitCode: true).ConfigureAwait(false);
-            var (pushCode, _, pushError) = await git.RunGitAsync(
-                tmp, ["push", "origin", $"HEAD:{branch}"], ct,
-                timeout: BackendRuntimeDefaults.GitWriteTimeout, ignoreExitCode: true).ConfigureAwait(false);
-            return pushCode == 0
-                ? (true, sha.Trim(), null)
-                : (false, null, $"push failed: {pushError}");
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return (false, null, ex.Message);
-        }
-        finally
-        {
-            if (Directory.Exists(tmp))
-            {
-                try
-                {
-                    GitProcessRunner.ClearReadOnlyAttributes(tmp);
-                    Directory.Delete(tmp, true);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogDebug(ex, "Best-effort AI patch temp cleanup failed: {Dir}", tmp);
-                }
-            }
-        }
-    }
 
     private static bool TryNormalizeRelativePath(string relativePath, out string safeRelativePath)
     {

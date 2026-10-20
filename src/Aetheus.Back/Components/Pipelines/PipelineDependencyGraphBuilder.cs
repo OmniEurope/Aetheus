@@ -42,7 +42,9 @@ internal static class PipelineDependencyGraphBuilder
                 ProjectName = pipeline.ProjectName,
                 TriggerType = ParseTriggerType(definition?.Trigger, pipeline.TriggerType),
                 RecentRuns = pipeline.RecentRuns,
-                References = references
+                References = references,
+                OwnerUsername = pipeline.OwnerUsername,
+                OwnerInactive = pipeline.OwnerInactive
             };
             items.Add(item);
         }

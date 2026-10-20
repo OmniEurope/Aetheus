@@ -2,15 +2,9 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// R-181: follows one domain event of the scoped <c>entities</c> hub (an
-/// <see cref="OperationalRealtimeEvents"/> name) for one resource and reloads the view on it, in place
-/// of a Refresh button. The hub only delivers the event to connections allowed to read that resource,
-/// the view then fetches through the authorized API. Pushes are coalesced through
-/// <see cref="TrailingReloadCoalescer"/> (an emitter batching every second must not turn into a reload
-/// per batch), the subscription is re-joined and the view reloaded after a reconnect, and an
-/// unavailable hub leaves the view on its last load without throwing. Each view owns its instance.
-/// </summary>
+/// <summary>Follow authorized resource events and coalesce reloads so push bursts do not overload
+/// the view; rejoin and catch up after reconnect, while an unavailable hub leaves the last loaded
+/// state visible.</summary>
 public sealed class EntityOperationalFeed(
     HubConnectionFactory hubFactory,
     Func<int, CancellationToken, Task>? coalesceDelay = null) : IAsyncDisposable
@@ -49,8 +43,8 @@ public sealed class EntityOperationalFeed(
                 await RequestReloadAsync().ConfigureAwait(false);
             });
             _hub = hub;
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-            timeout.CancelAfter(FrontendRuntimeDefaults.SignalRStartTimeout);
+            using var deadline = new CancellationTokenSource(FrontendRuntimeDefaults.SignalRStartTimeout, hubFactory.Clock);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, deadline.Token);
             await hub.StartAsync(timeout.Token).ConfigureAwait(false);
             await hub.InvokeAsync("JoinEntityUpdates", type, timeout.Token).ConfigureAwait(false);
         }

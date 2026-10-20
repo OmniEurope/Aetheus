@@ -465,10 +465,8 @@ public class ServerRepositoryTests : IDisposable
         Assert.Contains(items, log => log.Message == "build succeeded");
     }
 
-    /// <summary>
-    /// Recette R-210 / R-224: the level list and the time range narrow the whole log of the server
-    /// before the count, and a requested sort replaces the newest-first order.
-    /// </summary>
+    /// <summary> The level list and the time range narrow the whole log of the server before the
+    /// count, and a requested sort replaces the newest-first order. </summary>
     [Fact]
     public async Task GetLogsPagedAsync_AppliesColumnFiltersAndSort()
     {

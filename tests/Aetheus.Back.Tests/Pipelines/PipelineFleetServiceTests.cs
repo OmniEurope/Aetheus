@@ -119,6 +119,97 @@ public sealed class PipelineFleetServiceTests
     }
 
     [Fact]
+    public async Task PreviewUpdateAsync_ListsEveryOrphanOfAStageJobOrStep_AndNothingTheTargetStillHasOrNeverHad()
+    {
+        const string oldBase = """
+            name: ci
+            stages:
+              - name: build
+                steps:
+                  - name: keep
+                    shell: echo
+                  - name: dropped
+                    shell: echo
+                jobs:
+                  - name: compile
+                    steps:
+                      - name: a
+                        shell: echo
+                      - name: gone
+                        shell: echo
+                  - name: lint
+                    steps:
+                      - name: l
+                        shell: echo
+              - name: obsolete
+                steps:
+                  - name: x
+                    shell: echo
+            """;
+        const string newBase = """
+            name: ci
+            stages:
+              - name: build
+                steps:
+                  - name: keep
+                    shell: echo
+                jobs:
+                  - name: compile
+                    steps:
+                      - name: a
+                        shell: echo
+            """;
+        const string child = """
+            name: child
+            extends: ci@1
+            stages:
+              - name: BUILD
+                steps:
+                  - name: keep
+                    shell: echo local
+                  - name: dropped
+                    shell: echo local
+                jobs:
+                  - name: compile
+                    steps:
+                      - name: a
+                        shell: echo local
+                      - name: gone
+                        shell: echo local
+                  - name: lint
+                    steps:
+                      - name: l
+                        shell: echo local
+                  - name: extra
+                    steps:
+                      - name: e
+                        shell: echo local
+              - name: obsolete
+                steps:
+                  - name: x
+                    shell: echo local
+              - name: local
+                steps:
+                  - name: y
+                    shell: echo local
+            """;
+        _fleetRepository.Rows = [Row(2, "outdated", child)];
+        _pipelineRepository.FindTemplateByNameAsync("ci", 4, Arg.Any<CancellationToken>()).Returns(Template());
+        _resolver.ResolveAsync(Arg.Any<string>(), 4,
+                Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<string>(0).StartsWith("name: template-resolution", StringComparison.Ordinal)
+                ? Resolution(call.ArgAt<string>(0).Contains("ci@1", StringComparison.Ordinal) ? oldBase : newBase)
+                : Resolution("resolved"));
+
+        var result = await _service.PreviewUpdateAsync(2, 2, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["stage:BUILD/step:dropped", "stage:BUILD/job:compile/step:gone", "stage:BUILD/job:lint", "stage:obsolete"],
+            result.OrphanOverrides);
+        Assert.True(result.RequiresOrphanAcknowledgement);
+    }
+
+    [Fact]
     public async Task UpdateAsync_OrphanWithoutAcknowledgement_IsRejectedBeforeWrite()
     {
         var row = Row(2, "outdated", "name: child\nextends: ci@1\nstages:\n  - name: build\n    steps:\n      - name: removed\n        shell: echo local");

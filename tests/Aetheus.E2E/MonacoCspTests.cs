@@ -26,7 +26,9 @@ public sealed class MonacoCspTests : E2ETestBase
             """);
         Assert.That(yaml, Is.Not.Empty);
 
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Show Diff" }).ClickAsync();
+        // STD-BTN detection 11: Show Diff sits in the editor toolbar's "More actions" menu.
+        await Page.Locator(".pipeline-edit-toolbar .omni-overflow-menu__trigger").ClickAsync();
+        await Page.GetByRole(AriaRole.Menuitem, new() { Name = "Show Diff" }).ClickAsync();
         await Expect(Page.Locator("iframe.monaco-editor-frame")).ToHaveCountAsync(2);
         await Expect(Page.Locator("iframe.monaco-editor-frame").Nth(1)).ToBeVisibleAsync();
         await Page.WaitForFunctionAsync("""
@@ -50,7 +52,7 @@ public sealed class MonacoCspTests : E2ETestBase
         Assert.Multiple(() =>
         {
             Assert.That(shellResponse.Headers["content-security-policy"], Does.Contain("style-src-attr 'none'"));
-            // R-526: the shell allows no inline style at all; only the editor's own document does.
+            // The shell allows no inline style at all; only the editor's own document does.
             Assert.That(shellResponse.Headers["content-security-policy"], Does.Not.Contain("unsafe-inline"));
             Assert.That(frameResponse.Headers["content-security-policy"], Does.Contain("style-src-attr 'unsafe-inline'"));
             Assert.That(frameResponse.Headers["content-security-policy"], Does.Contain("frame-ancestors 'self'"));

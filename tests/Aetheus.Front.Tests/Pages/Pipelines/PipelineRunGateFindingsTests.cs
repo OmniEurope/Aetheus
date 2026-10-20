@@ -15,8 +15,9 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
 
     public PipelineRunGateFindingsTests() => _handler = BunitTestHelper.RegisterServices(this);
 
-    /// <summary>Recette R-485: the Gate tab reads its findings from the run findings route; this serves
-    /// the gate's findings there, the open ones by default and every one when the decided are asked for.</summary>
+    /// <summary>The Gate tab reads its findings from the run findings route; this serves the gate's
+    /// findings there, the open ones by default and every one when the decided are asked
+    /// for.</summary>
     private void ServeFindings(AnalysisRunGateDto gate)
     {
         AnalysisRunFindingsPageDto Page(IReadOnlyList<AnalysisRunGateFindingDto> items) => new()
@@ -57,10 +58,58 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         Assert.Equal("2", tile.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim());
         var lines = cut.FindAll(".analysis-run-gate-violation").Select(line => line.TextContent.Trim()).ToList();
         Assert.Equal(2, lines.Count);
-        Assert.Contains("quality.architecture.cycles: architecture.cycles.type = 40 (> 0)", lines[0], StringComparison.Ordinal);
+        // Recette R1-63: the alert in words, the measure named as the page names it.
+        Assert.Contains("AnalysisMetricTypeCycles : 40 (AnalysisThresholdWord 0)", lines[0], StringComparison.Ordinal);
         Assert.Contains("AnalysisGateViolationWarn", lines[0], StringComparison.Ordinal);
         Assert.Contains("system.quality.new-medium.code: no-control-regex = Medium (≥ Medium)", lines[1], StringComparison.Ordinal);
         Assert.Contains("AnalysisGateViolationBlock", lines[1], StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("architecture.cycles.namespace", "3", "0", "AnalysisMetricNamespaceCycles : 3 (AnalysisThresholdWord 0)")]
+    [InlineData("complexity.methods.high", "12", "10", "AnalysisMetricComplexMethods : 12 (AnalysisThresholdWord 10)")]
+    [InlineData("complexity.cyclomatic.maximum", "41", "", "AnalysisMaximumComplexity : 41")]
+    [InlineData("complexity.cyclomatic.average", null, "4", "AnalysisMetricAverageComplexity : - (AnalysisThresholdWord 4)")]
+    [InlineData("coverage.line.percent", "71.5", "75", "AnalysisTestedLines : 71.5 (AnalysisThresholdWord 75)")]
+    [InlineData("duplication.percentage", "6", " ", "AnalysisDuplicatedCode : 6")]
+    [InlineData("security.secrets", "2", "0", "quality.metric: security.secrets = 2 (> 0)")]
+    public void R1_63_EachKnownMeasure_IsNamedAsThePageNamesIt_AndAnUnknownOneKeepsItsText(
+        string targetKey, string? observed, string threshold, string expected)
+    {
+        var gate = new AnalysisRunGateDto
+        {
+            PipelineRunId = 2654,
+            Violations =
+            [
+                new AnalysisRunGateViolationDto { PolicyKey = "quality.metric", Outcome = "Warn", TargetKind = "metric", TargetKey = targetKey, ObservedValue = observed, Operator = "GreaterThan", Threshold = threshold }
+            ]
+        };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        var line = Assert.Single(cut.FindAll(".analysis-run-gate-violation")).TextContent;
+        Assert.Contains(expected, line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ADegradedMeasure_ShowsThePreviousValueNotAThreshold()
+    {
+        var gate = new AnalysisRunGateDto
+        {
+            PipelineRunId = 2654,
+            Violations =
+            [
+                new AnalysisRunGateViolationDto { PolicyKey = "quality.complexity.high-methods", Outcome = "Warn", TargetKind = "metric", TargetKey = "complexity.methods.high", ObservedValue = "319", Operator = "Degraded", Threshold = "318" }
+            ]
+        };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        var line = Assert.Single(cut.FindAll(".analysis-run-gate-violation")).TextContent;
+        Assert.Contains("AnalysisMetricComplexMethods : 319 (AnalysisPreviousWord 318)", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("AnalysisThresholdWord", line, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -92,7 +141,7 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
 
         var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
 
-        // Recette R2-139: no "limiting domain" sentence; the domain that sets the B has a bold title.
+        // No "limiting domain" sentence; the domain that sets the B has a bold title.
         Assert.DoesNotContain("AnalysisLimitingDomain", cut.Markup, StringComparison.Ordinal);
         Assert.Equal("AnalysisCodeQualityAndTests", cut.Find(".analysis-grade-domain-limiting").TextContent.Trim());
         var measure = Assert.Single(cut.FindAll(".analysis-grade-measure"));
@@ -120,7 +169,7 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
 
         Assert.Contains("Open finding", cut.Markup);
         Assert.DoesNotContain("CSP accepted", cut.Markup);
-        // R-501: the identifier the finding is quoted by.
+        // The identifier the finding is quoted by.
         Assert.Contains("#1094", cut.Markup);
 
         cut.FindAll("button.omni-switch").Single(toggle => toggle.TextContent.Contains("AnalysisGateShowDecided", StringComparison.Ordinal)).Click();
@@ -152,17 +201,17 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
 
         // The shared columns: identifier, title over its message, location, "new", the open button.
         var columns = cut.FindComponent<AnalysisFindingColumns>();
-        // Recette R-485: read from the server page by page, as the project's Quality list.
+        // Read from the server page by page, as the project's Quality list.
         Assert.False(columns.Instance.LocalData);
         Assert.Contains("#1094", cut.Markup);
-        // Recette R2-053: one line per cell, the message behind the title on hover.
+        // One line per cell, the message behind the title on hover.
         Assert.Contains("folder is not defined", cut.Find(".analysis-finding-grid-title").GetAttribute("title"));
         Assert.Contains("tests/security-rules/aetheus-security.py", cut.Find(".analysis-finding-location").TextContent);
         Assert.Contains("AnalysisGateNewBadge", cut.Find("tbody").TextContent);
 
         cut.Find("button[title='AnalysisGateOpenFinding']").Click();
 
-        // R-504: the finding is opened as this run saw it.
+        // The finding is opened as this run saw it.
         Assert.EndsWith("/analysis/findings/1094?run=2472", Services.GetRequiredService<NavigationManager>().Uri, StringComparison.Ordinal);
     }
 
@@ -225,8 +274,8 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
             .Add(component => component.ProjectId, 7)
             .Add(component => component.ProjectName, "Aetheus"));
 
-        // The gate figures are OE key-figure tiles (value over a wrapping label), in this order. Recette
-        // R2-137: no report count; R2-138: no rule alerts tile when there is no alert to list.
+        // Gate tiles show findings counts and display rule alerts only when their detail list
+        // exists.
         var tiles = cut.FindAll(".analysis-run-gate-metrics > .omni-stat-tile");
         Assert.Equal(2, tiles.Count);
         Assert.Equal(new[] { "2", "0" }, tiles.Select(tile => tile.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim()));
@@ -235,8 +284,7 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
             tiles.Select(tile => tile.QuerySelector(".omni-stat-tile__label")!.TextContent.Trim()));
         Assert.Contains("aetheus-grid-fullheight", cut.Find(".analysis-run-findings-grid").ClassList);
 
-        // PLAN-003 lot 22: "Export" opens the full text first (download, copy, close) instead of
-        // downloading a file straight away. The dialog receives the whole prompt.
+        // Export opens a preview containing the complete prompt before download.
         IDictionary<string, object?>? opened = null;
         Type? openedType = null;
         Services.GetRequiredService<OmniDialogService>().OnOpen += (_, type, parameters, _) =>
@@ -244,8 +292,8 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
             openedType = type;
             opened = parameters;
         };
-        cut.FindAll("button").Single(button =>
-            button.TextContent.Contains("AnalysisExport", StringComparison.Ordinal)).Click();
+        // STD-BTN detection 11: beside Open project quality, Export sits in the "More actions" menu.
+        cut.FindMenuItem("AnalysisExport")!.Click();
 
         Assert.Equal(typeof(TextExportDialog), openedType);
         Assert.DoesNotContain(JSInterop.Invocations, invocation => invocation.Identifier == "downloadFile");
@@ -254,7 +302,7 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         Assert.Contains("Second finding", markdown);
         Assert.Contains("First evidence", markdown);
         Assert.Contains("Second evidence", markdown);
-        // Recette R2-036: the project's name, the run, what the file holds, then the date.
+        // The project's name, the run, what the file holds, then the date.
         Assert.Matches(@"^aetheus-run-1586-findings-\d{4}-\d{2}-\d{2}\.md$", Assert.IsType<string>(opened[nameof(TextExportDialog.FileName)]));
 
         cut.FindAll("button").Single(button =>
@@ -291,8 +339,9 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         Assert.Equal(wordExpected, tile.Markup.Contains(statusKey, StringComparison.Ordinal));
     }
 
-    /// <summary>Recette R-485: the tab lists the findings of the run and the runs it triggered, read from
-    /// the server one page at a time; its figures are the gate's (the whole tree), not the page's.</summary>
+    /// <summary>The tab lists the findings of the run and the runs it triggered, read from the
+    /// server one page at a time; its figures are the gate's (the whole tree), not the
+    /// page's.</summary>
     [Fact]
     public void R485_TheGateTab_ReadsOnePageOfTheTreesFindings_FromTheServer()
     {
@@ -319,7 +368,7 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         Assert.Equal("120", cut.FindAll(".analysis-run-gate-metrics > .omni-stat-tile")[0].QuerySelector(".omni-stat-tile__value")!.TextContent.Trim());
     }
 
-    /// <summary>Recette R-485 with R-527: the decided findings switch asks the server for them.</summary>
+    /// <summary>The decided-findings switch requests those findings from the server.</summary>
     [Fact]
     public void R485_ShowingTheDecidedFindings_AsksTheServerForThem()
     {
@@ -345,8 +394,8 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         Assert.Contains(_handler.Requests, item => item.Url.Contains("includeDecided=true", StringComparison.Ordinal));
     }
 
-    /// <summary>Recette R-485: the export holds every listed finding, read page after page, not only the
-    /// page on screen.</summary>
+    /// <summary>The export holds every listed finding, read page after page, not only the page on
+    /// screen.</summary>
     [Fact]
     public void R485_TheExport_ReadsEveryListedPage()
     {
@@ -426,7 +475,7 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         ServeFindings(gate);
 
         var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The identifier link, the title link and the open button.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);

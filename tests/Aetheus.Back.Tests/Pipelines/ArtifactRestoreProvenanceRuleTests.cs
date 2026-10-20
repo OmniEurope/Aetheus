@@ -3,14 +3,8 @@ using Aetheus.Back.Components.Pipelines;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Which restores must prove their artifact's provenance (backlog defect D-04).
-///
-/// The rule matters more than it looks: a restore that skips the check consumes another commit's
-/// build in silence, and every consumer used to have to remember a separate shell stage to catch
-/// that. Getting the exception wrong in the other direction is just as bad, though quieter, because
-/// it refuses every baseline comparison the deploy pipelines depend on.
-/// </summary>
+/// <summary>Verifies artifact provenance requirements and the exceptions needed for baseline
+/// comparisons.</summary>
 public sealed class ArtifactRestoreProvenanceRuleTests
 {
     private const string RunCommit = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
@@ -108,17 +102,8 @@ public sealed class ArtifactRestoreProvenanceRuleTests
     [Fact]
     public void AnUnrecognisedReleaseNameNeverReachesThisRuleAtAll()
     {
-        // This assertion is deliberately the opposite of what it used to be, and the reason matters.
-        // It used to demand this run's revision for an unrecognised selector, on a fail-closed
-        // argument. But `release:` is not an enum: ResolveReleaseArtifactAsync looks up anything
-        // that is not one of the four symbolic selectors as an actual release name, and an unknown
-        // name fails there with "release '...' has no retained artifact in this project". A
-        // misspelled selector therefore never reaches task creation, so the old rule protected a
-        // case that cannot happen while refusing the one that does: promoting a named candidate
-        // release from a develop that has moved on (run 2323).
-        //
-        // The fail-closed intent still holds where it is real: artifact_source_selector IS a closed
-        // set, validated by ResolveSelector, and an unknown value there is an error.
+        // Unknown symbolic release selectors are resolved as explicit release names and fail if no
+        // retained artifact exists. artifact_source_selector remains a closed, validated set.
         Assert.Null(
             PipelineArtifactTaskFactory.ExpectedSourceCommitFor(Variables(), "some-new-selector"));
     }

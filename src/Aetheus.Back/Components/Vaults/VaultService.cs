@@ -12,7 +12,7 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
     private static readonly TimeSpan CacheDuration = BackendRuntimeDefaults.ReferenceDataCacheDuration;
     private readonly ConcurrentDictionary<string, byte> _activeNameKeys = new();
 
-    /// <summary>Recette R-210: the project names the vaults list's checkable filter offers.</summary>
+    /// <summary>The project names the vaults list's checkable filter offers.</summary>
     public Task<VaultFilterValuesDto> GetFilterValuesAsync(List<int>? accessibleIds, CancellationToken ct = default) =>
         repo.GetFilterValuesAsync(accessibleIds, ct);
 
@@ -212,8 +212,7 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
         await audit.LogAsync(auditAction, "VaultSecret", secret.Id, secret.Key, ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Recette R-292: the clear value of one secret, so an operator can copy it. The value never goes
+    /// <summary> The clear value of one secret, so an operator can copy it. The value never goes
     /// into the audit entry; the entry records who read which key, so every copy leaves a trace.
     /// </summary>
     public async Task<string?> RevealSecretValueAsync(int vaultId, int secretId, CancellationToken ct = default)
@@ -326,7 +325,7 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
         return (MergeVaultsWithPrecedence(vaults), foundNames);
     }
 
-    /// <summary>Recette R-287: the author of a history entry, as the audit log names it.</summary>
+    /// <summary>The author of a history entry, as the audit log names it.</summary>
     private string CurrentUserName => httpContextAccessor?.HttpContext?.User?.Identity?.Name ?? "system";
 
     private async Task AddSecretVersionAsync(VaultSecret secret, ChangeType changeType, CancellationToken ct)

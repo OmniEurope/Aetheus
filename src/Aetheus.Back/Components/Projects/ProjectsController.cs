@@ -37,8 +37,8 @@ public class ProjectsController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, null, Permission.Write, ct))
             return Forbid();
 
-        // Recette R2-034: the creator follows the new project. An identity without a user row (the
-        // deployment identity, NameIdentifier "bootstrap") has no inbox and follows nothing.
+        // The creator follows the new project. An identity without a user row (the deployment
+        // identity, NameIdentifier "bootstrap") has no inbox and follows nothing.
         var creatorUserId = int.TryParse(
             User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId) ? userId : (int?)null;
         var project = await projectService.CreateProjectAsync(request, creatorUserId, ct);
@@ -56,8 +56,8 @@ public class ProjectsController(
         return Ok(project);
     }
 
-    /// <summary>Recette R2-122: what deleting the project would remove, counted per kind, for the
-    /// confirmation to say before anything is deleted. Same permission as the deletion itself.</summary>
+    /// <summary>What deleting the project would remove, counted per kind, for the confirmation to
+    /// say before anything is deleted. Same permission as the deletion itself.</summary>
     [HttpGet("{id:int}/deletion-preview")]
     public async Task<ActionResult<ProjectDeletionPreviewDto>> GetDeletionPreview(int id, CancellationToken ct)
     {
@@ -69,8 +69,8 @@ public class ProjectsController(
         return Ok(preview);
     }
 
-    /// <summary>Recette R2-122: deletes the project and everything it owns; 409 while one of its runs
-    /// has not ended.</summary>
+    /// <summary>Deletes the project and everything it owns; 409 while one of its runs has not
+    /// ended.</summary>
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeleteProject(int id, CancellationToken ct)
@@ -134,7 +134,7 @@ public class ProjectsController(
         return Ok(await projectService.GetProjectTasksAsync(id, request, ct));
     }
 
-    /// <summary>Recette R-212: the server names the project tasks grid's Server column filter offers.</summary>
+    /// <summary>The server names the project tasks grid's Server column filter offers.</summary>
     [HttpGet("{id:int}/tasks/filter-values")]
     public async Task<ActionResult<TaskFilterValuesDto>> GetProjectTaskFilterValues(int id, CancellationToken ct)
     {

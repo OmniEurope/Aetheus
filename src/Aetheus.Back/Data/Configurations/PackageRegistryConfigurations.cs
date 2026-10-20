@@ -36,3 +36,23 @@ internal sealed class RegistryPackageVersionConfiguration : IEntityTypeConfigura
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+internal sealed class RegistryPackageFileConfiguration : IEntityTypeConfiguration<RegistryPackageFile>
+{
+    public void Configure(EntityTypeBuilder<RegistryPackageFile> builder)
+    {
+        builder.HasIndex(file => new { file.RegistryPackageVersionId, file.FileName }).IsUnique();
+        builder.Property(file => file.FileName).HasMaxLength(255).IsRequired();
+        builder.Property(file => file.FilePath).HasMaxLength(500).IsRequired();
+        builder.Property(file => file.ContentType).HasMaxLength(100).IsRequired();
+        builder.Property(file => file.Sha256).HasMaxLength(64).IsRequired();
+        builder.Property(file => file.Sha1).HasMaxLength(40).IsRequired();
+        builder.Property(file => file.Md5).HasMaxLength(32).IsRequired();
+        builder.Property(file => file.Sha512).HasMaxLength(128).IsRequired();
+        builder.Property(file => file.PublishedBy).HasMaxLength(100).IsRequired();
+        builder.HasOne(file => file.RegistryPackageVersion)
+            .WithMany(version => version.Files)
+            .HasForeignKey(file => file.RegistryPackageVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}

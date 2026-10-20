@@ -62,10 +62,20 @@ public partial class NavMenu : IDisposable
     {
         InvokeAsync(() =>
         {
-            Toast.Warning("ServerOfflineToastTitle", "ServerOfflineToastMessage", payload.ServerName);
+            Toast.Warning("ServerOfflineToastTitle", OfflineToastMessageKey(payload.Reachability), payload.ServerName);
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>PLAN-010 lot 1: the offline alert says whether only the agent or the whole host stopped,
+    /// from the backend's external probe; an older backend (no probe) keeps the plain message.</summary>
+    internal static string OfflineToastMessageKey(ServerReachability reachability) => reachability switch
+    {
+        ServerReachability.HostReachable => "ServerOfflineToastMessage_HostReachable",
+        ServerReachability.HostUnreachable => "ServerOfflineToastMessage_HostUnreachable",
+        ServerReachability.NotProbed => "ServerOfflineToastMessage",
+        _ => "ServerOfflineToastMessage_Unknown"
+    };
 
     private void OnProjectCtxChanged() => InvokeAsync(StateHasChanged);
 

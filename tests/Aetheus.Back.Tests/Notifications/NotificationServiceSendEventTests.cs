@@ -327,6 +327,48 @@ public class NotificationServiceSendEventTests
         Assert.Null(await _sut.UpdateRuleAsync(99, new Aetheus.Shared.Components.Notifications.UpdateNotificationRuleRequest(), ct: TestContext.Current.CancellationToken));
     }
 
+    [Theory]
+    [InlineData("http://hooks.example.com/slack", true)]
+    [InlineData("https://hooks.example.com/slack", true)]
+    [InlineData("ftp://hooks.example.com/slack", false)]
+    [InlineData("/relative/slack", false)]
+    [InlineData("   ", false)]
+    [InlineData(null, false)]
+    public void HttpTarget_AcceptsOnlyAbsoluteHttpUrls(string? url, bool accepted) =>
+        Assert.Equal(accepted, NotificationService.HttpTarget(url) is not null);
+
+    [Theory]
+    [InlineData("public.example.com", true)]
+    [InlineData("internal.example.com", false)]
+    public async Task SendEventAsync_SlackChannel_PostsOnlyToAHostResolvingToPublicAddresses(string host, bool posted)
+    {
+        var handler = new FakeHandler();
+        _httpFactory.CreateClient(Arg.Any<string>()).Returns(new HttpClient(handler));
+        var channel = new NotificationChannel
+        {
+            Id = 1,
+            Name = "slack",
+            Type = NotificationChannelType.Slack,
+            ConfigurationJson = $$"""enc:{"webhookUrl":"https://{{host}}/slack"}""",
+            Rules = []
+        };
+        _repo.GetRulesForEventAsync("deploy", Arg.Any<CancellationToken>())
+            .Returns([new NotificationRule { Id = 1, EventType = "deploy", Channel = channel, NotificationChannelId = 1 }]);
+        // A resolver that answers without DNS: internal.example.com is private.
+        var service = new NotificationService(
+            _repo, _audit, Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(), _httpFactory,
+            Substitute.For<Microsoft.Extensions.Logging.ILogger<NotificationService>>(), _encryption, TimeProvider.System,
+            Substitute.For<IUserNotificationService>(), _emailer,
+            new Aetheus.Back.Components.Shared.PublicHostCheck((name, _) => Task.FromResult(new[]
+            {
+                System.Net.IPAddress.Parse(name == "internal.example.com" ? "10.0.0.7" : "93.184.216.34")
+            })));
+
+        await service.SendEventAsync("deploy", new { Version = "1.0" }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(posted ? $"https://{host}/slack" : null, handler.LastRequest?.RequestUri?.ToString());
+    }
+
     private sealed class FakeHandler : HttpMessageHandler
     {
         public HttpRequestMessage? LastRequest { get; private set; }

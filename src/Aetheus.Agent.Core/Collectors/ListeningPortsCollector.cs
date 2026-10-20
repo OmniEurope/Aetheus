@@ -3,20 +3,9 @@ using System.Runtime.InteropServices;
 
 namespace Aetheus.Agent.Core.Collectors;
 
-/// <summary>
-/// PLAN-005 lot 2: reads the host's listening sockets and names their holder as precisely as the
-/// host allows. Unprivileged on both platforms (<c>ss</c> / <c>Get-NetTCPConnection</c>), argv-only.
-///
-/// TCP and UDP are both scanned and reported under their own protocol. They are separate stacks: a
-/// process bound to 53/udp occupies that port and nothing else, so merging the two would either hide
-/// a real UDP occupant or make it refuse a TCP deployment it has nothing to do with. A failure on one
-/// protocol does not discard the other - the report carries what was actually read.
-///
-/// Holder resolution goes container first, then process, then an honest fallback: a published Docker
-/// port is held by the container from the operator's point of view, and <c>ss</c> would name the
-/// forwarding proxy instead. When neither is readable the holder is reported as unknown rather than
-/// invented - the registry would otherwise carry a name nobody can act on.
-/// </summary>
+/// <summary>Scan TCP and UDP separately through unprivileged argv-only probes, preserving each
+/// successful protocol result independently. Resolve holders by container, then process, then
+/// unknown so proxy names do not obscure container ownership.</summary>
 public sealed class ListeningPortsCollector(
     ILogger<ListeningPortsCollector> logger,
     IShellRunner shell)

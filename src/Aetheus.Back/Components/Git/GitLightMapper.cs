@@ -29,11 +29,9 @@ internal static partial class GitLightMapper
         IsAdditionalSource = IsAdditionalSource(r)
     };
 
-    /// <summary>
-    /// The mirror of an external repository that is not the project's own source (recette R-534): it
-    /// sits beside the project's repository for the pipelines that name it. A repository whose
-    /// connection was not loaded reads as the project's own, which is the behaviour before mirrors.
-    /// </summary>
+    /// <summary>Maps an additional external mirror alongside the project source for pipelines that
+    /// reference it. Without a loaded connection, treat the repository as the project
+    /// source.</summary>
     public static bool IsAdditionalSource(GitInternalRepo repo) =>
         repo.GitConnection is { ProviderType: not GitProviderType.AetheusGit } connection
         && repo.Project?.GitConnectionId != connection.Id;

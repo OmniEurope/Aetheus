@@ -122,10 +122,8 @@ public class AgentUpdateServiceTests
     [Fact]
     public async Task QueueUpdateAsync_AlreadyUpToDate_StillQueuesTheUpdate()
     {
-        // This used to return AlreadyUpToDate and reserve nothing, so Update agent on a server the fleet
-        // considered current did nothing at all, on precisely the server an operator was trying to
-        // repair. The per-server action is explicit: someone named this server, and reinstalling a
-        // current agent is one of the reasons to do that. The fleet sweep still skips current agents.
+        // Explicit per-server updates permit reinstalling a current agent for repair, while fleet
+        // updates skip current versions.
         _updateRepo.FindServerAsync(1, Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 1, Name = "srv-1", AgentVersion = "1.0.0" });
         _compatibility.Evaluate(Arg.Any<ServerDto>())

@@ -13,10 +13,10 @@ namespace Aetheus.Back.Tests.Pipelines;
 
 public class PipelineRetentionServiceTests
 {
-    private static (PipelineRetentionService Sut, IPipelineRepository PipelineRepo, ILogRepository LogRepo, ITaskRepository TaskRepo) BuildSut(
+    private static (PipelineRetentionService Sut, IPipelineRunRetentionRepository PipelineRepo, ILogRepository LogRepo, ITaskRepository TaskRepo) BuildSut(
         IConfiguration config, FakeTimeProvider clock)
     {
-        var pipelineRepo = Substitute.For<IPipelineRepository>();
+        var pipelineRepo = Substitute.For<IPipelineRunRetentionRepository>();
         var logRepo = Substitute.For<ILogRepository>();
         var taskRepo = Substitute.For<ITaskRepository>();
         var sp = new ServiceCollection()

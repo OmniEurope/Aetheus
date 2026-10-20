@@ -46,13 +46,24 @@ public sealed class DeployOperationExecutor(
     private const int PollSeconds = 2;
     private const int RequiredStableSamples = 4;
 
+    // Replaceable so the whole deploy runs in a test on any platform, under a temporary deploy root and
+    // without real waits. The defaults are the production values above.
+    internal bool IsLinux { get; init; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+    internal string DeployRoot { get; init; } = DeployBaseDir;
+    internal TimeSpan HealthPollInterval { get; init; } = TimeSpan.FromSeconds(PollSeconds);
+    internal TimeSpan LockRetryDelay { get; init; } = TimeSpan.FromSeconds(1);
+    // The readiness probe's transport: no redirect, no proxy. A test answers through its own handler instead
+    // of a listening socket.
+    internal Func<HttpMessageHandler> CreateReadinessHandler { get; init; } =
+        () => new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
+
     public override bool CanHandle(OperationKind kind) => kind is OperationKind.PipelineDeploy;
 
     public override async Task<ExecutorResult> ExecuteAsync(
         OperationKind kind, string target, IReadOnlyDictionary<string, string> envVars,
         int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (!IsLinux)
         {
             await onOutput("Deploy operations are only supported on Linux", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
@@ -94,7 +105,7 @@ public sealed class DeployOperationExecutor(
 
         // Serialize concurrent deploys of the SAME app on this host (flip→restart critical section)
         // via an exclusive lock file - argv-free equivalent of flock on $BASE/<app>/.lock.
-        var appDir = Path.Combine(DeployBaseDir, app);
+        var appDir = Path.Combine(DeployRoot, app);
         Directory.CreateDirectory(appDir);
         FileStream? appLock = null;
         try
@@ -383,7 +394,7 @@ public sealed class DeployOperationExecutor(
                     return true;
                 }
             }
-            await Task.Delay(TimeSpan.FromSeconds(PollSeconds), ct).ConfigureAwait(false);
+            await Task.Delay(HealthPollInterval, ct).ConfigureAwait(false);
         }
         var requirement = healthUrl is null
             ? "a stable active(running) state"
@@ -394,9 +405,9 @@ public sealed class DeployOperationExecutor(
 
     [SuppressMessage("Aetheus.Security", "SEC006",
         Justification = "Readiness probe of a just-restarted unit: at most one client per PollSeconds sample inside the health window, disposed with its no-redirect, no-proxy handler. Moving it to IHttpClientFactory means injecting the factory into this executor and registering a named client; not done here.")]
-    private static async Task<bool> ProbeFunctionalReadinessAsync(string healthUrl, CancellationToken ct)
+    private async Task<bool> ProbeFunctionalReadinessAsync(string healthUrl, CancellationToken ct)
     {
-        using var handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
+        using var handler = CreateReadinessHandler();
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
         try
         {
@@ -581,7 +592,7 @@ public sealed class DeployOperationExecutor(
             }
             catch (IOException)
             {
-                await Task.Delay(TimeSpan.FromSeconds(1), ct).ConfigureAwait(false);
+                await Task.Delay(LockRetryDelay, ct).ConfigureAwait(false);
             }
         }
         await onOutput("Another deploy of this app is in progress (lock timeout)", TaskLogLevel.Error).ConfigureAwait(false);

@@ -12,8 +12,9 @@ trap 'rm -rf "$OUTPUT"' EXIT HUP INT TERM
   --configuration Release --output "$OUTPUT/feed" --nologo
 "$DOTNET" pack "$ROOT/src/Aetheus.WebAnalytics/Aetheus.WebAnalytics.csproj" \
   --configuration Release --output "$OUTPUT/feed" --nologo
-# The normalizer takes the packed files by name, so read each version from its project instead of
-# repeating it here: a version bump must not break this gate (run 2633).
+# Read package versions from their projects so the normalization gate follows the actual packed
+# filenames without duplicated version constants. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 package_version()
 {
   sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$1" | head -n 1

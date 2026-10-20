@@ -1,8 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-@* Recette R-364, R-373 and R-374: the compatibility attestation the QA stage publishes, extracted from
-   PipelineRun.razor. A tile of its own under the timeline, each code explained in words, and the V-1
-   commit shortened with a link to it. *@
+@* The QA compatibility attestation has its own timeline tile, with explanatory labels and a link
+   to the previous version's commit. *@
 @if (Mode is { Length: > 0 } mode)
 {
     <OmniCard Class="run-attestation-card">

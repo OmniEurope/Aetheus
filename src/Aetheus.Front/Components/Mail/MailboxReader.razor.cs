@@ -2,7 +2,7 @@
 
 namespace Aetheus.Front.Components.Mail;
 
-/// <summary>Recette R1-17: the reading pane of one message and its actions; the host does the work.</summary>
+/// <summary>The reading pane of one message and its actions; the host does the work.</summary>
 public partial class MailboxReader
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;

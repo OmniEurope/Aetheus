@@ -423,8 +423,7 @@ public sealed class AppMonitoringRepository(AppDbContext db) : IAppMonitoringRep
 
     public async Task<int> AggregateHourAsync(DateTime hourUtc, CancellationToken ct = default)
     {
-        // R2-020: one completed hour, one application at a time. The sweep used to load every raw sample
-        // of its whole lookback (48 hours on the startup catch-up) for every application at once.
+        // Process one completed hour per application to bound sample loading.
         var next = hourUtc.AddHours(1);
         var sampledApps = await db.AppHealthSamples
             .AsNoTracking()
@@ -460,8 +459,7 @@ public sealed class AppMonitoringRepository(AppDbContext db) : IAppMonitoringRep
         if (toInsert.Count == 0)
             return 0;
 
-        // R-462: the production 23505 was on this insert; an application another sweep rolled up first
-        // keeps its row and the others still go in.
+        // Concurrent aggregation keeps existing rollups while inserting the remaining applications.
         return await HourlyRollupInsert.AddMissingAsync(db, toInsert, async token =>
         {
             var present = (await RolledUpAppsAsync(hourUtc, token).ConfigureAwait(false)).ToHashSet();

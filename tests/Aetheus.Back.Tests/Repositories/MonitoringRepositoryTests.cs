@@ -92,9 +92,9 @@ public class MonitoringRepositoryTests : IDisposable
         Assert.Equal("p", result[0].PipelineName);
     }
 
-    /// <summary>Recette R-373: a run whose snapshotted URL is an internal smart-HTTP clone URL carries
-    /// the id of the repository it names, whatever host the URL was re-homed to, so the dashboard links
-    /// its commit to the Aetheus page. An external URL, or a mirror path naming no repository, carries
+    /// <summary>A run whose snapshotted URL is an internal smart-HTTP clone URL carries the id of
+    /// the repository it names, whatever host the URL was re-homed to, so the dashboard links its
+    /// commit to the Aetheus page. An external URL, or a mirror path naming no repository, carries
     /// none (the front then keeps the external link, or text).</summary>
     [Fact]
     public async Task GetRecentRunsAsync_ResolvesTheInternalRepositoryOfEachRun()

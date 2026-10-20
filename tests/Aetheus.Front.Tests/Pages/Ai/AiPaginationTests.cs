@@ -12,11 +12,11 @@ public sealed class AiPaginationTests : BunitContext
     {
         _handler = BunitTestHelper.RegisterServices(this, isAdmin: true);
         _handler.SetJsonResponse("api/ai/consumption", new AiConsumptionDto());
-        // Recette R-224: the profile and binary lists the header filters offer.
+        // The profile and model lists the header filters offer.
         _handler.SetJsonResponse("api/ai/profile-options", new List<AiRunnerProfileDto>
         {
-            new() { Id = 1, Name = "reviewer", Binary = "claude" },
-            new() { Id = 2, Name = "auditor", Binary = "claude" }
+            new() { Id = 1, Name = "reviewer", Model = "claude-sonnet-5-5" },
+            new() { Id = 2, Name = "auditor", Model = "claude-sonnet-5-5" }
         });
         _handler.SetJsonResponse("api/ai/tasks", new PaginatedResult<AiTaskDefinitionDto>
         {
@@ -64,7 +64,7 @@ public sealed class AiPaginationTests : BunitContext
             && request.Url.Contains("pageSize=25", StringComparison.Ordinal));
     }
 
-    /// <summary>Recette R-224: a header filter of the tasks grid reaches the API as a column filter.</summary>
+    /// <summary>A header filter of the tasks grid reaches the API as a column filter.</summary>
     [Fact]
     public async Task TasksGrid_HeaderFilter_ReachesTheApi()
     {
@@ -83,7 +83,7 @@ public sealed class AiPaginationTests : BunitContext
             && Uri.UnescapeDataString(request.Url).Contains("Filters[0].Value=False", StringComparison.Ordinal));
     }
 
-    /// <summary>Recette R-224: a header filter of the profiles grid reaches the API as a column filter.</summary>
+    /// <summary>A header filter of the profiles grid reaches the API as a column filter.</summary>
     [Fact]
     public async Task ProfilesGrid_HeaderFilter_ReachesTheApi()
     {
@@ -93,18 +93,18 @@ public sealed class AiPaginationTests : BunitContext
         {
             Skip = 0,
             Top = 25,
-            Filters = [new GridFilterDescriptor("Binary", "claude", OmniDataGridFilterOperator.Equals)]
+            Filters = [new GridFilterDescriptor("Model", "claude", OmniDataGridFilterOperator.Equals)]
         }));
 
         Assert.Contains(_handler.Requests, request =>
             Uri.UnescapeDataString(request.Url).Contains("api/ai/profiles", StringComparison.Ordinal)
-            && Uri.UnescapeDataString(request.Url).Contains("Filters[0].Field=Binary", StringComparison.Ordinal)
+            && Uri.UnescapeDataString(request.Url).Contains("Filters[0].Field=Model", StringComparison.Ordinal)
             && Uri.UnescapeDataString(request.Url).Contains("Filters[0].Value=claude", StringComparison.Ordinal));
     }
 
     [Theory]
     [InlineData(true, "api/ai/tasks", "Enabled desc")]
-    [InlineData(false, "api/ai/profiles", "Binary desc")]
+    [InlineData(false, "api/ai/profiles", "Model desc")]
     public async Task GridSort_ReachesTheApi(bool tasks, string route, string orderBy)
     {
         if (tasks)
@@ -166,7 +166,7 @@ public sealed class AiPaginationTests : BunitContext
         {
             Assert.NotNull(cut.Find("a[href='/projects/4/overview']"));
             Assert.NotNull(cut.Find("a[href='/servers/8/overview']"));
-        }, TimeSpan.FromSeconds(2));
+        });
     }
 
     [Fact]

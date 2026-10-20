@@ -36,7 +36,7 @@ public class StaticUtilityMethodTests
     [Fact]
     public void ValidateCronExpression_SixFieldWithSeconds_Rejected()
     {
-        // CR5F: /etc/cron.d is strictly 5-field, so the preview no longer accepts a 6-field schedule.
+        // The /etc/cron.d preview accepts only five-field schedules.
         var (isValid, nextRun, error) = ServerCronSection.ValidateCronExpression("0 */5 * * * *");
         Assert.False(isValid);
         Assert.Null(nextRun);
@@ -69,8 +69,7 @@ public class StaticUtilityMethodTests
     [InlineData(PipelineStatus.Success, OmniTone.Success)]
     [InlineData(PipelineStatus.Failed, OmniTone.Danger)]
     [InlineData(PipelineStatus.Running, OmniTone.Accent)]
-    // PLAN-003 D13: amber is now Partial (finished with a swallowed failure); a cancelled run is a
-    // non-event, so it takes the neutral grey.
+    // Partial uses amber, while cancelled runs use neutral grey.
     [InlineData(PipelineStatus.Cancelled, OmniTone.Info)]
     [InlineData(PipelineStatus.Partial, OmniTone.Warning)]
     [InlineData(PipelineStatus.Pending, OmniTone.Neutral)]

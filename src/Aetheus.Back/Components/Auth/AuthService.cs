@@ -27,7 +27,7 @@ public class AuthService(
     private const int MaxFailedAttempts = 5; // F-011
     private static readonly TimeSpan BaseLockoutDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(30); // F-012
-    private static readonly TimeSpan RefreshTokenGrace = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan RefreshTokenGrace = RefreshTokenRetention.RevokedRetention;
     public async Task<bool> IsRegistrationTokenValidAsync(string token, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(token)) return false;
@@ -495,9 +495,10 @@ public class AuthService(
         await repo.AddRefreshTokenAsync(newRefresh, ct).ConfigureAwait(false);
         if (!await repo.RevokeRefreshTokenAsync(stored.Id, newRefresh.Id, ct).ConfigureAwait(false))
         {
-            // R-072: a concurrent request rotated (or a logout revoked) this token after our read. Retire
-            // the replacement nobody will receive, then answer from the token's fresh state exactly as a
-            // request arriving just after that rotation would be answered: grace window or replay.
+            // A concurrent request rotated (or a logout revoked) this token after our read. Retire
+            // the replacement nobody will receive, then answer from the token's fresh state exactly
+            // as a request arriving just after that rotation would be answered: grace window or
+            // replay.
             await repo.RevokeRefreshTokenAsync(newRefresh.Id, null, ct).ConfigureAwait(false);
             var current = await repo.FindRefreshTokenStateAsync(stored.Id, ct).ConfigureAwait(false);
             return current is null
@@ -522,17 +523,28 @@ public class AuthService(
     private async Task<RefreshTokenOutcome> ReuseRevokedTokenAsync(
         Data.Entities.RefreshToken stored, Data.Entities.RefreshToken state, DateTime now, CancellationToken ct)
     {
-        if (state.RevokedAt is { } revokedAt && now - revokedAt <= RefreshTokenGrace && state.ReplacedById is not null)
+        if (state.RevokedAt is { } revokedAt && now - revokedAt <= RefreshTokenGrace && state.ReplacedById is { } replacementId
+            && await IsStillActiveAsync(replacementId, now, ct).ConfigureAwait(false))
         {
             if (stored.User is not { IsActive: true } user) return RefreshTokenOutcome.Rejected(RefreshRejectionCodes.UserInactive);
             return new RefreshTokenOutcome(GenerateTokenResponse(BuildUserClaims(user, user.UserRoles.Select(ur => ur.Role.Name).ToList())), null);
         }
         await repo.RevokeAllUserRefreshTokensAsync(stored.UserId, ct).ConfigureAwait(false);
-        // R1-37: the whole chain is revoked as a possible theft; drop what is held in memory for the user too.
+        // The whole chain is revoked as a possible theft; drop what is held in memory for the user
+        // too.
         await domainEvents.DispatchAsync(
             new UserSessionEndedEvent(stored.UserId, UserSessionEndReasons.RefreshReplay), ct).ConfigureAwait(false);
         return RefreshTokenOutcome.Rejected(RefreshRejectionCodes.Replay);
     }
+
+    // AUD-01 (recette R1-50): the grace window only covers a request in flight during a rotation. Once
+    // the chain was ended (password change, logout, theft response: revoked with no replacement), the
+    // rotated token must not mint an access token either. A replacement that was itself rotated onward
+    // is still a live chain: another tab refreshing at the same moment must not read as a theft.
+    private async Task<bool> IsStillActiveAsync(int tokenId, DateTime now, CancellationToken ct) =>
+        await repo.FindRefreshTokenStateAsync(tokenId, ct).ConfigureAwait(false) is { } replacement
+        && !replacement.IsExpired(now)
+        && (replacement.RevokedAt is null || replacement.ReplacedById is not null);
 
     private async Task<LoginResponse> GenerateTokenResponseWithRefreshAsync(
         List<Claim> claims, int userId, bool rememberMe, CancellationToken ct)

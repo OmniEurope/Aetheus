@@ -1,0 +1,60 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R3-59: the complete list of the packages installed on the host, services or not, read by the
+   agent without privilege. Read-only by design: no row carries an action, uninstalling an arbitrary package
+   stays refused (no sudo rule without a fixed list). While the agent reads, OE's veil lies over the card. *@
+@inject GridExportContext ExportContext
+
+@if (!IsWindows)
+{
+    <OmniCard Class="@(Busy ? "omni-u-mb-lg server-package-inventory omni-busy" : "omni-u-mb-lg server-package-inventory")" aria-busy="@(Busy ? "true" : "false")">
+        <OmniStack Gap="OmniSpacing.Medium">
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["InstalledPackagesTitle"]
+                    <OmniTooltip Text="@L["InstalledPackagesReadOnlyHelp"]" Focusable="true" MaxWidth="OmniTooltipWidth.Wide">
+                        <span role="img" aria-label="@L["InstalledPackagesReadOnlyHelp"]" class="package-inventory-help"><OmniIcon Name="OmniIconName.Question" aria-hidden="true" /></span>
+                    </OmniTooltip>
+                </OmniHeading>
+                <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Tonal" Class="package-inventory-readonly">
+                    <Icon><OmniIcon Name="OmniIconName.Lock" /></Icon>
+                    <ChildContent>@L["ReadOnly"]</ChildContent>
+                </OmniBadge>
+                @if (AgentCanList)
+                {
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ListAsync" Disabled="@AgentOffline" Busy="@Busy" Class="package-inventory-load">
+                        <OmniIcon Name="OmniIconName.ListChecks" /> <span>@L[_report is null ? "InstalledPackagesLoad" : "InstalledPackagesReload"]</span>
+                    </OmniButton>
+                }
+            </OmniStack>
+            @if (!AgentCanList)
+            {
+                <OmniAlert Severity="OmniSeverity.Warning" Class="package-inventory-agent-old">@L["InstalledPackagesNeedsAgentUpdate"]</OmniAlert>
+            }
+            else if (AgentOffline)
+            {
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0">@L["AgentOfflineActionBlocked"]</OmniText>
+            }
+            @if (_failure is { } failure)
+            {
+                <OmniAlert Severity="OmniSeverity.Danger" Class="package-inventory-failed">
+                    <OmniText Element="OmniTextElement.Strong">@L["InstalledPackagesIncomplete"]</OmniText>
+                    <OmniText Element="OmniTextElement.Paragraph" Class="task-output-error">@failure</OmniText>
+                </OmniAlert>
+            }
+            else if (_report is { } report)
+            {
+                <OmniDataGrid TItem="InstalledPackageDto" Items="@report.Packages" KeyOf="@(row => row.Name)" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+                    Caption="@string.Format(L["InstalledPackagesCaption"], report.Packages.Count)" Class="package-inventory-grid"
+                    ExportTitle="@ExportContext.Title(L["InstalledPackagesTitle"])" ExportFields="@ExportContext.Fields()">
+                    <Columns>
+                        <OmniDataGridColumn Frozen="true" TItem="InstalledPackageDto" Property="Name" Title="@L["Package"]" Filterable="true" />
+                        <OmniDataGridColumn TItem="InstalledPackageDto" Property="Version" Title="@L["Version"]" Filterable="true" />
+                    </Columns>
+                </OmniDataGrid>
+            }
+            @if (_taskId is { } taskId)
+            {
+                <OmniLink Href="@($"/tasks/{taskId}")">@L["ServerTaskOpen", taskId]</OmniLink>
+            }
+        </OmniStack>
+    </OmniCard>
+}

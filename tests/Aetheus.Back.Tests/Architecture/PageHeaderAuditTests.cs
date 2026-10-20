@@ -4,12 +4,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 lot 1: one header component, one geometry. Every routed page must get its chrome from
-/// <c>OmniPageHeader</c> (its own or its layout's; OE's since recette R-395, which replaced the Aetheus
-/// PageHeader), and nobody may hand-roll a title again - that is how the app ended up with two stacked
-/// blocks and a different content offset on every page.
-/// </summary>
+/// <summary>Routed pages use OmniPageHeader directly or through their layout for consistent
+/// geometry.</summary>
 public sealed class PageHeaderAuditTests
 {
     /// <summary>Pages that render no chrome of their own: the two authentication screens, plus the two
@@ -70,7 +66,7 @@ public sealed class PageHeaderAuditTests
             $"These pages stack a second header on top of their layout's: {string.Join(", ", offenders)}");
     }
 
-    /// <summary>Every <c>.razor</c> under Components (the pages since PLAN-009 lot 2) that declares a route.</summary>
+    /// <summary>Routed Razor components under Components.</summary>
     private static IEnumerable<(string Name, string Text)> RoutedPages() =>
         RepositoryScan.Enumerate(
                 Path.Combine(RepositoryScan.Root, "src", "Aetheus.Front", "Components"), "*.razor")

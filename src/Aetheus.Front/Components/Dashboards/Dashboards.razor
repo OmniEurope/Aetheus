@@ -47,9 +47,12 @@ else
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mt-xs">
                         @dashboard.CreatedAt.ToString("g")
                     </OmniText>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
+                    @* STD-BTN detection 11: Edit visible, the other actions in the menu. *@
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-md">
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => EditDashboard(dashboard))"><OmniIcon Name="OmniIconName.Edit" /> <span>@L["Edit"]</span></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteDashboard(dashboard.Id))"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                            <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => DeleteDashboard(dashboard.Id))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                        </OmniOverflowMenu>
                     </OmniStack>
                 </OmniCard>
             </OmniColumn>

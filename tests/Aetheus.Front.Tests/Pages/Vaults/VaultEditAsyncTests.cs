@@ -83,8 +83,7 @@ public class VaultEditAsyncTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 50));
         cut.WaitForState(
-            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         var method = typeof(VaultEdit).GetMethod("OnSubmit", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -104,8 +103,7 @@ public class VaultEditAsyncTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 51));
         cut.WaitForState(
-            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         SetFormValue(cut.Instance, "_newSecret", "Key", "NEW_KEY");
         SetFormValue(cut.Instance, "_newSecret", "Value", "secret-value");
@@ -129,8 +127,7 @@ public class VaultEditAsyncTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 52));
         cut.WaitForState(
-            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         SetFormValue(cut.Instance, "_newSecret", "Key", "WILL_FAIL");
         SetFormValue(cut.Instance, "_newSecret", "Value", "secret-value");
@@ -168,8 +165,7 @@ public class VaultEditAsyncTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 54));
         cut.WaitForState(
-            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         var method = typeof(VaultEdit).GetMethod("ExportKeys", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -237,8 +233,7 @@ public class VaultEditAsyncTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 58));
         cut.WaitForState(
-            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         var method = typeof(VaultEdit).GetMethod("CopyKeyReference", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, ["API_KEY"])!);
@@ -258,8 +253,7 @@ public class VaultEditAsyncTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 59));
         cut.WaitForState(
-            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance) != null);
 
         var method = typeof(VaultEdit).GetMethod("ReloadDetail", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -282,8 +276,7 @@ public class VaultEditAsyncTests : BunitContext
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, (int?)null));
         cut.WaitForState(
-            () => (typeof(VaultEdit).GetField("_projects", Priv)!.GetValue(cut.Instance) as System.Collections.ICollection)?.Count > 0,
-            TimeSpan.FromSeconds(2));
+            () => (typeof(VaultEdit).GetField("_projects", Priv)!.GetValue(cut.Instance) as System.Collections.ICollection)?.Count > 0);
 
         var model = typeof(VaultEdit).GetField("_model", Priv)!.GetValue(cut.Instance);
         var pid = (int?)model!.GetType().GetProperty("ProjectId")!.GetValue(model);

@@ -7,10 +7,13 @@ using NUnit.Framework.Interfaces;
 
 namespace Aetheus.E2E;
 
-public abstract class E2ETestBase : PageTest
+public abstract class E2ETestBase : BrowserTest
 {
     private readonly List<string> _browserDiagnostics = [];
     private readonly List<Regex> _allowedBrowserDiagnostics = [];
+    private IBrowserContext? _fixtureContext;
+    private int _fixtureContextsOpened;
+    private int _testsOnFixtureContext;
 
     // All harness configuration (URLs, admin creds, timeouts, readiness hook) lives in
     // PlaywrightConfig - each value env-overridable with the historical default. These
@@ -24,7 +27,24 @@ public abstract class E2ETestBase : PageTest
 
     protected virtual bool UsePreauthenticatedContext => true;
 
-    public override BrowserNewContextOptions ContextOptions()
+    /// <summary>
+    /// True for fixtures whose tests do not need a clean browser profile: they then share one
+    /// authenticated context for the whole fixture and each test still gets a fresh page (its own
+    /// routes, init scripts, viewport, sessionStorage and listeners). Fixtures that prove login,
+    /// logout, permissions or a fresh profile keep the default, one context per test. A test that
+    /// changes shared profile state inside a sharing fixture opts out with
+    /// <see cref="IsolatedBrowserContextAttribute"/>. After a failed test the shared context is
+    /// discarded so a broken state never reaches the next test.
+    /// </summary>
+    protected virtual bool ShareBrowserContextAcrossTests => false;
+
+    /// <summary>The browser context of the current test (shared by the fixture or its own).</summary>
+    public IBrowserContext Context { get; private set; } = null!;
+
+    /// <summary>A fresh page opened for the current test.</summary>
+    public IPage Page { get; private set; } = null!;
+
+    public virtual BrowserNewContextOptions ContextOptions()
     {
         var options = new BrowserNewContextOptions
         {
@@ -36,9 +56,14 @@ public abstract class E2ETestBase : PageTest
         return options;
     }
 
+    // One SetUp method, so the page exists before the diagnostics hooks attach to it (NUnit does not
+    // order two SetUp methods of the same class). BrowserTest's own SetUp has already provided Browser.
     [SetUp]
-    public void CaptureBrowserDiagnostics()
+    public async Task OpenPageAndCaptureBrowserDiagnosticsAsync()
     {
+        Context = await AcquireContextAsync();
+        Page = await Context.NewPageAsync();
+
         _browserDiagnostics.Clear();
         _allowedBrowserDiagnostics.Clear();
         Page.Console += (_, message) =>
@@ -52,6 +77,55 @@ public abstract class E2ETestBase : PageTest
             }
         };
         Page.PageError += (_, exception) => _browserDiagnostics.Add($"page error: {exception}");
+    }
+
+    private bool UsesFixtureContext =>
+        ShareBrowserContextAcrossTests && !IsolatedBrowserContextAttribute.AppliesToCurrentTest();
+
+    private async Task<IBrowserContext> AcquireContextAsync()
+    {
+        // NewContext registers the context with BrowserTest, which closes it after the test.
+        if (!UsesFixtureContext)
+            return await NewContext(ContextOptions());
+
+        // The worker replaces its browser after a failed test; a context of the old browser is dead.
+        if (_fixtureContext is null || _fixtureContext.Browser != Browser || !Browser.IsConnected)
+        {
+            await CloseFixtureContextAsync();
+            var context = await Browser.NewContextAsync(ContextOptions());
+            context.Close += (_, closed) =>
+            {
+                if (ReferenceEquals(_fixtureContext, closed)) _fixtureContext = null;
+            };
+            _fixtureContext = context;
+            _fixtureContextsOpened++;
+        }
+
+        _testsOnFixtureContext++;
+        TestContext.Out.WriteLine(
+            $"[E2E-CONTEXT] {GetType().Name}: test {_testsOnFixtureContext} on shared context #{_fixtureContextsOpened}.");
+        return _fixtureContext;
+    }
+
+    private async Task CloseFixtureContextAsync()
+    {
+        var context = _fixtureContext;
+        _fixtureContext = null;
+        if (context is null) return;
+        try
+        {
+            await context.CloseAsync();
+        }
+        catch (PlaywrightException)
+        {
+            // The browser that owned it is already gone.
+        }
+    }
+
+    [OneTimeTearDown]
+    public async Task CloseSharedBrowserContextAsync()
+    {
+        await CloseFixtureContextAsync();
     }
 
     /// <summary>
@@ -127,7 +201,75 @@ public abstract class E2ETestBase : PageTest
 
     protected async Task NavigateToAsync(string path)
     {
-        await Page.GotoAsync($"{FrontendUrl}/{path.TrimStart('/')}", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+        const int maxAttempts = 3;
+        for (var attempt = 1; ; attempt++)
+        {
+            var diagnosticsBefore = _browserDiagnostics.Count;
+            await Page.GotoAsync($"{FrontendUrl}/{path.TrimStart('/')}", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+
+            // A Windows network change (a Docker or Hyper-V adapter coming up) makes Chromium abort the
+            // in-flight boot downloads with ERR_NETWORK_CHANGED, and index.html then shows its start
+            // failure panel. That is the host, not the application: reload a bounded number of times,
+            // and only when that exact error was logged during this attempt.
+            var stateHandle = await Page.WaitForFunctionAsync(
+                """
+                readySelector => {
+                    if (document.querySelector(readySelector)) return 'ready';
+                    const failure = document.getElementById('app-start-error');
+                    return failure && !failure.hidden ? 'start-failed' : null;
+                }
+                """,
+                $"[data-testid='{PlaywrightConfig.BlazorReadyTestId}'], .omni-panel-menu, #Username",
+                new() { Timeout = AppReadyTimeoutMs });
+            var state = await stateHandle.JsonValueAsync<string>();
+            var networkChanged = _browserDiagnostics
+                .Skip(diagnosticsBefore)
+                .Any(line => line.Contains("ERR_NETWORK_CHANGED", StringComparison.Ordinal));
+            if (state == "start-failed" && networkChanged && attempt < maxAttempts)
+            {
+                TestContext.Progress.WriteLine(
+                    $"Navigation to {path} hit ERR_NETWORK_CHANGED during boot; retrying attempt {attempt + 1}/{maxAttempts}.");
+                _browserDiagnostics.RemoveRange(diagnosticsBefore, _browserDiagnostics.Count - diagnosticsBefore);
+                continue;
+            }
+
+            await WaitForAppReadyAsync();
+            return;
+        }
+    }
+
+    /// <summary>
+    /// Navigates the already loaded application to <paramref name="path"/> through the Blazor router,
+    /// without a document reload: what a click on an internal link does. Use it only after a first
+    /// <see cref="NavigateToAsync"/>, and keep a real reload wherever the reload itself is the proof.
+    /// </summary>
+    protected async Task NavigateInsideTheApplicationAsync(string path)
+    {
+        var target = new Uri(new Uri(FrontendUrl), path).ToString();
+        var origin = await Page.EvaluateAsync<string>("() => location.href");
+        // Blazor numbers its history entries: a route that redirects back to where it came from (an
+        // edit route without permission returns to its detail page) leaves the address unchanged.
+        var originEntry = await Page.EvaluateAsync<int?>("() => history.state?.['_index'] ?? null");
+        if (string.Equals(origin, target, StringComparison.Ordinal))
+        {
+            await NavigateToAsync(path);
+            return;
+        }
+        await Page.EvaluateAsync("""
+            path => {
+                if (!window.Blazor?.navigateTo) throw new Error('The Blazor router is not loaded on ' + location.href);
+                window.Blazor.navigateTo(path);
+            }
+            """, path);
+        // Read in the page, not through Playwright's URL tracking, which can miss a history change made
+        // while the call above was returning. A new address or a new history entry proves the router ran.
+        await Page.WaitForFunctionAsync(
+            "([origin, entry]) => location.href !== origin || (history.state?.['_index'] ?? null) !== entry",
+            new object?[] { origin, originEntry },
+            new() { Timeout = AppReadyTimeoutMs });
+        // The router renders the new route in the .NET call that follows the history change; two
+        // animation frames later its first render batch, loaders included, is in the document.
+        await Page.EvaluateAsync("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
         await WaitForAppReadyAsync();
     }
 
@@ -305,9 +447,22 @@ public abstract class E2ETestBase : PageTest
             .Where(diagnostic => !_allowedBrowserDiagnostics.Any(pattern => pattern.IsMatch(diagnostic)))
             .ToArray();
         var testAlreadyFailed = TestContext.CurrentContext.Result.Outcome.Status == TestStatus.Failed;
-        if (!testAlreadyFailed && unexpectedDiagnostics.Length == 0)
-            return;
+        var failing = testAlreadyFailed || unexpectedDiagnostics.Length > 0;
 
+        if (failing)
+            await CaptureFailureEvidenceAsync();
+        await ReleasePageAsync(discardFixtureContext: failing);
+
+        if (!testAlreadyFailed && unexpectedDiagnostics.Length > 0)
+        {
+            Assert.Fail(
+                "Unexpected browser errors were captured:\n  "
+                + string.Join("\n  ", unexpectedDiagnostics));
+        }
+    }
+
+    private async Task CaptureFailureEvidenceAsync()
+    {
         try
         {
             var safeName = Regex.Replace(TestContext.CurrentContext.Test.Name, "[^A-Za-z0-9_]", "_");
@@ -323,12 +478,23 @@ public abstract class E2ETestBase : PageTest
         {
             // Diagnostics are best-effort.
         }
+    }
 
-        if (!testAlreadyFailed && unexpectedDiagnostics.Length > 0)
+    // A per-test context is closed by BrowserTest; on a shared context the page itself must go, or
+    // its SignalR connections and timers would keep running under the next test.
+    private async Task ReleasePageAsync(bool discardFixtureContext)
+    {
+        if (!ReferenceEquals(Context, _fixtureContext))
+            return;
+        try
         {
-            Assert.Fail(
-                "Unexpected browser errors were captured:\n  "
-                + string.Join("\n  ", unexpectedDiagnostics));
+            await Page.CloseAsync();
         }
+        catch (PlaywrightException)
+        {
+            // The context or browser already closed it.
+        }
+        if (discardFixtureContext)
+            await CloseFixtureContextAsync();
     }
 }

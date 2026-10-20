@@ -7,7 +7,7 @@ namespace Aetheus.Back.Components.Git;
 [Authorize]
 public class GitController(IGitService gitService, IResourceAuthorizationService authz) : ControllerBase
 {
-    // --- R-01: Git Connections ---
+    // Git connections.
 
     [HttpGet("connections")]
     public async Task<ActionResult<List<GitConnectionDto>>> GetConnections([FromQuery] int projectId, CancellationToken ct)
@@ -68,7 +68,7 @@ public class GitController(IGitService gitService, IResourceAuthorizationService
         return NoContent();
     }
 
-    // --- R-02: Pull Requests ---
+    // Pull requests.
 
     [HttpGet("connections/{gitConnectionId:int}/pull-requests")]
     public async Task<ActionResult<PaginatedResult<PullRequestDto>>> GetPullRequests(
@@ -98,7 +98,7 @@ public class GitController(IGitService gitService, IResourceAuthorizationService
         return Ok(result);
     }
 
-    // --- R-03: Branch Policies ---
+    // Branch policies.
 
     [HttpGet("connections/{gitConnectionId:int}/branch-policies")]
     public async Task<ActionResult<List<BranchPolicyDto>>> GetBranchPolicies(int gitConnectionId, CancellationToken ct)

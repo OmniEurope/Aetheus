@@ -1,7 +1,11 @@
 [Unit]
 Description=Aetheus Infrastructure Agent
-After=network-online.target
-Wants=network-online.target
+After=network-online.target aetheus-agent-read-grant.service
+Wants=network-online.target aetheus-agent-read-grant.service
+# aetheus-agent-read-grant.service gives the agent read-only ACLs on the SSH configuration it monitors
+# (docs/contracts/security.md, "Read-only host observation rights"), before every start. Wants=, not
+# Requires=: whatever it returns, the agent starts. The matching .ssh directories are bound read-only
+# into this unit's sandbox by BindReadOnlyPaths= below.
 
 [Service]
 # Type=exec - the unit is "active" as soon as the binary execs. We previously
@@ -27,6 +31,7 @@ WorkingDirectory=#{INSTALL_DIR}#
 # legacy keys from the old install-dir location on first run, so existing enrollments survive.
 StateDirectory=aetheus-agent
 StateDirectoryMode=#{STATE_DIRECTORY_MODE}#
+#{JOURNAL_GROUP_BLOCK}#
 ExecStart=#{EXEC_START}#
 Restart=always
 RestartSec=10

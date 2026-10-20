@@ -148,8 +148,8 @@ test("still refuses a tampered contract identity", () => {
   assert.match(err, /identity is invalid/);
 });
 
-// PLAN-007 lot 5: redeploying the release deployed before the live one. Production runs N, which
-// migrated from the candidate's schemaAfter; N's QA exercised the candidate (its V-1) on that schema.
+// The live release's QA qualifies rollback to the candidate whose schemaAfter matches the schema
+// from which the live release migrated.
 const LIVE_SOURCE = "d".repeat(40);
 const live = seal({ bootstrap: false, schemaBefore: fingerprint(AFTER), schemaAfter: fingerprint(NEXT) }, LIVE_SOURCE);
 

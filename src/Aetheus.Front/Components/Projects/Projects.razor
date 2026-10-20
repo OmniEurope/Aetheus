@@ -8,7 +8,7 @@
         <HelpLink PageKey="projects" />
     </Badges>
     <Actions>
-        @* Recette R-408: the supervision of every project is a side-menu entry (NavMenu), not a button here. *@
+        @* The supervision of every project is a side-menu entry (NavMenu), not a button here. *@
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(!_canWrite)" Class="project-list-create" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
     </Actions>
 </OmniPageHeader>
@@ -73,9 +73,9 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                     </OmniText>
                 }
 
-                @* PLAN-003 lot 8: no frame; two lines ruled like "Last commit" / "Last run" below.
-                   Line 1: Production, and its state on the right. Line 2: the grade, and the
-                   people online on the right when the app reports them. *@
+                @* No frame; two lines ruled like "Last commit" / "Last run" below. Line 1:
+                   Production, and its state on the right. Line 2: the grade, and the people online
+                   on the right when the app reports them. *@
                 <div class="project-production">
                     <div class="project-production-row">
                         <span class="project-production-label">@L["Production"]</span>
@@ -106,8 +106,8 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                         <div class="project-activity-content">
                             @if (project.LastCommitId.HasValue)
                             {
-                                @* PLAN-005 lot 7 / D44: the SHA, then the first line of the message on its
-                                   own line (full message in the title); "Commit" only for a commit without one. *@
+                                @* Display the SHA and first message line, with the full message in
+                                   the title and a fallback label when absent. *@
                                 <span class="project-activity-link">
                                     <ShortId Value="@LastCommitSha(project)" Href="@GitCommitHref(project)" Copyable="false" />
                                     @if (string.IsNullOrWhiteSpace(project.LastCommitMessage))
@@ -133,8 +133,8 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                         </div>
                     </div>
                     <div class="project-activity-row">
-                        @* PLAN-005 lot 7 / D45: the label says which run is shown, the one in progress
-                           or the last one; the status is a badge with its word, not a colored dot. *@
+                        @* Identify an active or latest run explicitly and render its status as a
+                           labelled badge. *@
                         <span class="project-activity-label">@(project.LastRunIsActive ? L["RunInProgress"] : L["LastRun"])</span>
                         <div class="project-activity-content">
                             @if (project.LastRunId.HasValue)

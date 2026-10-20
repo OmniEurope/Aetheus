@@ -18,7 +18,7 @@ public class RkhunterSchedulerService(IServiceScopeFactory scopeFactory, ILogger
 
     private async Task RunLeaderLoopAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(BackendRuntimeDefaults.SchedulerCheckInterval);
+        using var timer = new PeriodicTimer(BackendRuntimeDefaults.SchedulerCheckInterval, timeProvider);
 
         do
         {

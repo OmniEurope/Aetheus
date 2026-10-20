@@ -14,7 +14,7 @@ public partial class EntityAuditTrail
     private int _count;
     private bool _loading;
 
-    // Recette R-238: the actions the Action filter lists, the same source as the audit log page.
+    // The actions the Action filter lists, the same source as the audit log page.
     private List<string> _actionOptions = [];
     private Func<string, string>? _actionFilterText;
     private Func<string, string> ActionFilterText => _actionFilterText ??= ActionText;
@@ -31,7 +31,7 @@ public partial class EntityAuditTrail
         }
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<AuditLogDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(25);
@@ -59,7 +59,7 @@ public partial class EntityAuditTrail
         }
     }
 
-    // Recette R-452: one label and one colour per audit action, as in the audit log.
+    // One label and one colour per audit action, as in the audit log.
     private string ActionText(string action) => Audit.AuditActionPresentation.Label(L, action);
 
     private Task ShowDetailsAsync(AuditLogDto log) =>

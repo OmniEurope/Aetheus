@@ -4,8 +4,7 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// Recette R-210 / R-224: the column filters of a server's projects grid. The keys are the grid's column keys.
+/// <summary> The column filters of a server's projects grid. The keys are the grid's column keys.
 /// </summary>
 internal static class ServerProjectListQuery
 {

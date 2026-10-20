@@ -1,19 +1,23 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R1-17: one message. The HTML arrives sanitized by the backend (no script, no event handler,
-   no remote resource unless "Show images" fetched it through the backend); the page's own Content
-   Security Policy still refuses any remote image or script that would slip through. *@
+@* One message. The HTML arrives sanitized by the backend (no script, no event handler, no remote
+   resource unless "Show images" fetched it through the backend); the page's own Content Security
+   Policy still refuses any remote image or script that would slip through. *@
 <OmniCard Class="mailbox-reader">
     <Header>
         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 mailbox-reader-subject">@Subject</OmniText>
     </Header>
     <ChildContent>
         <OmniStack Gap="OmniSpacing.Medium">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Wrap="true" Class="mailbox-reader-actions">
-                <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@(!CanWrite)" OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.Reply))"><OmniIcon Name="@MaterialIconMap.Resolve("undo")" /> <span>@L["MailboxReply"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@(!CanWrite)" OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.ReplyAll))"><OmniIcon Name="@MaterialIconMap.Resolve("group")" /> <span>@L["MailboxReplyAll"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@(!CanWrite)" OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.Forward))"><OmniIcon Name="@MaterialIconMap.Resolve("arrow_forward")" /> <span>@L["MailboxForward"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@(!CanWrite)" OnClick="@(() => OnToggleRead.InvokeAsync())"><OmniIcon Name="@MaterialIconMap.Resolve(Message.IsRead ? "visibility_off" : "visibility")" /> <span>@(Message.IsRead ? L["MailboxMarkUnread"] : L["MailboxMarkRead"])</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@(!CanWrite)" OnClick="@(() => OnDelete.InvokeAsync())"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+            @* Recette R3-52: one visible action (Répondre, grey: Écrire is the page's blue one), the others in the
+               menu beside it; deleting sits there in red, no longer as a red button among the others. *@
+            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="mailbox-reader-actions">
+                <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@(!CanWrite)" OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.Reply))" Class="mailbox-reply"><OmniIcon Name="@MaterialIconMap.Resolve("undo")" /> <span>@L["MailboxReply"]</span></OmniButton>
+                <OmniOverflowMenu Label="@L["MoreActions"]" Disabled="@(!CanWrite)" Class="mailbox-reader-more">
+                    <OmniMenuItem OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.ReplyAll))"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("group")" /></Icon><ChildContent>@L["MailboxReplyAll"]</ChildContent></OmniMenuItem>
+                    <OmniMenuItem OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.Forward))"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("arrow_forward")" /></Icon><ChildContent>@L["MailboxForward"]</ChildContent></OmniMenuItem>
+                    <OmniMenuItem OnClick="@(() => OnToggleRead.InvokeAsync())"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(Message.IsRead ? "visibility_off" : "visibility")" /></Icon><ChildContent>@(Message.IsRead ? L["MailboxMarkUnread"] : L["MailboxMarkRead"])</ChildContent></OmniMenuItem>
+                    <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => OnDelete.InvokeAsync())"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                </OmniOverflowMenu>
             </OmniStack>
             <OmniDescriptionList Columns="2">
                 <OmniDescriptionItem Label="@L["MailboxFrom"]">@Message.From</OmniDescriptionItem>

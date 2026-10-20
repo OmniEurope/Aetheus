@@ -38,7 +38,7 @@ public sealed class ProjectCardHoverContractTests
             RegexOptions.CultureInvariant);
 
         Assert.True(match.Success, "The project-card-name hover rule is missing.");
-        // The hover keeps the resting colour: the tile title token (recette R-106), the same as at rest.
+        // The hover keeps the resting colour: the tile title token, the same as at rest.
         Assert.Contains("color: var(--aetheus-tile-title)", match.Groups["body"].Value, StringComparison.Ordinal);
         Assert.Contains("text-decoration: none", match.Groups["body"].Value, StringComparison.Ordinal);
     }

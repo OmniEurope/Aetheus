@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// What a pipelines list showed and how it was filtered, kept for a return to it (recette R2-087,
-/// <see cref="PageStateCache"/>).
-/// </summary>
+/// <summary>Retain the pipeline list and filters in PageStateCache so return navigation restores
+/// the user's context.</summary>
 internal sealed record PipelinesListState(
     List<PipelineDependencyDto> Pipelines,
     List<PipelineRunDto> RecentRuns,

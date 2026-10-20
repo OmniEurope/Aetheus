@@ -15,8 +15,8 @@ namespace Aetheus.Back.Tests;
 public class TaskServiceTests
 {
     private readonly ITaskRepository _repo = Substitute.For<ITaskRepository>();
-    // The orchestration port is gone: Tasks announces a settled step and Pipelines reacts, so the
-    // spy that used to stand in for the run service is now the dispatcher.
+    // Tasks announces settled steps through the dispatcher, and Pipelines handles their
+    // consequences.
     private readonly Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher _domainEvents =
         Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>();
     private readonly ILogService _logService = Substitute.For<ILogService>();
@@ -276,6 +276,71 @@ public class TaskServiceTests
 
         Assert.False(result);
         Assert.Equal(TaskExecutionStatus.Assigned, task.Status);
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    private static readonly AgentTaskLeaseRequest ReleaseLease = new()
+    {
+        AgentSessionId = "11111111111111111111111111111111",
+        AgentSessionFencingToken = 3
+    };
+
+    [Fact]
+    public async Task ReleaseAssignedTaskAsync_AnAssignedTaskNeverStarted_IsHandedBackAndSaved()
+    {
+        var task = new ServerTask { Id = 7, ServerId = 2, Status = TaskExecutionStatus.Assigned };
+        _repo.FindTaskAsync(7, Arg.Any<CancellationToken>()).Returns(task);
+        _repo.TryReleaseAssignedTaskWithLeaseAsync(task, ReleaseLease.AgentSessionId, 3, Arg.Any<CancellationToken>()).Returns(true);
+
+        var released = await _sut.ReleaseAssignedTaskAsync(7, ReleaseLease, TestContext.Current.CancellationToken);
+
+        Assert.True(released);
+        await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReleaseAssignedTaskAsync_AnUnknownTask_ReturnsFalseWithoutTouchingTheRepository()
+    {
+        _repo.FindTaskAsync(7, Arg.Any<CancellationToken>()).Returns((ServerTask?)null);
+
+        Assert.False(await _sut.ReleaseAssignedTaskAsync(7, ReleaseLease, TestContext.Current.CancellationToken));
+
+        await _repo.DidNotReceiveWithAnyArgs().TryReleaseAssignedTaskWithLeaseAsync(default!, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    [Theory]
+    [InlineData(TaskExecutionStatus.Pending)]
+    [InlineData(TaskExecutionStatus.Running)]
+    [InlineData(TaskExecutionStatus.Success)]
+    public async Task ReleaseAssignedTaskAsync_ATaskThatIsNotAssigned_IsRefused(TaskExecutionStatus status)
+    {
+        _repo.FindTaskAsync(7, Arg.Any<CancellationToken>()).Returns(new ServerTask { Id = 7, Status = status });
+
+        Assert.False(await _sut.ReleaseAssignedTaskAsync(7, ReleaseLease, TestContext.Current.CancellationToken));
+
+        await _repo.DidNotReceiveWithAnyArgs().TryReleaseAssignedTaskWithLeaseAsync(default!, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ReleaseAssignedTaskAsync_AnAssignedTaskThatAlreadyStarted_IsRefused()
+    {
+        var task = new ServerTask { Id = 7, Status = TaskExecutionStatus.Assigned, StartedAt = DateTime.UtcNow };
+        _repo.FindTaskAsync(7, Arg.Any<CancellationToken>()).Returns(task);
+
+        Assert.False(await _sut.ReleaseAssignedTaskAsync(7, ReleaseLease, TestContext.Current.CancellationToken));
+
+        await _repo.DidNotReceiveWithAnyArgs().TryReleaseAssignedTaskWithLeaseAsync(default!, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ReleaseAssignedTaskAsync_WhenTheLeaseIsNotCurrent_ReturnsFalseAndSavesNothing()
+    {
+        var task = new ServerTask { Id = 7, Status = TaskExecutionStatus.Assigned };
+        _repo.FindTaskAsync(7, Arg.Any<CancellationToken>()).Returns(task);
+        _repo.TryReleaseAssignedTaskWithLeaseAsync(task, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        Assert.False(await _sut.ReleaseAssignedTaskAsync(7, ReleaseLease, TestContext.Current.CancellationToken));
+
         await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -670,7 +735,7 @@ public class TaskServiceTests
     [Fact]
     public async Task CompleteTaskAsync_AFailedActionOutsideAnyPipeline_IsNotAnIncident()
     {
-        // Recette R-515: three failed attempts to start dovecot were three incidents of the server.
+        // Repeated failed service-start attempts are distinct server incidents.
         var task = new ServerTask
         {
             Id = 1,

@@ -6,9 +6,10 @@ namespace Aetheus.Back.Components.Pipelines;
 /// <summary>
 /// Server resolution methods - split from <see cref="PipelineRepository"/> to stay within the
 /// 600-line file budget. Covers agent/pool/environment matching, the always-runnable org fallback,
-/// and the F-EXEC-1 authorization candidate enumeration.
+/// and the F-EXEC-1 authorization candidate enumeration. Its runner and deploy-target selection is also
+/// registered on its own as <see cref="IPipelineRunnerTargetReader"/> (audit AUD-07).
 /// </summary>
-internal sealed class PipelineServerResolver(AppDbContext db)
+internal sealed class PipelineServerResolver(AppDbContext db) : IPipelineRunnerTargetReader
 {
     public async Task<Server?> FindOnlineServerByAgentAsync(string agent, OsType requiredOs = OsType.Unknown, CancellationToken ct = default)
     {
@@ -129,7 +130,7 @@ internal sealed class PipelineServerResolver(AppDbContext db)
     /// by <paramref name="environmentName"/>. A name is unique per project only, so it is the project's own
     /// environment first, then a shared one (no project), never another project's homonym, which the
     /// organization filter alone let through. The same rule the approval, check and lock gates read
-    /// (<see cref="IPipelineRepository.FindEnvironmentByNameAsync"/>); a null project sees shared ones only.
+    /// (<see cref="IPipelineEnvironmentReader.FindEnvironmentByNameAsync"/>); a null project sees shared ones only.
     /// </summary>
     private IQueryable<Server> EnvironmentMembers(string environmentName, int? projectId)
     {
@@ -258,6 +259,7 @@ internal sealed class PipelineServerResolver(AppDbContext db)
 
         return await query
             .WhereAgentCan(AgentCapabilities.PipelineBuild)
+            .OrderBy(server => server.Id)
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
     }
@@ -431,6 +433,10 @@ internal sealed class PipelineServerResolver(AppDbContext db)
         return null;
     }
 
+    public Task<int?> GetAiRunnerProfileOrganizationIdAsync(int profileId, CancellationToken ct = default) =>
+        db.AiRunnerProfiles.AsNoTracking().Where(profile => profile.Id == profileId)
+            .Select(profile => (int?)profile.OrganizationId).FirstOrDefaultAsync(ct);
+
     public async Task<List<Pipeline>> GetPipelinesByEnvironmentAsync(int environmentId, CancellationToken ct = default)
     {
         return await db.Pipelines
@@ -495,31 +501,11 @@ internal sealed class PipelineServerResolver(AppDbContext db)
             .Select(p => p.ReleaseNumberingPattern)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
 
-    // F-INF-02: username of the project's owning-organization Owner (null if unresolvable). Used to give a
-    // pipeline auto-synced from committed YAML a REAL owner, not the non-existent "system" that the F-EXEC-1b
-    // authorization gate can never resolve (which is what blocked chained release triggers).
-    public async Task<string?> GetProjectOwnerUsernameAsync(int projectId, CancellationToken ct = default)
-    {
-        var orgId = await db.Projects.AsNoTracking()
+    public async Task<string?> GetProjectNameAsync(int projectId, CancellationToken ct = default) =>
+        await db.Projects.AsNoTracking()
             .Where(p => p.Id == projectId)
-            .Select(p => (int?)p.OrganizationId)
+            .Select(p => p.Name)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        if (orgId is null) return null;
-        return await db.OrganizationMembers.AsNoTracking()
-            .Where(m => m.OrganizationId == orgId.Value && m.Role == OrganizationRole.Owner)
-            .OrderBy(m => m.UserId) // deterministic when an org has more than one Owner
-            .Select(m => m.User.Username)
-            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-    }
-
-    // F-INF-02b: does this username still map to an active user? A pipeline owner that fails this can never
-    // pass the F-EXEC-1b gate, so the sync path treats it as unresolvable and re-resolves a live owner.
-    public async Task<bool> IsActiveUsernameAsync(string username, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(username)) return false;
-        return await db.Users.AsNoTracking()
-            .AnyAsync(u => u.Username == username && u.IsActive, ct).ConfigureAwait(false);
-    }
 
     // F-EXEC-1: all pool members, ANY status (authorization gate only).
     public async Task<List<int>> FindServerIdsInPoolAsync(string poolName, CancellationToken ct = default)

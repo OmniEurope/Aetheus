@@ -62,7 +62,7 @@ public class MainLayoutRenderTests : BunitContext
 
         // Wire ApiClient
         var testHandler = new BunitTestHelper.TestHandler();
-        // Recette R1-37: the logout tells the server first.
+        // The logout tells the server first.
         testHandler.SetResponse(HttpMethod.Post, "api/auth/logout", System.Net.HttpStatusCode.NoContent);
         var apiHttp = new HttpClient(testHandler) { BaseAddress = new Uri("http://localhost/") };
         var api = new ApiClient(apiHttp);
@@ -75,8 +75,7 @@ public class MainLayoutRenderTests : BunitContext
         SetProperty(instance, "Configuration", config);
 
         // Wire ActiveOrganizationService
-        var orgJs = Substitute.For<IJSRuntime>();
-        var orgs = new ActiveOrganizationService(api, orgJs);
+        var orgs = new ActiveOrganizationService(api, new Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences());
         SetProperty(instance, "Orgs", orgs);
 
         // Wire ListCacheService (cleared on sign-out / org switch)
@@ -88,7 +87,6 @@ public class MainLayoutRenderTests : BunitContext
         SetProperty(instance, "HttpFactory", httpFactory);
 
         SetProperty(instance, "RealtimeSession", Services.GetRequiredService<RealtimeSessionLifecycle>());
-        SetProperty(instance, "Appearance", Services.GetRequiredService<Aetheus.Front.Components.Settings.SiteAppearanceState>());
 
         return instance;
     }

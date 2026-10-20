@@ -10,7 +10,7 @@ public partial class PipelineFleet
     private AetheusDataGrid<PipelineFleetItemDto>? _grid;
     private List<PipelineFleetItemDto> _items = [];
     private List<ProjectDto> _projects = [];
-    // Recette R-224: the grid's header filters, sent with every page request, and the values they offer.
+    // The grid's header filters, sent with every page request, and the values they offer.
     private List<GridFilter> _columnFilters = [];
     private PipelineFleetFilterValuesDto _filterValues = new();
     private Func<string, string>? _freshnessFilterText;
@@ -44,15 +44,15 @@ public partial class PipelineFleet
         {
             _filtersLoadError = true;
         }
-        // Recette R-181: the fleet is the pipelines and the model versions they run, so a change to a
-        // pipeline or to a model reloads the current page in place, without the Refresh button.
+        // The fleet is the pipelines and the model versions they run, so a change to a pipeline or
+        // to a model reloads the current page in place, without the Refresh button.
         await FollowEntitiesAsync(ResourceType.Pipeline, ResourceType.PipelineTemplate);
     }
 
     protected override Task OnEntitiesChangedAsync() => _liveReload.RequestAsync(RefreshAsync);
 
-    /// <summary>Recette R-226: a live change fetches the current page again through the grid, rows kept on
-    /// screen, page, sort and filters unchanged.</summary>
+    /// <summary>A live change fetches the current page again through the grid, rows kept on screen,
+    /// page, sort and filters unchanged.</summary>
     private Task RefreshAsync() => _grid is not null ? _grid.Refresh() : LoadAsync();
 
     internal async Task LoadDataAsync(GridLoadArgs args)
@@ -64,7 +64,8 @@ public partial class PipelineFleet
         await LoadAsync();
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the project filter, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the project filter, sort and column filters of the
+    /// grid.</summary>
     internal Task<PaginatedResult<PipelineFleetItemDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -117,7 +118,7 @@ public partial class PipelineFleet
     private async Task ReloadAsync()
     {
         _page = 1;
-        // Recette R-327: the grid scrolls (remote virtualization) and only shows what it fetched itself, so
+        // The grid scrolls (remote virtualization) and only shows what it fetched itself, so
         // another project reloads it from its first row through its own loader.
         if (_grid is not null)
             await _grid.GoToPage(0, forceReload: true);
@@ -138,11 +139,11 @@ public partial class PipelineFleet
         _ => L["OffCatalog"]
     };
 
-    private static OmniTone FreshnessStyle(PipelineFleetFreshness freshness) => freshness switch
+    internal static OmniTone FreshnessStyle(PipelineFleetFreshness freshness) => freshness switch
     {
         PipelineFleetFreshness.Current => OmniTone.Success,
-        // Recette R2-145: a pinned version is a choice (aetheus-candidate pins application-candidate@1 on
-        // purpose), not a delay: a newer version in the catalogue is information, not a warning.
+        // A pinned version is a choice (aetheus-candidate pins application-candidate@1 on purpose),
+        // not a delay: a newer version in the catalogue is information, not a warning.
         PipelineFleetFreshness.Outdated => OmniTone.Info,
         _ => OmniTone.Neutral
     };

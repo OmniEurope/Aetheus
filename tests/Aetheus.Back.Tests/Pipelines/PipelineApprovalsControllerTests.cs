@@ -8,7 +8,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>PLAN-007 lot 7: pending approvals are listed only for pipelines the caller may read.</summary>
+/// <summary>Pending approvals are listed only for pipelines the caller may read.</summary>
 public sealed class PipelineApprovalsControllerTests
 {
     private readonly IPipelineApprovalService _service = Substitute.For<IPipelineApprovalService>();

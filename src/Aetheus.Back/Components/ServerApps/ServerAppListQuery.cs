@@ -4,9 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.ServerApps;
 
-/// <summary>
-/// Recette R-210: the column filters of a server's applications grid. The keys are the grid's column keys.
-/// </summary>
+/// <summary> The column filters of a server's applications grid. The keys are the grid's column
+/// keys. </summary>
 internal static class ServerAppListQuery
 {
     internal static readonly GridQueryMap<ServerApp> Columns = new GridQueryMap<ServerApp>()

@@ -9,11 +9,9 @@ using Microsoft.JSInterop;
 
 namespace Aetheus.Front.Tests.Pages.Projects;
 
-/// <summary>
-/// Recette R2-122: the project deletion confirmation says what goes with the project, read from the
+/// <summary> The project deletion confirmation says what goes with the project, read from the
 /// server's preview, and wakes the Delete button only for the exact project name, never while a run
-/// of the project is in progress.
-/// </summary>
+/// of the project is in progress. </summary>
 public sealed class ProjectDeleteDialogTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -62,6 +60,20 @@ public sealed class ProjectDeleteDialogTests : BunitContext
         Assert.Contains("Enum_ProjectDeletionItemKind_MonitoredApps", counts);
         Assert.DoesNotContain("Enum_ProjectDeletionItemKind_Vaults", counts);
         Assert.Contains("ProjectDeletionTypeName", cut.Markup);
+    }
+
+    [Fact]
+    public void R3_72_Lists_TheGitRepositoriesThatGoWithTheProject()
+    {
+        _handler.SetJsonResponse("api/projects/7/deletion-preview", Preview() with
+        {
+            Items = [new ProjectDeletionItemDto(ProjectDeletionItemKind.GitRepositories, 2)],
+        });
+
+        var cut = RenderDialog();
+
+        cut.WaitForAssertion(() => Assert.Contains("Enum_ProjectDeletionItemKind_GitRepositories", cut.Find(".project-deletion-counts").TextContent));
+        Assert.Contains("2", cut.Find(".project-deletion-counts").TextContent);
     }
 
     [Fact]

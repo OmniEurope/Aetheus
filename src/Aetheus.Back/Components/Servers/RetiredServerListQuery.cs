@@ -4,10 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// Recette R-210 / R-224: the column filters of the retired servers dialog. The keys are the grid's
-/// column keys; the retirement date is the soft-delete stamp.
-/// </summary>
+/// <summary> The column filters of the retired servers dialog. The keys are the grid's column keys;
+/// the retirement date is the soft-delete stamp. </summary>
 internal static class RetiredServerListQuery
 {
     internal static readonly GridQueryMap<Server> Columns = new GridQueryMap<Server>()

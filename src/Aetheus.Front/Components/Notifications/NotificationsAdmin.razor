@@ -16,7 +16,7 @@
     </OmniStack>
 </OmniStack>
 
-<AetheusDataGrid @ref="_channelsGrid" Data="@_channels" Count="@_channelTotalCount"
+<AetheusDataGrid @ref="_channelsGrid" RowClick="@(channel => OpenChannelDialogAsync(channel))" Data="@_channels" Count="@_channelTotalCount"
     TItem="NotificationChannelDto" IsLoading="@_channelsLoading" LoadData="@LoadChannelsAsync" ExportRead="@ReadChannelsExportAsync" ExportName="@L["NotificationChannels"]"
     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<NotificationChannelDto>(_channels, _channelTotalCount))"
     PageSize="25" class="omni-u-mb-2xl">
@@ -36,15 +36,20 @@
         <OmniDataGridColumn TItem="NotificationChannelDto" Property="RuleCount" Title="@L["Rules"]" Width="90px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
         <OmniDataGridColumn TItem="NotificationChannelDto" Title="@L["Actions"]" Width="260px" Sortable="false" Filterable="false" >
             <Template Context="c">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                @* STD-BTN detection 11: Edit and Delete visible, the other actions in the menu. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => TestChannelAsync(c.Id))" Class="@((_testing.Contains(c.Id)) ? "btn-busy" : null)" Busy="@((_testing.Contains(c.Id)))" title="@L["TestConnection"]" Label="@L["TestConnection"]"><OmniIcon Name="OmniIconName.PaperPlaneRight" /></OmniButton>
                     @if (_channelTest.TryGetValue(c.Id, out var r))
                     {
                         <OmniBadge Fill="OmniFill.Solid" Tone="@TestBadge(r.Status)" title="@r.Message">@L.Localize(r.Status)</OmniBadge>
                     }
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenChannelDialogAsync(c))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenChannelDialogAsync(c))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteChannelAsync(c))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniMenuItem OnClick="@(() => TestChannelAsync(c.Id))" Disabled="@(_testing.Contains(c.Id))"><Icon><OmniIcon Name="OmniIconName.PaperPlaneRight" /></Icon><ChildContent>@L["TestConnection"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
                 </OmniStack>
+                </span>
             </Template>
         </OmniDataGridColumn>
     </Columns>
@@ -59,7 +64,7 @@
     </OmniStack>
 </OmniStack>
 
-<AetheusDataGrid @ref="_rulesGrid" Data="@_rules" Count="@_ruleTotalCount"
+<AetheusDataGrid @ref="_rulesGrid" RowClick="@(rule => OpenRuleDialogAsync(rule))" Data="@_rules" Count="@_ruleTotalCount"
     TItem="NotificationRuleDto" IsLoading="@_rulesLoading" LoadData="@LoadRulesAsync" ExportRead="@ReadRulesExportAsync" ExportName="@L["NotificationRules"]"
     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<NotificationRuleDto>(_rules, _ruleTotalCount))"
     PageSize="25">
@@ -78,8 +83,10 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="NotificationRuleDto" Title="@L["Actions"]" Width="120px" Sortable="false" TextAlign="OmniDataGridTextAlign.Center" Filterable="false" >
             <Template Context="r">
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenRuleDialogAsync(r))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenRuleDialogAsync(r))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                 <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRuleAsync(r))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                </span>
             </Template>
         </OmniDataGridColumn>
     </Columns>

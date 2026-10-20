@@ -8,9 +8,8 @@
 
 @if (Loader?.Project is not null)
 {
-    @* Recette R-350: one page instead of two competing tabs. The monitored applications come first in
-       a compact table (the height of their rows), and the telemetry of the selected application sits
-       under it with its own application picker and sub-tabs. *@
+    @* Lists monitored applications above the selected application's telemetry, with its own picker
+       and sub-tabs. *@
     <MonitoredAppsList ProjectId="Id" />
     <OmniHeading Level="OmniHeadingLevel.H5" Class="monitoring-telemetry-heading">@L["Telemetry"]</OmniHeading>
     <AppTelemetryPanel ProjectId="Id" SelectedAppId="App" />

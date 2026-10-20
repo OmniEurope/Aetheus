@@ -45,7 +45,7 @@ public class PipelineApprovalServiceTests
             .Returns(new Dictionary<int, PipelineStatus> { [10] = PipelineStatus.WaitingForApproval });
 
         _sut = new PipelineApprovalService(
-            _repoMock, _runServiceMock, _httpContextAccessorMock, _hubMock, _audit,
+            _repoMock, _repoMock, _runServiceMock, _httpContextAccessorMock, _hubMock, _audit,
             NullLogger<PipelineApprovalService>.Instance, TimeProvider.System);
     }
 
@@ -122,8 +122,7 @@ public class PipelineApprovalServiceTests
     [Fact]
     public async Task DecideApprovalAsync_AlreadyResolved_SaysByWhomAndWhen_AndIsAudited()
     {
-        // Recette R2-116: on release-fast #2555 every click on a banner offering an approval already
-        // decided came back as the same bare 404, indistinguishable from a click that was lost.
+        // A decision on an already-settled approval returns an explicit conflict reason.
         _repoMock.FindApprovalAsync(1, Arg.Any<CancellationToken>()).Returns(new PipelineApproval
         {
             Id = 1,
@@ -305,10 +304,8 @@ public class PipelineApprovalServiceTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>
-    /// PLAN-003 2.7: a refused confirmation hands the run to its Rollback, so it has not completed yet;
-    /// announcing a completion here would tell the page the run ended while the rollback runs.
-    /// </summary>
+    /// <summary>Refused confirmation leaves rollback running, so completion must not be announced
+    /// yet.</summary>
     [Fact]
     public async Task DecideApprovalAsync_RefusedConfirmation_DoesNotAnnounceACompletedRun()
     {
@@ -417,8 +414,7 @@ public class PipelineApprovalServiceTests
     [InlineData(PipelineStatus.Success, ApprovalStatus.Approved)]
     public async Task DecideApprovalAsync_OnARunThatHasEnded_IsRefused_AndDecidesNothing(PipelineStatus runStatus, ApprovalStatus decision)
     {
-        // PLAN-005 lot 3 / D34: run 2323 ended Cancelled with its Rollback approval still Pending.
-        // Approving it would try to resume a finished run; the decision is refused instead.
+        // Approval on an ended run is refused rather than resuming execution.
         _repoMock.FindApprovalAsync(10, Arg.Any<CancellationToken>())
             .Returns(new PipelineApproval { Id = 10, PipelineRunId = 2323, StageName = "Rollback", Status = ApprovalStatus.Pending });
         _repoMock.GetRunStatusesByIdsAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())

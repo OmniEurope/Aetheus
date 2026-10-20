@@ -13,7 +13,6 @@ public class MailDomain
     public bool HasDmarc { get; set; }
     public DateTime CreatedAt { get; set; }
 
-    // PLAN-005
     public MailRecordSource Source { get; set; } = MailRecordSource.Aetheus;
 
     /// <summary>DKIM TXT value reported by the agent (<c>v=DKIM1; k=rsa; p=...</c>), empty when unknown.</summary>

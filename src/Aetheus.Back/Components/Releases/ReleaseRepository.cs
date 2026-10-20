@@ -16,10 +16,8 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(r => r.Version.Contains(search) || r.BranchName.Contains(search));
 
-        // D40, R-10: what a restore by release name accepts. The same-commit rule no longer applies to a
-        // release restore (dffb4549a) and the commit ancestry and grade are checked by the deployment
-        // itself; what is left is a payload that still exists, whatever the status - an earlier
-        // production (Superseded) included. The picker shows the status beside it.
+        // A release restore requires retained payload regardless of status, including superseded
+        // releases. Deployment separately validates ancestry and grade; the picker exposes status.
         if (deployableOnly)
             query = query.Where(r => r.Artifacts.Any());
 
@@ -63,10 +61,8 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
         return query;
     }
 
-    /// <summary>
-    /// Recette R-224: the header filters, after the scope and before the count. The source pipeline
-    /// filter arrives already resolved to <paramref name="releaseIds"/>.
-    /// </summary>
+    /// <summary> The header filters, after the scope and before the count. The source pipeline
+    /// filter arrives already resolved to <paramref name="releaseIds"/>. </summary>
     private static IQueryable<Release> ApplyColumnFilters(
         IQueryable<Release> query, IReadOnlyList<GridFilter>? columnFilters, IReadOnlyCollection<int>? releaseIds)
     {
@@ -157,7 +153,7 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
             .Select(run => new { run.Id, run.PipelineId })
             .ToDictionaryAsync(run => run.Id, run => run.PipelineId, ct).ConfigureAwait(false);
 
-        // PLAN-003 2.7: the project's quick-return pipeline, recognised by the template it extends.
+        // Identify the project quick-return pipeline through its extended template.
         var revertPipelines = (await db.Pipelines.AsNoTracking()
                 .Where(pipeline => pipeline.ProjectId != null && projects.Contains(pipeline.ProjectId.Value)
                     && pipeline.TemplateReferenceName == RevertTemplateName)
@@ -184,14 +180,9 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Recette R-366: the run that first publishes a release is its creator, stamped once and never
-    /// moved. PipelineRunId cannot say it: every later run that records the release (a deployment
-    /// confirming it) overwrites it. Done here, on the way to the database, so both paths that publish
-    /// (a new row, or a row first detected from a branch) are covered without a second rule elsewhere.
-    /// A release already published before this column existed is never stamped by a later run: its
-    /// creator is unknown, and a later deployment must not claim it.
-    /// </summary>
+    /// <summary>Stamp the creator only when a release is first published, independently of later
+    /// runs that overwrite PipelineRunId. Do not assign a creator retroactively to an already
+    /// published release with unknown provenance.</summary>
     private void StampCreators()
     {
         foreach (var entry in db.ChangeTracker.Entries<Release>())
@@ -274,9 +265,8 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
 
     public async Task<List<Release>> GetByPipelineRunIdAsync(int pipelineRunId, CancellationToken ct = default)
     {
-        // Recette R-365: Release.PipelineRunId names the LAST run that recorded the release, and the
-        // deploy run rewrites it (see GetRedeployTargetsAsync), so the candidate run that published the
-        // release lost it. Its release step still carries the RELEASE_ID output the server returned.
+        // Resolve publishing runs through their release-step RELEASE_ID output because
+        // Release.PipelineRunId records the latest reporting run, including deployments.
         var publishedIds = await PublishedReleaseIdsAsync(pipelineRunId, ct).ConfigureAwait(false);
         var runProjectId = await db.PipelineRuns.AsNoTracking()
             .Where(run => run.Id == pipelineRunId)

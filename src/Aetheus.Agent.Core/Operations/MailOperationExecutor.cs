@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// Typed Mail operations. PLAN-005: every kind runs one of the two root-owned helpers deposited by
-/// install-agent-linux.sh (<c>mail-setup</c> for the full provisioning, <c>mail-manage</c> for everything
-/// else: service control, queue, configuration check, logs, DKIM, TLS, rspamd, delivery test, quota) via
-/// <c>sudo -n</c> against the argv-exact <c>/etc/sudoers.d/aetheus-mail</c> grant. The argv is built and
-/// re-validated by <see cref="MailManageCommandBuilder"/>; secrets and messages travel over stdin. The
-/// former direct <c>sudo systemctl start postfix.service</c> / <c>postqueue</c> / <c>postfix check</c>
-/// argv never matched any sudoers rule and always failed.
-/// </summary>
+/// <summary>Run typed mail operations through root-owned mail-setup or mail-manage using the exact
+/// sudoers grant. MailManageCommandBuilder validates argv, while secrets and messages use
+/// stdin.</summary>
 public sealed class MailOperationExecutor(
     IOptions<AetheusAgentOptions> options,
     ILogger<MailOperationExecutor> logger) : IOperationExecutor
@@ -24,7 +18,8 @@ public sealed class MailOperationExecutor(
     internal const string ManageHelperPath = MailManageCommandBuilder.ManageHelperPath;
 
     public bool CanHandle(OperationKind kind) =>
-        kind is >= OperationKind.MailStartPostfix and <= OperationKind.MailPurge;
+        kind is >= OperationKind.MailStartPostfix and <= OperationKind.MailPurge
+            or OperationKind.MailMasterAccess or OperationKind.MailSetQuota or OperationKind.MailRetryTuning;
 
     public Task<ExecutorResult> ExecuteAsync(
         OperationKind kind,

@@ -52,8 +52,8 @@ public class SystemLogsTests : BunitContext
         Assert.True(Enum.IsDefined((OmniTone)style!));
     }
 
-    /// <summary>Recette R-453: the grid reads the log from the API itself, newest first, with no
-    /// "Load more" row; the rows it shows are the API's.</summary>
+    /// <summary>The grid reads the log from the API itself, newest first, with no "Load more" row;
+    /// the rows it shows are the API's.</summary>
     [Fact]
     public void Grid_ReadsTheLogFromTheApi_WithoutALoadMoreRow()
     {
@@ -130,8 +130,24 @@ public class SystemLogsTests : BunitContext
         });
 
         var cut = Render<SystemLogs>();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);
+    }
+
+    [Fact]
+    public void R1_82_TheLogOpensOnTheLastSeventyTwoHours_AcrossAllFiles()
+    {
+        var before = DateTime.UtcNow;
+        var cut = Render<SystemLogs>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var request = Assert.Single(_handler.Requests, r => r.Url.Contains(EntriesUrl, StringComparison.Ordinal)).Url;
+            Assert.DoesNotContain("fileName=", request, StringComparison.Ordinal);
+            var raw = System.Web.HttpUtility.ParseQueryString(request[(request.IndexOf('?', StringComparison.Ordinal) + 1)..])["dateFrom"];
+            var from = DateTime.Parse(raw!, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind).ToUniversalTime();
+            Assert.InRange(from, before - SystemLogs.DefaultWindow - TimeSpan.FromSeconds(1), DateTime.UtcNow - SystemLogs.DefaultWindow);
+        });
     }
 }

@@ -4,11 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Analysis;
 
-/// <summary>
-/// Recette R-224: the column header filters of the analysis portfolio grid, which replace the filter
-/// bar that sat above it. Each key is the grid column's key; the same map orders the columns the typed
-/// sort switch does not know.
-/// </summary>
+/// <summary>Maps analysis portfolio column filters and the sort columns not handled by the typed
+/// switch, using grid column keys.</summary>
 internal static class AnalysisPortfolioQuery
 {
     internal static readonly GridQueryMap<AnalysisReport> Columns = new GridQueryMap<AnalysisReport>()
@@ -56,7 +53,7 @@ internal static class AnalysisPortfolioQuery
         }
         if (request.From.HasValue) query = query.Where(report => report.CompletedAt >= request.From.Value);
         if (request.To.HasValue) query = query.Where(report => report.CompletedAt <= request.To.Value);
-        // Recette R-224: the grid's column header filters, after the scope and before the count.
+        // The grid's column header filters, after the scope and before the count.
         query = Columns.ApplyFilters(query, request.Filters);
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -88,8 +85,8 @@ internal static class AnalysisPortfolioQuery
             ("Status", true) => query.OrderByDescending(report => report.Status),
             ("CompletedAt", false) => query.OrderBy(report => report.CompletedAt),
             ("CompletedAt", true) => query.OrderByDescending(report => report.CompletedAt),
-            // Recette R-224: the other grid columns (scanner, gate, grade, counts...) sort through the
-            // column map instead of silently falling back to the newest first.
+            // The other grid columns (scanner, gate, grade, counts...) sort through the column map
+            // instead of silently falling back to the newest first.
             ({ Length: > 0 } key, var descending) when Columns.Keys.Contains(key, StringComparer.OrdinalIgnoreCase)
                 => Columns.ApplySorts(query, [new GridSort { Field = key, Descending = descending }])!,
             _ => query.OrderByDescending(report => report.CompletedAt)

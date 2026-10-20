@@ -6,11 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// Recette R1-28: the project's pipelines page names what is not configured and would make a run fail,
-/// with its fix, and a run asks before it starts when something is missing; recette R1-19 / R1-25: the
-/// return address a fixing page receives is only ever a local path.
-/// </summary>
+/// <summary>Readiness shows missing configuration and resolution links; return destinations must
+/// remain local paths.</summary>
 public sealed class ProjectPipelinesReadinessTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;

@@ -4,20 +4,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 lot 15 / D28: a grid that shows it is loading does it the same way everywhere. OE 1.2.0 renamed
-/// the grid's <c>IsLoading</c> to <c>Busy</c> and draws the same loading bar, on the table only, for a host
-/// load as for its own requests; the user's decision of 2026-09-29 (recette R-432) is that every grid shows
-/// that bar, by default, and never a veil.
-/// <para>
-/// The one sanctioned path from the app's loading state to OE: a component that loads its grid's rows
-/// itself (or has them handed down) declares a <c>[Parameter] public bool IsLoading</c> and hands exactly
-/// that parameter to <c>Busy="@IsLoading"</c>; the shared <c>AetheusDataGrid</c> hands its own
-/// <c>IsLoading</c> (plus the wait for its columns) through <c>EffectiveBusy</c>. Nothing else reaches
-/// <c>Busy</c>, no grid turns OE's bar off (which would replace the rows by a loading row), and the Aetheus
-/// veil drawn over a grid (<c>aetheus-grid-loading</c>) is gone from the markup and the stylesheet.
-/// </para>
-/// </summary>
+/// <summary>Grid busy state reaches OE through the shared wrapper or the page's IsLoading parameter
+/// and uses the table loading bar. Existing rows remain visible without an application
+/// veil.</summary>
 public sealed class GridWrapperAuditTests
 {
     // Quote-aware: a '>' inside an attribute value (a lambda's arrow, a generic such as
@@ -58,7 +47,7 @@ public sealed class GridWrapperAuditTests
         Assert.True(offenders.Count == 0,
             "These hand Busy something other than the component's own [Parameter] bool IsLoading: "
             + string.Join(", ", offenders));
-        // The two page-fed grids of R-432 go through this path; if they stopped, the scan would pass vacuously.
+        // The scan must detect both page-fed grids to avoid passing vacuously.
         Assert.Contains("PipelineRunsGrid.razor", sanctioned);
         Assert.Contains("MonitoredAppsStatusGrid.razor", sanctioned);
     }
@@ -90,8 +79,7 @@ public sealed class GridWrapperAuditTests
 
         Assert.Contains("Busy=\"@EffectiveBusy\"", grid, StringComparison.Ordinal);
         var codeBehind = File.ReadAllText(wrapper.Path + ".cs");
-        // The page's own loading state reaches the grid (OE 35969ce holds the first Load itself, so the
-        // wrapper no longer adds a busy term of its own).
+        // Page loading state is forwarded to the grid.
         Assert.Contains("private bool EffectiveBusy => IsLoading", codeBehind, StringComparison.Ordinal);
         Assert.Contains("ShowLoadingBar=\"true\"", grid, StringComparison.Ordinal);
     }

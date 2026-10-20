@@ -72,11 +72,42 @@ public class ServerServicesSectionRenderTests : BunitContext
             .Add(x => x.ServerId, s.Id));
     }
 
+    [Fact]
+    public void R3_27_OpeningTheMailModuleFromServices_StaysAClientSideNavigation()
+    {
+        // R3-27: the start screen seen on /servers/5/mail is a full document load. The in-app path
+        // Services -> Messagerie must not be one: it pushes a history entry without forceLoad.
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("/servers/21/services");
+        var cut = RenderSection(MakeServer(Svc("postfix")));
+
+        cut.WaitForElement("button[title='OpenModule: postfix']").Click();
+
+        var last = nav.History.First();
+        Assert.Equal("/servers/21/mail", last.Uri);
+        Assert.False(last.Options.ForceLoad);
+        Assert.False(last.Options.ReplaceHistoryEntry);
+    }
+
+    [Fact]
+    public void R3_59_TheOtherServicesTab_SaysThatAPackageWithoutAServiceIsNotListed_AndPointsToTheUpdates()
+    {
+        Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo("/servers/21/services?tab=other");
+
+        var cut = RenderSection(MakeServer(Svc("cron", manageable: false)));
+
+        var notice = cut.Find(".services-packages-not-listed");
+        Assert.Contains("ServicesPackagesNotListed", notice.TextContent, StringComparison.Ordinal);
+        Assert.Equal("/servers/21/updates", notice.QuerySelector("a")!.GetAttribute("href"));
+        // Second part of R3-59: the complete read-only package list sits in the same tab.
+        var inventory = cut.Find(".server-package-inventory");
+        Assert.NotNull(inventory.QuerySelector(".package-inventory-readonly"));
+    }
+
     // ── GetStatusBadgeStyle ──────────────────────────────────────────────────
 
     [Theory]
-    // Recette R2-058 (2026-10-02, the user's exception over R-507): running is blue, stopped red,
-    // scheduled moves to Info so it does not read as running.
+    // Running services use blue, stopped services red and scheduled services Info.
     [InlineData("active", true, OmniTone.Accent)]
     [InlineData("scheduled", false, OmniTone.Info)]
     [InlineData("idle", false, OmniTone.Neutral)]
@@ -111,7 +142,7 @@ public class ServerServicesSectionRenderTests : BunitContext
     [Fact]
     public void GetStatusBadgeStyle_Running_AlwaysBlue()
     {
-        // Recette R2-058: a running service reads blue, whatever its unit state says.
+        // A running service reads blue, whatever its unit state says.
         Assert.Equal(OmniTone.Accent, ManageableServiceGrid.GetStatusBadgeStyle("scheduled", true));
     }
 
@@ -204,13 +235,13 @@ public class ServerServicesSectionRenderTests : BunitContext
         var cut = RenderSection(MakeServer(packageMgmt: true, Svc("nginx", installed: false)));
         cut.Instance.TrackPendingInstall("nginx", 102);
 
-        cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             ServerId = 21,
             TaskId = 102,
             TaskName = "Install - nginx",
             Status = TaskExecutionStatus.Success
-        });
+        }));
 
         var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
         cut.WaitForState(() => dialog.OpenCount == 1);
@@ -229,13 +260,13 @@ public class ServerServicesSectionRenderTests : BunitContext
         cut.Render();
         Assert.Contains("ServiceActionQueued", cut.Markup);
 
-        cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             ServerId = 21,
             TaskId = 1,
             TaskName = "Start - docker",
             Status = TaskExecutionStatus.Success
-        });
+        }));
 
         Assert.Equal(ServiceActionPhase.Succeeded, cut.Instance.Actions.Of("docker", [])!.Phase);
         cut.WaitForAssertion(() => Assert.Contains("ServiceActionSucceeded", cut.Markup));
@@ -244,19 +275,19 @@ public class ServerServicesSectionRenderTests : BunitContext
     [Fact]
     public void HandleTaskCompleted_TheFollowedTask_Failed_LeavesItsErrorOnTheRow()
     {
-        // Recette R-510 and R-515: the failure of an action launched by hand is read on the service's
-        // own row, with its exit code and a link to the task, and the row's buttons are free again.
+        // Service-action failures expose exit code and task link on their row while releasing the
+        // action buttons.
         var cut = RenderSection(MakeServer(Svc("docker")));
         cut.Instance.Actions.Track("docker", 7, "Install");
 
-        cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             ServerId = 21,
             TaskId = 7,
             TaskName = "Install - docker",
             Status = TaskExecutionStatus.Failed,
             ExitCode = 100
-        });
+        }));
 
         var state = cut.Instance.Actions.Of("docker", [])!;
         Assert.Equal(ServiceActionPhase.Failed, state.Phase);
@@ -277,13 +308,13 @@ public class ServerServicesSectionRenderTests : BunitContext
         cut.Instance.Actions.Track("nginx", 1, "Start");
 
         // A different task id (an unrelated operation completing first) must NOT end our action.
-        cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             ServerId = 21,
             TaskId = 2,
             TaskName = "Start - apache2",
             Status = TaskExecutionStatus.Success
-        });
+        }));
 
         Assert.True(cut.Instance.Actions.Of("nginx", [])!.InFlight);
     }
@@ -294,13 +325,13 @@ public class ServerServicesSectionRenderTests : BunitContext
         var cut = RenderSection(MakeServer(Svc("nginx")));
         cut.Instance.Actions.Track("nginx", 1, "Start");
 
-        cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             ServerId = 22,
             TaskId = 1,
             TaskName = "Start - nginx",
             Status = TaskExecutionStatus.Success
-        });
+        }));
 
         Assert.True(cut.Instance.Actions.Of("nginx", [])!.InFlight);
     }
@@ -308,18 +339,18 @@ public class ServerServicesSectionRenderTests : BunitContext
     [Fact]
     public void TwoActionsAtOnce_AreEachFollowedOnTheirOwnRow()
     {
-        // Recette R-510: the page followed one action at a time; a batch said nothing per service.
+        // Batch actions retain independent per-service progress.
         var cut = RenderSection(MakeServer(Svc("nginx"), Svc("apache2")));
         cut.Instance.Actions.Track("nginx", 11, "Restart");
         cut.Instance.Actions.Track("apache2", 12, "Stop");
 
-        cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             ServerId = 21,
             TaskId = 12,
             TaskName = "Stop - apache2",
             Status = TaskExecutionStatus.Success
-        });
+        }));
 
         Assert.Equal(ServiceActionPhase.Queued, cut.Instance.Actions.Of("nginx", [])!.Phase);
         Assert.Equal(ServiceActionPhase.Succeeded, cut.Instance.Actions.Of("apache2", [])!.Phase);
@@ -331,8 +362,7 @@ public class ServerServicesSectionRenderTests : BunitContext
     [Fact]
     public void TheListTheSuccessRefreshes_KeepsTheSuccessLineOnScreen()
     {
-        // Recette R2-030: the success refreshes the server at once; the list that comes back a moment
-        // later used to take the "succeeded" line away before it could be read.
+        // Completion feedback remains readable while server state refreshes.
         var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero));
         Services.AddSingleton<TimeProvider>(clock);
         var cut = RenderSection(MakeServer(Svc("docker")));
@@ -411,17 +441,23 @@ public class ServerServicesSectionRenderTests : BunitContext
         var cut = RenderSection();
         typeof(ServerServicesSection).GetField("_currentLogTaskId", Priv)!.SetValue(cut.Instance, 99);
         typeof(ServerServicesSection).GetField("_logsLoading", Priv)!.SetValue(cut.Instance, true);
+        bool Loading() => (bool)typeof(ServerServicesSection).GetField("_logsLoading", Priv)!.GetValue(cut.Instance)!;
+        var taskLog = new TaskCompletionSource<List<TaskLogDto>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/logs/task/99", _ => taskLog.Task);
 
         cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
         {
             ServerId = 21,
             TaskId = 99,
             TaskName = "Logs task",
-            Output = "log output here",
             Status = TaskExecutionStatus.Success
         });
 
-        Assert.False((bool)typeof(ServerServicesSection).GetField("_logsLoading", Priv)!.GetValue(cut.Instance)!);
+        // Recette R3-44: the pane stays busy until the task's own log has been read, so the loading state
+        // clears asynchronously, after that read.
+        Assert.True(Loading());
+        taskLog.SetResult([new TaskLogDto { Id = 1, TaskId = 99, Message = "log output here" }]);
+        cut.WaitForAssertion(() => Assert.False(Loading()));
     }
 
     [Fact]
@@ -432,17 +468,18 @@ public class ServerServicesSectionRenderTests : BunitContext
         typeof(ServerServicesSection).GetField("_logsLoading", Priv)!.SetValue(cut.Instance, true);
         typeof(ServerServicesSection).GetField("_logsContent", Priv)!.SetValue(cut.Instance, "");
 
-        cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             ServerId = 21,
             TaskId = 55,
             TaskName = "log task",
             Output = "actual log output",
             Status = TaskExecutionStatus.Success
-        });
+        }));
 
-        var content = (string)typeof(ServerServicesSection).GetField("_logsContent", Priv)!.GetValue(cut.Instance)!;
-        Assert.Equal("actual log output", content);
+        // The task log is read on the renderer's dispatcher after the call returns: wait for it.
+        cut.WaitForAssertion(() => Assert.Equal("actual log output",
+            (string)typeof(ServerServicesSection).GetField("_logsContent", Priv)!.GetValue(cut.Instance)!));
     }
 
     // ── AppendLog ────────────────────────────────────────────────────────────
@@ -573,7 +610,7 @@ public class ServerServicesSectionRenderTests : BunitContext
         var cut = RenderSection();
         await cut.InvokeAsync(() => cut.Instance.ViewServiceLogsAsync("nginx"));
         cut.Render();
-        // R-181: the viewer opens live; the toggle is how a user freezes it, then resumes it.
+        // The viewer opens live; the toggle is how a user freezes it, then resumes it.
         Assert.True(cut.Instance.IsFollowingLogs);
         await cut.InvokeAsync(() => cut.Instance.OnFollowChangedAsync(false));
         cut.Render();
@@ -629,24 +666,24 @@ public class ServerServicesSectionRenderTests : BunitContext
         Assert.Equal(1, LogRequests());
 
         // Once it has, the next tick reads again.
-        cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 42,
             ServerId = 21,
             TaskName = "Logs - nginx",
             Status = TaskExecutionStatus.Success
-        });
+        }));
         await cut.InvokeAsync(cut.Instance.RefreshLogsTickAsync);
         cut.WaitForAssertion(() => Assert.Equal(2, LogRequests()));
 
         // Switched off, ticks do nothing.
-        cut.Instance.HandleTaskCompleted(new TaskCompletedNotification
+        cut.Instance.HandleTaskCompleted(_handler.Logged(new TaskCompletedNotification
         {
             TaskId = 42,
             ServerId = 21,
             TaskName = "Logs - nginx",
             Status = TaskExecutionStatus.Success
-        });
+        }));
         await cut.InvokeAsync(() => cut.Instance.OnFollowChangedAsync(false));
         await cut.InvokeAsync(cut.Instance.RefreshLogsTickAsync);
         Assert.Equal(2, LogRequests());

@@ -42,7 +42,7 @@ public class GitRepositoriesCoverageTests : BunitContext
     {
         SetupDefault();
         var cut = Render<GitRepositories>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // Without a project filter the page now lists every repo the user can read (cross-project view),
         // instead of the old "select a project first" empty state. SetupDefault stubs two repos.
@@ -57,7 +57,7 @@ public class GitRepositoriesCoverageTests : BunitContext
     {
         SetupDefault();
         var cut = Render<GitRepositories>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(GitRepositories).GetField("_projectFilter", Priv)!.SetValue(cut.Instance, 1);
 
@@ -75,7 +75,7 @@ public class GitRepositoriesCoverageTests : BunitContext
     {
         SetupDefault();
         var cut = Render<GitRepositories>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(GitRepositories).GetField("_projectFilter", Priv)!.SetValue(cut.Instance, 1);
 
@@ -93,7 +93,7 @@ public class GitRepositoriesCoverageTests : BunitContext
     {
         SetupDefault();
         var cut = Render<GitRepositories>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
             .NavigateTo("git-repositories?projectId=1");
@@ -120,7 +120,7 @@ public class GitRepositoriesCoverageTests : BunitContext
     {
         SetupDefault();
         var cut = Render<GitRepositories>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         typeof(GitRepositories).GetField("_projectFilter", Priv)!.SetValue(cut.Instance, (int?)null);
 
@@ -144,7 +144,7 @@ public class GitRepositoriesCoverageTests : BunitContext
     {
         SetupDefault();
         var cut = Render<GitRepositories>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // Simulate having a query param that doesn't match a known project
         typeof(GitRepositories).GetProperty("ProjectId")!.SetValue(cut.Instance, 999);

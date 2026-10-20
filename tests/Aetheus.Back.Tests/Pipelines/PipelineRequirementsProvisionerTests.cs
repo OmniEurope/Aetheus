@@ -7,12 +7,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// PLAN-003 lot 30 / D22: one click creates what the templates require. Three properties are defended
-/// here, each a way the button could quietly do the wrong thing: it creates exactly what the
-/// readiness check reported (no more, no less), it copies key NAMES but never a value, and it only
-/// reads key names from a resource the caller is allowed to read.
-/// </summary>
+/// <summary>Provisioning creates exactly the missing requirements, copies names without values and
+/// reads only authorized source resources.</summary>
 public sealed class PipelineRequirementsProvisionerTests
 {
     private const int ProjectId = 7;
@@ -89,9 +85,7 @@ public sealed class PipelineRequirementsProvisionerTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>PLAN-003 2.1: the libraries are now named with dots (<c>aetheus.share</c>). The name is
-    /// matched and created exactly as written, and a library whose name only shares the dotted prefix
-    /// is not taken for the source.</summary>
+    /// <summary>Dotted library names match exactly, not by shared prefix.</summary>
     [Fact]
     public async Task ADottedLibraryName_IsCreatedAsWritten_WithTheKeysOfTheSameName()
     {
@@ -256,7 +250,7 @@ public sealed class PipelineRequirementsProvisionerTests
         Assert.Equal(PipelineRequirementsChecker.LibraryKind, library.Kind);
         Assert.Equal("aetheus-prod-host", library.Name);
         Assert.Equal(["app-prod", "app-qa"], library.Pipelines);
-        // Recette R-486: one check for everything the project's pipelines reference, not one per pipeline.
+        // One check for everything the project's pipelines reference, not one per pipeline.
         await _checker.Received(1).CheckAsync(
             Arg.Any<PipelineRequiresDefinition?>(), ProjectId, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }

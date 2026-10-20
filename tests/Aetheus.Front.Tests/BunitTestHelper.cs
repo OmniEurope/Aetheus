@@ -21,6 +21,14 @@ internal static class BunitTestHelper
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     /// <summary>
+    /// Bound of a wait whose state arrives through an asynchronous continuation (a mocked HTTP answer
+    /// resumed on the thread pool, then marshalled back to the renderer). It was a ten-second ceiling, and
+    /// with every test class running at once a correct page still missed it: the wait is for an event, so
+    /// its only bound is the hang guard (see <see cref="TestHostRenderWaits"/>).
+    /// </summary>
+    internal static readonly TimeSpan AsyncRenderWait = HangGuard.Limit;
+
+    /// <summary>
     /// The front is a standalone WebAssembly app, always interactive. OE 1.6.0's forms read RendererInfo on an
     /// invalid submit (they focus the first invalid field only when a script can run), which bUnit refuses
     /// until it is set. Setting it builds the renderer, which closes the service collection: call it once the
@@ -43,27 +51,27 @@ internal static class BunitTestHelper
 
         var handler = new TestHandler();
         handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto());
-        // Recette R1-37: every logout tells the server first; it answers 204.
+        // Every logout tells the server first; it answers 204.
         handler.SetResponse(HttpMethod.Post, "api/auth/logout", HttpStatusCode.NoContent);
-        // PLAN-003 lot 30: no pipeline requirement is unmet unless a test says otherwise.
+        // No pipeline requirement is unmet unless a test says otherwise.
         handler.SetJsonResponse("api/pipelines/setup/unmet", new List<UnmetRequirementDto>());
-        // Recette R1-28: nothing stops a project's or a pipeline's runs unless a test says otherwise.
+        // Nothing stops a project's or a pipeline's runs unless a test says otherwise.
         handler.SetJsonResponse("api/pipelines/setup/project-readiness", new PipelineSetupReadinessDto());
         handler.SetJsonResponse("api/pipelines/setup/pipeline-readiness", new PipelineSetupReadinessDto());
-        // Recette R-295: external repositories are always on; no project has one unless a test says so.
+        // External repositories are always on; no project has one unless a test says so.
         handler.SetResponse("api/external-repos/project/", System.Net.HttpStatusCode.NotFound);
-        // PLAN-003 lot 20: a run with no successful predecessor has no usual durations.
+        // A run with no successful predecessor has no usual durations.
         handler.SetJsonResponse("/stage-baselines", new RunStageBaselinesDto());
-        // PLAN-007 lot 7: no approval waits unless a test says otherwise (top bar, home page).
+        // No approval waits unless a test says otherwise (top bar, home page).
         handler.SetJsonResponse("api/pipelines/approvals/pending", new List<PendingApprovalDto>());
-        // R-112 to R-116: no notification, preference or subscription unless a test says otherwise
-        // (the bell and the menu entry render on every layout).
+        // Default to no notifications, preferences or subscriptions unless overridden by a test.
         handler.SetJsonResponse("api/notifications/me/unread-count", 0);
         handler.SetPaginatedJsonResponse("api/notifications/me?", new List<NotificationDeliveryDto>());
         handler.SetJsonResponse("api/notifications/me/preferences", new List<NotificationPreferenceDto>());
         handler.SetJsonResponse("api/notifications/me/subscriptions", new List<ProjectSubscriptionDto>());
+        handler.SetJsonResponse("api/users/me/preferences", new List<UserPreferenceDto>());
         handler.SetResponse(HttpMethod.Get, "health/live", HttpStatusCode.ServiceUnavailable);
-        // Recette R2-021: the deployed front is the one the test runs unless a test says otherwise.
+        // The deployed front is the one the test runs unless a test says otherwise.
         handler.SetRawResponse("appsettings.json", "{\"App\":{\"Version\":\"test-version\"}}");
         var http = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
         var apiClient = new ApiClient(http);
@@ -118,7 +126,14 @@ internal static class BunitTestHelper
                 sp.GetRequiredService<AuthStateProvider>()));
         ctx.Services.AddScoped<BreadcrumbService>();
         ctx.Services.AddScoped<IOmniBreadcrumbResolver, AetheusBreadcrumbResolver>();
-        ctx.Services.AddScoped<Aetheus.Front.Components.Settings.SiteAppearanceState>();
+        // R1-66: the user preferences live in memory; a test reads back what a component wrote.
+        var preferences = new InMemoryUserPreferences();
+        ctx.Services.AddSingleton(preferences);
+        ctx.Services.AddSingleton<IUserPreferences>(preferences);
+        ctx.Services.AddSingleton<PreferenceScope>();
+        ctx.Services.AddScoped<LegacyPreferenceMigration>();
+        ctx.Services.AddScoped<UserPreferenceSession>();
+        ctx.Services.AddScoped<LegacyAppearanceMigration>();
         ctx.Services.AddScoped<Aetheus.Front.Components.Users.AdminIdentitySearch>();
         ctx.Services.AddScoped<ProjectNavContextService>();
         ctx.Services.AddScoped(sp => new ClientErrorReporter(
@@ -129,7 +144,7 @@ internal static class BunitTestHelper
             sp.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ProjectDetailLoader>.Instance,
             sp.GetRequiredService<HubConnectionFactory>()));
-        ctx.Services.AddSingleton(new ActiveOrganizationService(apiClient, Substitute.For<IJSRuntime>()));
+        ctx.Services.AddSingleton(new ActiveOrganizationService(apiClient, preferences));
         ctx.Services.AddScoped<NotifyHelper>();
         ctx.Services.AddScoped<GridExportContext>();
         ctx.Services.AddScoped<ClipboardService>();
@@ -143,8 +158,9 @@ internal static class BunitTestHelper
         var httpFactoryMock = Substitute.For<IHttpClientFactory>();
         httpFactoryMock.CreateClient(Arg.Any<string>()).Returns(new HttpClient { BaseAddress = new Uri("http://test/") });
         ctx.Services.AddSingleton(httpFactoryMock);
-        // Recette R2-021: the deployed front version is read through the test handler (a test that sets
-        // "appsettings.json" there decides it); the handler is shared, so the client must not dispose it.
+        // The deployed front version is read through the test handler (a test that sets
+        // "appsettings.json" there decides it); the handler is shared, so the client must not
+        // dispose it.
         ctx.Services.AddSingleton(new Aetheus.Front.Layout.ApplicationVersionState(
             () => new HttpClient(handler, disposeHandler: false), new Uri("http://test/"), "test-version"));
 
@@ -177,7 +193,7 @@ internal static class BunitTestHelper
         ctx.Services.AddSingleton(sp => new Aetheus.Front.Components.Notifications.UserNotificationsFeed(
             sp.GetRequiredService<ApiClient>(),
             sp.GetRequiredService<AuthStateProvider>(),
-            TimeProvider.System,
+            sp.GetRequiredService<TimeProvider>(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<Aetheus.Front.Components.Notifications.UserNotificationsFeed>.Instance));
         ctx.Services.AddSingleton(sp => new AlertNotificationService(
             sp.GetRequiredService<AuthStateProvider>(),
@@ -248,8 +264,14 @@ internal static class BunitTestHelper
     internal sealed class BlockingHubConnectionFactory(IConfiguration config, AuthStateProvider auth)
         : HubConnectionFactory(config, auth, Microsoft.Extensions.Logging.Abstractions.NullLogger<AuthDelegatingHandler>.Instance)
     {
+        private int _created;
+
+        /// <summary>How many connections were asked for: each one is a live subscription the caller must dispose.</summary>
+        public int Created => Volatile.Read(ref _created);
+
         public override HubConnection Create(string hubPath, IRetryPolicy? retryPolicy = null)
         {
+            Interlocked.Increment(ref _created);
             return new HubConnectionBuilder()
                 .WithUrl($"http://127.0.0.1:1/hubs/{hubPath}", options =>
                 {
@@ -293,8 +315,32 @@ internal static class BunitTestHelper
 
         /// <summary>Every request seen, in order - lets a test assert a POST/PUT/DELETE was actually sent.</summary>
         public List<(string Method, string Url)> Requests { get; } = [];
+
+        /// <summary>A copy of <see cref="Requests"/> taken under the lock the handler adds under.</summary>
+        public List<(string Method, string Url)> RequestsSnapshot()
+        {
+            lock (Requests) return [.. Requests];
+        }
         public List<(string Method, string Url, string? Body)> RequestDetails { get; } = [];
         public string? LastRequestBody { get; private set; }
+
+        private readonly StateSignal _requested = new();
+
+        /// <summary>Completes once at least <paramref name="count"/> recorded requests match
+        /// <paramref name="match"/>: re-checked on each request, never against the clock.</summary>
+        public Task WhenRequestedAsync(Func<(string Method, string Url), bool> match, int count, string what) =>
+            _requested.WhenAsync(() =>
+            {
+                lock (Requests) return Requests.Count(match) >= count;
+            }, what);
+
+        /// <summary>Completes once at least <paramref name="count"/> GET requests whose URL contains
+        /// <paramref name="urlContains"/> were sent.</summary>
+        public Task WhenGetAsync(string urlContains, int count = 1) =>
+            WhenRequestedAsync(
+                request => request.Method == "GET" && request.Url.Contains(urlContains, StringComparison.Ordinal),
+                count,
+                $"{count} GET {urlContains}");
 
         public void SetResponse(string urlContains, HttpStatusCode status) =>
             _responses[urlContains] = () => new HttpResponseMessage(status) { Content = new StringContent("{}") };
@@ -351,6 +397,31 @@ internal static class BunitTestHelper
 
         public void SetJsonResponse<T>(HttpMethod method, string urlContains, T data)
             => SetJsonResponse(method, urlContains, data, HttpStatusCode.OK);
+
+        private int _nextLoggedTaskId = 70000;
+
+        /// <summary>
+        /// Recette R3-30/R3-34: the backend's <c>TaskCompleted</c> notification never carries the output,
+        /// the sections read it from the task's log. A test that writes the output it expects into the
+        /// notification gets it served the real way: by <c>GET api/logs/task/{id}</c>, under a task id of
+        /// its own (five digits, so no registered id is the prefix of another), with the output removed
+        /// from the notification and a finished task marked successful unless the test says otherwise.
+        /// </summary>
+        public TaskCompletedNotification Logged(TaskCompletedNotification notification)
+        {
+            ArgumentNullException.ThrowIfNull(notification);
+            var taskId = notification.TaskId != 0 ? notification.TaskId : ++_nextLoggedTaskId;
+            List<TaskLogDto> lines = notification.Output is null
+                ? []
+                : [new TaskLogDto { Id = 1, TaskId = taskId, Message = notification.Output }];
+            SetJsonResponse(HttpMethod.Get, $"api/logs/task/{taskId}", lines);
+            return notification with
+            {
+                TaskId = taskId,
+                Output = null,
+                Status = notification.Status == TaskExecutionStatus.Pending ? TaskExecutionStatus.Success : notification.Status
+            };
+        }
 
         public void SetJsonResponse<T>(HttpMethod method, string urlContains, T data, HttpStatusCode status)
         {
@@ -417,9 +488,19 @@ internal static class BunitTestHelper
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var url = request.RequestUri?.ToString() ?? "";
-            Requests.Add((request.Method.Method, url));
-            LastRequestBody = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
-            RequestDetails.Add((request.Method.Method, url, LastRequestBody));
+            // The body is read before the request is recorded, and both lists take it in one step, details
+            // first: a test that waits on Requests and then reads RequestDetails found the request in the one
+            // and not yet in the other while the body read was pending. Requests is also read by tests while
+            // the component's background loads still send: a reader snapshots it under the same lock (see
+            // RequestsSnapshot).
+            var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
+            lock (Requests)
+            {
+                LastRequestBody = body;
+                RequestDetails.Add((request.Method.Method, url, body));
+                Requests.Add((request.Method.Method, url));
+            }
+            _requested.Pulse();
             foreach (var r in _asyncMethodResponses
                          .Where(r => string.Equals(r.Method, request.Method.Method, StringComparison.OrdinalIgnoreCase)
                                      && url.Contains(r.UrlContains, StringComparison.OrdinalIgnoreCase))

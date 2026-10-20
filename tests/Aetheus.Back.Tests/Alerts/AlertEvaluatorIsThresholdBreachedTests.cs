@@ -149,6 +149,28 @@ public class AlertEvaluatorIsThresholdBreachedTests
     }
 
     [Fact]
+    public void Inodes_GreaterThanOrEqual_UsesTheStoredPercent()
+    {
+        var rule = MakeRule(MetricType.Inodes, ComparisonOperator.GreaterThanOrEqual, 90);
+        var full = MakeMetric();
+        full.InodeUsedPercent = 90;
+        var roomy = MakeMetric();
+        roomy.InodeUsedPercent = 89.9;
+
+        Assert.True(AlertEvaluatorService.IsThresholdBreached(rule, full));
+        Assert.False(AlertEvaluatorService.IsThresholdBreached(rule, roomy));
+    }
+
+    [Fact]
+    public void Inodes_UnknownMeasurement_NeverTriggers()
+    {
+        // A "below" rule on an unmeasured table would fire on a reading of 0 if unknown became 0.
+        var rule = MakeRule(MetricType.Inodes, ComparisonOperator.LessThan, 100);
+
+        Assert.False(AlertEvaluatorService.IsThresholdBreached(rule, MakeMetric()));
+    }
+
+    [Fact]
     public void UnknownMetric_ReturnsZero()
     {
         var rule = MakeRule((MetricType)999, ComparisonOperator.GreaterThan, 0);

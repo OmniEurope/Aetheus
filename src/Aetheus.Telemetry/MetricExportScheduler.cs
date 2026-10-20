@@ -5,12 +5,10 @@ using OpenTelemetry.Metrics;
 
 namespace Aetheus.Telemetry;
 
-/// <summary>
-/// PLAN-013 lot 4: sends the metrics at the interval of <see cref="MetricExportSchedule"/>, which follows
+/// <summary> Sends the metrics at the interval of <see cref="MetricExportSchedule"/>, which follows
 /// the « Conservation des données » setting of the application's project (1, 5 or 15 minutes by
-/// profile). The interval is read from Aetheus at startup and every <see cref="RefreshPeriod"/>, so a
-/// change applies without a restart.
-/// </summary>
+/// profile). The interval is read from Aetheus at startup and every <see cref="RefreshPeriod"/>, so
+/// a change applies without a restart. </summary>
 internal sealed class MetricExportScheduler(
     MetricReader reader,
     MetricExportSchedule schedule,

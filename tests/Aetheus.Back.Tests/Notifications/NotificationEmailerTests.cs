@@ -5,13 +5,13 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-16: notifications become HTML and plain-text e-mails, one per addressed user.</summary>
+/// <summary>Notifications become HTML and plain-text e-mails, one per addressed user.</summary>
 public sealed class NotificationEmailerTests
 {
     private readonly IEmailSender _sender = Substitute.For<IEmailSender>();
     private readonly NotificationEmailer _sut;
 
-    public NotificationEmailerTests() => _sut = new NotificationEmailer(_sender);
+    public NotificationEmailerTests() => _sut = new NotificationEmailer(_sender, NotificationMailKit.Templates());
 
     private CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -50,15 +50,16 @@ public sealed class NotificationEmailerTests
     [Fact]
     public void Build_CarriesTextAndEncodedHtml()
     {
-        var message = NotificationEmailer.Build(
+        var message = NotificationMailKit.Build(
             new NotificationEmail("alice@x.org", "release <b>1.0</b> deployed", "release.deployed", "{\"Version\":\"<1.0>\"}"));
 
-        Assert.Equal("[Aetheus] release <b>1.0</b> deployed", message.Subject);
-        Assert.Contains("Event: release.deployed", message.TextBody, StringComparison.Ordinal);
-        Assert.Contains("\"Version\": \"\\u003C1.0\\u003E\"", message.TextBody, StringComparison.Ordinal);
+        Assert.Equal("[Aetheus] Release deployed: release <b>1.0</b> deployed", message.Subject);
+        Assert.Contains("Source event\trelease.deployed", message.TextBody, StringComparison.Ordinal);
+        Assert.Contains("Version\t<1.0>", message.TextBody, StringComparison.Ordinal);
         Assert.NotNull(message.HtmlBody);
         Assert.Contains("release &lt;b&gt;1.0&lt;/b&gt; deployed", message.HtmlBody, StringComparison.Ordinal);
         Assert.DoesNotContain("<b>1.0</b>", message.HtmlBody, StringComparison.Ordinal);
+        Assert.Contains("&lt;1.0&gt;", message.HtmlBody, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -80,7 +81,7 @@ public sealed class NotificationEmailerTests
 
         Assert.Equal("Connection refused", result.Message);
         await _sender.Received(1).SendAsync(
-            Arg.Is<EmailMessage>(m => m.To == "admin@x.org" && m.HtmlBody != null && m.TextBody.Contains("\"mail\"")),
+            Arg.Is<EmailMessage>(m => m.To == "admin@x.org" && m.HtmlBody != null && m.Subject.Contains("\"mail\"") && m.TextBody.Contains("mail")),
             Arg.Any<CancellationToken>());
     }
 }

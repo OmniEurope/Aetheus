@@ -17,9 +17,10 @@ internal static class PublicWebAnalyticsPseudonymizer
     {
         var master = SHA256.HashData(Encoding.UTF8.GetBytes(secret));
         var authenticated = !string.IsNullOrWhiteSpace(source.AuthenticatedUserId);
+        var place = "network-prefix:" + NetworkPrefix(address);
         var identity = authenticated
             ? $"account:{source.AuthenticatedUserId}"
-            : "network-prefix:" + NetworkPrefix(address);
+            : place;
         var instant = source.OccurredAtUtc;
         return new AppWebAnalyticsIngestEvent
         {
@@ -40,8 +41,11 @@ internal static class PublicWebAnalyticsPseudonymizer
                 $"{ISOWeek.GetYear(instant):0000}-W{ISOWeek.GetWeekOfYear(instant):00}",
                 identity),
             MonthlyPseudonym = Period(master, app.Id, "month", $"{instant:yyyy-MM}", identity),
+            // Recette R1-68: one person signed in at two places is two sessions of Current visitors, so
+            // the session of an account is also keyed on the network it comes from. The visitor and
+            // authenticated pseudonyms stay per account: the person is still counted once.
             SessionPseudonym = authenticated
-                ? Stable(master, app.Id, app.AnalyticsPseudonymKeyVersion, "session", identity)
+                ? Stable(master, app.Id, app.AnalyticsPseudonymKeyVersion, "session", $"{identity}|{place}")
                 : Period(master, app.Id, "session-day", $"{instant:yyyy-MM-dd}", identity),
             AuthenticatedPseudonym = authenticated
                 ? Stable(master, app.Id, app.AnalyticsPseudonymKeyVersion, "authenticated", identity)

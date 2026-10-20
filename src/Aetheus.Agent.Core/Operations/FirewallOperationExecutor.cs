@@ -36,47 +36,46 @@ public sealed class FirewallOperationExecutor(ILogger<FirewallOperationExecutor>
             return new ExecutorResult(-1, false);
         }
 
-        IReadOnlyList<string> argv;
+        var command = ResolveHelperCommand(kind, target, envVars);
+        if (command.Refusal is { } refusal)
+        {
+            await onOutput(refusal, TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(command.ExitCode, false);
+        }
+        return await RunSudoAsync(command.Argv, timeoutSeconds, onOutput, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The <c>sudo</c> argv of the helper call, or why it is refused (and with which exit code).</summary>
+    internal sealed record HelperCommand(IReadOnlyList<string> Argv, string? Refusal = null, int ExitCode = 0);
+
+    /// <summary>The helper call for a validated target: enable/disable as is, a port rule only with a
+    /// valid protocol and source and never one that would close an administration port.</summary>
+    internal static HelperCommand ResolveHelperCommand(
+        OperationKind kind, string target, IReadOnlyDictionary<string, string> envVars)
+    {
+        // target is "enable" | "disable" (validated). The helper auto-allows the admin port on enable.
         if (kind == OperationKind.FirewallSetEnabled)
+            return new HelperCommand(["-n", HelperPath, target]);
+
+        var port = int.Parse(target);
+        var proto = envVars.TryGetValue(FirewallConstants.ProtoEnvVar, out var pr) ? pr : "tcp";
+        var source = envVars.TryGetValue(FirewallConstants.SourceEnvVar, out var src) && !string.IsNullOrWhiteSpace(src) ? src : "any";
+
+        if (!FirewallValidation.IsValidProtocol(proto))
+            return new HelperCommand([], $"Invalid protocol '{proto}' (allowed: tcp, udp)", -1);
+        if (!FirewallValidation.IsValidSource(source))
+            return new HelperCommand([], $"Invalid source '{source}' (expected a CIDR, an IP, or 'any')", -1);
+        if (FirewallLockoutGuard.IsLockoutRisk(kind, port, BuildAdminPorts(envVars)))
+            return new HelperCommand([], $"Refused: this would close the administration port {port} and lock you out.", 1);
+
+        var subcommand = kind switch
         {
-            // target is "enable" | "disable" (validated). The helper auto-allows the admin port on enable.
-            argv = ["-n", HelperPath, target];
-        }
-        else
-        {
-            var port = int.Parse(target);
-            var proto = envVars.TryGetValue(FirewallConstants.ProtoEnvVar, out var pr) ? pr : "tcp";
-            var source = envVars.TryGetValue(FirewallConstants.SourceEnvVar, out var src) && !string.IsNullOrWhiteSpace(src) ? src : "any";
-
-            if (!FirewallValidation.IsValidProtocol(proto))
-            {
-                await onOutput($"Invalid protocol '{proto}' (allowed: tcp, udp)", TaskLogLevel.Error).ConfigureAwait(false);
-                return new ExecutorResult(-1, false);
-            }
-            if (!FirewallValidation.IsValidSource(source))
-            {
-                await onOutput($"Invalid source '{source}' (expected a CIDR, an IP, or 'any')", TaskLogLevel.Error).ConfigureAwait(false);
-                return new ExecutorResult(-1, false);
-            }
-
-            var adminPorts = BuildAdminPorts(envVars);
-            if (FirewallLockoutGuard.IsLockoutRisk(kind, port, adminPorts))
-            {
-                await onOutput($"Refused: this would close the administration port {port} and lock you out.", TaskLogLevel.Error).ConfigureAwait(false);
-                return new ExecutorResult(1, false);
-            }
-
-            var subcommand = kind switch
-            {
-                OperationKind.FirewallAllow => "allow",
-                OperationKind.FirewallDeny => "deny",
-                OperationKind.FirewallDeleteRule => "delete",
-                _ => throw new InvalidOperationException($"Unhandled firewall kind {kind}")
-            };
-            argv = ["-n", HelperPath, subcommand, port.ToString(), proto, source];
-        }
-
-        return await RunSudoAsync(argv, timeoutSeconds, onOutput, cancellationToken).ConfigureAwait(false);
+            OperationKind.FirewallAllow => "allow",
+            OperationKind.FirewallDeny => "deny",
+            OperationKind.FirewallDeleteRule => "delete",
+            _ => throw new InvalidOperationException($"Unhandled firewall kind {kind}")
+        };
+        return new HelperCommand(["-n", HelperPath, subcommand, port.ToString(), proto, source]);
     }
 
     private static IReadOnlySet<int> BuildAdminPorts(IReadOnlyDictionary<string, string> envVars)

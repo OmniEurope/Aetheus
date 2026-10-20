@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>
-/// PLAN-003 lot 20 / D26: how long each stage and step usually takes, measured on the last
-/// successful runs of the same pipeline that started before the run being viewed. Failed, partial
-/// and cancelled runs are left out: a run that stopped halfway would pull the average down and make
-/// every healthy run look slow.
-/// </summary>
+/// <summary>Computes stage and step baselines from successful runs of the same pipeline started
+/// before the viewed run. Excluding incomplete executions prevents early termination from biasing
+/// durations downward.</summary>
 public sealed record RunStageBaselinesDto
 {
     /// <summary>How many successful runs the figures are drawn from (at most the server's cap).</summary>

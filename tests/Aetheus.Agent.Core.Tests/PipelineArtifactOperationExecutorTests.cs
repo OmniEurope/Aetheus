@@ -17,6 +17,27 @@ namespace Aetheus.Agent.Core.Tests;
 public class PipelineArtifactOperationExecutorTests
 {
     [Theory]
+    [InlineData(OperationKind.PipelineCollectArtifacts, true)]
+    [InlineData(OperationKind.PipelineCreateRelease, true)]
+    [InlineData(OperationKind.PipelineSubstituteVariables, true)]
+    [InlineData(OperationKind.PipelinePublishCoverage, true)]
+    [InlineData(OperationKind.PipelinePublishLint, true)]
+    [InlineData(OperationKind.PipelinePublishComplexity, true)]
+    [InlineData(OperationKind.PipelinePublishMutation, true)]
+    [InlineData(OperationKind.PipelineRestoreArtifacts, true)]
+    [InlineData(OperationKind.BlueGreenRetire, false)]
+    [InlineData(OperationKind.PipelineDotnetTest, false)]
+    public void CanHandle_ClaimsOnlyTheArtifactAndPublishOperations(OperationKind kind, bool expected)
+    {
+        var executor = new PipelineArtifactOperationExecutor(
+            Substitute.For<IServerApiClient>(),
+            NullLogger<PipelineArtifactOperationExecutor>.Instance,
+            TimeProvider.System);
+
+        Assert.Equal(expected, executor.CanHandle(kind));
+    }
+
+    [Theory]
     [InlineData(null, CompressionLevel.Fastest)]
     [InlineData("fastest", CompressionLevel.Fastest)]
     [InlineData("Optimal", CompressionLevel.Optimal)]
@@ -814,6 +835,49 @@ public class PipelineArtifactOperationExecutorTests
         }
     }
 
+    // Mirror CI run 1272: ApplicationPayload-artifacts went green with files=0 on four of its eight
+    // declared paths. A declared path that matches nothing is a missing artifact, not a smaller one.
+    [Fact]
+    public async Task CollectArtifacts_OneDeclaredPatternWithoutMatches_FailsWithoutUploadAndNamesIt()
+    {
+        var workDir = Directory.CreateTempSubdirectory("prm-artifact-").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(workDir, ".pipeline-artifacts"));
+            await File.WriteAllTextAsync(
+                Path.Combine(workDir, ".pipeline-artifacts", "source-commit"), "abc\n",
+                TestContext.Current.CancellationToken);
+            var api = Substitute.For<IServerApiClient>();
+            var output = new List<string>();
+
+            var result = await NewExecutor(api).ExecuteAsync(
+                OperationKind.PipelineCollectArtifacts,
+                target: "[\".pipeline-artifacts/source-commit\",\".pipeline-artifacts/aetheus-back.tar.gz\"]",
+                envVars: new Dictionary<string, string>
+                {
+                    ["AETHEUS_RUN_ID"] = "42",
+                    ["AETHEUS_WORKING_DIR"] = workDir
+                },
+                timeoutSeconds: 60,
+                onOutput: (message, _) => { output.Add(message); return Task.CompletedTask; },
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(output, message =>
+                message.Contains("matched no file", StringComparison.Ordinal)
+                && message.Contains(".pipeline-artifacts/aetheus-back.tar.gz", StringComparison.Ordinal));
+            Assert.DoesNotContain(output, message =>
+                message.Contains("matched no file", StringComparison.Ordinal)
+                && message.Contains(".pipeline-artifacts/source-commit", StringComparison.Ordinal));
+            await api.DidNotReceive().UploadArtifactAsync(
+                Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            Directory.Delete(workDir, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task PublishCoverage_WithNestedCoberturaFile_FindsAndPublishesIt()
     {
@@ -1214,10 +1278,8 @@ public class PipelineArtifactOperationExecutorTests
         }
     }
 
-    /// <summary>
-    /// PLAN-003 2.4: a lint step with analysis_category: accessibility publishes its SARIF as
-    /// Accessibility analysis, and keeps it out of the code-quality lint store.
-    /// </summary>
+    /// <summary>Publish accessibility-category lint SARIF as Accessibility analysis, outside the
+    /// code-quality lint store.</summary>
     [Fact]
     public async Task PublishLint_AccessibilityCategory_PublishesAccessibilityAnalysisOnly()
     {
@@ -1246,6 +1308,45 @@ public class PipelineArtifactOperationExecutorTests
                 Arg.Any<CancellationToken>());
             await api.DidNotReceive().PublishLintAsync(
                 Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            Directory.Delete(workDir, recursive: true);
+        }
+    }
+
+    /// <summary>QA run 1283's layout and the QA pipeline's pattern: the SARIF the V suite preserved is
+    /// published, the V-1 one beside it is not.</summary>
+    [Fact]
+    public async Task PublishLint_WildcardDirectoryPattern_PublishesThePreservedCurrentReport()
+    {
+        var workDir = Directory.CreateTempSubdirectory("prm-lint-a11y-dir-").FullName;
+        try
+        {
+            foreach (var label in new[] { "qa-1283-current", "qa-1283-previous" })
+            {
+                var e2e = Directory.CreateDirectory(Path.Combine(workDir, ".qa-evidence", label, "e2e")).FullName;
+                await File.WriteAllTextAsync(Path.Combine(e2e, "accessibility.sarif"), "{}", TestContext.Current.CancellationToken);
+            }
+            var api = Substitute.For<IServerApiClient>();
+
+            var result = await NewExecutor(api).ExecuteAsync(
+                OperationKind.PipelinePublishLint,
+                target: "[\".qa-evidence/*-current/e2e/accessibility.sarif\"]",
+                envVars: new Dictionary<string, string>
+                {
+                    ["AETHEUS_RUN_ID"] = "42",
+                    ["AETHEUS_WORKING_DIR"] = workDir,
+                    [LintAnalysisCategories.VariableName] = "Accessibility"
+                },
+                timeoutSeconds: 60,
+                onOutput: (_, _) => Task.CompletedTask,
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, result.ExitCode);
+            await api.Received(1).PublishAnalysisReportAsync(
+                42, Arg.Is<PublishAnalysisReportRequest>(request => request.Category == AnalysisCategory.Accessibility),
+                Arg.Any<CancellationToken>());
         }
         finally
         {
@@ -1408,13 +1509,8 @@ public class PipelineArtifactOperationExecutorTests
         }
     }
 
-    // ── D-04: the restore proves which build it restored ──────────────────────────────────────────
-    //
-    // The archive SHA proves the bytes arrived intact; it says nothing about WHICH build they are.
-    // Every consumer used to rewrite that comparison in shell afterwards, so a consumer that forgot
-    // the stage silently scanned, graded or shipped another commit's build. These pin that the
-    // restore itself now refuses, and that it still allows the one case where another commit is the
-    // whole point.
+    // Archive hashes prove byte integrity, while provenance checks verify which build was restored.
+    // Refuse mismatched revisions except for the explicit cross-revision restore case.
 
     private const string RunCommit = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
 

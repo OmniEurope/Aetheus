@@ -1,8 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R-202: the common grid (AetheusDataGrid, shared settings), full height and virtualized, no
-   pager. Recette R-210 / R-224: the grid reads the log from the API block by block as it scrolls, and
-   its header filters (level, time range, message) and sort travel with each request, so they apply to
-   the whole log of the server and not only to the entries already loaded. *@
+@* The virtualized log grid sends sort and header filters on each paged request so they apply to
+   all server logs. *@
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
@@ -12,7 +10,7 @@
 <AetheusDataGrid @ref="_grid" TItem="TaskLogDto" Data="@_logs" Count="@_totalCount" IsLoading="@_loading"
     LoadData="@LoadLogsAsync" ExportRead="@ReadExportAsync" PageSize="50" Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<TaskLogDto>(_logs, _totalCount))"
-    FullHeight="true" class="aetheus-grid-fullheight">
+    FullHeight="true" RowClick="@OpenEntryAsync" class="aetheus-grid-fullheight">
     <EmptyTemplate>
         <EmptyState Icon="article" Title="@L["NoLogs"]" />
     </EmptyTemplate>

@@ -16,7 +16,8 @@ public class PipelinesController(
     IPipelineArtifactService artifactService,
     IPipelineWebhookService webhookService,
     IPipelineOwnerAuthorization ownerAuthz,
-    IResourceAuthorizationService authz) : ControllerBase
+    IResourceAuthorizationService authz,
+    IPipelineRunToEndPolicy runToEnd) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PaginatedResult<PipelineDto>>> GetPipelines(
@@ -70,7 +71,7 @@ public class PipelinesController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, id, Permission.Read, ct))
             return Forbid();
 
-        // Recette R-483: four columns of the pipeline, not the pipeline with its YAML and runs.
+        // Four columns of the pipeline, not the pipeline with its YAML and runs.
         var (found, source) = await pipelineService.GetPipelineSourceByIdAsync(id, ct);
         if (!found) return NotFound();
         return source is null ? NoContent() : Ok(source);
@@ -139,9 +140,8 @@ public class PipelinesController(
 
         var pipeline = await pipelineService.GetPipelineAsync(id, ct);
         if (pipeline is null) return NotFound();
-        if (!string.IsNullOrWhiteSpace(request?.SourceBranch)
-            && !PipelineBranchValidator.IsValid(request.SourceBranch))
-            return BadRequest("The selected source branch is invalid.");
+        if (await LaunchOptionsRefusalAsync(request, ct) is { } refusal) return refusal;
+        var runToEndRequested = request?.RunToEnd == true;
 
         // Resolve Git exactly once. Authorization below and execution use the same branch, commit and YAML.
         var preparation = await runService.PrepareRunAsync(id, request?.SourceBranch, ct);
@@ -154,11 +154,31 @@ public class PipelinesController(
 
         // Invalid queue-time parameters surface as a BadRequestException and become HTTP 400.
         var run = await runService.TriggerPreparedRunAsync(
-            runtimePreparation, parameters: request?.Parameters, ct: ct,
+            runtimePreparation with { RunToEnd = runToEndRequested }, parameters: request?.Parameters, ct: ct,
             idempotencyKey: request?.IdempotencyKey);
         if (run is null) return NotFound();
         return CreatedAtAction(nameof(GetRun), new { runId = run.Id }, run);
     }
+
+    /// <summary>The refusal of a launch's options, or null: an invalid source branch, or run-to-end
+    /// where this instance does not allow it.</summary>
+    private async Task<ActionResult?> LaunchOptionsRefusalAsync(PipelineRunRequest? request, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(request?.SourceBranch)
+            && !PipelineBranchValidator.IsValid(request.SourceBranch))
+            return BadRequest("The selected source branch is invalid.");
+        // Refused here, not only hidden in the UI: on a production instance the mode would let a
+        // deployment run after failed tests.
+        if (request?.RunToEnd == true && !await runToEnd.IsAllowedAsync(ct))
+            return BadRequest(new ApiError { Message = PipelineRunToEndPolicy.RefusalMessage });
+        return null;
+    }
+
+    /// <summary>The launch options this instance offers for a manual run, so the run dialog shows only
+    /// what the backend will accept.</summary>
+    [HttpGet("run-options")]
+    public async Task<ActionResult<PipelineRunOptionsDto>> GetRunOptions(CancellationToken ct) =>
+        Ok(new PipelineRunOptionsDto { RunToEndAllowed = await runToEnd.IsAllowedAsync(ct) });
 
     [HttpGet("dependencies/page")]
     public async Task<ActionResult<PaginatedResult<PipelineDependencyDto>>> GetDependencyPage(
@@ -380,7 +400,7 @@ public class PipelinesController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
             return Forbid();
 
-        // Recette R2-116: a refused decision answers with its reason (ErrorHandlingMiddleware), never a bare 404.
+        // A refused decision answers with its reason (ErrorHandlingMiddleware), never a bare 404.
         return Ok(await approvalService.DecideApprovalAsync(approvalId, request, ct));
     }
 

@@ -8,10 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// "Réinstaller la messagerie" (recette R2-083 / R2-088), the single setup launch (R2-085) and the page
-/// that concludes nothing while it loads (R2-089).
-/// </summary>
+/// <summary>Covers mail reinstallation, single-submit setup and loading states that defer
+/// configuration conclusions.</summary>
 public sealed class ServerMailReinstallTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -26,7 +24,7 @@ public sealed class ServerMailReinstallTests : BunitContext
 
     private IRenderedComponent<ContainerFragment>? _host;
 
-    /// <summary>Recette R1-12: the Réinstaller button is drawn in the page header.</summary>
+    /// <summary>The Réinstaller button is drawn in the page header.</summary>
     private IElement? HeaderButton(string label) =>
         _host!.FindAll("[data-outlet=\"pipelines-header-actions\"] button").FirstOrDefault(b => b.TextContent.Contains(label, StringComparison.Ordinal));
 
@@ -78,7 +76,7 @@ public sealed class ServerMailReinstallTests : BunitContext
             [nameof(ServerMailSection.ServerId)] = 10
         }, PipelinesList.HeaderActionsSection);
 
-        _host.WaitForAssertion(() => Assert.Single(_host.FindAll("[data-outlet=\"pipelines-header-actions\"] .mail-actions-menu")), TimeSpan.FromSeconds(3));
+        _host.WaitForAssertion(() => Assert.Single(_host.FindAll("[data-outlet=\"pipelines-header-actions\"] .mail-actions-menu")));
         var header = _host.Find("[data-outlet=\"pipelines-header-actions\"]");
         var reinstall = header.QuerySelector(".mail-reinstall-button")!;
         Assert.Contains("omni-button--danger", reinstall.ClassName, StringComparison.Ordinal);
@@ -184,14 +182,14 @@ public sealed class ServerMailReinstallTests : BunitContext
         var cut = RenderReinstall(Stack());
 
         HeaderButton("MailReinstall")!.Click();
-        // A second click finds the button busy, or already replaced by the banner (R2-126).
+        // A second click finds the button busy, or already replaced by the banner.
         HeaderButton("MailReinstall")?.Click();
 
-        cut.WaitForAssertion(() => Assert.Equal(1, Posts("mail/purge")), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Equal(1, Posts("mail/purge")));
         Assert.Equal(1, _dialog.OpenCount);
         Assert.Equal("sonytumen.com", (string?)_dialog.LastParameters![nameof(MailReinstallDialog.Word)]);
         Assert.Contains("\"confirmation\":\"sonytumen.com\"", _handler.RequestDetails.Last(r => r.Url.EndsWith("mail/purge", StringComparison.Ordinal)).Body, StringComparison.OrdinalIgnoreCase);
-        // Recette R2-126: while the stack is erased, one banner and no button.
+        // While the stack is erased, one banner and no button.
         Assert.Null(HeaderButton("MailReinstall"));
         Assert.Contains("MailReinstallRunning", cut.Find(".mail-reinstall-running").TextContent, StringComparison.Ordinal);
         Assert.Single(cut.FindAll(".mail-reinstall-running .mail-reinstall-running__indicator"));
@@ -204,7 +202,7 @@ public sealed class ServerMailReinstallTests : BunitContext
         {
             var outcome = cut.Find(".mail-reinstall-outcome");
             Assert.Contains("MailReinstallFailed", outcome.TextContent, StringComparison.Ordinal);
-        }, TimeSpan.FromSeconds(3));
+        });
         // The test localizer returns the bare key, so the formatted line is read from the outcome itself.
         Assert.Equal(
             new ServerMailReinstall.ReinstallOutcome(false, TaskExecutionStatus.Failed, "Failed to disable unit: Access denied"),
@@ -222,7 +220,7 @@ public sealed class ServerMailReinstallTests : BunitContext
         var cut = RenderReinstall(Stack());
 
         HeaderButton("MailReinstall")!.Click();
-        cut.WaitForAssertion(() => Assert.Equal(1, Posts("mail/purge")), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Equal(1, Posts("mail/purge")));
         // No domain known: the host name is the word to type.
         Assert.Equal("mx.sonytumen.com", (string?)_dialog.LastParameters![nameof(MailReinstallDialog.Word)]);
 
@@ -235,9 +233,9 @@ public sealed class ServerMailReinstallTests : BunitContext
         Assert.Contains("MailReinstallSucceeded", cut.Find(".mail-reinstall-outcome").TextContent, StringComparison.Ordinal);
     }
 
-    // ── R2-085: one click, one setup ─────────────────────────────────────────
+    // One setup per submission.
 
-    // ── R2-089: no conclusion while loading ──────────────────────────────────
+    // No configuration conclusion while loading.
 
     [Fact]
     public void WhileTheCountsLoad_TheNotConfiguredWarningIsNotShown()
@@ -257,7 +255,7 @@ public sealed class ServerMailReinstallTests : BunitContext
         domains.SetResult(new PaginatedResult<MailDomainDto>());
         accounts.SetResult(new PaginatedResult<MailAccountDto>());
 
-        cut.WaitForAssertion(() => Assert.Contains("MailInstalledNotConfigured", cut.Markup, StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Contains("MailInstalledNotConfigured", cut.Markup, StringComparison.Ordinal));
         Assert.Empty(cut.FindAll(".mail-counts-loading"));
     }
 
@@ -275,7 +273,7 @@ public sealed class ServerMailReinstallTests : BunitContext
         var server = ServerTestData.MakeMailServer() with { MailSetupAvailable = true };
         var cut = Render<ServerMailSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, 10));
 
-        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".mail-counts-loading")), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".mail-counts-loading")));
         Assert.DoesNotContain("MailInstalledNotConfigured", cut.Markup, StringComparison.Ordinal);
     }
 }

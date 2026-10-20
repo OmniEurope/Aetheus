@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.Releases;
 
-/// <summary>Recette R-366/R-367: the release detail's creator, uses and build inputs.</summary>
+/// <summary>The release detail's creator, uses and build inputs.</summary>
 [ApiController]
 [Route("api/releases")]
 [Authorize]

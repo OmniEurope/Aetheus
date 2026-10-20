@@ -172,6 +172,25 @@ public class ContainerRunExecutorTests
     }
 
     [Fact]
+    public void ClassifySecrets_LeavesAStageQualifiedOutputOutOfTheContainerEnvironment()
+    {
+        // Mirror quality run 1282: docker refused the env file over
+        // "Toolchain.Resolve source languages.HAS_DOTNET", so no container step of the run could start.
+        var secrets = ContainerRunExecutor.ClassifySecrets(new Dictionary<string, string>
+        {
+            ["HAS_DOTNET"] = "true",
+            ["Toolchain.Resolve source languages.HAS_DOTNET"] = "true",
+            ["Build.Compile the app.NOTES"] = "a\nb",
+            ["invalid key"] = "line 1\nline 2",
+        });
+
+        Assert.Equal(["HAS_DOTNET"], secrets.Environment.Select(kv => kv.Key));
+        Assert.Empty(secrets.Mounted);
+        // Any other unusable key still fails the step rather than vanishing.
+        Assert.Equal(["invalid key"], secrets.InvalidKeys);
+    }
+
+    [Fact]
     public void ResolveSecretFilePaths_StayUnderDaemonVisibleStateRoot_NeverTheServicePrivateTmp()
     {
         var stateRoot = Path.Combine(Path.GetTempPath(), "agent-work", "container-state", "7");
@@ -319,9 +338,84 @@ public class ContainerRunExecutorTests
     [InlineData("/workspace/.git", true)]
     [InlineData("/workspace/.aetheus-container-workspace-ready", true)]
     [InlineData("/workspace/.aetheus-injection", false)]
+    [InlineData("/workspace/.prom-step-0123456789abcdef0123456789abcdef.sh", true)]
+    [InlineData("/workspace/.prom-step-notaguid.sh", false)]
     [InlineData("/workspace/src", false)]
-    public void IsProtectedSyncEntry_ExcludesOnlyRunnerMetadata(string entry, bool expected) =>
+    public void IsProtectedSyncEntry_ExcludesOnlyRunnerMetadataAndStepScripts(string entry, bool expected) =>
         Assert.Equal(expected, ContainerWorkspaceMaterializer.IsProtectedSyncEntry(entry));
+
+    [Fact]
+    public void BuildDockerRun_ReadOnlyMounts_AreBoundReadOnlyBesideTheWorkspace()
+    {
+        var resolution = new ToolchainResolution { IsSuccess = true, Image = ImmutableImage, Shell = "sh" };
+
+        var args = NewExecutor().BuildDockerRun(
+            new ContainerSpec { Image = ImmutableImage, WorkspaceKey = 1 },
+            resolution,
+            "/host/ws",
+            "/host/home",
+            [],
+            ".prom-step-00000000000000000000000000000000.sh",
+            "prom-fn",
+            null,
+            null,
+            readOnlyMounts: [new ContainerReadOnlyMount("/opt/aetheus-agent/aetheus-fn", "/opt/aetheus-fn")]).ArgumentList;
+
+        var mount = args.IndexOf("/opt/aetheus-agent/aetheus-fn:/opt/aetheus-fn:ro");
+        Assert.True(mount > 0, string.Join(' ', args));
+        Assert.Equal("-v", args[mount - 1]);
+        Assert.Contains("/host/ws:/w", args);
+        // The hardening stays as for any step: the mount adds nothing writable.
+        Assert.Contains("--read-only", args);
+        Assert.Contains("ALL", args);
+        Assert.True(mount < args.IndexOf("--"), "The mount must be a docker option, before the image.");
+    }
+
+    [Theory]
+    [InlineData("relative/path")]
+    [InlineData("/w")]
+    [InlineData("/w/tools")]
+    [InlineData("/opt/a:b")]
+    [InlineData("/opt/a,b")]
+    [InlineData("/")]
+    public void BuildDockerRun_RefusesAnInvalidReadOnlyMount(string containerPath)
+    {
+        var resolution = new ToolchainResolution { IsSuccess = true, Image = ImmutableImage, Shell = "sh" };
+
+        Assert.Throws<ArgumentException>(() => NewExecutor().BuildDockerRun(
+            new ContainerSpec { Image = ImmutableImage, WorkspaceKey = 1 },
+            resolution,
+            "/host/ws",
+            "/host/home",
+            [],
+            ".prom-step-00000000000000000000000000000000.sh",
+            "prom-fn",
+            null,
+            null,
+            readOnlyMounts: [new ContainerReadOnlyMount("/host/fn", containerPath)]));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InvalidReadOnlyMount_IsBlockedBeforeAnyContainerStarts()
+    {
+        var errors = new List<string>();
+
+        var result = await NewExecutor().ExecuteAsync(
+            new ContainerSpec { Image = ImmutableImage, WorkspaceKey = 1 },
+            "echo hi",
+            new Dictionary<string, string>(),
+            60,
+            (line, level) =>
+            {
+                if (level == TaskLogLevel.Error) errors.Add(line);
+                return Task.CompletedTask;
+            },
+            TestContext.Current.CancellationToken,
+            [new ContainerReadOnlyMount("/host/fn", "/w")]);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Contains(errors, line => line.Contains("Read-only container mount '/w' is invalid", StringComparison.Ordinal));
+    }
 
     private static string FindRepoRoot() => Aetheus.Agent.Core.Tests.RepositoryScan.Root;
 }

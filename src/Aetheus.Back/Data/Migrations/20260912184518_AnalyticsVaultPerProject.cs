@@ -10,15 +10,10 @@ namespace Aetheus.Back.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: data move, no schema change (PLAN-003 2.1). Web
-            // analytics had one vault per app, `aetheus-web-analytics-<appId>`; it now has one per project,
-            // `<project slug>.analytics`, with one key per app (`..._PSEUDONYMIZATION_KEY_<appId>`).
-            // The slug is AppWebAnalyticsConfigurationService.VaultNameFor, restated in SQL: lower-case,
-            // every run of other characters one hyphen, trimmed, 90 at most, `project-<id>` when empty.
-            // The legacy vaults are COPIED from, never modified or deleted: the key keeps its encrypted
-            // value (the encryption is not bound to the vault or the key name), so pseudonyms do not
-            // change, and a legacy vault nothing points to any more is removed by hand later. Every
-            // statement is guarded, so re-running it adds nothing.
+            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: idempotently copy application pseudonymization
+            // keys into project analytics vaults without changing schema, source vaults or
+            // encrypted values. SQL naming mirrors VaultNameFor so existing pseudonyms and
+            // application key identities remain stable.
             migrationBuilder.Sql(
                 """
                 CREATE TEMP TABLE analytics_vault_move ON COMMIT DROP AS

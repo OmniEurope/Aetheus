@@ -92,10 +92,9 @@ public class ServerEnrollmentService(
         };
     }
 
-    // PLAN-004 R-11: the same machine must find its row again, active or retired. The machine-id hash
-    // is looked up only inside the token's organization and wins over the hostname (it survives a
-    // rename); the hostname rule is unchanged and still spans organizations, so a hostname owned by
-    // another organization keeps being refused by the caller. Older agents send no hash.
+    // Prefer machine-id matching within the enrollment token organisation, including retired rows,
+    // so host renaming preserves identity. Fall back to hostname matching across organisations,
+    // leaving cross-organisation ownership conflicts for the caller to reject.
     private async Task<(Server? Server, string? MatchedBy)> FindEnrollmentMatchAsync(
         ServerRegistrationRequest request, int organizationId, CancellationToken ct)
     {

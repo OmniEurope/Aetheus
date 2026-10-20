@@ -4,9 +4,7 @@ namespace Aetheus.Front.Components.Pipelines;
 
 public partial class ReleasePickerGrid
 {
-    /// <summary>R-10 put every release in one place (no more "Show more", "All releases", "Show more");
-    /// recette R-327 replaced its five-row pager with scrolling: this is the size of the block the grid
-    /// asks for as the reader scrolls.</summary>
+    /// <summary>The grid requests releases in blocks as the user scrolls.</summary>
     internal const int PageSize = 20;
 
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -23,7 +21,7 @@ public partial class ReleasePickerGrid
     private List<ReleaseDto> _page = [];
     private int _count;
 
-    // Recette R-210: the two status columns filter by a checkable list of their members.
+    // The two status columns filter by a checkable list of their members.
     private Func<string, string>? _statusText;
     private Func<string, string> StatusText => _statusText ??= GridFilterText.ForEnum<ReleaseStatus>(L);
     private Func<string, string>? _runStatusText;

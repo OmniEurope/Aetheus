@@ -7,8 +7,7 @@
 else
 {
     @* The breadcrumb leaf already reads "Tasks" - no need to repeat it as a section title. *@
-    @* Recette R-184: no search box and no pager; the grid is virtualized (R-049) and its header
-       filters do the searching. *@
+    @* The task grid virtualizes rows and searches through header filters. *@
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_result.Items" TItem="ServerTaskDto"
         Count="@_result.TotalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
         PageSize="25" EmptyText="@L["NoRecords"]"
@@ -31,7 +30,7 @@ else
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="ServerTaskDto" Property="Status" Title="@L["Status"]" Width="220px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
                 <Template Context="task">
-                    @* Recette R-446: each status its colour, the one mapping of the server task pages. *@
+                    @* Each status its colour, the one mapping of the server task pages. *@
                     <OmniBadge Fill="OmniFill.Solid" Tone="@Aetheus.Front.Components.Tasks.TaskListView.GetTaskBadge(task.Status)">@L[task.Status.ToString()]</OmniBadge>
                     @if (!string.IsNullOrWhiteSpace(task.FailureCode))
                     {

@@ -11,9 +11,10 @@ namespace Aetheus.E2E;
 [Category("E2E")]
 [Category("ResponsiveAdmin")]
 [NonParallelizable]
-[FixtureLifeCycle(LifeCycle.InstancePerTestCase)]
 public sealed class MobileActionBarLayoutTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     private const int PhoneWidth = 390;
     private const int PhoneHeight = 844;
 
@@ -124,7 +125,11 @@ public sealed class MobileActionBarLayoutTests : E2ETestBase
 
         var problems = await MeasureAsync(href);
         Assert.That(problems, Is.Empty, string.Join("; ", problems));
-        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Move Down" }).First).ToBeVisibleAsync();
+        // STD-BTN detection 11: a widget shows Settings, its other actions (Move Up/Down, Delete) are in its menu.
+        var widget = Page.Locator("[role=listitem]").First;
+        await Expect(widget.GetByRole(AriaRole.Button, new() { Name = "Settings" })).ToBeVisibleAsync();
+        await widget.GetByRole(AriaRole.Button, new() { Name = "More actions" }).ClickAsync();
+        await Expect(Page.GetByRole(AriaRole.Menuitem, new() { Name = "Move Down" }).First).ToBeVisibleAsync();
     }
 
     [Test]

@@ -81,11 +81,11 @@ public static class AetheusTelemetryBuilderExtensions
         // process, exported as gauges on the same metrics pipeline.
         services.AddAetheusRequestPerformanceMetrics();
 
-        // PLAN-013 lot 1: the database size, when the host handed over a connection.
+        // Measure database size when the host supplies a connection.
         AddDatabaseSizeMetrics(services, options.DatabaseSize);
 
-        // PLAN-013 lot 4: the metrics are sent at the interval of the project's « Conservation des
-        // données » setting, read from Aetheus with the ingest key, instead of the fixed periodic reader.
+        // The metrics are sent at the interval of the project's « Conservation des données »
+        // setting, read from Aetheus with the ingest key, instead of the fixed periodic reader.
         var metricReader = AddScheduledMetricExport(services, options);
 
         openTelemetry.WithMetrics(builder =>

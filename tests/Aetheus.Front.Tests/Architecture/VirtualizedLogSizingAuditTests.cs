@@ -28,8 +28,8 @@ public class VirtualizedLogSizingAuditTests
     {
         var root = FindRepoRoot();
         var css = File.ReadAllText(Path.Combine(root, "src", "Aetheus.Front", "wwwroot", "css", "app.css"));
-        // The side-by-side rule starts its line; the phone rule, indented in its media block, stacks the
-        // timeline over the logs and gives the wheel back to the page (recette R-425).
+        // The side-by-side rule begins at the line start; the indented phone rule stacks the
+        // timeline and returns scrolling to the page.
         var timelineMatch = Regex.Match(
             css,
             @"^\.run-split-timeline\s*\{(?<body>.*?)\}",

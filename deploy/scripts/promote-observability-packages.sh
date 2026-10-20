@@ -5,11 +5,45 @@
 set -eu
 
 ROOT="${AETHEUS_WORKING_DIR:-}"
-VERSION="${PACKAGE_VERSION:-}"
+# A run definition from before PLAN-002 C8 still carries one PACKAGE_VERSION for the whole set. It
+# is honoured for one cycle as a constraint only: every candidate must then carry exactly it.
+LEGACY_SET_VERSION="${PACKAGE_VERSION:-}"
+unset PACKAGE_VERSION
 PUBLISH_SCRIPT="${AETHEUS_TRUSTED_PUBLISH_SCRIPT:-}"
-case "$VERSION" in ''|*[!0-9A-Za-z.+-]*) echo "PACKAGE_VERSION is invalid." >&2; exit 2 ;; esac
+case "$LEGACY_SET_VERSION" in *[!0-9A-Za-z.+-]*) echo "PACKAGE_VERSION is invalid." >&2; exit 2 ;; esac
 test -d "$ROOT" || { echo "AETHEUS_WORKING_DIR is invalid." >&2; exit 2; }
 test -f "$PUBLISH_SCRIPT" || { echo "Trusted publication harness is unavailable." >&2; exit 2; }
+
+# Each package is published under its own version (PLAN-002 C8): the one its child pipeline read from
+# the package's csproj or package.json and attested as packageVersion in the candidate's
+# provenance.json. One package's version is never applied to another.
+candidate_version()
+{
+  PROVENANCE="$ROOT/.package-candidate/$1/provenance.json"
+  test -f "$PROVENANCE" || { echo "The $1 candidate has no provenance.json." >&2; return 2; }
+  CANDIDATE_VERSION="$(sed -n \
+    's/^[[:space:]]*"packageVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*$/\1/p' "$PROVENANCE")"
+  case "$CANDIDATE_VERSION" in ''|*[!0-9A-Za-z.+-]*)
+    echo "The $1 candidate does not attest one valid packageVersion." >&2; return 2 ;;
+  esac
+  if [ -n "$LEGACY_SET_VERSION" ] && [ "$CANDIDATE_VERSION" != "$LEGACY_SET_VERSION" ]; then
+    echo "The $1 candidate is $CANDIDATE_VERSION, not the requested PACKAGE_VERSION." >&2; return 2
+  fi
+  printf '%s\n' "$CANDIDATE_VERSION"
+}
+TELEMETRY_VERSION="$(candidate_version telemetry)"
+WEB_ANALYTICS_DOTNET_VERSION="$(candidate_version web-analytics-dotnet)"
+WEB_ANALYTICS_BROWSER_VERSION="$(candidate_version web-analytics-browser)"
+version_of()
+{
+  case "$1" in
+    telemetry) printf '%s' "$TELEMETRY_VERSION" ;;
+    web-analytics-dotnet) printf '%s' "$WEB_ANALYTICS_DOTNET_VERSION" ;;
+    web-analytics-browser) printf '%s' "$WEB_ANALYTICS_BROWSER_VERSION" ;;
+  esac
+}
+echo "Release set: Aetheus.Telemetry $TELEMETRY_VERSION, Aetheus.WebAnalytics $WEB_ANALYTICS_DOTNET_VERSION," \
+  "@aetheus/web-analytics $WEB_ANALYTICS_BROWSER_VERSION."
 test -n "${AETHEUS_NUGET_SIGNING_PFX_BASE64:-}" || {
   echo "AETHEUS_NUGET_SIGNING_PFX_BASE64 is required." >&2; exit 1;
 }
@@ -31,13 +65,9 @@ test "${#EXPECTED_FINGERPRINT}" -eq 64 || {
 DOTNET="${DOTNET:-dotnet}"
 command -v "$DOTNET" >/dev/null
 command -v openssl >/dev/null
-# `node` is a prerequisite of this harness, and nothing installs one system-wide on an Aetheus host:
-# the delivery pipelines use a pinned, checksummed runtime that ensure-node-runtime.sh unpacks under
-# the agent's own home. This harness is embedded in the agent and deliberately runs nothing from the
-# checkout, so it looks for that runtime where the agent put it instead of calling the script. The
-# mirror only ever worked because a session had installed a system node by hand; rebuilding the
-# simulator from the repository removed it and the promotion died with exit 127 and no output
-# (publisher run 1238). A host that genuinely has node on PATH is unaffected.
+# Resolve the pinned Node runtime from the agent's installation when PATH has none because this
+# embedded harness must not execute checkout scripts. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 if ! command -v node >/dev/null 2>&1; then
   for NODE_BIN_DIR in "${HOME:-${AETHEUS_AGENT_WORK_DIRECTORY:?HOME or AETHEUS_AGENT_WORK_DIRECTORY is required}}"/.aetheus/node-v*/bin
   do
@@ -143,7 +173,7 @@ sign_candidate()
   KIND="$1"
   ID="$2"
   OUT="$ROOT/.package-candidate/$KIND"
-  PACKAGE="$OUT/$ID.$VERSION.nupkg"
+  PACKAGE="$OUT/$ID.$(version_of "$KIND").nupkg"
   test -f "$PACKAGE"
   (cd "$OUT" && sha256sum --check SHA256SUMS)
   "$DOTNET" nuget sign "$PACKAGE" \
@@ -188,14 +218,15 @@ done
 # immutable identical versions are accepted and conflicting bytes always fail closed.
 for KIND in telemetry web-analytics-dotnet web-analytics-browser
 do
-  AETHEUS_PUBLISH_PREFLIGHT_ONLY=true \
+  AETHEUS_PUBLISH_PREFLIGHT_ONLY=true PACKAGE_VERSION="$(version_of "$KIND")" \
     AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT="$EXPECTED_FINGERPRINT" \
     WORKSPACE="$ROOT" DOTNET="$DOTNET" \
     sh "$PUBLISH_SCRIPT" "$KIND"
 done
 for KIND in telemetry web-analytics-dotnet web-analytics-browser
 do
-  AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT="$EXPECTED_FINGERPRINT" \
+  PACKAGE_VERSION="$(version_of "$KIND")" \
+    AETHEUS_NUGET_SIGNING_CERTIFICATE_FINGERPRINT="$EXPECTED_FINGERPRINT" \
     WORKSPACE="$ROOT" DOTNET="$DOTNET" sh "$PUBLISH_SCRIPT" "$KIND"
 done
 unset EXPECTED_FINGERPRINT

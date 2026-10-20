@@ -61,8 +61,12 @@
                         <OmniFormField For="oe-pages-servers-serverdetailsections-serverfirewallsection-3"><LabelContent>@L["FirewallSource"]</LabelContent><ChildContent>
                             <OmniTextBox @bind-Value="_rule.Source" maxlength="64" Id="oe-pages-servers-serverdetailsections-serverfirewallsection-3" />
                         </ChildContent></OmniFormField>
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _ruleAction = FirewallRuleAction.Allow)" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.LockOpen" /> <span>@L["FirewallAllow"]</span></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => _ruleAction = FirewallRuleAction.Deny)" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Prohibit" /> <span>@L["FirewallDeny"]</span></OmniButton>
+                        @* One submit, the rule's action chosen beside it (user decision, 2026-10-17). *@
+                        <OmniFormField For="oe-pages-servers-serverdetailsections-serverfirewallsection-action"><LabelContent>@L["FirewallActionColumn"]</LabelContent><ChildContent>
+                            <OmniSelectBar TValue="FirewallRuleAction" @bind-Value="_rule.Action" Options="@RuleActionOptions" IconFor="@RuleActionIcon"
+                                           Id="oe-pages-servers-serverdetailsections-serverfirewallsection-action" />
+                        </ChildContent></OmniFormField>
+                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["FirewallAddRule"]</span></OmniButton>
                     </OmniRow>
                 </OmniTemplateForm>
             </OmniCard>

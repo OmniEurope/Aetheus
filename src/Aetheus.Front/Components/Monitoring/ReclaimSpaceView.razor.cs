@@ -5,11 +5,9 @@ using System.Text.Json;
 
 namespace Aetheus.Front.Components.Monitoring;
 
-/// <summary>
-/// PLAN-013 lot 6: the purged tables with their size, a confirmed « Récupérer la place » per table, and
+/// <summary> The purged tables with their size, a confirmed « Récupérer la place » per table, and
 /// the results measured before and after. The page reads the status again after a start; the server
-/// refuses a start while a pipeline runs or another table is being processed.
-/// </summary>
+/// refuses a start while a pipeline runs or another table is being processed. </summary>
 public partial class ReclaimSpaceView
 {
     private const double Megabyte = 1024d * 1024d;

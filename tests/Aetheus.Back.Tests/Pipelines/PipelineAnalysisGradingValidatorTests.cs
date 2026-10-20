@@ -50,7 +50,7 @@ public sealed class PipelineAnalysisGradingValidatorTests
     [Fact]
     public void Validate_AcceptsACountedFindingScoreWithAnOpenEBand()
     {
-        // Recette R1-4: finding_score: count grades the number of open findings, no weighting.
+        // Finding_score: count grades the number of open findings, no weighting.
         var grading = WeightedGrading();
         grading = grading with { Rules = [grading.Rules[0] with { FindingScore = "count" }] };
 

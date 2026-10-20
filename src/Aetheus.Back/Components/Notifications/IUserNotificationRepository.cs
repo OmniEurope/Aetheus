@@ -14,7 +14,7 @@ public interface IUserNotificationRepository
         int recipientUserId, int page, int pageSize, UserNotificationPageRequest request, CancellationToken ct = default);
     Task<int> CountUnreadAsync(int recipientUserId, CancellationToken ct = default);
 
-    /// <summary>Recette R-224: the distinct event types of the user's deliveries.</summary>
+    /// <summary>The distinct event types of the user's deliveries.</summary>
     Task<List<string>> GetEventTypesAsync(int recipientUserId, CancellationToken ct = default);
 
     /// <summary>The delivery when it belongs to <paramref name="recipientUserId"/>; null otherwise (tracked).</summary>
@@ -34,6 +34,11 @@ public interface IUserNotificationRepository
 
     Task<List<UserNotificationPreference>> GetPreferencesAsync(int userId, CancellationToken ct = default);
 
+    /// <summary>Recette R1-77: the users among <paramref name="userIds"/> already e-mailed (Sent) a delivery of
+    /// <paramref name="eventType"/> whose payload contains <paramref name="payloadMarker"/>.</summary>
+    Task<HashSet<int>> GetRecipientsAlreadyEmailedAsync(
+        string eventType, string payloadMarker, IReadOnlyCollection<int> userIds, CancellationToken ct = default);
+
     /// <summary>Inserts or updates one row per entry of <paramref name="preferences"/>; other rows are left alone.</summary>
     Task SavePreferencesAsync(int userId, IReadOnlyDictionary<string, bool> preferences, CancellationToken ct = default);
 
@@ -44,19 +49,18 @@ public interface IUserNotificationRepository
     /// <summary>Removes the subscription; false when there was none.</summary>
     Task<bool> RemoveSubscriptionAsync(int userId, int projectId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Recette R2-034: subscribes the user to every project of <paramref name="projectIds"/> (every
+    /// <summary> Subscribes the user to every project of <paramref name="projectIds"/> (every
     /// project when null) not followed yet, and returns how many subscriptions were added.
     /// </summary>
     Task<int> AddMissingSubscriptionsAsync(int userId, IReadOnlyCollection<int>? projectIds, CancellationToken ct = default);
 
-    /// <summary>Audit R2-023 follow-up: the active users holding the Admin role.</summary>
+    /// <summary>Returns active users holding the Admin role.</summary>
     Task<List<NotificationRecipient>> GetActiveAdministratorsAsync(CancellationToken ct = default);
 
-    /// <summary>Recette R2-034: the distinct projects the server is attached to (agent server links).</summary>
+    /// <summary>The distinct projects the server is attached to (agent server links).</summary>
     Task<List<int>> GetServerProjectIdsAsync(int serverId, CancellationToken ct = default);
 
-    /// <summary>Recette R2-034: the project and version of a release, or null when it does not exist.</summary>
+    /// <summary>The project and version of a release, or null when it does not exist.</summary>
     Task<(int ProjectId, string Version)?> GetReleaseProjectAsync(int releaseId, CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);

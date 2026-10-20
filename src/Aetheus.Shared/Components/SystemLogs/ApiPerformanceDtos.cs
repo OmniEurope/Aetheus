@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.SystemLogs;
 
-/// <summary>
-/// PLAN-003 lot 27 / D27: how long the API takes to answer, measured by the server on the ASP.NET
-/// Core request-duration instrument (the one OpenTelemetry exports), kept in memory by this instance.
-/// </summary>
+/// <summary>API response durations measured through the ASP.NET Core request-duration instrument
+/// and retained in this instance’s memory.</summary>
 public sealed record ApiPerformanceReportDto
 {
     /// <summary>Oldest measurement kept. Later than 24 h ago after a restart or a deployment: the

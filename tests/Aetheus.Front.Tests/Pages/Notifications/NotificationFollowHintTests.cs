@@ -4,10 +4,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Notifications;
 
-/// <summary>
-/// Recette R2-034: a user who follows no project receives nothing. The bell and the preferences say why
-/// and offer to follow every project the user can read; the preferences list the new events.
-/// </summary>
+/// <summary>Users without followed projects receive no project notifications. The bell and
+/// preferences explain this and offer to follow readable projects.</summary>
 public sealed class NotificationFollowHintTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -71,9 +69,29 @@ public sealed class NotificationFollowHintTests : BunitContext
 
         panel.Find(".notification-follow-all").Click();
 
-        panel.WaitForAssertion(() => Assert.Single(panel.FindAll(".notification-subscription")));
+        panel.WaitForAssertion(() => Assert.Single(panel.FindAll("[data-testid='notification-subscriptions'] a[href='/projects/4']")));
         Assert.Empty(panel.FindAll(".notification-subscriptions-empty"));
-        Assert.Contains("Shop", panel.Find(".notification-subscription").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Shop", panel.Find("[data-testid='notification-subscriptions']").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R1_56_FollowedProjects_AreACompactGrid_WithAProjectLink_AndAnIconOnlyUnfollow()
+    {
+        _subscriptions = [new ProjectSubscriptionDto { ProjectId = 4, ProjectName = "Shop" }, new ProjectSubscriptionDto { ProjectId = 9, ProjectName = "Blog" }];
+        _handler.SetResponse(HttpMethod.Delete, "api/notifications/me/subscriptions/4", System.Net.HttpStatusCode.NoContent);
+        var panel = Render<NotificationPreferencesPanel>();
+
+        panel.WaitForAssertion(() => Assert.Equal(2, panel.FindAll("[data-testid='notification-subscriptions'] a[href^='/projects/']").Count));
+        Assert.Empty(panel.FindAll(".notification-subscription"));
+        var unfollow = panel.FindAll("[data-testid='notification-subscriptions'] button.notification-unsubscribe");
+        Assert.Equal(2, unfollow.Count);
+        Assert.Equal("Unsubscribe", unfollow[0].GetAttribute("title"));
+        Assert.DoesNotContain("<span>", unfollow[0].InnerHtml, StringComparison.Ordinal);
+
+        unfollow[0].Click();
+
+        panel.WaitForAssertion(() => Assert.Single(panel.FindAll("[data-testid='notification-subscriptions'] a[href^='/projects/']")));
+        Assert.Contains(_handler.Requests, r => r.Method == "DELETE" && r.Url.EndsWith("api/notifications/me/subscriptions/4", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -85,6 +103,27 @@ public sealed class NotificationFollowHintTests : BunitContext
         Assert.Contains("NotificationEvent_release_deployed", panel.Markup, StringComparison.Ordinal);
         Assert.Contains("NotificationEvent_agent_update_completed", panel.Markup, StringComparison.Ordinal);
         Assert.Contains("NotificationEvent_agent_update_failed", panel.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R177_TheChildResultsOption_IsASwitchOfThePipelinesGroup_OffByDefault()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "api/notifications/me/preferences", new List<NotificationPreferenceDto>
+        {
+            new()
+            {
+                EventType = NotificationEventTypes.PipelineChildResults,
+                IsEnabled = false,
+                DefaultEnabled = false,
+                CarriesProjectId = true
+            }
+        });
+
+        var panel = Render<NotificationPreferencesPanel>();
+
+        panel.WaitForAssertion(() => Assert.Contains("NotificationEvent_pipeline_child_results", panel.Markup, StringComparison.Ordinal));
+        Assert.Equal("false", panel.Find(".notification-preference-toggle button[role='switch']").GetAttribute("aria-checked"));
+        Assert.Equal("Pipelines", NotificationPreferencesPanel.GroupKey(NotificationEventTypes.PipelineChildResults));
     }
 
     [Theory]

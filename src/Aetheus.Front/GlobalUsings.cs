@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 global using System.ComponentModel.DataAnnotations;
-// PLAN-008 lot 43: the front pieces follow their module folder. Components/Shared holds what three
-// modules or more use; the rest lives with its module.
+// Components follow module folders; Components/Shared contains pieces used by at least three
+// modules.
 global using Aetheus.Front.Components.AiTasks;
 global using Aetheus.Front.Components.Analysis;
 global using Aetheus.Front.Components.Auth;
@@ -9,6 +9,7 @@ global using Aetheus.Front.Components.Dashboards;
 global using Aetheus.Front.Components.Environments;
 global using Aetheus.Front.Components.Git;
 global using Aetheus.Front.Components.Mail;
+global using Aetheus.Front.Components.MailTemplates;
 global using Aetheus.Front.Components.Pipelines;
 global using Aetheus.Front.Components.Projects;
 global using Aetheus.Front.Components.Releases;
@@ -20,8 +21,7 @@ global using Aetheus.Front.Components.Users;
 global using Aetheus.Front.Components.VariableLibraries;
 global using Aetheus.Front.Layout;
 global using Aetheus.Front.Resources;
-// PLAN-008 lot 43: the contracts follow their module folder, so the former flat DTOs, enums,
-// constants, validators and helpers are now one namespace per module.
+// Import shared contracts through their module namespaces.
 global using Aetheus.Shared.Components.AgentPools;
 global using Aetheus.Shared.Components.Agents;
 global using Aetheus.Shared.Components.AgentUpdate;
@@ -43,6 +43,7 @@ global using Aetheus.Shared.Components.Firewall;
 global using Aetheus.Shared.Components.Git;
 global using Aetheus.Shared.Components.Logs;
 global using Aetheus.Shared.Components.Mail;
+global using Aetheus.Shared.Components.MailTemplates;
 global using Aetheus.Shared.Components.ModuleLinks;
 global using Aetheus.Shared.Components.Monitoring;
 global using Aetheus.Shared.Components.Notifications;

@@ -13,7 +13,7 @@ public partial class ServerCronSection : ServerActionSectionBase
 
     private CronDataDto Cron => Server.Cron;
 
-    // Recette R-227: each heartbeat brings a new job list; jobs that were not there read bold.
+    // Each heartbeat brings a new job list; jobs that were not there read bold.
     private OmniDataGrid<CronJobDto>? _grid;
     private readonly LiveGridRows _liveRows = new();
 
@@ -63,6 +63,10 @@ public partial class ServerCronSection : ServerActionSectionBase
             await SaveJobAsync(request);
     }
 
+    // Recette R3-35: clicking a job edits it, when its Edit button would (agent online, not a system job).
+    private Task OpenFromRowAsync(CronJobDto job) =>
+        AgentOffline || job.IsSystem ? Task.CompletedTask : OpenEditDialog(job);
+
     private async Task OpenEditDialog(CronJobDto job)
     {
         if (BlockedByOfflineAgent()) return;
@@ -91,11 +95,16 @@ public partial class ServerCronSection : ServerActionSectionBase
 
         if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
+        // Recette R3-37: the follower shows what becomes of the task, in place of a lone "Task queued".
+        _follower?.Expect(L["Save"]);
         var success = await Api.ServerTools.SaveCronJobAsync(ServerId, request);
         if (success)
             Toast.Success(L["TaskQueued"]);
         else
+        {
+            _follower?.Forget();
             Toast.Error(L["Error"], L["ActionFailed"]);
+        }
         _actionRunning = false;
     }
 
@@ -103,11 +112,15 @@ public partial class ServerCronSection : ServerActionSectionBase
     {
         if (BlockedByOfflineAgent()) return;
         _actionRunning = true;
+        _follower?.Expect(L["DeleteCronJob"]);
         var success = await Api.ServerTools.DeleteCronJobAsync(ServerId, new CronJobDeleteRequest { Id = job.Id, User = job.User });
         if (success)
             Toast.Success(L["TaskQueued"]);
         else
+        {
+            _follower?.Forget();
             Toast.Error(L["Error"], L["ActionFailed"]);
+        }
         _actionRunning = false;
     }
 }

@@ -8,11 +8,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// Recette R1-29, option 1: the setup wizard starts from an existing project. The path is driven
-/// through the wizard page itself: the start choice, the projects and prefixes, the plan the backend
-/// returns, the copy request, and the result that lists the empty values and what remains to set up.
-/// </summary>
+/// <summary>Exercises the copy wizard through project selection, backend planning, copy request and
+/// the resulting empty-value checklist.</summary>
 public sealed class PipelineProjectCopyWizardTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -103,6 +100,78 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
             Assert.NotNull(cut.Find("[data-testid='setup-readiness']"));
             Assert.Contains("prod", cut.Find("[data-testid='setup-readiness']").TextContent, StringComparison.Ordinal);
         });
+    }
+
+    private async Task<(IRenderedComponent<PipelineSetupWizard> Cut, IRenderedComponent<PipelineProjectCopyWizard> Copy)> CopyAsync()
+    {
+        _handler.SetPaginatedJsonResponse("api/projects",
+        [
+            new ProjectDto { Id = 1, Name = "Aetheus", DefaultBranch = "main" },
+            new ProjectDto { Id = 2, Name = "ATS", DefaultBranch = "develop" }
+        ]);
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>());
+        _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/setup/copy-plan", Plan());
+        _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/setup/copy", new PipelineProjectCopyResultDto
+        {
+            Plan = Plan(created: true),
+            Readiness = new PipelineSetupReadinessDto
+            {
+                RepositoryInspected = true,
+                Checks = [new PipelineSetupReadinessCheckDto { Kind = PipelineSetupReadinessKind.MissingEnvironments, Severity = PipelineSetupReadinessSeverity.Blocking, Items = ["prod"] }]
+            }
+        });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("http://localhost/pipelines/setup?projectId=2");
+        var cut = Render<PipelineSetupWizard>();
+        cut.WaitForAssertion(() => cut.FindComponent<OmniRadioButtonList<bool>>());
+        await cut.InvokeAsync(() => cut.FindComponent<OmniRadioButtonList<bool>>().Instance.ValueChanged.InvokeAsync(true));
+        var copy = cut.FindComponent<PipelineProjectCopyWizard>();
+        await cut.InvokeAsync(() => copy.Instance.SetSourceProject(1));
+        var wizard = copy.FindComponent<WizardDialog>();
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid='pipeline-copy-item']").Count));
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+        await cut.Find(".omni-wizard__actions button.omni-wizard__finish")
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='setup-readiness']")));
+        return (cut, copy);
+    }
+
+    private int ReadinessReads() =>
+        _handler.Requests.Count(request => request.Method == "GET"
+            && request.Url.Contains("api/pipelines/setup/project-readiness?projectId=2", StringComparison.Ordinal));
+
+    // A library, vault or repository created from the result changes the verdict: it is read again for
+    // the new project and replaces the one shown.
+    [Fact]
+    public async Task AChangeFromTheResult_ReadsTheVerdictAgain_AndShowsTheNewOne()
+    {
+        var (cut, copy) = await CopyAsync();
+        _handler.SetJsonResponse(HttpMethod.Get, "api/pipelines/setup/project-readiness", new PipelineSetupReadinessDto
+        {
+            RepositoryInspected = true,
+            Checks = [new PipelineSetupReadinessCheckDto { Kind = PipelineSetupReadinessKind.MissingEnvironments, Severity = PipelineSetupReadinessSeverity.Blocking, Items = ["staging"] }]
+        });
+
+        await cut.InvokeAsync(() => cut.FindComponent<PipelineSetupReadinessPanel>().Instance.OnChanged.InvokeAsync());
+
+        Assert.Equal(1, ReadinessReads());
+        Assert.False(copy.Instance.ReadinessLoading);
+        Assert.Equal("staging", Assert.Single(Assert.Single(copy.Instance.Result!.Readiness!.Checks).Items));
+        cut.WaitForAssertion(() =>
+            Assert.Contains("staging", cut.Find("[data-testid='setup-readiness']").TextContent, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AVerdictThatCannotBeReadAgain_KeepsThePreviousOne()
+    {
+        var (cut, copy) = await CopyAsync();
+        _handler.SetResponse(HttpMethod.Get, "api/pipelines/setup/project-readiness", System.Net.HttpStatusCode.ServiceUnavailable);
+
+        await cut.InvokeAsync(() => cut.FindComponent<PipelineSetupReadinessPanel>().Instance.OnChanged.InvokeAsync());
+
+        Assert.Equal(1, ReadinessReads());
+        Assert.False(copy.Instance.ReadinessLoading);
+        Assert.Equal("prod", Assert.Single(Assert.Single(copy.Instance.Result!.Readiness!.Checks).Items));
     }
 
     [Fact]

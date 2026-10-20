@@ -80,16 +80,22 @@ public class PipelinesTemplatesTests : BunitContext
         Assert.Contains("href=\"/templates/7\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("v3", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("v@template.Version", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("UseTemplate", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("VersionHistoryTitle", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("Category", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Updated", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("LatestRunShort", cut.Markup, StringComparison.Ordinal);
         Assert.Contains(">4<", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("href=\"/pipelines?templateId=7\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("title=\"ViewPipelinesUsingTemplate\"", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("title=\"UseTemplate\"", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("title=\"VersionHistoryTitle\"", cut.Markup, StringComparison.Ordinal);
+        // STD-BTN detection 11: with write access the row shows Edit and Delete; Use, Versions and Export
+        // sit in its "More actions" menu.
+        Assert.NotNull(cut.Find("button[title=\"Edit\"]"));
+        Assert.NotNull(cut.Find("button[title=\"Delete\"]"));
+        Assert.Empty(cut.FindAll("button[title=\"UseTemplate\"]"));
+        var use = cut.FindMenuItem("UseTemplate");
+        Assert.NotNull(use);
+        Assert.Equal("UseTemplate", use.GetAttribute("title"));
+        Assert.Equal("VersionHistoryTitle", cut.FindMenuItem("Versions")?.GetAttribute("title"));
+        Assert.NotNull(cut.FindMenuItem("Export"));
     }
 
     // D9 / SITE-FUNC-TEMPLATE-USE-001: a user-made template opened the role wizard, which knows only
@@ -107,7 +113,7 @@ public class PipelinesTemplatesTests : BunitContext
         var cut = Render<PipelineTemplates>();
         cut.WaitForState(() => cut.Markup.Contains(name, StringComparison.Ordinal));
 
-        await cut.Find("button[title=\"UseTemplate\"]").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        await cut.FindMenuItem("UseTemplate")!.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         Assert.EndsWith(expectedPath, nav.Uri, StringComparison.Ordinal);
@@ -212,7 +218,7 @@ public class PipelinesTemplatesTests : BunitContext
         });
 
         var cut = Render<PipelineTemplates>();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The template and usage links, then the row buttons.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);

@@ -16,7 +16,7 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
-    <AetheusMinimumAnalyzerSdkVersion>10.0.100</AetheusMinimumAnalyzerSdkVersion>
+    <AetheusMinimumAnalyzerSdkVersion>10.0.400</AetheusMinimumAnalyzerSdkVersion>
   </PropertyGroup>
 
   <ItemGroup>

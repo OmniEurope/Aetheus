@@ -11,7 +11,7 @@ namespace Aetheus.Back.Components.Pipelines;
 /// working-looking affordance that tells the reader something false.</para></summary>
 internal static class PipelineRunQuery
 {
-    /// <summary>The runs grid's columns (PLAN-008 lot 12): the keys its filters and sorts may name.</summary>
+    /// <summary>Allowed column keys for run-grid filtering and sorting.</summary>
     internal static readonly GridQueryMap<PipelineRun> Columns = new GridQueryMap<PipelineRun>()
         .Number("id", r => r.Id)
         .Number("buildNumber", r => r.BuildNumber)

@@ -1,8 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Environments
 @using Microsoft.AspNetCore.Components.Sections
-@* Recette R-218/R-221: the create action sits on the title line (the host's page header), and the
-   column header filters replace the search row. *@
+@* The create action sits on the title line (the host's page header), and the column header filters
+   replace the search row. *@
 @if (true)
 {
     <SectionContent SectionName="@Aetheus.Front.Components.Shared.PipelinesList.HeaderActionsSection">
@@ -62,7 +62,7 @@
         <OmniDataGridColumn TItem="EnvironmentDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
         <OmniDataGridColumn TItem="EnvironmentDto" Title="" Width="60px" Sortable="false" TextAlign="OmniDataGridTextAlign.Center" Filterable="false" >
             <Template Context="env">
-                @* STD-BTN exception chosen by the user (recette R-438, 2026-09-28): the copy (duplicate) button is blue on every row. *@
+                @* Duplicate uses the approved blue STD-BTN exception on each row. *@
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => DuplicateEnvironment(env))" Disabled="@(!_canWrite)" title="@L["Duplicate"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
                 </span>

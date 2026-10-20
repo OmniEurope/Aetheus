@@ -13,6 +13,8 @@
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenCreateDialog())" Disabled="@(AgentOffline || !Cron.IsInstalled || _actionRunning)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
 </OmniRow>
 
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Cron" />
+
 <OmniTabs>
         <OmniTabsItem Title="@L["CronJobs"]">
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
@@ -20,7 +22,8 @@
                 <OmniTextBox aria-label="@L["FilterCronJobs"]" @bind-Value="_jobSearch" Placeholder="@L["FilterCronJobs"]" />
             </OmniStack>
             <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["CronJobs"])" ExportFields="@ExportContext.Fields()" Items="@FilteredJobs" TItem="CronJobDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
-                AllowGrouping="true" ShowGroupPanel="true" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+                AllowGrouping="true" ShowGroupPanel="true" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+                OnRowClick="@(args => OpenFromRowAsync(args.Item))">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="CronJobDto" Property="User" Title="@L["User"]" Width="8.75rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                     <OmniDataGridColumn TItem="CronJobDto" Property="Schedule" Title="@L["Schedule"]" Width="10rem" Filterable="true">
@@ -36,11 +39,13 @@
                     <OmniDataGridColumn TItem="CronJobDto" Property="Source" Title="@L["Source"]" Width="11.25rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
                     <OmniDataGridColumn TItem="CronJobDto" Title="@L["Actions"]" Width="10rem" Sortable="false" Filterable="false">
                         <Template Context="j">
+                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenEditDialog(j))" title="@L["Edit"]" Disabled="@(AgentOffline || j.IsSystem)"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialog(j))" title="@L["Edit"]" Disabled="@(AgentOffline || j.IsSystem)"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                                 <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["DeleteCronJob"], string.Format(L["ConfirmDeleteCronJob"], j.Id),
                                         () => DeleteJobAsync(j), L["Delete"].Value))" title="@L["Delete"]" Disabled="@(AgentOffline || j.IsSystem)"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                             </OmniStack>
+                            </span>
                         </Template>
                     </OmniDataGridColumn>
                 </Columns>

@@ -4,8 +4,8 @@
    in MainLayout between Help and the user menu. *@
 
 <div class="task-tracker-container omni-task-tracker">
-    @* Recette R-191/R-192: an OmniPopover, closed by a click outside (another header menu included) or
-       Escape, with no full-page veil. *@
+    @* An OmniPopover, closed by a click outside (another header menu included) or Escape, with no
+       full-page veil. *@
     <OmniPopover Id="task-tracker" Class="header-popover"
                  Open="@_popoverOpen" OpenChanged="@(open => _popoverOpen = open)"
                  TriggerVariant="OmniButtonVariant.Primary"
@@ -14,8 +14,8 @@
                  Label="@string.Format(L["TaskTrackerTooltip"], _count)"
                  PopupLabel="@L["TaskTrackerTitle"]">
         <TriggerContent>
-            @* Recette R-170 (replaces PLAN-005 D31): the icon always shows (R-020: a task list, not a
-               check mark); while tasks run their number follows it and the button doubles its width. *@
+            @* Keep the task-list icon visible and widen the button when a running-task count
+               accompanies it. *@
             <OmniIcon Name="OmniIconName.ListChecks" Class="header-icon" />
             @if (_count > 0)
             {
@@ -92,7 +92,7 @@
                     }
                 </div>
                 <div class="task-tracker-footer">
-                    @* Recette R-208: the same neutral "See all" button as the bell. *@
+                    @* The same neutral "See all" button as the bell. *@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => GoTo("/tasks"))" Class="task-tracker-see-all"><OmniIcon Name="OmniIconName.ArrowRight" /> <span>@L["SeeAll"]</span></OmniButton>
                 </div>
             </div>

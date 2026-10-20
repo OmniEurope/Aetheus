@@ -79,7 +79,7 @@ public class GitRepositoryDetailTests : BunitContext
     {
         SetupDefaultMocks();
         var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Contains("my-repo"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("my-repo"));
 
         Assert.Contains("my-repo", cut.Markup);
     }
@@ -169,7 +169,7 @@ public class GitRepositoryDetailTests : BunitContext
         SetupDefaultMocks();
         Services.GetRequiredService<NavigationManager>().NavigateTo("/git-repositories/1?tab=branches");
         var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Contains("main"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("main"));
 
         Assert.Contains("main", cut.Markup);
     }
@@ -223,21 +223,18 @@ public class GitRepositoryDetailTests : BunitContext
         SetupDefaultMocks();
         var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
 
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         Assert.Contains("my-repo", cut.Markup);
     }
 
     [Fact]
     public void Renders_EmptyState_WhenRepoNotFound()
     {
-        // Regression guard for the git-repo page crash: a non-success status on the initial
-        // repo fetch must NOT escape to Blazor's ErrorBoundary. LoadData contains the
-        // HttpRequestException and falls through to the `_repo is null` empty-state branch.
-        // Previously this assertion expected an exception - that *was* the bug (an expired
-        // token surfaced as 401 here and blanked the whole page with a generic error screen).
+        // An unsuccessful initial repository request must reach the page's empty state without
+        // escaping to ErrorBoundary, allowing authentication redirection to complete.
         _handler.SetResponse("api/git/repos/999", System.Net.HttpStatusCode.InternalServerError);
         var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 999));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         Assert.Contains("NotFound", cut.Markup);
     }
 
@@ -248,7 +245,7 @@ public class GitRepositoryDetailTests : BunitContext
 
         var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 999));
 
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         Assert.Contains("NotFound", cut.Markup);
     }
 

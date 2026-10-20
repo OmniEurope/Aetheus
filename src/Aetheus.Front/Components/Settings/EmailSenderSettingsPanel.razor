@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R1-16: the platform e-mail sender. By default the no-reply mailbox of the mail domain Aetheus
-   manages, with nothing to fill in; a custom SMTP server replaces it when the switch is on. The
-   password is never shown back: the field stays empty and a saved one is kept until a new one is typed. *@
+@* The platform e-mail sender. By default the no-reply mailbox of the mail domain Aetheus manages,
+   with nothing to fill in; a custom SMTP server replaces it when the switch is on. The password is
+   never shown back: the field stays empty and a saved one is kept until a new one is typed. *@
 
 @if (_loading)
 {
@@ -61,13 +61,13 @@ else
                                 </OmniFormField>
                             </OmniColumn>
                             <OmniColumn Span="12" MediumSpan="6">
-                                <OmniFormField Label="@L["EmailSenderUsername"]" For="email-sender-username" Description="@L["EmailSenderUsernameHint"]" Class="omni-u-w-100">
+                                <OmniFormField Label="@L["EmailSenderUsername"]" For="email-sender-username" Help="@L["EmailSenderUsernameHint"]" Class="omni-u-w-100">
                                     <OmniTextBox Id="email-sender-username" @bind-Value="_model.Username" Autocomplete="off" Class="omni-u-w-100" />
                                 </OmniFormField>
                             </OmniColumn>
                             <OmniColumn Span="12" MediumSpan="6">
                                 <OmniFormField Label="@L["EmailSenderPassword"]" For="email-sender-password"
-                                               Description="@(_settings.HasPassword ? L["EmailSenderPasswordKept"] : L["EmailSenderPasswordHint"])" Class="omni-u-w-100">
+                                               Help="@(_settings.HasPassword ? L["EmailSenderPasswordKept"] : L["EmailSenderPasswordHint"])" Class="omni-u-w-100">
                                     <OmniPassword Id="email-sender-password" @bind-Value="_model.Password" IgnorePasswordManagers="true" Class="omni-u-w-100" />
                                 </OmniFormField>
                             </OmniColumn>

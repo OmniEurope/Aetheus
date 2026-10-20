@@ -69,8 +69,7 @@ public sealed class PrometheusNamingScorieAuditTests
         // whitelists such an intentional usage without disabling the guard for accidental scorie.
         if (line.Contains("prometheus-ok", StringComparison.OrdinalIgnoreCase)) return false;
 
-        // Recette R2-107: the shell and the C# readings are their own methods, each under the grade-A
-        // cyclomatic threshold.
+        // Shell and C# sources have separate readers.
         return isShell
             ? PromToken.IsMatch(ShellCode(line))
             : PromToken.IsMatch(CodeOutsideComments(line, ref inBlockComment));

@@ -3,12 +3,10 @@ using Microsoft.AspNetCore.Components.Routing;
 
 namespace Aetheus.Front.Layout;
 
-/// <summary>
-/// Recette R2-087: tells the shell's <c>Aetheus.pageScroll</c> helper (layout.js) about every navigation,
+/// <summary> Tells the shell's <c>Aetheus.pageScroll</c> helper (layout.js) about every navigation,
 /// before it (the position of the page being left is kept) and after it (a return puts its position
-/// back). Every page is covered without code of its own; the data a page shows again on a return is the
-/// page's part, through <c>PageStateCache</c>.
-/// </summary>
+/// back). Every page is covered without code of its own; the data a page shows again on a return is
+/// the page's part, through <c>PageStateCache</c>. </summary>
 internal sealed class PageScrollMemory : IDisposable
 {
     private readonly NavigationManager _nav;

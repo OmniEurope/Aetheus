@@ -64,7 +64,7 @@ public sealed class PipelineRunFinalizer(
     {
         await repo.UpdatePipelineRunStatusAsync(pipelineRunId, status, ct).ConfigureAwait(false);
         await ReleaseLocksAsync(pipelineRunId, status, ct).ConfigureAwait(false);
-        // PLAN-005 lot 3 / D34: an ended run leaves nothing to approve.
+        // Ended runs leave no pending approval.
         if (status.IsTerminal())
             await repo.CloseApprovalsOfEndedRunsAsync(
                 pipelineRunId, timeProvider.GetUtcNow().UtcDateTime, EndedRunApprovals.Reason, ct).ConfigureAwait(false);
@@ -106,10 +106,8 @@ public sealed class PipelineRunFinalizer(
             }
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
 
-            // R-04: persist the human-readable "no server matched" reason. This MUST go through a
-            // tracked repository update - GetPipelineRunWithPipelineAsync returns an AsNoTracking
-            // entity, so mutating its WarningsJson here would be silently dropped on SaveChanges,
-            // leaving the run Failed with no visible error message for the user.
+            // Persist the no-matching-server reason through a tracked repository update because the
+            // loaded run is untracked.
             await repo.AppendRunWarningsAsync(runId, unmatchedReasons, ct).ConfigureAwait(false);
         }
 
@@ -126,11 +124,8 @@ public sealed class PipelineRunFinalizer(
         await pipelineHub.Clients.Groups(groups).SendAsync("PipelineRunCompleted", runId, PipelineStatus.Failed, ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// The environments an ended run held are free again (decision of 2026-10-02). Eager only: a lock
-    /// whose run is no longer active never blocks anyone anyway (PipelineResourceLockRepository), so a
-    /// run that ends on a path that skips this still frees what it held.
-    /// </summary>
+    /// <summary>Terminal runs release environment locks eagerly; inactive owners also cease
+    /// blocking through lock-repository checks.</summary>
     private async Task ReleaseLocksAsync(int runId, PipelineStatus status, CancellationToken ct)
     {
         if (resourceLocks is null || !status.IsTerminal()) return;

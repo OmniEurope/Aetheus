@@ -19,7 +19,6 @@ public class GitLightService(
     IHubContext<GitRealtimeHub> hub,
     IMemoryCache cache,
     GitBranchProtectionService branchProtection,
-    GitAiPatchService aiPatch,
     ILogger<GitLightService> logger,
     TimeProvider timeProvider) : IGitLightService
 {
@@ -323,11 +322,6 @@ public class GitLightService(
         await BroadcastAsync(repoId, GitRealtimeEvents.BranchesChanged, ct).ConfigureAwait(false);
     }
 
-    public Task<(bool Success, string? CommitSha, string? Error)> ApplyPatchAsync(
-        int repoId, string branch, string patch, CancellationToken ct = default) =>
-        aiPatch.ApplyAsync(repoId, branch, patch, BroadcastBranchesChangedAsync, ct);
-    private Task BroadcastBranchesChangedAsync(int repoId, CancellationToken ct) =>
-        BroadcastAsync(repoId, GitRealtimeEvents.BranchesChanged, ct);
     public async Task DeleteBranchAsync(int repoId, string name, CancellationToken ct = default)
     {
         var entity = await lightRepo.FindByIdAsync(repoId, ct).ConfigureAwait(false);

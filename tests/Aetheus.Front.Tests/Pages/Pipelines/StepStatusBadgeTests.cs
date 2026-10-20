@@ -4,10 +4,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// PLAN-003 lot 22 / D13: a failed step is red, always. One the pipeline continued past is the same
-/// red, outlined, and says it did not block; it used to be orange, which read as a warning.
-/// </summary>
+/// <summary>Failure badges are red; nonblocking failures are outlined and explain that execution
+/// continued.</summary>
 public sealed class StepStatusBadgeTests : BunitContext
 {
     public StepStatusBadgeTests() => BunitTestHelper.RegisterServices(this);
@@ -53,7 +51,7 @@ public sealed class StepStatusBadgeTests : BunitContext
     [Fact]
     public void ARestoreThatFoundNoArtifact_ReadsSkipped_NotAGreenTick()
     {
-        // PLAN-007 lot 3: the step completes Success because nothing failed, and restored nothing.
+        // The step completes Success because nothing failed, and restored nothing.
         var badge = RenderFor(new PipelineStepRunDto
         {
             Status = TaskExecutionStatus.Success,
@@ -69,7 +67,7 @@ public sealed class StepStatusBadgeTests : BunitContext
     [Fact]
     public void AStepSkippedByItsCondition_ReadsSkipped_WithAnIcon_AndTheCondition()
     {
-        // Recette R-246: stored as Cancelled (the enum has no Skipped value), told apart by the condition.
+        // Stored as Cancelled (the enum has no Skipped value), told apart by the condition.
         var badge = RenderFor(new PipelineStepRunDto
         {
             Status = TaskExecutionStatus.Cancelled,
@@ -136,5 +134,30 @@ public sealed class StepStatusBadgeTests : BunitContext
 
         Assert.Contains("omni-badge--success", badge.ClassName, StringComparison.Ordinal);
         Assert.Null(badge.GetAttribute("title"));
+    }
+
+    [Fact]
+    public void R1_80_AControlThatRanAndFoundFailures_ReadsRejected_InWarning_NotSuccess()
+    {
+        var badge = RenderFor(new PipelineStepRunDto { Status = TaskExecutionStatus.Success, IsRejected = true })
+            .Find(".omni-badge");
+
+        Assert.Contains("omni-badge--warning", badge.ClassName, StringComparison.Ordinal);
+        Assert.DoesNotContain("omni-badge--success", badge.ClassName, StringComparison.Ordinal);
+        Assert.Contains("Enum_PipelineStatus_Rejected", badge.TextContent, StringComparison.Ordinal);
+        Assert.Equal("StepRejectedHint", badge.GetAttribute("title"));
+    }
+
+    [Fact]
+    public void R1_80_AStage_IsRejectedOnlyWhenNothingInItFailedOrRuns()
+    {
+        var rejected = new PipelineStepRunDto { Status = TaskExecutionStatus.Success, IsRejected = true };
+        var plain = new PipelineStepRunDto { Status = TaskExecutionStatus.Success };
+        var failed = new PipelineStepRunDto { Status = TaskExecutionStatus.Failed };
+
+        Assert.True(PipelineRunFormatting.IsRejectedStage([rejected, plain]));
+        Assert.False(PipelineRunFormatting.IsRejectedStage([plain]));
+        // A technical error outranks a rejection.
+        Assert.False(PipelineRunFormatting.IsRejectedStage([rejected, failed]));
     }
 }

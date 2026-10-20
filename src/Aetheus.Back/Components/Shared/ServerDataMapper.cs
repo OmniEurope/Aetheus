@@ -69,6 +69,9 @@ internal static class ServerDataMapper
             CreatedAt = s.CreatedAt,
             OrganizationId = s.OrganizationId,
             AgentInstalledAt = s.AgentInstalledAt,
+            ExternalProbe = s.ExternalProbe,
+            ExternalProbeAt = s.ExternalProbeAt,
+            ExternalProbeTarget = s.ExternalProbeTarget,
             PipelineRunnerEnabled = reported ? s.PipelineRunnerEnabled : null,
             DockerAvailable = s.DockerAvailable,
             PackageManagementAvailable = reported ? s.PackageManagementAvailable : null,
@@ -98,9 +101,8 @@ internal static class ServerDataMapper
 
     public static List<ServiceInfoDto> BuildServicesWithWellKnown(List<ServiceInfo> detected)
     {
-        // The stored rows carry no installed flag: they are the services the agent reported, and the
-        // agent reports only what is installed (recette R2-031: a removed package's leftover unit is no
-        // longer reported).
+        // Stored service rows represent installed services reported by the agent and carry no
+        // separate installed flag.
         var dtos = detected.Select(s => new ServiceInfoDto
         {
             Name = s.Name,
@@ -115,8 +117,7 @@ internal static class ServerDataMapper
 
     public static List<ServiceInfoDto> SupplementWithWellKnown(List<ServiceInfoDto> services)
     {
-        // Recette R2-031: the agent's installed flag is kept. Forcing it to true put a service the agent
-        // reported as not installed under "Installed", where Start and Uninstall could only fail.
+        // Preserve the agent reported installed flag.
         var result = services.Select(s => s with
         {
             IsManageable = ResolveManageable(s.Name, s.IsManageable)
@@ -190,7 +191,11 @@ internal static class ServerDataMapper
             Created = container.Created,
             CpuPercent = container.CpuPercent,
             MemoryUsageMb = container.MemoryUsageMb,
-            MemoryLimitMb = container.MemoryLimitMb
+            MemoryLimitMb = container.MemoryLimitMb,
+            SecurityInspected = container.SecurityInspected,
+            Risks = container.Risks,
+            DangerousCapabilities = container.DangerousCapabilities,
+            AetheusRole = container.AetheusRole
         }).ToList();
 
     public static ApacheDataDto MapApacheDataDto(Server server) => new()
@@ -234,8 +239,24 @@ internal static class ServerDataMapper
             RenewalConvention = c.RenewalConvention
         }).ToList(),
         RenewalCheckedAt = server.CertbotState?.RenewalCheckedAt,
-        RenewalCheckSucceeded = server.CertbotState?.RenewalCheckSucceeded
+        RenewalCheckSucceeded = server.CertbotState?.RenewalCheckSucceeded,
+        HelperVersion = server.CertbotState?.HelperVersion ?? 0,
+        RenewalCheckFailures = ReadRenewalFailures(server.CertbotState?.RenewalCheckFailuresJson)
     };
+
+    // Recette R3-56: an unreadable column reads as no reported failure, never as a crash of the page.
+    private static List<CertbotRenewalFailureDto> ReadRenewalFailures(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<CertbotRenewalFailureDto>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 
     public static CronDataDto MapCronDataDto(Server server) => new()
     {

@@ -63,7 +63,7 @@ internal static class PipelineRunLogView
     {
         foreach (var step in failedSteps)
         {
-            // Recette R2-104: lines streamed while the step ran are not its history; it is read all the same.
+            // Lines streamed while the step ran are not its history; it is read all the same.
             if (step.TaskId is not { } taskId || logs.HasSnapshot(taskId)) continue;
             try { logs.ApplySnapshot(taskId, await api.Monitoring.GetTaskLogsAsync(taskId) ?? [], requested: null); }
             catch (HttpRequestException) { logs.Lines[taskId] = []; }

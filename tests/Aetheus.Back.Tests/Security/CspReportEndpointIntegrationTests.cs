@@ -5,13 +5,9 @@ using System.Text;
 
 namespace Aetheus.Back.Tests.Security;
 
-/// <summary>
-/// PLAN-003 lot 14. The point of the endpoint is that a REAL browser can post to it, so it is
-/// exercised through the whole pipeline with the exact content types browsers use. The default JSON
-/// input formatter accepts neither <c>application/csp-report</c> (415) nor the Reporting API's array
-/// body (400), which is why the controller reads and parses the body itself; these tests are what
-/// keeps that from silently regressing to a model-bound DTO.
-/// </summary>
+/// <summary>Exercises the HTTP pipeline with browser CSP report content types and Reporting API
+/// arrays. The controller parses these bodies directly because the default JSON formatter does not
+/// accept their formats.</summary>
 public class CspReportEndpointIntegrationTests(CustomWebApplicationFactory factory)
     : IClassFixture<CustomWebApplicationFactory>
 {
@@ -64,6 +60,22 @@ public class CspReportEndpointIntegrationTests(CustomWebApplicationFactory facto
 
         var endpoints = Assert.Single(response.Headers.GetValues("Reporting-Endpoints"));
         Assert.Equal("csp-endpoint=\"/api/security/csp-report\"", endpoints);
+    }
+
+    [Fact]
+    public async Task The_Script_Policy_Asks_For_A_Sample_Without_Allowing_Inline_Or_Eval()
+    {
+        // Recette R1-83: four blocked inline scripts arrived with no sample, so their origin could not be
+        // read. 'report-sample' only fills the report; the policy itself must stay as strict as before.
+        using var response = await factory.CreateClient()
+            .GetAsync("/health/live", TestContext.Current.CancellationToken);
+
+        var csp = Assert.Single(response.Headers.GetValues("Content-Security-Policy"));
+        var scriptSrc = csp.Split(';', StringSplitOptions.TrimEntries)
+            .Single(directive => directive.StartsWith("script-src ", StringComparison.Ordinal));
+        Assert.Equal("script-src 'self' 'wasm-unsafe-eval' blob: 'report-sample'", scriptSrc);
+        Assert.DoesNotContain("'unsafe-inline'", csp, StringComparison.Ordinal);
+        Assert.DoesNotContain("'unsafe-eval'", csp, StringComparison.Ordinal);
     }
 
     private async Task<HttpResponseMessage> Post(string contentType, string body)

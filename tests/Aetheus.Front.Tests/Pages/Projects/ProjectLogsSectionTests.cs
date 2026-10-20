@@ -29,7 +29,7 @@ public class ProjectLogsSectionTests : BunitContext
     public void Renders_WithLogs_OnInit()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Deploy started"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy started"));
 
         // OnInitializedAsync fetches page 1 of the project logs and renders the messages.
         Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/projects/1/logs"));
@@ -76,7 +76,7 @@ public class ProjectLogsSectionTests : BunitContext
         {
             var r = typeof(ProjectLogsSection).GetField("_result", Priv)!.GetValue(cut.Instance);
             return r is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         _handler.SetJsonResponse(HttpMethod.Get, "page=2", MakeLogPage(
             new TaskLogDto { Id = 3, Message = "Rollback complete", Level = TaskLogLevel.Warning }
@@ -104,7 +104,7 @@ public class ProjectLogsSectionTests : BunitContext
         {
             var r = typeof(ProjectLogsSection).GetField("_result", Priv)!.GetValue(cut.Instance);
             return r is not null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         _handler.SetJsonResponse(HttpMethod.Get, "page=2", MakeLogPage());
 
@@ -138,10 +138,9 @@ public class ProjectLogsSectionTests : BunitContext
     [Fact]
     public async Task HeaderFilters_AreColumnFilters_NotASearchTerm()
     {
-        // Recette R-212: the Level list, the Time range and the Message text are real column filters of
-        // the project's logs endpoint; the first typed value is no longer turned into a search term.
+        // Send Level, Time and Message as column filters to the project logs endpoint.
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Deploy started"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy started"));
         var grid = cut.FindComponent<AetheusDataGrid<TaskLogDto>>();
         var separator = Aetheus.Shared.Components.Shared.GridFilter.ListSeparator;
 

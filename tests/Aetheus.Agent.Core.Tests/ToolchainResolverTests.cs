@@ -184,6 +184,40 @@ public sealed class ToolchainResolverTests
     }
 
     [Theory]
+    [InlineData("ruby", "3.4.1", "IMMUTABLE", "bash", "has no supported native contract reader")]
+    [InlineData("dotnet", "10.*", "IMMUTABLE", "bash", "version '10.*' is not exact")]
+    [InlineData("node", "24.4.1", "node:24.4.1", "bash", "image must end in an immutable SHA-256 digest")]
+    [InlineData("java", "25.0.2", "IMMUTABLE", "zsh", "shell 'zsh' is unsupported")]
+    public async Task ResolveAsync_ManifestEntryOutsideContract_IsRejectedWithItsReason(
+        string toolchain,
+        string version,
+        string image,
+        string shell,
+        string expected)
+    {
+        using var workspace = new TemporaryWorkspace();
+        var resolvedImage = image == "IMMUTABLE" ? ImmutableImage : image;
+        await WriteRawManifestAsync(workspace.Path, $"""
+            version: 1
+            toolchains:
+              {toolchain}:
+                version: "{version}"
+                image: "{resolvedImage}"
+                path: "toolchains/{toolchain}"
+                shell: "{shell}"
+            """);
+
+        var result = await new ToolchainResolver().ResolveAsync(
+            new ContainerSpec { Toolchain = toolchain },
+            workspace.Path,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(expected, result.FailureReason, StringComparison.Ordinal);
+        Assert.Contains($"'{toolchain}'", result.FailureReason, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("{}")]
     [InlineData("{\"sdk\":null}")]
     [InlineData("{\"sdk\":{\"version\":10}}")]

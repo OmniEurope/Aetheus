@@ -17,23 +17,30 @@
 </OmniPageHeader>
 
 <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mb-lg">
-    <OmniColumn Span="12" MediumSpan="6">
+    <OmniColumn Span="12" MediumSpan="4">
         <OmniCard>
             <OmniHeading Level="OmniHeadingLevel.H5">NuGet</OmniHeading>
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-sm">@L["RegistryNuGetHelp"]</OmniText>
             <code class="text-mono">/api/packages/nuget/v3/index.json</code>
         </OmniCard>
     </OmniColumn>
-    <OmniColumn Span="12" MediumSpan="6">
+    <OmniColumn Span="12" MediumSpan="4">
         <OmniCard>
             <OmniHeading Level="OmniHeadingLevel.H5">npm</OmniHeading>
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-sm">@L["RegistryNpmHelp"]</OmniText>
             <code class="text-mono">/api/packages/npm/</code>
         </OmniCard>
     </OmniColumn>
+    <OmniColumn Span="12" MediumSpan="4">
+        <OmniCard>
+            <OmniHeading Level="OmniHeadingLevel.H5">Maven</OmniHeading>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-sm">@L["RegistryMavenHelp"]</OmniText>
+            <code class="text-mono">/api/packages/maven/</code>
+        </OmniCard>
+    </OmniColumn>
 </OmniRow>
 
-<AetheusDataGrid @ref="_grid" Data="@_packages" TItem="PackageRegistryPackageDto"
+<AetheusDataGrid @ref="_grid" Data="@_packages" TItem="PackageRegistryPackageDto" RowClick="@(p => OpenPackageAsync(p))"
     Count="@_totalCount" IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="20"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<PackageRegistryPackageDto>(_packages, _totalCount))"
@@ -61,7 +68,9 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PackageRegistryPackageDto" Title="@L["Actions"]" Width="90px" Sortable="false" Filterable="false" >
             <Template Context="p">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenPackageAsync(p))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
+                </span>
             </Template>
         </OmniDataGridColumn>
     </Columns>

@@ -7,12 +7,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Recette R2-034: the <c>SubscribeProjectCreatorsToTheirProjects</c> backfill, run for real on
-/// PostgreSQL. A project whose "Created" audit entry names an active user gets that user as a follower;
-/// a project created by "system", by an inactive user or with no entry gets none; an existing
-/// subscription is kept, and applying the migration again adds nothing.
-/// </summary>
+/// <summary> The <c>SubscribeProjectCreatorsToTheirProjects</c> backfill, run for real on
+/// PostgreSQL. A project whose "Created" audit entry names an active user gets that user as a
+/// follower; a project created by "system", by an inactive user or with no entry gets none; an
+/// existing subscription is kept, and applying the migration again adds nothing. </summary>
 [Collection(PostgresCollection.Name)]
 public sealed class SubscribeProjectCreatorsMigrationTests(PostgresFixture fixture)
 {

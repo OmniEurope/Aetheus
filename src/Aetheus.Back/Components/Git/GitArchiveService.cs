@@ -3,10 +3,8 @@ using System.Text;
 
 namespace Aetheus.Back.Components.Git;
 
-/// <summary>
-/// R2-003: downloads a hosted repository as a zip. The archive's top folder is the repository slug,
-/// and the ref defaults to the repository's default branch.
-/// </summary>
+/// <summary> Downloads a hosted repository as a zip. The archive's top folder is the repository
+/// slug, and the ref defaults to the repository's default branch. </summary>
 public sealed class GitArchiveService(IGitLightRepository lightRepo, IGitLightService light, IGitLightCliService cli)
 {
     public async Task<GitArchive?> GetArchiveAsync(int repoId, string? refName, CancellationToken ct = default)

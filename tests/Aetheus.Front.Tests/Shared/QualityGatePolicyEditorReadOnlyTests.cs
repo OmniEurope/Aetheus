@@ -50,7 +50,7 @@ public sealed class QualityGatePolicyEditorReadOnlyTests : BunitContext
             .Add(component => component.ProjectId, 4)
             .Add(component => component.CanEdit, canEdit)
             .Add(component => component.InitialPolicies, policies.ToList()));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         return cut;
     }
 
@@ -70,7 +70,7 @@ public sealed class QualityGatePolicyEditorReadOnlyTests : BunitContext
         var cut = RenderEditor(canEdit: false, Inherited(), Local());
 
         Assert.Empty(cut.FindAll("button[title='Edit']"));
-        Assert.Empty(cut.FindAll("button[title='Duplicate']"));
+        Assert.Null(cut.FindMenuItem("Duplicate"));
         Assert.Empty(cut.FindAll("button[title='QualityGateOverride']"));
     }
 
@@ -80,7 +80,7 @@ public sealed class QualityGatePolicyEditorReadOnlyTests : BunitContext
         var cut = RenderEditor(canEdit: true, Inherited(), Local());
 
         Assert.NotEmpty(cut.FindAll("button[title='Edit']"));
-        Assert.NotEmpty(cut.FindAll("button[title='Duplicate']"));
+        Assert.NotNull(cut.FindMenuItem("Duplicate"));
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class QualityGatePolicyEditorReadOnlyTests : BunitContext
         var cut = RenderEditor(canEdit: false, Inherited());
 
         Assert.Contains("analysis_preset: recommended", cut.Markup, StringComparison.Ordinal);
-        // R-516: OE's code block, with its copy button in the header.
+        // OE's code block, with its copy button in the header.
         Assert.NotNull(cut.Find(".omni-code-block.quality-gate-yaml-panel figcaption button"));
     }
 }

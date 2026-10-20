@@ -275,7 +275,8 @@ public sealed class ScannerOperationExecutor(
             : (await FailAsync(invocation, status, scope + error).ConfigureAwait(false), result.ExitCode);
     }
 
-    /// <summary>R2-099: the definitions of one step, scanned in sequence, published as one report.</summary>
+    /// <summary>The definitions of one step, scanned in sequence, published as one
+    /// report.</summary>
     private async Task<ExecutorResult> RunPartitionsAndPublishAsync(
         ScanInvocation invocation, string sourceDirectory, string reportPath, string? rulesDirectory,
         string? cacheDirectory, string? trustedHarnessPath, string scannerVersion,
@@ -416,39 +417,48 @@ public sealed class ScannerOperationExecutor(
         RestrictedScannerEgress? egress,
         Func<string, TaskLogLevel, Task> onOutput)
     {
-        Exception? cleanupError = null;
-        if (sourceProjection is not null)
-        {
-            try { await sourceProjection.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception ex)
-            {
-                cleanupError = ex;
-                logger.LogError(ex, "Shared scanner source projection release failed for run {RunId}", runId);
-            }
-        }
-        if (egress is not null)
-        {
-            try { await egress.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception ex)
-            {
-                cleanupError = ex;
-                logger.LogError(ex, "Scanner network cleanup failed for {ScanRoot}", scanRoot);
-            }
-        }
-        try
-        {
-            if (Directory.Exists(scanRoot)) Directory.Delete(scanRoot, recursive: true);
-        }
-        catch (Exception ex)
-        {
-            cleanupError ??= ex;
-            logger.LogError(ex, "Scanner workspace cleanup failed for {ScanRoot}", scanRoot);
-        }
+        // Every resource is released even when an earlier one fails. The error reported is the network's
+        // when it failed, else the projection's, else the workspace's.
+        var projectionError = await TryReleaseAsync(sourceProjection, ex =>
+            logger.LogError(ex, "Shared scanner source projection release failed for run {RunId}", runId)).ConfigureAwait(false);
+        var egressError = await TryReleaseAsync(egress, ex =>
+            logger.LogError(ex, "Scanner network cleanup failed for {ScanRoot}", scanRoot)).ConfigureAwait(false);
+        var workspaceError = TryDeleteScanRoot(scanRoot);
+        var cleanupError = egressError ?? projectionError ?? workspaceError;
         if (cleanupError is null)
             return;
         await onOutput("Scanner workspace cleanup failed; operator intervention is required.", TaskLogLevel.Error)
             .ConfigureAwait(false);
         throw new IOException("Scanner resource cleanup failed.", cleanupError);
+    }
+
+    private static async Task<Exception?> TryReleaseAsync(IAsyncDisposable? resource, Action<Exception> logFailure)
+    {
+        if (resource is null) return null;
+        try
+        {
+            await resource.DisposeAsync().ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logFailure(ex);
+            return ex;
+        }
+    }
+
+    private Exception? TryDeleteScanRoot(string scanRoot)
+    {
+        try
+        {
+            if (Directory.Exists(scanRoot)) Directory.Delete(scanRoot, recursive: true);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Scanner workspace cleanup failed for {ScanRoot}", scanRoot);
+            return ex;
+        }
     }
 
     private async Task<ProcessStartInfo> BuildBinaryProcessAsync(
@@ -460,110 +470,68 @@ public sealed class ScannerOperationExecutor(
     {
         if (!OperatingSystem.IsLinux() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
             throw new PlatformNotSupportedException("This verified scanner binary is available only for Linux x64.");
+        RequireVerifiedDownload(scanner);
+
+        var binaryPath = OpenGrepSandbox.BinaryPath(_options.WorkDirectory, scanner);
+        await OpenGrepSandbox.EnsureBinaryAsync(scanner, binaryPath, DownloadScannerAsync, ct).ConfigureAwait(false);
+        var outputDirectory = RequireBinaryRuntime(scanner, reportPath, rulesDirectory);
+        List<SandboxMount> mounts =
+        [
+            new(sourceDirectory, "/src", ReadOnly: true),
+            new(outputDirectory, "/out", ReadOnly: false)
+        ];
+        if (!string.IsNullOrWhiteSpace(rulesDirectory))
+            mounts.Add(new SandboxMount(rulesDirectory, "/rules", ReadOnly: true));
+        return OpenGrepSandbox.BuildDockerProcess(
+            scanner, binaryPath, mounts,
+            ScannerOperationValidator.ResolveArguments(scanner.Arguments, new Dictionary<string, string>(), "/src",
+                "/out/" + scanner.ReportPath, "/rules", "/out"));
+    }
+
+    /// <summary>The HTTPS download of a binary scanner, refused unless the manifest pins its SHA-256.</summary>
+    internal static Uri RequireVerifiedDownload(ScannerManifestEntry scanner)
+    {
         if (!Uri.TryCreate(scanner.DownloadUriLinuxAmd64, UriKind.Absolute, out var downloadUri)
             || downloadUri.Scheme != Uri.UriSchemeHttps || scanner.Sha256LinuxAmd64?.Length != 64)
             throw new IOException("Binary scanner manifest entry is incomplete.");
-
-        var binaryDirectory = Path.Combine(_options.WorkDirectory, "scanners", scanner.Key, scanner.Version);
-        var binaryPath = Path.Combine(binaryDirectory, scanner.Key);
-        Directory.CreateDirectory(binaryDirectory);
-        await EnsureScannerBinaryAsync(
-            scanner, downloadUri, binaryPath, ct).ConfigureAwait(false);
-        if (string.Equals(scanner.Key, "opengrep", StringComparison.OrdinalIgnoreCase)
-            && string.IsNullOrWhiteSpace(rulesDirectory))
-            throw new IOException("Embedded versioned OpenGrep rules are unavailable.");
-        if (string.IsNullOrWhiteSpace(scanner.RuntimeImage)
-            || !scanner.RuntimeImage.Contains("@sha256:", StringComparison.Ordinal))
-            throw new IOException("Binary scanner runtime image is not pinned by digest.");
-        var outputDirectory = Path.GetDirectoryName(reportPath)
-            ?? throw new IOException("Binary scanner report directory is unavailable.");
-        return BuildBinaryDockerProcess(
-            scanner, binaryPath, sourceDirectory, outputDirectory, rulesDirectory);
+        return downloadUri;
     }
 
-    private async Task EnsureScannerBinaryAsync(
-        ScannerManifestEntry scanner,
-        Uri downloadUri,
-        string binaryPath,
-        CancellationToken ct)
+    /// <summary>The report directory, once the scanner has its rules (OpenGrep) and a runtime image
+    /// pinned by digest.</summary>
+    internal static string RequireBinaryRuntime(ScannerManifestEntry scanner, string reportPath, string? rulesDirectory)
+    {
+        if (string.Equals(scanner.Key, OpenGrepSandbox.ScannerKey, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(rulesDirectory))
+            throw new IOException("Embedded versioned OpenGrep rules are unavailable.");
+        OpenGrepSandbox.RequirePinnedRuntime(scanner);
+        return Path.GetDirectoryName(reportPath)
+            ?? throw new IOException("Binary scanner report directory is unavailable.");
+    }
+
+    /// <summary>The scanner download through the agent's named client, refused off Linux where the
+    /// binary could never run.</summary>
+    private async Task DownloadScannerAsync(Uri downloadUri, string destinationPath, CancellationToken ct)
     {
         if (!OperatingSystem.IsLinux())
             throw new PlatformNotSupportedException("Scanner binary installation requires Linux.");
-        if (File.Exists(binaryPath)
-            && await HasExpectedHashAsync(binaryPath, scanner.Sha256LinuxAmd64!, ct).ConfigureAwait(false))
-            return;
-        var tempPath = binaryPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            using var client = httpClientFactory.CreateClient("AetheusScannerDownload");
-            await using var source = await client.GetStreamAsync(downloadUri, ct).ConfigureAwait(false);
-            await using (var destination = new FileStream(
-                tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
-                await source.CopyToAsync(destination, ct).ConfigureAwait(false);
-            if (!await HasExpectedHashAsync(tempPath, scanner.Sha256LinuxAmd64!, ct).ConfigureAwait(false))
-                throw new IOException("Downloaded scanner binary failed SHA-256 verification.");
-            File.SetUnixFileMode(
-                tempPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-            File.Move(tempPath, binaryPath, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(tempPath)) File.Delete(tempPath);
-        }
+        using var client = httpClientFactory.CreateClient("AetheusScannerDownload");
+        await using var source = await client.GetStreamAsync(downloadUri, ct).ConfigureAwait(false);
+        await using var destination = new FileStream(
+            destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
+        await source.CopyToAsync(destination, ct).ConfigureAwait(false);
     }
 
-    private static ProcessStartInfo BuildBinaryDockerProcess(
-        ScannerManifestEntry scanner,
-        string binaryPath,
-        string sourceDirectory,
-        string outputDirectory,
-        string? rulesDirectory)
-    {
-        var psi = BaseProcess("docker");
-        var args = psi.ArgumentList;
-        args.Add("run"); args.Add("--rm");
-        args.Add("--name"); args.Add($"aetheus-scan-{Guid.NewGuid():N}");
-        args.Add("--cap-drop"); args.Add("ALL");
-        args.Add("--security-opt"); args.Add("no-new-privileges");
-        args.Add("--pids-limit"); args.Add(ScannerContainerProcessBuilder.PidsLimit.ToString());
-        args.Add("--memory"); args.Add(scanner.Memory);
-        args.Add("--cpus"); args.Add(scanner.Cpus);
-        args.Add("--read-only");
-        args.Add("--network"); args.Add("none");
-        args.Add("--tmpfs"); args.Add("/tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777");
-        args.Add("--tmpfs"); args.Add("/opengrep-home:rw,exec,nosuid,nodev,size=512m,mode=1777");
-        args.Add("--env"); args.Add("HOME=/opengrep-home");
-        ScannerContainerProcessBuilder.AddCurrentUser(args);
-        args.Add("--mount"); args.Add($"type=bind,src={binaryPath},dst=/scanner/opengrep,readonly");
-        args.Add("--mount"); args.Add($"type=bind,src={sourceDirectory},dst=/src,readonly");
-        args.Add("--mount"); args.Add($"type=bind,src={outputDirectory},dst=/out");
-        if (!string.IsNullOrWhiteSpace(rulesDirectory))
-        {
-            args.Add("--mount"); args.Add($"type=bind,src={rulesDirectory},dst=/rules,readonly");
-        }
-        args.Add("--entrypoint"); args.Add("/scanner/opengrep");
-        args.Add("--"); args.Add(scanner.RuntimeImage!);
-        foreach (var argument in ScannerOperationValidator.ResolveArguments(scanner.Arguments, new Dictionary<string, string>(), "/src",
-                     "/out/" + scanner.ReportPath, "/rules", "/out"))
-            args.Add(argument);
-        return psi;
-    }
-
+    /// <summary>Every in-house OpenGrep rule file, extracted into the scan root; null for any other
+    /// scanner.</summary>
     private static async Task<string?> ExtractEmbeddedRulesAsync(
         ScannerManifestEntry scanner,
         string scanRoot,
         CancellationToken ct)
     {
-        if (!string.Equals(scanner.Key, "opengrep", StringComparison.OrdinalIgnoreCase)) return null;
-        const string resourceName = "Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-security.yml";
-        var assembly = typeof(ScannerOperationExecutor).Assembly;
-        await using var source = assembly.GetManifestResourceStream(resourceName)
-            ?? throw new IOException("Embedded OpenGrep rules resource is missing.");
+        if (!string.Equals(scanner.Key, OpenGrepSandbox.ScannerKey, StringComparison.OrdinalIgnoreCase)) return null;
         var directory = Path.Combine(scanRoot, "rules");
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, "aetheus-security.yml");
-        await using var destination = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
-        await source.CopyToAsync(destination, ct).ConfigureAwait(false);
+        await OpenGrepSandbox.ExtractEmbeddedRulesAsync(directory, ct).ConfigureAwait(false);
         return directory;
     }
 

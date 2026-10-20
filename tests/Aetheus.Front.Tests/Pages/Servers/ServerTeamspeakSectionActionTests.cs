@@ -56,8 +56,11 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
             .Add(x => x.ServerId, s.Id));
     }
 
+    // R3-42: only Restart is a button of the bar; the other actions are entries of the "More actions" menu,
+    // which this opens when no button carries the name.
     private static IElement? TryButton(IRenderedComponent<ServerTeamspeakSection> cut, string label) =>
-        cut.FindAll("button").FirstOrDefault(b => b.Names().Contains(label, StringComparison.Ordinal));
+        cut.FindAll("button:not([role='menuitem'])").FirstOrDefault(b => b.Names().Contains(label, StringComparison.Ordinal))
+        ?? cut.FindMenuItem(label);
 
     [Fact]
     public void AnInstalledServerOffersItsManagementToolbar()
@@ -68,6 +71,75 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
         Assert.NotNull(TryButton(cut, "SendMessage"));
         Assert.NotNull(TryButton(cut, "GracefulRestart"));
         Assert.NotNull(TryButton(cut, "SnapshotCreate"));
+    }
+
+    [Fact]
+    public void TheBarHasOneButton_Restart_AndEveryOtherActionIsInTheSingleMoreActionsMenu()
+    {
+        // Recette R3-41/R3-42: never several action buttons in a row.
+        var cut = RenderSection();
+
+        var barButtons = cut.FindAll(".omni-row > .omni-button");
+        var restart = Assert.Single(barButtons);
+        Assert.Contains("Restart", restart.TextContent, StringComparison.Ordinal);
+        Assert.Contains("omni-button--primary", restart.ClassName, StringComparison.Ordinal);
+        Assert.Single(cut.FindAll(".omni-row > .omni-overflow-menu"));
+
+        cut.Find(".omni-row > .omni-overflow-menu .omni-overflow-menu__trigger").Click();
+        var entries = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item").Select(e => e.TextContent.Trim()).ToList();
+        string[] expected =
+            ["Start", "Stop", "EditServer", "Send", "CopyCredentials", "GracefulRestart", "TeamspeakStats", "Snapshot",
+             "SnapshotDeploy", "Groups", "TeamspeakTokens", "TeamspeakComplaints", "Connect"];
+        Assert.Equal(expected, entries);
+    }
+
+    [Fact]
+    public void R3_42_StopInTheMoreActionsMenu_IsRed_LikeApacheAndDocker()
+    {
+        var cut = RenderSection();
+
+        cut.Find(".omni-row > .omni-overflow-menu .omni-overflow-menu__trigger").Click();
+        var items = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item");
+        var stop = items.Single(e => e.TextContent.Trim() == "Stop");
+        Assert.Contains("omni-menu__item--danger", stop.ClassName, StringComparison.Ordinal);
+        var start = items.Single(e => e.TextContent.Trim() == "Start");
+        Assert.DoesNotContain("omni-menu__item--danger", start.ClassName, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMovedActionStillRunsItsHandler_StopPostsTheStopAction()
+    {
+        _handler.SetJsonResponse(HttpMethod.Post, "api/servers/5/teamspeak/action", new { success = true });
+        var cut = RenderSection();
+
+        cut.FindMenuItem("Stop")!.Click();
+
+        cut.WaitForAssertion(
+            () => Assert.Contains(_handler.Requests, r =>
+                r.Method == "POST" && r.Url.Contains("teamspeak/action", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void ARowOfClientsKeepsInfoVisible_AndPutsMoveAndPokeAndKickAndBanInARowMenu()
+    {
+        var server = Server();
+        _handler.SetJsonResponse($"api/servers/{server.Id}/teamspeak", server.Teamspeak);
+        _handler.SetPaginatedJsonResponse($"api/servers/{server.Id}/teamspeak/clients",
+            new[] { new TeamspeakClientDto { ClientId = 7, Nickname = "Alice", ChannelId = 1, Platform = "Windows" } });
+        _handler.SetPaginatedJsonResponse($"api/servers/{server.Id}/teamspeak/channels", Array.Empty<TeamspeakChannelDto>());
+        _handler.SetPaginatedJsonResponse($"api/servers/{server.Id}/teamspeak/bans", Array.Empty<TeamspeakBanDto>());
+        var cut = Render<ServerTeamspeakSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
+
+        cut.WaitForState(() => cut.FindAll("tbody .omni-overflow-menu__trigger").Count > 0);
+        var cell = cut.Find("tbody .omni-overflow-menu__trigger").ParentElement!.ParentElement!;
+        Assert.Single(cell.QuerySelectorAll(".omni-button[title='ClientInfo']"));
+        Assert.Empty(cell.QuerySelectorAll(".omni-button[title='Kick'], .omni-button[title='Ban'], .omni-button[title='Move'], .omni-button[title='Poke']"));
+
+        cut.Find("tbody .omni-overflow-menu__trigger").Click();
+        var items = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item");
+        Assert.Equal(["Move", "Poke", "Kick", "Ban"], items.Select(i => i.TextContent.Trim()).ToArray());
+        Assert.All(items.Where(i => i.TextContent.Trim() is "Kick" or "Ban"),
+            i => Assert.Contains("danger", i.ClassName, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -87,7 +159,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
         // A wrong host here sends the operator's TeamSpeak client to somebody else's server.
         var cut = RenderSection();
 
-        var link = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Connect");
+        var link = cut.FindMenuItem("Connect")!;
         Assert.Contains("10.0.0.5", link.GetAttribute("title") ?? string.Empty, StringComparison.Ordinal);
         Assert.StartsWith("ts3server://", link.GetAttribute("title") ?? string.Empty, StringComparison.Ordinal);
     }
@@ -102,8 +174,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Url.Contains("servers/5/teamspeak", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Url.Contains("servers/5/teamspeak", StringComparison.Ordinal)));
         Assert.DoesNotContain(_handler.Requests, r =>
             r.Url.Contains("servers/6/", StringComparison.Ordinal));
     }
@@ -119,7 +190,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
 
         TryButton(cut, "GracefulRestart")!.Click();
 
-        cut.WaitForAssertion(() => Assert.True(_dialog.OpenCount > 0), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.True(_dialog.OpenCount > 0));
         Assert.Equal(before, _handler.Requests.Count(r => r.Method == "POST"));
     }
 
@@ -134,7 +205,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
 
         TryButton(cut, "SendMessage")!.Click();
 
-        cut.WaitForAssertion(() => Assert.True(_dialog.OpenCount > 0), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.True(_dialog.OpenCount > 0));
         Assert.Equal(before, _handler.Requests.Count(r => r.Method == "POST"));
     }
 
@@ -148,7 +219,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
 
         TryButton(cut, "EditServer")!.Click();
 
-        cut.WaitForAssertion(() => Assert.True(_dialog.OpenCount > 0), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.True(_dialog.OpenCount > 0));
         Assert.Equal(before, _handler.Requests.Count(r => r.Method == "POST"));
     }
 
@@ -163,7 +234,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
 
         TryButton(cut, "SnapshotDeploy")!.Click();
 
-        cut.WaitForAssertion(() => Assert.True(_dialog.OpenCount > 0), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.True(_dialog.OpenCount > 0));
         Assert.Equal(before, _handler.Requests.Count(r => r.Method == "POST"));
     }
 
@@ -191,8 +262,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "POST" && r.Url.Contains("teamspeak/graceful-restart", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "POST" && r.Url.Contains("teamspeak/graceful-restart", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -206,8 +276,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "POST" && r.Url.Contains("teamspeak/message", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "POST" && r.Url.Contains("teamspeak/message", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -221,8 +290,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "POST" && r.Url.Contains("teamspeak/snapshots", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "POST" && r.Url.Contains("teamspeak/snapshots", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -238,16 +306,14 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
         TryButton(restart, "GracefulRestart")!.Click();
         restart.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Url.Contains("graceful-restart", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Url.Contains("graceful-restart", StringComparison.Ordinal)));
 
         _dialog.OpenResult = Confirmed(TeamspeakDialogMode.Message);
         var message = RenderSection();
         TryButton(message, "SendMessage")!.Click();
         message.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Url.Contains("teamspeak/message", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Url.Contains("teamspeak/message", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -261,7 +327,6 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "POST" && r.Url.Contains("teamspeak/setup", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "POST" && r.Url.Contains("teamspeak/setup", StringComparison.Ordinal)));
     }
 }

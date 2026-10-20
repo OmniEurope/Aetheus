@@ -48,7 +48,7 @@ public class PipelineRunLiveConnectionResumeTests
 
         factory.AnnouncePageResumed();
 
-        await reloaded.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await Aetheus.Front.Tests.TestDoubles.HangGuard.AwaitAsync(reloaded.Task, "the run reloaded after the restart");
         Assert.Equal(2, hub.Starts);
     }
 

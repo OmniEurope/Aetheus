@@ -5,7 +5,7 @@ namespace Aetheus.Back.Components.PackageFeeds;
 
 public class PackageFeedRepository(AppDbContext db) : IPackageFeedRepository
 {
-    /// <summary>Recette R-210 / R-224: the header filters of the package feeds admin grid.</summary>
+    /// <summary>The header filters of the package feeds admin grid.</summary>
     internal static readonly GridQueryMap<PackageFeed> Columns = new GridQueryMap<PackageFeed>()
         .Text("Name", f => f.Name)
         .Enum("FeedType", f => f.FeedType)
@@ -59,7 +59,7 @@ public class PackageFeedRepository(AppDbContext db) : IPackageFeedRepository
         return (items, total);
     }
 
-    private static IQueryable<PackageFeed> ApplySort(
+    internal static IQueryable<PackageFeed> ApplySort(
         IQueryable<PackageFeed> query, string? sortBy, bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {

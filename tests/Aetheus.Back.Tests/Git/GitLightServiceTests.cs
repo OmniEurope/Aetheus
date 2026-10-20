@@ -52,7 +52,6 @@ public class GitLightServiceTests
             new Microsoft.Extensions.Caching.Memory.MemoryCache(
                 new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             new GitBranchProtectionService(_lightRepoMock, _cliMock, _auditMock, options),
-            new GitAiPatchService(_lightRepoMock, _cliMock, _auditMock, options),
             Substitute.For<ILogger<GitLightService>>(),
             TimeProvider.System);
     }
@@ -487,9 +486,6 @@ public class GitLightServiceTests
             new GitBranchProtectionService(
                 _lightRepoMock, _cliMock, _auditMock,
                 Options.Create(new GitLightOptions { RepositoriesPath = "/tmp/test-repos" })),
-            new GitAiPatchService(
-                _lightRepoMock, _cliMock, _auditMock,
-                Options.Create(new GitLightOptions { RepositoriesPath = "/tmp/test-repos" })),
             Substitute.For<ILogger<GitLightService>>(),
             TimeProvider.System);
 
@@ -522,8 +518,6 @@ public class GitLightServiceTests
             new Microsoft.Extensions.Caching.Memory.MemoryCache(
                 new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             new GitBranchProtectionService(
-                _lightRepoMock, _cliMock, _auditMock, options),
-            new GitAiPatchService(
                 _lightRepoMock, _cliMock, _auditMock, options),
             Substitute.For<ILogger<GitLightService>>(),
             TimeProvider.System);

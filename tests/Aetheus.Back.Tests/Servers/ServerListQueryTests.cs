@@ -7,11 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R-211: the servers list's column header filters. The stored columns go through the generic
-/// map in the query; tags and the agent column (versions mixed with compatibility states) resolve to
-/// server ids first.
-/// </summary>
+/// <summary> The servers list's column header filters. The stored columns go through the generic
+/// map in the query; tags and the agent column (versions mixed with compatibility states) resolve
+/// to server ids first. </summary>
 public sealed class ServerListQueryTests : IDisposable
 {
     private readonly AppDbContext _db = new(new DbContextOptionsBuilder<AppDbContext>()

@@ -1,0 +1,1423 @@
+{
+  "node": "v24.7.0",
+  "cases": [
+    {
+      "name": "light-passing",
+      "description": "A light candidate where every gate passed.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_ASSURANCE_PROFILE": "light"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"light\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"A\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null,\n      \"reason\": \"nightly-profile\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"f929389ffde36581fbbddc12ba3dd31e689f13818bcef2a8b8f37dd48e03e00b\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade A.",
+        "grade": "A"
+      }
+    },
+    {
+      "name": "full-nightly-with-extensions",
+      "description": "A full nightly sealing both extension analyses and the performance smoke.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json",
+        "security_history": ".assurance-input/security-history",
+        "extended_qa": ".assurance-input/qa-extended"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "true",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_ASSURANCE_PROFILE": "full",
+        "QA_PERFORMANCE_GATE_STATUS": "0"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n",
+        ".assurance-input/security-history/security-summary.json": "{\"pipelineRunId\":14,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"D\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":14}}\n",
+        ".assurance-input/qa-extended/security-summary.json": "{\"pipelineRunId\":15,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":15}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"D\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    },\n    \"securityHistory\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"D\",\n      \"effectiveGrade\": \"D\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 14,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"88e68a05ca3ef0951b5426d117cd4c983036b7dc2dc37e00888710d0d1dbdc3b\",\n      \"evidence\": \"assurance/security-history-summary.json\"\n    },\n    \"extendedDynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 15,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"ac15f52081386ce081a5d2033cca6b1b68e01070d7b3227326d1a4ca54d1f9fb\",\n      \"evidence\": \"assurance/extended-dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"6c9db68a279f44aaa4accd0a09e4ba00bdb6a8f06dbf81df6488678cba936a03\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/extended-dynamic-security-summary.json": "{\"pipelineRunId\":15,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":15}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-history-summary.json": "{\"pipelineRunId\":14,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"D\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":14}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade D.",
+        "grade": "D"
+      }
+    },
+    {
+      "name": "failing-gates",
+      "description": "Failed and missing gate statuses, grades C/F/B, an exit code beyond 2^53.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "99999999999999999999999",
+        "ANALYZER_TEST_GATE_STATUS": "1",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "007",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": " 1",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "2",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_ASSURANCE_PROFILE": "full"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"C\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"F\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"F\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"C\",\n      \"effectiveGrade\": \"C\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Warning\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"7e197510c52a311cbfe8cc8b9209749718971eb65f6e3e70854495b60c8d9917\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"F\",\n      \"effectiveGrade\": \"F\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"43acf1f68df39dccdb9c963708a03cdea948c16095b864edd2cacb7984385524\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"B\",\n      \"effectiveGrade\": \"B\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Warning\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"5d4339df461000bc578829c888a5cbba8c2e28aab0c9a973b96d7737abe43641\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Failed\",\n      \"effectiveGrade\": \"F\",\n      \"exitCode\": 1e+23\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Failed\",\n      \"effectiveGrade\": \"F\",\n      \"exitCode\": 1\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"F\",\n      \"reason\": \"output-variable-unavailable\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"F\",\n      \"reason\": \"output-variable-unavailable\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"F\",\n      \"reason\": \"output-variable-unavailable\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Failed\",\n      \"effectiveGrade\": \"F\",\n      \"exitCode\": 2,\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"cbb2aca0227cd1e0ee6f022149c02bc39b9fb514e14d5b2b44d39d17ba1efab2\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"C\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"F\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade F.",
+        "grade": "F"
+      }
+    },
+    {
+      "name": "legacy-pascalcase-attestation",
+      "description": "COMPATIBILITY_MODE absent: the legacy CompatibilityMode names are read.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_ASSURANCE_PROFILE": "full",
+        "CompatibilityMode": "NMinusOne",
+        "PreviousVersionTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"A\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"745b1a5a7cbe2c77fda39cf7233547e1969746de8f6f69e349a20590c1725a9e\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade A.",
+        "grade": "A"
+      }
+    },
+    {
+      "name": "upper-snake-attestation-wins",
+      "description": "COMPATIBILITY_MODE wins over CompatibilityMode.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "Bootstrap",
+        "PREVIOUS_VERSION_TESTED": "false",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_ASSURANCE_PROFILE": "full",
+        "CompatibilityMode": "NMinusOne",
+        "PreviousVersionTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"A\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"Bootstrap\",\n      \"tested\": \"false\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"Bootstrap\",\n      \"tested\": \"false\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"Bootstrap\",\n      \"tested\": \"false\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"a58d284db3beeb29bdc31c0f65527a3e44c0a274d9db4910e28e34bc915ee33f\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade A.",
+        "grade": "A"
+      }
+    },
+    {
+      "name": "bootstrap-authorized",
+      "description": "Bootstrap compatibility with the explicit authorization.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "Bootstrap",
+        "PREVIOUS_VERSION_TESTED": "false",
+        "AgentCompatibilityMode": "Bootstrap",
+        "PreviousAgentTested": "false",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "true"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"C\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"C\",\n  \"bootstrapAuthorized\": true,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"B\",\n      \"effectiveGrade\": \"B\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Warning\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"5b82c96019b10b6faea99b69ffd5f5cdf35acda41a193eb33b2e7445292a6677\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"C\",\n      \"effectiveGrade\": \"C\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Warning\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"02f6e0c0a58dce5311404489f899585ec5973550f570c320e76aa73eed128ac3\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"B\",\n      \"effectiveGrade\": \"B\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Warning\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"5d4339df461000bc578829c888a5cbba8c2e28aab0c9a973b96d7737abe43641\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"Bootstrap\",\n      \"tested\": \"false\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"Bootstrap\",\n      \"tested\": \"false\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"Bootstrap\",\n      \"tested\": \"false\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"Bootstrap\",\n      \"tested\": \"false\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"a4acf446c4f58f8f82cf0a821a49a4f37dc77cd422a3cd0cca2073c5d54a6bb9\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"C\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade C.",
+        "grade": "C"
+      }
+    },
+    {
+      "name": "inapplicable-tests",
+      "description": "Inapplicable tests listed with JavaScript white space (U+00A0, U+FEFF trimmed; U+0085 kept).",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_ASSURANCE_PROFILE": "light",
+        "AETHEUS_ASSURANCE_INAPPLICABLE_TESTS": " analyzers , agentCompatibility,, unit ,﻿currentE2E,previousE2E"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"light\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"A\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null,\n      \"reason\": \"not-applicable-to-project\"\n    },\n    \"analyzers\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null,\n      \"reason\": \"not-applicable-to-project\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null,\n      \"reason\": \"not-applicable-to-project\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null,\n      \"reason\": \"not-applicable-to-project\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"aea66f983850e055031a8de90900159c56dbc8982940d9f5fa5ec1d0dd17f7e2\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade A.",
+        "grade": "A"
+      }
+    },
+    {
+      "name": "unavailable-summaries",
+      "description": "Quality summary missing, security ambiguous (two nested), dynamic not JSON.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n",
+        ".assurance-input/quality/other.json": "{}\n",
+        ".assurance-input/security/a/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/security/b/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{invalid-json"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"F\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Unavailable\",\n      \"reason\": \"summary-missing\",\n      \"reportedGrade\": null,\n      \"effectiveGrade\": \"F\",\n      \"completeness\": \"Incomplete\",\n      \"gateStatus\": \"Unavailable\",\n      \"pipelineRunId\": null,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"0a4fd945521366ce5c150c6590e00a70b2f4e9c6a1db9d6b51888adca0d5d90f\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Unavailable\",\n      \"reason\": \"summary-ambiguous\",\n      \"reportedGrade\": null,\n      \"effectiveGrade\": \"F\",\n      \"completeness\": \"Incomplete\",\n      \"gateStatus\": \"Unavailable\",\n      \"pipelineRunId\": null,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"8fe17ff170c824ea47630389deacfcae6468c135fee30a6e509cc705be82c97b\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Unavailable\",\n      \"reason\": \"summary-invalid-json\",\n      \"reportedGrade\": null,\n      \"effectiveGrade\": \"F\",\n      \"completeness\": \"Incomplete\",\n      \"gateStatus\": \"Unavailable\",\n      \"pipelineRunId\": null,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"20f604dbee158d62f1fb85399a91ecf06f3ae59b5ef27ff90613f3743a97197c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"dedc3733098cf33122ca466ea367e1f17bf37e769f03acc0845673c2c6ce3f9c\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\n  \"schema\": 1,\n  \"status\": \"Unavailable\",\n  \"reason\": \"summary-invalid-json\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"generatedBy\": \"candidate-assurance\"\n}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\n  \"schema\": 1,\n  \"status\": \"Unavailable\",\n  \"reason\": \"summary-missing\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"generatedBy\": \"candidate-assurance\"\n}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\n  \"schema\": 1,\n  \"status\": \"Unavailable\",\n  \"reason\": \"summary-ambiguous\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"generatedBy\": \"candidate-assurance\"\n}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade F.",
+        "grade": "F"
+      }
+    },
+    {
+      "name": "incomplete-and-blocked-grades",
+      "description": "Grade null with an Error gate, an incomplete grade, a complete grade behind an Error gate, a hidden nested summary.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Error\",\"grade\":{\"overallGrade\":null,\"completeness\":\"Incomplete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Error\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n",
+        ".assurance-input/security/.hidden/deep/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Partial\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"F\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Unavailable\",\n      \"reason\": \"gate-error-or-blocked\",\n      \"reportedGrade\": null,\n      \"effectiveGrade\": \"F\",\n      \"completeness\": \"Incomplete\",\n      \"gateStatus\": \"Error\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"acfa2155171e003bbffd4ed6506e7c883777014a1d2de119fa4397171f7b9707\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Unavailable\",\n      \"reason\": \"grade-incomplete-or-unavailable\",\n      \"reportedGrade\": \"B\",\n      \"effectiveGrade\": \"F\",\n      \"completeness\": \"Partial\",\n      \"gateStatus\": \"Warning\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"1652bdafb8a44cce40661558694f80d100720a5a4947487bb3738345a63f1a27\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Unavailable\",\n      \"reason\": \"gate-error-or-blocked\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"F\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Error\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"209b8823782d3d4aabcb8fbafa6810d5548e71c84e1e615f11e474efc75bf5f4\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"f95d9e57ad1a03601ee46e9a9947821cf0038fdbd350a33d33750e0bf84673a3\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Error\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Error\",\"grade\":{\"overallGrade\":null,\"completeness\":\"Incomplete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Warning\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Partial\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade F.",
+        "grade": "F"
+      }
+    },
+    {
+      "name": "checkpoint-identities",
+      "description": "Checkpoint resume identities, valid and invalid.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_RESUME_SOURCE_RUN_ID": "42",
+        "AETHEUS_CHECKPOINT_CI_RUN_ID": "7",
+        "AETHEUS_CHECKPOINT_QUALITY_RUN_ID": "0",
+        "AETHEUS_CHECKPOINT_SECURITY_RUN_ID": "9007199254740993"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"A\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": 42,\n    \"reusedRuns\": {\n      \"ci\": 7,\n      \"security\": 9007199254740992\n    }\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"833686c1a6e953a9b2a24a3be1fa1a4eaa66bd114779978ae3bbb73592ca3900\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade A.",
+        "grade": "A"
+      }
+    },
+    {
+      "name": "checkpoint-invalid-source",
+      "description": "A resume source that is not a positive integer, with reused runs.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_RESUME_SOURCE_RUN_ID": "08",
+        "AETHEUS_CHECKPOINT_SECURITY_RUN_ID": "3",
+        "AETHEUS_CHECKPOINT_QUALITY_RUN_ID": "12"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"A\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {\n      \"quality\": 12,\n      \"security\": 3\n    }\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"59a47d465796d8cbe157018cf987364896ef4ab9aecfb3108ae3547793f03dab\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade A.",
+        "grade": "A"
+      }
+    },
+    {
+      "name": "performance-setting-unset",
+      "description": "No performance setting: Unavailable, grade left as the outcome set it.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "QA_PERFORMANCE_GATE_STATUS": "0"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"A\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"A\",\n      \"reason\": \"performance-setting-unavailable\"\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"10fca47ebc9acf266a607beb332decfd4cfb1c8182f536a03080b7d159ab8bdb\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade A.",
+        "grade": "A"
+      }
+    },
+    {
+      "name": "performance-setting-invalid-and-failed",
+      "description": "Performance setting 'yes' with a failed smoke.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "yes",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "QA_PERFORMANCE_GATE_STATUS": "4"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"F\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"F\",\n      \"exitCode\": 4,\n      \"reason\": \"performance-setting-unavailable\"\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"b6a7c0866e604502702a1ed8b4b8ae84093c29417c7959114c3e13c2358690d0\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade F.",
+        "grade": "F"
+      }
+    },
+    {
+      "name": "performance-required-missing",
+      "description": "Performance required but its status missing.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "true",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"F\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"F\",\n      \"reason\": \"output-variable-unavailable\"\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"f3f6644b7923c6894e7a21b5cac14bf8703be972c82955d27051b0831581895c\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade F.",
+        "grade": "F"
+      }
+    },
+    {
+      "name": "compatibility-mode-unavailable",
+      "description": "No attestation at all: compatibility Unavailable, keeping a failed exit code before the reason.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "x",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "3",
+        "AgentCompatibilityMode": "",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"F\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"F\",\n      \"exitCode\": 3,\n      \"reason\": \"compatibility-mode-unavailable\",\n      \"mode\": null,\n      \"tested\": null\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"F\",\n      \"reason\": \"compatibility-mode-unavailable\",\n      \"mode\": null,\n      \"tested\": null\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"F\",\n      \"reason\": \"compatibility-mode-unavailable\",\n      \"mode\": null,\n      \"tested\": null\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Unavailable\",\n      \"effectiveGrade\": \"F\",\n      \"reason\": \"compatibility-mode-unavailable\",\n      \"mode\": null,\n      \"tested\": null\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"12eec4d9dd5d78a5b89f17023b542a920833546702e04854ddca2d3c29f8c5fa\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade F.",
+        "grade": "F"
+      }
+    },
+    {
+      "name": "nminusone-without-tested",
+      "description": "NMinusOne with an empty tested revision writes tested null.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"A\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": null\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": null\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": null\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": null\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"0f054260d362b25ab736c105482c517efbdd91d6aac8bc18183320ef52236e95\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade A.",
+        "grade": "A"
+      }
+    },
+    {
+      "name": "javascript-json-fidelity",
+      "description": "Duplicate and integer keys, a grade that is an array, a numeric status, escapes and numbers of every form in the summaries and the provenance.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789ABCDEF0123456789ABCDEF01234567\"},\"pipelineRunId\":21}",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":1.2e1,\"status\":\"Warning\",\"grade\":{\"overallGrade\":[\"A\"],\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\"}}",
+        ".assurance-input/qa/security-summary.json": "{\"status\":5,\"grade\":{\"pipelineRunId\":13,\"overallGrade\":\"C\",\"completeness\":{\"b\":1,\"2\":2,\"1\":3,\"a\":4,\"b\":5,\"4294967295\":6,\"4294967294\":7},\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\"}}",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789ABCDEF0123456789ABCDEF01234567\",\"categories\":{\"z\":1e21,\"10\":1.5e-7,\"2\":-0,\"a\\u2028b\":\"\\u0007\\ud800\\u00e9</script>\\/ é😀\",\"nested\":{\"empty\":{},\"list\":[],\"deep\":[[1,2,{\"x\":null}],true,false]},\"num\":[0.1,123456789012345680000,5e-324,1.7976931348623157e308,1e400,-1e-7,100,0.000001,1e-6,1e-7,123e-20,-0.0,0.30000000000000004],\"dup\":1,\"dup\":{\"k\":\"v\"},\"ctl\":\"\\u0000\\u001f\\b\\f\\n\\r\\t\\\"\\\\\"}}"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"F\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"B\",\n      \"effectiveGrade\": \"B\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 21,\n      \"sourceSha\": \"0123456789ABCDEF0123456789ABCDEF01234567\",\n      \"sha256\": \"0175f34b043bc83e210834aa6f6c5355bcd28c5b5ef11f8c5104d42da34bea1a\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": [\n        \"A\"\n      ],\n      \"effectiveGrade\": [\n        \"A\"\n      ],\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Warning\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"f274ff9fc563c40650571e6697dd7df53bda459271393e681de51898a651f44a\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Unavailable\",\n      \"reason\": \"gate-error-or-blocked\",\n      \"reportedGrade\": \"C\",\n      \"effectiveGrade\": \"F\",\n      \"completeness\": {\n        \"1\": 3,\n        \"2\": 2,\n        \"4294967294\": 7,\n        \"b\": 5,\n        \"a\": 4,\n        \"4294967295\": 6\n      },\n      \"gateStatus\": \"5\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"92895669b5b3a02d7d2f72b8e31d13a3ba99f0381cd21d8968cfd24c03509e63\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789ABCDEF0123456789ABCDEF01234567\",\n    \"categories\": {\n      \"2\": 0,\n      \"10\": 1.5e-7,\n      \"z\": 1e+21,\n      \"a b\": \"\\u0007\\ud800é</script>/ é😀\",\n      \"nested\": {\n        \"empty\": {},\n        \"list\": [],\n        \"deep\": [\n          [\n            1,\n            2,\n            {\n              \"x\": null\n            }\n          ],\n          true,\n          false\n        ]\n      },\n      \"num\": [\n        0.1,\n        123456789012345680000,\n        5e-324,\n        1.7976931348623157e+308,\n        null,\n        -1e-7,\n        100,\n        0.000001,\n        0.000001,\n        1e-7,\n        1.23e-18,\n        0,\n        0.30000000000000004\n      ],\n      \"dup\": {\n        \"k\": \"v\"\n      },\n      \"ctl\": \"\\u0000\\u001f\\b\\f\\n\\r\\t\\\"\\\\\"\n    },\n    \"provenanceSha256\": \"0ffd8d6bdd184d8be69e8a515743ed3de96a06906a2b1696915c253ed675b7ed\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"57dcf9e83fa5926ec714df1862e59b1efcb340b63870fce810e4727cecd40b53\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"status\":5,\"grade\":{\"pipelineRunId\":13,\"overallGrade\":\"C\",\"completeness\":{\"b\":1,\"2\":2,\"1\":3,\"a\":4,\"b\":5,\"4294967295\":6,\"4294967294\":7},\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\"}}",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"B\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789ABCDEF0123456789ABCDEF01234567\"},\"pipelineRunId\":21}",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":1.2e1,\"status\":\"Warning\",\"grade\":{\"overallGrade\":[\"A\"],\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\"}}"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade F.",
+        "grade": "F"
+      }
+    },
+    {
+      "name": "invalid-utf8-and-bom",
+      "description": "A status with invalid UTF-8 bytes (decoded to U+FFFD) and a summary starting with a BOM (not JSON).",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": {
+          "base64": "eyJwaXBlbGluZVJ1bklkIjoxMSwic3RhdHVzIjoiUGFzwyjigv/wn3NlZCIsImdyYWRlIjp7Im92ZXJhbGxHcmFkZSI6IkEiLCJjb21wbGV0ZW5lc3MiOiJDb21wbGV0ZSIsImNvbW1pdEhhc2giOiIwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3In19"
+        },
+        ".assurance-input/security/security-summary.json": {
+          "base64": "77u/eyJwaXBlbGluZVJ1bklkIjoxMiwic3RhdHVzIjoiUGFzc2VkIiwiZ3JhZGUiOnsib3ZlcmFsbEdyYWRlIjoiQSIsImNvbXBsZXRlbmVzcyI6IkNvbXBsZXRlIiwiY29tbWl0SGFzaCI6IjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1NjciLCJwaXBlbGluZVJ1bklkIjoxMn19Cg=="
+        },
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"F\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Unavailable\",\n      \"reason\": \"gate-error-or-blocked\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"F\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Pas�(���sed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"f89f3391b14c48e4f67c738706f2540250b8b20a7fbfe5063fe103dc968290a7\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Unavailable\",\n      \"reason\": \"summary-invalid-json\",\n      \"reportedGrade\": null,\n      \"effectiveGrade\": \"F\",\n      \"completeness\": \"Incomplete\",\n      \"gateStatus\": \"Unavailable\",\n      \"pipelineRunId\": null,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"20f604dbee158d62f1fb85399a91ecf06f3ae59b5ef27ff90613f3743a97197c\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"153d34630d887e87bf7d5bf3836b146167e9570945d9e840d021e60e7226b699\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": {
+            "base64": "eyJwaXBlbGluZVJ1bklkIjoxMSwic3RhdHVzIjoiUGFzwyjigv/wn3NlZCIsImdyYWRlIjp7Im92ZXJhbGxHcmFkZSI6IkEiLCJjb21wbGV0ZW5lc3MiOiJDb21wbGV0ZSIsImNvbW1pdEhhc2giOiIwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3In19"
+          },
+          ".pipeline-artifacts/assurance/security-summary.json": "{\n  \"schema\": 1,\n  \"status\": \"Unavailable\",\n  \"reason\": \"summary-invalid-json\",\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"generatedBy\": \"candidate-assurance\"\n}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade F.",
+        "grade": "F"
+      }
+    },
+    {
+      "name": "uppercase-source-sha",
+      "description": "The source SHA given in capitals is sealed in lowercase.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789ABCDEF0123456789ABCDEF01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance-contract.json": "{\n  \"schema\": 2,\n  \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n  \"profile\": \"full\",\n  \"gradingScale\": [\n    \"A\",\n    \"B\",\n    \"C\",\n    \"D\",\n    \"E\",\n    \"F\"\n  ],\n  \"overallGrade\": \"A\",\n  \"bootstrapAuthorized\": false,\n  \"checkpointResume\": {\n    \"sourceRunId\": null,\n    \"reusedRuns\": {}\n  },\n  \"analyses\": {\n    \"quality\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 11,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"e572732fbd72af12f4854818a7b37147623d676ec187eeeed9a9135c2dce5298\",\n      \"evidence\": \"assurance/quality-summary.json\"\n    },\n    \"security\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 12,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"46b60309bbca392b0aaf1e8849ff74df12b1d53884b222474728d65458dfeb01\",\n      \"evidence\": \"assurance/security-summary.json\"\n    },\n    \"dynamicSecurity\": {\n      \"status\": \"Available\",\n      \"reportedGrade\": \"A\",\n      \"effectiveGrade\": \"A\",\n      \"completeness\": \"Complete\",\n      \"gateStatus\": \"Passed\",\n      \"pipelineRunId\": 13,\n      \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n      \"sha256\": \"9ffde6c6b76d07f258febe34ac3f6a3314279d19a107e3a7dd7f8c1cbfa3fc1c\",\n      \"evidence\": \"assurance/dynamic-security-summary.json\"\n    }\n  },\n  \"tests\": {\n    \"unit\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"analyzers\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"currentE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\"\n    },\n    \"previousSmoke\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"agentCompatibility\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousIntegration\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"previousE2E\": {\n      \"required\": true,\n      \"status\": \"Passed\",\n      \"effectiveGrade\": \"A\",\n      \"mode\": \"NMinusOne\",\n      \"tested\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n    },\n    \"performance\": {\n      \"required\": false,\n      \"status\": \"NotRun\",\n      \"effectiveGrade\": null\n    }\n  },\n  \"artifactReferences\": {\n    \"sourceSha\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"categories\": {\n      \"dockerImages\": {\n        \"fileCount\": 2,\n        \"totalBytes\": 42,\n        \"sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      }\n    },\n    \"provenanceSha256\": \"cd349a64440896d3a09addf194b5359c01de5be818ad50a990cc2247af98fe3c\"\n  },\n  \"seal\": {\n    \"algorithm\": \"sha256\",\n    \"digest\": \"745b1a5a7cbe2c77fda39cf7233547e1969746de8f6f69e349a20590c1725a9e\"\n  }\n}\n",
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "log": "Candidate assurance contract written to .pipeline-artifacts/assurance-contract.json with grade A.",
+        "grade": "A"
+      }
+    },
+    {
+      "name": "extensions-in-light-profile",
+      "description": "Extension analyses in a light qualification are refused after the base evidence was written.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json",
+        "security_history": ".assurance-input/security-history",
+        "extended_qa": ".assurance-input/qa-extended"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_ASSURANCE_PROFILE": "light"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n",
+        ".assurance-input/security-history/security-summary.json": "{\"pipelineRunId\":14,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":14}}\n",
+        ".assurance-input/qa-extended/security-summary.json": "{\"pipelineRunId\":15,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":15}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "error": {
+          "kind": "Error",
+          "message": "The nightly extension analyses belong to a full qualification only."
+        }
+      }
+    },
+    {
+      "name": "unknown-profile",
+      "description": "An unknown profile is refused rather than defaulted.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false",
+        "AETHEUS_ASSURANCE_PROFILE": "quick"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {},
+        "error": {
+          "kind": "Error",
+          "message": "AETHEUS_ASSURANCE_PROFILE must be 'light' or 'full', not 'quick'."
+        }
+      }
+    },
+    {
+      "name": "invalid-source-sha",
+      "description": "A short source SHA is refused.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {},
+        "error": {
+          "kind": "Error",
+          "message": "The candidate source SHA must be a full hexadecimal commit identifier."
+        }
+      }
+    },
+    {
+      "name": "summary-of-another-commit",
+      "description": "A summary of another commit stops the generation.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"ffffffffffffffffffffffffffffffffffffffff\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {},
+        "error": {
+          "kind": "Error",
+          "message": "quality summary belongs to another commit."
+        }
+      }
+    },
+    {
+      "name": "summary-without-commit",
+      "description": "A summary without a commit hash stops the generation.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\"}}",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "error": {
+          "kind": "Error",
+          "message": "dynamic-security summary belongs to another commit."
+        }
+      }
+    },
+    {
+      "name": "run-identity-is-a-string",
+      "description": "A pipeline run identity written as a string is invalid.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":\"12\",\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\"}}",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n"
+        },
+        "error": {
+          "kind": "Error",
+          "message": "security pipeline run identity is invalid."
+        }
+      }
+    },
+    {
+      "name": "run-identity-beyond-safe-integers",
+      "description": "A pipeline run identity of 2^53 is invalid.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":9007199254740992,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\"}}",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n"
+        },
+        "error": {
+          "kind": "Error",
+          "message": "security pipeline run identity is invalid."
+        }
+      }
+    },
+    {
+      "name": "summary-is-json-null",
+      "description": "A summary that is JSON null crashed the script with a TypeError.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "null",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"schema\":1,\"sourceCommit\":\"0123456789abcdef0123456789abcdef01234567\",\"categories\":{\"dockerImages\":{\"fileCount\":2,\"totalBytes\":42,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}}\n"
+      },
+      "expected": {
+        "outputs": {},
+        "error": {
+          "kind": "TypeError",
+          "message": "Cannot read properties of null (reading 'status')"
+        }
+      }
+    },
+    {
+      "name": "provenance-of-another-commit",
+      "description": "A provenance of another commit is refused.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"sourceCommit\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "error": {
+          "kind": "Error",
+          "message": "Artifact provenance belongs to another commit."
+        }
+      }
+    },
+    {
+      "name": "provenance-commit-is-a-number",
+      "description": "A provenance whose sourceCommit is a number crashed the script with a TypeError.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{\"sourceCommit\":12}"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "error": {
+          "kind": "TypeError",
+          "message": "artifactProvenance?.sourceCommit?.toLowerCase is not a function"
+        }
+      }
+    },
+    {
+      "name": "provenance-not-json",
+      "description": "A provenance that is not JSON crashed the script with a SyntaxError.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+        ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json": "{"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "error": {
+          "kind": "SyntaxError",
+          "message": "Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+        }
+      }
+    },
+    {
+      "name": "provenance-missing",
+      "description": "A missing provenance crashed the script.",
+      "parameters": {
+        "output": ".pipeline-artifacts/assurance-contract.json",
+        "evidence_directory": ".pipeline-artifacts/assurance",
+        "source_sha": "0123456789abcdef0123456789abcdef01234567",
+        "quality": ".assurance-input/quality",
+        "security": ".assurance-input/security",
+        "qa": ".assurance-input/qa",
+        "provenance": ".assurance-input/ci/.pipeline-artifacts/artifact-provenance.json"
+      },
+      "environment": {
+        "UNIT_TEST_GATE_STATUS": "0",
+        "ANALYZER_TEST_GATE_STATUS": "0",
+        "QA_CURRENT_INTEGRATION_GATE_STATUS": "0",
+        "QA_CURRENT_E2E_GATE_STATUS": "0",
+        "QA_AGENT_COMPATIBILITY_GATE_STATUS": "0",
+        "QA_PREVIOUS_INTEGRATION_GATE_STATUS": "0",
+        "QA_PREVIOUS_E2E_GATE_STATUS": "0",
+        "QA_PREVIOUS_SMOKE_GATE_STATUS": "0",
+        "COMPATIBILITY_MODE": "NMinusOne",
+        "PREVIOUS_VERSION_TESTED": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AgentCompatibilityMode": "NMinusOne",
+        "PreviousAgentTested": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "AETHEUS_ASSURANCE_PERFORMANCE_ENABLED": "false",
+        "AETHEUS_ASSURANCE_ALLOW_BOOTSTRAP": "false"
+      },
+      "files": {
+        ".assurance-input/quality/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+        ".assurance-input/security/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n",
+        ".assurance-input/qa/security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n"
+      },
+      "expected": {
+        "outputs": {
+          ".pipeline-artifacts/assurance/dynamic-security-summary.json": "{\"pipelineRunId\":13,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":13}}\n",
+          ".pipeline-artifacts/assurance/quality-summary.json": "{\"pipelineRunId\":11,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":11}}\n",
+          ".pipeline-artifacts/assurance/security-summary.json": "{\"pipelineRunId\":12,\"status\":\"Passed\",\"grade\":{\"overallGrade\":\"A\",\"completeness\":\"Complete\",\"commitHash\":\"0123456789abcdef0123456789abcdef01234567\",\"pipelineRunId\":12}}\n"
+        },
+        "error": {
+          "kind": "FileSystemError",
+          "message": "ENOENT: no such file or directory, open '<workspace>\\.assurance-input\\ci\\.pipeline-artifacts\\artifact-provenance.json'"
+        }
+      }
+    }
+  ]
+}

@@ -10,8 +10,8 @@ public interface IAuthRepository
     /// <summary>Finds a server by hostname in any organization, retired servers included.</summary>
     Task<Server?> FindServerByHostnameAsync(string hostname, CancellationToken ct = default);
 
-    /// <summary>PLAN-004 R-11: finds a server of <paramref name="organizationId"/> (retired included)
-    /// that recorded this machine identity hash; <paramref name="hostname"/> breaks ties.</summary>
+    /// <summary>Finds the machine identity within <paramref name="organizationId"/>, including
+    /// retired rows; <paramref name="hostname"/> breaks ties.</summary>
     Task<Server?> FindServerByMachineIdHashAsync(
         int organizationId, string machineIdHash, string hostname, CancellationToken ct = default);
 

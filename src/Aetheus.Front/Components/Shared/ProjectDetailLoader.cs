@@ -143,6 +143,9 @@ public sealed class ProjectDetailLoader : IAsyncDisposable
     private async Task StartReleaseHubAsync(int projectId, CancellationToken ct)
     {
         var hub = _hubFactory.Create("releases");
+        // The reconnect handler reads hub, so ownership is tracked apart from the variable: nulling
+        // hub to skip the dispose below left that handler throwing on every reconnection.
+        var ownsHub = true;
         try
         {
             hub.On<ReleaseDto>("ReleaseCreated", _ => ReloadReleasesAsync(projectId));
@@ -168,7 +171,7 @@ public sealed class ProjectDetailLoader : IAsyncDisposable
             if (ct.IsCancellationRequested || _disposing || _currentId != projectId)
                 Interlocked.CompareExchange(ref _releaseHub, null, hub);
             else
-                hub = null!;
+                ownsHub = false;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -180,7 +183,7 @@ public sealed class ProjectDetailLoader : IAsyncDisposable
         }
         finally
         {
-            if (hub is not null)
+            if (ownsHub)
             {
                 try { await hub.DisposeAsync().ConfigureAwait(false); }
                 catch (Exception ex) { _logger.LogDebug(ex, "Release hub dispose failed for project {ProjectId}", projectId); }

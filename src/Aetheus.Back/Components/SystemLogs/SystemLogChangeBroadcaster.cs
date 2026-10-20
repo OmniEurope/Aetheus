@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.SystemLogs;
 
-/// <summary>
-/// Recette R-181: the system logs page follows the log files live instead of a Refresh button or a
-/// polling toggle. A watcher on the log directory marks it changed; at most every
-/// <see cref="Throttle"/> the admin hub is told <c>AdminEntityChanged("SystemLog", 0, "Updated")</c>
-/// and the page reloads. The throttle bounds the pushes whatever the write rate, including the
-/// lines the page's own reload may write.
-/// </summary>
+/// <summary> The system logs page follows the log files live instead of a Refresh button or a
+/// polling toggle. A watcher on the log directory marks it changed; at most every <see
+/// cref="Throttle"/> the admin hub is told <c>AdminEntityChanged("SystemLog", 0, "Updated")</c> and
+/// the page reloads. The throttle bounds the pushes whatever the write rate, including the lines
+/// the page's own reload may write. </summary>
 public sealed class SystemLogChangeBroadcaster(
     IConfiguration configuration,
     IAdminChangeNotifier notifier,

@@ -46,6 +46,23 @@
     </ItemGroup>
   </Target>
 
+  <!-- The browser runtime pack is the one pack the wasm-tools workload decides, so it cannot be pinned
+       like the packs above without mixing it with the workload's relinking toolchain of another patch.
+       The workload set is pinned instead (AetheusWasmWorkloadVersion, installed by the host publish),
+       and a Release publish that resolved any other runtime is refused rather than shipped.
+       PrepareForPublish also runs once more inside the WebAssembly publish, in an invocation that
+       never resolves runtime packs; that pass has nothing to verify, so it is skipped rather than
+       failed. The outer pass prints the version it checked ("Browser runtime pack: ..."). -->
+  <Target Name="VerifyBrowserRuntimePack" BeforeTargets="PrepareForPublish" Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <_AetheusBrowserRuntimePack Include="@(RuntimePack)"
+                                  Condition="'%(RuntimePack.FrameworkName)' == 'Microsoft.NETCore.App' and '%(RuntimePack.RuntimeIdentifier)' == 'browser-wasm'" />
+    </ItemGroup>
+    <Error Condition="'@(_AetheusBrowserRuntimePack)' != '' and '%(_AetheusBrowserRuntimePack.NuGetPackageVersion)' != '$(AetheusRuntimeImageVersion)'"
+           Text="The browser runtime pack %(_AetheusBrowserRuntimePack.Identity) resolved to %(_AetheusBrowserRuntimePack.NuGetPackageVersion), not AetheusRuntimeImageVersion $(AetheusRuntimeImageVersion). Install the pinned workload set: dotnet workload install wasm-tools --version $(AetheusWasmWorkloadVersion)" />
+    <Message Condition="'@(_AetheusBrowserRuntimePack)' != ''" Importance="high" Text="Browser runtime pack: %(_AetheusBrowserRuntimePack.Identity) %(_AetheusBrowserRuntimePack.NuGetPackageVersion)" />
+  </Target>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Aetheus.Front.Tests" />
     <StaticWebAssetFingerprintPattern Include="AetheusCss"
@@ -77,10 +94,19 @@
   </ItemGroup>
 
   <!-- The published OmniEurope.Blazor package (version pinned in Directory.Packages.props); it ships the
-       OE0001 analyzer itself. -->
-  <ItemGroup>
+       OE0001 analyzer itself. On a machine with the OE sources (UseLocalOmniEurope, Directory.Build.props)
+       the front references those sources and their analyzer project instead, recette R1-57. -->
+  <ItemGroup Condition="'$(UseLocalOmniEurope)' != 'true'">
     <PackageReference Include="OmniEurope.Blazor" />
   </ItemGroup>
+  <ItemGroup Condition="'$(UseLocalOmniEurope)' == 'true'">
+    <ProjectReference Include="$(OmniEuropeBlazorLocalProject)" />
+    <ProjectReference Include="$(OmniEuropeBlazorLocalAnalyzers)" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Target Name="ReportOmniEuropeSource" BeforeTargets="Build">
+    <Message Importance="high" Condition="'$(UseLocalOmniEurope)' == 'true'" Text="Aetheus.Front: OmniEurope.Blazor from local sources $(OmniEuropeBlazorLocalProject)" />
+    <Message Importance="high" Condition="'$(UseLocalOmniEurope)' != 'true'" Text="Aetheus.Front: OmniEurope.Blazor from the NuGet package" />
+  </Target>
 
   <!-- Firefox does not support the "integrity" key inside importmaps (Chrome 127+/Safari 18.2+ only).
        Strip it from every generated HTML so the WASM app loads on all browsers.

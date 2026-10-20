@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 5: the usage of each project, its rows in each detail table times the bytes per row of
-/// that table. Pure, so the arithmetic is tested without a database.
-/// </summary>
+/// <summary> The usage of each project, its rows in each detail table times the bytes per row of
+/// that table. Pure, so the arithmetic is tested without a database. </summary>
 internal static class ProjectStorageUsage
 {
     public static List<ProjectStorageUsageDto> Build(

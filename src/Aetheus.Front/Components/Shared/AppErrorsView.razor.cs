@@ -13,8 +13,8 @@ public partial class AppErrorsView : IAsyncDisposable
 
     [Parameter] public int AppId { get; set; }
 
-    /// <summary>Recette R-360: the application's name, written in the export's header (its id
-    /// alone when absent).</summary>
+    /// <summary>The application's name, written in the export's header (its id alone when
+    /// absent).</summary>
     [Parameter] public string? AppName { get; set; }
 
     /// <summary>The app's project: the scope of the <c>AppTelemetryChanged</c> push that reloads this view.</summary>
@@ -43,8 +43,8 @@ public partial class AppErrorsView : IAsyncDisposable
     /// </summary>
     private List<string> _exceptionTypes = [];
 
-    // R-181: replaces the Refresh button. New error groups stored by OTLP ingestion push
-    // AppTelemetryChanged for the app's project; the grid re-reads its rows with the current filters.
+    // Subscribe to the project's AppTelemetryChanged events so newly ingested error groups refresh
+    // the grid with its current filters.
     private EntityOperationalFeed? _liveFeed;
     internal EntityOperationalFeed? LiveFeed => _liveFeed;
 
@@ -115,10 +115,9 @@ public partial class AppErrorsView : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// R-181 / R-227: a push refreshes the grid in place (rows, scroll position and filters kept), and a
-    /// new error group reads bold for a few seconds. A new exception type joins the type filter's list.
-    /// </summary>
+    /// <summary> A push refreshes the grid in place (rows, scroll position and filters kept), and a
+    /// new error group reads bold for a few seconds. A new exception type joins the type filter's
+    /// list. </summary>
     private async Task RefreshFromPushAsync()
     {
         if (_grid is null) return;
@@ -133,18 +132,16 @@ public partial class AppErrorsView : IAsyncDisposable
         return _grid?.Reload() ?? Task.CompletedTask;
     }
 
-    // Recette R-361: the whole row opens the error's detail; the dialog only reads the row, so closing
-    // it leaves the grid (scroll position, filters, rows) untouched.
+    // The whole row opens the error's detail; the dialog only reads the row, so closing it leaves
+    // the grid (scroll position, filters, rows) untouched.
     private Task OpenErrorAsync(AppErrorEventDto error) =>
         Dialog.OpenAsync<AppErrorDetailDialog>(L["ErrorDetails"],
             new Dictionary<string, object?> { [nameof(AppErrorDetailDialog.Error)] = error },
             new OmniDialogOptions { Width = "700px", CloseDialogOnOverlayClick = true, AutoFocusFirstElement = false });
 
-    /// <summary>
-    /// Recette R2-011: the pages of an export, read from the API with the sort and the column filters of
-    /// the grid, without touching the groups it shows (the grid's load replaces them). A failed page fails
-    /// the export: no file, <see cref="OnExportFailed"/> says so.
-    /// </summary>
+    /// <summary> The pages of an export, read from the API with the sort and the column filters of
+    /// the grid, without touching the groups it shows (the grid's load replaces them). A failed
+    /// page fails the export: no file, <see cref="OnExportFailed"/> says so. </summary>
     private async Task<OmniDataGridResult<AppErrorEventDto>> LoadExportPageAsync(OmniDataGridLoadRequest request)
     {
         var result = await ReadAsync(AppId, request.ToGridLoadArgs());
@@ -164,7 +161,7 @@ public partial class AppErrorsView : IAsyncDisposable
     private IReadOnlyList<OmniTableExportField> ExportFields =>
         AppTelemetryMarkdownExport.ErrorsFields(AppId, AppName, key => L[key].Value);
 
-    /// <summary>Recette R2-036: <c>aetheus-errors</c>, then OE's generation time and the extension.</summary>
+    /// <summary><c>aetheus-errors</c>, then OE's generation time and the extension.</summary>
     private string ExportFileName => ExportFileNames.Stem(AppName, $"app-{AppId}", "errors");
 
     /// <summary>A page that could not be read: no file was produced, the toast says so. Any other

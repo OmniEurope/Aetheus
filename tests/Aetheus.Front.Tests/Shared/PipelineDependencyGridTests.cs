@@ -39,7 +39,8 @@ public class PipelineDependencyGridTests : BunitContext
         });
     }
 
-    /// <summary>R-121: one list, the chevron decided per row. A leaf (even one with parents) has none.</summary>
+    /// <summary>One list, the chevron decided per row. A leaf (even one with parents) has
+    /// none.</summary>
     [Fact]
     public void MixedRows_ShowTheChevronOnlyOnRowsWithChildren()
     {
@@ -66,7 +67,7 @@ public class PipelineDependencyGridTests : BunitContext
         Assert.False(PipelineDependencyGrid.HasChildren(items[2]));
     }
 
-    /// <summary>R-123: Run and the star stay on the row; Edit sits in the row's "..." menu.</summary>
+    /// <summary>Run and the star stay on the row; Edit sits in the row's "..." menu.</summary>
     [Fact]
     public void RowActions_KeepRunAndStarVisible_AndEditLivesInTheMenu()
     {
@@ -237,7 +238,7 @@ public class PipelineDependencyGridTests : BunitContext
         Assert.Contains("v2", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("v@pinnedVersion", cut.Markup, StringComparison.Ordinal);
 
-        // R-123: the model update is a "..." menu entry now, not a row button.
+        // Model updates belong in the row menu.
         Assert.DoesNotContain(cut.FindAll("button"), button => button.Names().Contains("Update", StringComparison.Ordinal));
         cut.Find("button[aria-label='MoreActions']").Click();
         cut.FindAll("[role='menuitem']").Single(item => item.TextContent.Contains("Update", StringComparison.Ordinal)).Click();
@@ -267,7 +268,7 @@ public class PipelineDependencyGridTests : BunitContext
     [Fact]
     public void RecentRuns_ShowTheGradeOfTheNewestRunOnly()
     {
-        // PLAN-007 lot 3: the pipelines table carries the grade the run grids show.
+        // The pipelines table carries the grade the run grids show.
         var graded = RenderGrid(new PipelineDependencyDto
         {
             Id = 1,
@@ -312,7 +313,7 @@ public class PipelineDependencyGridTests : BunitContext
             ProjectId = 8,
             RecentRuns = [new PipelineRunSummaryDto { Id = 15, Status = Aetheus.Shared.Components.Pipelines.PipelineStatus.Success }]
         });
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.NotEmpty(cut.FindAll(".pipeline-run-history a.pipeline-run-dot"));
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 4);

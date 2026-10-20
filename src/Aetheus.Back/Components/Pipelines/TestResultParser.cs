@@ -113,9 +113,16 @@ public static class TestResultParser
 
     private static void ParseTrx(XDocument doc, List<TestResult> results, int runId, string? stageName, string? stepName)
     {
-        // TRX uses a default namespace whose value differs between Visual Studio generations. Match
-        // by LocalName so both current and historical result files are accepted.
-        var suitesByTestId = doc.Descendants()
+        var suitesByTestId = TrxSuitesByTestId(doc);
+        foreach (var test in doc.Descendants().Where(e => e.Name.LocalName == "UnitTestResult"))
+            results.Add(ToTrxResult(test, suitesByTestId, runId, stageName, stepName));
+    }
+
+    /// <summary>The test class of every UnitTest definition, by test id. TRX uses a default namespace
+    /// whose value differs between Visual Studio generations: elements are matched by LocalName so both
+    /// current and historical result files are accepted.</summary>
+    private static Dictionary<string, string?> TrxSuitesByTestId(XDocument doc) =>
+        doc.Descendants()
             .Where(e => e.Name.LocalName == "UnitTest")
             .Select(e => new
             {
@@ -126,39 +133,38 @@ public static class TestResultParser
             .Where(x => !string.IsNullOrWhiteSpace(x.Id))
             .ToDictionary(x => x.Id!, x => x.Suite, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var test in doc.Descendants().Where(e => e.Name.LocalName == "UnitTestResult"))
+    private static TestResult ToTrxResult(
+        XElement test, Dictionary<string, string?> suitesByTestId, int runId, string? stageName, string? stepName)
+    {
+        var errorInfo = test.Descendants().FirstOrDefault(e => e.Name.LocalName == "ErrorInfo");
+        var testId = test.Attribute("testId")?.Value;
+        suitesByTestId.TryGetValue(testId ?? string.Empty, out var suite);
+
+        return new TestResult
         {
-            var rawOutcome = test.Attribute("outcome")?.Value;
-            var outcome = rawOutcome?.ToLowerInvariant() switch
-            {
-                "passed" => TestOutcome.Passed,
-                "failed" => TestOutcome.Failed,
-                "notexecuted" or "notrunnable" => TestOutcome.Skipped,
-                _ => TestOutcome.Error
-            };
-
-            var durationMs = TimeSpan.TryParse(
-                test.Attribute("duration")?.Value,
-                CultureInfo.InvariantCulture,
-                out var duration)
-                ? duration.TotalMilliseconds
-                : 0;
-            var errorInfo = test.Descendants().FirstOrDefault(e => e.Name.LocalName == "ErrorInfo");
-            var testId = test.Attribute("testId")?.Value;
-            suitesByTestId.TryGetValue(testId ?? string.Empty, out var suite);
-
-            results.Add(new TestResult
-            {
-                PipelineRunId = runId,
-                StageName = stageName,
-                StepName = stepName,
-                TestName = test.Attribute("testName")?.Value ?? "Unknown",
-                TestSuite = suite,
-                Outcome = outcome,
-                DurationMs = durationMs,
-                ErrorMessage = errorInfo?.Elements().FirstOrDefault(e => e.Name.LocalName == "Message")?.Value,
-                StackTrace = errorInfo?.Elements().FirstOrDefault(e => e.Name.LocalName == "StackTrace")?.Value
-            });
-        }
+            PipelineRunId = runId,
+            StageName = stageName,
+            StepName = stepName,
+            TestName = test.Attribute("testName")?.Value ?? "Unknown",
+            TestSuite = suite,
+            Outcome = TrxOutcome(test.Attribute("outcome")?.Value),
+            DurationMs = TrxDurationMs(test.Attribute("duration")?.Value),
+            ErrorMessage = TrxErrorChild(errorInfo, "Message"),
+            StackTrace = TrxErrorChild(errorInfo, "StackTrace")
+        };
     }
+
+    private static TestOutcome TrxOutcome(string? rawOutcome) => rawOutcome?.ToLowerInvariant() switch
+    {
+        "passed" => TestOutcome.Passed,
+        "failed" => TestOutcome.Failed,
+        "notexecuted" or "notrunnable" => TestOutcome.Skipped,
+        _ => TestOutcome.Error
+    };
+
+    private static double TrxDurationMs(string? duration) =>
+        TimeSpan.TryParse(duration, CultureInfo.InvariantCulture, out var parsed) ? parsed.TotalMilliseconds : 0;
+
+    private static string? TrxErrorChild(XElement? errorInfo, string localName) =>
+        errorInfo?.Elements().FirstOrDefault(e => e.Name.LocalName == localName)?.Value;
 }

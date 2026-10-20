@@ -13,11 +13,9 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Aetheus.Back.Tests.Projects;
 
-/// <summary>
-/// Recette R2-122: the orchestration of a project deletion. The removal itself is proved on PostgreSQL
-/// by ProjectDeletionIntegrationTests; this covers the refusal, the preview shape, the files removed
-/// after the commit and what the audit entry says.
-/// </summary>
+/// <summary> The orchestration of a project deletion. The removal itself is proved on PostgreSQL by
+/// ProjectDeletionIntegrationTests; this covers the refusal, the preview shape, the files removed
+/// after the commit and what the audit entry says. </summary>
 public sealed class ProjectDeletionServiceTests
 {
     private static readonly ProjectDeletionScope Scope = new(

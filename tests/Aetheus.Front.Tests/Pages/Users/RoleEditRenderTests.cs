@@ -35,7 +35,7 @@ public class RoleEditRenderTests : BunitContext
     {
         StubRole(1);
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("ProgressBar"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("ProgressBar"));
 
         // The stubbed role's name is loaded into instance state.
         var name = (string)typeof(RoleEdit).GetField("_name", Priv)!.GetValue(cut.Instance)!;
@@ -52,7 +52,7 @@ public class RoleEditRenderTests : BunitContext
             var rows = (List<RoleEdit.PermissionRowModel>?)typeof(RoleEdit)
                 .GetField("_permissionRows", Priv)!.GetValue(cut.Instance);
             return rows?.Count > 0;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var permissionRows = (List<RoleEdit.PermissionRowModel>?)typeof(RoleEdit)
             .GetField("_permissionRows", Priv)!.GetValue(cut.Instance);
@@ -70,7 +70,7 @@ public class RoleEditRenderTests : BunitContext
             var r = (List<RoleEdit.PermissionRowModel>?)typeof(RoleEdit)
                 .GetField("_permissionRows", Priv)!.GetValue(cut.Instance);
             return r?.Count > 0;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         var row = new RoleEdit.PermissionRowModel
         {
@@ -176,7 +176,7 @@ public class RoleEditRenderTests : BunitContext
             var r = (List<RoleEdit.PermissionRowModel>?)typeof(RoleEdit)
                 .GetField("_permissionRows", Priv)!.GetValue(cut.Instance);
             return r?.Count > 0;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         typeof(RoleEdit).GetField("_bulkPermission", Priv)!.SetValue(cut.Instance, null);
 
@@ -204,7 +204,7 @@ public class RoleEditRenderTests : BunitContext
             var r = (List<RoleEdit.PermissionRowModel>?)typeof(RoleEdit)
                 .GetField("_permissionRows", Priv)!.GetValue(cut.Instance);
             return r?.Count > 0;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         typeof(RoleEdit).GetField("_bulkPermission", Priv)!.SetValue(cut.Instance, (Permission?)Permission.Admin);
 

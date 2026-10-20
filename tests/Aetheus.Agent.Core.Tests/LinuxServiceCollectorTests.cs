@@ -184,8 +184,8 @@ public class LinuxServiceCollectorTests
         Assert.DoesNotContain(services, s => s.Type == ServiceType.Systemd);
     }
 
-    // Recette R2-031: after `apt-get remove dovecot-core` systemd still lists dovecot.service as
-    // `not-found` (something refers to it), and the page showed a dovecot nobody could start or remove.
+    // A systemd not-found entry can remain after package removal and must not appear as an
+    // installed service.
     [Theory]
     [InlineData("dovecot.service not-found inactive dead dovecot.service\n")]
     [InlineData("● dovecot.service not-found inactive dead dovecot.service\n")]

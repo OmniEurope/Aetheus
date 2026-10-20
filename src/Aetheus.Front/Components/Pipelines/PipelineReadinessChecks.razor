@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R1-28: one finding per alert, its items, and the fix: a page link, or for a missing
-   repository the creation dialog over the current page (recette R1-19). *@
+@* One finding per alert, its items, and the fix: a page link, or for a missing repository the
+   creation dialog over the current page. *@
 @foreach (var check in Checks)
 {
     <OmniAlert Severity="@(check.Severity == PipelineSetupReadinessSeverity.Blocking ? OmniSeverity.Warning : OmniSeverity.Info)"

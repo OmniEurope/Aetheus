@@ -1,16 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-#
-# Makes the public URLs of a persistent environment file follow the libraries (PLAN-003 2.1).
-#
-# The environment file is written once, at the first deployment, and then reused verbatim: it holds
-# the secrets an existing database was created under. Its URL lines are not secrets, though, and a
-# host renamed in a library (the API moving to api.<domain>) would never reach them. This rewrites
-# only the KEY=URL lines it is given, and only when they differ, after a dated copy of the file, through
-# a temporary file moved into place so an interruption cannot leave it truncated. Every other line is
-# kept byte for byte.
-#
-# Usage: reconcile-env-urls.sh ENV_FILE KEY=https://host [KEY=https://host ...]
+# Refresh only requested public URL lines so persistent environments follow library configuration
+# without rotating secrets; keep a dated copy and replace atomically to avoid truncation. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 set -eu
 
 fail() { echo "FATAL: $*" >&2; exit 1; }

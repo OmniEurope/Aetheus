@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Agent.Core.Operations;
+using Aetheus.Tests.Shared;
 
 namespace Aetheus.Agent.Core.Tests;
 
@@ -52,6 +53,72 @@ public class TeamspeakServerQueryOperationExecutorTests
     {
         const string reply = "error id=0 msg=ok\nerror id=0 msg=ok\nclid=42 client_nickname=Bob\nerror id=0 msg=ok\nerror id=0 msg=ok";
         Assert.True(TeamspeakServerQueryOperationExecutor.ServerQueryReportsSuccess(reply));
+    }
+
+    [Fact]
+    public void ResolveQueryCommand_PrefersTheProtectedCommand()
+    {
+        Assert.Equal("serveredit virtualserver_password=s3cr3t",
+            TeamspeakServerQueryOperationExecutor.ResolveQueryCommand("clientlist",
+                new Dictionary<string, string> { ["TEAMSPEAK_QUERY_CMD"] = "serveredit virtualserver_password=s3cr3t" }));
+        Assert.Equal("clientlist",
+            TeamspeakServerQueryOperationExecutor.ResolveQueryCommand("clientlist",
+                new Dictionary<string, string> { ["TEAMSPEAK_QUERY_CMD"] = " " }));
+    }
+
+    [Fact]
+    public async Task RunQueryAsync_SendsTheEscapedLoginAndTheCommand()
+    {
+        var client = new RecordingQueryClient("error id=0 msg=ok\nerror id=0 msg=ok\nerror id=0 msg=ok\nerror id=0 msg=ok");
+        var log = new List<string>();
+
+        var result = await new TeamspeakServerQueryOperationExecutor(client).RunQueryAsync(
+            10011, "pa ss", "clientlist", (line, _) => { log.Add(line); return Task.CompletedTask; },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(10011, client.Port);
+        Assert.Equal("login serveradmin pa\\sss\nuse sid=1\nclientlist\nquit\n", client.Script);
+        Assert.Single(log);
+    }
+
+    [Theory]
+    [InlineData(null, -1)]
+    [InlineData("error id=520 msg=invalid\\sloginname\nerror id=0 msg=ok", 1)]
+    public async Task RunQueryAsync_NoReplyOrARejectedLine_Fails(string? reply, int exitCode)
+    {
+        var result = await new TeamspeakServerQueryOperationExecutor(new StubQueryClient(reply)).RunQueryAsync(
+            10011, "pass", "clientlist", (_, _) => Task.CompletedTask, TestContext.Current.CancellationToken);
+
+        Assert.Equal(exitCode, result.ExitCode);
+    }
+
+    [PlatformFact("windows")]
+    public async Task ExecuteAsync_OutsideLinux_IsRefusedBeforeAnyQuery()
+    {
+        var client = new RecordingQueryClient("error id=0 msg=ok");
+        var log = new List<string>();
+
+        var result = await new TeamspeakServerQueryOperationExecutor(client).ExecuteAsync(
+            OperationKind.TeamspeakServerQuery, "clientlist", new Dictionary<string, string>(), 30,
+            (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Equal(["TeamSpeak ServerQuery operations are only supported on Linux"], log);
+        Assert.Null(client.Script);
+    }
+
+    private sealed class RecordingQueryClient(string reply) : Aetheus.Agent.Core.Collectors.ITeamspeakQueryClient
+    {
+        public int Port { get; private set; }
+        public string? Script { get; private set; }
+
+        public Task<string?> ExecuteAsync(int port, string commands, CancellationToken ct = default)
+        {
+            Port = port;
+            Script = commands;
+            return Task.FromResult<string?>(reply);
+        }
     }
 
     private sealed class StubQueryClient(string? reply) : Aetheus.Agent.Core.Collectors.ITeamspeakQueryClient

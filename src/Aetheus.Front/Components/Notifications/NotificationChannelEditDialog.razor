@@ -33,10 +33,9 @@ else
                 </OmniColumn>
             }
             <OmniColumn Span="12">
-                <OmniFormField For="oe-pages-notifications-notificationchanneleditdialog-3" Class="omni-u-w-100"><LabelContent>@L["ChannelConfiguration"]</LabelContent><ChildContent>
+                <OmniFormField For="oe-pages-notifications-notificationchanneleditdialog-3" Help="@L["NotificationChannelConfigHint"]" Class="omni-u-w-100"><LabelContent>@L["ChannelConfiguration"]</LabelContent><ChildContent>
                     <OmniTextArea @bind-Value="_model.ConfigurationJson" Rows="5" Class="text-mono" Id="oe-pages-notifications-notificationchanneleditdialog-3" />
                 </ChildContent></OmniFormField>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["NotificationChannelConfigHint"]</OmniText>
             </OmniColumn>
         </OmniRow>
         <DialogFooter OnCancel="@Cancel">

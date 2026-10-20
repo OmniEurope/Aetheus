@@ -23,11 +23,21 @@ internal static class DeployReleaseFileSystem
     internal static void HardenTree(string releaseDir)
     {
         if (!OperatingSystem.IsLinux()) return;
-        File.SetUnixFileMode(releaseDir, ReleaseDirectoryMode);
+        HardenTreeWith(releaseDir, isLinux: true, File.GetUnixFileMode, File.SetUnixFileMode);
+    }
+
+    // The hardening itself, with the platform check and the mode accessors injected so its effect on every
+    // directory and file of the tree is asserted on any platform.
+    internal static void HardenTreeWith(
+        string releaseDir, bool isLinux,
+        Func<string, UnixFileMode> getMode, Action<string, UnixFileMode> setMode)
+    {
+        if (!isLinux) return;
+        setMode(releaseDir, ReleaseDirectoryMode);
         foreach (var directory in Directory.EnumerateDirectories(releaseDir, "*", SearchOption.AllDirectories))
-            File.SetUnixFileMode(directory, ReleaseDirectoryMode);
+            setMode(directory, ReleaseDirectoryMode);
         foreach (var file in Directory.EnumerateFiles(releaseDir, "*", SearchOption.AllDirectories))
-            File.SetUnixFileMode(file, HardenedFileMode(File.GetUnixFileMode(file)));
+            setMode(file, HardenedFileMode(getMode(file)));
     }
 
     internal static UnixFileMode HardenedFileMode(UnixFileMode originalMode)

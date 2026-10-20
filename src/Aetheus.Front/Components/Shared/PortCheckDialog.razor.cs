@@ -40,11 +40,9 @@ public partial class PortCheckDialog
         _ => l["PortListeningUnknown"].Value
     };
 
-    /// <summary>
-    /// PLAN-003 lot 24 / D14: the verdict badge carries the answer, so this line carries only what
-    /// the badge cannot: where a claim comes from, and what the last scan saw. A port nobody claims
-    /// and nothing answers on has nothing left to add, so it says nothing.
-    /// </summary>
+    /// <summary>Reserve this detail line for claim provenance and scan evidence that the verdict
+    /// badge cannot express; omit it when an unclaimed, unanswered port needs no
+    /// explanation.</summary>
     private string DetailText(PortCheckEntryDto entry)
     {
         var claim = entry.IsFree || entry.Source is null ? null : L.Localize(entry.Source.Value);

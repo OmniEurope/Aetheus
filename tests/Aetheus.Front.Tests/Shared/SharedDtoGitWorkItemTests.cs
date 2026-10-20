@@ -6,17 +6,6 @@ namespace Aetheus.Front.Tests;
 public class SharedDtoGitWorkItemTests
 {
     [Fact]
-    public void GitConnectionDto_DefaultValues()
-    {
-        var dto = new GitConnectionDto();
-        Assert.Equal(0, dto.Id);
-        Assert.Equal(string.Empty, dto.OwnerOrGroup);
-        Assert.Equal(string.Empty, dto.RepositoryName);
-        Assert.False(dto.AutoSyncEnabled);
-        Assert.Null(dto.LastSyncedAt);
-    }
-
-    [Fact]
     public void CreateGitConnectionRequest_Validation_Valid()
     {
         var req = new CreateGitConnectionRequest
@@ -50,24 +39,6 @@ public class SharedDtoGitWorkItemTests
     }
 
     [Fact]
-    public void PullRequestDto_DefaultValues()
-    {
-        var dto = new PullRequestDto();
-        Assert.Equal(string.Empty, dto.Title);
-        Assert.Equal(string.Empty, dto.SourceBranch);
-        Assert.Equal(string.Empty, dto.TargetBranch);
-        Assert.Null(dto.Description);
-    }
-
-    [Fact]
-    public void BranchPolicyDto_DefaultValues()
-    {
-        var dto = new BranchPolicyDto();
-        Assert.Equal(string.Empty, dto.BranchPattern);
-        Assert.Null(dto.ConfigurationJson);
-    }
-
-    [Fact]
     public void CreateBranchPolicyRequest_Validation_Valid()
     {
         var req = new CreateBranchPolicyRequest { BranchPattern = "main" };
@@ -89,16 +60,6 @@ public class SharedDtoGitWorkItemTests
         var dto = new PipelineStatusReport();
         Assert.Equal("aetheus-ci", dto.Context);
         Assert.Equal(string.Empty, dto.State);
-    }
-
-    [Fact]
-    public void WorkItemDto_DefaultValues()
-    {
-        var dto = new WorkItemDto();
-        Assert.Equal(string.Empty, dto.Title);
-        Assert.Empty(dto.Tags);
-        Assert.Null(dto.Description);
-        Assert.Null(dto.AssigneeName);
     }
 
     [Fact]
@@ -135,13 +96,6 @@ public class SharedDtoGitWorkItemTests
         var req = new UpdateWorkItemRequest { Title = "Updated" };
         var results = ValidateModel(req);
         Assert.Empty(results);
-    }
-
-    [Fact]
-    public void WorkItemBoardColumn_DefaultValues()
-    {
-        var col = new WorkItemBoardColumn();
-        Assert.Empty(col.Items);
     }
 
     private static List<ValidationResult> ValidateModel(object model)

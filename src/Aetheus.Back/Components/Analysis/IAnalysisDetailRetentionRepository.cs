@@ -2,15 +2,13 @@
 
 namespace Aetheus.Back.Components.Analysis;
 
-/// <summary>
-/// PLAN-013 lot 2: the detail rows of the analysis reports whose retention ran out. Detail is the
+/// <summary> The detail rows of the analysis reports whose retention ran out. Detail is the
 /// per-file and per-symbol <c>AnalysisMetrics</c> rows and every <c>AnalysisComponents</c> row; the
-/// project totals (metrics without file nor symbol), the reports, their evaluations and grades are never
-/// touched here.
-/// </summary>
+/// project totals (metrics without file nor symbol), the reports, their evaluations and grades are
+/// never touched here. </summary>
 public interface IAnalysisDetailRetentionRepository
 {
-    /// <summary>PLAN-013 lot 4: each project and the days its analysis detail is kept.</summary>
+    /// <summary>Each project and the days its analysis detail is kept.</summary>
     Task<IReadOnlyList<ProjectAnalysisRetention>> GetProjectRetentionsAsync(CancellationToken ct = default);
 
     /// <summary>Up to <paramref name="limit"/> reports of these projects created before
@@ -20,8 +18,9 @@ public interface IAnalysisDetailRetentionRepository
     Task<List<int>> GetReportsWithExpiredDetailAsync(
         DateTime cutoff, IReadOnlyCollection<int> projectIds, int limit, CancellationToken ct = default);
 
-    /// <summary>PLAN-013 lot 5: when the oldest report of the project whose detail may go was created, null
-    /// when none; the storage budget compares it with the oldest telemetry before choosing what to purge.</summary>
+    /// <summary>When the oldest report of the project whose detail may go was created, null when
+    /// none; the storage budget compares it with the oldest telemetry before choosing what to
+    /// purge.</summary>
     Task<DateTime?> GetOldestPurgeableReportDateAsync(int projectId, DateTime nowUtc, CancellationToken ct = default);
 
     /// <summary>Deletes at most <paramref name="batchSize"/> per-file or per-symbol metric rows of these

@@ -184,8 +184,8 @@ public sealed class PipelineSetupWizardTests : BunitContext
         });
     }
 
-    /// <summary>Recette R2-121: the extended QA and the Git-history secret scan the nightly runs are
-    /// wizard options, named after the project and enabled for its nightly and candidate.</summary>
+    /// <summary>The extended QA and the Git-history secret scan the nightly runs are wizard
+    /// options, named after the project and enabled for its nightly and candidate.</summary>
     [Theory]
     [InlineData("application-qa-extended", "atlas-qa-extended", "APPLICATION_QA_EXTENDED_ENABLED")]
     [InlineData("application-security-history", "atlas-security-history", "APPLICATION_SECURITY_HISTORY_ENABLED")]
@@ -207,8 +207,8 @@ public sealed class PipelineSetupWizardTests : BunitContext
         });
     }
 
-    /// <summary>Recette R2-121: the version pinned is that of the template the backend resolves for the
-    /// project, its organization's own before the one the platform shares.</summary>
+    /// <summary>The version pinned is that of the template the backend resolves for the project,
+    /// its organization's own before the one the platform shares.</summary>
     [Fact]
     public async Task Wizard_PinsTheVersionOfTheProjectsOrganizationTemplate()
     {
@@ -226,8 +226,8 @@ public sealed class PipelineSetupWizardTests : BunitContext
         Assert.Contains("extends: application-ci@7", Assert.Single(requests).YamlDefinition, StringComparison.Ordinal);
     }
 
-    /// <summary>Recette R1-19: reaching the summary writes the choices into the wizard's own address, the
-    /// return address of the pages the summary opens.</summary>
+    /// <summary>Reaching the summary writes the choices into the wizard's own address, the return
+    /// address of the pages the summary opens.</summary>
     [Fact]
     public async Task Wizard_ReachingTheSummary_PutsTheChoicesInItsAddress()
     {
@@ -252,8 +252,8 @@ public sealed class PipelineSetupWizardTests : BunitContext
             nav.Uri);
     }
 
-    /// <summary>Recette R1-19 / R1-25: coming back to that address reopens the summary with the same
-    /// choices, checks readiness again, and creates exactly what was chosen.</summary>
+    /// <summary>Coming back to that address reopens the summary with the same choices, checks
+    /// readiness again, and creates exactly what was chosen.</summary>
     [Fact]
     public async Task Wizard_ComingBackToTheSummaryAddress_RestoresTheSummaryWithTheSameChoices()
     {
@@ -294,8 +294,8 @@ public sealed class PipelineSetupWizardTests : BunitContext
         });
     }
 
-    /// <summary>Recette R1-26: libraries and vaults the wizard created must each be opened before the
-    /// pipelines can be created.</summary>
+    /// <summary>Libraries and vaults the wizard created must each be opened before the pipelines
+    /// can be created.</summary>
     [Fact]
     public void Wizard_FinishWaitsUntilEveryCreatedElementWasOpened()
     {
@@ -350,7 +350,7 @@ public sealed class PipelineSetupWizardTests : BunitContext
             .ToArray();
     }
 
-    /// <summary>Recette R1-18 / R1-31: the type is asked on the architecture step before anything else.</summary>
+    /// <summary>The type is asked on the architecture step before anything else.</summary>
     internal static async Task ChooseArchitectureAsync(
         IRenderedComponent<PipelineSetupWizard> cut, string slug, bool? sameProject = null)
     {

@@ -408,22 +408,9 @@ internal static partial class PipelineCommandBuilder
 
         if (!string.IsNullOrEmpty(workDir))
         {
-            // A runner or Docker daemon restart can remove an ephemeral workspace before an always()
-            // teardown is scheduled. Recreate only the already-validated in-workspace path so
-            // label-based cleanup can still run; steps that require source files still fail honestly.
-            // 0-d (double-clone fix): `checkout: true` no longer re-clones the repo. The auto-injected
-            // system Prepare step already cloned REPOSITORY_URL into the run workspace before any stage
-            // runs (every repo-backed run gets one, pinned to the same affinity server), so re-running
-            // the clone preamble here cloned the repo a SECOND time - a redundant fetch + reset over the
-            // network with no benefit. Every step now enters the run workspace, including pipelines
-            // without a repository, so concurrent runs never share the agent's global work directory.
-            //
-            // System:Prepare created this directory before any user step ran, so finding it gone means
-            // it was destroyed mid-run - an agent restart is the usual cause. Say so: the recreate above
-            // otherwise turns a lost workspace into "no such file" on whatever the step touches first,
-            // which reads as a missing repository file and sends the reader hunting the wrong bug
-            // (production run 2185 lost 27 minutes to `ensure-dotnet-sdk.sh: No such file`). The warning
-            // never fails the step on its own: the teardown still needs to run.
+            // Every step enters its run-scoped workspace, using the repository checkout prepared by
+            // System:Prepare. If that workspace disappears, recreate only the validated path and
+            // warn so teardown can proceed while missing-source steps still fail honestly.
             command = isWindows
                 ? $"if (-not [System.IO.Directory]::Exists('{workDir}')) {{ Write-Warning '{WorkspaceLostWarning}' }}\n"
                   + $"New-Item -ItemType Directory -Force -Path '{workDir}' | Out-Null\nSet-Location '{workDir}'\n{command}"

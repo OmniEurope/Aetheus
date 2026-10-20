@@ -6,6 +6,7 @@ running_file="/var/lib/aetheus-agent/.agent-posture-upgrade-running"
 failed_request_file="/var/lib/aetheus-agent/.agent-posture-upgrade-failed-request"
 result_file="/var/lib/aetheus-agent/.agent-posture-upgrade-result"
 server_url_file="/etc/aetheus-agent-update-url"
+posture_file="/etc/aetheus-agent-posture-version"
 install_dir="/opt/aetheus-agent"
 work_dir="/var/lib/aetheus-agent"
 upgrade_dir=""
@@ -15,6 +16,8 @@ phase="claim"
 target_version="unknown"
 target_sha="unknown"
 target_commit="unknown"
+enable_capabilities=""
+enable_patch_manage=0
 
 write_result() {
     result_tmp="$result_file.tmp.$$"
@@ -32,6 +35,15 @@ restore_previous_agent() {
         -exec rm -rf -- {} +
     cp -a "$rollback"/. "$install_dir"/
     chown -R aetheus-agent:aetheus-agent "$install_dir"
+    # The restored agent expects the posture version it was installed with: leaving the version the failed
+    # install wrote would make an older agent refuse every later UI update.
+    if [ -f "$upgrade_dir/posture.previous" ]; then
+        cp -f -- "$upgrade_dir/posture.previous" "$posture_file"
+        chown root:root "$posture_file"
+        chmod 644 "$posture_file"
+    elif [ -f "$upgrade_dir/posture.absent" ]; then
+        rm -f -- "$posture_file"
+    fi
     rm -f -- "$work_dir/.agent-update-pending"
     systemctl daemon-reload
     systemctl start aetheus-agent
@@ -61,7 +73,7 @@ trap finish EXIT HUP INT TERM
 mv -- "$request_file" "$running_file"
 
 tab="$(printf '\t')"
-IFS="$tab" read -r target_version archive_name archive_size target_sha target_commit extra < "$running_file"
+IFS="$tab" read -r target_version archive_name archive_size target_sha target_commit enable_capabilities extra < "$running_file"
 case "$target_version" in ''|*[!0-9A-Za-z.+-]*) phase="invalid-version"; exit 10 ;; esac
 case "$archive_name" in
     aetheus-agent-linux-x64-v*.tar.gz) ;;
@@ -75,6 +87,24 @@ case "$target_sha" in *[!0-9a-fA-F]*) phase="invalid-archive-sha"; exit 13 ;; es
 case "${#target_commit}" in 40|64) ;; *) phase="invalid-commit"; exit 14 ;; esac
 case "$target_commit" in *[!0-9a-fA-F]*) phase="invalid-commit"; exit 14 ;; esac
 [ -z "${extra:-}" ] || { phase="invalid-request-fields"; exit 15; }
+
+# Optional sixth field (R3-58, ADR-051): the capabilities the UI asked this update to grant. It is a
+# closed whitelist of fixed tokens, each mapped to one fixed installer flag below. The field is never
+# interpolated into a command, and any other token fails the whole update before it touches the host.
+case "${enable_capabilities:-}" in
+    *[!a-z,-]*|,*|*,|*,,*) phase="invalid-capabilities"; exit 20 ;;
+esac
+if [ -n "${enable_capabilities:-}" ]; then
+    old_ifs="$IFS"
+    IFS=','
+    for capability in $enable_capabilities; do
+        case "$capability" in
+            patch-manage) enable_patch_manage=1 ;;
+            *) IFS="$old_ifs"; phase="invalid-capabilities"; exit 20 ;;
+        esac
+    done
+    IFS="$old_ifs"
+fi
 
 # Let the running agent publish the handoff result before this root-owned unit replaces it.
 sleep 5
@@ -107,10 +137,19 @@ test -f "$payload/Aetheus.Agent.Linux.dll" || test -f "$payload/Aetheus.Agent.Li
 # Preserve a last-known-good binary tree independently from the agent-owned staging area.
 find "$install_dir" -mindepth 1 -maxdepth 1 ! -name appsettings.json \
     -exec cp -a {} "$rollback/" \;
+if [ -f "$posture_file" ]; then
+    cp -p -- "$posture_file" "$upgrade_dir/posture.previous"
+else
+    : > "$upgrade_dir/posture.absent"
+fi
 rollback_ready=1
 
 phase="install"
-sh "$payload/install-agent-linux.sh" --upgrade --yes
+if [ "$enable_patch_manage" -eq 1 ]; then
+    sh "$payload/install-agent-linux.sh" --upgrade --yes --enable-patch-manage
+else
+    sh "$payload/install-agent-linux.sh" --upgrade --yes
+fi
 phase="service-health"
 systemctl is-active --quiet aetheus-agent
 outcome="success"

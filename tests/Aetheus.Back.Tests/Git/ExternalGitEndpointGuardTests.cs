@@ -4,7 +4,8 @@ using Aetheus.Back.Components.Git;
 
 namespace Aetheus.Back.Tests.Git;
 
-/// <summary>An external mirror can no longer be aimed at an internal service (SSRF beside audit BACK-024).</summary>
+/// <summary>Rejects external Git mirror targets that resolve to internal services to prevent
+/// SSRF.</summary>
 public class ExternalGitEndpointGuardTests
 {
     private static ExternalGitEndpointGuard Guard(string[] answer, params string[] allowedInternalHosts) =>

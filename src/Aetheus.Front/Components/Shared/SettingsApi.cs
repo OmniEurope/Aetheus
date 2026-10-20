@@ -17,13 +17,13 @@ public sealed class SettingsApi(HttpClient http) : ApiClientBase(http)
     {
         var query = PageQuery(page, pageSize, search, sortBy, sortDescending);
         if (projectId.HasValue) query["projectId"] = projectId.Value.ToString();
-        // Recette R-224: the list's column header filters.
+        // The list's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<ServiceConnectionDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/service-connections", query), filters), JsonOptions.Web)
             ?? new PaginatedResult<ServiceConnectionDto>();
     }
 
-    /// <summary>Recette R-224: the project names the list's Project column filter offers.</summary>
+    /// <summary>The project names the list's Project column filter offers.</summary>
     public async Task<ServiceConnectionFilterValuesDto> GetServiceConnectionFilterValuesAsync(CancellationToken ct = default) =>
         await GetJsonAsync<ServiceConnectionFilterValuesDto>("api/service-connections/filter-values", ct) ?? new();
 
@@ -81,7 +81,8 @@ public sealed class SettingsApi(HttpClient http) : ApiClientBase(http)
     }
 
 
-    /// <summary>Recette R1-16: the platform e-mail sender (default no-reply account or custom SMTP server).</summary>
+    /// <summary>The platform e-mail sender (default no-reply account or custom SMTP
+    /// server).</summary>
     public Task<EmailSenderSettingsDto?> GetEmailSenderAsync(CancellationToken ct = default) =>
         GetJsonAsync<EmailSenderSettingsDto>("api/settings/email-sender", ct);
 
@@ -135,12 +136,12 @@ public sealed class SettingsApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-224: the list's column header filters.
+        // The list's column header filters.
         return await GetJsonAsync<PaginatedResult<PluginRegistrationDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/plugins", query), filters), ct).ConfigureAwait(false) ?? new();
     }
 
-    /// <summary>Recette R-224: the authors the plugins list's Author column filter offers.</summary>
+    /// <summary>The authors the plugins list's Author column filter offers.</summary>
     public async Task<PluginFilterValuesDto> GetPluginFilterValuesAsync(CancellationToken ct = default) =>
         await GetJsonAsync<PluginFilterValuesDto>("api/plugins/filter-values", ct).ConfigureAwait(false) ?? new();
 

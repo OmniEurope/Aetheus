@@ -129,20 +129,26 @@ internal static class ScannerSourceStager
         string destination,
         string sourceRoot)
     {
-        var linkTarget = sourceLink.LinkTarget;
-        if (string.IsNullOrWhiteSpace(linkTarget) || Path.IsPathRooted(linkTarget))
-            throw new IOException($"Scanner source contains an unsafe symbolic link: {sourceLink.FullName}");
-
-        var resolvedTarget = Path.GetFullPath(Path.Combine(
-            Path.GetDirectoryName(sourceLink.FullName) ?? sourceRoot,
-            linkTarget));
-        if (!IsPathWithin(resolvedTarget, sourceRoot))
-            throw new IOException($"Scanner source symbolic link escapes the workspace: {sourceLink.FullName}");
-
+        var linkTarget = SafeLinkTarget(sourceLink.FullName, sourceLink.LinkTarget, sourceRoot);
         if ((sourceLink.Attributes & FileAttributes.Directory) != 0)
             Directory.CreateSymbolicLink(destination, linkTarget);
         else
             File.CreateSymbolicLink(destination, linkTarget);
+    }
+
+    /// <summary>The target of the symbolic link at <paramref name="linkPath"/>, kept as written, when it is
+    /// relative and resolves inside <paramref name="sourceRoot"/>; any other link is refused.</summary>
+    internal static string SafeLinkTarget(string linkPath, string? linkTarget, string sourceRoot)
+    {
+        if (string.IsNullOrWhiteSpace(linkTarget) || Path.IsPathRooted(linkTarget))
+            throw new IOException($"Scanner source contains an unsafe symbolic link: {linkPath}");
+
+        var resolvedTarget = Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(linkPath) ?? sourceRoot,
+            linkTarget));
+        if (!IsPathWithin(resolvedTarget, sourceRoot))
+            throw new IOException($"Scanner source symbolic link escapes the workspace: {linkPath}");
+        return linkTarget;
     }
 
     private static void StageFile(string source, string destination, bool useHardLinks)

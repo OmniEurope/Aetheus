@@ -8,19 +8,21 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>PLAN-005: every mail stack operation requires server Write, every read requires server Read, and
-/// a refused permission never reaches the service.</summary>
+/// <summary>Require server Write for operations and Read for reads, rejecting unauthorized calls
+/// before service execution.</summary>
 public sealed class MailStackControllerTests
 {
     private readonly IMailOperationsService _operations = Substitute.For<IMailOperationsService>();
     private readonly IMailDiagnosticsService _diagnostics = Substitute.For<IMailDiagnosticsService>();
     private readonly IMailStackPurgeService _purge = Substitute.For<IMailStackPurgeService>();
+    private readonly IMailMasterAccessService _masterAccess = Substitute.For<IMailMasterAccessService>();
+    private readonly IMailAccountPurgeService _accountPurge = Substitute.For<IMailAccountPurgeService>();
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
     private readonly MailStackController _sut;
 
     public MailStackControllerTests()
     {
-        _sut = new MailStackController(_operations, _diagnostics, _purge, _authz)
+        _sut = new MailStackController(_operations, _diagnostics, _purge, _masterAccess, _accountPurge, _authz)
         {
             ControllerContext = new ControllerContext
             {
@@ -53,6 +55,45 @@ public sealed class MailStackControllerTests
         Assert.IsType<ForbidResult>((await _sut.ProbeOutboundSmtp(3, ct)).Result);
 
         Assert.Empty(_operations.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task MasterAccessAndAccountPurge_AreForbiddenWithoutWrite_AndNeverReachTheirService()
+    {
+        Grant(Permission.Write, false);
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.IsType<ForbidResult>((await _sut.PrepareMasterAccess(3, ct)).Result);
+        Assert.IsType<ForbidResult>((await _sut.PurgeMissingAccounts(3, ct)).Result);
+
+        Assert.Empty(_masterAccess.ReceivedCalls());
+        Assert.Empty(_accountPurge.ReceivedCalls());
+    }
+
+    [Fact]
+    public void MasterAccess_IsReservedToAdministrators()
+    {
+        // Recette R1-41: on top of the class-level [Authorize], the action demands the Admin role.
+        var roles = typeof(MailStackController).GetMethod(nameof(MailStackController.PrepareMasterAccess))!
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), inherit: true)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+            .Select(attribute => attribute.Roles);
+        Assert.Contains("Admin", roles);
+    }
+
+    [Fact]
+    public async Task MasterAccessAndAccountPurge_WithWrite_ReachTheirService()
+    {
+        Grant(Permission.Write, true);
+        var ct = TestContext.Current.CancellationToken;
+        _masterAccess.PrepareAsync(3, Arg.Any<CancellationToken>()).Returns(new MailTaskQueuedDto { TaskId = 41 });
+        _accountPurge.PurgeMissingAsync(3, Arg.Any<CancellationToken>()).Returns(new MailAccountPurgeResultDto { Removed = 2 });
+
+        var prepared = Assert.IsType<OkObjectResult>((await _sut.PrepareMasterAccess(3, ct)).Result);
+        var purged = Assert.IsType<OkObjectResult>((await _sut.PurgeMissingAccounts(3, ct)).Result);
+
+        Assert.Equal(41, Assert.IsType<MailTaskQueuedDto>(prepared.Value).TaskId);
+        Assert.Equal(2, Assert.IsType<MailAccountPurgeResultDto>(purged.Value).Removed);
     }
 
     [Fact]

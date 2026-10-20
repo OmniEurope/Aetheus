@@ -1,8 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* Recette R-333: the OE progress bar along the bottom edge of the top bar while a page loads after a
-   navigation (PageLoadActivity). The one indeterminate OmniProgressBar allowed by
-   LoadingIndicatorAuditTests: page content keeps AetheusLoader for its own waits. *@
+@* The OE progress bar along the bottom edge of the top bar while a page loads after a navigation
+   (PageLoadActivity). The one indeterminate OmniProgressBar allowed by LoadingIndicatorAuditTests:
+   page content keeps AetheusLoader for its own waits. *@
 @if (Activity.IsActive)
 {
     <OmniProgressBar Indeterminate="true" Label="@L["Loading"]" Class="page-load-progress" />

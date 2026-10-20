@@ -26,6 +26,8 @@ public class HeartbeatServiceTests
     private readonly IFirewallCollector _firewallCollectorMock = Substitute.For<IFirewallCollector>();
     private readonly IListeningPortsCollector _listeningPortsCollectorMock = Substitute.For<IListeningPortsCollector>();
     private readonly ISudoersHashCollector _sudoersHashCollectorMock = Substitute.For<ISudoersHashCollector>();
+    private readonly Aetheus.Agent.Core.Collectors.Ssh.ISshConfigCollector _sshConfigCollectorMock =
+        Substitute.For<Aetheus.Agent.Core.Collectors.Ssh.ISshConfigCollector>();
     private readonly IDockerStorageMaintenance _dockerStorageMaintenanceMock = Substitute.For<IDockerStorageMaintenance>();
     private readonly IShellRunner _shellRunnerMock = Substitute.For<IShellRunner>();
     private readonly AgentState _agentState;
@@ -94,6 +96,13 @@ public class HeartbeatServiceTests
         _sudoersHashCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
             .Returns(new Dictionary<string, string>());
 
+        _sshConfigCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
+            .Returns(new SshConfigDataDto
+            {
+                Collected = true,
+                PermitRootLogin = new SshSettingDto { Value = "no", Source = "/etc/ssh/sshd_config:3" }
+            });
+
         _dockerStorageMaintenanceMock.CollectDiagnosticsAsync(Arg.Any<CancellationToken>())
             .Returns(new StorageDiagnosticsDto { BuildCacheBytes = 1234 });
     }
@@ -123,11 +132,50 @@ public class HeartbeatServiceTests
                 && h.MemoryUsedMb == 2048
                 && h.MemoryTotalMb == 8192
                 && h.SudoersInventoryAvailable == true
+                && h.SshConfig != null && h.SshConfig.Collected && h.SshConfig.PermitRootLogin.Value == "no"
                 && !string.IsNullOrEmpty(h.AgentVersion)
                 && h.AgentProtocolVersion == AgentProtocol.CurrentVersion
                 && h.AgentCapabilities != null
                 && h.AgentCapabilities.Contains(AgentCapabilities.SelfUpdate)
                 && h.AgentCapabilities.SequenceEqual(h.AgentCapabilities.Order(StringComparer.Ordinal))),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_WithPipelineRunner_PublishesPipelineFunctions()
+    {
+        _shellRunnerMock.RunExecAsync(
+                "git",
+                Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(new[] { "--version" })),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<TimeSpan?>())
+            .Returns(new ShellExecResult(0, "git version 2.50.0", string.Empty));
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        // Build functions work on a checked-out workspace, so they follow pipeline.build; the
+        // deployment variant needs the deploy grant, absent here.
+        await _apiClientMock.Received(1).SendHeartbeatAsync(1, Arg.Is<ServerHeartbeatDto>(h =>
+                h.PipelineRunnerAvailable == true
+                && h.AgentCapabilities!.Contains(AgentCapabilities.PipelineBuild)
+                && h.AgentCapabilities.Contains(AgentCapabilities.PipelineFunctions)
+                && !h.AgentCapabilities.Contains(AgentCapabilities.DeploymentFunctions)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_WithoutPipelineRunner_WithdrawsPipelineFunctions()
+    {
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        await _apiClientMock.Received(1).SendHeartbeatAsync(1, Arg.Is<ServerHeartbeatDto>(h =>
+                h.AgentCapabilities != null
+                && !h.AgentCapabilities.Contains(AgentCapabilities.PipelineBuild)
+                && !h.AgentCapabilities.Contains(AgentCapabilities.PipelineFunctions)
+                && !h.AgentCapabilities.Contains(AgentCapabilities.DeploymentFunctions)),
             Arg.Any<CancellationToken>());
     }
 
@@ -212,7 +260,7 @@ public class HeartbeatServiceTests
     [Fact]
     public async Task ExecuteAsync_ARequestedHeartbeat_IsSentWithoutWaitingForTheTick()
     {
-        // Recette R-508: the clock never advances, so only the request can explain the second beat.
+        // The clock never advances, so only the request can explain the second beat.
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 30, 12, 0, 0, TimeSpan.Zero));
         var health = new AgentRuntimeHealth(time);
         var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -319,6 +367,7 @@ public class HeartbeatServiceTests
             _firewallCollectorMock,
             _listeningPortsCollectorMock,
             _sudoersHashCollectorMock,
+            _sshConfigCollectorMock,
             _dockerStorageMaintenanceMock,
             Substitute.For<IShellRunner>(),
             notEnrolledState,
@@ -387,11 +436,10 @@ public class HeartbeatServiceTests
         hungCollector.TrySetCanceled(TestContext.Current.CancellationToken);
     }
 
-    /// <summary>
-    /// Recette R2-015: a storage measurement that runs for minutes (`docker system df` during a build) is
-    /// off the beat. The beat is neither delayed nor degraded by it, reports no timeout nor quarantine,
-    /// starts it only once, and still carries the live build state the deployment-only alert reads.
-    /// </summary>
+    /// <summary> A storage measurement that runs for minutes (`docker system df` during a build) is
+    /// off the beat. The beat is neither delayed nor degraded by it, reports no timeout nor
+    /// quarantine, starts it only once, and still carries the live build state the deployment-only
+    /// alert reads. </summary>
     [Fact]
     public async Task CollectAndSendHeartbeatAsync_HungStorageMeasurement_DoesNotDegradeTheBeat()
     {
@@ -417,8 +465,7 @@ public class HeartbeatServiceTests
         hungMeasurement.TrySetCanceled(TestContext.Current.CancellationToken);
     }
 
-    /// <summary>
-    /// Recette R2-015: once the background measurement completes, the next beat reports it, and it is not
+    /// <summary> Once the background measurement completes, the next beat reports it, and it is not
     /// started again before <see cref="AgentRuntimeDefaults.StorageDiagnosticsTtl"/> has passed.
     /// </summary>
     [Fact]
@@ -479,6 +526,63 @@ public class HeartbeatServiceTests
         hungProbe.TrySetCanceled(TestContext.Current.CancellationToken);
     }
 
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_ReportsThePreviousExchangeAsClockSample()
+    {
+        // PLAN-010 lot 1: the agent's clock reads 2 s more than the backend's; each leg of the
+        // exchange takes 100 ms. The second beat carries the first exchange's four instants.
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero));
+        var agentAhead = TimeSpan.FromSeconds(2);
+        var sent = new List<ServerHeartbeatDto>();
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Do<ServerHeartbeatDto>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                time.Advance(TimeSpan.FromMilliseconds(100));
+                var backendNow = time.GetUtcNow().UtcDateTime - agentAhead;
+                time.Advance(TimeSpan.FromMilliseconds(100));
+                return new ServerHeartbeatResponseDto { ReceivedAtUtc = backendNow, RepliedAtUtc = backendNow };
+            });
+        var service = CreateService(time);
+        var firstSentAt = time.GetUtcNow().UtcDateTime;
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, sent.Count);
+        Assert.Null(sent[0].ClockSample);
+        var sample = Assert.IsType<ClockSampleDto>(sent[1].ClockSample);
+        Assert.Equal(firstSentAt, sample.AgentSentAtUtc);
+        Assert.Equal(firstSentAt.AddMilliseconds(200), sample.AgentReceivedAtUtc);
+        Assert.Equal(firstSentAt.AddMilliseconds(100) - agentAhead, sample.BackendReceivedAtUtc);
+        var estimate = sample.Estimate()!.Value;
+        Assert.Equal(2_000, estimate.OffsetMs);
+        Assert.Equal(100, estimate.UncertaintyMs);
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_UnstampedReplyOrFailedSend_LeavesNoClockSample()
+    {
+        var sent = new List<ServerHeartbeatDto>();
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Do<ServerHeartbeatDto>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(
+                _ => new ServerHeartbeatResponseDto { ReceivedAtUtc = DateTime.UtcNow, RepliedAtUtc = DateTime.UtcNow },
+                _ => throw new HttpRequestException("Connection refused"),
+                _ => new ServerHeartbeatResponseDto(),
+                _ => new ServerHeartbeatResponseDto());
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<HttpRequestException>(() => service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken));
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotNull(sent[1].ClockSample);
+        // The failed send's exchange has no reply: the next beat reports none rather than an old one.
+        Assert.Null(sent[2].ClockSample);
+        // A backend that does not stamp its reply (one predating the measure) gives no sample.
+        Assert.Null(sent[3].ClockSample);
+    }
+
     private HeartbeatService CreateService(
         TimeProvider? timeProvider = null,
         AgentRuntimeHealth? runtimeHealth = null)
@@ -500,6 +604,7 @@ public class HeartbeatServiceTests
         _firewallCollectorMock,
         _listeningPortsCollectorMock,
         _sudoersHashCollectorMock,
+        _sshConfigCollectorMock,
         _dockerStorageMaintenanceMock,
         _shellRunnerMock,
         _agentState,

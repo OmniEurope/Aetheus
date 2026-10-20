@@ -7,7 +7,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-16: the mail domain and mailbox the default sender is built from.</summary>
+/// <summary>The mail domain and mailbox the default sender is built from.</summary>
 public sealed class EmailSenderSettingsRepositoryTests : IDisposable
 {
     private readonly AppDbContext _db = new(

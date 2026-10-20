@@ -91,7 +91,8 @@ public class ReleaseServiceTests
         Assert.Equal(42, result.Items[0].PipelineRunId);
     }
 
-    /// <summary>R-10: "Published" with "Failed" beside it says a deployment of this release failed.</summary>
+    /// <summary>"Published" with "Failed" beside it says a deployment of this release
+    /// failed.</summary>
     [Fact]
     public async Task GetReleasesAsync_ShowsTheOutcomeOfTheRunTheReleaseLastWentThrough()
     {
@@ -249,7 +250,7 @@ public class ReleaseServiceTests
     [Fact]
     public async Task TriggerReleaseBuildAsync_LaunchesTheRunTheCallerWasAuthorizedFor()
     {
-        // BACK-023: the build used to launch the pipeline by id, on a preparation nobody had authorized.
+        // Require authorization for the prepared pipeline run before launching the release build.
         var release = new Release { Id = 1, ProjectId = 1, Status = ReleaseStatus.Detected, Project = new Project { Id = 1, Name = "P" } };
         _repoMock.FindReleaseAsync(1, Arg.Any<CancellationToken>()).Returns(release);
         _pipelineServiceMock.GetPipelineAsync(5, Arg.Any<CancellationToken>()).Returns(new PipelineDto { Id = 5, ProjectId = 1 });
@@ -275,6 +276,51 @@ public class ReleaseServiceTests
         await _pipelineLauncherMock.DidNotReceive().TriggerPreparedRunAsync(
             Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(),
             Arg.Any<CancellationToken>(), Arg.Any<string?>());
+    }
+
+    private const string ArchivedCommit = "0123456789abcdef0123456789abcdef01234567";
+
+    [Fact]
+    public async Task RelaunchFromCommitAsync_ArchivedRelease_LaunchesThePinnedRun_AndLeavesTheReleaseArchived()
+    {
+        var release = new Release { Id = 1, ProjectId = 1, Version = "1.0.0", Status = ReleaseStatus.Archived, CommitHash = ArchivedCommit };
+        _repoMock.FindReleaseAsync(1, Arg.Any<CancellationToken>()).Returns(release);
+        _pipelineServiceMock.GetPipelineAsync(5, Arg.Any<CancellationToken>()).Returns(new PipelineDto { Id = 5, ProjectId = 1 });
+        var pinned = Authorized(5) with { CommitHash = ArchivedCommit };
+        _pipelineLauncherMock.TriggerPreparedRunAsync(pinned, Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>())
+            .Returns(new PipelineRunDto { Id = 100 });
+
+        var run = await _sut.RelaunchFromCommitAsync(1, new TriggerReleaseBuildRequest { PipelineId = 5 }, pinned, TestContext.Current.CancellationToken);
+
+        Assert.Equal(100, run.Id);
+        Assert.Equal(ReleaseStatus.Archived, release.Status);
+        Assert.Null(release.PipelineRunId);
+        await _repoMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RelaunchFromCommitAsync_ARunNotPinnedToTheReleaseCommit_IsRefusedBeforeLaunch()
+    {
+        _repoMock.FindReleaseAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Release { Id = 1, ProjectId = 1, Status = ReleaseStatus.Archived, CommitHash = ArchivedCommit });
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.RelaunchFromCommitAsync(
+            1, new TriggerReleaseBuildRequest { PipelineId = 5 }, Authorized(5), TestContext.Current.CancellationToken));
+
+        await _pipelineLauncherMock.DidNotReceive().TriggerPreparedRunAsync(
+            Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task RelaunchFromCommitAsync_AReleaseThatIsNotArchived_IsRefused()
+    {
+        _repoMock.FindReleaseAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Release { Id = 1, ProjectId = 1, Status = ReleaseStatus.Published, CommitHash = ArchivedCommit });
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.RelaunchFromCommitAsync(
+            1, new TriggerReleaseBuildRequest { PipelineId = 5 }, Authorized(5) with { CommitHash = ArchivedCommit },
+            TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -481,6 +527,32 @@ public class ReleaseServiceTests
         await _artifactRetentionMock.Received(1).ApplyReleaseRetentionAsync(artifact, 7, Arg.Any<CancellationToken>());
     }
 
+    /// <summary>Decision D2: the relaunch of an archived release publishes its version again, which
+    /// brings the same row back to Published and clears its archive date.</summary>
+    [Fact]
+    public async Task CreateReleaseFromPipelineAsync_SameVersionAsAnArchivedRelease_MakesItPublishedAgain()
+    {
+        var archived = new Release
+        {
+            Id = 7,
+            ProjectId = 1,
+            Version = "1.0.0",
+            Status = ReleaseStatus.Archived,
+            ArchivedAt = DateTime.UtcNow.AddDays(-1),
+            CommitHash = ArchivedCommit
+        };
+        _repoMock.FindByVersionAsync(1, "1.0.0", Arg.Any<CancellationToken>()).Returns(archived);
+        _artifactRepoMock.GetByRunAsync(44, Arg.Any<CancellationToken>()).Returns([]);
+        SetupHubClients();
+
+        await _sut.CreateReleaseFromPipelineAsync(1, 44, "1.0.0", null, commitHash: ArchivedCommit, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(ReleaseStatus.Published, archived.Status);
+        Assert.Null(archived.ArchivedAt);
+        Assert.Equal(44, archived.PipelineRunId);
+        await _repoMock.DidNotReceive().AddReleaseAsync(Arg.Any<Release>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task CreateReleaseFromPipelineAsync_Deployed_DemotesPreviousActiveRelease()
     {
@@ -509,11 +581,10 @@ public class ReleaseServiceTests
         await _transactionMock.DidNotReceive().RollbackAsync(Arg.Any<CancellationToken>());
     }
 
-    /// <summary>
-    /// Recette R2-001: the deploy run records the candidate's release as deployed with its OWN workspace
-    /// head, which may be a newer develop commit that was never deployed. The release keeps the commit
-    /// its candidate built; a branch advanced onto the release would otherwise name the wrong commit.
-    /// </summary>
+    /// <summary> The deploy run records the candidate's release as deployed with its OWN workspace
+    /// head, which may be a newer develop commit that was never deployed. The release keeps the
+    /// commit its candidate built; a branch advanced onto the release would otherwise name the
+    /// wrong commit. </summary>
     [Theory]
     [InlineData(true, ReleaseStatus.Published)] // Record release: marks the candidate as deployed
     [InlineData(false, ReleaseStatus.Deployed)] // Rollback: demotes the release this run deployed
@@ -602,6 +673,73 @@ public class ReleaseServiceTests
             artifact, 7, Arg.Any<CancellationToken>());
         await _artifactRetentionMock.Received(1).ApplyReleaseRetentionAsync(
             assurance, 7, Arg.Any<CancellationToken>());
+    }
+
+    private const string CandidateCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    private void ArtifactSourceRun(PipelineStatus status)
+    {
+        var sourcePipeline = new Pipeline { Id = 2, ProjectId = 1, Name = "aetheus-ci" };
+        _pipelineRepoMock.GetPipelineRunWithPipelineAsync(42, Arg.Any<CancellationToken>()).Returns(new PipelineRun
+        {
+            Id = 42,
+            PipelineId = 2,
+            CommitHash = CandidateCommit,
+            Status = status,
+            Pipeline = sourcePipeline
+        });
+        _pipelineRepoMock.GetPipelineProjectIdAsync(sourcePipeline, Arg.Any<CancellationToken>()).Returns(1);
+        _artifactRepoMock.GetByRunAsync(42, Arg.Any<CancellationToken>())
+            .Returns([new PipelineArtifact { Id = 12, PipelineRunId = 42, ProjectId = 1 }]);
+        _artifactRepoMock.GetByRunAsync(99, Arg.Any<CancellationToken>()).Returns([]);
+        _repoMock.FindByVersionAsync(1, "1.0.0", Arg.Any<CancellationToken>()).Returns((Release?)null);
+        _repoMock.GetMaxBuildNumberAsync(1, Arg.Any<CancellationToken>()).Returns(0);
+        _repoMock.GetDeployedProjectReleasesAsync(1, Arg.Any<CancellationToken>()).Returns([]);
+        SetupHubClients();
+    }
+
+    [Fact]
+    public async Task CreateReleaseFromPipelineAsync_AcceptsARejectedArtifactRun_ForAnUndeployedRelease()
+    {
+        ArtifactSourceRun(PipelineStatus.Rejected);
+
+        var release = await _sut.CreateReleaseFromPipelineAsync(
+            1, 99, "1.0.0", null, commitHash: CandidateCommit, branchName: "main", artifactPipelineRunId: 42,
+            deployed: false, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(ReleaseStatus.Published, release.Status);
+        await _repoMock.Received(1).AddReleaseAsync(Arg.Any<Release>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateReleaseFromPipelineAsync_RefusesARejectedArtifactRun_ForADeployedRelease()
+    {
+        ArtifactSourceRun(PipelineStatus.Rejected);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.CreateReleaseFromPipelineAsync(
+            1, 99, "1.0.0", null, commitHash: CandidateCommit, artifactPipelineRunId: 42,
+            deployed: true, ct: TestContext.Current.CancellationToken));
+
+        await _repoMock.DidNotReceive().AddReleaseAsync(Arg.Any<Release>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(PipelineStatus.Failed, false)]
+    [InlineData(PipelineStatus.Partial, false)]
+    [InlineData(PipelineStatus.Cancelled, false)]
+    [InlineData(PipelineStatus.RolledBack, false)]
+    [InlineData(PipelineStatus.Running, false)]
+    [InlineData(PipelineStatus.Failed, true)]
+    [InlineData(PipelineStatus.Partial, true)]
+    public async Task CreateReleaseFromPipelineAsync_RefusesAnArtifactRunThatDidNotComplete(PipelineStatus status, bool deployed)
+    {
+        ArtifactSourceRun(status);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.CreateReleaseFromPipelineAsync(
+            1, 99, "1.0.0", null, commitHash: CandidateCommit, artifactPipelineRunId: 42,
+            deployed: deployed, ct: TestContext.Current.CancellationToken));
+
+        await _repoMock.DidNotReceive().AddReleaseAsync(Arg.Any<Release>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -827,8 +965,8 @@ public class ReleaseServiceTests
     [Fact]
     public async Task GetReleasesAsync_ResolvesTheSourcePipelineFilter_ToTheReleasesOfThatRootPipeline()
     {
-        // Recette R-224: the pipeline column shows the root of the release run's trigger chain, so its
-        // filter is resolved to release ids; the stored columns go to the query as they are.
+        // The pipeline column shows the root of the release run's trigger chain, so its filter is
+        // resolved to release ids; the stored columns go to the query as they are.
         _repoMock.GetReleaseFilterFactsAsync(null, Arg.Any<List<int>?>(), null, Arg.Any<CancellationToken>())
             .Returns([new ReleaseFilterFact(1, "App", 10), new ReleaseFilterFact(2, "App", 20), new ReleaseFilterFact(3, "App", null)]);
         _pipelineRepoMock.GetRootRunReferencesAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())

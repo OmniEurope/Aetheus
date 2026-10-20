@@ -14,7 +14,7 @@ public sealed record YamlValidationResultDto
 public sealed record ValidateYamlRequest
 {
     [Required]
-    [StringLength(50_000)]
+    [StringLength(PipelineDefinitionLimits.MaxYamlLength)]
     public string Yaml { get; init; } = string.Empty;
 
     public int? OrganizationId { get; init; }

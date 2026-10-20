@@ -7,15 +7,14 @@
             <OmniDropDown Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-1" TValue="int?" Options="@(Projects.ToOptions(item => (int?)item.Id, item => item.Name))"
                             Value="@ProjectId" ValueChanged="@ProjectIdChanged" ValueExpression="@(() => ProjectId)" Class="omni-u-w-100" />
         </OmniFormField>
-        <OmniFormField Label="@L["PipelinePrefix"]" Class="omni-u-w-100" For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-2">
+        <OmniFormField Label="@L["PipelinePrefix"]" Help="@L["PipelinePrefixHint"]" Class="omni-u-w-100" For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-2">
             <OmniTextBox Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-2" Value="@Prefix" ValueChanged="@PrefixChanged" Class="omni-u-w-100"  ValueExpression="@(() => Prefix)"/>
         </OmniFormField>
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["PipelinePrefixHint"]</OmniText>
     </OmniStack>
 }
 else if (Step == 1)
 {
-    @* Recette R1-18 / R1-31: the type first (what is built and checked), its detail below it. *@
+    @* The type first (what is built and checked), its detail below it. *@
     <div class="pipeline-setup-step">
         <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelineArchitectureQuestion"]</OmniHeading>
         <OmniSelectableCardGroup TValue="PipelineArchitecture" TSelection="PipelineArchitecture?"
@@ -32,7 +31,7 @@ else if (Step == 1)
         </OmniSelectableCardGroup>
         @if (Architecture is PipelineArchitecture.Application)
         {
-            @* Recette R1-31 decision: no type name for the one-project case, a yes/no question, no default. *@
+            @* The one-project application shape is an explicit yes/no choice with no default. *@
             <OmniRadioButtonList TValue="bool?" Label="@L["PipelineSameProjectQuestion"]" Options="@YesNoOptions"
                                  Value="@SameProject" ValueChanged="@SameProjectChanged" ValueExpression="@(() => SameProject)"
                                  Class="pipeline-setup-detail" data-testid="setup-same-project" />
@@ -54,7 +53,7 @@ else if (Step == 1)
         }
         @if (Architecture is PipelineArchitecture.Application or PipelineArchitecture.Package)
         {
-            <OmniFormField Label="@L["PipelineStack"]" Description="@L["PipelineStackHint"]" Class="pipeline-setup-detail"
+            <OmniFormField Label="@L["PipelineStack"]" Help="@L["PipelineStackHint"]" Class="pipeline-setup-detail"
                            For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-stack">
                 <OmniDropDown Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-stack" TValue="string" Options="@StackOptions"
                               Value="@Stack" ValueChanged="@StackChanged" ValueExpression="@(() => Stack)" />

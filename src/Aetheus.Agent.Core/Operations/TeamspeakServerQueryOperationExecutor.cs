@@ -31,32 +31,44 @@ public sealed class TeamspeakServerQueryOperationExecutor(ITeamspeakQueryClient 
             return new ExecutorResult(-1, false);
         }
 
-        // S-TECH-W9K7: a secret-bearing command (channel/server password, token value, snapshot blob)
-        // travels in the encrypted TEAMSPEAK_QUERY_CMD env var instead of the plaintext-at-rest Command
-        // column; prefer it when present and fall back to the operation target otherwise.
-        var queryCommand = envVars.TryGetValue("TEAMSPEAK_QUERY_CMD", out var protectedCmd) && !string.IsNullOrWhiteSpace(protectedCmd)
-            ? protectedCmd
-            : target;
-
+        var queryCommand = ResolveQueryCommand(target, envVars);
         if (string.IsNullOrWhiteSpace(queryCommand))
         {
             await onOutput("Empty ServerQuery command", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
         }
 
+        var connection = await ReadConnectionAsync(envVars, onOutput, cancellationToken).ConfigureAwait(false);
+        if (connection is null) return new ExecutorResult(-1, false);
+        return await RunQueryAsync(connection.Value.Port, connection.Value.Credential, queryCommand, onOutput, cancellationToken).ConfigureAwait(false);
+    }
+
+    // S-TECH-W9K7: a secret-bearing command (channel/server password, token value, snapshot blob)
+    // travels in the encrypted TEAMSPEAK_QUERY_CMD env var instead of the plaintext-at-rest Command
+    // column; prefer it when present and fall back to the operation target otherwise.
+    internal static string ResolveQueryCommand(string target, IReadOnlyDictionary<string, string> envVars) =>
+        envVars.TryGetValue("TEAMSPEAK_QUERY_CMD", out var protectedCmd) && !string.IsNullOrWhiteSpace(protectedCmd)
+            ? protectedCmd
+            : target;
+
+    private static async Task<(int Port, string Credential)?> ReadConnectionAsync(
+        IReadOnlyDictionary<string, string> envVars, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
         var queryPort = await ServerQueryHelper.GetQueryPortAsync(envVars, onOutput).ConfigureAwait(false);
-        if (queryPort is null) return new ExecutorResult(-1, false);
-        var port = queryPort.Value;
+        if (queryPort is null) return null;
+        var credential = await ServerQueryHelper.ReadCredentialAsync(onOutput, ct).ConfigureAwait(false);
+        return credential is null ? null : (queryPort.Value, credential);
+    }
 
-        var credential = await ServerQueryHelper.ReadCredentialAsync(
-            onOutput, cancellationToken).ConfigureAwait(false);
-        if (credential is null) return new ExecutorResult(-1, false);
-
+    /// <summary>Logs in, runs the command and reports whether every answer of the server succeeded.</summary>
+    internal async Task<ExecutorResult> RunQueryAsync(
+        int port, string credential, string queryCommand, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
         // The TCP client writes the script verbatim and reads until the server closes on `quit`.
         // The credential is EscapeServerQuery-encoded so a password with spaces/special chars cannot
         // break the login line; the command was already encoded server-side.
         var script = $"login serveradmin {ServerQueryHelper.EscapeServerQuery(credential)}\nuse sid=1\n{queryCommand}\nquit\n";
-        var reply = await queryClient.ExecuteAsync(port, script, cancellationToken).ConfigureAwait(false);
+        var reply = await queryClient.ExecuteAsync(port, script, ct).ConfigureAwait(false);
 
         if (reply is null)
         {

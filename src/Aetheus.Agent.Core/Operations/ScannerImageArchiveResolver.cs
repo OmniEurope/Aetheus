@@ -33,25 +33,9 @@ internal readonly record struct ImageArchiveResolution(
     string? FileName = null,
     string? Detail = null);
 
-/// <summary>
-/// Resolves the image archive a built-artifact scanner must read, inside the run's
-/// <c>.analysis-image/</c> directory.
-///
-/// The names used to be hard-coded to <c>aetheus-back.tar</c> / <c>aetheus-front.tar</c>, which made
-/// built-artifact image analysis structurally unreachable for every project that is not Aetheus
-/// itself: the file was never found, and the caller reported a revision mismatch, naming a cause that
-/// was not the real one. Resolution is now, in order:
-///
-/// 1. the name the pipeline declares (<c>AETHEUS_IMAGE_ARCHIVE_BACK</c> /
-///    <c>AETHEUS_IMAGE_ARCHIVE_FRONT</c>), for a project whose archives do not follow the convention;
-/// 2. otherwise discovery by role suffix (<c>*-back.tar</c> / <c>*-front.tar</c>), which covers
-///    Aetheus and every project naming its archives after itself, with no configuration at all.
-///
-/// This widens which FILE is read, never what is proven about it: the caller still verifies the run's
-/// source-commit marker and the archive's own <c>org.opencontainers.image.revision</c> label.
-/// Discovery refuses ambiguity rather than picking a candidate, so a directory holding two archives
-/// of the same role fails loudly instead of analysing an arbitrary one.
-/// </summary>
+/// <summary>Resolves scanner archives from explicit AETHEUS_IMAGE_ARCHIVE_BACK/FRONT names or
+/// unambiguous role-suffixed files in .analysis-image. Source-commit and image-revision checks
+/// remain the caller's responsibility.</summary>
 internal static class ScannerImageArchiveResolver
 {
     internal const string BackendArchiveVariable = "AETHEUS_IMAGE_ARCHIVE_BACK";

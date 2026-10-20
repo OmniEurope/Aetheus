@@ -8,13 +8,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// Covers the action-button / edit-panel / agent-update chrome that moved out of the retired
-/// monolithic <c>ServerDetail.razor</c> into <see cref="ServerDetailLayout"/> (audit 360 lot G).
-/// The layout owns: Contact/Update/Edit/Delete buttons (gated by <c>_canWrite</c>), the inline
-/// edit panel (Save → <c>UpdateServerAsync</c>, Delete → <c>DeleteServerAsync</c>), and the
-/// <c>AgentUpdateProgressCard</c> wired to the shared loader hub.
-/// </summary>
+/// <summary>Covers permission-gated server actions, configuration and agent-update progress
+/// coordinated by the detail layout.</summary>
 public class ServerDetailLayoutTests : BunitContext
 {
     private static readonly BindingFlags Priv = BindingFlags.NonPublic | BindingFlags.Instance;
@@ -83,9 +78,8 @@ public class ServerDetailLayoutTests : BunitContext
     public void ActionButtons_ConfigurationAndToolsMenu_Rendered_OnOverview_WhenCanWrite()
     {
         var cut = RenderLayout(MakeServer());
-        // Default test permissions grant Read+Write. Configuration (recette R-200, formerly "Edit")
-        // stays a first-class button; the other write actions live in the tools menu, which only
-        // renders its items once opened.
+        // The fixture grants read and write; Configuration is visible while other write actions are
+        // in the tools menu.
         var configuration = cut.Find("button[aria-label=\"Configuration\"]");
         Assert.Equal("Configuration", configuration.GetAttribute("title"));
         Assert.Contains("Configuration", configuration.TextContent, StringComparison.Ordinal);
@@ -97,8 +91,35 @@ public class ServerDetailLayoutTests : BunitContext
 
         Assert.Contains("ContactAgent", cut.Markup);
         Assert.Contains("UpdateAgent", cut.Markup);
-        // PLAN-004 R-11: the tools menu retires the server; permanent deletion lives with retired servers.
+        // The tools menu retires a server; permanent deletion belongs to retired-server management.
         Assert.Contains("RetireServer", cut.Markup);
+    }
+
+    [Fact]
+    public void R3_58_ToolsMenu_OffersTheCapabilityActivation_OnALinuxServer_AndOpensItsDialog()
+    {
+        var cut = RenderLayout(MakeServer() with { OsDescription = "Debian GNU/Linux 12" });
+        var dialogs = Services.GetRequiredService<OmniDialogService>();
+        string? openedTitle = null;
+        dialogs.OnOpen += (title, _, _, _) => openedTitle = title;
+
+        cut.Find(".omni-overflow-menu__trigger").Click();
+        var item = cut.FindAll("[role=\"menuitem\"], .omni-menu-item, button")
+            .First(element => element.TextContent.Contains("EnableAgentCapabilities", StringComparison.Ordinal));
+        item.Click();
+
+        Assert.Equal("EnableAgentCapabilities", openedTitle);
+    }
+
+    [Fact]
+    public void R3_58_ToolsMenu_DoesNotOfferTheCapabilityActivation_OnAWindowsServer()
+    {
+        var cut = RenderLayout(MakeServer() with { OsDescription = "Microsoft Windows Server 2022" });
+
+        cut.Find(".omni-overflow-menu__trigger").Click();
+
+        Assert.Contains("UpdateAgent", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnableAgentCapabilities", cut.Markup, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -106,7 +127,7 @@ public class ServerDetailLayoutTests : BunitContext
     [InlineData("pipelines")]
     public void ActionButtons_ConfigurationAndToolsMenu_NotRendered_OffOverview(string section)
     {
-        // Recette R-199: the server's own actions belong to its Overview; other sections keep theirs.
+        // The server's own actions belong to its Overview; other sections keep theirs.
         var cut = RenderLayout(MakeServer(), section);
 
         Assert.Contains("id=\"body\"", cut.Markup);
@@ -136,6 +157,13 @@ public class ServerDetailLayoutTests : BunitContext
     [InlineData("servers/1/pipelines?tab=runs", "account_tree")]
     [InlineData("servers/1/libraries", "library_books")]
     [InlineData("servers/1/logs#end", "receipt_long")]
+    [InlineData("servers/1/services", "engineering")]
+    [InlineData("servers/1/projects", "folder")]
+    [InlineData("servers/1/vaults", "lock")]
+    [InlineData("servers/1/releases", "new_releases")]
+    [InlineData("servers/1/ports", "lan")]
+    [InlineData("servers/1/tasks", "task_alt")]
+    [InlineData("servers/1/unknown", "dns")]
     public void SectionIconFor_MatchesTheSideMenuIcon(string relativePath, string expected)
     {
         Assert.Equal(expected, ServerDetailLayout.SectionIconFor(relativePath));
@@ -261,8 +289,8 @@ public class ServerDetailLayoutTests : BunitContext
 
         cut.WaitForAssertion(() =>
         {
-            // PLAN-005 lot 4 / D35: the label stays "Retire server"; the busy state is the item being
-            // disabled, not a "Retiring…" label that changes the width of the menu.
+            // Busy retirement preserves its label and disables the item without changing menu
+            // width.
             var item = cut.FindAll(".omni-menu__item").Single(element => element.TextContent.Contains("RetireServer", StringComparison.Ordinal));
             Assert.True(item.HasAttribute("disabled"));
         });
@@ -335,8 +363,7 @@ public class ServerDetailLayoutTests : BunitContext
     [Fact]
     public void Header_ShowsServerName_WithoutAStatusBadge()
     {
-        // Recette R-083: the status badge left the header of the server pages (the Overview shows the
-        // status in its Essentials card).
+        // Server status belongs to the Overview essentials card.
         var cut = RenderLayout(MakeServer(name: "header-srv"));
         Assert.Contains("header-srv", cut.Markup);
         Assert.Empty(cut.FindAll(".omni-page-header__frame .omni-badge"));
@@ -409,5 +436,22 @@ public class ServerDetailLayoutTests : BunitContext
         typeof(ServerDetailLoader).GetProperty(nameof(ServerDetailLoader.InitialLoadCompleted))!.SetValue(loader, true);
         var cut = Render<ServerDetailLayout>(p => p.Add(x => x.Body, b => b.AddMarkupContent(0, "<div/>")));
         Assert.Contains("ServerNotFound", cut.Markup);
+    }
+
+    // ── R3-29: the header's back arrow climbs to the logical parent ──────────
+
+    [Theory]
+    [InlineData("mail", "http://localhost/servers/1/overview")]
+    // The server crumb links to the overview: on the overview the arrow must reach the list, not itself.
+    [InlineData("overview", "http://localhost/servers")]
+    public async Task HeaderBackArrow_LeadsToTheLogicalParent(string section, string expected)
+    {
+        var cut = RenderLayout(MakeServer(), section);
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+
+        await cut.Find(".omni-page-header__back").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        Assert.Equal(expected, nav.Uri);
+        Assert.DoesNotContain(JSInterop.Invocations, call => call.Identifier == "historyBack");
     }
 }

@@ -37,6 +37,10 @@ internal sealed class PipelineVariableResolver(
         int? pipelineId = null, int? runId = null, string? pipelineName = null, int? buildNumber = null,
         bool enforceResolvedReferences = false)
     {
+        // R3-67: a template's `${{ project.slug }}.share` is this project's library, the same name the
+        // setup wizard created.
+        definition = await PipelineProjectResourceNames
+            .ExpandForProjectAsync(definition, repo, projectId, ct).ConfigureAwait(false);
         var warnings = new List<string>();
         var secretKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var resolved = CreateSystemVariables(definition, pipelineId, runId, pipelineName, buildNumber);
@@ -68,9 +72,10 @@ internal sealed class PipelineVariableResolver(
             // what a release/version pattern should use: it increments by exactly one per run of
             // this pipeline, so 1.1.$(BUILD_PIPELINE_RUNNUMBER) yields 1.1.1, 1.1.2, 1.1.3…
             ["BUILD_PIPELINE_RUNNUMBER"] = (buildNumber ?? 0).ToString(),
-            // Recette R2-110: the project's release number, the last number of the application version.
-            // A run's own number replaces this 0 (PipelineReleaseNumbers.Inject, at launch and every stage);
-            // 0 remains for a resolution without a run (preflight, dry run) and a pipeline without a project.
+            // The project's release number, the last number of the application version. A run's own
+            // number replaces this 0 (PipelineReleaseNumbers.Inject, at launch and every stage); 0
+            // remains for a resolution without a run (preflight, dry run) and a pipeline without a
+            // project.
             [PipelineReleaseNumbers.VariableName] = "0",
             ["BUILD_PIPELINEID"] = (pipelineId ?? 0).ToString(),
             ["BUILD_PIPELINENAME"] = pipelineName ?? definition.Name,
@@ -250,7 +255,7 @@ internal sealed class PipelineVariableResolver(
         // and CI can package an unpinned artifact despite the run itself having a valid commit.
         if (PipelineRunHelpers.IsGitCommitHash(run.CommitHash))
             additionalVars["BUILD_SOURCEVERSION"] = run.CommitHash!;
-        PipelineReleaseNumbers.Inject(additionalVars, run.ReleaseNumber);
+        PipelineReleaseNumbers.Inject(additionalVars, run.ReleaseNumber, run.ReleaseSeries);
 
         // S-TECH-RPVI: shared injection point (see PipelineProjectVariables), identical to the
         // trigger-time path so the rehomed mirror URL stays consistent across re-resolutions.

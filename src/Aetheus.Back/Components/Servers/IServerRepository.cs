@@ -20,8 +20,8 @@ public interface IServerRepository
         int page, int pageSize, List<int>? accessibleIds = null, CancellationToken ct = default,
         IReadOnlyList<GridFilter>? columnFilters = null);
 
-    /// <summary>Recette R-211: the OS, agent version and tags of every server in scope, for the list's
-    /// checkable column filters (their values, and the tag filter itself).</summary>
+    /// <summary>The OS, agent version and tags of every server in scope, for the list's checkable
+    /// column filters (their values, and the tag filter itself).</summary>
     Task<List<ServerFilterFact>> GetServerFilterFactsAsync(List<int>? accessibleIds, CancellationToken ct = default);
 
     Task<Server?> GetServerDetailAsync(int id, CancellationToken ct = default);
@@ -37,13 +37,16 @@ public interface IServerRepository
 
     Task<Server?> FindServerAsync(int id, CancellationToken ct = default);
 
+    /// <summary>Recette R3-24/R3-25: true when the server's mail stack carries Aetheus's managed marker.</summary>
+    Task<bool> IsMailStackManagedAsync(int serverId, CancellationToken ct = default);
+
     /// <summary>
     /// Loads the server together with its tokens - used by the diagnostic
     /// endpoint to inspect token validity without re-issuing a second query.
     /// </summary>
     Task<Server?> FindServerWithTokensAsync(int id, CancellationToken ct = default);
 
-    // Removal is no longer a plain delete: see IServerRetirementRepository (retire, then purge).
+    // Server removal uses IServerRetirementRepository to retire before purging.
 
 
 
@@ -114,8 +117,8 @@ public interface IServerRepository
         List<int>? accessibleIds,
         CancellationToken ct = default);
 
-    /// <summary>A page of the server's task log, narrowed by the grid's column filters (recette R-210 /
-    /// R-224) and ordered by its sort keys, newest first when it sends none.</summary>
+    /// <summary>Returns a filtered and sorted page of the server task log, newest first when no
+    /// sort is supplied.</summary>
     Task<(List<TaskLog> Items, int TotalCount)> GetLogsPagedAsync(
         int serverId,
         int page,

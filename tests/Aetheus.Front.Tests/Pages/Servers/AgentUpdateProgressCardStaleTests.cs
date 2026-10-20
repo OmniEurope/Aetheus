@@ -2,21 +2,27 @@
 using System.Reflection;
 using Aetheus.Front.Components.Servers;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// Recette R1-42: after an idle stretch the confirmation of an agent self-update can be lost (SignalR
-/// replays nothing for a sleeping tab). The card must not conclude a failure on its own: silence turns
-/// into a check that re-reads the persisted request, and a persisted status change for the request
-/// already followed is applied.
-/// </summary>
+/// <summary> After an idle stretch the confirmation of an agent self-update can be lost (SignalR
+/// replays nothing for a sleeping tab). The card must not conclude a failure on its own: silence
+/// turns into a check that re-reads the persisted request, and a persisted status change for the
+/// request already followed is applied. </summary>
 public sealed class AgentUpdateProgressCardStaleTests : BunitContext
 {
     private static readonly BindingFlags Priv = BindingFlags.NonPublic | BindingFlags.Instance;
     private readonly BunitTestHelper.TestHandler _handler;
 
-    public AgentUpdateProgressCardStaleTests() => _handler = BunitTestHelper.RegisterServices(this);
+    // The card reads "now" from this clock: the handoff is set relative to it, and no time passes between.
+    private readonly Microsoft.Extensions.Time.Testing.FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero));
+
+    public AgentUpdateProgressCardStaleTests()
+    {
+        _handler = BunitTestHelper.RegisterServices(this);
+        Services.AddSingleton<TimeProvider>(_clock);
+    }
 
     private static AgentUpdateRequestSummaryDto Request(AgentUpdateRequestStatus status, DateTime? handoffAt = null) => new()
     {
@@ -117,13 +123,13 @@ public sealed class AgentUpdateProgressCardStaleTests : BunitContext
     [Fact]
     public void OnceTheUpdaterIsLaunched_TheWaitFollowsTheBackendConfirmationWindow()
     {
-        var cut = RenderCard(Request(AgentUpdateRequestStatus.Handoff, DateTime.Now.AddMinutes(-1)));
+        var cut = RenderCard(Request(AgentUpdateRequestStatus.Handoff, _clock.GetLocalNow().LocalDateTime.AddMinutes(-1)));
 
         var fromHandoff = cut.Instance.StaleSecondsFor(AgentUpdatePhase.AgentOffline);
         var whileDownloading = cut.Instance.StaleSecondsFor(AgentUpdatePhase.Downloading);
 
         // 5 min 15 s from a handoff one minute ago: about 255 s, far beyond the old fixed 90 s.
-        Assert.InRange(fromHandoff, 250, 256);
+        Assert.Equal(255, fromHandoff);
         Assert.Equal(90, whileDownloading);
     }
 
@@ -134,6 +140,6 @@ public sealed class AgentUpdateProgressCardStaleTests : BunitContext
 
         var seconds = cut.Instance.StaleSecondsFor(AgentUpdatePhase.LaunchingUpdater);
 
-        Assert.InRange(seconds, 310, 316);
+        Assert.Equal(315, seconds);
     }
 }

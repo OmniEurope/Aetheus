@@ -39,9 +39,9 @@ internal sealed class AnalysisProjectSummaryRepository(AppDbContext db)
                 Latest = db.AnalysisReports
                     .Where(report => report.ProjectId == projectId)
                     .Max(report => (DateTime?)report.CompletedAt),
-                // Recette R-430: what the quality page links to, read in this same command so the
-                // summary keeps its budget. The latest release follows every release list: published
-                // first, newest first.
+                // What the quality page links to, read in this same command so the summary keeps
+                // its budget. The latest release follows every release list: published first,
+                // newest first.
                 LastAnalysisRunId = db.AnalysisEvaluations
                     .Where(evaluation => evaluation.ProjectId == projectId && evaluation.PipelineRunId.HasValue)
                     .OrderByDescending(evaluation => evaluation.EvaluatedAt)
@@ -87,8 +87,8 @@ internal sealed class AnalysisProjectSummaryRepository(AppDbContext db)
         var grades = await GetGradesAsync([projectId], ct).ConfigureAwait(false);
         var grade = grades.GetValueOrDefault(projectId);
 
-        // Recette R-430: the commit the grade was measured on. The grade is only known now, so this is
-        // the summary's one conditional command.
+        // The commit the grade was measured on. The grade is only known now, so this is the
+        // summary's one conditional command.
         int? gradeCommitId = null;
         if (grade?.CommitHash is { Length: > 0 } commitHash)
         {
@@ -125,15 +125,9 @@ internal sealed class AnalysisProjectSummaryRepository(AppDbContext db)
     // A trigger chain deeper than this is not walked further up; real chains are two or three levels.
     private const int MaxChainDepth = 8;
 
-    /// <summary>
-    /// Recette R2-024 (decided 2026-10-01): the grade of the project is the one of its latest candidate,
-    /// read as the run page reads it: the root run with the runs its trigger steps started, merged domain
-    /// by domain (R2-118, <see cref="AnalysisGradeEngine.MergeRuns"/>). It replaces the domain-by-domain mix of every recent run (R-482), where a
-    /// nightly or a quality-only run could replace a domain of the delivered candidate. Among the
-    /// project's 20 latest graded runs, the newest run tree that carries the candidate seal wins; a
-    /// project without any candidate in that window falls back to its newest graded run tree. The
-    /// summary's <see cref="AnalysisGradeSummaryDto.PipelineRunId"/> is that root run, the one to open.
-    /// </summary>
+    /// <summary>Among the latest 20 graded runs, select the newest run tree carrying a candidate
+    /// seal, falling back to the newest graded tree. Merge triggered runs domain by domain and
+    /// expose the root run through <see cref="AnalysisGradeSummaryDto.PipelineRunId"/>.</summary>
     internal async Task<Dictionary<int, AnalysisGradeSummaryDto>> GetGradesAsync(
         IReadOnlyCollection<int> projectIds,
         CancellationToken ct)
@@ -154,7 +148,12 @@ internal sealed class AnalysisProjectSummaryRepository(AppDbContext db)
         var sealedRunIds = await db.PipelineStepRuns.AsNoTracking()
             .Where(step => treeRunIds.Contains(step.PipelineRunId)
                 && step.OutputVariablesJson != null
-                && step.OutputVariablesJson.Contains(CandidateSealVariable))
+                && step.OutputVariablesJson.Contains(CandidateSealVariable)
+                // A "run to end" run past a failure seals nothing: its seal step ran only because
+                // that mode let it, after a failure that stops a normal candidate.
+                && !db.PipelineStepRuns.Any(failed => failed.PipelineRunId == step.PipelineRunId
+                    && failed.ContinueOnErrorForced
+                    && (failed.Status == TaskExecutionStatus.Failed || failed.Status == TaskExecutionStatus.Timeout)))
             .Select(step => step.PipelineRunId)
             .Distinct()
             .ToListAsync(ct)
@@ -180,9 +179,8 @@ internal sealed class AnalysisProjectSummaryRepository(AppDbContext db)
             .ThenByDescending(group => rootStarts.GetValueOrDefault(group.Key))
             .ThenByDescending(group => group.Key)
             .First();
-        // Recette R2-118: the tree's runs are merged domain by domain (the worst grade each domain was
-        // measured with). Keeping the one run with the worst overall grade left a domain empty whenever
-        // that run did not grade it: on a tie, the quality run won and the security tile read "-".
+        // Merge each domain using its worst measured grade so domains absent from one run remain
+        // represented by other runs.
         return AnalysisGradeEngine.MergeRuns([.. tree.Select(run => run.Summary)], tree.Key);
     }
 

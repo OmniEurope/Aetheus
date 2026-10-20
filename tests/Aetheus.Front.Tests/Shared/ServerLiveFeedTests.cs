@@ -4,11 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// R-181: the helper that replaced the Refresh buttons of the server detail sections. The hub itself is
-/// not reachable in a unit test (the test factory's transport fails at once); the pushes are fed through
-/// the same entry points the hub handlers call.
-/// </summary>
+/// <summary>Unit tests feed live events through hub-handler entry points because the test transport
+/// cannot reach a hub.</summary>
 public sealed class ServerLiveFeedTests : BunitContext
 {
     private readonly HubConnectionFactory _hubFactory;

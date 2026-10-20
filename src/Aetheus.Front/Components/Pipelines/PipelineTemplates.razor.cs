@@ -75,9 +75,9 @@ public partial class PipelineTemplates : IAsyncDisposable
         catch { /* SignalR is best-effort; local mutations still reload explicitly. */ }
     }
 
-    // Recette R-227: a live change re-reads the list without the loader; the grid notes the rows it
-    // holds before the new list lands, so a template created elsewhere reads bold for a few seconds.
-    // A failure keeps the rows on screen for the next event.
+    // A live change re-reads the list without the loader; the grid notes the rows it holds before
+    // the new list lands, so a template created elsewhere reads bold for a few seconds. A failure
+    // keeps the rows on screen for the next event.
     private async Task ReloadFromRealtimeAsync()
     {
         try

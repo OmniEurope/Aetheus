@@ -19,11 +19,22 @@ public sealed record PipelineDto
     public string? EnvironmentName { get; init; }
     public int? ProjectServerId { get; init; }
     public string? ProjectServerName { get; init; }
+
+    /// <summary>The AI runner profile the pipeline's <c>ai</c> steps use when they name none that can
+    /// run; null means automatic (the organization's most preferred usable profile).</summary>
+    public int? AiRunnerProfileId { get; init; }
     public PipelineStatus? LastRunStatus { get; init; }
     public DateTime? LastRunAt { get; init; }
     public List<PipelineRunSummaryDto> RecentRuns { get; init; } = [];
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
+
+    /// <summary>The automated-run owner the F-EXEC-1b gate authorizes chained runs against.</summary>
+    public string? OwnerUsername { get; init; }
+
+    /// <summary>The owner is missing or not an active user, so every chained run is
+    /// refused.</summary>
+    public bool OwnerInactive { get; init; }
 }
 
 /// <summary>Authoritative Git location of a project-owned pipeline definition. The pipeline YAML is
@@ -59,6 +70,11 @@ public sealed record PipelineDependencyDto
     public List<PipelineDependencyReferenceDto> References { get; init; } = [];
     /// <summary>Pipelines that launch this pipeline, ordered alphabetically for display.</summary>
     public List<PipelineDependencyReferenceDto> Parents { get; init; } = [];
+    /// <summary>The automated-run owner the F-EXEC-1b gate authorizes chained runs against.</summary>
+    public string? OwnerUsername { get; init; }
+    /// <summary>The owner is missing or not an active user, so every chained run is
+    /// refused.</summary>
+    public bool OwnerInactive { get; init; }
 }
 
 public sealed record PipelineDependencyReferenceDto(int? Id, string Name);
@@ -73,8 +89,8 @@ public sealed record PipelineRunSummaryDto
     public string? ServerOs { get; init; }
     /// <summary>M: the step a non-terminal run is currently on ("Stage · Step"); null for terminal runs.</summary>
     public string? CurrentStep { get; init; }
-    /// <summary>PLAN-007 lot 3: the same grade the run grids show (<c>PipelineRunGradeAggregation</c>);
-    /// null for a run that grades nothing.</summary>
+    /// <summary>The same grade the run grids show (<c>PipelineRunGradeAggregation</c>); null for a
+    /// run that grades nothing.</summary>
     public AnalysisGrade? GateGrade { get; init; }
 }
 
@@ -89,7 +105,7 @@ public sealed record CreatePipelineRequest
     public string Description { get; init; } = string.Empty;
 
     [Required]
-    [StringLength(50000)]
+    [StringLength(PipelineDefinitionLimits.MaxYamlLength)]
     public string YamlDefinition { get; init; } = string.Empty;
 
     public int? ProjectId { get; init; }
@@ -98,6 +114,10 @@ public sealed record CreatePipelineRequest
     public string? SourceBranch { get; init; }
     public int? EnvironmentId { get; init; }
     public int? ProjectServerId { get; init; }
+
+    /// <summary>An AI runner profile of the pipeline's organization; null is automatic.</summary>
+    [Range(1, int.MaxValue)]
+    public int? AiRunnerProfileId { get; init; }
 }
 
 [AtMostOneOwner]
@@ -111,7 +131,7 @@ public sealed record UpdatePipelineRequest
     public string Description { get; init; } = string.Empty;
 
     [Required]
-    [StringLength(50000)]
+    [StringLength(PipelineDefinitionLimits.MaxYamlLength)]
     public string YamlDefinition { get; init; } = string.Empty;
 
     public int? ProjectId { get; init; }
@@ -120,6 +140,10 @@ public sealed record UpdatePipelineRequest
     public string? SourceBranch { get; init; }
     public int? EnvironmentId { get; init; }
     public int? ProjectServerId { get; init; }
+
+    /// <summary>An AI runner profile of the pipeline's organization; null is automatic.</summary>
+    [Range(1, int.MaxValue)]
+    public int? AiRunnerProfileId { get; init; }
 }
 
 /// <summary>Query for a page of pipeline runs: paging (inherited), sorting (inherited
@@ -153,11 +177,13 @@ public sealed record PipelineRunDto
     /// <summary>True after the cancellation request has been durably accepted, while mandatory
     /// teardown may still keep the run active.</summary>
     public bool CancellationRequested { get; init; }
-    /// <summary>Recette R2-103: who asked for the cancellation (a user name, or "system"), null when
-    /// the run was never cancelled or was cancelled before the author was recorded.</summary>
+    /// <summary>Who asked for the cancellation (a user name, or "system"), null when the run was
+    /// never cancelled or was cancelled before the author was recorded.</summary>
     public string? CancelledBy { get; init; }
     /// <summary>Why the run was cancelled, beside <see cref="CancelledBy"/>.</summary>
     public string? CancellationReason { get; init; }
+    /// <summary>The run was launched in "run to end" mode: every step continued on error.</summary>
+    public bool RunToEnd { get; init; }
     /// <summary>Internal projection bridge used to hydrate <see cref="Warnings"/> after EF materialization.</summary>
     [JsonIgnore]
     public string? ProjectedWarningsJson { get; init; }
@@ -178,10 +204,10 @@ public sealed record PipelineRunDto
     public string? CommitHash { get; init; }
     public string? RepositoryUrl { get; init; }
 
-    /// <summary>Recette R-373: the Aetheus repository <see cref="RepositoryUrl"/> names when it is an
-    /// internal clone URL, so a run list links the commit to its Aetheus page rather than to the
-    /// smart-HTTP endpoint. Filled on run LIST rows only (<c>PipelineRunRepositoryLinks</c>); null for
-    /// an external repository, an unknown one, and on the run detail.</summary>
+    /// <summary>The Aetheus repository <see cref="RepositoryUrl"/> names when it is an internal
+    /// clone URL, so a run list links the commit to its Aetheus page rather than to the smart-HTTP
+    /// endpoint. Filled on run LIST rows only (<c>PipelineRunRepositoryLinks</c>); null for an
+    /// external repository, an unknown one, and on the run detail.</summary>
     public int? RepositoryId { get; init; }
     public string? ProjectName { get; init; }
 
@@ -222,12 +248,8 @@ public sealed record PipelineRunDto
     public List<PreflightCheckDto> PreflightChecks { get; init; } = [];
 }
 
-/// <summary>
-/// Recette R-498: where a run comes from and what it started, for the lineage tile of its page. The
-/// parent run is already in the run's variables; this adds the person who launched it and the runs it
-/// launched after it (an <c>on_success</c> chain). Recette R2-026: the runs of its own <c>trigger</c>
-/// steps are stages of the run, already in its timeline, and are left out.
-/// </summary>
+/// <summary>Provides the launching user and on_success descendant runs for the lineage tile.
+/// Trigger-step runs already appear in the timeline and are excluded.</summary>
 public sealed record PipelineRunLineageDto
 {
     /// <summary>The account that launched the run. Null when nobody did: a schedule, a push, a
@@ -255,13 +277,13 @@ public sealed record PipelineRunParameterDto
 {
     public string Name { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
-    /// <summary>PLAN-003 D41: the label in French, when the pipeline wrote one.</summary>
+    /// <summary>The optional French pipeline label.</summary>
     public string? DisplayNameFr { get; init; }
     public string Type { get; init; } = "string";
     public string? Default { get; init; }
     public bool Required { get; init; }
     public string? Description { get; init; }
-    /// <summary>PLAN-003 D41: the help text in French, when the pipeline wrote one.</summary>
+    /// <summary>The optional French help text.</summary>
     public string? DescriptionFr { get; init; }
     public List<string> AllowedValues { get; init; } = [];
 }
@@ -289,6 +311,12 @@ public sealed record PipelineStepRunDto
     /// <summary>True for a <c>type: ai</c> step declared <c>advisory: true</c> in the run's YAML snapshot:
     /// its result never changes the run status. Computed server-side with the scheduler's own helper.</summary>
     public bool IsAdvisory { get; init; }
+
+    /// <summary>Recette R1-80: the step ran its control to the end (its execution status is Success) and
+    /// what it published refuses the result: a required test gate with findings, the seal's refusal, or,
+    /// for a trigger step, the outputs of a rejected child run (<see cref="PipelineControlVerdict"/>). Shown
+    /// as Rejected, never as a plain success. Computed server-side; false for an advisory step.</summary>
+    public bool IsRejected { get; init; }
     public string? MatrixLeg { get; init; }
     public bool IsSystem { get; init; }
     public string? GroupName { get; init; }
@@ -366,16 +394,10 @@ public sealed record PipelineYamlDefinition
     /// <c>refs/heads/</c> prefix (on both the ref and the pattern); only applies to the webhook trigger.</summary>
     public List<string> Branches { get; init; } = [];
 
-    /// <summary>
-    /// Webhook-only. A push whose changed files ALL match one of these patterns creates no run at
-    /// all. Same glob semantics as <see cref="Branches"/> (<c>*</c> inside a segment, <c>**</c>
-    /// across). Empty means every push runs, which is the previous behaviour.
-    ///
-    /// It exists because <c>supersede_running</c> makes each push replace the candidate in flight,
-    /// so a README typo used to throw away a two-hour qualification. Skipping a run the push cannot
-    /// affect costs nothing; reusing another commit's artifacts, the other way of avoiding that
-    /// cost, would seal a release over images built from a different revision.
-    /// </summary>
+    /// <summary>Skip a webhook push when all changed files match these patterns, using the same
+    /// glob semantics as <see cref="Branches"/>; an empty list skips nothing. This avoids
+    /// superseding runs for irrelevant changes without reusing artifacts built from another
+    /// revision.</summary>
     public List<string> PathsIgnore { get; init; } = [];
 
     public string? Extends { get; init; }
@@ -395,20 +417,15 @@ public sealed record PipelineYamlDefinition
     /// downstream run as <c>UPSTREAM_RELEASE</c> (so a downstream <c>type: deploy</c> can deploy it).</summary>
     public List<PipelineDownstreamTrigger> OnSuccess { get; init; } = [];
 
-    /// <summary>
-    /// PLAN-005: what a port SEEN LISTENING on the target host, that no project declared, does to this
-    /// run. YAML key <c>observed_port_policy:</c>, one of <c>error</c>, <c>warning</c> (the default) or
-    /// <c>ignore</c>. It governs observations only: a port another project has DECLARED always refuses
-    /// the launch, which is what the registry is for.
-    /// </summary>
+    /// <summary>Controls undeclared observed listeners through YAML observed_port_policy: error,
+    /// warning (default), or ignore. Declared ports owned by another project always refuse
+    /// launch.</summary>
     public string? ObservedPortPolicy { get; init; }
 
-    /// <summary>
-    /// Recette R2-110: YAML key <c>release_number:</c>. <c>allocate</c> makes every run of this pipeline
+    /// <summary> YAML key <c>release_number:</c>. <c>allocate</c> makes every run of this pipeline
     /// take the project's next release number (<c>BUILD_RELEASENUMBER</c>, the last number of the
     /// application version), for the pipelines that produce a release. Absent, a run inherits the
-    /// number of the run that started it, or reads the latest one.
-    /// </summary>
+    /// number of the run that started it, or reads the latest one. </summary>
     public string? ReleaseNumber { get; init; }
 
     /// <summary>What this definition needs an installation to provide before it can run: the
@@ -417,7 +434,7 @@ public sealed record PipelineYamlDefinition
     public PipelineRequiresDefinition? Requires { get; init; }
 }
 
-/// <summary>What an undeclared listener on a target port does to a run (PLAN-005).</summary>
+/// <summary>Defines the run policy for an undeclared listener on a target port.</summary>
 public enum ObservedPortPolicy
 {
     /// <summary>Recorded as a run warning and the launch proceeds. The default: the observation may be
@@ -483,15 +500,15 @@ public sealed record PipelineTemplateParameterDefinition
     public List<string> AllowedValues { get; init; } = [];
     /// <summary>Human-friendly label shown in the run dialog; falls back to <see cref="Name"/>.</summary>
     public string? DisplayName { get; init; }
-    /// <summary>PLAN-003 D41: the label shown when the interface is in French; falls back to
-    /// <see cref="DisplayName"/>. Maps to YAML <c>display_name_fr</c>.</summary>
+    /// <summary>French display label, falling back to <see cref="DisplayName"/>; maps to YAML
+    /// display_name_fr.</summary>
     public string? DisplayNameFr { get; init; }
     /// <summary>When true, a value must be supplied at queue time (unless a <see cref="Default"/> exists).</summary>
     public bool Required { get; init; }
     /// <summary>Optional help text shown under the field.</summary>
     public string? Description { get; init; }
-    /// <summary>PLAN-003 D41: the help text shown when the interface is in French; falls back to
-    /// <see cref="Description"/>. Maps to YAML <c>description_fr</c>.</summary>
+    /// <summary>French help text, falling back to <see cref="Description"/>; maps to YAML
+    /// description_fr.</summary>
     public string? DescriptionFr { get; init; }
 }
 
@@ -511,16 +528,9 @@ public sealed record PipelineStageDefinition
     public string? ExecutionRole { get; init; }
     public string? Environment { get; init; }
 
-    /// <summary>
-    /// PLAN-003 2.7: this stage asks for its OWN approval, with its own delay, before it runs - even
-    /// when the environment's approval was already given for the run, and even when the environment
-    /// asks for none. An approval that is refused or not given in time fails the run, which is what
-    /// hands control to a <c>failed()</c> rollback. The environment's <c>ApprovalTimeoutMinutes</c>
-    /// covers the whole run (one decision per run, 7a75aa132); a confirmation window is a second,
-    /// shorter decision about one moment of it. Recette R-370: it is the PIPELINE's approval, recorded
-    /// with or without <see cref="Environment"/>, and never stands for the environment's own. Maps to YAML
-    /// <c>approval_timeout_minutes</c>.
-    /// </summary>
+    /// <summary>Requests a separate stage approval with its own timeout, independent of any
+    /// environment approval, through YAML approval_timeout_minutes. Refusal or expiry fails the run
+    /// so failed() rollback can execute.</summary>
     public int? ApprovalTimeoutMinutes { get; init; }
     public string? Pool { get; init; }
     public string? Condition { get; init; }
@@ -549,6 +559,12 @@ public sealed record PipelineStageDefinition
     /// ephemeral hardened container - requires a Docker-capable runner or the run is blocked.
     /// Inherited by jobs as the default when they don't set their own.</summary>
     public PipelineIsolationDefinition? Isolation { get; init; }
+
+    /// <summary>Recette R-14: <c>start</c> or <c>rollback</c> (see <see cref="PipelineDeploymentRoles"/>) for a
+    /// stage that deploys or undoes a deployment by a script; null for every other stage, and for a stage whose
+    /// typed <c>bluegreen-up</c> or <c>bluegreen-rollback</c> step already says it. Maps to YAML
+    /// <c>deployment_role</c>; the jobs of a stage inherit it.</summary>
+    public string? DeploymentRole { get; init; }
 }
 
 /// <summary>A job inside a stage - carries its own agent/pool, steps, and optional matrix.</summary>

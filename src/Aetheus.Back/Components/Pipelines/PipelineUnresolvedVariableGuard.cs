@@ -59,14 +59,14 @@ internal static partial class PipelineUnresolvedVariableGuard
     /// </summary>
     private static readonly HashSet<string> ProvidedByTheControlPlane = new(StringComparer.OrdinalIgnoreCase)
     {
-        "BUILD_BUILDID", "BUILD_BUILDNUMBER", "BUILD_PIPELINE_RUNNUMBER", "BUILD_RELEASENUMBER", "BUILD_PIPELINEID",
+        "BUILD_BUILDID", "BUILD_BUILDNUMBER", "BUILD_PIPELINE_RUNNUMBER", "BUILD_RELEASENUMBER", "BUILD_RELEASESERIES", "BUILD_PIPELINEID",
         "BUILD_PIPELINENAME", "BUILD_RUN_PORT", "BUILD_TRIGGEREDBY", "BUILD_PROJECTID",
         "BUILD_PROJECTNAME", "BUILD_SOURCEVERSION", "BUILD_SOURCEBRANCH", "BUILD_REPOSITORY_URI",
         "REPOSITORY_URL", "DEFAULT_BRANCH", "WORKSPACE", "PROJECT_TYPE", "UPSTREAM_RELEASE",
         "SYSTEM_DATE", "SYSTEM_DATETIME", "SYSTEM_TIMESTAMP", "SYSTEM_STAGENAME",
         "AGENT_NAME", "AGENT_HOSTNAME", "AGENT_OS", "AGENT_PLATFORM", "AGENT_ID",
         "AETHEUS_VERSION", "CI",
-        // Set on a run whose workspace comes from another repository (source: block, recette R-534).
+        // Set when the source block selects another repository for the workspace.
         "AETHEUS_DEFINITION_COMMIT", "AETHEUS_DEFINITION_BRANCH"
     };
 
@@ -188,6 +188,9 @@ internal static partial class PipelineUnresolvedVariableGuard
             foreach (var output in step.Outputs)
                 if (!string.IsNullOrWhiteSpace(output))
                     deferred.Add(output.Trim());
+            // A catalog function publishes the outputs its descriptor declares.
+            if (PipelineFunctionCatalog.Find(step.Function) is { } function && string.Equals(step.Type, PipelineFunctionCatalog.StepType, StringComparison.OrdinalIgnoreCase))
+                deferred.UnionWith(function.Outputs);
             if (string.IsNullOrEmpty(step.Shell)) continue;
             foreach (Match match in PublishedName().Matches(step.Shell))
                 deferred.Add(match.Groups[1].Value);

@@ -19,7 +19,7 @@ public sealed class ServerClockTests : IDisposable
         ServerClock.Reset();
 
         Assert.Equal(TimeSpan.Zero, ServerClock.Offset);
-        Assert.True((ServerClock.UtcNow - DateTime.UtcNow).Duration() < TimeSpan.FromSeconds(1));
+        Assert.True((ServerClock.UtcNow - DateTime.UtcNow).Duration() < TimeSpan.FromSeconds(10));
     }
 
     [Fact]

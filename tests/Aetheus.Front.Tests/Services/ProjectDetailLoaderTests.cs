@@ -86,7 +86,7 @@ public class ProjectDetailLoaderTests : BunitContext
             blockingHubFactory);
 
         await sut.EnsureLoadedAsync(3, Xunit.TestContext.Current.CancellationToken)
-            .WaitAsync(TimeSpan.FromSeconds(1), Xunit.TestContext.Current.CancellationToken);
+            .WaitAsync(Aetheus.Front.Tests.TestDoubles.HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
 
         Assert.Equal(3, sut.Project?.Id);
         Assert.True(sut.InitialLoadCompleted);

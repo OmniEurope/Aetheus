@@ -326,26 +326,13 @@ window.visualPipeline = {
         state.inner.style.transform = 'translate(' + state.panX + 'px, ' + state.panY + 'px) scale(' + state.scale + ')';
     },
 
-    // S-FEAT-VPNP: persist manually-arranged node positions per pipeline in localStorage.
-    saveLayout: function (pipelineId, positions) {
-        try { localStorage.setItem('vp-layout-' + pipelineId, JSON.stringify(positions)); } catch { /* quota/private mode */ }
-    },
-
-    loadLayout: function (pipelineId) {
-        try { const raw = localStorage.getItem('vp-layout-' + pipelineId); return raw ? JSON.parse(raw) : null; }
-        catch { return null; }
-    },
-
     dispose: function (elementId) {
         delete this._canvases[elementId];
     }
 };
 
-// PLAN-008 lot 44: a node carries its coordinates as data attributes and they are applied here,
-// through the CSSOM. A style attribute in markup would need style-src-attr 'unsafe-inline' in the
-// production policy; setProperty does not, and it is the same path the drag handler already used.
-// Only a change of the data attributes re-applies, so a dragged node keeps the position the drag
-// wrote and is not snapped back by an unrelated re-render.
+// Applies node data coordinates through CSSOM to comply with CSP. Only coordinate changes update
+// the position, preserving drag results across unrelated renders.
 (function applyNodePositions() {
     function apply(node) {
         if (!node || !node.dataset) return;

@@ -100,7 +100,7 @@ else
     </OmniCard>
 }
 
-<AetheusDataGrid @ref="_policyGrid" Data="@_policies" TItem="BackupPolicyDto"
+<AetheusDataGrid @ref="_policyGrid" RowClick="@(policy => EditPolicy(policy))" Data="@_policies" TItem="BackupPolicyDto"
     Count="@_policiesTotalCount" IsLoading="@_loading" LoadData="@OnLoadPoliciesAsync" ExportRead="@ReadPoliciesExportAsync"
     PageSize="25" Density="OmniDensity.Compact" FullHeight="true"
     Virtualize="@AetheusGrid.RemoteVirtualization"
@@ -134,12 +134,14 @@ else
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="BackupPolicyDto" Title="@L["Actions"]" MinWidth="32rem" Sortable="false" Filterable="false" >
             <Template Context="p">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowRunsAsync(p))" title="@L["BackupRuns"]" Label="@L["BackupRuns"]"><OmniIcon Name="OmniIconName.Reset" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => RunNowAsync(p))" title="@L["BackupRunNow"]" Label="@L["BackupRunNow"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => EditPolicy(p))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => RunNowAsync(p))" title="@L["BackupRunNow"]" Label="@L["BackupRunNow"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Success" OnClick="@(() => EditPolicy(p))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeletePolicyAsync(p))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
                 </OmniStack>
+                </span>
             </Template>
         </OmniDataGridColumn>
     </Columns>

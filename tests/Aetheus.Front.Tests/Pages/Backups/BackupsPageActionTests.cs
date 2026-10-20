@@ -130,7 +130,7 @@ public sealed class BackupsPageActionTests : BunitContext
         cut.Find("textarea").Input("/srv/app/uploads\n\n  /etc/app.conf  \n");
         PolicyForm(cut).Submit();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/backups")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/backups")));
         var request = LastBody<CreateBackupPolicyRequest>("POST", "api/backups");
         Assert.Equal("nightly-db", request.Name);
         Assert.Equal("0 4 * * *", request.ScheduleCron);
@@ -149,7 +149,7 @@ public sealed class BackupsPageActionTests : BunitContext
         await PickOwnersAsync(cut, null, 2);
         PolicyForm(cut).Submit();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/backups")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/backups")));
         Assert.Equal(7, LastBody<CreateBackupPolicyRequest>("POST", "api/backups").ProjectId);
     }
 
@@ -166,7 +166,7 @@ public sealed class BackupsPageActionTests : BunitContext
         await PickOwnersAsync(cut, 1, 2);
         PolicyForm(cut).Submit();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/backups")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/backups")));
         Assert.NotNull(PolicyForm(cut));
         Assert.Equal("nightly-db", FormInput(cut, "Name").GetAttribute("value"));
     }
@@ -202,7 +202,7 @@ public sealed class BackupsPageActionTests : BunitContext
 
         PolicyForm(cut).Submit();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("PUT", "api/backups/1")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("PUT", "api/backups/1")));
         var request = LastBody<UpdateBackupPolicyRequest>("PUT", "api/backups/1");
         Assert.Equal("nightly-db", request.Name);
         Assert.Equal(14, request.RetentionCount);
@@ -219,7 +219,7 @@ public sealed class BackupsPageActionTests : BunitContext
         Button(cut, "Edit").Click();
         PolicyForm(cut).Submit();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("PUT", "api/backups/1")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("PUT", "api/backups/1")));
         Assert.Null(LastBody<UpdateBackupPolicyRequest>("PUT", "api/backups/1").DbPassword);
     }
 
@@ -234,7 +234,7 @@ public sealed class BackupsPageActionTests : BunitContext
         Button(cut, "Edit").Click();
         PolicyForm(cut).Submit();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("PUT", "api/backups/1")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("PUT", "api/backups/1")));
         Assert.NotNull(PolicyForm(cut));
     }
 
@@ -263,7 +263,7 @@ public sealed class BackupsPageActionTests : BunitContext
 
         Button(cut, "Delete").Click();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/backups/1")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/backups/1")));
     }
 
     [Fact]
@@ -276,10 +276,10 @@ public sealed class BackupsPageActionTests : BunitContext
         var cut = Render<BackupsPage>();
 
         Button(cut, "BackupRuns").Click();
-        cut.WaitForAssertion(() => Assert.Contains("BackupRuns", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("BackupRuns", cut.Markup));
         Button(cut, "Delete").Click();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/backups/1")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("DELETE", "api/backups/1")));
         Assert.Contains("BackupRuns", cut.Markup);
     }
 
@@ -294,7 +294,7 @@ public sealed class BackupsPageActionTests : BunitContext
 
         Button(cut, "BackupRunNow").Click();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/backups/1/run")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/backups/1/run")));
     }
 
     [Fact]
@@ -310,8 +310,7 @@ public sealed class BackupsPageActionTests : BunitContext
             () => Assert.Single(
                 _handler.Requests,
                 request => request.Method == "POST"
-                    && request.Url.Contains("api/backups/1/run", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(2));
+                    && request.Url.Contains("api/backups/1/run", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -337,8 +336,7 @@ public sealed class BackupsPageActionTests : BunitContext
             .Click();
 
         cut.WaitForAssertion(
-            () => Assert.True(Sent("GET", "api/backups/2/runs")),
-            TimeSpan.FromSeconds(2));
+            () => Assert.True(Sent("GET", "api/backups/2/runs")));
         Assert.False(Sent("GET", "api/backups/1/runs"));
     }
 
@@ -351,7 +349,7 @@ public sealed class BackupsPageActionTests : BunitContext
 
         Button(cut, "BackupRuns").Click();
 
-        cut.WaitForAssertion(() => Assert.True(Sent("GET", "api/backups/1/runs")), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.True(Sent("GET", "api/backups/1/runs")));
         Assert.Contains("BackupRuns", cut.Markup);
     }
 
@@ -363,7 +361,7 @@ public sealed class BackupsPageActionTests : BunitContext
         _handler.SetResponse(HttpMethod.Get, "api/backups", HttpStatusCode.InternalServerError);
         var cut = Render<BackupsPage>();
 
-        cut.WaitForAssertion(() => Assert.Contains("BackupEmptyTitle", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("BackupEmptyTitle", cut.Markup));
     }
 
     [Fact]
@@ -375,6 +373,6 @@ public sealed class BackupsPageActionTests : BunitContext
 
         var cut = Render<BackupsPage>();
 
-        cut.WaitForAssertion(() => Assert.Contains("nightly-db", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("nightly-db", cut.Markup));
     }
 }

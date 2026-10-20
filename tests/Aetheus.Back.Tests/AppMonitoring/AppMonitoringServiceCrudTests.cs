@@ -88,10 +88,9 @@ public sealed class AppMonitoringServiceCrudTests
         Assert.Equal(4, await _service.GetAppProjectIdAsync(2, ct: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>
-    /// Recette R-441: an app registered without a server is probed by the backend, yet runs on a fleet
-    /// server; the list names that server when one of its Apache virtual hosts serves the probe host.
-    /// A registered server is never replaced, and an unknown host stays "off-fleet".
+    /// <summary> An app registered without a server is probed by the backend, yet runs on a fleet
+    /// server; the list names that server when one of its Apache virtual hosts serves the probe
+    /// host. A registered server is never replaced, and an unknown host stays "off-fleet".
     /// </summary>
     [Fact]
     public async Task GetAppsForProject_NamesTheServerWhoseVirtualHostServesTheProbeUrl()
@@ -396,7 +395,7 @@ public sealed class AppMonitoringServiceCrudTests
     [Fact]
     public async Task GetSummary_LastEvent_IsTheLatestOfOtlpAndWebAnalytics_AndNullWhenNothingArrived()
     {
-        // PLAN-003 lot 28: "collected, then stopped" must be told apart from "never configured".
+        // "collected, then stopped" must be told apart from "never configured".
         var otlp = new DateTime(2026, 8, 28, 21, 57, 0, DateTimeKind.Utc);
         var web = otlp.AddHours(3);
         _repo.GetAppsForSummaryAsync(null, Arg.Any<CancellationToken>()).Returns(

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>Recette R-353: the audience chart's value axis tops out on a round count.</summary>
+/// <summary>The audience chart's value axis tops out on a round count.</summary>
 public sealed class AppWebAnalyticsAxisTests
 {
     [Theory]

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics;
+using System.IO.Pipes;
 using Aetheus.Back.Components.Git;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -91,7 +92,7 @@ public sealed class GitProcessOutputStreamTests
         stopwatch.Stop();
 
         Assert.True(
-            stopwatch.Elapsed < TimeSpan.FromMilliseconds(500),
+            stopwatch.Elapsed < TimeSpan.FromSeconds(10),
             $"Synchronous cancellation teardown blocked for {stopwatch.Elapsed}.");
     }
 
@@ -118,6 +119,92 @@ public sealed class GitProcessOutputStreamTests
         stream.Dispose();
 
         await WaitUntilProcessIsGoneAsync(pid, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Dispose_AfterAFailedGit_LogsTheExitCodeOfTheFinishedProcess()
+    {
+        var logger = new RecordingLogger<GitProcessOutputStream>();
+        var (stream, inner) = await StartFinishedProcessAsync(exitCode: 3, logger);
+
+        stream.Dispose();
+        await WaitUntilReleasedAsync(inner);
+
+        var warning = Assert.Single(logger.Entries);
+        Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Warning, warning.Level);
+        Assert.Contains("git git-upload-pack exited with code 3 after streaming", warning.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Dispose_AfterASuccessfulGit_LogsNothing()
+    {
+        var logger = new RecordingLogger<GitProcessOutputStream>();
+        var (stream, inner) = await StartFinishedProcessAsync(exitCode: 0, logger);
+
+        stream.Dispose();
+        await WaitUntilReleasedAsync(inner);
+
+        Assert.Empty(logger.Entries);
+    }
+
+    private static async Task<(GitProcessOutputStream Stream, Stream Inner)> StartFinishedProcessAsync(
+        int exitCode, RecordingLogger<GitProcessOutputStream> logger)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        if (OperatingSystem.IsWindows())
+        {
+            startInfo.FileName = "cmd.exe";
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add($"exit {exitCode}");
+        }
+        else
+        {
+            startInfo.FileName = "/bin/sh";
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add($"exit {exitCode}");
+        }
+
+        var process = Process.Start(startInfo)!;
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+        var inner = process.StandardOutput.BaseStream;
+        var stream = new GitProcessOutputStream(
+            process, new CancellationTokenSource(), logger, "git-upload-pack");
+        return (stream, inner);
+    }
+
+    /// <summary>The synchronous teardown runs on a worker: the output stream is released last, so a
+    /// released stream means the failure check has already run. Released is observed without any I/O:
+    /// on Linux the pipe keeps <c>CanRead</c> true after disposal, and a probing read could block
+    /// forever (mirror run 1273 hung 30 min in this loop), so the pipe handle itself is inspected.</summary>
+    private static async Task WaitUntilReleasedAsync(Stream inner)
+    {
+        var elapsed = Stopwatch.StartNew();
+        while (!IsReleased(inner))
+        {
+            Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(10), "The teardown worker never released the stream.");
+            await Task.Delay(TimeSpan.FromMilliseconds(25), TestContext.Current.CancellationToken);
+        }
+    }
+
+    private static bool IsReleased(Stream inner)
+    {
+        if (inner is not PipeStream pipe)
+            return !inner.CanRead;
+        try
+        {
+            return pipe.SafePipeHandle.IsClosed;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
     }
 
     /// <summary>

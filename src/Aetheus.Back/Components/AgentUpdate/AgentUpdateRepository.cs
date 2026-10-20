@@ -10,12 +10,8 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
     : IAgentUpdateRepository
 {
     private const int UpdateTimeoutSeconds = 600;
-    // --- Own-reads over Server -------------------------------------------------------------------
-    // Two reads this module used to obtain by injecting IServerRepository, which put AgentUpdate and
-    // Servers in the same cycle. The agent-update listing genuinely belongs here - it existed in the
-    // server repository only because that is where it was written. FindServerAsync did not: it is a
-    // shared load with many callers, so this is a deliberately local variant rather than a move,
-    // which is what keeps the shared one where its other consumers expect it.
+    // Reads the server data owned by agent-update workflows locally to avoid a dependency cycle
+    // with Servers (ADR-039).
 
     /// <summary>
     /// Servers the agent-update view lists, optionally narrowed to what the caller may see.
@@ -42,15 +38,8 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
     public async Task<Server?> FindServerAsync(int id, CancellationToken ct = default) =>
         await db.Servers.FindAsync([id], ct).ConfigureAwait(false);
 
-    /// <summary>
-    /// The compatibility facts the update preview needs for a set of servers. A local variant, not a
-    /// move: ServerService reads the same shape for its own views, so relocating it would only have
-    /// pushed the dependency the other way.
-    ///
-    /// The read itself is the shared <see cref="ServerCompatibilityFacts"/>: a pure static helper over the
-    /// query, not an injected collaborator, so it creates no dependency to invert - and the two
-    /// modules cannot drift on which columns a compatibility verdict needs (recette R-530).
-    /// </summary>
+    /// <summary>Uses the shared <see cref="ServerCompatibilityFacts"/> query projection for
+    /// consistent compatibility verdicts without a dependency on the Servers repository.</summary>
     public Task<List<ServerDto>> GetServersForCompatibilityAsync(
         List<int>? accessibleIds, CancellationToken ct = default) =>
         ServerCompatibilityFacts.ReadAsync(db.Servers, accessibleIds, ct);
@@ -67,11 +56,8 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
                 || task.Status == TaskExecutionStatus.Assigned
                 || task.Status == TaskExecutionStatus.Running), ct);
 
-    /// <summary>
-    /// The same question asked for a whole fleet in one round trip. The preview dialog used to call the
-    /// single-server count per candidate server, so a fleet of 200 with 150 outdated agents issued 150
-    /// queries to render one dialog. Servers with no active task are simply absent from the result.
-    /// </summary>
+    /// <summary>Counts active tasks for the fleet in one query. Servers without active tasks are
+    /// omitted from the result.</summary>
     public async Task<IReadOnlyDictionary<int, int>> CountActiveNonUpdateTasksAsync(
         IReadOnlyCollection<int> serverIds, CancellationToken ct = default)
     {
@@ -96,8 +82,10 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
         Server server,
         AgentReleaseManifestDto release,
         string requestedBy,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<string>? enableCapabilities = null)
     {
+        // Callers hand over tokens already validated against AgentEnableableCapabilities.Whitelist.
         await using var transaction = db.Database.IsRelational()
             ? await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false)
             : null;
@@ -125,6 +113,14 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
             .ConfigureAwait(false);
         if (existing is not null)
         {
+            // A request that has not produced its task yet can still take the capabilities asked for
+            // now. Once the task exists its environment is fixed: the caller sees that the request does
+            // not carry them and refuses instead of reporting a grant that will not happen.
+            if (existing.TaskId is null && enableCapabilities is { Count: > 0 })
+            {
+                MergeCapabilities(existing, enableCapabilities);
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
             if (transaction is not null)
                 await transaction.CommitAsync(ct).ConfigureAwait(false);
             return (existing, false);
@@ -145,6 +141,8 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
             ExpectedCapabilitiesJson = JsonSerializer.Serialize(
                 BuildExpectedCapabilities(reservedServer))
         };
+        if (enableCapabilities is { Count: > 0 })
+            MergeCapabilities(request, enableCapabilities);
         reservedServer.AgentUpdateReserved = true;
         reservedServer.AgentUpdateReservedAt = now;
         db.AgentUpdateRequests.Add(request);
@@ -200,10 +198,7 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
             Operation = OperationKind.AgentSelfUpdate,
             Status = TaskExecutionStatus.Pending,
             TimeoutSeconds = UpdateTimeoutSeconds,
-            EnvironmentVariables = JsonSerializer.Serialize(new Dictionary<string, string>
-            {
-                ["AETHEUS_AGENT_TARGET_VERSION"] = request.TargetVersion
-            }),
+            EnvironmentVariables = JsonSerializer.Serialize(BuildTaskEnvironment(request)),
             CreatedAt = timeProvider.GetUtcNow().UtcDateTime
         };
         db.Tasks.Add(task);
@@ -224,6 +219,35 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
             .OrderBy(request => request.RequestedAt)
             .Select(request => request.Id)
             .ToListAsync(ct);
+
+    public Task<List<PendingTaskAgentContext>> GetPendingTasksOfPollingAgentsAsync(
+        TimeSpan olderThan, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var createdBefore = now - olderThan;
+        // Online with a live polling lease: the declared capabilities then describe an agent that is
+        // asking for work right now, so a task it never receives is not waiting for it to come back.
+        // A reserved server is mid-update: its fenced work resumes with the new agent, so it is left
+        // alone. The self-update itself is claimed regardless of capabilities.
+        return db.Tasks.AsNoTracking()
+            .Where(task => task.Status == TaskExecutionStatus.Pending
+                && !task.IsDeferredCleanup
+                && task.Operation != OperationKind.AgentSelfUpdate
+                && task.CreatedAt < createdBefore
+                && task.Server.Status == ServerStatus.Online
+                && !task.Server.AgentUpdateReserved
+                && task.Server.AgentSessionLeaseExpiresAt > now)
+            .OrderBy(task => task.CreatedAt)
+            .Take(200)
+            .Select(task => new PendingTaskAgentContext(
+                task.Id,
+                task.Operation,
+                task.Server.Name,
+                task.Server.AgentVersion,
+                task.Server.AgentProtocolVersion,
+                task.Server.AgentCapabilitiesJson))
+            .ToListAsync(ct);
+    }
 
     public Task<AgentUpdateRequest?> FindActiveByServerAsync(int serverId, CancellationToken ct) =>
         db.AgentUpdateRequests.AsNoTracking()
@@ -423,6 +447,38 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
         task.EnvironmentVariables = TaskEnvProtection.EmptyEnv;
     }
 
+    private static Dictionary<string, string> BuildTaskEnvironment(AgentUpdateRequest request)
+    {
+        var environment = new Dictionary<string, string>
+        {
+            ["AETHEUS_AGENT_TARGET_VERSION"] = request.TargetVersion
+        };
+        if (!string.IsNullOrEmpty(request.EnableCapabilities))
+            environment[AgentEnableableCapabilities.EnvironmentVariable] = request.EnableCapabilities;
+        return environment;
+    }
+
+    /// <summary>Adds the requested grants to the request and, since a grant that is installed must then
+    /// show in the agent's heartbeat, to the capabilities the confirming heartbeat has to report.</summary>
+    private static void MergeCapabilities(AgentUpdateRequest request, IReadOnlyList<string> requested)
+    {
+        // Fail closed: a stored or requested value outside the whitelist is never merged, trimmed or
+        // replaced by an empty grant; the whole reservation stops so nothing is persisted.
+        if (!AgentEnableableCapabilities.TryParse(request.EnableCapabilities, out var carried, out var carriedRejected))
+            throw new InvalidOperationException(
+                $"The stored capability grant of update request {request.Id} holds a value outside the whitelist: \"{carriedRejected}\".");
+        if (!AgentEnableableCapabilities.TryNormalize([.. carried, .. requested], out var merged, out var requestedRejected))
+            throw new InvalidOperationException(
+                $"The requested capability \"{requestedRejected}\" is outside the whitelist and cannot be granted.");
+        request.EnableCapabilities = AgentEnableableCapabilities.Join(merged);
+
+        var expected = JsonSerializer.Deserialize<List<string>>(request.ExpectedCapabilitiesJson) ?? [];
+        if (merged.Contains(AgentEnableableCapabilities.PatchManage)
+            && !expected.Contains(AgentCapabilities.PatchManagement, StringComparer.Ordinal))
+            expected.Add(AgentCapabilities.PatchManagement);
+        request.ExpectedCapabilitiesJson = JsonSerializer.Serialize(expected.Order(StringComparer.Ordinal).ToList());
+    }
+
     private static List<string> BuildExpectedCapabilities(Server server)
     {
         var expected = new HashSet<string>(StringComparer.Ordinal)
@@ -430,10 +486,19 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
             AgentCapabilities.SelfUpdate,
             AgentCapabilities.ShellExecution
         };
+        // Mirrors HeartbeatService.BuildEffectiveCapabilities: a runner-enabled agent reports
+        // pipeline.build and pipeline.functions together (type: aetheus steps need the latter).
         if (server.PipelineRunnerEnabled)
+        {
             expected.Add(AgentCapabilities.PipelineBuild);
+            expected.Add(AgentCapabilities.PipelineFunctions);
+        }
+        // Same rule for deployment: deployment.apply and deployment.functions come from one grant.
         if (server.DeploymentTargetAvailable)
+        {
             expected.Add(AgentCapabilities.Deployment);
+            expected.Add(AgentCapabilities.DeploymentFunctions);
+        }
         return expected.Order(StringComparer.Ordinal).ToList();
     }
 }

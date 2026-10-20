@@ -43,7 +43,10 @@ public sealed class AgentSelfUpdateOperationExecutor(
     internal const long MaxExtractedPayloadBytes = 1024L * 1024 * 1024;
     internal const int MaxArchiveEntries = 4096;
     internal const int ConfirmationTimeoutSeconds = 330;
-    internal const string LinuxIntegrationPostureVersion = "2";
+    // Posture 3: the supervisor understands the sixth request field (capabilities to enable). This agent
+    // refuses to hand a request to a supervisor of another version, so a six-field line never reaches a
+    // supervisor that would reject it.
+    internal const string LinuxIntegrationPostureVersion = "3";
     internal const string LinuxIntegrationPostureVersionPath = "/etc/aetheus-agent-posture-version";
     internal bool? IsWindowsOverride { get; set; }
     internal string? InstallDirectoryOverride { get; set; }
@@ -112,11 +115,15 @@ public sealed class AgentSelfUpdateOperationExecutor(
 
             await ReportPhaseAsync(AgentUpdatePhase.PickedUp, 10, null, cancellationToken).ConfigureAwait(false);
             await onOutput($"Starting agent self-update (install dir: {installDir})", TaskLogLevel.Info).ConfigureAwait(false);
+            // Refuse a capability request before anything is downloaded or touched.
+            var capabilities = await ReadCapabilityRequestAsync(envVars, isWindows, onOutput, cancellationToken)
+                .ConfigureAwait(false);
+            if (capabilities is null) return new ExecutorResult(-1, false);
             var preparation = await PrepareUpdateAsync(
                 stagingRoot, envVars, isWindows, onOutput, cancellationToken).ConfigureAwait(false);
             if (preparation.Context is null) return preparation.Failure!;
             return await HandoffUpdateAsync(
-                preparation.Context, stagingRoot, installDir, isWindows, onOutput, cancellationToken)
+                preparation.Context, stagingRoot, installDir, isWindows, capabilities, onOutput, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -202,6 +209,7 @@ public sealed class AgentSelfUpdateOperationExecutor(
         string stagingRoot,
         string installDir,
         bool isWindows,
+        IReadOnlyList<string> enableCapabilities,
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken ct)
     {
@@ -219,7 +227,7 @@ public sealed class AgentSelfUpdateOperationExecutor(
             LinuxPostureVersionPathOverride ?? LinuxIntegrationPostureVersionPath,
             LinuxUpdateRequestPathOverride ?? Path.Combine(_options.WorkDirectory, ".agent-posture-upgrade-request"),
             LinuxIntegrationPostureVersion,
-            LinuxAgentPostureUpgradeRequester.BuildQualifiedRequest(context.Release!),
+            LinuxAgentPostureUpgradeRequester.BuildQualifiedRequest(context.Release!, enableCapabilities),
             onOutput,
             ct).ConfigureAwait(false);
         if (requested) return new ExecutorResult(0, false);
@@ -227,6 +235,39 @@ public sealed class AgentSelfUpdateOperationExecutor(
         await SafeReportAsync(AgentUpdatePhase.Failed, 80, diagnostic).ConfigureAwait(false);
         return new ExecutorResult(-1, false,
             Aetheus.Shared.Components.Shared.TaskFailureCodes.InfrastructureMismatch, diagnostic);
+    }
+
+    /// <summary>
+    /// The capabilities this update must also grant (R3-58, ADR-051), or null after reporting why the
+    /// request is refused. The backend already validated them; the agent checks again against the same
+    /// closed whitelist because the task environment is not a trust boundary of its own. Only the Linux
+    /// installer has the flags the tokens map to, so a Windows agent refuses the request.
+    /// </summary>
+    private async Task<IReadOnlyList<string>?> ReadCapabilityRequestAsync(
+        IReadOnlyDictionary<string, string>? envVars,
+        bool isWindows,
+        Func<string, TaskLogLevel, Task> onOutput,
+        CancellationToken ct)
+    {
+        string? raw = null;
+        envVars?.TryGetValue(AgentEnableableCapabilities.EnvironmentVariable, out raw);
+        if (!AgentEnableableCapabilities.TryParse(raw, out var capabilities, out var rejected))
+        {
+            await ReportPhaseAsync(AgentUpdatePhase.Failed, 10, "capability request refused", ct).ConfigureAwait(false);
+            await onOutput(
+                $"Self-update refused: capability '{rejected}' cannot be enabled by an agent update.",
+                TaskLogLevel.Error).ConfigureAwait(false);
+            return null;
+        }
+        if (capabilities.Count > 0 && isWindows)
+        {
+            await ReportPhaseAsync(AgentUpdatePhase.Failed, 10, "capability request refused", ct).ConfigureAwait(false);
+            await onOutput(
+                "Self-update refused: capabilities can only be enabled on a Linux agent.",
+                TaskLogLevel.Error).ConfigureAwait(false);
+            return null;
+        }
+        return capabilities;
     }
 
     private void LaunchWindowsUpdater(string stagingRoot, string extractDir, string installDir)

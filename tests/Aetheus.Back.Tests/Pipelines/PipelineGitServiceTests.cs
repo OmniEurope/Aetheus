@@ -126,9 +126,9 @@ public class PipelineGitServiceTests
     [Fact]
     public async Task R534_AnAdditionalSource_IsNeverWhereADefinitionIsReadByDefault()
     {
-        // The project's repository plus the mirror of an external one attached beside it: a pipeline
-        // bound to no repository still reads its definition from the project's own.
-        // Recette R-483: the source is read from the stored repositories (no default-branch sync).
+        // The project's repository plus the mirror of an external one attached beside it: a
+        // pipeline bound to no repository still reads its definition from the project's own. the
+        // source is read from the stored repositories (no default-branch sync).
         _gitServiceMock.GetAccessibleRepositoriesAsync(Arg.Is<List<int>?>(ids => ids != null && ids.SequenceEqual(new[] { 1 })), Arg.Any<CancellationToken>()).Returns(
         [
             new GitLightRepoDto { Id = 10, ProjectId = 1, Slug = "aetheus", DefaultBranch = "develop" },
@@ -192,6 +192,34 @@ public class PipelineGitServiceTests
             secondPath, commit, ".pipeline/configs/apache/site.conf", Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ReadVersionPropsAtRevisionAsync_ReadsTheRootPropsAtTheExactCommit()
+    {
+        const string commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
+        _gitServiceMock.GetRepositoriesAsync(1, Arg.Any<CancellationToken>()).Returns(
+        [
+            new GitLightRepoDto { Id = 10, ProjectId = 1, Slug = "first", DefaultBranch = "main" }
+        ]);
+        var path = Path.Combine(Path.GetTempPath(), "pgs-test-1-props");
+        Directory.CreateDirectory(path);
+        _gitServiceMock.ResolveDiskPath(1, "first").Returns(path);
+        _cliMock.GetBlobAsync(path, commit, "Directory.Build.props", Arg.Any<CancellationToken>())
+            .Returns(new GitLightBlobDto { Content = "<VersionPrefix>1.4.0</VersionPrefix>", Path = "Directory.Build.props" });
+
+        var props = await _sut.ReadVersionPropsAtRevisionAsync(1, commit, TestContext.Current.CancellationToken);
+
+        Assert.Equal("1.4", ReleaseSeries.FromVersionProps(props));
+    }
+
+    [Fact]
+    public async Task ReadVersionPropsAtRevisionAsync_AMutableRevision_ReadsNothing()
+    {
+        var props = await _sut.ReadVersionPropsAtRevisionAsync(1, "main", TestContext.Current.CancellationToken);
+
+        Assert.Null(props);
+        await _gitServiceMock.DidNotReceiveWithAnyArgs().GetRepositoriesAsync(
+            default, TestContext.Current.CancellationToken);
+    }
     [Theory]
     [InlineData(".pipeline/configs/../secret.conf", null)]
     [InlineData(".pipeline/configs/apache/site.conf", "main")]
@@ -236,7 +264,7 @@ public class PipelineGitServiceTests
 
         Assert.Equal(GitWriteOutcome.Committed, outcome);
         Assert.Null(error);
-        // Recette R1-21: an Aetheus-made commit clears the repository's empty flag.
+        // An Aetheus-made commit clears the repository's empty flag.
         await _commitRecorderMock.Received(1).RecordCommitAsync(1, Arg.Any<CancellationToken>());
     }
 
@@ -459,6 +487,50 @@ public class PipelineGitServiceTests
 
         Assert.NotNull(source);
         Assert.Null(source.CommitHash);
+    }
+
+    [Theory]
+    [InlineData(null, "main")]
+    [InlineData("release/2.0", "release/2.0")]
+    public async Task GetHeadCommitShaAsync_ReadsTheAskedBranchElseTheDefault(string? sourceBranch, string expectedBranch)
+    {
+        SetupRepoWithDiskPath(31, "head-repo", "main");
+        _cliMock.GetCommitsAsync(Arg.Any<string>(), expectedBranch, 0, 1, ct: Arg.Any<CancellationToken>())
+            .Returns([new GitLightCommitDto { Sha = "0123456789abcdef0123456789abcdef01234567" }]);
+
+        var sha = await _sut.GetHeadCommitShaAsync(31, TestContext.Current.CancellationToken, sourceBranch);
+
+        Assert.Equal("0123456789abcdef0123456789abcdef01234567", sha);
+    }
+
+    [Fact]
+    public async Task GetHeadCommitShaAsync_AnEmptyRepositoryOrNoRepository_HasNoHead()
+    {
+        _gitServiceMock.GetRepositoriesAsync(32, Arg.Any<CancellationToken>())
+            .Returns([new GitLightRepoDto { Id = 1, ProjectId = 32, Slug = "empty", IsEmpty = true }]);
+
+        Assert.Null(await _sut.GetHeadCommitShaAsync(32, TestContext.Current.CancellationToken));
+        Assert.Null(await _sut.GetHeadCommitShaAsync(33, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task GetHeadCommitShaAsync_AFailingRead_IsAnUnresolvedSource()
+    {
+        _gitServiceMock.GetRepositoriesAsync(34, Arg.Any<CancellationToken>())
+            .Returns<List<GitLightRepoDto>>(_ => throw new IOException("repository store unavailable"));
+
+        Assert.Null(await _sut.GetHeadCommitShaAsync(34, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task GetHeadCommitShaAsync_ACancelledCaller_IsNotSwallowed()
+    {
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        _gitServiceMock.GetRepositoriesAsync(35, Arg.Any<CancellationToken>())
+            .Returns<List<GitLightRepoDto>>(_ => throw new OperationCanceledException(cancelled.Token));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _sut.GetHeadCommitShaAsync(35, cancelled.Token));
     }
 
     private void SetupRepoWithDiskPath(int projectId, string slug, string defaultBranch)

@@ -111,6 +111,41 @@ public sealed class ClientErrorsControllerTests
         Assert.Equal(4000, length.MaximumLength);
     }
 
+    [Theory]
+    [InlineData(ClientErrorLogLevels.Warning, LogLevel.Warning)]
+    [InlineData(ClientErrorLogLevels.Error, LogLevel.Error)]
+    [InlineData(null, LogLevel.Error)]
+    public void R1_89_Report_IsLoggedAtTheRequestedLevel_AndNoLevelStaysAnError(string? level, LogLevel expected)
+    {
+        var levels = new List<LogLevel>();
+        _logger.When(logger => logger.Log(
+                Arg.Any<LogLevel>(), Arg.Any<EventId>(), Arg.Any<object>(),
+                Arg.Any<Exception?>(), Arg.Any<Func<object, Exception?, string>>()))
+            .Do(call => levels.Add((LogLevel)call[0]));
+
+        Sut().Report(new ClientErrorLogRequest { CorrelationId = "abc", Summary = "boom", Message = "details", Level = level });
+
+        Assert.Equal([expected], levels);
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(ClientErrorLogLevels.Error, true)]
+    [InlineData(ClientErrorLogLevels.Warning, true)]
+    [InlineData("warning", false)]
+    [InlineData("Critical", false)]
+    [InlineData("", false)]
+    public void R1_89_Level_IsValidatedToTheKnownSet(string? level, bool valid)
+    {
+        var request = new ClientErrorLogRequest { CorrelationId = "abc", Summary = "boom", Message = "details", Level = level };
+        var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+
+        var ok = System.ComponentModel.DataAnnotations.Validator.TryValidateObject(
+            request, new System.ComponentModel.DataAnnotations.ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.Equal(valid, ok);
+    }
+
     private Dictionary<string, object?> CaptureLoggedValues()
     {
         var logged = new Dictionary<string, object?>();

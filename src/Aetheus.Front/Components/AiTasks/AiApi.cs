@@ -16,7 +16,7 @@ public sealed class AiApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<GridFilter>? filters = null, string? sortBy = null, bool sortDescending = false)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy ?? "Name", sortDescending);
-        // Recette R-224: the list's column header filters.
+        // The list's column header filters.
         var url = GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/ai/profiles", query), filters);
         return await Http.GetFromJsonAsync<PaginatedResult<AiRunnerProfileDto>>(url, JsonOptions.Web, ct) ?? new();
     }
@@ -40,6 +40,20 @@ public sealed class AiApi(HttpClient http) : ApiClientBase(http)
         => PutJsonAsync<UpdateAiRunnerProfileRequest, AiRunnerProfileDto>($"api/ai/profiles/{id}", request, ct);
 
 
+    /// <summary>Runs one tiny completion from the backend with these values; the stored key is used
+    /// when none is typed, and never comes back.</summary>
+    public Task<ApiOutcome<AiConnectionTestDto, object>> TestAiRunnerProfileAsync(
+        TestAiRunnerProfileRequest request, CancellationToken ct = default)
+        => PostForOutcomeAsync<AiConnectionTestDto, object>("api/ai/profiles/test", request, ct);
+
+
+    /// <summary>Recette R3-7: reads the saved profile's model list at its provider now and returns the
+    /// profile as stored afterwards. 429 when it was read less than a minute ago.</summary>
+    public Task<ApiOutcome<AiRunnerProfileDto, object>> RefreshAiRunnerProfileModelListAsync(
+        int id, CancellationToken ct = default)
+        => PostForOutcomeAsync<AiRunnerProfileDto, object>($"api/ai/profiles/{id}/model-list/refresh", null, ct);
+
+
     public Task<ApiStatus> DeleteAiRunnerProfileAsync(int id, CancellationToken ct = default)
         => DeleteAsync($"api/ai/profiles/{id}", ct);
 
@@ -52,7 +66,7 @@ public sealed class AiApi(HttpClient http) : ApiClientBase(http)
         var query = BuildPaginationQuery(page, pageSize, search, sortBy ?? "Name", sortDescending);
         if (projectId.HasValue) query["projectId"] = projectId.Value.ToString();
         if (serverId.HasValue) query["serverId"] = serverId.Value.ToString();
-        // Recette R-224: the list's column header filters.
+        // The list's column header filters.
         var url = GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/ai/tasks", query), filters);
         return await Http.GetFromJsonAsync<PaginatedResult<AiTaskDefinitionDto>>(url, JsonOptions.Web, ct) ?? new();
     }
@@ -90,10 +104,6 @@ public sealed class AiApi(HttpClient http) : ApiClientBase(http)
         return await Http.GetFromJsonAsync<PaginatedResult<AiRunResultDto>>(
             QueryHelpers.AddQueryString("api/ai/results", query), JsonOptions.Web, ct) ?? new();
     }
-
-
-    public Task<AiPatchApplicationDto?> ApplyAiPatchAsync(int resultId, CancellationToken ct = default)
-        => PostNoBodyAsync<AiPatchApplicationDto>($"api/ai/results/{resultId}/apply", ct);
 
 
     public Task<AiConsumptionDto?> GetAiConsumptionAsync(

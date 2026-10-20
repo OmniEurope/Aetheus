@@ -57,6 +57,9 @@ public class RoleAssignmentPickerTests : BunitContext
 
         cut.Find(".role-assignment-search").Input("security");
 
+        // Loaded-machine ceiling: the search leaves after a 300 ms debounce and the wait is checked again
+        // only on the render its answer brings; under load the request was measured sent and the check
+        // passing 39 ms after bUnit's 1 s default, never a missing or wrong request (PLAN-002 B7).
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request =>
             request.Url.Contains("search=security", StringComparison.OrdinalIgnoreCase)));
 
@@ -95,8 +98,8 @@ public class RoleAssignmentPickerTests : BunitContext
 
         await cut.InvokeAsync(async () => await (Task)load.Invoke(cut.Instance, [args])!);
 
-        // Recette R-210: the Role header filter is a real column filter (operator kept), not the free-text
-        // search that also matched descriptions.
+        // The Role header filter is a real column filter (operator kept), not the free-text search
+        // that also matched descriptions.
         Assert.Contains(_handler.Requests, IsNameColumnFilter);
         Assert.DoesNotContain(_handler.Requests, request =>
             request.Url.Contains("search=auditor", StringComparison.OrdinalIgnoreCase));
@@ -111,7 +114,7 @@ public class RoleAssignmentPickerTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("Security Auditor", cut.Markup));
         _handler.Requests.Clear();
 
-        // Recette R-024: the column's filter lives in its header menu, not in a second header row.
+        // The column's filter lives in its header menu, not in a second header row.
         const string nameFilter = ".role-assignment-grid th[data-omni-col='Name'] .omni-data-grid__filter-menu";
         cut.Find($"{nameFilter} input").Input("auditor");
         Assert.Empty(cut.FindAll($"{nameFilter} .omni-data-grid__filter-apply"));

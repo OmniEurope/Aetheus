@@ -33,9 +33,10 @@ public sealed class PipelineRunMetrics
     public static double? Metric(PipelineRunDto? run, string key) =>
         run?.Metrics.FirstOrDefault(m => m.Key == key)?.Value;
 
-    /// <summary>Fetch both trend series (each gated by the run actually having that data). Best-effort:
-    /// a transient API failure leaves the corresponding series empty rather than throwing.</summary>
-    /// <remarks>Recette R-422: the two series are independent, so they are fetched together.</remarks>
+    /// <summary>Fetch both trend series (each gated by the run actually having that data).
+    /// Best-effort: a transient API failure leaves the corresponding series empty rather than
+    /// throwing.</summary> <remarks>the two series are independent, so they are fetched
+    /// together.</remarks>
     public Task LoadAsync(ApiClient api, int runId, PipelineRunDto? run) =>
         Task.WhenAll(LoadCoverageTrendAsync(api, runId, run), LoadComplexityTrendAsync(api, runId, run));
 

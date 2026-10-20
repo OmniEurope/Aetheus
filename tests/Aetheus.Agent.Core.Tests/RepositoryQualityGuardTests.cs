@@ -13,7 +13,8 @@ public sealed class RepositoryQualityGuardTests
             .Where(path => !path.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
                 && !path.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase)
                 && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-                && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                && !RepositoryPathFilter.IsNestedCheckout(root, path))
             .Select(path => (path, File.ReadAllText(path)))
             .ToList();
         var productSources = ArchitectureAnalysisPublisher.SelectProductSources(root, sources);

@@ -1,7 +1,12 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* PLAN-013 lot 6 (R2-114): « Récupérer la place », administrators only. A purge frees rows, not disk;
-   VACUUM FULL gives a purged table's space back, table by table, never while a pipeline runs. *@
-<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-xl omni-u-mb-sm">@L["ReclaimSpace"]</OmniHeading>
+@* Offer administrator-confirmed VACUUM FULL per purged table to return disk space, refusing while
+   pipelines run. *@
+<div id="reclaim-space">
+<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-xl omni-u-mb-sm">@L["ReclaimSpace"]
+    <OmniTooltip Text="@L["ReclaimSpaceHelp"]" Focusable="true" MaxWidth="OmniTooltipWidth.Wide">
+        <span role="img" aria-label="@L["ReclaimSpaceHelp"]" data-testid="reclaim-space-help"><OmniIcon Name="OmniIconName.Question" aria-hidden="true" /></span>
+    </OmniTooltip>
+</OmniHeading>
 @if (_loading)
 {
     <AetheusLoader Size="OmniControlSize.Small" />
@@ -12,7 +17,6 @@ else if (_loadFailed || _status is null)
 }
 else
 {
-    <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted" Class="omni-u-mb-sm">@L["ReclaimSpaceHelp"]</OmniText>
     @if (_status.ActivePipelineRuns > 0)
     {
         <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-sm" data-testid="reclaim-space-busy">@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["ReclaimSpacePipelinesRunning"], _status.ActivePipelineRuns)</OmniAlert>
@@ -61,3 +65,4 @@ else
         </AetheusDataGrid>
     }
 }
+</div>

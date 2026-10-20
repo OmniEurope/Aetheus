@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Net;
-using System.Text;
-using System.Text.Json;
+using Aetheus.Back.Components.Notifications.MailTemplates;
 using Aetheus.Back.Services.Email;
 
 namespace Aetheus.Back.Components.Notifications;
 
-public sealed class NotificationEmailer(IEmailSender sender) : INotificationEmailer
+/// <summary>
+/// Writes each notification mail, and the channel test, from its editable template (recette R1-75) in its
+/// recipient's language and colours (recette R1-74), then sends through the platform sender.
+/// </summary>
+public sealed class NotificationEmailer(IEmailSender sender, IMailTemplateRenderer templates, IConfiguration? configuration = null)
+    : INotificationEmailer
 {
     internal const string NoAddressMessage = "The recipient's account has no e-mail address; nothing was sent.";
-    private const string SubjectPrefix = "[Aetheus] ";
-
-    private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
+    private string? FrontOrigin => configuration?["Cors:Origins:0"] is { Length: > 0 } front
+        ? front : configuration?["Cors:FrontendUrl"];
 
     public async Task<IReadOnlyList<EmailSendResult>> SendAsync(
         IReadOnlyList<NotificationEmail> emails, CancellationToken ct = default)
@@ -21,9 +23,11 @@ public sealed class NotificationEmailer(IEmailSender sender) : INotificationEmai
             .Select((email, index) => (email, index))
             .Where(item => !string.IsNullOrWhiteSpace(item.email.To))
             .ToList();
-        var sent = addressed.Count == 0
-            ? []
-            : await sender.SendBatchAsync(addressed.Select(item => Build(item.email)).ToList(), ct).ConfigureAwait(false);
+        var messages = new List<EmailMessage>(addressed.Count);
+        var styles = new Dictionary<string, MailRecipientStyle>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (email, _) in addressed)
+            messages.Add(await BuildAsync(email, styles, ct).ConfigureAwait(false));
+        var sent = messages.Count == 0 ? [] : await sender.SendBatchAsync(messages, ct).ConfigureAwait(false);
 
         var results = Enumerable.Repeat(EmailSendResult.NotConfigured(NoAddressMessage), emails.Count).ToArray();
         for (var i = 0; i < addressed.Count; i++)
@@ -31,61 +35,31 @@ public sealed class NotificationEmailer(IEmailSender sender) : INotificationEmai
         return results;
     }
 
-    public Task<EmailSendResult> SendChannelTestAsync(string? to, string channelName, CancellationToken ct = default)
+    public async Task<EmailSendResult> SendChannelTestAsync(string? to, string channelName, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(to))
-            return Task.FromResult(EmailSendResult.NotConfigured(
-                "Your account has no e-mail address: an administrator sets it in the user administration; nothing was sent."));
+            return EmailSendResult.NotConfigured(
+                "Your account has no e-mail address: an administrator sets it in the user administration; nothing was sent.");
 
-        var text = $"This is a test of the Aetheus notification channel \"{channelName}\".\n"
-            + "If you read it, e-mail notifications reach this address.";
-        return sender.SendAsync(new EmailMessage(
-            to.Trim(),
-            SubjectPrefix + "Notification channel test",
-            text,
-            Html(SubjectPrefix + "Notification channel test", text, payload: null)), ct);
+        var address = to.Trim();
+        var style = await templates.ResolveRecipientAsync(address, ct).ConfigureAwait(false);
+        var mail = await templates.RenderAsync(MailTemplateKind.NotificationChannelTest,
+            MailTemplateData.Text(NotificationEmailComposer.ChannelTestValues(channelName, FrontOrigin)), style, ct).ConfigureAwait(false);
+        return await sender.SendAsync(new EmailMessage(address, mail.Subject, mail.Text, mail.Html), ct).ConfigureAwait(false);
     }
 
-    internal static EmailMessage Build(NotificationEmail email)
+    /// <summary>One recipient's mail; a recipient's style is read once per batch.</summary>
+    private async Task<EmailMessage> BuildAsync(NotificationEmail email, Dictionary<string, MailRecipientStyle> styles, CancellationToken ct)
     {
-        var payload = Indent(email.PayloadJson);
-        var text = new StringBuilder()
-            .AppendLine(email.Subject)
-            .AppendLine()
-            .Append("Event: ").AppendLine(email.EventType)
-            .AppendLine()
-            .AppendLine(payload)
-            .ToString();
-        return new EmailMessage(
-            email.To!.Trim(),
-            SubjectPrefix + email.Subject,
-            text,
-            Html(email.Subject, $"Event: {email.EventType}", payload));
-    }
-
-    private static string Html(string title, string text, string? payload)
-    {
-        var html = new StringBuilder()
-            .Append("<!DOCTYPE html><html><body>")
-            .Append("<h2>").Append(WebUtility.HtmlEncode(title)).Append("</h2>")
-            .Append("<p>").Append(WebUtility.HtmlEncode(text).Replace("\n", "<br>", StringComparison.Ordinal)).Append("</p>");
-        if (!string.IsNullOrWhiteSpace(payload))
-            html.Append("<pre>").Append(WebUtility.HtmlEncode(payload)).Append("</pre>");
-        return html.Append("</body></html>").ToString();
-    }
-
-    private static string Indent(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return string.Empty;
-        try
+        var address = email.To!.Trim();
+        if (!styles.TryGetValue(address, out var style))
         {
-            using var document = JsonDocument.Parse(json);
-            return JsonSerializer.Serialize(document.RootElement, IndentedJson);
+            style = await templates.ResolveRecipientAsync(address, ct).ConfigureAwait(false);
+            styles[address] = style;
         }
-        catch (JsonException)
-        {
-            // Mandatory: a payload that is not JSON is still worth reading, as it came.
-            return json;
-        }
+
+        var data = NotificationEmailComposer.Build(email, FrontOrigin, style.Language);
+        var mail = await templates.RenderAsync(MailTemplateKind.NotificationEvent, data, style, ct).ConfigureAwait(false);
+        return new EmailMessage(address, mail.Subject, mail.Text, mail.Html);
     }
 }

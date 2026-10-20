@@ -7,7 +7,7 @@ using NSubstitute;
 
 namespace Aetheus.Front.Tests;
 
-/// <summary>Recette R-471: what the application tells its own audience measurement.</summary>
+/// <summary>What the application tells its own audience measurement.</summary>
 public sealed class AuthStateProviderAnalyticsTests
 {
     private static string Jwt(object payload)

@@ -8,7 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.MailboxUi;
 
-/// <summary>Recette R1-17: unlock, compose and new-folder dialogs, the reading pane and the client settings.</summary>
+/// <summary>Unlock, compose and new-folder dialogs, the reading pane and the client
+/// settings.</summary>
 public sealed class MailboxDialogsTests : BunitContext
 {
     private const string Base = "api/servers/7/mail/accounts/3/mailbox";

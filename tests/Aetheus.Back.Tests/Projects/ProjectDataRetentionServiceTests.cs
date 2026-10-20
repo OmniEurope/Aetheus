@@ -8,7 +8,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Projects;
 
-/// <summary>PLAN-013 lot 4: the « Conservation des données » setting of a project.</summary>
+/// <summary>The « Conservation des données » setting of a project.</summary>
 public sealed class ProjectDataRetentionServiceTests
 {
     private readonly IProjectDataRetentionRepository _repository = Substitute.For<IProjectDataRetentionRepository>();

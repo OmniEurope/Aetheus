@@ -146,6 +146,47 @@ public sealed class SarifAnalysisParserTests
             Assert.Single(SarifAnalysisParser.Parse(renamedAuthor, AnalysisCategory.Secrets)).Fingerprint);
     }
 
+    [Theory]
+    // An explicit severity wins over every other signal.
+    [InlineData("\"properties\": { \"severity\": \"info\", \"security-severity\": \"9.5\" }, \"level\": \"error\",", null, AnalysisSeverity.Info)]
+    // The result's own security-severity, numeric or textual, mapped by CVSS band.
+    [InlineData("\"properties\": { \"security-severity\": 9.0 },", null, AnalysisSeverity.Critical)]
+    [InlineData("\"properties\": { \"security-severity\": \"7.0\" },", null, AnalysisSeverity.High)]
+    [InlineData("\"properties\": { \"security-severity\": 4 },", null, AnalysisSeverity.Medium)]
+    [InlineData("\"properties\": { \"security-severity\": 0.1 },", null, AnalysisSeverity.Low)]
+    // The rule's security-severity is the fallback when the result has none.
+    [InlineData("", "8.1", AnalysisSeverity.High)]
+    // An unparsable explicit severity and a zero score fall through to the SARIF level.
+    [InlineData("\"properties\": { \"severity\": \"dreadful\", \"security-severity\": 0 }, \"level\": \"ERROR\",", null, AnalysisSeverity.High)]
+    [InlineData("\"level\": \"warning\",", null, AnalysisSeverity.Medium)]
+    [InlineData("\"level\": \"note\",", null, AnalysisSeverity.Low)]
+    [InlineData("\"level\": \"none\",", null, AnalysisSeverity.Info)]
+    [InlineData("\"level\": \"unexpected\",", null, AnalysisSeverity.Medium)]
+    [InlineData("", null, AnalysisSeverity.Medium)]
+    public void Parse_SeverityFollowsExplicitThenScoreThenLevel(
+        string resultSeverity, string? ruleScore, AnalysisSeverity expected)
+    {
+        var ruleProperties = ruleScore is null ? string.Empty : $$""", "properties": { "security-severity": "{{ruleScore}}" }""";
+        var sarif = $$"""
+            {
+              "version": "2.1.0",
+              "runs": [{
+                "tool": { "driver": { "name": "Scanner", "rules": [{ "id": "R1"{{ruleProperties}} }] } },
+                "results": [{
+                  "ruleId": "R1",
+                  {{resultSeverity}}
+                  "message": { "text": "Finding" },
+                  "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/app.ts" }, "region": { "startLine": 3 } } }]
+                }]
+              }]
+            }
+            """;
+
+        var finding = Assert.Single(SarifAnalysisParser.Parse(sarif, AnalysisCategory.Sast));
+
+        Assert.Equal(expected, finding.Severity);
+    }
+
     [Fact]
     public void Parse_MalformedSarifFailsClosed()
     {

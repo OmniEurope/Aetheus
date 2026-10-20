@@ -92,13 +92,9 @@ internal sealed class BlueGreenJournal(BlueGreenContext context)
 
     internal void MarkSwitched() => WriteAtomic(StatePath, Switched);
 
-    /// <summary>
-    /// Recette R2-092: whether the state directory holds no open transaction, read without building a
-    /// context, so without the env file and Compose files a run that failed early never wrote, and
-    /// without creating anything. Absent directory, absent journal, a journal without a state file
-    /// (TryOpen writes it last) or a committed one: nothing was switched. An unreadable state file is
-    /// a transaction whose record cannot be seen, so it counts as open.
-    /// </summary>
+    /// <summary>Inspect journal state without deployment context or filesystem creation to
+    /// determine whether a transaction is open. An unreadable state counts as open rather than
+    /// being mistaken for safe absence.</summary>
     internal static bool HoldsNoOpenTransaction(string stateDir)
     {
         if (stateDir.Length == 0 || !Path.IsPathRooted(stateDir) || stateDir.Contains("..", StringComparison.Ordinal))

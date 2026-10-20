@@ -35,11 +35,9 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
     public Task<PublicDemoInfoDto?> GetPublicDemoInfoAsync(CancellationToken ct = default)
         => GetJsonAsync<PublicDemoInfoDto>("api/auth/public-demo", ct);
 
-    /// <summary>
-    /// Recette R1-37: tells the server the user logs out, while the token is still held, so it forgets what it
-    /// keeps in memory for them (the typed mailbox passwords). Best effort: false when the server could not be
-    /// told, and the caller logs out anyway.
-    /// </summary>
+    /// <summary> Tells the server the user logs out, while the token is still held, so it forgets
+    /// what it keeps in memory for them (the typed mailbox passwords). Best effort: false when the
+    /// server could not be told, and the caller logs out anyway. </summary>
     public async Task<bool> NotifyLogoutAsync(CancellationToken ct = default)
     {
         try
@@ -51,7 +49,7 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
         catch (Polly.ExecutionRejectedException) { return false; }
     }
 
-    /// <summary>PLAN-005 lot 9 / D48: reports why the client ended a session (anonymous: the session is gone).</summary>
+    /// <summary>Reports why the client ended a session through an anonymous endpoint.</summary>
     public Task<ApiStatus> ReportSessionEndedAsync(SessionEndedReport report, CancellationToken ct = default)
         => PostJsonNoBodyAsync("api/auth/session-ended", report, ct);
 
@@ -78,7 +76,7 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-224: the tokens grid's column header filters.
+        // The tokens grid's column header filters.
         return await GetJsonAsync<PaginatedResult<PersonalAccessTokenDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString("api/personal-access-tokens", query), filters), ct).ConfigureAwait(false) ?? new();
     }
@@ -98,7 +96,7 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
         CancellationToken cancellationToken = default)
     {
         var query = PageQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210 / R-224: the list's column header filters.
+        // The list's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<UserDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString("api/users", query), filters), JsonOptions.Web, cancellationToken) ?? new();
     }
@@ -127,6 +125,17 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
     public Task<ApiStatus> DeleteUserAsync(int id, CancellationToken ct = default)
         => DeleteAsync($"api/users/{id}", ct);
 
+    /// <summary>Deletes a pipeline owner, handing the pipelines to <paramref
+    /// name="transferPipelinesTo"/> first, or leaving them ownerless when <paramref name="force"/>
+    /// is set.</summary>
+    public Task<ApiStatus> DeleteUserAsync(int id, string? transferPipelinesTo, bool force, CancellationToken ct = default)
+    {
+        var query = new Dictionary<string, string?>();
+        if (!string.IsNullOrWhiteSpace(transferPipelinesTo)) query["transferPipelinesTo"] = transferPipelinesTo;
+        if (force) query["force"] = "true";
+        return DeleteAsync(QueryHelpers.AddQueryString($"api/users/{id}", query), ct);
+    }
+
 
     public Task<ApiStatus> ChangeUserPasswordAsync(int id, ChangeUserPasswordRequest request, CancellationToken ct = default)
         => PostJsonNoBodyAsync<ChangeUserPasswordRequest>($"api/users/{id}/change-password", request, ct);
@@ -147,7 +156,7 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210: the role grids' column header filters.
+        // The role grids' column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<RoleDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString("api/roles", query), filters), JsonOptions.Web) ?? new();
     }
@@ -191,7 +200,7 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210: the role's users grid column header filters.
+        // The role's users grid column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<RoleUserDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/roles/{roleId}/users", query), filters), JsonOptions.Web, ct) ?? new();
     }
@@ -239,6 +248,10 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
 
     public async Task<int?> UninstallServiceAsync(int serverId, string serviceName, CancellationToken ct = default)
         => (await PostJsonAsync<ServiceInstallRequest, ServiceTaskResponse>($"api/servers/{serverId}/services/uninstall", new ServiceInstallRequest { ServiceName = serviceName }, ct).ConfigureAwait(false))?.TaskId;
+
+    /// <summary>Recette R3-59: queues the read-only list of every package installed on the server.</summary>
+    public async Task<int?> ListInstalledPackagesAsync(int serverId, CancellationToken ct = default)
+        => (await PostNoBodyAsync<ServiceTaskResponse>($"api/servers/{serverId}/packages/inventory", ct).ConfigureAwait(false))?.TaskId;
 
     public async Task<TotpSetupResponse?> SetupTotpAsync(CancellationToken ct = default)
         => await PostNoBodyAsync<TotpSetupResponse>("api/auth/totp/setup", ct).ConfigureAwait(false);

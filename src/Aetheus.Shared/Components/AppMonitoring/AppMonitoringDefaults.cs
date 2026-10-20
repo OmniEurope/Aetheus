@@ -76,16 +76,10 @@ public static class AppMonitoringDefaults
     public const int MaximumAnalyticsRoutesPerApp = 500;
     public const long DefaultAnalyticsStorageBudgetBytes = 104_857_600;
 
-    /// <summary>
-    /// Audit R2-007 follow-up: the events an application may have accepted over the last rolling hour
-    /// for a batch reaching its storage budget to roll the oldest audience rows off; above it the batch
-    /// is refused (reason <c>flood</c>) and nothing is deleted. 5 000 is about 100 tabs open at once
-    /// (a heartbeat every 75 s is 48 events an hour each) plus their page views, far above the few
-    /// hundred events an hour of an app that fills the 100 MiB default within the 30-day raw retention.
-    /// At the cap, a flood of new visitors (an event, a session and its period identities, about
-    /// 2.2 KB) rolls at most about 11 MB an hour, a tenth of that default budget, where the 600 batches
-    /// of 100 events a minute the public endpoint lets through roll all of it within a minute.
-    /// </summary>
+    /// <summary>Caps accepted audience events over a rolling hour before storage-budget eviction is
+    /// allowed; exceeding it refuses the batch without deleting rows. The 5000-event allowance
+    /// accommodates normal concurrent visits while bounding how quickly a flood can roll stored
+    /// history.</summary>
     public const int DefaultAnalyticsRollingEventsPerHour = 5_000;
     public const int MinimumAnalyticsRollingEventsPerHour = 100;
     public const int MaximumAnalyticsRollingEventsPerHour = 1_000_000;

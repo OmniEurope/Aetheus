@@ -61,8 +61,8 @@ const generate = (root, environment) => {
       QA_AGENT_COMPATIBILITY_GATE_STATUS: "0",
       QA_PREVIOUS_INTEGRATION_GATE_STATUS: "0",
       QA_PREVIOUS_E2E_GATE_STATUS: "0",
-      CompatibilityMode: "NMinusOne",
-      PreviousVersionTested: previousSha,
+      COMPATIBILITY_MODE: "NMinusOne",
+      PREVIOUS_VERSION_TESTED: previousSha,
       AgentCompatibilityMode: "NMinusOne",
       PreviousAgentTested: previousSha,
       AETHEUS_ASSURANCE_PERFORMANCE_ENABLED: "false",
@@ -106,6 +106,37 @@ test("a full candidate requires every compatibility test", () => withRoot(root =
     assert.equal(contract.tests[name].required, true, `${name} must be required in a full candidate`);
     assert.equal(contract.tests[name].status, "Passed");
   }
+}));
+
+test("a QA run still on the script's PascalCase attestation names is graded the same", () => withRoot(root => {
+  const { result, output } = generate(root, {
+    AETHEUS_ASSURANCE_PROFILE: "full",
+    COMPATIBILITY_MODE: undefined,
+    PREVIOUS_VERSION_TESTED: undefined,
+    CompatibilityMode: "NMinusOne",
+    PreviousVersionTested: previousSha
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const contract = JSON.parse(readFileSync(output, "utf8"));
+  for (const name of ["previousSmoke", "previousIntegration", "previousE2E"]) {
+    assert.equal(contract.tests[name].status, "Passed");
+    assert.equal(contract.tests[name].mode, "NMinusOne");
+    assert.equal(contract.tests[name].tested, previousSha);
+  }
+}));
+
+test("the upper snake case attestation wins over the script's PascalCase one", () => withRoot(root => {
+  const { result, output } = generate(root, {
+    AETHEUS_ASSURANCE_PROFILE: "full",
+    COMPATIBILITY_MODE: "Bootstrap",
+    PREVIOUS_VERSION_TESTED: "false",
+    CompatibilityMode: "NMinusOne",
+    PreviousVersionTested: previousSha
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const contract = JSON.parse(readFileSync(output, "utf8"));
+  assert.equal(contract.tests.previousSmoke.mode, "Bootstrap");
+  assert.equal(contract.tests.previousSmoke.tested, "false");
 }));
 
 test("a light candidate excuses the retained-agent contract and nothing else", () => withRoot(root => {
@@ -207,8 +238,8 @@ test("a schema 1 contract is still verified as a full qualification", () => with
   assert.equal(readiness.status, 0, readiness.stderr);
 }));
 
-// PLAN-007 lot 2: the nightly seals the grades of its two extension pipelines beside the three every
-// contract carries. They weigh in the overall grade, and only a full qualification may carry them.
+// Only full qualification carries the two nightly extension grades; both contribute to the overall
+// grade. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 const generateNightly = (root, environment, historySummary = passingSummary("security-history", 14)) => {
   const history = join(root, "security-history");
   const extended = join(root, "qa-extended");
@@ -234,8 +265,8 @@ const generateNightly = (root, environment, historySummary = passingSummary("sec
       QA_PREVIOUS_INTEGRATION_GATE_STATUS: "0",
       QA_PREVIOUS_E2E_GATE_STATUS: "0",
       QA_PERFORMANCE_GATE_STATUS: "0",
-      CompatibilityMode: "NMinusOne",
-      PreviousVersionTested: previousSha,
+      COMPATIBILITY_MODE: "NMinusOne",
+      PREVIOUS_VERSION_TESTED: previousSha,
       AgentCompatibilityMode: "NMinusOne",
       PreviousAgentTested: previousSha,
       AETHEUS_ASSURANCE_PERFORMANCE_ENABLED: "true",

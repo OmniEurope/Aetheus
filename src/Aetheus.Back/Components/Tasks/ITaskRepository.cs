@@ -12,7 +12,8 @@ public interface ITaskRepository
         string? search, int page, int pageSize, TaskExecutionStatus? status = null, List<int>? accessibleServerIds = null, int? serverId = null, CancellationToken ct = default,
         string? sortBy = null, bool sortDescending = true, IReadOnlyList<GridFilter>? columnFilters = null);
 
-    /// <summary>Recette R-212: the server names across the tasks of a scope, for the Server column filter.</summary>
+    /// <summary>The server names across the tasks of a scope, for the Server column
+    /// filter.</summary>
     Task<TaskFilterValuesDto> GetTaskFilterValuesAsync(List<int>? accessibleServerIds, int? serverId, CancellationToken ct = default);
 
     Task<(List<ServerTask> Items, int TotalCount)> GetTasksByStatusesPagedAsync(
@@ -34,6 +35,15 @@ public interface ITaskRepository
         int serverId,
         int? take = null,
         string? agentSessionId = null,
+        CancellationToken ct = default);
+    /// <summary>Fails a task that is still Pending (atomically: a task an agent claimed meanwhile is left
+    /// alone) with a failure code and reason, and scrubs its environment. <c>false</c> when the task is
+    /// no longer Pending.</summary>
+    Task<bool> TryFailPendingTaskAsync(
+        int taskId,
+        string failureCode,
+        string failureReason,
+        DateTime failedAt,
         CancellationToken ct = default);
     Task<bool> HasCurrentAgentLeaseAsync(
         int taskId,

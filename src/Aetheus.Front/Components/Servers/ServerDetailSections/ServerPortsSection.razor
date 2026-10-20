@@ -1,9 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
-@* PLAN-005 lots 1 and 2 - the port registry, finally visible, crossed with what the agent really
-   sees listening. The reservations existed since the pipeline guard started declaring them, but no
-   page listed them: an operator hitting "port is already allocated" could read the holder only in a
-   run's rejection message. A discrepancy between the two sources is shown, never auto-corrected. *@
+@* The port registry is compared with observed listeners; discrepancies are shown without automatic
+   correction. *@
 
 <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
@@ -40,7 +38,10 @@
                        two forms for one intent. *@
                     <OmniFormField For="oe-pages-servers-serverdetailsections-serverportssection-numeric-2"><LabelContent>@L["PortAllocateCount"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_form.AllocateCount" Minimum="1"
                             Maximum="@PortRegistryLimits.MaxPortsPerAllocation" Id="oe-pages-servers-serverdetailsections-serverportssection-numeric-2" /></ChildContent></OmniFormField>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@AllocateAsync" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Archive" /> <span>@L["PortAllocate"]</span></OmniButton>
+                    @* STD-BTN detection 11: Add visible, the other actions in the menu (Allocate, beside its count). *@
+                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniMenuItem OnClick="@AllocateAsync" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent>@L["PortAllocate"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
                 </OmniRow>
             </OmniTemplateForm>
             @if (_addError is not null)

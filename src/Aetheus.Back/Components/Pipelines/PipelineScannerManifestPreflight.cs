@@ -4,13 +4,8 @@ using Aetheus.Back.Components.Tasks;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// The scanner-manifest half of the launch preflight. A scanner step triggered by the candidate is
-/// dispatched only to an agent reporting the manifest this backend embeds
-/// (<see cref="PipelineScannerTaskFactory.HasCompatibleScannerManifest"/>). After a production
-/// deployment changed that manifest, the runners still report the old one until an operator updates
-/// them, and the candidate used to discover it at the first scanner, an hour of CI later.
-/// </summary>
+/// <summary>Scanner preflight requires an agent manifest matching the backend before launching
+/// candidate work, so incompatible runners are detected before scanner dispatch.</summary>
 public interface IPipelineScannerManifestPreflight
 {
     /// <summary>
@@ -37,7 +32,7 @@ public interface IPipelineScannerManifestPreflight
 /// last report carries the expected manifest satisfies the stage whether it is online right now or not.
 /// </summary>
 public sealed class PipelineScannerManifestPreflight(
-    IPipelineRepository repo,
+    IPipelineRunnerTargetReader repo,
     IPipelineDispatchServerResolver dispatchServers) : IPipelineScannerManifestPreflight
 {
     public async Task<string?> FindProblemAsync(

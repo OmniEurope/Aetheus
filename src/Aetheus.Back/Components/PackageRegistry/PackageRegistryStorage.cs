@@ -12,17 +12,43 @@ internal sealed class PackageRegistryStorage(IConfiguration configuration) : IPa
         PackageRegistryDefaults.ResolveMaxPackageBytes(configuration),
         configuration.GetValue("PackageRegistry:VolumeQuotaBytes", 20L * 1024 * 1024 * 1024));
 
-    public async Task<StoredPackagePayload> SaveAsync(
+    public Task<StoredPackagePayload> SaveAsync(
         PackageRegistryKind kind,
         string normalizedName,
         string normalizedVersion,
         string extension,
         Stream content,
         CancellationToken ct = default)
+        => SaveToAsync(VersionDirectory(kind, normalizedName, normalizedVersion, "package" + extension), content, ct);
+
+    public Task<StoredPackagePayload> SaveFileAsync(
+        PackageRegistryKind kind,
+        string normalizedName,
+        string normalizedVersion,
+        string fileName,
+        Stream content,
+        CancellationToken ct = default)
+    {
+        // The file name is the client's, already held to a strict character set by the caller; it
+        // still never chooses a directory: the separators are refused here and the resolved path is
+        // checked against the storage root.
+        if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOfAny(['/', '\\', ':']) >= 0
+            || fileName is "." or "..")
+            throw new BadRequestException("Invalid package file name.");
+        return SaveToAsync(VersionDirectory(kind, normalizedName, normalizedVersion, Path.Combine("files", fileName)),
+            content, ct);
+    }
+
+    private static string VersionDirectory(
+        PackageRegistryKind kind, string normalizedName, string normalizedVersion, string leaf)
     {
         var nameHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedName)));
         var versionHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedVersion)));
-        var relativePath = Path.Combine(kind.ToString().ToLowerInvariant(), nameHash, versionHash, "package" + extension);
+        return Path.Combine(kind.ToString().ToLowerInvariant(), nameHash, versionHash, leaf);
+    }
+
+    private async Task<StoredPackagePayload> SaveToAsync(string relativePath, Stream content, CancellationToken ct)
+    {
         var fullPath = SafeResolvePath(relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
@@ -33,6 +59,8 @@ internal sealed class PackageRegistryStorage(IConfiguration configuration) : IPa
             using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             using var sha1 = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
             using var sha512 = IncrementalHash.CreateHash(HashAlgorithmName.SHA512);
+            // MD5 only feeds the .md5 checksum file Maven clients still request; it guards nothing.
+            using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
             await using var output = new FileStream(
                 temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
@@ -49,6 +77,7 @@ internal sealed class PackageRegistryStorage(IConfiguration configuration) : IPa
                 sha256.AppendData(buffer, 0, read);
                 sha1.AppendData(buffer, 0, read);
                 sha512.AppendData(buffer, 0, read);
+                md5.AppendData(buffer, 0, read);
                 await output.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
             }
 
@@ -57,6 +86,7 @@ internal sealed class PackageRegistryStorage(IConfiguration configuration) : IPa
             var sha256Bytes = sha256.GetHashAndReset();
             var sha1Bytes = sha1.GetHashAndReset();
             var sha512Bytes = sha512.GetHashAndReset();
+            var md5Hex = Convert.ToHexStringLower(md5.GetHashAndReset());
             var createdNew = false;
             await using var quotaLease = await AcquireQuotaLeaseAsync(ct).ConfigureAwait(false);
             if (File.Exists(fullPath))
@@ -72,7 +102,8 @@ internal sealed class PackageRegistryStorage(IConfiguration configuration) : IPa
                     Convert.ToHexStringLower(sha256Bytes),
                     Convert.ToHexStringLower(sha1Bytes),
                     "sha512-" + Convert.ToBase64String(sha512Bytes),
-                    createdNew);
+                    createdNew,
+                    md5Hex);
             }
 
             var occupiedBytes = Directory.EnumerateFiles(_basePath, "*", SearchOption.AllDirectories)
@@ -99,7 +130,8 @@ internal sealed class PackageRegistryStorage(IConfiguration configuration) : IPa
                 Convert.ToHexStringLower(sha256Bytes),
                 Convert.ToHexStringLower(sha1Bytes),
                 "sha512-" + Convert.ToBase64String(sha512Bytes),
-                createdNew);
+                createdNew,
+                md5Hex);
         }
         finally
         {

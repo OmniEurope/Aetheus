@@ -3,7 +3,7 @@ using Aetheus.Front.Components.Pipelines;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>Recette R-373: the commit and branch links of the pipeline page's runs grid.</summary>
+/// <summary>The commit and branch links of the pipeline page's runs grid.</summary>
 public sealed class PipelineRunRepositoryResolverTests
 {
     private const string Sha = "0123456789abcdef0123456789abcdef01234567";

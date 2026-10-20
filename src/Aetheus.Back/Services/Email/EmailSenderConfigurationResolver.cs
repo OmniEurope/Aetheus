@@ -3,12 +3,9 @@ using System.Globalization;
 
 namespace Aetheus.Back.Services.Email;
 
-/// <summary>
-/// Recette R1-16. The default sender needs no configuration: the <c>no-reply</c> mailbox of the mail
-/// domain Aetheus manages, submitted on port 587 with STARTTLS and authenticated with the password
-/// Aetheus generated and keeps in its secret store. A custom SMTP server selected in the platform
-/// settings replaces it. Nothing here guesses a password: a missing one is reported as the problem.
-/// </summary>
+/// <summary>Uses the managed domain’s no-reply mailbox with STARTTLS on port 587 and its stored
+/// password, unless platform settings select a custom SMTP server. Missing credentials produce an
+/// explicit configuration error.</summary>
 public sealed class EmailSenderConfigurationResolver(
     IEmailSenderSettingsRepository repo,
     IEncryptionService encryption) : IEmailSenderConfigurationResolver

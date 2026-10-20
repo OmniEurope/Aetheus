@@ -2,12 +2,11 @@
 
 namespace Aetheus.Front.Components.Git;
 
-/// <summary>
-/// Recette R2-124: the export of each list of a repository page (commits, branches, tags, files, pull
-/// requests, protection rules) reads its pages here, with the sort and column filters of its grid and
-/// the same query the grid's own load sends, without the rows, the cache or the error state the page
-/// keeps. A page that cannot be read throws, so the export fails instead of writing a partial file.
-/// </summary>
+/// <summary> The export of each list of a repository page (commits, branches, tags, files, pull
+/// requests, protection rules) reads its pages here, with the sort and column filters of its grid
+/// and the same query the grid's own load sends, without the rows, the cache or the error state the
+/// page keeps. A page that cannot be read throws, so the export fails instead of writing a partial
+/// file. </summary>
 internal sealed class GitRepositoryExportReader(GitApi git)
 {
     public Task<PaginatedResult<GitLightCommitDto>> CommitsAsync(int repoId, GridLoadArgs args)

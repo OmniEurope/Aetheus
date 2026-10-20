@@ -90,8 +90,7 @@ public class ServerMailSectionTests : BunitContext
         cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification { TaskId = 1, ServerId = 10 }));
 
         cut.WaitForAssertion(() =>
-            Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/servers/10/mail/domains")),
-            TimeSpan.FromSeconds(2));
+            Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/servers/10/mail/domains")));
     }
 
     [Fact]
@@ -158,7 +157,7 @@ public class ServerMailSectionTests : BunitContext
         Assert.Same(dnsField.GetValue(cut.Instance), dialog.LastParameters["DnsRecords"]);
     }
 
-    // --- Recette R2-080 / R2-090: what the page opens on ---
+    // Initial mail-page presentation.
 
     [Fact]
     public void R2_080_AStackNotInstalled_OpensOnTheSetupAssistant_WithoutTabs()

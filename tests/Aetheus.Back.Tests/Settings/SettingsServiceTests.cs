@@ -55,7 +55,9 @@ public class SettingsServiceTests
         Assert.Equal("dark", result[0].Value);
         Assert.Equal("Locale", result[1].Key);
         Assert.Contains(result, s => s.Key == "Retention:LogDays" && s.Value == "30");
-        Assert.Equal(3, result.Count);
+        // "Run to end" is shown off until an administrator turns it on.
+        Assert.Contains(result, s => s.Key == PipelineRunToEndSetting.Key && s.Value == "false");
+        Assert.Equal(4, result.Count);
     }
 
     [Fact]
@@ -66,9 +68,11 @@ public class SettingsServiceTests
         var result = await _sut.GetSettingsAsync(ct: TestContext.Current.CancellationToken);
 
         // L9QM: even with no persisted settings, the operational defaults surface so they are editable.
-        Assert.Single(result);
+        Assert.Equal(2, result.Count);
         Assert.Equal("Retention:LogDays", result[0].Key);
         Assert.Equal("30", result[0].Value);
+        Assert.Equal(PipelineRunToEndSetting.Key, result[1].Key);
+        Assert.Equal("false", result[1].Value);
     }
 
     [Fact]

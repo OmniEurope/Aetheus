@@ -3,10 +3,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Audit;
 
-/// <summary>
-/// Recette R-238: the column filters of the audit grids (the audit log page and an entity's audit
-/// trail). The timestamp range replaces the two date pickers that sat above the grid.
-/// </summary>
+/// <summary>Column filters for audit logs and entity audit trails, including the timestamp
+/// range.</summary>
 internal static class AuditLogQuery
 {
     internal static readonly GridQueryMap<AuditLog> Columns = new GridQueryMap<AuditLog>()

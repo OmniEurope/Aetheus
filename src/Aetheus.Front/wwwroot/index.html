@@ -7,34 +7,20 @@
     <title>Aetheus</title>
     <base href="/" />
     <link rel="preload" id="webassembly" />
-    <!-- PLAN-008 (ADR-046): the OmniEurope.Blazor stylesheet, applied as shipped, before app.css so the
-         application's explicit overrides keep the last word (one theme, recette R-054). -->
+    <!-- Loads the unmodified OmniEurope.Blazor stylesheet before application overrides (ADR-046). -->
     <link rel="stylesheet" href="_content/OmniEurope.Blazor/omnieurope.blazor.css" />
     <link rel="stylesheet" href="css/app#[.{fingerprint}].css" />
     <link rel="icon" type="image/svg+xml" href="aetheus-icon.svg" />
     <script type="importmap"></script>
-    <!-- Recette R2-112 (STD-SHELL): OE replays the theme snapshot OmniThemeScope wrote (App.razor,
-         SnapshotKey) on the document before the first frame, so the boot splash shows in the chosen
-         colours; it hands the look back to the scope once the splash (#app-splash) is gone. -->
-    <script src="_content/OmniEurope.Blazor/omni-boot.js" data-theme-snapshot-key="aetheus:theme" data-theme-hold="#app-splash"></script>
+    <!-- OE replays the saved OmniThemeScope snapshot for the boot splash (the appearance, the text and
+     control sizes of the last look drawn in this browser) and returns theme ownership to the scope
+     when the splash disappears (STD-SHELL); it also sets the document language from the saved
+     culture, or the browser language, so accessibility metadata matches the rendered application. -->
+    <script src="_content/OmniEurope.Blazor/omni-boot.js" data-theme-snapshot-key="aetheus:theme" data-theme-hold="#app-splash" data-language-key="aetheus_lang"></script>
     <script>
         (function() {
-            // Recette R2-112 (STD-SHELL): the mode of the boot splash comes from OE's snapshot (omni-boot.js
-            // above), which the theme scope rewrites on every change; nothing is copied on the root here.
-            // Align <html lang> with the effective boot culture: the saved preference if any,
-            // otherwise the browser's own language (which is what Blazor.start falls back to).
-            // Without this, a French-browser user with no saved preference kept lang="en",
-            // mislabelling the document for screen readers and SEO.
-            var lang = localStorage.getItem('aetheus_lang') || navigator.language || 'en';
-            if (lang) document.documentElement.lang = lang.substring(0, 2);
-            // Recette R-390: the text size and control size levels (1-10, 5 as drawn, no attribute). OE leaves
-            // them to the host, on the document root, where its stylesheet reads them (layout.js on change).
-            [['aetheus_text_size', 'data-oe-text-size'], ['aetheus_control_size', 'data-oe-control-size']].forEach(function (scale) {
-                var level = parseInt(localStorage.getItem(scale[0]), 10);
-                if (level >= 1 && level <= 10 && level !== 5) document.documentElement.setAttribute(scale[1], String(level));
-            });
-            // Recette R2-112: the boot copy of the theme tokens is OE's now (omni-boot.js above); the copy
-            // Aetheus kept before is dropped once.
+            // Removes the obsolete application-owned theme-token snapshot; OE manages the boot
+            // snapshot.
             try { localStorage.removeItem('aetheus_theme_tokens'); } catch (e) { /* blocked storage */ }
         })();
     </script>
@@ -88,7 +74,7 @@
          changed layout.js would otherwise stay stale in the browser (a new function like
          Aetheus.scrollToBottom would be "undefined" and its buttons silently no-op). Bump ?v= on any
          edit to these files. -->
-    <script src="js/layout.js?v=17"></script>
+    <script src="js/layout.js?v=19"></script>
     <script src="js/offline-registration.js?v=1"></script>
     <script src="js/docker-interop.js?v=3"></script>
     <script src="js/monaco-frame-host.js?v=2"></script>

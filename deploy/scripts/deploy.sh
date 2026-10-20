@@ -7,10 +7,8 @@ set -e
 # deploy.sh - Aetheus Remote Deployment
 # =============================================================================
 APPNAME="aetheus"
-# No host defaults. This script used to fall back to one specific installation's git remote and
-# domain, which made the wrong host the silent answer: a copy run elsewhere with the variables unset
-# deployed a stranger's repository under a stranger's name instead of saying it had not been told
-# where to go. Required, and refused by name when missing (PLAN-006 lot 10).
+# Require repository and host values explicitly so an unset variable cannot silently select another
+# installation. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 GITREMOTE="${GITREMOTE:-}"
 SERVERNAME="${SERVERNAME:-}"
 require_env() {
@@ -194,17 +192,9 @@ ensure_env_secret() {
     printf '  %-16s: GENERATED (persisted to %s)\n' "$3" "$ENV_FILE"
 }
 
-# =========================================
-# The env file is data, never shell code (audit DEP-016)
-# =========================================
-# It used to be written with the values interpolated into "..." and then sourced: a password holding
-# $, `, " or \ did not keep its bytes, and could run a command when the file was read back. Now one
-# line per value, written by env_line and read back by env_get, which interprets nothing.
-#
-# env_line NAME VALUE prints NAME='VALUE': literal both for this reader and for docker compose
-# --env-file. A value holding a single quote, which single quotes cannot carry, is written "..." with
-# \, ", $ and ` escaped. Compose interpolates the remote compose file from the exported variables,
-# which win over the env file, so it sees the exact value either way.
+# Write and read environment values as literal data so metacharacters cannot execute or change
+# stored bytes; escape single-quote cases for Compose and export the exact values for interpolation.
+# See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 env_line() {
     case "$2" in
         *"'"*) printf '%s="%s"\n' "$1" "$(printf '%s' "$2" | sed 's/[\\"$`]/\\&/g')" ;;
@@ -533,11 +523,8 @@ if [ "$DIAG_ONLY" = "1" ]; then
     cd "$REPO_DIR"
     print_runtime_diagnostics
 
-    # Health-aware exit code so -x is usable in cron/monitoring. Inspect every
-    # container labeled for this compose project (same label filter the wipe
-    # path uses) and fail when any is Restarting / unhealthy / Exited / dead.
-    # Docker answering is part of the verdict (audit DEP-017): an unreachable daemon or a stack with no
-    # container used to read as an empty list of unhealthy containers, hence HEALTH OK.
+    # Require a reachable Docker daemon and a nonempty healthy stack so diagnostic exit codes are
+    # reliable for monitoring. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
     echo ""
     if ! _states=$(docker ps -a \
         --filter "label=com.docker.compose.project=${PROJECT_NAME}" \

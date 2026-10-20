@@ -1,11 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@*
-    PLAN-003 lot 7: a counter badge showing "0" tells the reader nothing they cannot already see from
-    the empty list next to it, and it costs a line of horizontal room on every row that carries one.
-    Making the rule structural here beats repeating `@if (n > 0)` at two dozen call sites, where the
-    next one added would simply forget it.
-*@
+@* Hide zero counters centrally so empty lists do not consume extra badge space and callers share
+   the same rule. *@
 @if (Value > 0)
 {
     <OmniBadge Fill="OmniFill.Solid" Tone="@OmniVariant" Class="@Class">@DisplayText</OmniBadge>

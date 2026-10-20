@@ -3,9 +3,7 @@
 
 <PageTitle>@L["Releases"] - Aetheus</PageTitle>
 
-@* Recette R-275: the global list contributes no header action (the project scope does), so no empty
-   actions section: on a phone it showed a toggle that opened nothing. Recette R-416: the help link
-   rides in the header, as on the Git repositories page, instead of a toolbar row above the grid. *@
+@* Omit empty global-list header actions to avoid an empty mobile toggle. Place help in the header. *@
 <OmniPageHeader Title="@L["Releases"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("new_releases")" /></Icon>
     <Badges>

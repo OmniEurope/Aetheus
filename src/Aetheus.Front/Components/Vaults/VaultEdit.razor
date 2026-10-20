@@ -5,8 +5,8 @@
 
 <PageTitle>@(_isNew ? L["NewVault"] : _detail?.Name ?? L["Vault"]) - Aetheus</PageTitle>
 
-@* Recette R-288: no secret-count badge; R-287 (as R-284): Edit and Delete of the vault live in the ⋮ menu.
-   Recette R-275: no header body at all, an empty one showed a phone toggle that opened nothing. *@
+@* Keep vault Edit and Delete in the menu and omit empty header content to avoid a useless mobile
+   toggle. *@
 <OmniPageHeader Title="@(_isNew ? L["NewVault"] : _detail?.Name ?? "")" ShowBack="true" BackHref="@LocalReturnUrl.Validated(ReturnUrl)" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock")" /></Icon>
 </OmniPageHeader>
@@ -63,17 +63,15 @@ else
 
         <OmniTemplateForm TModel="NewSecretModel" Model="@_newSecret" OnValidSubmit="@((EditContext context) => AddSecret((NewSecretModel)context.Model))">
         <OmniDataAnnotationsValidator Localizer="@L" />
-        @* Recette R-289: one aligned line (key, value, expiry, add, ⋮), the validation messages under it
-           rather than wedged between the fields. R-290: the value is a masked text field, not a password
-           field, so the browser neither offers to save it nor fills the login around it. *@
+        @* Align secret input controls on one row with validation below them. Use a masked text
+           field that password managers do not treat as a login credential. *@
         <div class="vault-add-row">
             <OmniTextBox @bind-Value="_newSecret.Key" Placeholder="@L["Key"]" Autocomplete="off"
                          aria-label="@L["Key"]" Class="vault-add-row__key" />
             <OmniPassword Id="vault-new-secret-value" @bind-Value="_newSecret.Value" Placeholder="@L["Value"]" IgnorePasswordManagers="true"
                           RevealLabel="@L["ShowValue"]" HideLabel="@L["HideValue"]" aria-label="@L["Value"]" />
-            @* STD-BTN exception chosen by the user (recette R-436, 2026-09-28): Generate, the field's helper, is
-               blue beside Add, the zone's main action. Recette R-437: a text button with a menu, like Run:
-               the click applies the key's recipe, the menu the other ways to generate. *@
+            @* Generate uses the approved blue STD-BTN exception beside Add. Its main click uses
+               the key recipe and its menu offers alternative generators. *@
             <OmniSplitButton Text="@L["Generate"]" Variant="OmniButtonVariant.Primary"
                              OnClick="@GenerateNewSecretValue" MenuLabel="@L["SecretGenerateOptions"]" title="@GenerateHint(_newSecret.Key)"><Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon><ChildContent>
                 @foreach (var choice in SecretGenerationChoices.All)
@@ -101,7 +99,7 @@ else
             <Columns>
                 <OmniDataGridColumn Frozen="true" TItem="VaultSecretDto" Property="Key" Title="@L["Key"]" Filterable="true">
                     <Template Context="secret">
-                        @* Recette R-292: a copy button beside the key, blue on every row (STD-BTN exception, R-436). *@
+                        @* Use the approved blue STD-BTN exception for each key copy button. *@
                         <span class="library-cell">
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyKey(secret.Key))" Class="library-copy-btn"
                                         title="@L["CopyKey"]" Label="@L["CopyKey"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
@@ -113,8 +111,8 @@ else
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="VaultSecretDto" Title="@L["Value"]" Width="12.5rem" Sortable="false">
                     <Template Context="secret">
-                        @* Recette R-292: copies the value without ever showing it (audited server side); blue on every
-                           row (STD-BTN exception chosen by the user, R-436, 2026-09-28). R2-064: left of the value. *@
+                        @* Copy values without rendering them, with server-side auditing. Place the
+                           approved blue copy action before the value for alignment. *@
                         <span class="library-cell">
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopySecretValue(secret))" Class="library-copy-btn"
                                         title="@L["CopyValue"]" Label="@L["CopyValue"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
@@ -141,8 +139,8 @@ else
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="VaultSecretDto" Title="" Width="15rem" Sortable="false" TextAlign="OmniDataGridTextAlign.End">
                     <Template Context="secret">
-                        @* Recette R-293: every action filled: copy blue (R-436), history and edit secondary, rotate
-                           orange (both STD-BTN exceptions chosen by the user). *@
+                        @* Use filled actions: blue copy, secondary history and edit, and orange
+                           rotation under the approved STD-BTN exceptions. *@
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyKeyReference(secret.Key))" title="@L["CopyKeyReference"]" Label="@L["CopyKeyReference"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowVersions(secret))" title="@L["History"]" Label="@L["History"]"><OmniIcon Name="OmniIconName.Reset" /></OmniButton>
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => UpdateSecret(secret))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>

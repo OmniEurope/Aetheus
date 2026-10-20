@@ -11,16 +11,15 @@ public interface IMailDnsVerifier
     /// <paramref name="serverAddress"/> is the public address of the mail server, the one SPF must authorise.</summary>
     Task<MailDnsCheckDto> VerifyAsync(MailDomain domain, string? hostname, string? serverAddress, CancellationToken ct = default);
 
-    /// <summary>The same four checks, read-only: the domain is left untouched (recette R2-090 status list).</summary>
+    /// <summary>Checks DNS without modifying the domain.</summary>
     Task<IReadOnlyList<MailDnsRecordCheckDto>> CheckAsync(MailDomain domain, string? hostname, string? serverAddress, CancellationToken ct = default);
 }
 
-/// <summary>
-/// PLAN-005 lot 5: DNS verification from the backend (the mail server is not necessarily a trustworthy
-/// resolver, the control plane already has outbound DNS). Details are stable codes the UI localises:
-/// <c>multiple-records</c>, <c>permissive-all</c>, <c>no-sender-mechanism</c>, <c>server-not-authorized</c>,
-/// <c>no-address</c>, <c>key-mismatch</c>, <c>key-not-compared</c>, <c>wrong-target</c>, <c>resolver-error</c>.
-/// </summary>
+/// <summary> DNS verification from the backend (the mail server is not necessarily a trustworthy
+/// resolver, the control plane already has outbound DNS). Details are stable codes the UI
+/// localises: <c>multiple-records</c>, <c>permissive-all</c>, <c>no-sender-mechanism</c>,
+/// <c>server-not-authorized</c>, <c>no-address</c>, <c>key-mismatch</c>, <c>key-not-compared</c>,
+/// <c>wrong-target</c>, <c>resolver-error</c>. </summary>
 public sealed class MailDnsVerifier(IMailDnsResolver resolver, TimeProvider timeProvider) : IMailDnsVerifier
 {
     private static readonly string[] s_senderMechanisms = ["mx", "a", "ip4", "ip6", "include"];
@@ -57,9 +56,9 @@ public sealed class MailDnsVerifier(IMailDnsResolver resolver, TimeProvider time
         };
     }
 
-    /// <summary>Recette R1-14: an MX that still shows another host carries the remaining time-to-live of the
-    /// answer seen, as the resolver reports it, so the page can say how long a cached old answer may last.
-    /// No TTL is invented: a resolver that does not give one leaves it null.</summary>
+    /// <summary>An MX that still shows another host carries the remaining time-to-live of the
+    /// answer seen, as the resolver reports it, so the page can say how long a cached old answer
+    /// may last. No TTL is invented: a resolver that does not give one leaves it null.</summary>
     private async Task<MailDnsRecordCheckDto> WithMxTimeToLiveAsync(MailDnsRecordCheckDto mx, CancellationToken ct)
     {
         if (mx.Verdict != MailCheckVerdict.Mismatch) return mx;
@@ -115,13 +114,9 @@ public sealed class MailDnsVerifier(IMailDnsResolver resolver, TimeProvider time
             : (MailCheckVerdict.Mismatch, "wrong-target", hosts);
     }
 
-    /// <summary>
-    /// Recette R1-10: SPF is compliant only when it authorises this mail server: the record Aetheus proposes
-    /// (<c>mx</c> and <c>a</c>, alone or added before the existing terms) is published, or a receiver
-    /// evaluating the record would give the server's address a pass (<see cref="MailSpfAuthorization"/>).
-    /// A record with any sender mechanism is no longer enough: <c>include:</c> of another provider authorises
-    /// that provider, not this server.
-    /// </summary>
+    /// <summary>SPF must authorize this mail server through the proposed mx/a terms or a
+    /// receiver-equivalent pass from <see cref="MailSpfAuthorization"/>. Merely authorizing another
+    /// provider is insufficient.</summary>
     internal async Task<(MailCheckVerdict, string, IReadOnlyList<string>)> EvaluateSpfAsync(
         string domain, IReadOnlyList<string> txt, string? serverAddress, CancellationToken ct)
     {

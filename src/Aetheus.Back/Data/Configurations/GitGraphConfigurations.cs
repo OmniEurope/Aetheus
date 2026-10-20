@@ -36,8 +36,8 @@ internal sealed class GitCommitConfiguration : IEntityTypeConfiguration<GitCommi
         builder.Property(e => e.Message).HasMaxLength(2000);
         builder.Property(e => e.Author).HasMaxLength(200);
         builder.HasIndex(e => new { e.ProjectId, e.Sha }).IsUnique();
-        // Recette R-481: the projects list reads each project's newest commit by date (CommittedAt when
-        // known, else CreatedAt) as two top-1 lookups, one per index, instead of sorting every commit.
+        // The projects list reads each project's newest commit by date (CommittedAt when known,
+        // else CreatedAt) as two top-1 lookups, one per index, instead of sorting every commit.
         builder.HasIndex(e => new { e.ProjectId, e.CommittedAt, e.Id });
         builder.HasIndex(e => new { e.ProjectId, e.CreatedAt, e.Id });
         builder.HasOne(e => e.Project)

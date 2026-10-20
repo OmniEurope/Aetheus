@@ -1,45 +1,19 @@
-# Reviewed false positives. Gitleaks fingerprints deliberately include the path, rule and line
-# (plus the introducing commit for history scans), so any moved or changed value is reviewed again.
+# History-only exceptions (PLAN-002 lot 7, decision D3; user decision of 2026-10-13: the history is not
+# rewritten again, so these stay permanently). The current tree has no exception: every entry below is a
+# history fingerprint (commit:path:rule:line) that matches one reviewed commit and nothing else, so a new
+# commit carrying the same value is reported again.
 
-# Documentation mentions configuration keys, not credentials.
-CHANGELOG.md:generic-api-key:1370
-docs/adr/ADR-008-aes256-gcm-encryption.md:generic-api-key:32
-src/Aetheus.Back/Services/EncryptionService.cs:generic-api-key:71
-src/Aetheus.Back/Services/EncryptionService.cs:generic-api-key:76
+# Dovecot names its password hashing scheme (SHA512-CRYPT), not a credential. The line left the tree on
+# 2026-10-13: doveadm pw prefixes every hash with its scheme, so the 2.4 passdb no longer sets a default.
+87d7c5c1646e27605170c8acbb7542c2a01bc5a4:deploy/scripts/install-agent-linux.sh:generic-api-key:2268
+3a985f24954cb2b61d171370531e0f42411a920b:deploy/agent-host-config/mail/dovecot-2.4/99-aetheus.conf:generic-api-key:11
+9b724525a2b91899389839ac39b8b529df5f40ab:deploy/agent-host-config/mail/dovecot-2.4/99-aetheus-master.conf:generic-api-key:8
 
-# The character set the no-reply password generator draws from (recette R1-16), not a credential:
-# the generated password itself is only ever held in memory and in the encrypted secret store.
-# Finding #1244, candidate run 2672 graded B on it alone.
-src/Aetheus.Back/Components/Mail/MailNoReplySenderService.cs:generic-api-key:22
-
-# Scanner conformance fixture intentionally contains a synthetic GitHub-shaped token.
-scripts/run-scanner-campaign.ps1:github-pat:431
-
-# Vendored Monaco identifiers are source-code tokens, not credential values.
-src/Aetheus.Front/wwwroot/lib/monaco-editor/min/vs/editor/editor.main.js:generic-api-key:631
-src/Aetheus.Front/wwwroot/lib/monaco-editor/min/vs/language/typescript/tsWorker.js:generic-api-key:320
-
-# Test-only constants use invalid hosts, synthetic hashes or non-secret DTO values.
-tests/Aetheus.Back.Tests/Pipelines/PipelineGitServiceTests.cs:generic-api-key:169
-tests/Aetheus.Back.Tests/Webhooks/WebhookSecretReencryptionTests.cs:generic-api-key:79
-tests/Aetheus.E2E/WebAnalyticsConsumerBrowserTests.cs:generic-api-key:57
-tests/Aetheus.Front.Tests/Pages/Servers/ServerDtosTests.cs:generic-api-key:83
-tests/Aetheus.WebAnalytics.Tests/AetheusWebAnalyticsEndpointTests.cs:generic-api-key:127
-tests/Aetheus.WebAnalytics.Tests/AnalyticsPrivacyTests.cs:generic-api-key:144
-tests/Aetheus.WebAnalytics.Tests/AudienceMeasurementPageTests.cs:generic-api-key:33
-
-# Historical introductions of the same reviewed documentation, conformance and test fixtures.
-013fe39ba1aa5e9ffec97eaf9e508c1627549145:tests/Aetheus.Back.Tests/Pipelines/PipelineGitServiceTests.cs:generic-api-key:169
-06d218f6d88659c06467cb1e666d76f8230b0aeb:tests/Prometheus.Front.Tests/Pages/Servers/ServerDtosTests.cs:generic-api-key:83
-117795d14d34966a4a143f943c02f89e14bb4add:CHANGELOG.md:generic-api-key:245
-3d64bd6d457826c4e920e9c6ee2c3019bbab39d8:tests/Aetheus.E2E/WebAnalyticsConsumerBrowserTests.cs:generic-api-key:57
-3d64bd6d457826c4e920e9c6ee2c3019bbab39d8:tests/Aetheus.WebAnalytics.Tests/AetheusWebAnalyticsEndpointTests.cs:generic-api-key:127
-3d64bd6d457826c4e920e9c6ee2c3019bbab39d8:tests/Aetheus.WebAnalytics.Tests/AnalyticsPrivacyTests.cs:generic-api-key:142
-3d64bd6d457826c4e920e9c6ee2c3019bbab39d8:tests/Aetheus.WebAnalytics.Tests/AudienceMeasurementPageTests.cs:generic-api-key:31
+# The character set the no-reply password generator drew from (recette R1-16, finding #1244), not a
+# credential: the generated password only lives in memory and in the encrypted secret store. Built from
+# ranges in MailPasswordGenerator since 9b724525a.
 978433d5d461fcc9634a1c9066d9a2fca58eb5ab:src/Aetheus.Back/Components/Mail/MailNoReplySenderService.cs:generic-api-key:22
-49c9e02a129e67fc81f98fc5ee60b5bdc66900b4:docs/adr/ADR-008-aes256-gcm-encryption.md:generic-api-key:32
-7be4d29ebfc1efa28a0173469dfb26ea86423f9a:CHANGELOG.md:generic-api-key:25
-7be4d29ebfc1efa28a0173469dfb26ea86423f9a:tests/Prometheus.Back.Tests/Webhooks/WebhookSecretReencryptionTests.cs:generic-api-key:79
-8b726697d1b64e71cdeaf17951ba34fa55bd7e2a:scripts/run-scanner-campaign.ps1:github-pat:431
-9acf7b2cafc43f24405064681d29e5f1b3fd59ae:src/Prometheus.Back/Services/EncryptionService.cs:generic-api-key:71
-ba4d19f9a98eaba49d57124ff9a0d5020702532d:.claude/auditsession.md:generic-api-key:12
+
+# Fake provider key of the AI client tests (findings #1245/#1246), never a real key; since renamed to a
+# value that does not look like a key.
+68cd170ee856f3cd317c20ba21a1075b495a1ea5:tests/Aetheus.Agent.Core.Tests/AiProviderClientTests.cs:generic-api-key:14

@@ -99,6 +99,42 @@ public sealed class DotnetTestCommandLineTests : IDisposable
     }
 
     [Fact]
+    public void ToolDirectories_GoFirstOnPath_BeforeThePinnedSdk()
+    {
+        // run-unit-suite.sh put the pinned Node.js ahead of everything: a test that starts `node`
+        // must run the delivery toolchain, not the host's.
+        var sdk = Path.Combine(_root, "sdk");
+        var node = Path.Combine(_root, "node", "bin");
+        var tools = Path.Combine(_root, "tools");
+        Assert.True(PipelineDotnetTestRequest.TryCreate(
+            "tests/Sample.Tests",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["WORKSPACE"] = _root,
+                [PipelineDotnetTestVariables.ResultsDirectory] = "coverage/backend",
+                [PipelineDotnetTestVariables.StatusVariable] = "BACKEND_STATUS",
+                [PipelineDotnetTestVariables.DotnetPath] = Path.Combine(sdk, "dotnet"),
+                [PipelineDotnetTestVariables.ToolPaths] = node + "\n" + tools
+            },
+            out var request,
+            out var rejection), rejection);
+
+        var startInfo = DotnetTestCommandLine.Build(request!, testingPlatform: true);
+
+        Assert.StartsWith(
+            node + Path.PathSeparator + tools + Path.PathSeparator + sdk + Path.PathSeparator,
+            startInfo.Environment["PATH"], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WithoutToolDirectories_PathIsTheInheritedOne()
+    {
+        var startInfo = DotnetTestCommandLine.Build(Request(), testingPlatform: true);
+
+        Assert.Equal(System.Environment.GetEnvironmentVariable("PATH"), startInfo.Environment["PATH"]);
+    }
+
+    [Fact]
     public void NormalizeCoverageReports_MovesOnlyStampedReports()
     {
         var results = Directory.CreateDirectory(Path.Combine(_root, "results")).FullName;

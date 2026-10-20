@@ -16,15 +16,13 @@ public abstract class PagedDataGridPageBase<T> : ComponentBase
     protected bool _loading;
     protected bool _loadFailed;
 
-    /// <summary>Recette R-224: the grid's header filters of the last load, sent with every page request.</summary>
+    /// <summary>The grid's header filters of the last load, sent with every page request.</summary>
     protected List<GridFilter> _columnFilters = [];
     protected string _sortBy = "Name";
     protected bool _sortDescending;
 
-    /// <summary>
-    /// Recette R-226: for live data. The grid fetches its current page again, with its sort and filters,
-    /// the rows staying on screen; a user action keeps <see cref="ReloadPageAsync"/>.
-    /// </summary>
+    /// <summary> For live data. The grid fetches its current page again, with its sort and filters,
+    /// the rows staying on screen; a user action keeps <see cref="ReloadPageAsync"/>. </summary>
     protected Task RefreshPageAsync() => _grid?.Refresh() ?? Task.CompletedTask;
 
     protected async Task ReloadPageAsync()
@@ -43,9 +41,12 @@ public abstract class PagedDataGridPageBase<T> : ComponentBase
         var pageSize = args.Top ?? 25;
         var page = (args.Skip ?? 0) / pageSize + 1;
         _columnFilters = args.ToApiFilters();
-        (_sortBy, _sortDescending) = args.ToSortRequest("Name");
+        (_sortBy, _sortDescending) = args.ToSortRequest(DefaultSortField);
         return LoadPageAsync(page, pageSize);
     }
+
+    /// <summary>The column a page sorts on until the user sorts another one.</summary>
+    protected virtual string DefaultSortField => "Name";
 
     protected async Task<PaginatedResult<T>> LoadPageResultAsync(
         Func<Task<PaginatedResult<T>>> loadAsync)
@@ -60,7 +61,7 @@ public abstract class PagedDataGridPageBase<T> : ComponentBase
         }
         catch (HttpRequestException)
         {
-            // Recette R-239: an honest failure the page shows with a Retry button.
+            // An honest failure the page shows with a Retry button.
             _loadFailed = true;
             return new PaginatedResult<T>();
         }

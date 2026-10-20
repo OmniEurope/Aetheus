@@ -18,19 +18,19 @@ public class ProjectExternalRepoSectionTests : BunitContext
 
         var cut = Render<ProjectExternalRepoSection>(p => p.Add(c => c.ProjectId, 1));
 
-        cut.WaitForState(() => cut.Markup.Contains("OwnerOrGroup"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("OwnerOrGroup"));
         Assert.Contains("Attach", cut.Markup);
     }
 
     [Fact]
     public void NoContent_ShowsAttachForm_AndTheSameProjectIsReadOnce()
     {
-        // Recette R-321: no external repository answers 204; a re-render with the same project does not
-        // ask again (the launch log showed the same request three times).
+        // An absent external repository returns 204; re-rendering the same project does not repeat
+        // the request.
         _handler.SetResponse("api/external-repos/project/1", HttpStatusCode.NoContent);
 
         var cut = Render<ProjectExternalRepoSection>(p => p.Add(c => c.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("OwnerOrGroup"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("OwnerOrGroup"));
         cut.Render(p => p.Add(c => c.ProjectId, 1));
 
         Assert.Single(_handler.Requests, request => request.Url.EndsWith("api/external-repos/project/1", StringComparison.Ordinal));
@@ -50,7 +50,7 @@ public class ProjectExternalRepoSectionTests : BunitContext
 
         var cut = Render<ProjectExternalRepoSection>(p => p.Add(c => c.ProjectId, 1));
 
-        cut.WaitForState(() => cut.Markup.Contains("acme"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("acme"));
         Assert.Contains("Enum_GitMirrorStatus_Ready", cut.Markup);
         Assert.Contains("SyncNow", cut.Markup);
     }
@@ -72,7 +72,7 @@ public class ProjectExternalRepoSectionTests : BunitContext
 
         var cut = Render<ProjectExternalRepoSection>(p => p.Add(c => c.ProjectId, 1));
 
-        cut.WaitForState(() => cut.Markup.Contains("acme"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("acme"));
         Assert.Contains("ExternalRepoRoleAdditionalSource", cut.Markup);
         Assert.Contains("repository: demo-public", cut.Find("pre").TextContent);
         Assert.Contains("branch: main", cut.Find("pre").TextContent);
@@ -96,7 +96,7 @@ public class ProjectExternalRepoSectionTests : BunitContext
 
         var cut = Render<ProjectExternalRepoSection>(p => p.Add(c => c.ProjectId, 1));
 
-        cut.WaitForState(() => cut.Markup.Contains("acme"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("acme"));
         Assert.Contains("ExternalRepoRoleProjectSource", cut.Markup);
         Assert.Contains("ExternalRepoCloneHint", cut.Markup);
         Assert.Empty(cut.FindAll("pre"));

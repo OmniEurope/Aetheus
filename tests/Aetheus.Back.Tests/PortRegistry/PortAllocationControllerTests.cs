@@ -8,12 +8,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.PortRegistry;
 
-/// <summary>
-/// PLAN-005 lot 5, decision D3. Allocating from a library needs WRITE on the library and READ on the
-/// server, never write on the server: the reservation is written by the system under the project's
-/// identity, exactly as a pipeline launch already does. Requiring server write would deny the action
-/// to the very people who own the deployment.
-/// </summary>
+/// <summary>Allocation requires library Write and server Read because the system records the
+/// reservation under the project identity.</summary>
 public class PortAllocationControllerTests
 {
     private readonly IPortAllocationService _service = Substitute.For<IPortAllocationService>();

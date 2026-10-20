@@ -120,8 +120,7 @@ public class ButtonFamilyAndGridNavigationAuditTests
 
         foreach (var (file, tag) in EnumerateRawGridTags())
         {
-            // PLAN-012: no Density at all means the default grid preset's Compact (GridCapabilityAuditTests
-            // forbids a raw grid from leaving that preset).
+            // Omitted grid density uses the registered Compact preset, which raw grids must retain.
             var density = Attribute(tag, "Density");
             if (density is not null and not "OmniDensity.Compact" and not "@Density")
                 violations.Add(file);

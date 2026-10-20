@@ -144,7 +144,7 @@ public sealed class RunGanttChartTests
             layout.Bars.Select(bar => bar.Stage.DisplayName));
     }
 
-    // Recette R-154: the wait before each stage, drawn on real time, glued to the left of its bar.
+    // The wait before each stage, drawn on real time, glued to the left of its bar.
 
     [Fact]
     public void ASequentialStageWaitsFromTheEndOfTheStageItDependsOn()
@@ -233,7 +233,7 @@ public sealed class RunGanttChartTests
     [Fact]
     public void ForStagesRunOneAfterTheOtherExecutionPlusWaitCoversTheWholeAxis()
     {
-        // Recette R-157: the totals under the strip add up to the run's span when nothing overlapped.
+        // The totals under the strip add up to the run's span when nothing overlapped.
         var layout = Build(
             Stage("Prepare", 0, 3),
             Stage("Verify", 10, 14, depth: 0),

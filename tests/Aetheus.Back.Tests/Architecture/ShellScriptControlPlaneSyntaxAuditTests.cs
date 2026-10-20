@@ -3,27 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// Architectural guard: no delivery script may contain control-plane substitution syntax.
-///
-/// Two forms of it read as ordinary text but mean entirely different things depending on where they
-/// live. In a pipeline's <c>shell:</c> block, <c>$(NAME)</c> is a pipeline variable and
-/// <c>${{ parameters.x }}</c> a template expression, both substituted before the agent ever runs the
-/// command. Inside a <c>.sh</c> file the control plane never sees them: <c>$(NAME)</c> becomes a
-/// POSIX command substitution that tries to execute a command called NAME, and
-/// <c>${{ ... }}</c> is a bad substitution that aborts the script on its first line.
-///
-/// This is not hypothetical. Extracting the inline shell out of the pipelines (PLAN-006 lot 11)
-/// carried both forms into scripts by hand: <c>$(QA_PORT_BACK)</c> would have broken the QA rollback
-/// health check, and three <c>${{ parameters.* }}</c> reads left in
-/// <c>seal-assurance-contract.sh</c> would have aborted the step that seals every candidate's
-/// assurance contract, making no candidate deployable at all.
-///
-/// Neither form is caught by <c>sh -n</c>: both parse cleanly and fail only when expanded. So the
-/// guard has to be static, and it has to be here rather than in a shell one-liner nobody reruns.
-/// The fix is always the same: pass the value by name from the calling step
-/// (<c>NAME="$(NAME)" sh script.sh</c>) and read <c>${NAME}</c> in the script.
-/// </summary>
+/// <summary>Standalone shell scripts cannot interpret control-plane variable or template syntax,
+/// even when shell syntax checking accepts it. Pass values as named environment variables from the
+/// pipeline and read ordinary shell variables in the script.</summary>
 public class ShellScriptControlPlaneSyntaxAuditTests
 {
     /// <summary>`$(NAME)` where NAME is a bare uppercase identifier. Deliberately narrow: a real
@@ -45,6 +27,13 @@ public class ShellScriptControlPlaneSyntaxAuditTests
     private static readonly Regex TemplateExpression = new(
         @"\$\{\{", RegexOptions.Compiled);
 
+    private static readonly string[] KnownLiveScripts =
+    [
+        "deploy/scripts/deploy.sh",
+        "deploy/scripts/release-fast-deploy.sh",
+        "deploy/scripts/install-agent-linux.sh",
+    ];
+
     [Fact]
     public void NoDeliveryScript_ContainsControlPlaneSubstitution()
     {
@@ -52,11 +41,11 @@ public class ShellScriptControlPlaneSyntaxAuditTests
         Assert.True(Directory.Exists(scriptsDir), $"Scripts dir not found: {scriptsDir}");
 
         var offenders = new List<string>();
-        var scanned = 0;
+        var scanned = new List<string>();
         foreach (var file in RepositoryScan.Enumerate(scriptsDir, "*.sh"))
         {
-            scanned++;
             var relative = Path.GetRelativePath(RepositoryScan.Root, file);
+            scanned.Add(relative.Replace('\\', '/'));
             var lineNumber = 0;
             foreach (var line in File.ReadLines(file))
             {
@@ -70,7 +59,12 @@ public class ShellScriptControlPlaneSyntaxAuditTests
             }
         }
 
-        Assert.True(scanned >= 50, $"Scanner found only {scanned} shell scripts - likely a path bug.");
+        // A path bug shows as known live scripts missing from the scan, whatever the number of scripts:
+        // the manual deployment (README), the pipeline-run fast release, and the agent installer
+        // (launch-linux.sh, Dockerfile.back).
+        Assert.True(scanned.Count > 0, $"Scanner found no shell script under {scriptsDir} - likely a path bug.");
+        foreach (var known in KnownLiveScripts)
+            Assert.True(scanned.Contains(known), $"Scanner did not see {known} - likely a path bug.");
         Assert.True(
             offenders.Count == 0,
             "Control-plane substitution syntax only works inside a pipeline's shell: block. In a .sh "

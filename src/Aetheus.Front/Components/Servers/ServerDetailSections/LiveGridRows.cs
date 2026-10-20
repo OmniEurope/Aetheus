@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>
-/// Recette R-227: a grid fed through <c>Items</c> whose rows a live event replaces (a server heartbeat,
-/// a task completion). A section calls <see cref="ObserveAsync{TItem}"/> from its parameter update with
-/// the list that event brought; when that list is a new one, the grid is told before it receives it,
-/// so the rows it did not hold read bold for its <c>NewRowHighlight</c>. The first list seen for a
-/// scope (the server shown) is its initial load and marks nothing.
-/// </summary>
+/// <summary>Notify Items-based grids before replacing live rows so new entries can be highlighted.
+/// The initial list for a server establishes the baseline without highlighting.</summary>
 internal sealed class LiveGridRows
 {
     private object? _held;

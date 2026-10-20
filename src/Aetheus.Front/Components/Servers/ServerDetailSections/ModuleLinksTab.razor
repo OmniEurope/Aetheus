@@ -4,8 +4,11 @@
     <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
         <CountBadge Value="@_totalCount" Variant="OmniTone.Accent" />
         <div class="blade-content-spacer"></div>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@AutoDetectAsync" Class="@(_detecting ? "btn-busy" : null)" Busy="@(_detecting)" title="@L["AutoDetect"]"><OmniIcon Name="OmniIconName.Sparkle" /> <span>@L["Detect"]</span></OmniButton>
+        @* STD-BTN detection 11: Add visible, the other actions in the menu. *@
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddDialogAsync" title="@L["AddLink"]"><OmniIcon Name="OmniIconName.Link" /> <span>@L["Add"]</span></OmniButton>
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem OnClick="@AutoDetectAsync" Disabled="@_detecting" title="@L["AutoDetect"]"><Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon><ChildContent>@L["Detect"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
     </OmniRow>
 
     <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="OnSearchChangedAsync"

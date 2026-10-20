@@ -47,7 +47,7 @@ public class SettingsExtendedTests : BunitContext
     {
         StubDefaults();
         var cut = Render<SettingsPage>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
         Assert.Contains("Settings", cut.Markup);
     }
 
@@ -56,7 +56,7 @@ public class SettingsExtendedTests : BunitContext
     {
         StubDefaults();
         var cut = Render<SettingsPage>(p => p.Add(x => x.Tab, "security"));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var idx = (int)typeof(SettingsPage)
             .GetField("_selectedTabIndex", InstPriv)!
@@ -69,7 +69,7 @@ public class SettingsExtendedTests : BunitContext
     {
         StubDefaults();
         var cut = Render<SettingsPage>(p => p.Add(x => x.Tab, "nonexistent"));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var idx = (int)typeof(SettingsPage)
             .GetField("_selectedTabIndex", InstPriv)!

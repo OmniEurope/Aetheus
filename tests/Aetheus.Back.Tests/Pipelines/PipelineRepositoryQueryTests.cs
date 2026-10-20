@@ -113,10 +113,8 @@ public class PipelineRepositoryQueryTests : IDisposable
         Assert.Null(runs[0].ProjectedWarningsJson);
     }
 
-    /// <summary>The runs grid is server-paged, so a sort the server ignores is a sort that does not
-    /// exist: the header moves, the same page comes back. Duration is the case that hides best, since
-    /// the column used to sort on CompletedAt and therefore ordered by end date while showing length.
-    /// </summary>
+    /// <summary>Server-side duration sorting must order by elapsed length rather than completion
+    /// date.</summary>
     [Fact]
     public async Task GetRunsPagedAsync_SortsByDuration_IncludingARunStillGoing()
     {
@@ -168,8 +166,8 @@ public class PipelineRepositoryQueryTests : IDisposable
         Assert.Equal(PipelineStatus.Running, shortestFirst[^1].Status);
     }
 
-    /// <summary>PLAN-008 lot 12: the grid's generic column filters and sort keys reach the runs query,
-    /// and the total they report is the size of the filtered set.</summary>
+    /// <summary>The grid's generic column filters and sort keys reach the runs query, and the total
+    /// they report is the size of the filtered set.</summary>
     [Fact]
     public async Task GetRunsPagedAsync_AppliesTheGridColumnFiltersAndSorts_BeforeCounting()
     {
@@ -200,7 +198,7 @@ public class PipelineRepositoryQueryTests : IDisposable
         Assert.Equal(["feature/logout", "feature/login"], runs.Select(run => run.BranchName));
     }
 
-    /// <summary>Recette R-210 / R-224: the runs grid's checkable status list and its date ranges.</summary>
+    /// <summary>The runs grid's checkable status list and its date ranges.</summary>
     [Fact]
     public async Task GetRunsPagedAsync_AppliesTheStatusListAndTheDateRanges()
     {
@@ -342,8 +340,7 @@ public class PipelineRepositoryQueryTests : IDisposable
     [Fact]
     public async Task GetContinuableFailedStepsInRunAsync_SeesOnlyTheSwallowedFailures()
     {
-        // PLAN-003 D13 reads the case the other query hides: the run finished green because the
-        // failure was continuable, and that is exactly what makes it Partial rather than Success.
+        // Continuable failures distinguish Partial from Success.
         Step(1, TaskExecutionStatus.Success);
         Assert.Empty(await _repo.GetContinuableFailedStepsInRunAsync(1, ct: TestContext.Current.CancellationToken));
 
@@ -354,8 +351,8 @@ public class PipelineRepositoryQueryTests : IDisposable
         Assert.Single(await _repo.GetContinuableFailedStepsInRunAsync(1, ct: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>R-14: the rollback stages count as having rolled back only when they ran and all of
-    /// their steps succeeded.</summary>
+    /// <summary>The rollback stages count as having rolled back only when they ran and all of their
+    /// steps succeeded.</summary>
     [Fact]
     public async Task DidStagesAllSucceedAsync_NeedsEveryStepOfTheNamedStagesGreen()
     {
@@ -608,8 +605,8 @@ public class PipelineRepositoryQueryTests : IDisposable
     [Fact]
     public async Task FindServerIdsInPoolAsync_ReturnsServerIdsForPool()
     {
-        // The link points at a real server row, as its FK guarantees in PostgreSQL: the link filter
-        // (PLAN-004 R-11) reads the server to hide a retired one, so an orphan link would vanish.
+        // The link fixture requires its server row because retirement filtering resolves that
+        // relation.
         _db.Servers.Add(new Server { Id = 7, Name = "pool-runner", Hostname = "pool-runner" });
         _db.AgentPoolServers.Add(new AgentPoolServer { ServerId = 7, AgentPool = new AgentPool { Id = 1, Name = "build-pool" } });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -985,8 +982,8 @@ public class PipelineRepositoryQueryTests : IDisposable
     [Fact]
     public async Task DependencyQueries_CarryTheGradeOfEachRecentRun()
     {
-        // PLAN-007 lot 3: the pipelines table shows the grade the run grids show. Run 1 sealed its own
-        // assurance letter; run 2 grades nothing and must stay without one.
+        // The pipelines table shows the grade the run grids show. Run 1 sealed its own assurance
+        // letter; run 2 grades nothing and must stay without one.
         _db.Pipelines.Add(new Pipeline { Id = 71, Name = "candidate" });
         _db.PipelineRuns.AddRange(
             new PipelineRun { Id = 11, PipelineId = 71, Status = PipelineStatus.Success, StartedAt = new DateTime(2026, 7, 1, 0, 1, 0, DateTimeKind.Utc) },
@@ -1035,8 +1032,7 @@ public class PipelineRepositoryQueryTests : IDisposable
     [Fact]
     public async Task DependencyGraph_ProjectScope_ReturnsOnlyThatProjectsPipelines()
     {
-        // PLAN-003 lot 12: the graph is narrowed by project the same way it already was by
-        // server, so a project's pipelines page stops loading the whole fleet's graph.
+        // Project-scoped graph reads exclude unrelated fleet pipelines.
         _db.Projects.AddRange(
             new Project { Id = 90, Name = "mine", OrganizationId = 1 },
             new Project { Id = 91, Name = "other", OrganizationId = 1 });
@@ -1100,7 +1096,7 @@ public class PipelineRepositoryQueryTests : IDisposable
     [Fact]
     public async Task GetPendingApprovalsAsync_ListsOnlyUndecidedApprovalsOfWaitingRunsTheCallerMayRead()
     {
-        // PLAN-007 lot 7: the home page and the top bar list what waits for a decision, and only that.
+        // The home page and the top bar list what waits for a decision, and only that.
         var at = new DateTime(2026, 9, 12, 8, 0, 0, DateTimeKind.Utc);
         _db.Environments.Add(new Aetheus.Back.Data.Entities.Environment { Id = 1, Name = "prod" });
         _db.Pipelines.AddRange(
@@ -1148,7 +1144,7 @@ public class PipelineRepositoryQueryTests : IDisposable
         Assert.Equal([1], expired);
     }
 
-    /// <summary>PLAN-003 2.7: a confirmation window expires on its own delay, not the environment's day.</summary>
+    /// <summary>Stage confirmation expires according to its own window.</summary>
     [Fact]
     public async Task GetExpiredPendingApprovalIdsAsync_AStageDelay_OverridesTheEnvironmentTimeout()
     {
@@ -1226,6 +1222,7 @@ public class PipelineRepositoryQueryTests : IDisposable
                 call.Arg<CancellationToken>()));
         var approvalService = new PipelineApprovalService(
             _repo,
+            _repo,
             runService,
             Substitute.For<IHttpContextAccessor>(),
             Substitute.For<IHubContext<PipelineHub>>(),
@@ -1261,8 +1258,8 @@ public class PipelineRepositoryQueryTests : IDisposable
         Assert.Equal(PipelineStatus.WaitingForApproval, untouchedRun.Status);
     }
 
-    /// <summary>Recette R2-121: the shipped catalog lives in the platform organization and is shared by
-    /// name; a template someone wrote there, or one of another organization, is not.</summary>
+    /// <summary>The shipped catalog lives in the platform organization and is shared by name; a
+    /// template someone wrote there, or one of another organization, is not.</summary>
     [Fact]
     public async Task FindSharedTemplateByNameAsync_SharesOnlyThePlatformsShippedTemplates()
     {

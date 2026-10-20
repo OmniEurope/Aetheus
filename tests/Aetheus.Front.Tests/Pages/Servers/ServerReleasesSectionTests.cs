@@ -21,7 +21,7 @@ public class ServerReleasesSectionTests : BunitContext
         // Server-scope ReleasesList always renders the "Releases" heading, and the empty
         // grid shows the NoReleasesFound empty-state (not just an empty shell).
         Assert.Contains("Releases", cut.Markup);
-        cut.WaitForAssertion(() => Assert.Contains("NoReleasesFound", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("NoReleasesFound", cut.Markup));
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public class ServerReleasesSectionTests : BunitContext
         });
         var cut = Render<ServerReleasesSection>(p => p.Add(x => x.ServerId, 1));
         // The release version is loaded into the grid and rendered as a link to /releases/{id}.
-        cut.WaitForAssertion(() => Assert.Contains("1.0.0", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("1.0.0", cut.Markup));
         Assert.Contains("/releases/5", cut.Markup);
         Assert.Contains("Published", cut.Markup);
     }

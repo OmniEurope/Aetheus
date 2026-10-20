@@ -25,6 +25,20 @@ public sealed class TeamspeakGracefulRestartOperationExecutor(
 {
     private readonly AetheusAgentOptions _options = options.Value;
 
+    internal bool IsLinux { get; init; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+
+    internal string CredentialPath { get; init; } = ServerQueryHelper.ReadCredentialPath();
+
+    // The grace-period wait, replaceable so the sequence is asserted without waiting.
+    internal Func<TimeSpan, CancellationToken, Task> DelayAsync { get; init; } =
+        static (delay, ct) => Task.Delay(delay, ct);
+
+    // The process runner, replaceable so the restart argv is asserted without sudo.
+    internal Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>>
+        RunProcessAsync
+    { get; init; } = static (startInfo, timeoutSeconds, onOutput, processLogger, ct) =>
+            ProcessRunner.RunAsync(startInfo, timeoutSeconds, onOutput, processLogger, ct);
+
     public override bool CanHandle(OperationKind kind) =>
         kind is OperationKind.TeamspeakGracefulRestart or OperationKind.TeamspeakGetLogs;
 
@@ -57,7 +71,7 @@ public sealed class TeamspeakGracefulRestartOperationExecutor(
         seconds = Math.Clamp(seconds, 0, 600);
         var message = envVars.GetValueOrDefault(TeamspeakSetupEnv.WarnMessage, "Server restarting");
 
-        var credential = await ServerQueryHelper.ReadCredentialAsync(onOutput, ct).ConfigureAwait(false);
+        var credential = await ServerQueryHelper.ReadCredentialAsync(CredentialPath, onOutput, ct).ConfigureAwait(false);
         if (credential is null) return new ExecutorResult(-1, false);
 
         // 1) Broadcast the warning, 2) wait the grace period, 3) kick everyone. Each ServerQuery runs
@@ -69,7 +83,7 @@ public sealed class TeamspeakGracefulRestartOperationExecutor(
         await queryClient.ExecuteAsync(port, gm, ct).ConfigureAwait(false);
 
         if (seconds > 0)
-            await Task.Delay(TimeSpan.FromSeconds(seconds), ct).ConfigureAwait(false);
+            await DelayAsync(TimeSpan.FromSeconds(seconds), ct).ConfigureAwait(false);
 
         var kick = $"login serveradmin {escCred}\nuse sid=1\nclientkick reasonid=5 reasonmsg=Restart cldbid=0\nquit\n";
         await onOutput("Kicking connected clients…", TaskLogLevel.Info).ConfigureAwait(false);
@@ -85,13 +99,13 @@ public sealed class TeamspeakGracefulRestartOperationExecutor(
         psi.ArgumentList.Add("ts3server");
 
         await onOutput("Restarting ts3server…", TaskLogLevel.Info).ConfigureAwait(false);
-        return await ProcessRunner.RunAsync(psi, restartTimeout, onOutput, logger, ct).ConfigureAwait(false);
+        return await RunProcessAsync(psi, restartTimeout, onOutput, logger, ct).ConfigureAwait(false);
     }
 
-    private static async Task<bool> RejectNonLinuxAsync(
+    private async Task<bool> RejectNonLinuxAsync(
         Func<string, TaskLogLevel, Task> onOutput)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return false;
+        if (IsLinux) return false;
 
         await onOutput(
             "TeamSpeak operations are only supported on Linux",

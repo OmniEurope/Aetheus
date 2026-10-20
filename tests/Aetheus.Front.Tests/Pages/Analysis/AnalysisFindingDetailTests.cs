@@ -51,7 +51,7 @@ public sealed class AnalysisFindingDetailTests : BunitContext
 
         var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 7));
 
-        cut.WaitForAssertion(() => Assert.Equal("src/Sample.cs", cut.Find(".analysis-source-location code").TextContent), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Equal("src/Sample.cs", cut.Find(".analysis-source-location code").TextContent));
         cut.Find(".analysis-source-location button.analysis-source-open").Click();
         Assert.Contains("ref=runcommit2472", navigation.Uri);
         Assert.Contains("path=src%2FSample.cs", navigation.Uri);
@@ -102,12 +102,12 @@ public sealed class AnalysisFindingDetailTests : BunitContext
 
         var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 7));
 
-        cut.WaitForState(() => cut.Markup.Contains("src/Sample.cs", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("src/Sample.cs", StringComparison.Ordinal));
         Assert.Contains("Sample.Execute", cut.Markup);
         Assert.Contains("Untrusted input reaches a command sink.", cut.Markup);
         Assert.Contains("pipelines/runs/88", cut.Markup);
         Assert.Equal("src/Sample.cs", cut.Find(".analysis-source-location code").TextContent);
-        // Recette R-433: the line is a badge, "Open the file" a standard button, the passage under them.
+        // The line is a badge, "Open the file" a standard button, the passage under them.
         Assert.Contains("Line 42-46", cut.Find(".analysis-source-location .omni-badge").TextContent);
         cut.Find(".analysis-source-location button.analysis-source-open").Click();
         var fileHref = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().Uri;
@@ -159,12 +159,13 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
             .NavigateTo("/analysis/findings/8?tab=prompt");
         var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 8));
-        cut.WaitForState(() => cut.Markup.Contains("AnalysisAiPrompt", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("AnalysisAiPrompt", StringComparison.Ordinal));
 
         var buttons = cut.FindAll("button");
         await buttons.Single(button => button.TextContent.Contains("CopyAiPrompt", StringComparison.Ordinal)).ClickAsync(new());
-        await buttons.Single(button => button.Names().Contains("DownloadMarkdown", StringComparison.Ordinal)).ClickAsync(new());
         await buttons.Single(button => button.TextContent.Contains("AnalysisPromptPreview", StringComparison.Ordinal)).ClickAsync(new());
+        // STD-BTN detection 11: the Markdown download is an entry of the prompt's "More actions" menu.
+        await cut.FindMenuItem("DownloadMarkdown")!.ClickAsync(new());
 
         Assert.Contains(JSInterop.Invocations, invocation => invocation.Identifier == "navigator.clipboard.writeText");
         Assert.Contains(JSInterop.Invocations, invocation => invocation.Identifier == "downloadFile");
@@ -193,15 +194,15 @@ public sealed class AnalysisFindingDetailTests : BunitContext
 
         var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 9));
 
-        cut.WaitForState(() => cut.Markup.Contains("analysis-decision-card", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
-        // Recettes R2-130, R2-131: no arbitration instruction, no "required"/"optional" hints.
+        cut.WaitForState(() => cut.Markup.Contains("analysis-decision-card", StringComparison.Ordinal));
+        // Omit arbitration instructions and required or optional hints.
         Assert.DoesNotContain("AnalysisDecisionHelp", cut.Find(".analysis-decision-card").TextContent);
         Assert.Equal(3, cut.FindAll(".analysis-decision-choice").Count);
         Assert.Equal(2, cut.FindAll(".analysis-decision-details .omni-form-field").Count);
         Assert.Empty(cut.FindAll(".analysis-decision-outcome .omni-drop-down"));
         Assert.DoesNotContain("AnalysisDecisionReasonHint", cut.Find(".analysis-decision-card").TextContent);
         Assert.DoesNotContain("AnalysisDecisionExpirationHint", cut.Find(".analysis-decision-card").TextContent);
-        // Recette R2-134: an open finding reads as open; nothing is chosen until the reviewer picks.
+        // An open finding reads as open; nothing is chosen until the reviewer picks.
         Assert.Contains("AnalysisFindingStatusOpen", cut.Find(".analysis-decision-selected").TextContent);
         Assert.Empty(cut.FindAll(".analysis-decision-choice.is-selected"));
         Assert.Contains("AnalysisDecisionHistory", cut.Markup);
@@ -235,10 +236,10 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
             .NavigateTo("/analysis/findings/10?tab=decisions");
         var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 10));
-        cut.WaitForState(() => cut.Markup.Contains("analysis-decision-card", StringComparison.Ordinal), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("analysis-decision-card", StringComparison.Ordinal));
 
         cut.Find("textarea").Input("Risk accepted after architecture review.");
-        // Recette R2-134: no outcome is preselected, so a submit without a choice sends nothing.
+        // No outcome is preselected, so a submit without a choice sends nothing.
         BunitTestHelper.Interactive(this);
         cut.Find(".analysis-decision-form form").Submit();
         Assert.DoesNotContain(_handler.Requests, request => request.Method == "POST");
@@ -248,5 +249,73 @@ public sealed class AnalysisFindingDetailTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request =>
             request.Method == "POST" && request.Url.Contains("api/analysis/findings/10/decisions", StringComparison.Ordinal)));
+    }
+
+    private IRenderedComponent<AnalysisFindingDetail> RenderPlainFinding(string? helpUri = null)
+    {
+        Services.GetRequiredService<PermissionService>().SetPermissions([], isAdmin: true);
+        _handler.SetJsonResponse("api/analysis/findings/7", new AnalysisFindingDto
+        {
+            Id = 7,
+            ProjectId = 1,
+            Title = "Command injection",
+            Message = "Untrusted input reaches a command sink.",
+            RuleId = "aetheus.test.rule",
+            Severity = AnalysisSeverity.High,
+            Category = AnalysisCategory.Secrets,
+            Status = AnalysisFindingStatus.Open,
+            HelpUri = helpUri,
+        });
+        _handler.SetJsonResponse("api/analysis/findings/7/occurrences?take=100", new List<AnalysisFindingOccurrenceDto>());
+        _handler.SetJsonResponse("api/analysis/findings/7/decisions", new List<AnalysisFindingDecisionDto>());
+        var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 7));
+        cut.WaitForAssertion(() => Assert.Contains("Command injection", cut.Markup, StringComparison.Ordinal));
+        return cut;
+    }
+
+    [Fact]
+    public void CreateTicket_FilesOneBugLinkedToTheFinding_ThenShowsItsNumber()
+    {
+        _handler.SetJsonResponse(HttpMethod.Post, "api/work-items", new WorkItemDto { Id = 314 });
+        var cut = RenderPlainFinding();
+
+        cut.FindAll("button").Single(button => button.TextContent.Contains("AnalysisCreateTicket", StringComparison.Ordinal)).Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("AnalysisTicket #314", cut.Markup, StringComparison.Ordinal));
+        var post = Assert.Single(_handler.RequestDetails, request => request.Method == "POST");
+        Assert.EndsWith("api/work-items", post.Url, StringComparison.Ordinal);
+        Assert.Contains("\"externalId\":\"analysis:7\"", post.Body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("[High] Command injection", post.Body, StringComparison.Ordinal);
+        Assert.Contains("\"secrets\"", post.Body, StringComparison.Ordinal);
+        // The ticket exists: the button is now disabled and a second click files nothing.
+        var button = cut.FindAll("button").Single(b => b.TextContent.Contains("AnalysisTicket #314", StringComparison.Ordinal));
+        Assert.True(button.HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void CreateTicket_ARefusedCreation_KeepsTheButtonOffered()
+    {
+        _handler.SetJsonResponse(HttpMethod.Post, "api/work-items", new { }, System.Net.HttpStatusCode.BadRequest);
+        var cut = RenderPlainFinding();
+
+        cut.FindAll("button").Single(button => button.TextContent.Contains("AnalysisCreateTicket", StringComparison.Ordinal)).Click();
+
+        cut.WaitForAssertion(() => Assert.Single(_handler.Requests, request => request.Method == "POST" && request.Url.EndsWith("api/work-items", StringComparison.Ordinal)));
+        cut.WaitForAssertion(() => Assert.False(cut.FindAll("button").Single(b => b.TextContent.Contains("AnalysisCreateTicket", StringComparison.Ordinal)).HasAttribute("disabled")));
+    }
+
+    [Theory]
+    [InlineData("https://cwe.mitre.org/data/definitions/78.html", "https://cwe.mitre.org/data/definitions/78.html")]
+    [InlineData("http://cwe.mitre.org/data/definitions/78.html", null)]
+    [InlineData("javascript:alert(1)", null)]
+    public void Documentation_OpensOnlyAnHttpsHelpPage(string helpUri, string? expected)
+    {
+        var navigation = Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+        var cut = RenderPlainFinding(helpUri);
+        var before = navigation.Uri;
+
+        cut.FindAll("button").Single(button => button.TextContent.Contains("Documentation", StringComparison.Ordinal)).Click();
+
+        Assert.Equal(expected ?? before, navigation.Uri);
     }
 }

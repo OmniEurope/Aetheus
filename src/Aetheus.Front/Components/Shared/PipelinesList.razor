@@ -1,11 +1,11 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
 @using Microsoft.AspNetCore.Components.Sections
-@* Recette R-124: the list's own actions go into the host's page header (Pipelines hub,
-   project and server detail layouts all expose this outlet) instead of a toolbar row of their own. *@
+@* Place list actions in the host's page-header outlet so the hub, project and server layouts share
+   one action area. *@
 <SectionContent SectionName="@HeaderActionsSection">
-    @* Recette R-215: the catalogue and the runs are two views of the page, switched from the page
-       header by one select bar with their counts, instead of a tab strip above the grid. *@
+    @* Switch catalogue and runs from the page header with their counts so both views share the
+       same page structure. *@
     @if (!_loading)
     {
         <OmniSelectBar TValue="string" Options="@ViewOptions" IconFor="@PipelineListViews.Icon" Label="@L["PipelineView"]"
@@ -16,10 +16,11 @@
     {
         <HelpLink PageKey="pipelines" />
     }
-    @* Recette R-181: no Refresh, the list follows the pipelines and entities hubs. *@
+    @* Follow pipeline and entity hub events so the list stays current without a manual refresh
+       action. *@
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewPipeline" Disabled="@(!_canWrite)" Class="pipeline-list-new-button" title="@(!_canWrite ? L["InsufficientPermissions"] : L["NewPipeline"])" Label="@L["NewPipeline"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-    @* Recette R-412 (user decision 2026-09-28): Create, the main action, stays visible in blue; Import,
-       a secondary one, moves into the header's "..." menu. *@
+    @* Keep Create visible as the primary blue action and place secondary Import in the header
+       menu. *@
     @if (IsGlobal)
     {
         <OmniOverflowMenu Label="@L["MoreActions"]">
@@ -30,7 +31,7 @@
 
 @if (_showPipelineImporter)
 {
-    <OmniUpload MaximumFileSize="50000"
+    <OmniUpload MaximumFileSize="PipelineDefinitionLimits.MaxYamlLength"
                 AllowedContentTypes="@YamlContentTypes"
                 FilesSelected="@OnPipelineFileSelected" />
 }
@@ -46,7 +47,7 @@ else
         <div class="pipeline-catalog-panel">
             <div class="pipeline-catalog-filters">
                 <OmniTextBox aria-label="@L["SearchPipelines"]" Placeholder="@L["SearchPipelines"]" @bind-Value="_search" @bind-Value:after="ApplyFilters" Class="pipeline-list-search" />
-                @* Recette R-167: one or several triggers, one or several models. *@
+                @* One or several triggers, one or several models. *@
                 <OmniMultiSelect TValue="PipelineTriggerType"
                     Options="@_triggerOptions" Placeholder="@L["AllTriggers"]" aria-label="@L["AllTriggers"]"
                     @bind-Value="_triggerFilters" @bind-Value:after="ApplyFilters" Class="pipeline-filter-multi" />
@@ -64,9 +65,10 @@ else
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearFilters"><OmniIcon Name="OmniIconName.Close" /> <span>@L["ClearFilters"]</span></OmniButton>
                 }
             </div>
-            @* Recette R-122: each chip is an icon, a label and a count, never a colour alone; a
-               click filters the table on that state, a second click lifts the filter. *@
-            @* Recette R-307: one line; what does not fit is reached through OE's chevrons, no scrollbar. *@
+            @* Include an icon, label and count so state filters do not rely on colour alone;
+               clicking a selected chip clears its filter. *@
+            @* Use OE's chevrons for overflow so the chip strip stays on one line without another
+               scrollbar. *@
             @if (HasActionableStatusChip)
             {
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Overflow="OmniStackOverflow.Scroll" Gap="OmniSpacing.Small"
@@ -75,8 +77,8 @@ else
                     {
                         var count = StatusCount(status);
                         var active = _statusFilters.Contains(status);
-                        @* Recette R-165 / R-167: coloured by state, several chips can be on at once; an
-                           active chip also shows a check, not only its thicker border. *@
+                        @* Allow multiple state chips and show a check on active ones so selection
+                           is distinguishable beyond colour and border weight. *@
                         <OmniButton Variant="@PipelineCatalogView.Variant(status)"
                                     Class="@PipelineCatalogView.ChipCssClass(status, active)"
                                     aria-pressed="@(active ? "true" : "false")"

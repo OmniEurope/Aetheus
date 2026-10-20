@@ -42,7 +42,7 @@ public class HelpArticleDeepTests : BunitContext
         {
             var art = typeof(HelpArticlePage).GetField("_article", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
             return art != null;
-        }, TimeSpan.FromSeconds(2));
+        });
 
         // The known "servers" key resolves to the matching article (loaded from the stubbed help JSON).
         var article = (HelpArticleService?)typeof(HelpArticlePage)

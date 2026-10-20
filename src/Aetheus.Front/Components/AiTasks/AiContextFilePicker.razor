@@ -1,0 +1,66 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* The repository files and folders an AI task attaches to its prompt: the chosen ones as a list, an Add
+   button that opens the repository tree to pick folders or several files at once. *@
+<OmniFormField For="ai-context-add" Help="@L["AiContextPathsHint"]" Id="ai-context-field" Class="omni-u-w-100"><LabelContent>@L["AiContextPaths"]</LabelContent><ChildContent>
+<OmniStack Gap="OmniSpacing.Small">
+    @if (Paths.Count == 0)
+    {
+        <OmniText Class="omni-u-text-muted">@L["AiContextEmpty"]</OmniText>
+    }
+    else
+    {
+        <ul class="ai-context-list" aria-label="@L["AiContextPaths"]">
+            @foreach (var path in Paths)
+            {
+                <li @key="path" class="ai-context-item">
+                    <OmniIcon Name="@(path.EndsWith('/') ? OmniIconName.Folder : OmniIconName.Document)" />
+                    <span class="ai-context-path text-mono">@path</span>
+                    <OmniButton Variant="OmniButtonVariant.Danger" Size="OmniControlSize.Small" Label="@string.Format(L["AiContextRemove"], path)" OnClick="@(() => RemoveAsync(path))"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+                </li>
+            }
+        </ul>
+    }
+
+    @if (!_open)
+    {
+        <div>
+            <OmniButton Id="ai-context-add" Variant="OmniButtonVariant.Primary" OnClick="@OpenAsync" Disabled="@(Paths.Count >= MaxPaths)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+        </div>
+    }
+    else
+    {
+        <OmniCard Class="ai-context-picker">
+            @if (_loading)
+            {
+                <AetheusLoader Size="OmniControlSize.Small" />
+            }
+            else if (_repos.Count == 0)
+            {
+                <OmniAlert Severity="OmniSeverity.Info">@L["AiContextNoRepository"]</OmniAlert>
+            }
+            else
+            {
+                @if (_repos.Count > 1)
+                {
+                    <OmniDropDown TValue="int" Id="ai-context-repo" Label="@L["Repository"]" @bind-Value:get="_repoId" @bind-Value:set="OnRepoChosenAsync" Options="@(_repos.ToOptions(item => item.Id, item => item.Name))" Class="omni-u-w-100" />
+                }
+                <OmniTree TValue="string" Multiple="true" Label="@L["AiContextPaths"]" Value="@_picked" ValueChanged="@(values => _picked = values)">
+                    <AiContextTreeNodes Nodes="@_roots" LoadChildren="@LoadChildrenAsync" />
+                </OmniTree>
+                @if (_loadFailed)
+                {
+                    <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
+                }
+                @if (_limitReached)
+                {
+                    <OmniAlert Severity="OmniSeverity.Warning">@string.Format(L["AiContextLimit"], MaxPaths)</OmniAlert>
+                }
+            }
+            <OmniRow Gap="OmniSpacing.Small" Justify="OmniJustification.End">
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Close"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ConfirmAsync" Disabled="@(_picked.Count == 0)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+            </OmniRow>
+        </OmniCard>
+    }
+</OmniStack>
+</ChildContent></OmniFormField>

@@ -35,7 +35,7 @@ public class ServersHeartbeatPatchTests : BunitContext
         });
         var cut = Render<ServersPage>();
         // The grid's LoadData populates _servers from the stub on first render.
-        cut.WaitForState(() => Servers(cut).Count == servers.Length, TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => Servers(cut).Count == servers.Length);
         return cut;
     }
 

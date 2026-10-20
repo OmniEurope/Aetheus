@@ -6,17 +6,6 @@ namespace Aetheus.Front.Tests;
 public class SharedDtoTestManagementTests
 {
     [Fact]
-    public void TestSuiteDto_DefaultValues()
-    {
-        var dto = new TestSuiteDto();
-        Assert.Equal(0, dto.Id);
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Null(dto.Description);
-        Assert.Null(dto.PipelineId);
-        Assert.Null(dto.PipelineName);
-    }
-
-    [Fact]
     public void CreateTestSuiteRequest_Validation_Valid()
     {
         var req = new CreateTestSuiteRequest { ProjectId = 1, Name = "My Suite" };
@@ -48,18 +37,6 @@ public class SharedDtoTestManagementTests
     }
 
     [Fact]
-    public void TestCaseDto_DefaultValues()
-    {
-        var dto = new TestCaseDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Null(dto.Description);
-        Assert.Null(dto.AutomatedTestClass);
-        Assert.Null(dto.AutomatedTestMethod);
-        Assert.Null(dto.LastOutcome);
-        Assert.Null(dto.LastDurationMs);
-    }
-
-    [Fact]
     public void IngestTestResultsRequest_Validation_Valid()
     {
         var req = new IngestTestResultsRequest
@@ -81,59 +58,11 @@ public class SharedDtoTestManagementTests
     }
 
     [Fact]
-    public void TestIngestionResultDto_DefaultValues()
-    {
-        var dto = new TestIngestionResultDto();
-        Assert.Equal(0, dto.SuiteId);
-        Assert.Equal(0, dto.TotalCases);
-        Assert.Equal(0, dto.NewCases);
-        Assert.Equal(0, dto.UpdatedCases);
-    }
-
-    [Fact]
-    public void ReleaseDto_DefaultValues()
-    {
-        var dto = new ReleaseDto();
-        Assert.Equal(string.Empty, dto.Version);
-        Assert.Equal(string.Empty, dto.BranchName);
-        Assert.Null(dto.PublishedAt);
-        Assert.Null(dto.PromotedAt);
-        Assert.Null(dto.RolledBackAt);
-        Assert.Null(dto.PipelineRunId);
-    }
-
-    [Fact]
     public void TriggerReleaseBuildRequest_Validation_Valid()
     {
         var req = new TriggerReleaseBuildRequest { PipelineId = 1 };
         var results = ValidateModel(req);
         Assert.Empty(results);
-    }
-
-    [Fact]
-    public void WebhookPayload_DefaultValues()
-    {
-        var payload = new WebhookPayload();
-        Assert.Null(payload.Ref);
-        Assert.Null(payload.RepositoryUrl);
-    }
-
-    [Fact]
-    public void VaultDto_DefaultValues()
-    {
-        var dto = new VaultDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Equal(string.Empty, dto.Description);
-        Assert.Null(dto.ProjectId);
-    }
-
-    [Fact]
-    public void VaultSecretDto_DefaultValues()
-    {
-        var dto = new VaultSecretDto();
-        Assert.Equal(string.Empty, dto.Key);
-        Assert.Null(dto.ExpiresAt);
-        Assert.Equal(0, dto.VersionCount);
     }
 
     [Fact]

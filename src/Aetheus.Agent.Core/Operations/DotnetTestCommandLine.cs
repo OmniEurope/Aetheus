@@ -69,6 +69,7 @@ internal static class DotnetTestCommandLine
             CreateNoWindow = true
         };
         SetDotnetRoot(startInfo, request.DotnetPath);
+        PrependToolPaths(startInfo, request.ToolPaths);
         if (testingPlatform) AddTestingPlatformArguments(startInfo.ArgumentList, request);
         else AddVsTestArguments(startInfo.ArgumentList, request);
         return startInfo;
@@ -88,6 +89,19 @@ internal static class DotnetTestCommandLine
         startInfo.Environment["DOTNET_ROOT"] = root;
         var path = startInfo.Environment.TryGetValue("PATH", out var inherited) ? inherited : null;
         startInfo.Environment["PATH"] = string.IsNullOrEmpty(path) ? root : root + Path.PathSeparator + path;
+    }
+
+    /// <summary>
+    /// The tool directories go before everything else on PATH, the SDK's included: run-unit-suite.sh
+    /// put the pinned Node.js first for the same reason, so a test that starts <c>node</c> runs the
+    /// delivery toolchain and not whatever the host installed.
+    /// </summary>
+    private static void PrependToolPaths(ProcessStartInfo startInfo, IReadOnlyList<string> toolPaths)
+    {
+        if (toolPaths.Count == 0) return;
+        var prefix = string.Join(Path.PathSeparator, toolPaths);
+        var path = startInfo.Environment.TryGetValue("PATH", out var inherited) ? inherited : null;
+        startInfo.Environment["PATH"] = string.IsNullOrEmpty(path) ? prefix : prefix + Path.PathSeparator + path;
     }
 
     private static void AddTestingPlatformArguments(ICollection<string> arguments, PipelineDotnetTestRequest request)

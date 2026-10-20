@@ -69,7 +69,7 @@ public class ServerTasksSectionTests : BunitContext
             new ServerTaskDto { Id = 2, Name = "Test Run", ServerStatus = ServerStatus.Online, Status = TaskExecutionStatus.Failed, CreatedAt = DateTime.UtcNow.AddHours(-2) });
 
         var cut = Render<ServerTasksSection>(p => p.Add(x => x.Server, MakeServer()));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy"));
 
         Assert.Contains("Deploy", cut.Markup);
         Assert.Contains("Test Run", cut.Markup);
@@ -81,7 +81,7 @@ public class ServerTasksSectionTests : BunitContext
         StubTasks(new ServerTaskDto { Id = 10, Name = "DeployAlpha", ServerStatus = ServerStatus.Online, Status = TaskExecutionStatus.Success, CreatedAt = DateTime.UtcNow });
 
         var cut = Render<ServerTasksSection>(p => p.Add(x => x.Server, MakeServer()));
-        cut.WaitForState(() => cut.Markup.Contains("DeployAlpha"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("DeployAlpha"));
 
         Assert.Contains("DeployAlpha", cut.Markup);
     }
@@ -99,7 +99,7 @@ public class ServerTasksSectionTests : BunitContext
         {
             Assert.NotNull(cut.Find("a[href='/pipelines/runs/55']"));
             Assert.Contains("web-server-01", cut.Find("a[href='/servers/1/overview']").TextContent);
-        }, TimeSpan.FromSeconds(2));
+        });
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class ServerTasksSectionTests : BunitContext
         StubTasks(new ServerTaskDto { Id = 3, Name = "RunningJob", ServerStatus = ServerStatus.Online, Status = TaskExecutionStatus.Running, CreatedAt = DateTime.UtcNow });
 
         var cut = Render<ServerTasksSection>(p => p.Add(x => x.Server, MakeServer()));
-        cut.WaitForState(() => cut.Markup.Contains("RunningJob"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("RunningJob"));
 
         Assert.Contains("RunningJob", cut.Markup);
     }

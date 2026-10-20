@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.AiTasks;
 using Aetheus.Back.Components.Artifacts;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data.Entities;
@@ -7,20 +8,18 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Environment preconditions of the candidate chain that the control plane already knows at launch,
-/// and that used to surface only when the stage was reached: a configured runner no dispatch will ever
-/// select (protocol window, capability), and a retained release artifact the QA rollback proof
-/// restores through <c>release: previous-deployed</c>.
-/// </summary>
+/// <summary>Launch preflight checks configured-runner compatibility and retained release artifacts
+/// before their stages are reached.</summary>
 public sealed class PipelineLaunchPreconditionTests
 {
     private const string Commit = "0123456789abcdef0123456789abcdef01234567";
 
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();
     private readonly IArtifactRepository _artifacts = Substitute.For<IArtifactRepository>();
+    private readonly IArtifactStorageService _storage = Substitute.For<IArtifactStorageService>();
     private readonly IPipelineVariableResolver _variables = Substitute.For<IPipelineVariableResolver>();
     private readonly IPipelineTemplateResolver _templates = Substitute.For<IPipelineTemplateResolver>();
+    private readonly IAiTaskService _ai = Substitute.For<IAiTaskService>();
 
     public PipelineLaunchPreconditionTests()
     {
@@ -58,7 +57,8 @@ public sealed class PipelineLaunchPreconditionTests
             new PipelineChildPipelineResolver(_templates, _variables),
             Substitute.For<IPipelineRequirementsChecker>(),
             new PipelineScannerManifestPreflight(_repo, dispatch),
-            new PipelineReleaseArtifactPreflight(_artifacts),
+            new PipelineReleaseArtifactPreflight(_artifacts, _storage),
+            new PipelineAiProfilePreflight(_ai),
             logger ?? Substitute.For<ILogger<PipelineRunPreflightService>>());
     }
 
@@ -131,12 +131,21 @@ public sealed class PipelineLaunchPreconditionTests
             .Returns(new PipelineTemplateResolution(definition, pipeline.YamlDefinition, null, null, null, false));
     }
 
-    private void RetainedV1(bool browserRuntimePresent, bool requiredByContract)
+    private void RetainedV1(bool browserRuntimePresent, bool requiredByContract, bool payloadFilePresent = true)
     {
         _artifacts.FindPreviousDeployedReleaseArtifactAsync(5, Commit, "BrowserRuntime-artifacts", Arg.Any<CancellationToken>())
             .Returns(browserRuntimePresent
-                ? new PipelineArtifact { Id = 9, Name = "BrowserRuntime-artifacts", Sha256 = new string('c', 64) }
+                ? new PipelineArtifact
+                {
+                    Id = 9,
+                    Name = "BrowserRuntime-artifacts",
+                    Sha256 = new string('c', 64),
+                    FilePath = "5/7/41/BrowserRuntime-artifacts.zip"
+                }
                 : null);
+        _artifacts.FindNewestReleaseVersionAsync(9, Arg.Any<CancellationToken>()).Returns("2026.10.3");
+        _storage.OpenArtifact("5/7/41/BrowserRuntime-artifacts.zip")
+            .Returns(_ => payloadFilePresent ? new MemoryStream([1]) : null);
         _artifacts.RequiresPreviousDeployedArtifactAsync(5, Commit, "BrowserRuntime-artifacts", Arg.Any<CancellationToken>())
             .Returns(requiredByContract);
     }
@@ -228,6 +237,34 @@ public sealed class PipelineLaunchPreconditionTests
     }
 
     [Fact]
+    public async Task RetainedV1RowWhosePayloadFileIsMissing_RefusesTheLaunchDespiteAllowMissing()
+    {
+        // The QA restores V-1 with allow_missing: true. The row exists, its file does not: the agent
+        // download would answer 404 mid-run, so the launch refuses instead of skipping to bootstrap.
+        ChildExists(Qa(allowMissing: true));
+        RetainedV1(browserRuntimePresent: true, requiredByContract: false, payloadFilePresent: false);
+
+        var problem = Assert.Single((await LaunchAsync(Candidate())).Problems);
+
+        Assert.Contains("Restore exact retained V-1 browser runtime", problem, StringComparison.Ordinal);
+        Assert.Contains("release 'previous-deployed' (version 2026.10.3)", problem, StringComparison.Ordinal);
+        Assert.Contains("artifact #9 'BrowserRuntime-artifacts'", problem, StringComparison.Ordinal);
+        Assert.Contains("payload file is missing", problem, StringComparison.Ordinal);
+        Assert.Contains("allow_missing does not apply", problem, StringComparison.Ordinal);
+        Assert.Contains("before launching", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RetainedV1RowAndPayloadFilePresent_OpensTheFileAndAccepts()
+    {
+        ChildExists(Qa(allowMissing: true));
+        RetainedV1(browserRuntimePresent: true, requiredByContract: false);
+
+        Assert.Empty((await LaunchAsync(Candidate())).Problems);
+        _storage.Received(1).OpenArtifact("5/7/41/BrowserRuntime-artifacts.zip");
+    }
+
+    [Fact]
     public async Task OnSuccessChild_IsNotJudgedOnTheLaunchCommit()
     {
         // A downstream run starts later, on its own commit: the launch cannot know what it resolves.
@@ -237,7 +274,7 @@ public sealed class PipelineLaunchPreconditionTests
         Assert.Empty((await LaunchAsync(Candidate(onSuccess: true))).Problems);
     }
 
-    // --- Refusal log (recette R2-040) ---------------------------------------------------------
+    // Refusal logging.
 
     [Fact]
     public async Task Refusal_LogsEachProblemAsItsOwnShortEntry_PlusOneCountLine()
@@ -301,5 +338,78 @@ public sealed class PipelineLaunchPreconditionTests
         RetainedV1(browserRuntimePresent: false, requiredByContract: true);
 
         Assert.Empty((await LaunchAsync(Candidate(), commit: null)).Problems);
+    }
+
+    // --- AI runner profile --------------------------------------------------------------------
+
+    private const string MissingProfile = "AI runner profile 'claude-sonnet' was not found in the pipeline's organization.";
+
+    private static PipelineYamlDefinition AiReview(bool advisory, string? profile = "claude-sonnet") => new()
+    {
+        Name = "aetheus-candidate",
+        Stages =
+        [
+            new PipelineStageDefinition
+            {
+                Name = "AI review", Os = "linux",
+                Steps =
+                [
+                    new PipelineStepDefinition
+                    {
+                        Name = "Review the last commit", Type = "ai", Profile = profile,
+                        Prompt = "Review.", Advisory = advisory, ContinueOnError = advisory
+                    }
+                ]
+            }
+        ]
+    };
+
+    [Fact]
+    public async Task AnOrdinaryAiStep_WithAMissingProfile_RefusesTheLaunch_NamingTheProfile()
+    {
+        _ai.FindPipelineProfileProblemAsync("claude-sonnet", 3, Arg.Any<CancellationToken>()).Returns(MissingProfile);
+
+        var outcome = await LaunchAsync(AiReview(advisory: false));
+
+        var problem = Assert.Single(outcome.Problems);
+        Assert.Equal($"AI step 'Review the last commit' in stage 'AI review': {MissingProfile}", problem);
+        var check = Assert.Single(outcome.Checks, check => check.Kind == "ai-profile");
+        Assert.False(check.Satisfied);
+    }
+
+    [Fact]
+    public async Task AnAdvisoryAiStep_WithAMissingProfile_OnlyWarns()
+    {
+        _ai.FindPipelineProfileProblemAsync("claude-sonnet", 3, Arg.Any<CancellationToken>()).Returns(MissingProfile);
+
+        var outcome = await LaunchAsync(AiReview(advisory: true));
+
+        Assert.Empty(outcome.Problems);
+        var warning = Assert.Single(outcome.Warnings);
+        Assert.Contains(MissingProfile, warning, StringComparison.Ordinal);
+        Assert.Contains("advisory step will be recorded as not run", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAiStep_WithoutAProfile_IsStillCheckedAgainstTheOrganization()
+    {
+        const string NoneUsable = "No AI runner profile can run this step. The pipeline's organization has no AI runner profile.";
+        _ai.FindPipelineProfileProblemAsync(null, 3, Arg.Any<CancellationToken>()).Returns(NoneUsable);
+
+        var outcome = await LaunchAsync(AiReview(advisory: false, profile: null));
+
+        var problem = Assert.Single(outcome.Problems);
+        Assert.Contains(NoneUsable, problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAiStep_WithAUsableProfile_PassesTheLaunch()
+    {
+        _ai.FindPipelineProfileProblemAsync("claude-sonnet", 3, Arg.Any<CancellationToken>()).Returns((string?)null);
+
+        var outcome = await LaunchAsync(AiReview(advisory: false));
+
+        Assert.Empty(outcome.Problems);
+        Assert.Empty(outcome.Warnings);
     }
 }

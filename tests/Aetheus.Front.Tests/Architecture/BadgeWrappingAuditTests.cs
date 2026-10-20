@@ -3,13 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R-326 / R-342: a badge keeps its whole text on one line at every width; when the room runs
-/// out, the group of badges wraps instead. The dashboard's small tiles are narrow on a wide screen too,
-/// so the rules must not sit under a phone media query, as they first did (only under 40rem). OE's own
-/// <c>.omni-badge</c> is <c>white-space: nowrap</c>; Aetheus keeps a badge from being squeezed in a
-/// flex row and never lets one wrap, break or end in an ellipsis.
-/// </summary>
+/// <summary>Badges retain complete single-line labels at every width; their containing groups wrap
+/// instead.</summary>
 public sealed class BadgeWrappingAuditTests
 {
     private static readonly string Css = Regex.Replace(

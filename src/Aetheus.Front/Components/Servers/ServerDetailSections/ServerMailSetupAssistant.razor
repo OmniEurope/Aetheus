@@ -1,6 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R2-080: the first configuration, step by step on the page. Recette R-512: every field carries
-   its "?" help (OmniFormField.Help, shown on hover and keyboard focus). *@
+@* The setup wizard provides field help accessible by hover and keyboard focus. *@
 <OmniCard Class="omni-u-mb-lg mail-setup-assistant">
     <OmniStack Gap="OmniSpacing.Medium">
         <OmniHeading Level="OmniHeadingLevel.H5">@L["MailAssistantTitle"]</OmniHeading>
@@ -10,6 +9,30 @@
             <OmniAlert Severity="OmniSeverity.Warning" Class="mail-setup-capability">@L["MailSetupCapabilityRequired"]</OmniAlert>
         }
 
+        @* Recette R3-46: the setup runs as a task on the agent, so leaving the page does not stop it; the
+           assistant says so and, reopened, finds the open task again (see OnInitialized). *@
+        @if (SetupBusy)
+        {
+            <OmniAlert Severity="OmniSeverity.Info" Class="mail-setup-running" aria-live="polite">
+                <OmniText Element="OmniTextElement.Strong">@L["MailSetupRunning"]</OmniText>
+                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["MailSetupContinuesInBackground"]</OmniText>
+                @if (_setupTaskId is { } setupTaskId)
+                {
+                    <OmniLink Href="@($"/tasks/{setupTaskId}")">@L["ServerTaskOpen", setupTaskId]</OmniLink>
+                }
+            </OmniAlert>
+        }
+
+        @* A failed setup is said above the steps, so it shows whatever step the assistant is on (after a
+           return to the page, it is the first one). *@
+        @if (_setupFailure is { } failure)
+        {
+            <OmniAlert Severity="OmniSeverity.Danger" Class="mail-setup-failed">@string.Format(L["MailSetupFailed"], L.Localize(failure))</OmniAlert>
+        }
+
+        @* Recette R3-45: while the setup runs, OE's busy veil lies over the whole assistant, which stays
+           mounted underneath, instead of a loader added inside the page. *@
+        <div class="@(SetupBusy ? "omni-busy mail-setup-veil" : "mail-setup-veil")" aria-busy="@(SetupBusy ? "true" : "false")">
         <OmniWizard Value="@_step" ValueChanged="@OnStepChangedAsync" Label="@L["MailSetupSteps"]"
                     FinishText="@L["MailConfigure"]" OnFinish="@ConfigureAsync">
             <OmniWizardStep Title="@L["MailStepDomain"]" Validate="@(() => ValidateStepAsync(StepDomain))">
@@ -110,7 +133,7 @@
                     <OmniFormField Label="@L["AdminEmail"]" Help="@L["MailAdminEmailHelp"]" For="mail-setup-admin">
                         <OmniTextBox Id="mail-setup-admin" @bind-Value="_model.Email" Placeholder="admin@example.com" />
                     </OmniFormField>
-                    <OmniFormField Label="@L["AdminPassword"]" Help="@L["MailAdminPasswordHelp"]" Description="@string.Format(L["MailPasswordRule"], PasswordPolicy.MinimumLength, PasswordPolicy.MaximumLength)" For="mail-setup-password">
+                    <OmniFormField Label="@L["AdminPassword"]" Help="@($"{L["MailAdminPasswordHelp"]} {string.Format(L["MailPasswordRule"], PasswordPolicy.MinimumLength, PasswordPolicy.MaximumLength)}")" For="mail-setup-password">
                         <OmniPassword Id="mail-setup-password" @bind-Value="_model.Password" Autocomplete="new-password" />
                     </OmniFormField>
                     <OmniFormField Help="@L["MailQuotaHelp"]" For="mail-setup-quota"><LabelContent>@($"{L["Quota"]} (MB)")</LabelContent><ChildContent>
@@ -140,17 +163,6 @@
                             <li>@L["MailAfterSetupMx"]</li>
                         </ol>
                     </OmniStack>
-                    @if (SetupBusy)
-                    {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-setup-running">
-                            <AetheusLoader Size="OmniControlSize.Small" />
-                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailSetupRunning"]</OmniText>
-                        </OmniStack>
-                    }
-                    @if (_setupFailure is { } failure)
-                    {
-                        <OmniAlert Severity="OmniSeverity.Danger" Class="mail-setup-failed">@string.Format(L["MailSetupFailed"], L.Localize(failure))</OmniAlert>
-                    }
                     @if (_stepErrors.Count > 0)
                     {
                         <OmniAlert Severity="OmniSeverity.Danger" Class="mail-setup-step-errors">@foreach (var error in _stepErrors) { <div>@error</div> }</OmniAlert>
@@ -158,5 +170,6 @@
                 </OmniStack>
             </OmniWizardStep>
         </OmniWizard>
+        </div>
     </OmniStack>
 </OmniCard>

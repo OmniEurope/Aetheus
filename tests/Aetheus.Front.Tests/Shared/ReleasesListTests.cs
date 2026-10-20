@@ -6,11 +6,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Shared;
 
-// 0-a: the shared ReleasesList drives all 3 scopes. Server scope is exercised by
-// ServerReleasesSectionTests; here we cover the global (unfiltered) and project-scoped paths plus
-// the behavioral methods (load / sync / filter / permissions / dispose) that the global Releases
-// page used to own - consolidating the previously duplicated per-page coverage onto the component
-// where the logic now lives. Badge mapping is covered by ReleaseHelperTests.
+// Covers global and project-scoped ReleasesList behaviour; server scope and badge mapping have
+// dedicated test suites.
 public class ReleasesListTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -47,7 +44,7 @@ public class ReleasesListTests : BunitContext
     public void GlobalScope_RendersReleases()
     {
         var cut = Render<ReleasesList>();
-        cut.WaitForState(() => cut.Markup.Contains("1.0.0"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("1.0.0"));
         Assert.Contains("1.0.0", cut.Markup);
     }
 
@@ -61,7 +58,7 @@ public class ReleasesListTests : BunitContext
         });
 
         var cut = Render<ReleasesList>(p => p.Add(x => x.ProjectId, 7));
-        cut.WaitForState(() => cut.Markup.Contains("2.1.0"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("2.1.0"));
 
         Assert.Contains("2.1.0", cut.Markup);
         // Project column is hidden in project scope, so the project name must not appear as a cell.
@@ -91,7 +88,7 @@ public class ReleasesListTests : BunitContext
         });
 
         var cut = Render<ReleasesList>(parameters => parameters.Add(component => component.ProjectId, 7));
-        cut.WaitForState(() => cut.Markup.Contains("release-orchestrator"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("release-orchestrator"));
 
         Assert.Contains("Pipeline", cut.Markup);
         Assert.DoesNotContain("Changelog", cut.Markup);
@@ -121,7 +118,7 @@ public class ReleasesListTests : BunitContext
         });
 
         var cut = Render<ReleasesList>(parameters => parameters.Add(component => component.ServerId, 4));
-        cut.WaitForState(() => cut.Markup.Contains("release-orchestrator"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("release-orchestrator"));
 
         Assert.Contains("href=\"/pipelines/17?serverId=4\"", cut.Markup);
     }
@@ -133,7 +130,7 @@ public class ReleasesListTests : BunitContext
         _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto> { Items = [], TotalCount = 0 });
 
         var cut = Render<ReleasesList>();
-        cut.WaitForState(() => _handler.Requests.Any(r => r.Url.Contains("api/releases")), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => _handler.Requests.Any(r => r.Url.Contains("api/releases")));
 
         // Global scope loads its project filter list + releases even when empty; the empty result must
         // not surface any release version row.
@@ -300,7 +297,7 @@ public class ReleasesListTests : BunitContext
         Assert.Null(GetOnChangedHandler(loader));
 
         var cut = Render<ReleasesList>(p => p.Add(x => x.ProjectId, 7));
-        cut.WaitForState(() => cut.Markup.Contains("1.0.0") || cut.Markup.Contains("NoReleasesFound"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("1.0.0") || cut.Markup.Contains("NoReleasesFound"));
 
         // Project scope subscribed to the loader's OnChanged (the reused releases hub path).
         Assert.NotNull(GetOnChangedHandler(loader));
@@ -310,7 +307,7 @@ public class ReleasesListTests : BunitContext
     public async Task ProjectScope_ProjectLoaderOnChanged_ReloadsGridWithNewData()
     {
         var cut = Render<ReleasesList>(p => p.Add(x => x.ProjectId, 7));
-        cut.WaitForState(() => cut.Markup.Contains("1.0.0"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("1.0.0"));
 
         // A new release arrives; raising the loader's OnChanged must re-page the grid and surface it.
         _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>
@@ -322,14 +319,14 @@ public class ReleasesListTests : BunitContext
         Assert.NotNull(handler);
         await cut.InvokeAsync(() => handler!.Invoke());
 
-        cut.WaitForState(() => cut.Markup.Contains("9.9.9"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("9.9.9"));
         Assert.Contains("9.9.9", cut.Markup);
     }
 
     [Fact]
     public async Task HeaderFilters_AreSentAsColumnFilters_WithNamesFromTheApi()
     {
-        // Recette R-224: dates, status and grade lists, project and pipeline lists read from the API.
+        // Dates, status and grade lists, project and pipeline lists read from the API.
         _handler.SetJsonResponse("api/releases/filter-values", new ReleaseFilterValuesDto
         {
             ProjectNames = ["MyProject"],

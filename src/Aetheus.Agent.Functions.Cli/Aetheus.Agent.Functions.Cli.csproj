@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- aetheus-fn: the agent's pipeline functions as one self-contained executable, bind-mounted
+       read-only into a container-isolated step and run there (PLAN-002 lot 1.0g). The agent release
+       ships one per Linux C library, published with
+         dotnet publish -c Release -r linux-x64        -o <agent>/aetheus-fn/linux-x64
+         dotnet publish -c Release -r linux-musl-x64   -o <agent>/aetheus-fn/linux-musl-x64
+       so it runs in glibc images and in Alpine (musl) images alike. A plain build (no runtime
+       identifier) stays framework-dependent so the solution and its tests build as usual. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>aetheus-fn</AssemblyName>
+    <RootNamespace>Aetheus.Agent.Functions.Cli</RootNamespace>
+    <RuntimeIdentifiers>linux-x64;linux-musl-x64</RuntimeIdentifiers>
+    <!-- Step images carry no ICU; culture-sensitive behaviour has no place in a pipeline function. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishTrimmed>true</PublishTrimmed>
+    <!-- Publishing always names its runtime (linux-x64 or linux-musl-x64). Without this, trimming makes
+         the SDK add the build machine's runtime to every restore, and packages.lock.json would differ
+         between a Windows and a Linux machine (NU1004 in locked mode). -->
+    <UseDefaultPublishRuntimeIdentifier>false</UseDefaultPublishRuntimeIdentifier>
+  </PropertyGroup>
+
+  <!-- Self-contained single file only for a runtime-specific publish: nothing to install in the
+       step image, nothing extracted at start (the container root is read-only and /tmp noexec). -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+  </PropertyGroup>
+
+  <Target Name="PinLinkerPack" BeforeTargets="ProcessFrameworkReferences">
+    <ItemGroup>
+      <!-- The runtime it embeds is a delivered artifact: same single source of truth as the agent
+           (AetheusRuntimeImageVersion). It is raised through the runtime pack a self-contained publish
+           rolls forward to, NOT through RuntimeFrameworkVersion: that property also drags the linker
+           pack to the same version, and the 10.0.12 linker cannot run on the SDK image's 10.0.0 shared
+           framework (NETSDK1144 in the agent-linux-build stage of Dockerfile.back, see ADR-048). -->
+      <KnownFrameworkReference Update="Microsoft.NETCore.App"
+                               Condition="'%(TargetFramework)' == '$(TargetFramework)'"
+                               LatestRuntimeFrameworkVersion="$(AetheusRuntimeImageVersion)" />
+      <!-- Same pin and reason as Aetheus.Front: left implicit, the linker version comes from
+           machine-global workload manifests and leaks into packages.lock.json. -->
+      <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks"
+                       ILLinkPackVersion="$(AetheusLinkerPackVersion)" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aetheus.Agent.Core\Aetheus.Agent.Core.csproj" />
+    <ProjectReference Include="..\Aetheus.Analyzers\Aetheus.Analyzers.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

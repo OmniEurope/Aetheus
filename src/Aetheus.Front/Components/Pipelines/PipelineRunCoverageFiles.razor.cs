@@ -2,12 +2,8 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// Recette R-484: the coverage tree of a run, read when the Coverage tab opens. The run detail carries
-/// the coverage figures without the per-file list (the heavy part, sent again on every live reload of
-/// the run before); this reads that list once from <c>GET runs/{id}/coverage</c>. A summary that
-/// already holds its files (an older backend) shows them as they are.
-/// </summary>
+/// <summary>The per-file coverage tree loads once when the Coverage tab opens, keeping live run
+/// refreshes small. An already populated summary supplies its files directly.</summary>
 public partial class PipelineRunCoverageFiles
 {
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -49,7 +45,7 @@ public partial class PipelineRunCoverageFiles
         _projects = CoverageProjectTree.Build(files);
     }
 
-    /// <summary>Recette R-428: a project's or a file's line in the coverage tree, name then figures.</summary>
+    /// <summary>A project's or a file's line in the coverage tree, name then figures.</summary>
     private string CoverageTreeText(string name, double rate, int covered, int valid) =>
         string.Format(System.Globalization.CultureInfo.CurrentCulture, L["CoverageTreeEntry"], name, PipelineRunFormatting.FormatPercent(rate), covered, valid);
 }

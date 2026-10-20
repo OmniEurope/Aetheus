@@ -5,11 +5,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>
-/// Recette R2-015: "capability diagnostics: ... collectors quarantined" was a warning repeated on every
-/// beat for as long as it lasted. Diagnostics are now logged when they change, and the agent's own
-/// collection notices (timeout, quarantine) are Information while a real capability problem stays a Warning.
-/// </summary>
+/// <summary>Log diagnostics only when they change, with collection delays at Information and
+/// unavailable configured capabilities at Warning.</summary>
 public sealed class CapabilityDiagnosticsRecorderTests
 {
     private const string UnreadableDropIn =

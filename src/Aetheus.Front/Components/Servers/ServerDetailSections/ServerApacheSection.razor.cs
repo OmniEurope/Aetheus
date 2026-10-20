@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
 public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
@@ -26,7 +27,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 
     private ApacheDataDto Apache => Server.Apache;
 
-    // Recette R-227: each heartbeat brings new Apache data; sites and modules that were not there read bold.
+    // Each heartbeat brings new Apache data; sites and modules that were not there read bold.
     private OmniDataGrid<ApacheVirtualHostGroup>? _enabledGrid;
     private OmniDataGrid<ApacheVirtualHostGroup>? _disabledGrid;
     private OmniDataGrid<ApacheModuleDto>? _modulesGrid;
@@ -96,8 +97,16 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
             {
                 Action = action,
                 TargetName = targetName
-            }));
+            }), FollowTitle(action, targetName));
     }
+
+    // Recette R3-37: what the follower calls the task this action queues.
+    private string FollowTitle(ApacheAction action, string? targetName) => action switch
+    {
+        ApacheAction.EnableSite or ApacheAction.EnableModule => $"{L["Enable"]} {targetName}",
+        ApacheAction.DisableSite or ApacheAction.DisableModule => $"{L["Disable"]} {targetName}",
+        _ => L[action.ToString()]
+    };
 
     private async Task FetchLogsAsync()
     {
@@ -105,6 +114,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
         if (BlockedByOfflineAgent()) return;
         _logLoading = true;
         _logContent = null;
+        _follower?.Expect(L["ViewLogs"]);
         try
         {
             var success = await Api.ServerTools.GetApacheLogsAsync(ServerId, new ApacheLogRequest
@@ -115,10 +125,14 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
             if (success)
                 _logContent = L["TaskQueued"];
             else
+            {
+                _follower?.Forget();
                 Toast.Error(L["ActionFailed"]);
+            }
         }
         catch
         {
+            _follower?.Forget();
             Toast.Error(L["ActionFailed"]);
         }
         finally
@@ -199,36 +213,56 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
     private async Task SaveConfigAsync(ApacheVHostSaveRequest request)
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect(L["Save"]);
         try
         {
             var success = await Api.ServerTools.SaveApacheVHostConfigAsync(ServerId, request);
             if (success)
                 Toast.Success(L["ConfigSaved"]);
             else
+            {
+                _follower?.Forget();
                 Toast.Error(L["ActionFailed"]);
+            }
         }
         catch
         {
+            _follower?.Forget();
             Toast.Error(L["ActionFailed"]);
         }
     }
 
-    public void HandleTaskCompleted(TaskCompletedNotification notification)
+    public void HandleTaskCompleted(TaskCompletedNotification notification) =>
+        _ = InvokeAsync(() => ShowTaskOutputAsync(notification));
+
+    // Recette R3-30/R3-31: the completion notification carries no output (it never did), so the text a
+    // read task produced is read from its log; a failed task shows why instead of an empty editor.
+    private async Task ShowTaskOutputAsync(TaskCompletedNotification notification)
     {
-        if (notification.TaskName.Contains("Apache logs", StringComparison.OrdinalIgnoreCase))
+        var isLogs = notification.TaskName.Contains("Apache logs", StringComparison.OrdinalIgnoreCase);
+        var isConfig = notification.TaskName.Contains("Apache config", StringComparison.OrdinalIgnoreCase)
+            && !notification.TaskName.Contains("save", StringComparison.OrdinalIgnoreCase);
+        if (!isLogs && !(isConfig && _configEditor is not null)) return;
+
+        string output;
+        try { output = await ServerTaskOutputLoader.ReadAsync(Api, notification.TaskId); }
+        catch (HttpRequestException) { output = L["TaskOutputUnavailable"]; }
+        var failed = notification.Status != TaskExecutionStatus.Success;
+
+
+        if (isLogs)
         {
-            _logContent = notification.Output;
+            _logContent = failed ? L["TaskFailed"] + "\n" + output : output;
             _logLoading = false;
-            _ = InvokeAsync(StateHasChanged);
+            StateHasChanged();
         }
-        else if (notification.TaskName.Contains("Apache config", StringComparison.OrdinalIgnoreCase)
-                 && !notification.TaskName.Contains("save", StringComparison.OrdinalIgnoreCase)
-                 && _configEditor is { } model)
+        else if (_configEditor is { } model)
         {
-            model.Content = notification.Output ?? string.Empty;
+            model.Content = failed ? string.Empty : output;
+            model.Error = failed ? output : null;
             model.Loading = false;
             CancelConfigTimeout();
-            _ = InvokeAsync(model.NotifyChanged);
+            model.NotifyChanged();
         }
     }
 
@@ -277,7 +311,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
         _configTimeoutTimer?.Dispose();
     }
 
-    /// <summary>Recette R2-124: the export writes the ports of the group's virtual hosts.</summary>
+    /// <summary>The export writes the ports of the group's virtual hosts.</summary>
     private static readonly Func<ApacheVirtualHostGroup, object?> PortsExport = group =>
         string.Join(", ", group.Members.Select(member => member.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 }

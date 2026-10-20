@@ -16,11 +16,13 @@ public class ApiClient(HttpClient http)
     public GitApi Git { get; } = new(http);
     public MailApi Mail { get; } = new(http);
     public MailboxApi Mailbox { get; } = new(http);
+    public MailTemplatesApi MailTemplates { get; } = new(http);
     public MonitoringApi Monitoring { get; } = new(http);
     public Aetheus.Front.Components.Notifications.UserNotificationsApi Notifications { get; } = new(http);
     public PackagesApi Packages { get; } = new(http);
     public PipelinesApi Pipelines { get; } = new(http);
     public PipelineTemplatesApi PipelineTemplates { get; } = new(http);
+    public UserPreferencesApi Preferences { get; } = new(http);
     public ProjectsApi Projects { get; } = new(http);
     public SecurityApi Security { get; } = new(http);
     public ServersApi Servers { get; } = new(http);

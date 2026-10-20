@@ -17,6 +17,19 @@ public interface IAgentUpdateService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Queues a self-update that also grants the named capabilities on the host (R3-58, ADR-051). Only
+    /// <see cref="AgentEnableableCapabilities.Whitelist"/> entries are accepted. Throws
+    /// <c>BadRequestException</c> for an empty or non-whitelisted list or a non-Linux server,
+    /// <c>NotFoundException</c> for an unknown server and <c>ConflictException</c> when the agent is too
+    /// old to apply the request or an update already underway cannot take it.
+    /// </summary>
+    Task<AgentUpdateResponse> QueueUpdateWithCapabilitiesAsync(
+        int serverId,
+        string requestedBy,
+        IReadOnlyCollection<string> capabilities,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Queues a self-update for every server in <paramref name="accessibleServerIds"/>
     /// (already filtered to the caller's administrable resources).
     /// </summary>

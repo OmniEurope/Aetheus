@@ -1,8 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* PLAN-007 lot 7: an approval waiting for a decision is an alert in the top bar, not something found
-   by opening the run. Absent when nothing waits, so the bar does not carry a permanent zero.
-   It is the task tracker's twin beside it: the same square that doubles its width once it carries a
-   count, the same pulse, and a click opens the list of waiting approvals instead of leaving the page. *@
+@* Show waiting approvals in the top bar only when decisions are pending. The indicator shares the
+   task tracker layout and opens the approval list without navigating away. *@
 
 @if (Approvals.Items.Count > 0)
 {

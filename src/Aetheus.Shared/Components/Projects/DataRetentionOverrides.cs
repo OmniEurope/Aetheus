@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Shared.Components.Projects;
 
-/// <summary>PLAN-013 lot 4: the values a project sets itself; null keeps the profile's value.</summary>
+/// <summary>The values a project sets itself; null keeps the profile's value.</summary>
 public sealed record DataRetentionOverrides
 {
     public static readonly DataRetentionOverrides None = new();

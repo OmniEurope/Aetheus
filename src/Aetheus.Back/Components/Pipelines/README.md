@@ -20,7 +20,7 @@ Run, stages, and jobs also accept an `isolation:` block (`PipelineIsolationDefin
 
 **Git-strict project pipelines (ADR-015).** `Pipeline.SourceRepositoryId` selects the one Aetheus-hosted repo or enabled external mirror that supplies the authoritative `.pipeline/<name>.yaml`, clone URL and full immutable SHA. Existing mono-repository projects are backfilled; an unbound multi-repository project and any workspace run without a full SHA fail before run creation. The run snapshots YAML, branch, SHA and repository URL. UI/API edits against an external mirror currently create local mirror commits only; write-back to the external remote is not supported.
 
-**Candidate, deployment, fast release, nightly and package publication roots.** A push on `develop` launches `aetheus-candidate`: CI creates the immutable application artifact, Quality and Security publish advisory grades while mechanical child failures remain blocking, then one disposable QA validates V, dynamic security and the V-1 binary rollback on schema V before an unconditional teardown. Test and performance outcomes converge on advisory gate boundaries, so they remain visible without blocking candidate creation. Candidate then seals those outputs and the three same-commit grade summaries into an immutable assurance contract and creates the non-deployed release `c-<SHA>`. The manual `aetheus-deploy-prod` root restores an explicitly selected Candidate, verifies its assurance contract fail-closed, deploys the same bytes and marks that release `Deployed` without rebuilding or retesting. The manual `aetheus-release-fast` emergency root instead builds and deploys the exact selected `develop` SHA autonomously, with no Candidate, prior release or child pipeline. `aetheus-nightly`, pinned to `develop` at 02:00 UTC, reruns the candidate with performance smoke and full-history Gitleaks; it never deploys production; it deploys a disposable QA (Compose project `aetheus-nightly`, state under `/var/lib/aetheus-nightly`, hosts `qa.*`) that its last stage, `Tear down QA` (`condition: always()`), empties with `deploy/scripts/bluegreen-host-reset.sh` (recette R-523). The persistent demo (`aetheus-demo`, state under `/var/lib/aetheus-demo`) belongs to the `aetheus-demo` root since 2026-10-02: once a day it clones the public GitHub repository, proves with `export-public-distribution.mjs --verify` that it is the distribution of one of the last `main` commits, builds its images from those public sources, resets the demo and deploys it. It is the first pipeline to **extend `host-bluegreen-deploy@2`** rather than carry its own shell cutover: `deploy/scripts/nightly-demo-prepare.sh` establishes what the typed steps do not know about (the demo identity contract, TLS and the HTTPS vhost, the Vault-held secrets, the payload loaded as revision-tagged images, and the run variables Compose interpolates), the `bluegreen-*` and `smoke` steps own the cutover, and `deploy/scripts/nightly-demo-evidence.sh` records the bounded growth evidence after the commit. The preparation accepts a first deploy with no existing colour or migration history, and holds no transaction, so a failure in it leaves the live demo untouched. `publish-observability-packages` is a distinct manual root: its three package children build and consume candidates, then the parent publishes one immutable bundle exclusively to the Aetheus registries (ADR-037). Legacy and demo definitions are not part of the active Aetheus catalog. See [`docs/self-deploy-guide.md`](../../../../docs/self-deploy-guide.md) for the operating contract.
+**Candidate, deployment, fast release, nightly and package publication roots.** A push on `develop` launches `aetheus-candidate`: CI creates the immutable application artifact, Quality and Security publish advisory grades while mechanical child failures remain blocking, then one disposable QA validates V, dynamic security and the V-1 binary rollback on schema V before an unconditional teardown. Test and performance outcomes converge on advisory gate boundaries, so they remain visible without blocking candidate creation. Candidate then seals those outputs and the three same-commit grade summaries into an immutable assurance contract and creates the non-deployed release `c-<SHA>`. The manual `aetheus-deploy-prod` root restores an explicitly selected Candidate, verifies its assurance contract fail-closed, deploys the same bytes and marks that release `Deployed` without rebuilding or retesting. The manual `aetheus-release-fast` emergency root instead builds and deploys the exact selected `develop` SHA autonomously, with no Candidate, prior release or child pipeline. `aetheus-nightly`, pinned to `develop` at 02:00 UTC, reruns the candidate with performance smoke and full-history Gitleaks; it never deploys production; it deploys a disposable QA (Compose project `aetheus-nightly`, state under `/var/lib/aetheus-nightly`, hosts `qa.*`) that its last stage, `Tear down QA` (`condition: always()`), empties with `deploy/scripts/bluegreen-host-reset.sh` (recette R-523). The persistent demo (`aetheus-demo`, state under `/var/lib/aetheus-demo`) belongs to the `aetheus-demo` root since 2026-10-02: once a day it clones the public GitHub repository, proves with `export-public-distribution.mjs --verify` that it is the distribution of one of the last `main` commits, builds its images from those public sources, resets the demo and deploys it. It is the first pipeline to **extend `host-bluegreen-deploy@2`** rather than carry its own shell cutover: its inline `Prepare demo host` shell step (the same block as the nightly's `Prepare QA host`) establishes what the typed steps do not know about (the demo identity contract, TLS and the HTTPS vhost, the Vault-held secrets, the payload loaded as revision-tagged images, and the run variables Compose interpolates), the `bluegreen-*` and `smoke` steps own the cutover, and `deploy/scripts/nightly-demo-evidence.sh` records the bounded growth evidence after the commit. The preparation accepts a first deploy with no existing colour or migration history, and holds no transaction, so a failure in it leaves the live demo untouched. `publish-observability-packages` is a distinct manual root: its three package children build and consume candidates, then the parent publishes one immutable bundle exclusively to the Aetheus registries (ADR-037). Legacy and demo definitions are not part of the active Aetheus catalog. See [`docs/self-deploy-guide.md`](../../../../docs/self-deploy-guide.md) for the operating contract.
 
 **Verified checkpoint resume (ADR-036).** The explicit manual `ResumeCheckpoints` rerun pins the source
 snapshot, commit and parameters. Only successful CI, Quality and Security children are eligible; QA,
@@ -33,6 +33,89 @@ check under a retention lease. Any missing or divergent proof falls back to a no
 **Toto conformance projects.** `Seed:ConformanceToto=true` provisions the healthy `Toto` V-1/V delivery laboratory and the isolated expected-red `Toto Vulnerable` project. The latter has only CI, Quality, Security and negative conformance pipelines: CI must pass, both real gates must return `Blocked`, and no QA, candidate, release, deployment or promotion path exists. `Toto Demo` is created separately by `Seed:Demo` and is never conformance evidence.
 
 **Dependency view.** `GET /api/pipelines/dependencies` returns the caller-visible pipelines split into parents and leaves. `PipelineDependencyGraphBuilder` derives a parent's references from `on_success` entries and `type: trigger` steps; the global pipelines page renders both groups as navigable grids.
+
+**Pipeline owner and its transfer (recette R1-49, incident 2026-10-11).** `Pipeline.CreatedByUsername` is the principal the F-EXEC-1b gate (`PipelineTriggerStepCoordinator.ChainedRunAuthorizedAsync`) authorizes chained and `on_success` runs against: it must hold Server.Admin on every target server. An inactive or missing owner holds no role, so every chained run is refused (`BlockedUnauthorizedChainedRun` / `BlockedUnownedChainedRun`). The gate is unchanged; the owner is what changes. `PipelineOwnershipService` (`api/pipelines/ownership`, platform Admin only) lists a user's pipelines (`owned`), the active users a pipeline can be given to (`candidates`), previews a transfer (`preview`, nothing written) and applies it (`transfer`). The scope is exactly one of a pipeline, a project, or a current owner; the new owner must be an active user. Each item says whether the new owner holds Server.Admin on the pipeline's targets, resolved with the default parameters and checked with the gate's own `HasPermissionAsync(owner, Server, id, Admin)` call (false: chained runs would still be refused; null: the targets could not be resolved, with the reason). Each changed pipeline writes one `PipelineOwnerTransferred` audit entry (`name: owner 'old' -> 'new' by 'actor'`). `PipelineDto` and `PipelineDependencyDto` carry `OwnerUsername` and `OwnerInactive`, shown as a warning badge on the pipelines list and the settings tab. `UserPipelinesTransferHandler` answers the Users module's `UserPipelinesTransferRequestedEvent` (dispatched strictly before a deactivation or deletion that names a transfer target) with the same transfer, as the administrator of the request. A git push by another active user still takes ownership as before (`PipelineService.UpdateSyncOwnershipAsync`).
+
+## Agent-native function steps (`type: aetheus`)
+
+A `type: aetheus` step runs one function written in C# and shipped with the agent, instead of a versioned
+shell script. The set of functions is the shared catalog (`PipelineFunctionCatalog.All`,
+`src/Aetheus.Shared/Components/Pipelines/PipelineFunctionCatalog.cs:675`); the YAML spelling of a name is its
+contract (names are case-sensitive, `Find` at line 700).
+
+```yaml
+      - name: Produce formatting outcome
+        type: aetheus
+        function: run-affected-dotnet-format
+        with:
+          solution: Aetheus.slnx
+          dotnet: "$(DOTNET)"
+          restore: "false"
+        timeout_seconds: 900
+```
+
+(copied from `.pipeline/aetheus-ci.yaml:150-157`.) A function without parameters is just `type` and
+`function` (`.pipeline/aetheus-candidate.yaml:271-273`, `ensure-node-runtime`).
+
+**Syntax.**
+
+- `type: aetheus` (`PipelineFunctionCatalog.StepType`, compared case-insensitively by the validator).
+- `function:` the catalog name (`PipelineStepDefinition.Function`). Required.
+- `with:` a map of string parameters (`PipelineStepDefinition.With`), keyed by the names the catalog entry
+  declares. Each parameter is required or optional; the descriptor also lists the fixed `Outputs` the
+  function publishes as run variables (`PipelineFunctionDescriptor`). Values accept run-variable
+  substitution (`$(NAME)`), applied when the task is created.
+- The usual step keys (`name`, `timeout_seconds`, `continue_on_error`, ...) apply as for any step.
+
+**Refused when the definition is saved** (`PipelineFunctionStepValidator`,
+`src/Aetheus.Back/Components/Pipelines/PipelineFunctionStepValidator.cs:13-57`, called from
+`PipelineDefinitionValidator.cs:292`): no `function`; a function that is not in the catalog (the message lists
+the known ones); a required `with` key missing or blank; a `with` key the function does not declare;
+`function` or `with` on a step of another type. A misspelled function or parameter never reaches an agent.
+
+**Outputs.** A later step may reference the fixed outputs of a function (`$(DOTNET)` after
+`ensure-dotnet-sdk`): the unresolved-variable guard adds them to the names a run will publish
+(`PipelineUnresolvedVariableGuard.cs:191-193`). One catalog entry (`publish-failed-tests`) also publishes one
+variable whose name the caller gives, through `NamedOutputParameter` (`PipelineFunctionDescriptor.cs:45`); a
+later step cannot reference it before the run.
+
+**Dispatch.** The dispatcher routes `aetheus` to `PipelineFunctionTaskFactory`
+(`PipelineStepTaskDispatcher.cs:308`). The factory re-checks the function and the parameters (a definition
+stored before the catalog changed), substitutes the `with` values, refuses a value that still contains an
+unresolved `$(NAME)` (a step with `continue_on_error` fails alone instead of stopping the run), puts the
+parameters as JSON in `AETHEUS_FUNCTION_PARAMETERS_JSON` and creates a task whose target is the function name
+(`PipelineFunctionTaskFactory.cs:25-85`). The task kind comes from the access level of the function: `Build`
+is `PipelineFunction` and needs the agent capability `pipeline.functions`; `Deployment` is
+`PipelineDeploymentFunction` and needs `deployment.functions` (`PipelineFunctionCatalog.OperationFor`,
+`AgentCapabilities.cs:51,56`). The agent publishes `pipeline.functions` at enrolment
+(`EnrollmentService.cs:142-148`).
+
+**How the agent resolves a function.** `PipelineFunctionOperationExecutor`
+(`src/Aetheus.Agent.Core/Functions/PipelineFunctionOperationExecutor.cs:49-73`) first checks the task against
+the catalog (function, task kind, required parameters, `WORKSPACE`), then looks the name up among the
+registered `IPipelineFunction` implementations. The implementations are `PipelineFunctions.CreateAll()`
+(`PipelineFunctions.cs:13`), registered in `AgentCoreServiceCollectionExtensions.cs:220-221`; the same set is
+what the `aetheus-fn` executable runs inside a container-isolated stage. The function runs under the step
+timeout (linked cancellation token, and `WaitAsync` so a function that ignores its token still ends on time,
+`PipelineFunctionOperationExecutor.cs:82-89`). Its fixed outputs are published as
+`##aetheus[setvariable name=...]` lines only on success, and a success that left a declared output unset fails
+(`PipelineFunctionOperationExecutor.cs:120-139`).
+
+**Failure codes** (`PipelineFunctionOperationExecutor.cs:20-22`): `invalid-request` (the task does not match the
+catalog), `function-not-implemented`, and `function-error` (the function returned a failure or threw). A
+timeout is reported as timed out and an external cancellation propagates; neither reads as success.
+
+**`function-not-implemented`.** The catalog lives in Shared and is what the control plane validates against;
+the implementations live in the agent build. A function that is in the catalog but that the agent has no code
+for (an agent older than the control plane) passes validation when the definition is saved, and is refused
+when the agent receives the task: `Function '<name>' is in the catalog but this agent has no implementation
+for it; update the agent.` (`PipelineFunctionOperationExecutor.cs:61-66`). It is a refusal at execution, not
+at registration of the definition. In a container-isolated stage the same code is returned when the agent does
+not ship `aetheus-fn` (`ContainerPipelineFunctionExecutor.cs:104-118`); `aetheus-fn` exits 69 for it
+(`AetheusFnExitCodes.cs:19`).
+
+**Stage isolation.** In a stage with container isolation the task carries the stage container, and the agent
+runs the function inside it with `aetheus-fn`, never on the host (`PipelineFunctionTaskFactory.cs:77-83`).
 
 ## Native blue-green step types
 

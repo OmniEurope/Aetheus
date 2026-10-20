@@ -6,13 +6,9 @@ using OmniEurope.Performance;
 
 namespace Aetheus.Telemetry.Tests;
 
-/// <summary>
-/// R-455, decision of 2026-10-07: the request timings are measured by the OmniEurope.Performance collector
-/// (its arithmetic, window and filters are pinned by that package's own tests); this package exports them
-/// per route. Checked here through the gauges' public surface, with the collector fed the way ASP.NET Core
-/// feeds it and a clock the test moves. The registration through AddAetheusTelemetry is tested with the
-/// other registration tests (they share the AETHEUS_TELEMETRY_ENABLED variable).
-/// </summary>
+/// <summary>Verifies per-route request gauges with a controlled clock and the
+/// OmniEurope.Performance collector. AddAetheusTelemetry registration is covered separately because
+/// those tests share AETHEUS_TELEMETRY_ENABLED.</summary>
 public sealed class RequestPerformanceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 28, 12, 0, 0, TimeSpan.Zero);

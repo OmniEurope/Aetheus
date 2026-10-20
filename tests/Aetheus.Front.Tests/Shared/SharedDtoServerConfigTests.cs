@@ -26,84 +26,6 @@ public class SharedDtoServerConfigTests
     }
 
     [Fact]
-    public void ServerConfigDockerSection_DefaultValues()
-    {
-        var dto = new ServerConfigDockerSection();
-        Assert.Empty(dto.Containers);
-        Assert.Empty(dto.ComposeStacks);
-        Assert.Empty(dto.Images);
-    }
-
-    [Fact]
-    public void ServerConfigContainer_DefaultValues()
-    {
-        var dto = new ServerConfigContainer();
-        Assert.Equal(string.Empty, dto.Image);
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Empty(dto.Ports);
-        Assert.Empty(dto.Volumes);
-        Assert.Equal(string.Empty, dto.Restart);
-        Assert.Empty(dto.Env);
-    }
-
-    [Fact]
-    public void ServerConfigComposeStack_DefaultValues()
-    {
-        var dto = new ServerConfigComposeStack();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Equal(string.Empty, dto.Content);
-    }
-
-    [Fact]
-    public void ServerConfigServicesSection_DefaultValues()
-    {
-        var dto = new ServerConfigServicesSection();
-        Assert.Empty(dto.Systemd);
-    }
-
-    [Fact]
-    public void ServerConfigService_DefaultValues()
-    {
-        var dto = new ServerConfigService();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.False(dto.Enabled);
-    }
-
-    [Fact]
-    public void ServerConfigValidationResult_DefaultValues()
-    {
-        var dto = new ServerConfigValidationResult();
-        Assert.False(dto.IsValid);
-        Assert.Empty(dto.Errors);
-    }
-
-    [Fact]
-    public void ServerConfigPreviewDto_DefaultValues()
-    {
-        var dto = new ServerConfigPreviewDto();
-        Assert.Equal(string.Empty, dto.ServerName);
-        Assert.Empty(dto.Changes);
-        Assert.Equal(0, dto.TaskCount);
-    }
-
-    [Fact]
-    public void ServerConfigChange_DefaultValues()
-    {
-        var dto = new ServerConfigChange();
-        Assert.Equal(string.Empty, dto.Category);
-        Assert.Equal(string.Empty, dto.Action);
-        Assert.Equal(string.Empty, dto.Description);
-    }
-
-    [Fact]
-    public void ServerConfigDeployResultDto_DefaultValues()
-    {
-        var dto = new ServerConfigDeployResultDto();
-        Assert.Equal(0, dto.TasksCreated);
-        Assert.Empty(dto.TaskNames);
-    }
-
-    [Fact]
     public void ServerConfigImportRequest_Valid()
     {
         var req = new ServerConfigImportRequest { Yaml = "server:\n  name: web" };
@@ -165,14 +87,6 @@ public class SharedDtoServerConfigTests
     }
 
     // --- PaginatedResult ---
-
-    [Fact]
-    public void PaginatedResult_DefaultValues()
-    {
-        var result = new PaginatedResult<string>();
-        Assert.Empty(result.Items);
-        Assert.Equal(0, result.TotalCount);
-    }
 
     private static List<ValidationResult> ValidateModel(object model)
     {

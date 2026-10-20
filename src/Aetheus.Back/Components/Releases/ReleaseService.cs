@@ -133,6 +133,31 @@ public class ReleaseService(
         return await MapToDtoAsync(release, ct).ConfigureAwait(false);
     }
 
+    public async Task<PipelineRunDto> RelaunchFromCommitAsync(
+        int releaseId, TriggerReleaseBuildRequest request, PipelineRunPreparation authorizedRun, CancellationToken ct = default)
+    {
+        EnsureAuthorizedRunMatches(authorizedRun, request.PipelineId);
+        var release = await repo.FindReleaseAsync(releaseId, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException("Release not found");
+        if (!ReleaseRelaunch.CanRelaunch(release.Status, release.CommitHash))
+            throw new BadRequestException("Only an archived release with a full commit hash can be relaunched from its commit.");
+        // The authorized snapshot must be the one pinned to this release's commit, never a branch head.
+        if (!string.Equals(authorizedRun.CommitHash, release.CommitHash, StringComparison.OrdinalIgnoreCase))
+            throw new BadRequestException("The authorized run is not pinned to the release's commit.");
+        var pipeline = await pipelineService.GetPipelineAsync(request.PipelineId, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException("Pipeline not found");
+        if (pipeline.ProjectId != release.ProjectId)
+            throw new BadRequestException("Pipeline does not belong to the release's project.");
+
+        // The release stays archived: the run, if it publishes this version again, makes it Published
+        // (CreateReleaseFromPipelineAsync), and a failed run leaves it as it was, its logs kept.
+        var run = await pipelineLauncher.TriggerPreparedRunAsync(authorizedRun, ct: ct).ConfigureAwait(false)
+            ?? throw new BadRequestException("The pipeline run could not be started.");
+        if (audit is not null) await audit.LogAsync("ReleaseRelaunchedFromCommit", "Release", release.Id,
+            $"version={release.Version}; commit={release.CommitHash}; pipeline={pipeline.Id}; run={run.Id}", ct).ConfigureAwait(false);
+        return run;
+    }
+
     public async Task<ReleaseRollbackDto> RollbackReleaseAsync(
         int releaseId, RollbackReleaseRequest request, PipelineRunPreparation authorizedRun, CancellationToken ct = default)
     {
@@ -304,7 +329,7 @@ public class ReleaseService(
         IReadOnlyList<PipelineArtifact>? validatedArtifacts = null;
         if (retainedArtifactRunId != pipelineRunId)
             validatedArtifacts = await ValidateArtifactSourceRunAsync(
-                projectId, retainedArtifactRunId, commitHash, ct).ConfigureAwait(false);
+                projectId, retainedArtifactRunId, commitHash, deployed, ct).ConfigureAwait(false);
 
         if (artifactPipelineRunId.HasValue && artifactRetention is null)
             throw new BadRequestException("Artifact retention is unavailable; refusing to publish a release without a retained payload.");
@@ -335,6 +360,7 @@ public class ReleaseService(
                 ReleaseRunOutcome.RecordSourceIdentity(existingByVersion, deployed, commitHash, tagName, branchName);
                 existingByVersion.Status = releaseStatus;
                 existingByVersion.PublishedAt = timeProvider.GetUtcNow().UtcDateTime;
+                existingByVersion.ArchivedAt = null;
                 existingByVersion.PipelineRunId = pipelineRunId;
                 existingByVersion.Changelog = changelog;
                 if (assuranceVerdict is not null)
@@ -486,8 +512,12 @@ public class ReleaseService(
             ? "Rollback pipeline completed without a successful deployment task."
             : "Rollback pipeline failed before the deployment health gate succeeded.";
 
+    /// <summary>A release that is NOT recorded as deployed may be built from a Rejected source run: that
+    /// run executed every control to the end and sealed what it found (recette R1-80), so the candidate
+    /// is published undeployed with its bad verdict, and aetheus-deploy-prod refuses it on the seal. A
+    /// release recorded as deployed keeps the strict rule: its artifacts must come from a Success run.</summary>
     private async Task<IReadOnlyList<PipelineArtifact>> ValidateArtifactSourceRunAsync(
-        int projectId, int artifactPipelineRunId, string? commitHash, CancellationToken ct)
+        int projectId, int artifactPipelineRunId, string? commitHash, bool deployed, CancellationToken ct)
     {
         if (pipelineRepo is null || artifactRepo is null)
             throw new BadRequestException("Artifact source validation is unavailable.");
@@ -497,11 +527,14 @@ public class ReleaseService(
         var sourceProjectId = sourceRun?.Pipeline is null
             ? null
             : await pipelineRepo.GetPipelineProjectIdAsync(sourceRun.Pipeline, ct).ConfigureAwait(false);
-        if (sourceProjectId != projectId
-            || sourceRun?.Status != PipelineStatus.Success
+        var sourceCompleted = sourceRun is { Status: PipelineStatus.Success }
+            || (!deployed && sourceRun is { Status: PipelineStatus.Rejected });
+        if (sourceRun is null
+            || sourceProjectId != projectId
+            || !sourceCompleted
             || string.IsNullOrWhiteSpace(commitHash)
             || !string.Equals(sourceRun.CommitHash, commitHash, StringComparison.OrdinalIgnoreCase))
-            throw new BadRequestException("The artifact source run is not a successful same-project run at the release commit.");
+            throw new BadRequestException("The artifact source run is not a completed same-project run at the release commit (successful, or rejected for an undeployed release).");
 
         var artifacts = await artifactRepo.GetByRunAsync(artifactPipelineRunId, ct).ConfigureAwait(false);
         if (artifacts.Count == 0 || artifacts.Any(artifact => artifact.ProjectId != projectId))
@@ -548,6 +581,7 @@ public class ReleaseService(
         PublishedAt = r.PublishedAt,
         PromotedAt = r.PromotedAt,
         RolledBackAt = r.RolledBackAt,
+        ArchivedAt = r.ArchivedAt,
         PipelineRunId = r.PipelineRunId,
         Changelog = r.Changelog,
         BuildNumber = r.BuildNumber,
@@ -592,7 +626,7 @@ public class ReleaseService(
         };
     }
 
-    // Recette R-224: the header filters and filter values of the releases list.
+    // The header filters and filter values of the releases list.
     private ReleaseListFilters ListFilters => new(repo, pipelineRepo);
     public Task<ReleaseFilterValuesDto> GetReleaseFilterValuesAsync(int? projectId, List<int>? accessibleIds, int? serverId, CancellationToken ct = default)
         => ListFilters.ValuesAsync(projectId, accessibleIds, serverId, ct);

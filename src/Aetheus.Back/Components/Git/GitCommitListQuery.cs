@@ -4,14 +4,9 @@ using Aetheus.Back.Components.Shared;
 
 namespace Aetheus.Back.Components.Git;
 
-/// <summary>
-/// Recette R-224 / R2-004 / R2-005: the column header filters of a repository's commits grid. Commits
-/// come from <c>git log</c>, not from the database, so each filter the grid offers becomes git
-/// arguments through an explicit allow-list: the Message column's text (<c>--grep</c>, contains only),
-/// the Author column's checkable list (<c>--author</c>), the Branch column's checkable list (the refs the
-/// walk starts from) and the Date column's range (<c>--since</c> / <c>--until</c>, on the committer
-/// date the column shows). Any other column, operator or shape is refused.
-/// </summary>
+/// <summary>Maps approved commit column filters to git arguments: message contains, author and
+/// branch selections, and committer date ranges. Reject unknown columns, operators and
+/// shapes.</summary>
 internal static class GitCommitListQuery
 {
     internal const string MessageKey = "Message";
@@ -125,7 +120,7 @@ internal static class GitCommitListQuery
         current is { } value && value < candidate ? value : candidate;
 }
 
-/// <summary>Recette R-224: the column header filters of a repository's pull requests grid.</summary>
+/// <summary>The column header filters of a repository's pull requests grid.</summary>
 internal static class GitPullRequestListQuery
 {
     internal static readonly GridQueryMap<Aetheus.Back.Data.Entities.PullRequest> Columns = new GridQueryMap<Aetheus.Back.Data.Entities.PullRequest>()

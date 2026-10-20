@@ -9,11 +9,19 @@ public interface IAgentUpdateRepository
         Server server,
         AgentReleaseManifestDto release,
         string requestedBy,
-        CancellationToken ct);
+        CancellationToken ct,
+        IReadOnlyList<string>? enableCapabilities = null);
     Task<(AgentUpdateRequest Request, ServerTask? CreatedTask, int BlockingTaskCount)> TryQueueAsync(
         int requestId,
         CancellationToken ct);
     Task<List<int>> GetWaitingRequestIdsAsync(CancellationToken ct);
+    /// <summary>
+    /// Pending tasks created before <paramref name="olderThan"/> ago whose server is online, polling
+    /// and not mid-update, with what its agent declared. The caller decides which of them the agent can
+    /// never claim; this is only the candidate set, bounded per call.
+    /// </summary>
+    Task<List<PendingTaskAgentContext>> GetPendingTasksOfPollingAgentsAsync(
+        TimeSpan olderThan, CancellationToken ct);
     Task<AgentUpdateRequest?> FindActiveByServerAsync(int serverId, CancellationToken ct);
     Task<AgentUpdateRequest?> MarkProgressAsync(int serverId, AgentUpdateProgressDto progress, CancellationToken ct);
     Task<AgentUpdateRequest?> ConfirmFromHeartbeatAsync(

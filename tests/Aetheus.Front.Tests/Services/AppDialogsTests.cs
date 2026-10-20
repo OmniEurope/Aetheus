@@ -7,9 +7,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests;
 
-/// <summary>
-/// PLAN-008 lot 11: AppDialogs opens a component with its parameters through the real
-/// <see cref="OmniOverlayService"/>, shown by a real <see cref="OmniComponentsHost"/>; the component,
+/// <summary> AppDialogs opens a component with its parameters through the real <see
+/// cref="OmniOverlayService"/>, shown by a real <see cref="OmniComponentsHost"/>; the component,
 /// injecting the same scoped AppDialogs, reports the outcome with <see cref="AppDialogs.Close"/>.
 /// </summary>
 public sealed class AppDialogsTests : BunitContext
@@ -165,8 +164,8 @@ public sealed class AppDialogsTests : BunitContext
     [Fact]
     public void R2029_ConfirmAsync_Destructive_IsANeutralDialog_WhoseOnlyWarningIsTheMarkBeforeTheTitle()
     {
-        // Recette R2-029 (OE 1.4.0): the intention no longer tints the header and the footer; a destructive
-        // question reads by its warning mark, then by its red button. Aetheus re-tints nothing.
+        // Use OE warning marks and destructive button colour without application tinting of dialog
+        // headers or footers.
         _ = _dialogs.ConfirmAsync("Uninstall", "Uninstall nginx?", "Uninstall", destructive: true);
 
         var dialog = _host.WaitForElement(".omni-dialog");
@@ -188,7 +187,7 @@ public sealed class AppDialogsTests : BunitContext
     [Fact]
     public async Task ConfirmAsync_WithoutItsVerb_IsRefused()
     {
-        // R-407: no confirmation falls back to a generic "Valider".
+        // No confirmation falls back to a generic "Valider".
         await Assert.ThrowsAsync<ArgumentException>(() => _dialogs.ConfirmAsync("Promote", "Promote v1.2.3?"));
     }
 

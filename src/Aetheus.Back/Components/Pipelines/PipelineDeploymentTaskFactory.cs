@@ -152,7 +152,7 @@ public sealed class PipelineDeploymentTaskFactory(
         return (variables, null);
     }
 
-    private async Task AddDeployOtlpVariablesAsync(
+    internal async Task AddDeployOtlpVariablesAsync(
         int runId, IDictionary<string, string> deployVars, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(configuration["AppMonitoring:IngestBaseUrl"])) return;

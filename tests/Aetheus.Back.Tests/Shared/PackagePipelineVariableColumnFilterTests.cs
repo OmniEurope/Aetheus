@@ -13,11 +13,9 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R-210 / R-224: the column maps of the package feeds, package registry, template versions,
-/// coverage assemblies, project artifacts, variable libraries (entries and versions) and vaults grids
-/// narrow the rows in the query, before the count, and refuse a column they do not expose.
-/// </summary>
+/// <summary> The column maps of the package feeds, package registry, template versions, coverage
+/// assemblies, project artifacts, variable libraries (entries and versions) and vaults grids narrow
+/// the rows in the query, before the count, and refuse a column they do not expose. </summary>
 public sealed class PackagePipelineVariableColumnFilterTests : IDisposable
 {
     private static readonly DateTime Origin = new(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc);

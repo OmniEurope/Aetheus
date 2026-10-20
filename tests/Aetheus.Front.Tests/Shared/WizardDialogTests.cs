@@ -6,10 +6,8 @@ using Microsoft.AspNetCore.Components.Web;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// WizardDialog hands Aetheus' steps to OE's OmniWizard (recette R-396): the steps in a list at the top,
-/// only the current step in the body, and OE's navigation at the foot.
-/// </summary>
+/// <summary> WizardDialog hands Aetheus' steps to OE's OmniWizard : the steps in a list at the top,
+/// only the current step in the body, and OE's navigation at the foot. </summary>
 public class WizardDialogTests : BunitContext
 {
     public WizardDialogTests()
@@ -46,7 +44,7 @@ public class WizardDialogTests : BunitContext
         Assert.Contains(titles, t => t.Contains("Step 1"));
         Assert.Contains(titles, t => t.Contains("Step 3"));
 
-        // R-396: the step content is in the wizard body, not inside a step of the list (the old column).
+        // Current-step content belongs to the wizard body rather than the step navigation.
         var body = cut.Find(".omni-wizard__body");
         Assert.Contains("Content of step 1", body.TextContent);
         Assert.DoesNotContain("Content of step 2", cut.Markup);
@@ -58,7 +56,7 @@ public class WizardDialogTests : BunitContext
     {
         var cut = Render<WizardDialog>(p => p.Add(x => x.Steps, CreateSteps(3)));
 
-        // R-397: the white action bar belonged to Aetheus' own `.wizard-actions` row.
+        // The wizard uses OE's action footer.
         Assert.Empty(cut.FindAll(".wizard-actions"));
         Assert.Empty(cut.FindAll(".wizard-progress"));
         Assert.NotNull(cut.Find(".omni-wizard__actions"));
@@ -97,7 +95,7 @@ public class WizardDialogTests : BunitContext
 
         var finish = Button(cut, "omni-wizard__finish");
         Assert.Contains("Done!", finish.TextContent);
-        // R-402: the last step's main action is blue, never green.
+        // The last step's main action is blue, never green.
         Assert.Contains("omni-button--primary", finish.ClassList);
     }
 
@@ -268,7 +266,7 @@ public class WizardDialogTests : BunitContext
     {
         var cut = Render<WizardDialog>(p => p.Add(x => x.Steps, CreateSteps(2)));
 
-        // STD-FOCUS: nothing is focused on render, so the wrapper is no longer a tab stop.
+        // The wrapper is not a tab stop because rendering does not assign focus.
         Assert.False(cut.Find(".wizard-dialog").HasAttribute("tabindex"));
     }
 }

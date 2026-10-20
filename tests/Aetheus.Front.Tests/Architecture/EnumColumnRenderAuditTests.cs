@@ -4,18 +4,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R-466: the findings list showed its status as the raw enum member ("Open") in the French UI,
-/// while the column's header filter showed the translated name. OE writes a cell without a
-/// <c>Template</c> as the value's own text (its <c>FormatFilterValue</c> only renames the filter's
-/// choices), so an enum or yes/no column reads in English on every row unless it gives a template.
-/// <para>
-/// This guard reads every <c>OmniDataGridColumn</c> of the front, resolves the type of the property it
-/// shows (its <c>TItem</c> and <c>Property</c> path, by reflection over the front and shared assemblies)
-/// and fails on a column of an enum or boolean type that has no template, or whose template writes the
-/// value itself (<c>@item.Status</c>, <c>@item.Status.ToString()</c>) instead of its translated text.
-/// </para>
-/// </summary>
+/// <summary>Enum and boolean cells need templates rendering localized values; filter labels alone
+/// do not localize cell contents. The guard resolves property types and rejects direct enum
+/// rendering.</summary>
 public sealed class EnumColumnRenderAuditTests
 {
     private static readonly Regex ColumnOpen = new(@"<OmniDataGridColumn\b", RegexOptions.Compiled);

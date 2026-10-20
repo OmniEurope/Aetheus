@@ -46,5 +46,5 @@ sending any account or token. Such a visit is counted per network prefix and per
 stable identity.
 
 The same source is packaged by the Razor Class Library at
-`/_content/Aetheus.WebAnalytics/0.1.0/aetheus-web-analytics.js`. Pin the exact version and its SHA-384 SRI
+`/_content/Aetheus.WebAnalytics/<package version>/aetheus-web-analytics.js` (for example `1.1.0`). Pin the exact version and its SHA-384 SRI
 value; do not use an unversioned mutable URL.

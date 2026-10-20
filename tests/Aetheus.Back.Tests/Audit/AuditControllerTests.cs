@@ -65,7 +65,7 @@ public class AuditControllerTests
     [Fact]
     public async Task GetAuditLogs_PassesTheColumnFilters_ThroughToTheService()
     {
-        // Recette R-238: the grid's header filters travel beside the typed parameters.
+        // The grid's header filters travel beside the typed parameters.
         List<GridFilter> filters = [new() { Field = "Timestamp", Operator = GridFilterOperator.GreaterThanOrEqual, Value = "2026-09-01T08:00:00Z" }];
 
         await _sut.GetAuditLogs(ct: TestContext.Current.CancellationToken, filters: filters);

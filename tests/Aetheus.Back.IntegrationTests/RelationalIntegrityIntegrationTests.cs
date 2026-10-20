@@ -5,23 +5,8 @@ using Npgsql;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Relational-constraint regression suite. Every assertion here exercises behaviour that
-/// EF InMemory (the <c>Aetheus.Back.Tests</c> provider) silently ignores:
-/// <list type="bullet">
-///   <item>UNIQUE indexes (<c>Organization.Slug/Name</c>, <c>User.Username</c>, <c>Role.Name</c>,
-///         <c>Project.Name</c>, <c>Server.Name</c>, the <c>(OrganizationId, UserId)</c> membership
-///         pair).</item>
-///   <item>FK <c>RESTRICT</c> on delete for org-owned resources - the exact constraint class
-///         behind the production <c>23503</c> incident.</item>
-///   <item>FK <c>CASCADE</c> on delete (membership rows follow their parent org).</item>
-///   <item>The filtered partial UNIQUE index on <c>ProjectServer (ProjectId, ServerId)</c>
-///         WHERE <c>ServerId IS NOT NULL</c> - a PostgreSQL-only construct.</item>
-/// </list>
-/// These were previously "tested" only as paging/LINQ shape tests on InMemory, where the
-/// constraints do not exist. Moving the constraint-bearing cases here makes a regression
-/// (e.g. a dropped unique index, or a Restrict→Cascade flip) actually fail.
-/// </summary>
+/// <summary>Exercises PostgreSQL uniqueness, RESTRICT and CASCADE constraints, including the
+/// partial ProjectServer index. EF InMemory cannot prove these relational guarantees.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class RelationalIntegrityIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)

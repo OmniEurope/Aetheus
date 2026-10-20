@@ -23,13 +23,6 @@ public interface IAiTaskService
     /// </summary>
     Task<int?> GetRunPipelineIdAsync(int pipelineRunId, CancellationToken ct);
 
-    Task<PaginatedResult<AiRunnerProfileDto>> GetProfilesAsync(PaginationRequest request, CancellationToken ct);
-    Task<List<AiRunnerProfileDto>> GetProfileOptionsAsync(List<int> organizationIds, CancellationToken ct);
-    Task<AiRunnerProfileDto?> GetProfileAsync(int id, CancellationToken ct);
-    Task<AiRunnerProfileDto> CreateProfileAsync(CreateAiRunnerProfileRequest request, CancellationToken ct);
-    Task<AiRunnerProfileDto?> UpdateProfileAsync(int id, UpdateAiRunnerProfileRequest request, CancellationToken ct);
-    Task<bool> DeleteProfileAsync(int id, CancellationToken ct);
-
     Task<PaginatedResult<AiTaskDefinitionDto>> GetDefinitionsAsync(
         PaginationRequest request, int? projectId, int? serverId,
         List<int>? accessibleProjectIds, List<int>? accessibleServerIds, CancellationToken ct);
@@ -39,17 +32,24 @@ public interface IAiTaskService
         int id, UpdateAiTaskDefinitionRequest request, CancellationToken ct);
     Task<bool> DeleteDefinitionAsync(int id, CancellationToken ct);
     Task<ServerTask> RunNowAsync(int definitionId, string? eventPayload, CancellationToken ct);
-    /// <summary>Null when no profile of that name exists in the organization: the pipeline decides what
-    /// that costs (a failed run, or a failed advisory step).</summary>
-    Task<AiExecutionSpec?> BuildPipelineExecutionAsync(
-        string profileName, int organizationId, string prompt, bool gate,
+    /// <summary>Builds the run of a pipeline AI step with the profile <see cref="AiProfileResolver"/>
+    /// picks: the step's named profile, else the pipeline's (<paramref name="pipelineProfileId"/>), else
+    /// the organization's most preferred usable one. No spec when none can run; the problem says why:
+    /// the pipeline decides what that costs (a failed run, or a failed advisory step).</summary>
+    Task<AiPipelineExecution> BuildPipelineExecutionAsync(
+        string? profileName, int? pipelineProfileId, int organizationId, string prompt, bool gate,
         int pipelineRunId, string workingDirectory, CancellationToken ct);
+
+    /// <summary>Why no profile can run a pipeline AI step naming this profile (or none) in this
+    /// organization, or null when one can. The pipeline's assigned profile is not an input: when it is
+    /// usable the organization has a usable profile anyway, so it cannot change whether this is null.
+    /// Read-only: the launch preflight asks it before a single task exists.</summary>
+    Task<string?> FindPipelineProfileProblemAsync(string? profileName, int organizationId, CancellationToken ct);
 
     Task<PaginatedResult<AiRunResultDto>> GetResultsAsync(
         int? definitionId, int? pipelineRunId, PaginationRequest request, CancellationToken ct);
     Task<AiRunResultDto> PublishResultAsync(PublishAiRunResultRequest request, CancellationToken ct);
     Task<AiRunResultDto?> GetResultAsync(int id, CancellationToken ct);
-    Task<AiPatchApplicationDto> ApplyProposedPatchAsync(int resultId, CancellationToken ct);
     Task<AiConsumptionDto> GetConsumptionAsync(int? projectId, CancellationToken ct);
 }
 
@@ -57,3 +57,11 @@ public sealed record AiExecutionSpec(
     string Target,
     int TimeoutSeconds,
     Dictionary<string, string> EnvironmentVariables);
+
+/// <param name="Spec">The run to dispatch; null when no profile can run.</param>
+/// <param name="Problem">Why no profile can run; null when <paramref name="Spec"/> is set.</param>
+/// <param name="Resolution">Which profile was used and why (the same sentence the agent logs).</param>
+/// <param name="IsFallback">The step's own profile name did not decide, so the pipeline records the choice
+/// on the run as well.</param>
+public sealed record AiPipelineExecution(
+    AiExecutionSpec? Spec, string? Problem, string Resolution = "", bool IsFallback = false);

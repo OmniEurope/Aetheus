@@ -8,7 +8,6 @@ variables:
   DOTNET_NOLOGO: "1"
   TOTO_WINDOWS_PORT: "10092"
   TOTO_WINDOWS_COMPOSE_PROJECT: "toto-windows-image"
-  TOTO_WINDOWS_DB_PASSWORD: "toto-windows-local-only"
 
 stages:
   - name: WindowsPreflight
@@ -175,9 +174,26 @@ stages:
             throw "The loaded Toto image differs from the built image."
           }
 
+          # The database password is generated once per runner and kept outside the repository, so no
+          # literal sits in this file. A new password means a database initialized under the old one:
+          # its volumes are removed (the stack is disposable) so Postgres starts with the new value.
+          $stateDirectory = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "Aetheus\toto-windows-image"
+          $passwordPath = Join-Path $stateDirectory "db-password"
           $env:TOTO_IMAGE = $imageTag
           $env:TOTO_PORT = "$(TOTO_WINDOWS_PORT)"
-          $env:TOTO_DB_PASSWORD = "$(TOTO_WINDOWS_DB_PASSWORD)"
+          if (-not (Test-Path -LiteralPath $passwordPath -PathType Leaf)) {
+            New-Item -ItemType Directory -Force -Path $stateDirectory | Out-Null
+            $bytes = New-Object byte[] 24
+            [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+            $env:TOTO_DB_PASSWORD = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+            docker compose -p "$(TOTO_WINDOWS_COMPOSE_PROJECT)" -f deploy/docker-compose.yml down --volumes
+            if ($LASTEXITCODE -ne 0) {
+              throw "The Toto stack initialized under the previous password could not be removed."
+            }
+            # Written only once the old stack is gone, so a failed removal retries on the next run.
+            [IO.File]::WriteAllText($passwordPath, $env:TOTO_DB_PASSWORD)
+          }
+          $env:TOTO_DB_PASSWORD = (Get-Content -LiteralPath $passwordPath -Raw).Trim()
           docker compose -p "$(TOTO_WINDOWS_COMPOSE_PROJECT)" -f deploy/docker-compose.yml up -d --wait --no-build
           if ($LASTEXITCODE -ne 0) {
             throw "The Toto Windows image deployment failed."
@@ -199,7 +215,9 @@ stages:
           $expectedImageId = (Get-Content -LiteralPath (Join-Path $artifactDirectory "image-id") -Raw).Trim()
           $env:TOTO_IMAGE = "toto-windows:$commit"
           $env:TOTO_PORT = "$(TOTO_WINDOWS_PORT)"
-          $env:TOTO_DB_PASSWORD = "$(TOTO_WINDOWS_DB_PASSWORD)"
+          # Written by DeployImage on this runner (run affinity).
+          $passwordPath = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "Aetheus\toto-windows-image\db-password"
+          $env:TOTO_DB_PASSWORD = (Get-Content -LiteralPath $passwordPath -Raw).Trim()
           $containerId = (docker compose -p "$(TOTO_WINDOWS_COMPOSE_PROJECT)" -f deploy/docker-compose.yml ps -q api).Trim()
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerId)) {
             throw "The deployed Toto API container is unavailable."

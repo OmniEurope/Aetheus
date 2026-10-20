@@ -3,24 +3,9 @@ using System.Globalization;
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// PLAN-006 lot 12.1. Draws the run's stages as bars on one shared time axis, above the ordered
-/// timeline that already lists them.
-///
-/// It exists because the list cannot answer two questions. It marks a stage "runs in parallel" from
-/// its position in the dependency graph, which says what the definition ALLOWED, not what happened:
-/// with one free runner, two stages at the same depth run one after the other and the list looks
-/// identical. And durations in a column tell you each stage's cost but not the run's shape, so the
-/// stage that actually holds the run up is not visible until you add the numbers yourself.
-///
-/// PLAN-003 lot 20 / D26 adds what each bar is read against: the stage's usual duration over the
-/// last successful runs, its last duration, and what it consumed. A running stage fills its bar up
-/// to its usual duration, then a second, stronger layer restarts from the left for the time spent
-/// beyond it.
-///
-/// The placement lives in <see cref="RunGanttChart"/> and <see cref="RunGanttProgress"/>, which are
-/// pure and tested on their own; this component only renders what they return.
-/// </summary>
+/// <summary>The shared time axis exposes actual stage overlap and compares durations with
+/// successful runs. <see cref="RunGanttChart"/> and <see cref="RunGanttProgress"/> compute
+/// placement and progress independently of rendering.</summary>
 public partial class RunGanttStrip
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -46,7 +31,7 @@ public partial class RunGanttStrip
 
     internal enum GanttColumn { Duration, Wait, Average, Last, Cpu, Io }
 
-    /// <summary>Recette R-158: one labelled tick per quarter of the axis.</summary>
+    /// <summary>One labelled tick per quarter of the axis.</summary>
     internal sealed record Tick(int Percent, string Label);
 
     internal sealed record Column(
@@ -59,8 +44,8 @@ public partial class RunGanttStrip
     /// step and its stage never disagree about "now".</summary>
     private DateTime _now;
 
-    /// <summary>Recette R-160: stages whose steps are unfolded. Keyed by kind and name rather than by
-    /// view model, so a stage stays open while the run refreshes live. Collapsed by default.</summary>
+    /// <summary>Stages whose steps are unfolded. Keyed by kind and name rather than by view model,
+    /// so a stage stays open while the run refreshes live. Collapsed by default.</summary>
     private readonly HashSet<string> _expandedStages = new(StringComparer.Ordinal);
 
     protected override void OnParametersSet()
@@ -98,7 +83,7 @@ public partial class RunGanttStrip
         return $"run-gantt-steps-{_instance}-{index}";
     }
 
-    /// <summary>Recette R-160: start, end and duration of one step, one fact per line.</summary>
+    /// <summary>Start, end and duration of one step, one fact per line.</summary>
     internal string StepTitle(RunGanttStepBar step)
     {
         var culture = CultureInfo.CurrentCulture;
@@ -122,8 +107,8 @@ public partial class RunGanttStrip
         [
             new(GanttColumn.Duration, "GanttColumnDuration", "GanttColumnDurationHint",
                 StageDuration),
-            // Recette R-156: a stage that started at once has no wait to show; when none waited, the
-            // column is not drawn, like the others.
+            // A stage that started at once has no wait to show; when none waited, the column is not
+            // drawn, like the others.
             new(GanttColumn.Wait, "GanttColumnWait", "GanttColumnWaitHint",
                 (bar, _) => bar.Wait >= TimeSpan.FromSeconds(1) ? FormatDuration(bar.Wait) : string.Empty),
             new(GanttColumn.Average, "GanttColumnAverage", "GanttColumnAverageHint",
@@ -161,7 +146,15 @@ public partial class RunGanttStrip
     private static double ScaledWidth(double barWidth, double fillPercent) =>
         barWidth * Math.Clamp(fillPercent, 0, 100) / 100;
 
-    private static string BarClass(RunGanttBar bar) => StatusClass(bar.Stage.Status);
+    private static string BarClass(RunGanttBar bar) => StatusClass(bar.Stage);
+
+    // Recette R1-80: a stage or step whose control ran and found failures is Rejected, in the warning
+    // colour, not a green success.
+    private const string RejectedClass = "run-gantt-rejected";
+
+    private static string StatusClass(StageViewModel stage) => stage.IsRejected ? RejectedClass : StatusClass(stage.Status);
+
+    private static string StatusClass(PipelineStepRunDto step) => step.IsRejected ? RejectedClass : StatusClass(step.Status);
 
     private static string StatusClass(TaskExecutionStatus status) => status switch
     {
@@ -181,8 +174,8 @@ public partial class RunGanttStrip
     private static string StageDuration(RunGanttBar bar, RunGanttLayout layout) =>
         FormatDuration(Elapsed(bar, layout));
 
-    /// <summary>Recette R-159: start, end, duration, the wait before the stage and, when this pipeline
-    /// has a usual duration for it, how far this run is from it. One fact per line.</summary>
+    /// <summary>Start, end, duration, the wait before the stage and, when this pipeline has a usual
+    /// duration for it, how far this run is from it. One fact per line.</summary>
     internal string BarTitle(RunGanttBar bar, RunGanttLayout layout, RunGanttProgress? progress)
     {
         var culture = CultureInfo.CurrentCulture;
@@ -220,13 +213,13 @@ public partial class RunGanttStrip
         return reference.Kind == DateTimeKind.Local ? utc.ToLocalTime() : utc;
     }
 
-    /// <summary>Recette R-158: the elapsed time at 0, 25, 50, 75 and 100 % of the axis.</summary>
+    /// <summary>The elapsed time at 0, 25, 50, 75 and 100 % of the axis.</summary>
     internal static IReadOnlyList<Tick> Ticks(RunGanttLayout layout) =>
         [.. new[] { 0, 25, 50, 75, 100 }.Select(percent =>
             new Tick(percent, FormatDuration(TimeSpan.FromTicks(layout.Duration.Ticks * percent / 100))))];
 
-    /// <summary>Recette R-157: the run's own duration, measured like the Started tile (run start to run
-    /// end, or to now while it runs). Null when the run carries no start.</summary>
+    /// <summary>The run's own duration, measured like the Started tile (run start to run end, or to
+    /// now while it runs). Null when the run carries no start.</summary>
     internal TimeSpan? RunDuration()
     {
         if (Run is null || Run.StartedAt == default) return null;
@@ -235,8 +228,8 @@ public partial class RunGanttStrip
         return span > TimeSpan.Zero ? span : TimeSpan.Zero;
     }
 
-    /// <summary>Recette R-155: the status as an icon beside the name, so it does not rest on the bar's
-    /// hue alone.</summary>
+    /// <summary>The status as an icon beside the name, so it does not rest on the bar's hue
+    /// alone.</summary>
     private static OmniIconName StatusIcon(TaskExecutionStatus status) => status switch
     {
         TaskExecutionStatus.Success => OmniIconName.CheckCircle,
@@ -246,24 +239,36 @@ public partial class RunGanttStrip
         _ => OmniIconName.Hourglass
     };
 
-    private static string StatusIconClass(TaskExecutionStatus status) =>
-        "run-gantt-status-icon run-gantt-status-" + StatusClass(status)["run-gantt-".Length..];
+    private static string StatusIconClass(StageViewModel stage) => IconClassOf(StatusClass(stage));
+
+    private static string StatusIconClass(PipelineStepRunDto step) => IconClassOf(StatusClass(step));
+
+    private static string IconClassOf(string statusClass) =>
+        "run-gantt-status-icon run-gantt-status-" + statusClass["run-gantt-".Length..];
 
     private string StatusText(TaskExecutionStatus status) => L.Localize(status);
 
-    /// <summary>Recette R-246: a stage or step skipped because its condition was false is stored as
-    /// Cancelled; it gets the skipped icon and says "Skipped", so it no longer reads as cancelled.</summary>
+    /// <summary>Steps stored as Cancelled because their condition was false display the skipped
+    /// icon and label.</summary>
     private static OmniIconName StageIcon(StageViewModel stage) =>
-        stage.SkippedCondition is { Length: > 0 } ? PipelineRunFormatting.SkippedIcon : StatusIcon(stage.Status);
+        stage.SkippedCondition is { Length: > 0 } ? PipelineRunFormatting.SkippedIcon
+        : stage.IsRejected ? OmniIconName.Warning
+        : StatusIcon(stage.Status);
 
     private string StageStatusText(StageViewModel stage) =>
-        stage.SkippedCondition is { Length: > 0 } ? L["Skipped"] : StatusText(stage.Status);
+        stage.SkippedCondition is { Length: > 0 } ? L["Skipped"]
+        : stage.IsRejected ? L.Localize(PipelineStatus.Rejected)
+        : StatusText(stage.Status);
 
     private static OmniIconName StepIcon(PipelineStepRunDto step) =>
-        PipelineRunFormatting.IsSkippedByCondition(step) ? PipelineRunFormatting.SkippedIcon : StatusIcon(step.Status);
+        PipelineRunFormatting.IsSkippedByCondition(step) ? PipelineRunFormatting.SkippedIcon
+        : step.IsRejected ? OmniIconName.Warning
+        : StatusIcon(step.Status);
 
     private string StepStatusText(PipelineStepRunDto step) =>
-        PipelineRunFormatting.IsSkippedByCondition(step) ? L["Skipped"] : StatusText(step.Status);
+        PipelineRunFormatting.IsSkippedByCondition(step) ? L["Skipped"]
+        : step.IsRejected ? L.Localize(PipelineStatus.Rejected)
+        : StatusText(step.Status);
 
     private static string SignedDuration(TimeSpan span) =>
         (span < TimeSpan.Zero ? "-" : "+") + FormatDuration(span.Duration());

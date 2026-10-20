@@ -1,14 +1,17 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 <OmniStack Gap="OmniSpacing.Large">
+    @* STD-BTN detection 11: Export visible, the other actions in the menu. *@
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ExportConfigAsync" Class="@(_configExporting ? "btn-busy" : null)" Busy="@(_configExporting)" title="@L["ExportYaml"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Export"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _configImportVisible = true)" title="@L["ImportYaml"]"><OmniIcon Name="OmniIconName.Upload" /> <span>@L["Import"]</span></OmniButton>
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem OnClick="@(() => _configImportVisible = true)" title="@L["ImportYaml"]"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
     </OmniStack>
 
     @if (!string.IsNullOrEmpty(_configYaml))
     {
-        @* R-516: the configuration in OE's code block, whose copy button sits at the end of its title. *@
+        @* The configuration in OE's code block, whose copy button sits at the end of its title. *@
         <OmniCodeBlock Code="@_configYaml" Title="@L["CurrentConfiguration"]" Language="yaml" Wrap="true" Class="config-yaml-block code-block-bounded" />
     }
 
@@ -18,9 +21,12 @@
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["ImportYamlConfiguration"]</OmniText>
             <OmniTextArea aria-label="@L["ImportYamlConfiguration"]" @bind-Value="_configImportYaml" Rows="15" Class="config-yaml-editor" />
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ValidateConfigAsync" Class="@(_configValidating ? "btn-busy" : null)" Busy="@(_configValidating)"><OmniIcon Name="OmniIconName.CheckCircle" /> <span>@L["ValidateYaml"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@PreviewConfigAsync" Class="@(_configPreviewing ? "btn-busy" : null)" Busy="@(_configPreviewing)"><OmniIcon Name="OmniIconName.Eye" /> <span>@L["Preview"]</span></OmniButton>
+                @* STD-BTN detection 11: Deploy visible, the other actions in the menu. *@
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@DeployConfigAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_configImportYaml))" title="@(AgentOffline ? L["AgentOfflineActionBlocked"].Value : null)" Class="@(_configDeploying ? "btn-busy" : null)" Busy="@(_configDeploying)"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["Deploy"]</span></OmniButton>
+                <OmniOverflowMenu Label="@L["MoreActions"]">
+                    <OmniMenuItem OnClick="@ValidateConfigAsync" Disabled="@_configValidating"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@L["ValidateYaml"]</ChildContent></OmniMenuItem>
+                    <OmniMenuItem OnClick="@PreviewConfigAsync" Disabled="@_configPreviewing"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon><ChildContent>@L["Preview"]</ChildContent></OmniMenuItem>
+                </OmniOverflowMenu>
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _configImportVisible = false; _configPreview = null; })"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
             </OmniStack>
 

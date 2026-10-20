@@ -56,9 +56,12 @@ else
                             <ValidationMessage For="@(() => _general.Description)" />
                         </ChildContent></OmniFormField>
                     </OmniStack>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+                    @* STD-BTN detection 11: Save visible, the other actions in the menu. *@
+                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-lg">
                         <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_savingGeneral ? "btn-busy" : null)" Busy="@(_savingGeneral)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnDeleteOrganization"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["DeleteOrganization"]</span></OmniButton>
+                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                            <OmniMenuItem Tone="OmniTone.Danger" OnClick="@OnDeleteOrganization"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["DeleteOrganization"]</ChildContent></OmniMenuItem>
+                        </OmniOverflowMenu>
                     </OmniStack>
                 </OmniTemplateForm></div>
                 </OmniCard>

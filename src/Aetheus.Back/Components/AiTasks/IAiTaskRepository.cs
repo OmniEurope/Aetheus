@@ -12,10 +12,15 @@ public interface IAiTaskRepository
     Task<List<AiRunnerProfile>> GetProfilesForOrganizationsAsync(
         List<int> organizationIds, CancellationToken ct);
     Task<AiRunnerProfile?> FindProfileAsync(int id, CancellationToken ct);
-    Task<AiRunnerProfile?> FindProfileByNameAsync(string name, int organizationId, CancellationToken ct);
+    /// <summary>Every profile of one organization, most preferred first (lowest priority, then lowest
+    /// id): what a pipeline AI step picks its profile from. Untracked.</summary>
+    Task<List<AiRunnerProfile>> GetOrganizationProfilesByPriorityAsync(int organizationId, CancellationToken ct);
     Task AddProfileAsync(AiRunnerProfile profile, CancellationToken ct);
     Task RemoveProfileAsync(AiRunnerProfile profile, CancellationToken ct);
     Task<bool> ProfileHasDefinitionsAsync(int profileId, CancellationToken ct);
+    /// <summary>Tracked API profiles (known provider, stored key) whose model list was not read since
+    /// <paramref name="checkedBefore"/>, oldest attempt first.</summary>
+    Task<List<AiRunnerProfile>> GetProfilesDueForModelListAsync(DateTime checkedBefore, CancellationToken ct);
 
     Task<(List<AiTaskDefinition> Items, int Total)> GetDefinitionsPageAsync(
         string? search, int page, int pageSize, int? projectId, int? serverId,

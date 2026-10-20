@@ -304,6 +304,15 @@ public sealed class DependencyTrackOutboxTests
             CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<string> AdoptVerifiedArtifactAsync(
+            int projectId,
+            int pipelineId,
+            int runId,
+            string fileName,
+            VerifiedArtifactFile file,
+            CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task DeleteArtifactAsync(string filePath, CancellationToken ct = default) =>
             throw new NotSupportedException();
 

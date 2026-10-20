@@ -2,8 +2,7 @@
 
 namespace Aetheus.Front.Components.Git;
 
-/// <summary>
-/// Recette R-319: the page of a commit at the provider that hosts its repository, for a commit no
+/// <summary> The page of a commit at the provider that hosts its repository, for a commit no
 /// internal repository holds. Only an http(s) repository URL gives a link; the path follows the
 /// provider's convention (GitLab's "/-/commit/", Bitbucket's "/commits/", "/commit/" elsewhere).
 /// </summary>

@@ -107,4 +107,40 @@ public class ArtifactStorageServiceTests : IDisposable
         // Assert
         Assert.False(File.Exists(fullPath));
     }
+
+    [Fact]
+    public async Task AdoptVerifiedArtifactAsync_MovesTheFileUnderItsImmutableName()
+    {
+        // Recette R1-91: the assembled chunked upload is renamed into the store, not read and written again.
+        var uploads = Path.Combine(_tempDir, ".uploads", "abc");
+        Directory.CreateDirectory(uploads);
+        var assembled = Path.Combine(uploads, "assembled");
+        await File.WriteAllTextAsync(assembled, "verified bytes", TestContext.Current.CancellationToken);
+        var digest = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData("verified bytes"u8.ToArray()));
+
+        var relativePath = await _sut.AdoptVerifiedArtifactAsync(
+            1, 2, 3, "build-3.zip", new VerifiedArtifactFile(assembled, 14, digest), TestContext.Current.CancellationToken);
+
+        Assert.StartsWith(Path.Combine("1", "2", "3", $"build-3.{digest}."), relativePath, StringComparison.Ordinal);
+        Assert.EndsWith(".zip", relativePath, StringComparison.Ordinal);
+        Assert.False(File.Exists(assembled));
+        Assert.Equal("verified bytes", await File.ReadAllTextAsync(Path.Combine(_tempDir, relativePath), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task AdoptVerifiedArtifactAsync_RefusesAFileOutsideTheStore()
+    {
+        var outside = Path.Combine(Path.GetTempPath(), $"aetheus-outside-{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(outside, "x", TestContext.Current.CancellationToken);
+        try
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.AdoptVerifiedArtifactAsync(
+                1, 2, 3, "build-3.zip", new VerifiedArtifactFile(outside, 1, new string('a', 64)), TestContext.Current.CancellationToken));
+            Assert.True(File.Exists(outside));
+        }
+        finally
+        {
+            File.Delete(outside);
+        }
+    }
 }

@@ -163,5 +163,78 @@ public class TaskLogsControllerTests
         await _serviceMock.DidNotReceive().AppendLogAsync(
             Arg.Any<AppendLogRequest>(), Arg.Any<CancellationToken>());
     }
-}
 
+    private const string Session = "11111111111111111111111111111111";
+
+    private static AppendLogRequest Line(int taskId, string? session = Session, long? token = 1) =>
+        new() { TaskId = taskId, AgentSessionId = session, AgentSessionFencingToken = token, Level = TaskLogLevel.Info, Message = "line" };
+
+    [Fact]
+    public async Task AppendLogs_AnEmptyBatch_IsAcceptedWithoutWriting()
+    {
+        Assert.IsType<OkResult>(await _sut.AppendLogs([], TestContext.Current.CancellationToken));
+        await _serviceMock.DidNotReceiveWithAnyArgs().AppendLogsAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AppendLogs_MoreThanFiveHundredLines_IsRefused()
+    {
+        var result = await _sut.AppendLogs([.. Enumerable.Range(0, 501).Select(_ => Line(1))], TestContext.Current.CancellationToken);
+
+        Assert.Equal("Batch size exceeds maximum of 500 entries.", Assert.IsType<ApiError>(Assert.IsType<BadRequestObjectResult>(result).Value).Message);
+        await _serviceMock.DidNotReceiveWithAnyArgs().AppendLogsAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AppendLogs_WithoutAServerClaim_IsForbidden()
+    {
+        _sut.ControllerContext.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("ServerId", "not-a-number")], "test"));
+
+        Assert.IsType<ForbidResult>(await _sut.AppendLogs([Line(1)], TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task AppendLogs_ALineOfAnotherServersTask_ForbidsTheWholeBatch()
+    {
+        _taskServiceMock.GetServerIdsForTasksAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, int> { [1] = 1, [2] = 2 });
+
+        Assert.IsType<ForbidResult>(await _sut.AppendLogs([Line(1), Line(2), Line(3)], TestContext.Current.CancellationToken));
+        await _serviceMock.DidNotReceiveWithAnyArgs().AppendLogsAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task AppendLogs_AStaleLease_IsAConflict()
+    {
+        _taskServiceMock.HaveCurrentAgentLeasesAsync(
+                Arg.Any<IReadOnlyCollection<int>>(), 1, Session, 1, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        Assert.IsType<ConflictResult>(await _sut.AppendLogs([Line(1), Line(2)], TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(true, typeof(OkResult))]
+    [InlineData(false, typeof(ConflictResult))]
+    public async Task AppendLogs_MixedOrMissingLeases_DependOnTheLegacyProtocol(bool legacyAllowed, Type expected)
+    {
+        _taskServiceMock.AllowsLegacyUnfencedTaskProtocolAsync(1, Arg.Any<CancellationToken>()).Returns(legacyAllowed);
+
+        var result = await _sut.AppendLogs([Line(1), Line(1, "22222222222222222222222222222222")], TestContext.Current.CancellationToken);
+
+        Assert.IsType(expected, result);
+        await _taskServiceMock.DidNotReceiveWithAnyArgs().HaveCurrentAgentLeasesAsync(default!, default, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    [Theory]
+    [InlineData(Session, 1L, true)]
+    [InlineData("not-a-guid", 1L, false)]
+    [InlineData(Session, 0L, false)]
+    [InlineData(null, 1L, false)]
+    public void SharesOneValidLease_RequiresAValidSessionAndToken(string? session, long token, bool expected) =>
+        Assert.Equal(expected, TaskLogsController.SharesOneValidLease([Line(1, session, token), Line(2, session, token)]));
+
+    [Fact]
+    public void SharesOneValidLease_TwoFencingTokens_AreNotOneLease() =>
+        Assert.False(TaskLogsController.SharesOneValidLease([Line(1, Session, 1), Line(2, Session, 2)]));
+}

@@ -133,7 +133,7 @@ public class ApiClientMailGitTests
     [InlineData("purge")]
     public async Task SetupAndPurge_PostAndReturnTheQueuedTaskId(string command)
     {
-        // R2-085 / R2-083: the page follows the task the setup or the reinstall queued.
+        // The page follows the task the setup or the reinstall queued.
         var url = $"api/servers/1/mail/{command}";
         _handler.SetJsonResponse(HttpMethod.Post, url, new MailTaskQueuedDto { TaskId = 42 });
 

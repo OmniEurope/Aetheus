@@ -2,12 +2,9 @@
 
 namespace Aetheus.Back.Data.Entities;
 
-/// <summary>
-/// Recette R-366/R-367: one artifact a pipeline run consumed (restored or deployed), recorded when the
-/// step is dispatched. It is the only durable trace of a run's inputs: the task environment that
-/// carries the artifact id is encrypted and purged with the task. The artifact name, digest and
-/// producing run are copied so the record still reads after artifact retention deleted the file.
-/// </summary>
+/// <summary>Records each artifact consumed by a run at step dispatch, independently of the
+/// encrypted task environment and its retention. Copy the name, digest and producing run so
+/// provenance survives artifact-file deletion.</summary>
 public class PipelineRunArtifactInput
 {
     public int Id { get; set; }

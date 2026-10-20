@@ -9,9 +9,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages;
 
-/// <summary>
-/// Recette R-210 / R-224: the header filters of the package, pipeline, artifact and variable grids reach
-/// their API as generic column filters (<c>Filters[i].Field</c>...), so the server narrows the rows and
+/// <summary> The header filters of the package, pipeline, artifact and variable grids reach their
+/// API as generic column filters (<c>Filters[i].Field</c>...), so the server narrows the rows and
 /// the total. A grid whose rows are all in memory (the release picker) narrows them itself.
 /// </summary>
 public sealed class PackagePipelineVariableGridFilterTests : BunitContext
@@ -95,14 +94,15 @@ public sealed class PackagePipelineVariableGridFilterTests : BunitContext
         _handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto>());
         _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>());
         var cut = Render<PipelineEdit>(parameters => parameters.Add(page => page.Id, 5));
-        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
         _handler.SetJsonResponse("api/pipelines/5/runs?page=1", new PaginatedResult<PipelineRunDto>());
 
         await LoadAsync(cut, "OnRunsLoadDataAsync", Filtered(Ticked("Status", "Failed", "Cancelled")));
         cut.Render();
 
         AssertFilterSent("api/pipelines/5/runs", "Status", "In");
-        // The typed single-status parameter is no longer sent next to the list: it would narrow twice.
+        // Send the status list without a second single-status filter that would narrow results
+        // again.
         Assert.DoesNotContain(_handler.Requests, request =>
             request.Url.Contains("api/pipelines/5/runs", StringComparison.Ordinal)
             && request.Url.Contains("&status=", StringComparison.Ordinal));

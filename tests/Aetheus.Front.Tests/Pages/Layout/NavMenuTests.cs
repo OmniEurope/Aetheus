@@ -133,7 +133,7 @@ public class NavMenuTests : BunitContext
     [Fact]
     public void ServerSubMenu_ShowsAllSectionLinks()
     {
-        // On /servers/{id}: all section links visible (capabilities no longer gate the nav).
+        // All server section links remain visible regardless of reported capabilities.
         var nav = Services.GetRequiredService<NavigationManager>();
         nav.NavigateTo("servers/7/overview");
 

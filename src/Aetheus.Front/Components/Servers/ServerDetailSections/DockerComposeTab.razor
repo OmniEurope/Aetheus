@@ -6,7 +6,10 @@
     <CountBadge Value="@FilteredCompose.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterStacks"]" @bind-Value="_composeSearch" Placeholder="@L["FilterStacks"]" Class="docker-search" />
 </OmniStack>
-<OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["DockerCompose"])" ExportFields="@ExportContext.Fields()" Items="@FilteredCompose" TItem="DockerComposeStackDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" />
+<OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["DockerCompose"])" ExportFields="@ExportContext.Fields()" Items="@FilteredCompose" TItem="DockerComposeStackDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+    OnRowClick="@(args => OpenComposeEditorAsync(args.Item.Name))">
+    @* Recette R3-35: clicking a stack opens its compose file; the buttons of the row keep their own action. *@
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="DockerComposeStackDto" Property="Name" Title="@L["Stack"]" Filterable="true" />
         <OmniDataGridColumn TItem="DockerComposeStackDto" Property="Status" Title="@L["Status"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
@@ -18,12 +21,17 @@
         <OmniDataGridColumn TItem="DockerComposeStackDto" Property="ConfigFile" Title="@L["Config"]" Filterable="true" />
         <OmniDataGridColumn TItem="DockerComposeStackDto" Title="@L["Actions"]" MinWidth="28rem" Sortable="false" Filterable="false">
             <Template Context="s">
+                <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                @* STD-BTN detection 11: Start visible with its destructive Stop, the other actions in the menu. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
                     <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Up))" title="@L["Start"]" Label="@L["Start"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
                     <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Down))" title="@L["Stop"]" Label="@L["Stop"]"><OmniIcon Name="OmniIconName.Stop" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Restart))" title="@L["Restart"]" Label="@L["Restart"]"><OmniIcon Name="OmniIconName.Refresh" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => OpenComposeEditorAsync(s.Name))" title="@L["EditCompose"]" Label="@L["EditCompose"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Restart))" title="@L["Restart"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Restart"]</ChildContent></OmniMenuItem>
+                        <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => OpenComposeEditorAsync(s.Name))" title="@L["EditCompose"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["EditCompose"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
                 </OmniStack>
+                </span>
             </Template>
         </OmniDataGridColumn>
     </Columns>
@@ -38,16 +46,23 @@
                 <div class="flex-spacer"></div>
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseComposeEditor" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
             </OmniStack>
-            @if (_composeFileLoading)
+            @* Recette R3-34: a failed read says why; while the file is requested, OE's busy veil lies over
+               the editor, which stays mounted underneath (R3-32, the same rule as the Apache editor). *@
+            @if (!string.IsNullOrWhiteSpace(_composeError))
             {
-                <AetheusLoader Size="OmniControlSize.Small" />
-                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["RequestingCompose"]</OmniText>
+                <OmniAlert Severity="OmniSeverity.Danger">
+                    <Icon><OmniIcon Name="OmniIconName.Error" /></Icon>
+                    <ChildContent><OmniText Element="OmniTextElement.Strong">@L["TaskFailed"]</OmniText><OmniText Element="OmniTextElement.Paragraph" Class="task-output-error">@_composeError</OmniText></ChildContent>
+                </OmniAlert>
             }
-            else
-            {
+            <div class="@(_composeFileLoading ? "omni-busy" : null)" aria-busy="@(_composeFileLoading ? "true" : "false")"
+                 title="@(_composeFileLoading ? L["RequestingCompose"].Value : null)">
                 <OmniCodeEditor @bind-Value="_composeEditorContent" Language="yaml" Height="24rem"
                                 InteropModulePath="./js/omni-code-editor-frame.js?v=1"
-                                Label="@L["DockerCompose"]" />
+                                Label="@L["DockerCompose"]" Disabled="@_composeFileLoading" />
+            </div>
+            @if (!_composeFileLoading)
+            {
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseComposeEditor"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
                     @if (CanAdmin)

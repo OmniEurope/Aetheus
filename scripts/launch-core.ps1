@@ -36,7 +36,7 @@ function Show-Options {
     Write-Host "  -r,  -Reset            Drop & recreate local Postgres docker volume (fresh seed)"
     Write-Host "  -tb, -TestBack         Run backend unit tests"
     Write-Host "  -tf, -TestFront        Run frontend unit tests"
-    Write-Host "  -t,  -TestUnit         Run ALL unit tests (back + front + agent-core + analyzers + observability)"
+    Write-Host "  -t,  -TestUnit         Run ALL unit tests (back + front + agent-core + analyzers + observability + JavaScript)"
     Write-Host "  -ti, -TestIntegration  Run integration tests (Aetheus.Back.IntegrationTests, Testcontainers)"
     Write-Host "  -te                    Run ALL E2E tests (isolated dedicated DB :15433, dev DB untouched)"
     Write-Host "  -tec <filter>          Run specific E2E categories (implies -te)"
@@ -46,7 +46,7 @@ function Show-Options {
     Write-Host "    -tec Auth            Category by name"
     Write-Host "    -tec Auth,Acts,3     Mix of names and numbers"
     Write-Host "  -ta, -TestAll          Run EVERYTHING: unit + integration + E2E (dev DB never reset)"
-    Write-Host "  -c,  -Coverage         Collect coverage + open HTML report (Back+Front+Agent.Core; integration coverage kept beside it, implies -tb -tf)"
+    Write-Host "  -c,  -Coverage         Collect coverage + open HTML report (Back+Front+Agent.Core; integration coverage kept beside it, implies -tb -tf), then the CRAP gate"
     Write-Host "  -mf, -ModeFront        Start Backend + Frontend (default)"
     Write-Host "  -ma, -ModeAgent        Start Agent Worker Service"
     Write-Host "  -hr, -HotReload        Start servers with dotnet watch (hot reload)"
@@ -845,6 +845,102 @@ function Invoke-TestRun {
     }
 }
 
+function Invoke-NodeTestRun {
+    # PLAN-002 lot 9.T: the JavaScript suites (deploy/scripts/*.test.mjs, tests/js/*) run in the CI and
+    # quality pipelines but never ran locally. Runs `node --test` with the TAP reporter over the given
+    # files and reads its final counters. A skipped test fails the run, like the quality stage that
+    # demands `# skipped 0`: the PowerShell-driven suites skip themselves when pwsh is missing.
+    param(
+        [string[]]$Files,
+        [string]$Label
+    )
+    Write-Step $Label
+    $nodeExe = Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
+    if (-not $nodeExe) {
+        Write-Host "  node not found on PATH: the JavaScript suites cannot run." -ForegroundColor Red
+        return @{ Label = $Label; ExitCode = 1; Passed = 0; Failed = 0; Total = 0; ExpectedTotal = 0; Skipped = 0 }
+    }
+    if (-not $Files -or $Files.Count -eq 0) {
+        Write-Host "  No JavaScript test file found." -ForegroundColor Red
+        return @{ Label = $Label; ExitCode = 1; Passed = 0; Failed = 0; Total = 0; ExpectedTotal = 0; Skipped = 0 }
+    }
+    # The deploy-script suites drive POSIX shells (`sh -c`, `bash`), as on the Linux CI agent. A Windows
+    # PowerShell PATH has no `sh` and its `bash` is WSL's: put Git for Windows' usr\bin first for the
+    # node process only, the same tools a Git Bash prompt resolves.
+    $savedPath = $env:PATH
+    $posixBin = $null
+    $gitExe = Get-Command git -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
+    if ($gitExe) {
+        $candidate = Join-Path (Split-Path (Split-Path $gitExe)) "usr\bin"
+        if (Test-Path (Join-Path $candidate "sh.exe")) { $posixBin = $candidate }
+    }
+    if (-not $posixBin -and -not (Get-Command sh -ErrorAction SilentlyContinue)) {
+        Write-Host "  No POSIX sh found (Git for Windows usr\bin): the deploy-script suites cannot run." -ForegroundColor Red
+        return @{ Label = $Label; ExitCode = 1; Passed = 0; Failed = 0; Total = 0; ExpectedTotal = 0; Skipped = 0 }
+    }
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    Push-Location $root
+    try {
+        if ($posixBin) { $env:PATH = "$posixBin;$savedPath" }
+        $lines = @(& $nodeExe --test --test-reporter=tap @Files 2>&1 | ForEach-Object { "$_" })
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $env:PATH = $savedPath
+        Pop-Location
+    }
+    $sw.Stop()
+    $counters = @{}
+    foreach ($line in $lines) {
+        if ($line -match '^# (tests|pass|fail|cancelled|skipped|todo) (\d+)\s*$') { $counters[$Matches[1]] = [int]$Matches[2] }
+    }
+    $total = if ($counters.ContainsKey('tests')) { $counters['tests'] } else { 0 }
+    $passed = if ($counters.ContainsKey('pass')) { $counters['pass'] } else { 0 }
+    $failed = 0
+    foreach ($key in 'fail', 'cancelled') { if ($counters.ContainsKey($key)) { $failed += $counters[$key] } }
+    $skipped = 0
+    foreach ($key in 'skipped', 'todo') { if ($counters.ContainsKey($key)) { $skipped += $counters[$key] } }
+    # Tests that need POSIX file modes, symbolic links and FIFOs skip themselves on NTFS: they are run
+    # for real in a Linux container instead, and only their passing there accounts for the skips.
+    $posixSkips = @($lines | Where-Object { $_ -match '# SKIP needs POSIX file modes' })
+    if ($exitCode -eq 0 -and $skipped -gt 0 -and $posixSkips.Count -eq $skipped -and $IsWindows) {
+        $posixFiles = @($Files | Where-Object { Select-String -Path $_ -SimpleMatch 'needs POSIX file modes' -Quiet })
+        Write-Host "  $skipped POSIX-only JavaScript test(s) skipped on Windows: running $($posixFiles.Count) file(s) in a Linux container..." -ForegroundColor Cyan
+        $relative = @($posixFiles | ForEach-Object { [System.IO.Path]::GetRelativePath($root, $_).Replace('\', '/') })
+        $posixLines = @(& docker run --rm --user 1000 -v "${root}:/w" -w /w node:22 node --test --test-reporter=tap @relative 2>&1 | ForEach-Object { "$_" })
+        $posixExit = $LASTEXITCODE
+        $posixRan = @($posixLines | Where-Object { $_ -match '^# skipped 0\s*$' }).Count -eq 1
+        if ($posixExit -eq 0 -and $posixRan) {
+            Write-Host "  POSIX-only tests passed in the Linux container." -ForegroundColor Green
+            $skipped = 0
+        } else {
+            $lines += $posixLines
+            Write-Host "  POSIX-only tests failed or did not all run in the Linux container (docker exit $posixExit)." -ForegroundColor Red
+        }
+    }
+    if ($exitCode -eq 0 -and $skipped -gt 0) {
+        Write-Host "  $skipped JavaScript test(s) skipped: every suite must run (is pwsh on PATH?)." -ForegroundColor Red
+        $exitCode = 1
+    }
+    if ($exitCode -ne 0) {
+        $failureDirectory = Join-Path $root "TestResults\LauncherFailures"
+        New-Item -ItemType Directory -Path $failureDirectory -Force | Out-Null
+        $failureLog = Join-Path $failureDirectory ("node-test-{0:yyyyMMdd-HHmmssfff}.log" -f (Get-Date))
+        $lines | Set-Content -Path $failureLog -Encoding utf8
+        Write-Host "  node --test exited with code $exitCode. Full log: $failureLog" -ForegroundColor Red
+        $lines | Where-Object { $_ -match '^\s*not ok ' } | Select-Object -First 30 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    }
+    Write-TestSummary -summaryLine "Test summary: total: ${total}; failed: ${failed}; succeeded: ${passed}; skipped: ${skipped}" -elapsedSec $sw.Elapsed.TotalSeconds
+    return @{
+        Label = $Label
+        ExitCode = $exitCode
+        Passed = $passed
+        Failed = $failed
+        Total = $total
+        ExpectedTotal = $total
+        Skipped = $skipped
+    }
+}
+
 function Invoke-CoverageReport {
     Write-Step "Generating HTML coverage report..."
     # coverlet.MTP writes coverage.cobertura.<timestamp>.xml at the top of the results directory. Give
@@ -900,6 +996,23 @@ function Invoke-CoverageReport {
     }
 }
 
+# PLAN-002 lot 2.final (STD-CRAP): the kit's CRAP gate, run once the coverage is green. It scores every
+# Cobertura report of this run (the three unit suites and the integration suite, under a coverage folder
+# emptied at the start of -c) against .config/crap-exceptions.json. Returns $false when it fails.
+function Invoke-CrapGate([string]$GatePath, [string]$CoverageRoot, [string]$ScoresPath) {
+    Write-Step "Running the CRAP gate..."
+    try {
+        & $GatePath -CoverageRoot $CoverageRoot -ReportPath $ScoresPath | Out-Null
+        Write-Host "  Method scores: $ScoresPath" -ForegroundColor DarkGray
+        return $true
+    }
+    catch {
+        Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  Method scores: $ScoresPath" -ForegroundColor DarkGray
+        return $false
+    }
+}
+
 # ---------- E2E category helpers ----------
 
 # One entry per feature [Category(...)] on the E2E fixtures. Every fixture also carries the broad
@@ -920,7 +1033,8 @@ $E2eCategories = @(
     'Logs',
     'Accessibility',
     'ResponsiveAdmin',
-    'ProductionSmoke'
+    'ProductionSmoke',
+    'RollbackRelevant'
 )
 
 function Resolve-E2eCategories([string]$filter) {
@@ -1028,6 +1142,8 @@ function Start-Servers {
                     # Delay the immediate task sweep so it cannot query a table between DROP SCHEMA
                     # and the last migration. Ordinary dev/prod hosts retain the zero-delay default.
                     $env:BackgroundServices__TaskStartupDelay = "00:30:00"
+                    # No nightly AI model list read (R3-7): a seeded profile would send a fake key to a real provider.
+                    $env:AiTasks__ModelListRefresh__Enabled = "false"
                     # Point the E2E backend at the isolated ephemeral DB (:15433); env vars override
                     # appsettings, so the dev DB (:15432) is never opened. Seed demo data too.
                     $env:ConnectionStrings__Default = $using:e2eConnString
@@ -1082,6 +1198,8 @@ function Start-Servers {
                     # Delay the immediate task sweep so it cannot query a table between DROP SCHEMA
                     # and the last migration. Ordinary dev/prod hosts retain the zero-delay default.
                     $env:BackgroundServices__TaskStartupDelay = "00:30:00"
+                    # No nightly AI model list read (R3-7): a seeded profile would send a fake key to a real provider.
+                    $env:AiTasks__ModelListRefresh__Enabled = "false"
                     # Point the E2E backend at the isolated ephemeral DB (:15433); env vars override
                     # appsettings, so the dev DB (:15432) is never opened. Seed demo data too.
                     $env:ConnectionStrings__Default = $using:e2eConnString
@@ -1688,6 +1806,24 @@ if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegrat
         }
     }
 
+    # PLAN-002 lot 9.T: the JavaScript suites belong to the unit set (-t, hence -ta), with the same
+    # file sets as the `Compile` step of aetheus-ci and the JavaScript stages of aetheus-quality.
+    if ($TestUnit) {
+        foreach ($jsSuite in @(
+            @{ Files = @(Get-ChildItem -Path (Join-Path $root "deploy\scripts") -Filter "*.test.mjs" -File); Label = "JS deploy-scripts" },
+            @{ Files = @(Get-ChildItem -Path (Join-Path $root "tests\js") -File | Where-Object { $_.Name -like "*.test.cjs" -or $_.Name -like "*.test.mjs" }); Label = "JS tests" }
+        )) {
+            $files = @($jsSuite.Files | Sort-Object Name | ForEach-Object { [IO.Path]::GetRelativePath($root, $_.FullName) })
+            $result = Invoke-NodeTestRun -Files $files -Label "Running $($jsSuite.Label) suites..."
+            $testResults += $result; $testLabels += $jsSuite.Label
+            if ($result.ExitCode -ne 0) {
+                Write-Host "$($jsSuite.Label.ToUpperInvariant()) TESTS FAILED - aborting." -ForegroundColor Red
+                $script:ylaunchExitCode = 1
+                return
+            }
+        }
+    }
+
     # PLAN-015 lot 0: the integration tests exercise the controllers and repositories the unit suites do
     # not reach; under -c their coverage is collected too, in its own subdirectory: the product report
     # still merges exactly the three unit suites, the CRAP measure reads every report under the coverage
@@ -1699,7 +1835,14 @@ if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegrat
         if ($rci.ExitCode -ne 0) { Write-Host "INTEGRATION TESTS FAILED - aborting." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
     }
 
-    if ($Coverage) { Invoke-CoverageReport }
+    if ($Coverage) {
+        Invoke-CoverageReport
+        if (-not (Invoke-CrapGate -GatePath $crapGate -CoverageRoot $coverageDir -ScoresPath (Join-Path $reportDir "crap-scores.csv"))) {
+            Write-Host "CRAP GATE FAILED - aborting." -ForegroundColor Red
+            $script:ylaunchExitCode = 1
+            return
+        }
+    }
 
     if ($TestIntegration -and -not $Coverage) {
         $integrationTestDir = Join-Path $root "tests\Aetheus.Back.IntegrationTests"

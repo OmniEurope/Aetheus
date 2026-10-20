@@ -1,28 +1,24 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Front.Tests.TestDoubles;
 using Aetheus.Shared.Components.Organizations;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.JSInterop;
-using NSubstitute;
 
 namespace Aetheus.Front.Tests.Services;
 
 public class ActiveOrganizationServiceTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
-    private readonly IJSRuntime _js;
+    // R1-66: the active organization is a user preference; none is stored unless a test seeds one.
+    private readonly InMemoryUserPreferences _preferences = new();
 
     public ActiveOrganizationServiceTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
-        _js = Substitute.For<IJSRuntime>();
-        // Simulate no stored value in localStorage
-        _js.InvokeAsync<string?>(Arg.Any<string>(), Arg.Any<object[]>())
-            .Returns(new ValueTask<string?>(result: null));
     }
 
     private ActiveOrganizationService CreateSut() =>
-        new(Services.GetRequiredService<ApiClient>(), _js);
+        new(Services.GetRequiredService<ApiClient>(), _preferences);
 
     private static MyOrganizationDto MakeOrg(int id, string name = "OrgName") =>
         new(id, name, name.ToLower(), OrganizationRole.Member);
@@ -78,12 +74,9 @@ public class ActiveOrganizationServiceTests : BunitContext
         var orgs = new List<MyOrganizationDto> { MakeOrg(1, "Org1"), MakeOrg(2, "Org2") };
         _handler.SetJsonResponse("api/organizations/me", orgs);
 
-        // Create a fresh JS runtime stub that returns "2" as stored id
-        var jsWithStored = Substitute.For<IJSRuntime>();
-        jsWithStored.InvokeAsync<string?>(Arg.Any<string>(), Arg.Any<object[]>())
-            .Returns(new ValueTask<string?>("2"));
+        _preferences.Seed(PreferenceKeys.ActiveOrganization, 2);
 
-        var sut = new ActiveOrganizationService(Services.GetRequiredService<ApiClient>(), jsWithStored);
+        var sut = CreateSut();
         await sut.RefreshAsync(Xunit.TestContext.Current.CancellationToken);
 
         Assert.Equal(2, sut.Active!.Id);
@@ -107,14 +100,7 @@ public class ActiveOrganizationServiceTests : BunitContext
 
         Assert.Equal(2, sut.Active!.Id);
         Assert.Equal(1, changedCount);
-        Assert.Contains(_js.ReceivedCalls(), call =>
-        {
-            var args = call.GetArguments();
-            return call.GetMethodInfo().Name == "InvokeAsync"
-                   && Equals(args[0], "Aetheus.setLocal")
-                   && args.OfType<object?[]>().Any(values => values.Length == 2
-                       && Equals(values[0], "aetheus.activeOrgId") && Equals(values[1], "2"));
-        });
+        Assert.Equal(2, _preferences.Read<int?>(PreferenceKeys.ActiveOrganization));
     }
 
     [Fact]

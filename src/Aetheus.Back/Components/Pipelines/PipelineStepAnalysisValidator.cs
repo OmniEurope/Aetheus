@@ -104,7 +104,7 @@ internal static class PipelineStepAnalysisValidator
         || step.ApiSpecificationUrls.Count > 0
         || !string.IsNullOrWhiteSpace(step.ApiSpecificationFormat);
 
-    /// <summary>R2-099: the most definitions one zap-api step scans in sequence.</summary>
+    /// <summary>The most definitions one zap-api step scans in sequence.</summary>
     internal const int MaxApiSpecificationUrls = 16;
 
     private static void ValidateApiScanner(
@@ -112,7 +112,7 @@ internal static class PipelineStepAnalysisValidator
         PipelineStepDefinition step,
         string context)
     {
-        // R2-099: one definition, or a list scanned in sequence by the same step; never both.
+        // One definition, or a list scanned in sequence by the same step; never both.
         if (step.ApiSpecificationUrls.Count > 0)
         {
             if (!string.IsNullOrWhiteSpace(step.ApiSpecificationUrl))

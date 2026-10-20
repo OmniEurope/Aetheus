@@ -84,8 +84,8 @@ public static class PipelineAnalysisGradingValidator
         ValidateBands(rule, label, errors);
     }
 
-    // A rule grades exactly one thing: a metric, one severity's finding count, or the weighted score of
-    // the open findings (recette R2-119), which only a lower-is-better direction can grade.
+    // A rule grades exactly one thing: a metric, one severity's finding count, or the weighted
+    // score of the open findings, which only a lower-is-better direction can grade.
     private static void ValidateTarget(
         PipelineAnalysisGradeRuleDefinition rule,
         string label,
@@ -154,7 +154,7 @@ public static class PipelineAnalysisGradingValidator
         ICollection<string> errors)
     {
         // A finding score, counted or weighted, may leave E open: above D is E, and only a critical
-        // finding gives F (recette R2-119). Every other rule needs its five thresholds.
+        // finding gives F. Every other rule needs its five thresholds.
         var findingScore = IsFindingScore(rule);
         var values = findingScore && !rule.E.HasValue
             ? new[] { rule.A, rule.B, rule.C, rule.D }

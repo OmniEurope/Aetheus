@@ -6,12 +6,9 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// Recette R2-122. The database rows go in one transaction, refused while a run of the project has
-/// not ended. The files go after the commit: an artifact or a bare repository left on disk by a
-/// failure is an orphan to clean, whereas a row pointing at a file already deleted would be a lie.
-/// The audit entry lists what was removed, files that could not be removed included.
-/// </summary>
+/// <summary>Delete database rows transactionally only after all project runs end, then remove files
+/// after commit to avoid live rows referencing deleted files. Audit removed resources and any files
+/// that could not be removed.</summary>
 public sealed class ProjectDeletionService(
     IProjectDeletionRepository repo,
     IDbTransactionScope transaction,

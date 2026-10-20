@@ -24,12 +24,13 @@ public partial class VersionHistoryDialog
     private bool _restoring;
     private int _currentVersion;
 
-    /// <summary>Recette R-286: the date column shows local time, so its range filter reads the same instant.</summary>
+    /// <summary>The date column shows local time, so its range filter reads the same
+    /// instant.</summary>
     private static readonly Func<VariableEntryVersionDto, object?> LocalChangedAt = version => version.ChangedAt.ToLocalTime();
 
     protected override void OnParametersSet() => _currentVersion = CurrentVersion;
 
-    /// <summary>Recette R2-124: one page of the versions export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the versions export, with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<VariableEntryVersionDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(25);
@@ -55,10 +56,8 @@ public partial class VersionHistoryDialog
     private void ApplyResult(PaginatedResult<VariableEntryVersionDto> result) =>
         (_versions, _totalCount) = (result.Items, result.TotalCount);
 
-    /// <summary>
-    /// Recette R-286: restoring writes the version's key and value back as a new change of the entry,
-    /// through the ordinary update, so the history keeps the restore as its own line.
-    /// </summary>
+    /// <summary> Restoring writes the version's key and value back as a new change of the entry,
+    /// through the ordinary update, so the history keeps the restore as its own line. </summary>
     private async Task RestoreAsync(VariableEntryVersionDto version)
     {
         var confirmed = await Dialog.Confirm(
@@ -77,7 +76,7 @@ public partial class VersionHistoryDialog
             });
             if (outcome.StatusCode == System.Net.HttpStatusCode.BadRequest)
             {
-                // The restored key was given to another entry since: R2-065.
+                // The restored key already belongs to another entry.
                 Toast.Error("Error", "LibraryEntryKeyExists", version.Key);
                 return;
             }

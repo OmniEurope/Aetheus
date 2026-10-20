@@ -6,22 +6,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Telemetry;
 
-/// <summary>
-/// PLAN-013 lot 1 (R2-113): measures the host's database every <see cref="DatabaseSizeOptions.IntervalMinutes"/>
-/// and publishes three gauges on the meter <see cref="MeterName"/>:
-/// <list type="bullet">
-/// <item><see cref="DatabaseSizeMetric"/>: the whole database, in bytes, attribute <see cref="DatabaseAttribute"/>;</item>
-/// <item><see cref="TableSizeMetric"/>: each of the largest tables, in bytes (heap, indexes, TOAST);</item>
-/// <item><see cref="TableRowsMetric"/>: the same tables' estimated row count (<c>pg_class.reltuples</c>),
-/// absent while PostgreSQL has never analysed the table.</item>
-/// </list>
-/// A table series carries <see cref="SchemaAttribute"/> and <see cref="TableAttribute"/>. Nothing of a
-/// table's content is read.
-///
-/// A measurement is exported once: the gauges report it at the first collection after it was taken, then
-/// nothing until the next one, so a 15-minute interval writes one point per series every 15 minutes, not
-/// one per export minute (the lesson of R2-082).
-/// </summary>
+/// <summary>Publish database bytes and largest-table bytes and estimated row counts from PostgreSQL
+/// metadata without reading table contents. Export each measurement once, on its first collection,
+/// rather than repeating unchanged values at every export.</summary>
 public sealed class DatabaseSizeMetrics : BackgroundService
 {
     public const string MeterName = "Aetheus.Telemetry.Database";

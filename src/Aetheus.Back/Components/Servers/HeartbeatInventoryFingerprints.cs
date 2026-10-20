@@ -4,24 +4,10 @@ using System.Text.Json;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// Recette R-479: one fingerprint per heartbeat inventory section, so a beat rewrites only the sections
-/// whose content changed instead of deleting and reinserting all of them (22 bulk deletes and their
-/// inserts on every beat, every 30 s, for every server). Same idea as the port registry's
-/// <c>PortObservationWriter</c>: what did not change is not written.
-///
-/// A fingerprint hashes the section AS THE AGENT REPORTED IT. Every persisted column derives from those
-/// fields, so equal fingerprints mean equal rows; a reported field that is not persisted can only cause a
-/// rewrite too many, never one too few. The one column that does not come from the report is the
-/// security-updates <c>CheckedAt</c> stamp, which an unchanged beat moves on its own.
-///
-/// The fingerprints are stored on the server row (<c>Server.HeartbeatInventoryFingerprintsJson</c>), loaded
-/// with it and saved in the same transaction as the sections they describe, so they cannot claim a write
-/// that was rolled back. They are trusted for <see cref="FullRewriteInterval"/> only: after that every
-/// section is rewritten once. That bounds how long the rows can disagree with the fingerprints when
-/// something else wrote them - the other colour of a blue-green deployment still running code that knows
-/// nothing about fingerprints, a restore, or a mapping changed by a new release.
-/// </summary>
+/// <summary>Hash agent-reported inventory fields and rewrite changed sections transactionally with
+/// their stored fingerprints, while updating security CheckedAt independently. Force a complete
+/// rewrite after <see cref="FullRewriteInterval"/> to bound drift from other writers, restored data
+/// or changed mappings.</summary>
 internal sealed class HeartbeatInventoryFingerprints
 {
     internal static readonly TimeSpan FullRewriteInterval = TimeSpan.FromMinutes(10);
@@ -77,7 +63,9 @@ internal sealed class HeartbeatInventoryFingerprints
             {
                 heartbeat.Certbot.IsInstalled,
                 heartbeat.Certbot.RenewalCheckedAt,
-                heartbeat.Certbot.RenewalCheckSucceeded
+                heartbeat.Certbot.RenewalCheckSucceeded,
+                heartbeat.Certbot.HelperVersion,
+                heartbeat.Certbot.RenewalCheckFailures
             }),
             [Mail] = Hash(heartbeat.Mail),
             [Teamspeak] = Hash(heartbeat.Teamspeak),

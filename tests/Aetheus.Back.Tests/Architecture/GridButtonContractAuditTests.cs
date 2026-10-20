@@ -4,11 +4,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 lot 4 / D9: inside a data row a button is icon only. A labelled button costs a column of
-/// width on every row and pushed the pipeline grids into their own mobile exceptions; the label moves
-/// to <c>title</c> and <c>aria-label</c>, so the action keeps a readable name.
-/// </summary>
+/// <summary>Grid-row actions use icons with title and aria-label text to retain accessible names
+/// without consuming labelled-button width.</summary>
 public sealed class GridButtonContractAuditTests
 {
     /// <summary>

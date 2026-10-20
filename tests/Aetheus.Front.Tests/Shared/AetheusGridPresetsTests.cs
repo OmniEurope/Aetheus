@@ -4,10 +4,7 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// PLAN-012: a raw OmniDataGrid that writes none of the shared settings gets them from the default
-/// preset registered at startup, and a setting written on the grid still wins.
-/// </summary>
+/// <summary>Registered grid defaults apply unless explicitly overridden on the instance.</summary>
 public sealed class AetheusGridPresetsTests : BunitContext
 {
     public AetheusGridPresetsTests() => BunitTestHelper.RegisterServices(this);
@@ -24,12 +21,11 @@ public sealed class AetheusGridPresetsTests : BunitContext
         Assert.True(grid.AllowColumnResize);
         Assert.True(grid.AllowAlternatingRows);
         Assert.Equal(OmniDensity.Compact, grid.Density);
-        Assert.Equal(OmniDataGridHeaderWrap.Truncate, grid.HeaderWrap); // R-538: titles on one line
+        Assert.Equal(OmniDataGridHeaderWrap.Truncate, grid.HeaderWrap); // Titles on one line
     }
 
-    /// <summary>Recette R2-124 (second decision of 2026-10-05), OE 1.6.0: a raw grid has no export bar by
-    /// default; it shows Markdown (blue), alone, when the grid shows its footer bar; the opt-out written on
-    /// the grid wins.</summary>
+    /// <summary>Raw grids expose Markdown export only when their footer bar is enabled, with
+    /// instance opt-outs taking precedence.</summary>
     [Fact]
     public void RawGrid_HasNoExportBarByDefault_MarkdownOnlyWhenAsked_AndTheOptOutWins()
     {

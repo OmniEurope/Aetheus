@@ -3,14 +3,8 @@ using System.Text.Json;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// Whether the Trivy vulnerability database cached on this agent is recent enough to scan without
-/// refreshing it (PLAN-007 lot 7). Candidate #2328 spent about 16 s per Trivy scanner on "Need to update
-/// DB" although the cache persists between runs: Trivy refreshes as soon as the database passes its own
-/// NextUpdate, a few hours after it was built. The policy here is explicit: a database built less than
-/// <see cref="MaxAge"/> ago is used as is, an older one is refreshed exactly as before. Anything that
-/// cannot be read keeps the refresh, so a doubt never trades freshness for speed.
-/// </summary>
+/// <summary>Use a cached Trivy database only when it was built within <see cref="MaxAge"/>. Older,
+/// missing or unreadable databases retain refresh to preserve freshness.</summary>
 internal static class TrivyDatabaseFreshness
 {
     /// <summary>The oldest vulnerability data a scan accepts without refreshing. The capability probe

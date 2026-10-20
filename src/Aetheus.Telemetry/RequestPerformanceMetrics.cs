@@ -5,24 +5,9 @@ using OmniEurope.Performance;
 
 namespace Aetheus.Telemetry;
 
-/// <summary>
-/// Publishes what the OmniEurope.Performance <see cref="RequestPerformanceRecorder"/> measured as OTLP gauges, one series per route
-/// template and method: the request count of the window and its 50th, 95th and 99th percentiles and
-/// maximum, in milliseconds. One more gauge, without attributes, says how long that window really is.
-/// They ride the metrics export <c>AddAetheusTelemetry</c> configures, so Aetheus shows the same
-/// per-route table for every application that uses the package.
-///
-/// The slowest individual calls are not exported: one series per request would be unbounded.
-///
-/// Recette R2-082: a route is exported only for a collection in which its figures changed (it served a
-/// request, or older requests left the window). Repeating unchanged figures every minute for every route
-/// ever called was most of the rows Aetheus stored about itself. A reader takes each route's newest point,
-/// whenever it was written. The package keeps no per-request list to read, so the change is told from the
-/// route's figures, compared with the previous collection's.
-///
-/// Routes are exported without the leading slash the package writes (<c>api/orders/{id}</c>), the form
-/// Aetheus has always stored.
-/// </summary>
+/// <summary>Export changed per-route request counts, percentile and maximum timings plus the actual
+/// window length as OTLP gauges, normalizing routes without a leading slash. Avoid per-request
+/// series and repeated unchanged values to bound telemetry volume.</summary>
 public sealed class RequestPerformanceMetrics : IHostedService, IDisposable
 {
     public const string MeterName = "Aetheus.Telemetry.Performance";
@@ -32,9 +17,9 @@ public sealed class RequestPerformanceMetrics : IHostedService, IDisposable
     public const string P99Metric = "aetheus.http.server.request.duration.p99";
     public const string MaxMetric = "aetheus.http.server.request.duration.max";
 
-    /// <summary>Recette R-476: seconds between the oldest request kept and the report. The window holds
-    /// 24 hours at most and restarts with the process, so the figures of a freshly started application
-    /// cover minutes, not a day; this gauge lets the reader see which.</summary>
+    /// <summary>Seconds between the oldest request kept and the report. The window holds 24 hours
+    /// at most and restarts with the process, so the figures of a freshly started application cover
+    /// minutes, not a day; this gauge lets the reader see which.</summary>
     public const string WindowMetric = "aetheus.http.server.request.window";
     /// <summary>The window the figures cover unless the host chose another: 24 hours. Aetheus searches
     /// each route's newest point within it.</summary>

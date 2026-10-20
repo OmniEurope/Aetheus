@@ -19,7 +19,7 @@ internal static class AnalysisDefaultPolicyCatalog
         Finding(-8, "system.quality.new-medium.coverage", AnalysisCategory.Coverage, AnalysisSeverity.Medium, AnalysisGateBehavior.Warn),
         Finding(-9, "system.quality.new-medium.duplication", AnalysisCategory.Duplication, AnalysisSeverity.Medium, AnalysisGateBehavior.Warn),
         Finding(-10, "system.quality.new-medium.architecture", AnalysisCategory.Architecture, AnalysisSeverity.Medium, AnalysisGateBehavior.Warn),
-        // PLAN-003 2.4: serious and critical are what the accessibility suite already refuses.
+        // Serious and critical accessibility findings match the suite blocking threshold.
         Finding(-18, "system.quality.new-high.accessibility", AnalysisCategory.Accessibility, AnalysisSeverity.High, AnalysisGateBehavior.Warn),
         // A360-74, raised from 75 to 80 on the user's decision of 2026-08-21. The finding described this
         // as "min_coverage: 0 in the CI yaml", which was the wrong place twice over: that zero is
@@ -39,8 +39,14 @@ internal static class AnalysisDefaultPolicyCatalog
             AnalysisPolicyOperator.GreaterThan, 10),
         Metric(-14, "quality.complexity.maximum", null, "complexity.cyclomatic.maximum",
             AnalysisPolicyOperator.GreaterThan, 25),
+        // A ratchet, not an absolute: the count of overly complex methods must never go up. It warns when
+        // the count is above the one of the previous analysis (the latest successful run on the project's
+        // default branch, the baseline every Degraded policy uses) and says both numbers. Equal or lower
+        // is silent, and so is the first analysis, which has no previous one: its count becomes the
+        // baseline. The "0" threshold is not read by Degraded. It names the metric, so it replaces the
+        // catch-all degradation policy below for this metric (one alert, not two).
         Metric(-15, "quality.complexity.high-methods", null, "complexity.methods.high",
-            AnalysisPolicyOperator.GreaterThan, 0),
+            AnalysisPolicyOperator.Degraded, 0),
         Metric(-16, "quality.architecture.cycles", null, "architecture.cycles*",
             AnalysisPolicyOperator.GreaterThan, 0),
         Metric(-17, "quality.metric.degradation", null, "*", AnalysisPolicyOperator.Degraded, 0)

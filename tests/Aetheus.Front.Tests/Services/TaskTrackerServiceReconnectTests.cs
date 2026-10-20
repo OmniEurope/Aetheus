@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -165,7 +166,7 @@ public class TaskTrackerServiceReconnectTests : BunitContext
             () => true,
             Xunit.TestContext.Current.CancellationToken,
             armWake: () => Task.CompletedTask)
-            .WaitAsync(TimeSpan.FromSeconds(10), Xunit.TestContext.Current.CancellationToken);
+            .WaitAsync(HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
 
         Assert.True(connected);
         Assert.Equal(1, connectCalls);
@@ -197,7 +198,7 @@ public class TaskTrackerServiceReconnectTests : BunitContext
             () => true,
             Xunit.TestContext.Current.CancellationToken,
             armWake: ArmWake)
-            .WaitAsync(TimeSpan.FromSeconds(10), Xunit.TestContext.Current.CancellationToken);
+            .WaitAsync(HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
 
         Assert.True(connected);
         Assert.Equal(2, connectCalls);
@@ -218,7 +219,7 @@ public class TaskTrackerServiceReconnectTests : BunitContext
             () => true,
             Xunit.TestContext.Current.CancellationToken,
             armWake: () => Task.CompletedTask)
-            .WaitAsync(TimeSpan.FromSeconds(10), Xunit.TestContext.Current.CancellationToken);
+            .WaitAsync(HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
 
         Assert.True(connected);
         Assert.Equal([0, 5, 30, 30], announcedDelays);
@@ -269,25 +270,30 @@ public class TaskTrackerServiceReconnectTests : BunitContext
     [Fact]
     public async Task StartAsync_ConnectAttemptNeverAnswers_GivesUpAtItsDeadlineAndKeepsRetrying()
     {
-        // A negotiate that never answers used to hold the attempt with no deadline: no failure reason,
-        // no next attempt, no countdown - the overlay of 2026-09-13, backend online.
+        // A stalled negotiation must time out and expose the failure and retry countdown.
         var auth = Services.GetRequiredService<AuthStateProvider>();
+        var clock = new ObservedFakeClock(DateTimeOffset.UnixEpoch);
         var sut = new TaskTrackerService(
             Services.GetRequiredService<ApiClient>(),
             auth,
             new BunitTestHelper.BlockingHubConnectionFactory(Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), auth),
             NullLogger<TaskTrackerService>.Instance)
         {
-            ConnectAttemptTimeout = TimeSpan.FromMilliseconds(200)
+            ConnectAttemptTimeout = TimeSpan.FromMilliseconds(200),
+            Clock = clock
         };
         var attempts = new System.Collections.Concurrent.ConcurrentQueue<int>();
         sut.OnReconnectAttempt += attempts.Enqueue;
 
-        await sut.StartAsync(Xunit.TestContext.Current.CancellationToken)
-            .WaitAsync(TimeSpan.FromSeconds(10), Xunit.TestContext.Current.CancellationToken);
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (attempts.Count < 3 && DateTime.UtcNow < deadline)
-            await Task.Delay(50, Xunit.TestContext.Current.CancellationToken);
+        // The attempt deadlines and the backoff run on the simulated clock: each time the service has
+        // armed its next timer (an attempt waiting on its deadline, or a backoff), the clock is moved past it.
+        var starting = sut.StartAsync(Xunit.TestContext.Current.CancellationToken);
+        while (attempts.Count < 3)
+        {
+            await clock.WhenAnyPendingAsync();
+            clock.Advance(TimeSpan.FromMinutes(1));
+        }
+        await HangGuard.AwaitAsync(starting, "the first attempt giving up");
 
         // The third announcement follows the second retry's failure: that retry was a real attempt on
         // the same hub (not a "connection is not Disconnected" refusal) and it timed out too.

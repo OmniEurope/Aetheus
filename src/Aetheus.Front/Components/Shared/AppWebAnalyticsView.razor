@@ -22,7 +22,7 @@ else if (_summary is null)
 else
 {
     <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
-        @* Recette R-356: compact tiles, a third of the row from the small breakpoint (half before). *@
+        @* Compact tiles, a third of the row from the small breakpoint (half before). *@
         <OmniRow Gap="OmniSpacing.Medium">
             @foreach (var tile in SummaryTiles)
             {
@@ -32,25 +32,25 @@ else
             }
         </OmniRow>
 
-        @* Recette R2-007: the storage of the audience is no longer a card of this tab; its figure is one line
-           of the Ingestion tab, next to the budget it is measured against. *@
+        @* Show audience storage beside its ingestion budget so the amount and limit can be
+           compared in one place. *@
 
         @if (_summary.Daily.Count > 0)
         {
-            @* Recette R-362: one shared count axis; the line is the unique visitors of each UTC day, the
-               columns the pages viewed that same day. *@
+            @* One shared count axis; the line is the unique visitors of each UTC day, the columns
+               the pages viewed that same day. *@
             <OmniCard>
                 <OmniHeading Level="OmniHeadingLevel.H5">@L["AudienceDailyTitle"]</OmniHeading>
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mb-sm omni-u-text-muted web-analytics-chart-caption">
                     @L["AudienceDailyCaption"]
                 </OmniText>
-                @* R-470: a wide, low drawing. Left to itself the chart takes half the card's width as its
-                   height for a 30-day series, about 950 px on a 1900 px screen. *@
+                @* Bound chart height so a long daily series remains readable without occupying an
+                   oversized card. *@
                 <OmniChart Title="@L["AudienceDailyTitle"]" Description="@L["AudienceDailyCaption"]" AspectRatio="5">
                     <OmniLineSeries Data="@DailyVisitorPoints" ColorIndex="0"
                                       Title="@L["UniqueVisitorsPerDay"]" />
-                    @* A line alone carries one title for the whole series: the markers give every day its
-                       own "date · value" hover text (OE R-354). *@
+                    @* Add per-day markers so each hover identifies its date and value instead of
+                       only the series title. *@
                     <OmniMarkers Data="@DailyVisitorPoints" ColorIndex="0" />
                     <OmniColumnSeries Data="@DailyPageViewPoints" ColorIndex="1"
                                         Title="@L["PageViewsPerDay"]" />

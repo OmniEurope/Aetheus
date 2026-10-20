@@ -3,7 +3,7 @@ using System.Net.Http;
 
 namespace Aetheus.Front.Components.Mail;
 
-/// <summary>Recette R1-17: the settings an external mail client needs, read from the backend.</summary>
+/// <summary>The settings an external mail client needs, read from the backend.</summary>
 public partial class MailClientSettings
 {
     [Inject] private ApiClient Api { get; set; } = default!;

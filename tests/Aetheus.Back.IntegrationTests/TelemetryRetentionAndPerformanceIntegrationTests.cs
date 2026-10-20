@@ -8,11 +8,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// R-455, R-458, R-463 on PostgreSQL: the unit tests run the InMemory provider, which neither translates
-/// these queries nor runs the bulk deletes. Here the hour-by-hour rollup check, the batched purges, the
-/// latest-export read and the delete by identifier run as production runs them.
-/// </summary>
+/// <summary>Runs hourly rollup checks, batched purges, latest-export reads and identifier-based
+/// deletion on PostgreSQL rather than relying on InMemory behaviour.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class TelemetryRetentionAndPerformanceIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

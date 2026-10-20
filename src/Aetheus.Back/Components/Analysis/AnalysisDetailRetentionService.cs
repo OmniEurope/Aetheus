@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Analysis;
 
-/// <summary>
-/// PLAN-013 lots 2 and 4 (R2-114, R2-115): the per-file and per-symbol metrics and the components of an
-/// analysis report are kept for the « Détail des analyses » duration of its project's « Conservation des
-/// données » setting (30 days in the Standard profile), then deleted in short batches; the reports of a
-/// retained release and the newest report of each project and scanner keep theirs. The project totals,
-/// the reports, their evaluations and grades stay forever. Run by
-/// <see cref="AnalysisOperationalMonitorService"/>, on the leader backend only.
-/// </summary>
+/// <summary>Purge expired per-file and per-symbol metrics and components in bounded batches on the
+/// leader, preserving retained-release reports and each scanner latest report. Retain project
+/// totals, reports, evaluations and grades.</summary>
 public sealed class AnalysisDetailRetentionService(
     IAnalysisDetailRetentionRepository repository,
     ILogger<AnalysisDetailRetentionService> logger)

@@ -205,4 +205,86 @@ public class GitControllerTests
         Assert.Equal(false, forwarded);
         await _serviceMock.Received(1).ReportPipelineStatusAsync(Arg.Any<PipelineStatusReport>(), Arg.Any<CancellationToken>());
     }
+
+    // --- Pull request sync and branch policy update ---
+
+    [Fact]
+    public async Task SyncPullRequest_OnAnUnknownConnection_IsNotFound()
+    {
+        _serviceMock.GetProjectIdForConnectionAsync(9, Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        var result = await _sut.SyncPullRequest(9, new PullRequestDto { ExternalId = 4 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+        await _serviceMock.DidNotReceiveWithAnyArgs().SyncPullRequestAsync(default, default, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task SyncPullRequest_WithoutWriteOnTheProject_IsForbidden()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _sut.SyncPullRequest(2, new PullRequestDto { ExternalId = 4 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _serviceMock.DidNotReceiveWithAnyArgs().SyncPullRequestAsync(default, default, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task SyncPullRequest_StoresItUnderItsExternalId()
+    {
+        var incoming = new PullRequestDto { ExternalId = 4 };
+        var stored = new PullRequestDto { Id = 8, ExternalId = 4 };
+        _serviceMock.SyncPullRequestAsync(2, 4, incoming, Arg.Any<CancellationToken>()).Returns(stored);
+
+        var result = await _sut.SyncPullRequest(2, incoming, TestContext.Current.CancellationToken);
+
+        Assert.Same(stored, Assert.IsType<OkObjectResult>(result.Result).Value);
+    }
+
+    [Fact]
+    public async Task SyncPullRequest_TheServiceRefuses_IsABadRequest()
+    {
+        _serviceMock.SyncPullRequestAsync(2, 4, Arg.Any<PullRequestDto>(), Arg.Any<CancellationToken>()).Returns((PullRequestDto?)null);
+
+        var result = await _sut.SyncPullRequest(2, new PullRequestDto { ExternalId = 4 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateBranchPolicy_OfAnUnknownPolicy_IsNotFound()
+    {
+        _serviceMock.GetProjectIdForBranchPolicyAsync(6, Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        var result = await _sut.UpdateBranchPolicy(6, new UpdateBranchPolicyRequest(), TestContext.Current.CancellationToken);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+        await _serviceMock.DidNotReceiveWithAnyArgs().UpdateBranchPolicyAsync(default, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UpdateBranchPolicy_WithoutWriteOnTheProject_IsForbidden()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _sut.UpdateBranchPolicy(6, new UpdateBranchPolicyRequest(), TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _serviceMock.DidNotReceiveWithAnyArgs().UpdateBranchPolicyAsync(default, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UpdateBranchPolicy_ReturnsTheUpdatedPolicy_OrNotFoundWhenItVanished()
+    {
+        var request = new UpdateBranchPolicyRequest();
+        var updated = new BranchPolicyDto { Id = 6 };
+        _serviceMock.UpdateBranchPolicyAsync(6, request, Arg.Any<CancellationToken>()).Returns(updated);
+        _serviceMock.UpdateBranchPolicyAsync(7, request, Arg.Any<CancellationToken>()).Returns((BranchPolicyDto?)null);
+
+        Assert.Same(updated, Assert.IsType<OkObjectResult>((await _sut.UpdateBranchPolicy(6, request, TestContext.Current.CancellationToken)).Result).Value);
+        Assert.IsType<NotFoundResult>((await _sut.UpdateBranchPolicy(7, request, TestContext.Current.CancellationToken)).Result);
+    }
 }

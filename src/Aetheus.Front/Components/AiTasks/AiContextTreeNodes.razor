@@ -1,0 +1,15 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* One level of the repository tree of AiContextFilePicker; a folder holds the next level, loaded when it opens. *@
+@foreach (var node in Nodes)
+{
+    @if (node.IsFolder)
+    {
+        <OmniTreeItem @key="node.Path" TValue="string" Value="@node.Value" Text="@node.Name" LoadChildren="@(ct => LoadChildren(node, ct))">
+            <AiContextTreeNodes Nodes="@node.Children" LoadChildren="@LoadChildren" />
+        </OmniTreeItem>
+    }
+    else
+    {
+        <OmniTreeItem @key="node.Path" TValue="string" Value="@node.Value" Text="@node.Name" />
+    }
+}

@@ -129,14 +129,8 @@ public sealed class AgentTaskSessionLeaseIntegrationTests(PostgresFixture fixtur
         Assert.Equal(2, persisted.AgentSessionFencingToken);
     }
 
-    /// <summary>
-    /// The relational counterpart of the incident: one runner shared by two pipelines, a twelve-minute
-    /// local build starving the poll loop past the two-minute lease, and the agent coming back with the
-    /// same session id. Reclaiming used to bump the fencing token, which every lease check compares
-    /// against the server's - so the agent's own running task was parked as "orphaned by an agent
-    /// restart", its log batches refused and its completion answered 409 after the work had succeeded.
-    /// The same session id is the same process, so the token must survive the lapse.
-    /// </summary>
+    /// <summary>Verifies on PostgreSQL that reclaiming an expired lease for the same agent session
+    /// preserves its fencing token and running-task ownership.</summary>
     [Fact]
     public async Task ReclaimingALapsedLeaseWithTheSameSession_KeepsTheTokenAndTheRunningTask()
     {
@@ -235,5 +229,71 @@ public sealed class AgentTaskSessionLeaseIntegrationTests(PostgresFixture fixtur
             DateTime.UtcNow,
             "{}",
             TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>On PostgreSQL, an agent holding only the build-function capability claims the build
+    /// function task and leaves the deployment function task pending: the access level of a
+    /// <c>type: aetheus</c> function is enforced at claim time, not only at save time.</summary>
+    [Fact]
+    public async Task ADeploymentFunctionTaskIsNotClaimedWithoutTheDeploymentFunctionsCapability()
+    {
+        await ResetAndMigrateAsync();
+        int serverId;
+        int buildFunctionId;
+        int deploymentFunctionId;
+
+        await using (var seed = NewContext())
+        {
+            var organization = new Organization { Name = "Function claim", Slug = $"fn-{Guid.NewGuid():N}" };
+            seed.Organizations.Add(organization);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var server = new Server
+            {
+                Name = "function-server",
+                Hostname = "function-host",
+                OrganizationId = organization.Id,
+                Status = ServerStatus.Online,
+                AgentProtocolVersion = AgentProtocol.CurrentVersion,
+                AgentCapabilitiesJson = $"[\"{AgentCapabilities.PipelineFunctions}\"]"
+            };
+            seed.Servers.Add(server);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+            serverId = server.Id;
+
+            var deploymentFunction = new ServerTask
+            {
+                ServerId = server.Id,
+                Name = "deployment function",
+                Command = "some-deployment-function",
+                Operation = OperationKind.PipelineDeploymentFunction,
+                Status = TaskExecutionStatus.Pending,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-2)
+            };
+            var buildFunction = new ServerTask
+            {
+                ServerId = server.Id,
+                Name = "build function",
+                Command = "detect-project-languages",
+                Operation = OperationKind.PipelineFunction,
+                Status = TaskExecutionStatus.Pending,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-1)
+            };
+            seed.Tasks.AddRange(deploymentFunction, buildFunction);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+            buildFunctionId = buildFunction.Id;
+            deploymentFunctionId = deploymentFunction.Id;
+        }
+
+        await using var db = new AppDbContext(BuildOptions());
+        var repository = new TaskRepository(db, TimeProvider.System);
+        var claimed = await repository.ClaimPendingTasksAsync(
+            serverId, 10, "33333333333333333333333333333333", TestContext.Current.CancellationToken);
+
+        Assert.Equal(buildFunctionId, Assert.Single(claimed).Id);
+        await using var verification = NewContext();
+        var deploymentTask = await verification.Tasks.AsNoTracking()
+            .SingleAsync(task => task.Id == deploymentFunctionId, TestContext.Current.CancellationToken);
+        Assert.Equal(TaskExecutionStatus.Pending, deploymentTask.Status);
     }
 }

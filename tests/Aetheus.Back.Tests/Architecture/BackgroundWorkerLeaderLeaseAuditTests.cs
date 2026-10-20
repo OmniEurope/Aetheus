@@ -8,13 +8,9 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// Decision of 2026-10-02: only the live blue-green colour runs background work. The reserve colour
-/// runs the previous release; a worker without a leader lease runs in both, twice and partly on old
-/// code (the 02:00 nightly was refused by the reserve's scheduler; R-462 was the same class). Every
-/// hosted worker therefore takes an <see cref="IPostgresLeaderLease"/>, except the ones whose work
-/// belongs to their own process, each listed with its reason.
-/// </summary>
+/// <summary>Hosted workers require a PostgreSQL leader lease so only the live colour performs
+/// shared work. Explicitly listed process-local workers retain their documented
+/// exceptions.</summary>
 public sealed class BackgroundWorkerLeaderLeaseAuditTests
 {
     private static readonly Dictionary<Type, string> PerInstanceWorkers = new()

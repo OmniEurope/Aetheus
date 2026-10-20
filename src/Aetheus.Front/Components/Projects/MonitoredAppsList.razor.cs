@@ -21,8 +21,8 @@ public partial class MonitoredAppsList : IAsyncDisposable
 
     private List<MonitoredAppDto> _apps = [];
     private AetheusDataGrid<MonitoredAppDto>? _grid;
-    // Recette R-210: header filter texts and the hosting-server value the filter lists, built once so
-    // the columns see the same delegates on every render.
+    // Header filter texts and the hosting-server value the filter lists, built once so the columns
+    // see the same delegates on every render.
     private Func<string, string>? _statusText;
     private Func<MonitoredAppDto, object?>? _serverValue;
     private Func<string, string> StatusText => _statusText ??= value =>
@@ -72,8 +72,8 @@ public partial class MonitoredAppsList : IAsyncDisposable
 
     private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.Project);
 
-    /// <param name="live">Recette R-227: a live event; the grid notes the rows it holds before the new
-    /// list lands, so an app added elsewhere reads bold for a few seconds.</param>
+    /// <param name="live">a live event; the grid notes the rows it holds before the new list lands,
+    /// so an app added elsewhere reads bold for a few seconds.</param>
     private async Task LoadAppsAsync(bool live = false)
     {
         try
@@ -177,7 +177,7 @@ public partial class MonitoredAppsList : IAsyncDisposable
         }
     }
 
-    /// <summary>Recette R2-124: the export writes the uptimes the cells show.</summary>
+    /// <summary>The export writes the uptimes the cells show.</summary>
     private Func<MonitoredAppDto, object?> Uptime24hExport => _uptime24hExport ??= app => FormatUptime(app.Uptime24h);
     private Func<MonitoredAppDto, object?> Uptime7dExport => _uptime7dExport ??= app => FormatUptime(app.Uptime7d);
     private Func<MonitoredAppDto, object?>? _uptime24hExport;

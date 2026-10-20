@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>PLAN-005 lot 4: rspamd state, lifecycle, thresholds and training.</summary>
+/// <summary>Rspamd state, lifecycle, thresholds and training.</summary>
 public partial class ServerMailSpamTab
 {
     [Inject] private ApiClient Api { get; set; } = default!;

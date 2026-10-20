@@ -61,11 +61,6 @@ public class GitLightCliService(
     public Task<(bool Success, string? CommitSha, string? Error)> CommitFileChangesAsync(string diskPath, string branch, IReadOnlyList<(string RelativePath, string Content)> upserts, IReadOnlyList<string> deletions,
         string commitMessage, string authorName, string authorEmail, CancellationToken ct = default) => writer.CommitFileChangesAsync(diskPath, branch, upserts, deletions, commitMessage, authorName, authorEmail, ct);
 
-    public Task<(bool Success, string? CommitSha, string? Error)> ApplyPatchAsync(
-        string diskPath, string branch, string patch,
-        string commitMessage, string authorName, string authorEmail, CancellationToken ct = default) =>
-        writer.ApplyPatchAsync(
-            diskPath, branch, patch, commitMessage, authorName, authorEmail, ct);
     public Task<string?> DetectDefaultBranchAsync(string diskPath, CancellationToken ct = default)
         => writer.DetectDefaultBranchAsync(diskPath, ct);
 
@@ -250,7 +245,7 @@ public class GitLightCliService(
 
     public async Task<Stream?> GetArchiveStreamAsync(string diskPath, string refName, string prefix, CancellationToken ct = default)
     {
-        // R2-003: the ref reaches git as argv like every other read route, so it gets the same guard.
+        // The ref reaches git as argv like every other read route, so it gets the same guard.
         EnsureRefArgsSafe(refName);
         // Resolve the tree first: once the zip streams, the 200 is on the wire and a git failure could
         // only truncate it. An unknown ref is a 404 instead.

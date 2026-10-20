@@ -3,11 +3,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// PLAN-005 lot 2 / D32: the detail is clamped to four lines by CSS, and "Show more" appears only
-/// when the browser reports that the clamp hides something (a 12-line message), never for a
-/// 2-line one. bUnit has no layout, so the browser's measurement is what the test sets.
-/// </summary>
+/// <summary>Show more depends on whether the four-line clamp hides content. bUnit supplies the
+/// browser measurement because it performs no layout.</summary>
 public sealed class NotificationBodyTests : BunitContext
 {
     public NotificationBodyTests() => BunitTestHelper.RegisterServices(this);

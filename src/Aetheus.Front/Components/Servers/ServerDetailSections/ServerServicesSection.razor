@@ -19,6 +19,9 @@
     </OmniRow>
 }
 
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" />
+<ServiceActionsInFlightBanner Services="@Server.Services" ActionStateOf="@ActionStateOf" />
+
 <UrlSyncedTabs Slugs="@(new[] { "manageable", "other", "system" })">
     <Tabs>
         <OmniTabsItem Key="manageable" Title="@($"{L["Manageable"]} ({ModuleCount})")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("build"))" /></Icon><ChildContent>
@@ -29,7 +32,7 @@
             }
             else
             {
-                <ManageableServiceGrid Services="@ModuleInstalled" Installed="true" ShowModuleLink="true"
+                <ManageableServiceGrid ShowInFlightBanner="false" MailStackManaged="@Server.Mail.IsManagedByAetheus" Services="@ModuleInstalled" Installed="true" ShowModuleLink="true"
                     CanManagePackages="@CanManagePackages" ActionStateOf="@ActionStateOf" ServerOnline="@ServerOnline" ServerId="@ServerId"
                     OnStart="@(n => ExecuteActionAsync(ServiceAction.Start, n))"
                     OnStop="@(n => ConfirmAndExecuteAsync(ServiceAction.Stop, n))"
@@ -47,13 +50,19 @@
             }
             else
             {
-                <ManageableServiceGrid Services="@ModuleNotInstalled" Installed="false"
+                <ManageableServiceGrid ShowInFlightBanner="false" MailStackManaged="@Server.Mail.IsManagedByAetheus" Services="@ModuleNotInstalled" Installed="false"
                     CanManagePackages="@CanManagePackages" CanInstallTeamspeak="@Server.TeamspeakSetupAvailable" ActionStateOf="@ActionStateOf" ServerOnline="@ServerOnline" ServerId="@ServerId"
                     OnInstall="@InstallServiceAsync" OnBulk="@BulkActionAsync" />
             }
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="other" Title="@($"{L["OtherServices"]} ({OtherCount})")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("apps"))" /></Icon><ChildContent>
+            @* Recette R3-59: a package that is not a service (a command-line client) is never in the service lists;
+               say so, and show the complete read-only package list at the end of this tab. *@
+            <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-sm services-packages-not-listed">
+                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["ServicesPackagesNotListed"]</OmniText>
+                <OmniLink Href="@($"/servers/{ServerId}/updates")">@L["ServicesPackagesSeeUpdates"]</OmniLink>
+            </OmniAlert>
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["InstalledServices"] (@OtherInstalled.Count())</OmniHeading>
             @if (!OtherInstalled.Any())
             {
@@ -61,7 +70,7 @@
             }
             else
             {
-                <ManageableServiceGrid Services="@OtherInstalled" Installed="true" ShowModuleLink="false"
+                <ManageableServiceGrid ShowInFlightBanner="false" MailStackManaged="@Server.Mail.IsManagedByAetheus" Services="@OtherInstalled" Installed="true" ShowModuleLink="false"
                     CanManagePackages="@CanManagePackages" ActionStateOf="@ActionStateOf" ServerOnline="@ServerOnline" ServerId="@ServerId"
                     OnStart="@(n => ExecuteActionAsync(ServiceAction.Start, n))"
                     OnStop="@(n => ConfirmAndExecuteAsync(ServiceAction.Stop, n))"
@@ -78,10 +87,14 @@
             }
             else
             {
-                <ManageableServiceGrid Services="@OtherNotInstalled" Installed="false"
+                <ManageableServiceGrid ShowInFlightBanner="false" MailStackManaged="@Server.Mail.IsManagedByAetheus" Services="@OtherNotInstalled" Installed="false"
                     CanManagePackages="@CanManagePackages" CanInstallTeamspeak="@Server.TeamspeakSetupAvailable" ActionStateOf="@ActionStateOf" ServerOnline="@ServerOnline" ServerId="@ServerId"
                     OnInstall="@InstallServiceAsync" OnBulk="@BulkActionAsync" />
             }
+
+            <div class="omni-u-mt-2xl">
+                <ServerPackageInventory Server="@Server" ServerId="@ServerId" />
+            </div>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="system" Title="@($"{L["System"]} ({SystemCount})")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("settings"))" /></Icon><ChildContent>
@@ -124,8 +137,8 @@
             <OmniDropDown aria-label="@L["LogLines"]" TValue="int" Value="@_logLines" Options="@(LineOptions.ToOptions(item => (int)item, item => item))" ValueChanged="@(v => OnLogLinesChanged((int)v))"
                 ValueExpression="@(() => _logLines)" Class="log-lines-select" />
             <OmniSwitch TValue="bool" TextFirst="true" Value="_logFollow" ValueExpression="@(() => _logFollow)" ValueChanged="@(v => OnFollowChangedAsync(v))" Class="omni-u-text-muted">@L["FollowLogs"]</OmniSwitch>
-            @* R-181: no Refresh button. Auto-refresh (on by default) reads the last lines again every 30 s
-               while this viewer is open. *@
+            @* The open log viewer refreshes its tail every 30 seconds when auto-refresh is
+               enabled. *@
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseLogsAsync" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
         </OmniStack>
         @if (_logsLoading && string.IsNullOrEmpty(_logsContent))

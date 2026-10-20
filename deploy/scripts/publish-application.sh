@@ -1,26 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-# Publishes on the HOST what the application images used to rebuild from source inside Docker.
-#
-# The pipeline already compiled the whole solution in Release before this point. Every `dotnet
-# publish` the two Dockerfiles ran then compiled the SAME sources a second time, from a cold
-# obj/ inside the build container: measured on 2026-09-07, the backend publish took 88.6 s and the
-# EF bundle 64.5 s in Docker, on top of a build the run had already paid for. The frontend paid it
-# twice over, since a Blazor WebAssembly publish is the slowest of them all.
-#
-# What stays in Docker on purpose: the two agent publishes. They are self-contained, single-file
-# outputs for two different runtime identifiers, and the Windows one is packaged with `zip`, a tool
-# no `ensure-*` script provisions on a build agent. Moving them would trade a real dependency on the
-# host for a smaller gain than the three publishes here.
-#
-# Inputs come from the environment so the caller stays a five-line step:
-#   DOTNET         path to the pinned SDK (deploy/scripts/ensure-dotnet-sdk.sh)
-#   APP_VERSION    version stamped into the assemblies
-# Output layout, consumed verbatim by deploy/docker/Dockerfile.back and Dockerfile.front:
-#   <output>/backend/        framework-dependent linux-x64 publish of Aetheus.Back
-#   (the EF migrations bundle stays in Docker, see below)
-#   <output>/frontend/       the published Blazor WebAssembly site (wwwroot and its siblings)
-#   <output>/static-server/  the ASP.NET host that serves it
+# Publish application payloads on the host to reuse the solution build; retain agent packaging and
+# the EF bundle inside Docker for their platform-specific tooling and apphosts. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 set -eu
 
 fail() {
@@ -131,9 +113,17 @@ echo ">>> Publishing the Blazor WebAssembly frontend"
 # publishes. Without it the publish prints "Publishing without optimizations" and still succeeds, so
 # the site ships an unoptimized runtime and nothing fails. Install the workload when it is missing,
 # then read the publish log back and refuse a publish that was not optimized.
-if ! "$DOTNET" workload list | grep -qi "^wasm-tools"; then
-  echo ">>> Installing the wasm-tools workload (STD-WASMOPT)"
-  "$DOTNET" workload install wasm-tools || fail "Could not install the wasm-tools workload; the frontend publish would ship unoptimized."
+# The workload also decides the WebAssembly runtime served to browsers, so it is installed from the
+# workload set the repository pins (AetheusWasmWorkloadVersion), and reinstalled when the host holds
+# another set: "installed once" kept 10.0.12 while the images ran 10.0.13. The Front's
+# VerifyBrowserRuntimePack target refuses a publish whose runtime still differs.
+WASM_WORKLOAD_VERSION="$(sed -n 's:.*<AetheusWasmWorkloadVersion>\([^<]*\)</AetheusWasmWorkloadVersion>.*:\1:p' "$WORKSPACE/Directory.Build.props")"
+[ -n "$WASM_WORKLOAD_VERSION" ] || fail "Directory.Build.props declares no AetheusWasmWorkloadVersion."
+if ! "$DOTNET" workload list | grep -qi "^wasm-tools" \
+  || [ "$("$DOTNET" workload --version | head -n 1)" != "$WASM_WORKLOAD_VERSION" ]; then
+  echo ">>> Installing the wasm-tools workload from workload set $WASM_WORKLOAD_VERSION (STD-WASMOPT)"
+  "$DOTNET" workload install wasm-tools --version "$WASM_WORKLOAD_VERSION" \
+    || fail "Could not install the wasm-tools workload set $WASM_WORKLOAD_VERSION; the frontend publish would ship unoptimized or another runtime."
 fi
 FRONTEND_PUBLISH_LOG="$(mktemp)"
 # The log is read back below, so the publish goes through tee. `set -e` only sees the LAST command of

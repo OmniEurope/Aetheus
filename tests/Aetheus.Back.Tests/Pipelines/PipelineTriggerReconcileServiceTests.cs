@@ -10,11 +10,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Guards the orchestration self-heal (the fix for stuck run #49): pass 1 mirrors a terminal child onto a
-/// wedged <c>type: trigger</c> step and re-enters the stage machine; pass 2 force-fails a run wedged in
-/// Running with no in-flight work. Previously this service had no test coverage at all.
-/// </summary>
+/// <summary>Verifies reconciliation of terminal children into waiting trigger steps and failure of
+/// stalled runs without in-flight work.</summary>
 public class PipelineTriggerReconcileServiceTests
 {
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();
@@ -92,6 +89,30 @@ public class PipelineTriggerReconcileServiceTests
             PipelineStatus.Success,
             Arg.Is<IReadOnlyDictionary<string, string>>(outputs =>
                 outputs["CANDIDATE_VERSION"] == "c-source-123"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R1_80_Pass1_ChildRejected_ResolvesAsTheLivePathDoes_WithWhatItFound()
+    {
+        var step = TriggerStep(99);
+        _repo.GetStuckRunningTriggerStepsAsync(Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns([step]);
+        _repo.GetRunStatusesByIdsAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, PipelineStatus> { [99] = PipelineStatus.Rejected });
+        _repo.GetSuccessfulStepOutputsAsync(99, Arg.Any<CancellationToken>()).Returns(
+            new List<StepOutputProjection>
+            {
+                new("Test V", "Test V integration", "{\"QA_CURRENT_INTEGRATION_GATE_STATUS\":\"1\"}")
+            });
+
+        await _sut.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        await _runService.Received(1).ResolveCompletedTriggerStepAsync(
+            step,
+            PipelineStatus.Rejected,
+            Arg.Is<IReadOnlyDictionary<string, string>>(outputs =>
+                outputs["QA_CURRENT_INTEGRATION_GATE_STATUS"] == "1"),
             Arg.Any<CancellationToken>());
     }
 
@@ -359,7 +380,7 @@ public class PipelineTriggerReconcileServiceTests
     [Fact]
     public async Task EveryTick_ClosesApprovalsLeftPendingOnEndedRuns_BeforeExpiringAny()
     {
-        // PLAN-005 lot 3 / D34: covers every run that ended outside the finalizer, run 2323 among them.
+        // Reconciliation closes approvals for runs that ended outside the finalizer.
         await _sut.ReconcileAsync(TestContext.Current.CancellationToken);
 
         Received.InOrder(() =>

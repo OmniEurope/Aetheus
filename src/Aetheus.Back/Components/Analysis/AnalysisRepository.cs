@@ -267,14 +267,7 @@ public sealed class AnalysisRepository(AppDbContext db) : IAnalysisRepository
             .FirstOrDefaultAsync(item => item.Id == findingId, ct)
             .ConfigureAwait(false);
         if (finding is null) return null;
-        var occurrence = await db.AnalysisFindingOccurrences.AsNoTracking()
-            .Where(item => item.AnalysisFindingId == findingId)
-            .Include(item => item.AnalysisReport)
-                .ThenInclude(report => report.PipelineRun)
-                .ThenInclude(run => run!.Pipeline)
-            .OrderByDescending(item => item.CreatedAt)
-            .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false);
+        var occurrence = await _occurrences.GetLatestForFindingAsync(findingId, ct).ConfigureAwait(false);
         var responsible = await db.WorkItems.AsNoTracking()
             .Where(item => item.ProjectId == finding.ProjectId
                 && item.ExternalId == $"analysis:{finding.Id}"
@@ -290,14 +283,7 @@ public sealed class AnalysisRepository(AppDbContext db) : IAnalysisRepository
         int findingId,
         int take,
         CancellationToken ct = default) =>
-        db.AnalysisFindingOccurrences.AsNoTracking()
-            .Where(item => item.AnalysisFindingId == findingId)
-            .Include(item => item.AnalysisReport)
-                .ThenInclude(report => report.PipelineRun)
-                .ThenInclude(run => run!.Pipeline)
-            .OrderByDescending(item => item.CreatedAt)
-            .Take(Math.Clamp(take, 1, 200))
-            .ToListAsync(ct);
+        _occurrences.GetForFindingAsync(findingId, take, ct);
 
     public async Task<int?> GetFindingProjectIdAsync(int findingId, CancellationToken ct = default)
     {
@@ -389,7 +375,8 @@ public sealed class AnalysisRepository(AppDbContext db) : IAnalysisRepository
         CancellationToken ct = default) =>
         _portfolioProjects.GetAsync(accessibleProjectIds, ct);
 
-    /// <summary>Recette R-224: the distinct organizations, projects and scanners of the reports in scope.</summary>
+    /// <summary>The distinct organizations, projects and scanners of the reports in
+    /// scope.</summary>
     public async Task<AnalysisPortfolioFilterValuesDto> GetPortfolioFilterValuesAsync(
         IReadOnlyCollection<int>? accessibleProjectIds,
         CancellationToken ct = default)

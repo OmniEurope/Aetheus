@@ -3,8 +3,8 @@
 
 <PageTitle>@L["Login"] - Aetheus</PageTitle>
 
-@* Recette R-376: the package's sign-in layout (logo, card, footer). `login-container` keeps the shared
-   login and change-password rules (field widths) and the E2E selectors on the same element. *@
+@* The package's sign-in layout (logo, card, footer). `login-container` keeps the shared login and
+   change-password rules (field widths) and the E2E selectors on the same element. *@
 <OmniLoginShell Title="@L["Login"]" Class="login-container">
     <Logo>
         <img src="aetheus-icon.svg" alt="Aetheus" class="login-logo-img" />
@@ -12,8 +12,8 @@
     <ChildContent>
         @if (_isPublicDemo)
         {
-            @* Recette R2-123: the demo account in two read-only fields, each with OE's Copy button welded to
-               its end, and a button that writes both into the sign-in form below. *@
+            @* The demo account in two read-only fields, each with OE's Copy button welded to its
+               end, and a button that writes both into the sign-in form below. *@
             <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-lg public-demo-account"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent>
                 <OmniStack Gap="OmniSpacing.Small">
                     <OmniText Element="OmniTextElement.Strong">@L["PublicDemo"]</OmniText>
@@ -32,8 +32,8 @@
             </ChildContent></OmniAlert>
         }
 
-        @* Recette R-439: signing in saves nothing, so leaving the page never asks (the forgotten
-           password link is a navigation of this very page). *@
+        @* Signing in saves nothing, so leaving the page never asks (the forgotten password link is
+           a navigation of this very page). *@
         <OmniTemplateForm TModel="LoginModel" Model="@_model" OnValidSubmit="@OnSubmit" GuardUnsavedChanges="false">
             <OmniDataAnnotationsValidator Localizer="@L" />
             <OmniStack Gap="OmniSpacing.Large">
@@ -45,8 +45,8 @@
                 </OmniFormField>
                 <OmniFormField Label="@L["Password"]" For="Password">
                     <ChildContent>
-                        @* The package's own eye, attached to the field: the page no longer adds a second one
-                           beside it (recette R-002). *@
+                        @* Use the password field built-in reveal control without a duplicate
+                           toggle. *@
                         <OmniPassword @bind-Value="_model.Password" Id="Password" aria-label="@L["Password"]"
                                       RevealLabel="@L["ShowPassword"]" HideLabel="@L["HidePassword"]" />
                         <OmniRequiredValidator TValue="string" For="@(() => _model.Password)" Message="@L["PasswordRequired"]" />
@@ -86,9 +86,8 @@
                     </ChildContent></OmniAlert>
                 }
 
-                @* Recette R-375/R-376 (user decision 2026-09-28): Login is the form's only button, blue, at the
-                   end of its row like every card and form action; the forgotten password is a text link in
-                   the card footer. *@
+                @* Login is the single form button, aligned at the row end; forgotten password is a
+                   footer link. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.End"
                            Gap="OmniSpacing.Small" Class="omni-u-mt-xs">
                     <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_loading ? "btn-busy" : null)" Busy="@(_loading)" Label="@L["Login"]"><OmniIcon Name="OmniIconName.SignIn" /> <span>@L["Login"]</span></OmniButton>

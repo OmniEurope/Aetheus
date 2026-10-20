@@ -2,9 +2,8 @@
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// An executor whose work reads the caller's environment variables. The call without them is the same
-/// call with none: it is written once here rather than repeated in every executor (recette R-530).
+/// <summary> An executor whose work reads the caller's environment variables. The call without them
+/// is the same call with none: it is written once here rather than repeated in every executor.
 /// </summary>
 public abstract class EnvironmentOperationExecutor : IOperationExecutor
 {

@@ -15,10 +15,10 @@ public sealed partial class PipelineSetupReadinessService(
     ILogger<PipelineSetupReadinessService> logger) : IPipelineSetupReadinessService
 {
     /// <summary>
-    /// The generic templates delegate every project-specific act to an adapter under
-    /// <c>.pipeline/scripts/</c>, guarded by a literal <c>test -f</c>. A missing adapter is therefore
-    /// not a subtle misconfiguration but a guaranteed stage failure, and the path is right there in
-    /// the template's shell, which is why it can be extracted rather than assumed.
+    /// The generic templates require no file of the project (ADR-050): its commands are declared in its
+    /// pipeline. A pipeline that still calls a script under <c>.pipeline/scripts/</c> in its own shell
+    /// fails on a missing one, and the path is right there in the shell, which is why it can be
+    /// extracted rather than assumed.
     /// </summary>
     [GeneratedRegex(@"\.pipeline/scripts/[A-Za-z0-9._-]+\.sh", RegexOptions.CultureInvariant)]
     private static partial Regex AdapterScriptPattern { get; }
@@ -90,6 +90,10 @@ public sealed partial class PipelineSetupReadinessService(
         int? organizationId,
         CancellationToken ct)
     {
+        // R3-67: the names the project's runs will read, `${{ project.slug }}.share` already this
+        // project's, so what the wizard reports missing is what it creates.
+        var slug = await PipelineProjectResourceNames.FindSlugAsync(pipelines, projectId, ct).ConfigureAwait(false);
+        definitions = [.. definitions.Select(definition => PipelineProjectResourceNames.Expand(definition, slug))];
         var stages = definitions.SelectMany(YamlParsingHelper.FlattenJobs).ToList();
         var checks = new List<PipelineSetupReadinessCheckDto>();
 
@@ -161,7 +165,7 @@ public sealed partial class PipelineSetupReadinessService(
         var unsatisfied = new List<PipelineRequirementOutcome>();
         foreach (var definition in definitions)
             unsatisfied.AddRange((await requirements
-                .CheckAsync(definition.Requires, projectId, organizationId, ct).ConfigureAwait(false))
+                .CheckAsync(DeclaredAndReadResources(definition), projectId, organizationId, ct).ConfigureAwait(false))
                 .Where(outcome => !outcome.Satisfied));
         if (unsatisfied.Count == 0) return;
 
@@ -187,6 +191,22 @@ public sealed partial class PipelineSetupReadinessService(
         // missing joins the same finding rather than opening a second one saying the same thing.
         Report(PipelineRequirementsChecker.EnvironmentKind, PipelineSetupReadinessKind.MissingEnvironments);
         Report(PipelineRequirementsChecker.CapabilityKind, PipelineSetupReadinessKind.MissingRequiredCapabilities);
+    }
+
+    /// <summary>
+    /// Recette R3-67: the <c>requires:</c> block plus the libraries and vaults the template reads
+    /// (<c>variable_libraries:</c>, <c>vaults:</c>), the same list the project overview warns about, so
+    /// the wizard creates what a run of the template loads.
+    /// </summary>
+    private static PipelineRequiresDefinition DeclaredAndReadResources(PipelineYamlDefinition definition)
+    {
+        var declared = definition.Requires ?? new PipelineRequiresDefinition();
+        var referenced = PipelineRequirementsProvisioner.ReferencedResources(definition);
+        return declared with
+        {
+            Libraries = referenced?.Libraries ?? [],
+            Vaults = referenced?.Vaults ?? []
+        };
     }
 
     /// <summary>
@@ -296,9 +316,8 @@ public sealed partial class PipelineSetupReadinessService(
         var source = await gitRepositories.GetProjectRepositorySourceAsync(projectId, ct).ConfigureAwait(false);
         if (repository is null)
         {
-            // Recette R1-32: a project whose source is an external address has a repository, Aetheus
-            // just cannot read it. Saying "no repository" there was false; saying the files are missing
-            // would be too. What is true: they could not be checked, and here is what to check.
+            // External sources may exist without being readable by Aetheus; report unverified
+            // requirements rather than claiming the repository or files are missing.
             if (source is { HasSource: true })
             {
                 ReportExternalNotInspected(stages, checks);
@@ -335,8 +354,8 @@ public sealed partial class PipelineSetupReadinessService(
 
         AddMissing(PipelineSetupReadinessKind.MissingAdapterScripts,
             await FindMissingFilesAsync(repository.Id, branch, required, ct).ConfigureAwait(false), checks);
-        // Recette R2-121: a platform scanner that reads its configuration from the repository fails
-        // without it, exactly like a missing adapter.
+        // A platform scanner that reads its configuration from the repository fails without it,
+        // exactly like a missing adapter.
         AddMissing(PipelineSetupReadinessKind.MissingScannerConfiguration,
             await FindMissingFilesAsync(repository.Id, branch, RequiredScannerFiles(stages), ct).ConfigureAwait(false),
             checks);
@@ -384,7 +403,9 @@ public sealed partial class PipelineSetupReadinessService(
     /// <summary>
     /// The repository files the selected scanner steps read, taken from the scanner manifest itself:
     /// the value of a <c>--config</c> argument inside the scanned source (<c>/src/.gitleaks.toml</c>).
-    /// A path the scanner merely accepts when present (an ignore file) is not a <c>--config</c>.
+    /// A path the scanner merely accepts when present (an ignore file) is not a <c>--config</c>, nor is
+    /// the configuration of a scanner the agent runs with its built-in rules when the file is absent
+    /// (<see cref="OptionalConfigurationScanners"/>).
     /// </summary>
     internal static List<string> RequiredScannerFiles(IEnumerable<PipelineStageDefinition> stages) =>
         stages
@@ -393,6 +414,7 @@ public sealed partial class PipelineSetupReadinessService(
                 && !string.IsNullOrWhiteSpace(step.Scanner))
             .Select(step => ScannerManifestCatalog.Find(step.Scanner!))
             .OfType<ScannerManifestEntry>()
+            .Where(scanner => !OptionalConfigurationScanners.Contains(scanner.Key))
             .SelectMany(scanner => scanner.Arguments
                 .Zip(scanner.Arguments.Skip(1))
                 .Where(pair => pair.First == "--config" && pair.Second.StartsWith(ScannedSourceRoot, StringComparison.Ordinal))
@@ -400,6 +422,12 @@ public sealed partial class PipelineSetupReadinessService(
             .Distinct(StringComparer.Ordinal)
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToList();
+
+    /// <summary>Recette R3-63, option 3: Gitleaks reads <c>.gitleaks.toml</c> when the repository has
+    /// one and its built-in rules otherwise (the agent drops the <c>--config</c> of an absent file,
+    /// <c>GitleaksRepositoryConfiguration</c>), so the file is never required.</summary>
+    private static readonly HashSet<string> OptionalConfigurationScanners =
+        new(["gitleaks", "gitleaks-history"], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Where a scanner container sees the repository.</summary>
     private const string ScannedSourceRoot = "/src/";

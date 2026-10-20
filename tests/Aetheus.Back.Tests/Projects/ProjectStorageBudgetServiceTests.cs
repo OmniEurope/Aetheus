@@ -9,7 +9,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Projects;
 
-/// <summary>PLAN-013 lot 5: the usage of a project against its budget, the 80 % alert, the oldest-first purge.</summary>
+/// <summary>The usage of a project against its budget, the 80 % alert, the oldest-first
+/// purge.</summary>
 public sealed class ProjectStorageBudgetServiceTests
 {
     private const long Megabyte = 1024 * 1024;

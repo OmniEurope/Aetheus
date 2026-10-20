@@ -4,13 +4,8 @@ using System.Text;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// BACK-012: the Docker operations that carry a user-supplied payload (a Compose file, a script for
-/// <c>docker exec</c>, a Dockerfile). The backend used to send them as <c>printf | base64 -d | ...</c>
-/// shell strings, which the command validator refuses on sight, so they never ran. Here the payload
-/// arrives base64-encoded in an environment variable and reaches <c>docker</c> as a file or as stdin;
-/// the command itself is an argv built from the validated target only.
-/// </summary>
+/// <summary>Passes user-supplied Docker payloads through base64 environment values to files or
+/// stdin, keeping command arguments separate from untrusted content.</summary>
 public sealed class DockerPayloadOperationExecutor(
     IOptions<AetheusAgentOptions> options,
     ILogger<DockerPayloadOperationExecutor> logger) : IOperationExecutor

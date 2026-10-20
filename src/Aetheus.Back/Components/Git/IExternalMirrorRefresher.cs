@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Git;
 
-/// <summary>
-/// Brings the mirror of an external repository up to date, on demand. A pipeline whose workspace comes
-/// from such a mirror (recette R-534) asks for it just before its commit is pinned, so the run builds
-/// what the remote holds now and not what the last scheduled fetch saw.
-///
-/// It lives with the repositories and the mirror mechanics (Git module), below the orchestrator that
-/// asks for it; attaching and detaching an external repository stays the ExternalRepos module's work.
-/// </summary>
+/// <summary> Brings the mirror of an external repository up to date, on demand. A pipeline whose
+/// workspace comes from such a mirror asks for it just before its commit is pinned, so the run
+/// builds what the remote holds now and not what the last scheduled fetch saw. It lives with the
+/// repositories and the mirror mechanics (Git module), below the orchestrator that asks for it;
+/// attaching and detaching an external repository stays the ExternalRepos module's work. </summary>
 public interface IExternalMirrorRefresher
 {
     /// <summary>

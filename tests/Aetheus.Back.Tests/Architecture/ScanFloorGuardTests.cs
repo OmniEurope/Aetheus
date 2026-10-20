@@ -23,9 +23,6 @@ public sealed class ScanFloorGuardTests
         // This guard names the raw API in the string literals it hunts for; matching itself would make
         // it permanently red for the wrong reason.
         "ScanFloorGuardTests.cs",
-        // Walks per-directory and tolerates a directory with no markdown, so an empty result is a valid
-        // answer rather than a broken scan. Its own second test asserts the overall scan is not empty.
-        "EmDashDocumentationAuditTests.cs"
     };
 
     [Theory]

@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Analysis;
 
-/// <summary>
-/// The score of the open findings a <c>finding_score</c> grading rule grades, one entry per distinct
-/// open finding. <c>count</c> (decided 2026-10-09, recette R1-4: "je veux pas de pondération, je montre
-/// le nombre") grades the plain number of open findings, the number the run's finding list shows.
-/// <c>weighted</c> (recette R2-119) weighs each finding by its severity (info 0.5, low 1, medium 3,
-/// high 10). In both, a critical finding has no weight because it alone makes the measure
-/// <see cref="AnalysisGrade.F"/> (not deliverable), whatever the score. A finding without a severity
-/// counts as an info one.
-/// </summary>
+/// <summary>Count grading uses distinct open findings; weighted grading applies severity weights of
+/// 0.5, 1, 3 and 10 for info, low, medium and high, with missing severity treated as info. In
+/// either mode a critical finding directly yields <see cref="AnalysisGrade.F"/>.</summary>
 public static class AnalysisFindingScore
 {
     /// <summary>The <c>finding_score</c> value of a rule that grades the severity-weighted score.</summary>

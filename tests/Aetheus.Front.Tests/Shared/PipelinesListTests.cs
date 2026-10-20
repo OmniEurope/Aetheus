@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Bunit.Rendering;
 using Microsoft.AspNetCore.Components.Sections;
@@ -33,15 +34,16 @@ public class PipelinesListTests : BunitContext
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("RemovePipelineFromFavorites", cut.Markup);
-            // R-119: no favourites panel any more; the favourite is a row of the one catalogue grid.
+            // Favourite pipelines remain rows of the shared catalogue grid.
             Assert.Empty(cut.FindAll(".pipeline-favorites-section"));
             var grid = Assert.Single(cut.FindComponents<PipelineDependencyGrid>()).Instance;
             Assert.Equal(["Build"], grid.Items.Select(item => item.Name));
             Assert.Contains(7, grid.FavoritePipelineIds);
-        }, TimeSpan.FromSeconds(2));
+        });
     }
 
-    /// <summary>R-119: the starred pipelines lead the one table, the rest keep project then name order.</summary>
+    /// <summary>The starred pipelines lead the one table, the rest keep project then name
+    /// order.</summary>
     [Fact]
     public void Favorites_AreSortedFirstInTheSingleCatalogue()
     {
@@ -61,12 +63,13 @@ public class PipelinesListTests : BunitContext
         {
             var grid = Assert.Single(cut.FindComponents<PipelineDependencyGrid>()).Instance;
             Assert.Equal(["zulu", "alpha", "bravo"], grid.Items.Select(item => item.Name));
-        }, TimeSpan.FromSeconds(2));
+        });
         Assert.Empty(cut.FindAll(".pipeline-favorites-section"));
         Assert.DoesNotContain("FavoritePipelinesHint", cut.Markup, StringComparison.Ordinal);
     }
 
-    /// <summary>R-121: the "with children" toggle keeps only the rows that launch other pipelines.</summary>
+    /// <summary>The "with children" toggle keeps only the rows that launch other
+    /// pipelines.</summary>
     [Fact]
     public void WithChildrenFilter_KeepsOnlyParentRows()
     {
@@ -75,7 +78,7 @@ public class PipelinesListTests : BunitContext
             leaves: [new PipelineDependencyDto { Id = 2, Name = "deploy" }]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var cut = RenderList();
-        cut.WaitForState(() => cut.FindComponents<PipelineDependencyGrid>().Count == 1, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.FindComponents<PipelineDependencyGrid>().Count == 1);
         Assert.Equal(2, cut.FindComponent<PipelineDependencyGrid>().Instance.Items.Count);
 
         typeof(PipelinesList).GetField("_withChildrenOnly", Priv)!.SetValue(cut.Instance, true);
@@ -84,7 +87,8 @@ public class PipelinesListTests : BunitContext
         Assert.Equal(["release"], cut.FindComponent<PipelineDependencyGrid>().Instance.Items.Select(item => item.Name));
     }
 
-    /// <summary>R-122: each chip counts from the loaded data, and a click filters the table on it.</summary>
+    /// <summary>Each chip counts from the loaded data, and a click filters the table on
+    /// it.</summary>
     [Fact]
     public void StatusSummary_CountsFromLoadedData_AndClickFilters()
     {
@@ -103,8 +107,8 @@ public class PipelinesListTests : BunitContext
         });
 
         var cut = RenderList();
-        // Recette R-167: the three fleet freshness states each have their chip.
-        cut.WaitForState(() => cut.FindAll(".pipeline-status-chip").Count == 6, TimeSpan.FromSeconds(2));
+        // The three fleet freshness states each have their chip.
+        cut.WaitForState(() => cut.FindAll(".pipeline-status-chip").Count == 6);
 
         string Chip(string status) => cut.Find($".pipeline-status-chip-{status}").TextContent;
         Assert.Contains("Failed", Chip("failed"), StringComparison.Ordinal);
@@ -123,7 +127,7 @@ public class PipelinesListTests : BunitContext
             Assert.Equal("true", cut.Find(".pipeline-status-chip-failed").GetAttribute("aria-pressed"));
         });
 
-        // Recette R-167: a second chip adds its rows (any chosen state matches).
+        // A second chip adds its rows (any chosen state matches).
         cut.Find(".pipeline-status-chip-neverrun").Click();
         cut.WaitForAssertion(() => Assert.Equal(["broken", "fresh"],
             cut.FindComponent<PipelineDependencyGrid>().Instance.Items.Select(item => item.Name).Order()));
@@ -134,7 +138,7 @@ public class PipelinesListTests : BunitContext
         cut.WaitForAssertion(() => Assert.Equal(4, cut.FindComponent<PipelineDependencyGrid>().Instance.Items.Count));
     }
 
-    /// <summary>R-120: without a ?tab in the URL, the tab this user last opened comes back.</summary>
+    /// <summary>Without a ?tab in the URL, the tab this user last opened comes back.</summary>
     [Fact]
     public void RememberedRunsTab_IsRestored_WhenTheUrlNamesNoTab()
     {
@@ -143,7 +147,7 @@ public class PipelinesListTests : BunitContext
         {
             new() { Id = 12, PipelineId = 7, PipelineName = "Build", Status = PipelineStatus.Success }
         });
-        JSInterop.Setup<string?>("localStorage.getItem", _ => true).SetResult("runs");
+        Services.GetRequiredService<Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences>().Seed(PreferenceKeys.PipelineListView, "runs");
 
         var cut = RenderList();
 
@@ -152,20 +156,19 @@ public class PipelinesListTests : BunitContext
             Assert.Single(cut.FindComponents<PipelineRunsGrid>());
             Assert.Empty(cut.FindComponents<PipelineDependencyGrid>());
             Assert.Contains(">#12<", cut.Markup, StringComparison.Ordinal);
-        }, TimeSpan.FromSeconds(2));
+        });
     }
 
     [Fact]
     public void GlobalHeader_KeepsCreateVisible_AndPutsImportInTheMoreActionsMenu()
     {
-        // Recette R-412 (user decision 2026-09-28): Create stays a visible blue button, Import moves
-        // into the header's "..." menu.
+        // Create is directly visible; Import belongs to the header menu.
         _handler.SetJsonResponse("api/pipelines/dependencies", Groups(leaves: [new PipelineDependencyDto { Id = 7, Name = "Build" }]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         RenderList();
         var host = _host!;
 
-        var create = host.WaitForElement(".pipeline-list-new-button", TimeSpan.FromSeconds(2));
+        var create = host.WaitForElement(".pipeline-list-new-button");
         Assert.Contains("omni-button--primary", create.ClassName, StringComparison.Ordinal);
         Assert.DoesNotContain(host.FindAll("button"), button =>
             button.TextContent.Contains("Import", StringComparison.Ordinal)
@@ -183,7 +186,7 @@ public class PipelinesListTests : BunitContext
         Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo("/pipelines?tab=catalog");
         _handler.SetJsonResponse("api/pipelines/dependencies", Groups(leaves: [new PipelineDependencyDto { Id = 7, Name = "Build" }]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
-        JSInterop.Setup<string?>("localStorage.getItem", _ => true).SetResult("runs");
+        Services.GetRequiredService<Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences>().Seed(PreferenceKeys.PipelineListView, "runs");
 
         var cut = RenderList();
 
@@ -191,7 +194,7 @@ public class PipelinesListTests : BunitContext
         {
             Assert.Single(cut.FindComponents<PipelineDependencyGrid>());
             Assert.Empty(cut.FindComponents<PipelineRunsGrid>());
-        }, TimeSpan.FromSeconds(2));
+        });
     }
 
     [Fact]
@@ -200,14 +203,13 @@ public class PipelinesListTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/dependencies", Groups(leaves: [new PipelineDependencyDto { Id = 7, Name = "Build" }]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var cut = RenderList();
-        cut.WaitForState(() => ViewItems().Count == 2, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => ViewItems().Count == 2);
 
         ViewItems()[1].Click();
 
-        cut.WaitForAssertion(() => Assert.Contains(JSInterop.Invocations, invocation =>
-            invocation.Identifier == "localStorage.setItem"
-            && invocation.Arguments[0] is string key && key.StartsWith("aetheus.pipelines.view-tab.", StringComparison.Ordinal)
-            && Equals(invocation.Arguments[1], "runs")));
+        // R1-66: the view is the user's preference, kept on the server.
+        cut.WaitForAssertion(() => Assert.Equal("runs",
+            Services.GetRequiredService<Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences>().Read<string>(PreferenceKeys.PipelineListView)));
     }
 
     private static PipelineRunSummaryDto Run(int id, PipelineStatus status) => new() { Id = id, Status = status };
@@ -282,8 +284,7 @@ public class PipelinesListTests : BunitContext
             new PipelineFavoriteDto { PipelineId = 7, IsFavorite = true });
         var cut = RenderList();
         var button = cut.WaitForElement(
-            "button[aria-label='AddPipelineToFavorites']",
-            TimeSpan.FromSeconds(2));
+            "button[aria-label='AddPipelineToFavorites']");
 
         button.Click();
 
@@ -293,7 +294,7 @@ public class PipelinesListTests : BunitContext
                 request.Method == HttpMethod.Put.Method
                 && request.Url.Contains("api/pipelines/7/favorite", StringComparison.Ordinal));
             Assert.Contains("RemovePipelineFromFavorites", cut.Markup);
-        }, TimeSpan.FromSeconds(2));
+        });
     }
 
     [Fact]
@@ -315,7 +316,7 @@ public class PipelinesListTests : BunitContext
         });
 
         var cut = RenderList(serverId: 42);
-        cut.WaitForState(() => cut.Markup.Contains("Server pipeline"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Server pipeline"));
 
         Assert.Contains(_handler.Requests, request => request.Url.Contains("dependencies?serverId=42"));
         Assert.Contains(_handler.Requests, request => request.Url.Contains("runs/recent?serverId=42"));
@@ -337,7 +338,7 @@ public class PipelinesListTests : BunitContext
         });
 
         var cut = RenderList(projectId: 3);
-        cut.WaitForState(() => cut.Markup.Contains("Project pipeline"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Project pipeline"));
 
         Assert.Contains(_handler.Requests, request => request.Url.Contains("api/pipelines/dependencies"));
         Assert.Contains(_handler.Requests, request => request.Url.Contains("runs/recent?projectId=3"));
@@ -362,12 +363,12 @@ public class PipelinesListTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/favorites", new PipelineFavoritesDto { PipelineIds = [8] });
 
         var cut = RenderList(projectId: 3);
-        // R-118/R-120: one catalogue grid (no favourites grid above it), the runs behind their own tab.
-        cut.WaitForState(() => cut.FindComponents<PipelineDependencyGrid>().Count == 1, TimeSpan.FromSeconds(2));
+        // Catalogue and runs use separate views of the shared grid.
+        cut.WaitForState(() => cut.FindComponents<PipelineDependencyGrid>().Count == 1);
 
         Assert.NotNull(cut.Find(".pipeline-catalog-panel .pipeline-catalog-filters"));
         Assert.Empty(cut.FindComponents<PipelineRunsGrid>());
-        // R-215: no tab strip any more, the two views are one select bar in the page header.
+        // A select bar in the header switches the two views.
         Assert.Empty(cut.FindAll("[role='tab']"));
         Assert.Equal(2, ViewItems().Count);
         Assert.True(cut.FindComponent<PipelineDependencyGrid>().Instance.FillHeight);
@@ -411,9 +412,10 @@ public class PipelinesListTests : BunitContext
         });
 
         var cut = RenderList();
-        cut.WaitForState(() => cut.Markup.Contains("release"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("release"));
 
-        // R-121 / R-215: parent and leaf share the one catalogue grid; the header views are Catalogue (n) and Runs (n).
+        // Parent and leaf share the one catalogue grid; the header views are Catalogue (n) and Runs
+        // (n).
         var tabs = ViewItems();
         Assert.Equal(2, tabs.Count);
         Assert.Contains("PipelineCatalogTab (2)", tabs[0].TextContent, StringComparison.Ordinal);
@@ -439,7 +441,7 @@ public class PipelinesListTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/dependencies", Groups());
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var cut = RenderList(serverId: 42);
-        cut.WaitForState(() => _handler.Requests.Any(request => request.Url.Contains("runs/recent")), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => _handler.Requests.Any(request => request.Url.Contains("runs/recent")));
 
         Assert.Contains("PipelineCatalogTab (0)", _host!.Markup);
         Assert.Contains("Runs (0)", _host!.Markup);
@@ -456,7 +458,7 @@ public class PipelinesListTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/11/parameters", new List<PipelineRunParameterDto>());
         _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/11/run", new PipelineRunDto { Id = 2470, PipelineId = 11 });
         var cut = RenderList();
-        cut.WaitForState(() => cut.Markup.Contains("Current"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Current"));
         var overviewLoads = _handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies"));
 
         var method = typeof(PipelinesList).GetMethod("RunPipelineClick", Priv)!;
@@ -474,14 +476,13 @@ public class PipelinesListTests : BunitContext
             [new PipelineDependencyDto { Id = 11, Name = "Current", TriggerType = PipelineTriggerType.Manual }]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var cut = RenderList(serverId: 42);
-        cut.WaitForState(() => cut.Markup.Contains("Current"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Current"));
         var before = _handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies"));
         var method = typeof(PipelinesList).GetMethod("OnPipelineHubEvent", Priv)!;
 
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [999])!);
         cut.WaitForAssertion(() => Assert.True(
-            _handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies")) > before),
-            TimeSpan.FromSeconds(3));
+            _handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies")) > before));
     }
 
     [Fact]
@@ -490,7 +491,7 @@ public class PipelinesListTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/dependencies", Groups());
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var cut = RenderList(projectId: 7);
-        cut.WaitForState(() => _handler.Requests.Any(request => request.Url.Contains("api/pipelines/dependencies")), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => _handler.Requests.Any(request => request.Url.Contains("api/pipelines/dependencies")));
         var before = _handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies"));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>
         {
@@ -501,11 +502,10 @@ public class PipelinesListTests : BunitContext
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [999])!);
 
         cut.WaitForAssertion(() => Assert.True(
-            _handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies")) > before),
-            TimeSpan.FromSeconds(3));
+            _handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies")) > before));
         // The run id cell now prefixes the id with "#" since it shares its column with the row actions.
         OpenRunsTab(cut);
-        cut.WaitForAssertion(() => Assert.Contains(">#123<", cut.Markup), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Contains(">#123<", cut.Markup));
     }
 
     [Fact]
@@ -514,21 +514,18 @@ public class PipelinesListTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/dependencies", Groups());
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var cut = RenderList();
-        cut.WaitForState(() => _handler.Requests.Any(request => request.Url.Contains("runs/recent")), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => _handler.Requests.Any(request => request.Url.Contains("runs/recent")));
         var before = _handler.Requests.Count(request => request.Url.Contains("runs/recent"));
         var method = typeof(PipelinesList).GetMethod("OnPipelineProgressEvent", Priv)!;
 
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
 
         cut.WaitForAssertion(() => Assert.True(
-            _handler.Requests.Count(request => request.Url.Contains("runs/recent")) > before),
-            TimeSpan.FromSeconds(3));
+            _handler.Requests.Count(request => request.Url.Contains("runs/recent")) > before));
     }
 
-    /// <summary>
-    /// R-10: pressing Run, and every run event after it, reloaded the page behind the page-wide
-    /// loader, so "Loading" replaced the runs the launch had just added. A reload keeps the page.
-    /// </summary>
+    /// <summary>Reloads preserve visible runs instead of replacing the page with a
+    /// loader.</summary>
     [Fact]
     public async Task AReloadAfterTheFirstLoad_KeepsThePageInsteadOfThePageWideLoader()
     {
@@ -536,17 +533,16 @@ public class PipelinesListTests : BunitContext
             [new PipelineDependencyDto { Id = 7, Name = "Build" }]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var cut = RenderList();
-        cut.WaitForAssertion(() => Assert.Contains("Build", cut.Markup, StringComparison.Ordinal), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains("Build", cut.Markup, StringComparison.Ordinal));
 
         var pending = new TaskCompletionSource<PipelineDependencyGroupsDto>(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/pipelines/dependencies", _ => pending.Task);
         var method = typeof(PipelinesList).GetMethod("OnPipelineProgressEvent", Priv)!;
         var reload = cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
 
-        // Polled without blocking: the reload runs on the renderer, which a blocking wait would starve.
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (_handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies")) < 2 && DateTime.UtcNow < deadline)
-            await Task.Delay(20, Xunit.TestContext.Current.CancellationToken);
+        // Awaited without blocking: the reload runs on the renderer, which a blocking wait would starve.
+        await _handler.WhenRequestedAsync(
+            request => request.Url.Contains("api/pipelines/dependencies", StringComparison.Ordinal), 2, "the overview read again");
         Assert.Equal(2, _handler.Requests.Count(request => request.Url.Contains("api/pipelines/dependencies")));
         // Any render while the reload is in flight - a run event, a toast - showed the loader.
         cut.Render();
@@ -563,15 +559,14 @@ public class PipelinesListTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/dependencies", Groups());
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var cut = RenderList(projectId: 7);
-        cut.WaitForState(() => _handler.Requests.Any(request => request.Url.Contains("runs/recent?projectId=7")), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => _handler.Requests.Any(request => request.Url.Contains("runs/recent?projectId=7")));
         var before = _handler.Requests.Count(request => request.Url.Contains("runs/recent?projectId=7"));
         var method = typeof(PipelinesList).GetMethod("OnPipelineProgressEvent", Priv)!;
 
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
 
         cut.WaitForAssertion(() => Assert.True(
-            _handler.Requests.Count(request => request.Url.Contains("runs/recent?projectId=7")) > before),
-            TimeSpan.FromSeconds(3));
+            _handler.Requests.Count(request => request.Url.Contains("runs/recent?projectId=7")) > before));
     }
 
     [Fact]
@@ -592,8 +587,7 @@ public class PipelinesListTests : BunitContext
         var cut = RenderList();
         OpenRunsTab(cut);
         cut.WaitForState(() => cut.FindComponents<PipelineRunsGrid>().Count == 1
-            && cut.FindComponent<PipelineRunsGrid>().Instance.Items.Count == 20,
-            TimeSpan.FromSeconds(2));
+            && cut.FindComponent<PipelineRunsGrid>().Instance.Items.Count == 20);
 
         Assert.Equal(20, cut.FindComponent<PipelineRunsGrid>().Instance.Items.Count);
     }
@@ -627,42 +621,45 @@ public class PipelinesListTests : BunitContext
         Assert.Contains("pipelines/setup", Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().Uri);
     }
 
-    /// <summary>R-120 / R-215: the runs grid is the second view, picked in the page header, and
-    /// renders only once it is open.</summary>
+    /// <summary>The runs grid is the second view, picked in the page header, and renders only once
+    /// it is open.</summary>
     private void OpenRunsTab(IRenderedComponent<PipelinesList> cut)
     {
-        cut.WaitForState(() => ViewItems().Count == 2, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => ViewItems().Count == 2);
         ViewItems()[1].Click();
-        cut.WaitForState(() => cut.FindComponents<PipelineRunsGrid>().Count == 1, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.FindComponents<PipelineRunsGrid>().Count == 1);
     }
 
-    /// <summary>R-215: the view switch sits in the page header (the host's outlet), not in the list.</summary>
+    /// <summary>The view switch sits in the page header (the host's outlet), not in the
+    /// list.</summary>
     private IReadOnlyList<AngleSharp.Dom.IElement> ViewItems() =>
         _host!.FindAll(".pipeline-view-switch .omni-select-bar__item");
 
     [Fact]
     public async Task R2100_LeavingThePageWhileItLoads_DoesNotUseTheDisposedLiveLifetime()
     {
-        // Recette R2-100: "ObjectDisposedException - CancellationTokenSource_Disposed" reached the error
-        // boundary. Leaving a pipelines page before its overview had loaded disposed the live lifetime,
-        // then the resumed initialisation read its Token to start the live recovery loop.
+        // Leaving before overview loading completes must prevent access to the disposed
+        // live-lifetime source.
         var overview = new TaskCompletionSource<PipelineDependencyGroupsDto>(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/pipelines/dependencies", _ => overview.Task);
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var cut = RenderList();
 
         await cut.InvokeAsync(() => cut.Instance.DisposeAsync().AsTask());
+        var renders = cut.RenderCount;
         overview.SetResult(Groups(leaves: [new PipelineDependencyDto { Id = 7, Name = "Build" }]));
 
+        // The resumed load ends with the render that follows the initialisation: either it comes, or the
+        // load failed on the disposed lifetime first and the renderer reported it.
         var unhandled = Renderer.UnhandledException;
-        var first = await Task.WhenAny(unhandled, Task.Delay(TimeSpan.FromSeconds(2), Xunit.TestContext.Current.CancellationToken));
+        var loaded = cut.WhenRenderedAsync(() => cut.RenderCount > renders);
+        var first = await Task.WhenAny(unhandled, loaded);
         Assert.True(first != unhandled, $"Unhandled after the page was left: {(first == unhandled ? await unhandled : null)}");
+        await loaded;
     }
 
-    /// <summary>
-    /// Recette R2-087: back on the list, the catalogue and its search are there at once, without the
-    /// page-wide loader, while the overview is read again behind them.
-    /// </summary>
+    /// <summary> Back on the list, the catalogue and its search are there at once, without the
+    /// page-wide loader, while the overview is read again behind them. </summary>
     [Fact]
     public async Task R2087_ComingBack_ShowsTheListAndItsSearchAtOnce()
     {
@@ -670,7 +667,7 @@ public class PipelinesListTests : BunitContext
             [new PipelineDependencyDto { Id = 7, Name = "Build" }, new PipelineDependencyDto { Id = 8, Name = "Deploy" }]));
         _handler.SetJsonResponse("api/pipelines/runs/recent", new List<PipelineRunDto>());
         var first = RenderList();
-        first.WaitForState(() => first.FindComponents<PipelineDependencyGrid>().Count == 1, TimeSpan.FromSeconds(2));
+        first.WaitForState(() => first.FindComponents<PipelineDependencyGrid>().Count == 1);
         typeof(PipelinesList).GetField("_search", Priv)!.SetValue(first.Instance, "build");
         // Leaving the page disposes it, which keeps what it showed.
         await DisposeComponentsAsync();

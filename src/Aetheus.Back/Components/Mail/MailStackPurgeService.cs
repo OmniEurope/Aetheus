@@ -10,14 +10,10 @@ public interface IMailStackPurgeService
     Task<MailTaskQueuedDto> PurgeAsync(int serverId, MailPurgeRequest request, CancellationToken ct = default);
 }
 
-/// <summary>
-/// "Réinstaller la messagerie" (recette R2-083 / R2-088, decision of 2026-10-03: erase everything). Queues
-/// <c>mail-manage purge</c>, which removes the services, packages, configuration, mailboxes and DKIM keys of
-/// the host, and drops the Aetheus rows that mirror them (domains, with their accounts and aliases), so the
-/// page returns to "not configured" and the same domain can be set up again. While the purge runs the
-/// heartbeat reconciliation leaves the rows alone (<see cref="MailStateReconciler"/>); a purge that fails
-/// lets the next heartbeats adopt back whatever is still on the host.
-/// </summary>
+/// <summary>Queue mail-manage purge to remove host mail services, packages, configuration,
+/// mailboxes and DKIM keys, and delete their mirrored database rows. Suspend heartbeat
+/// reconciliation during purge; after failure, later heartbeats can adopt remaining host
+/// resources.</summary>
 public sealed class MailStackPurgeService(
     IMailRepository mailRepo,
     IMailInventoryRepository inventory,
@@ -32,7 +28,7 @@ public sealed class MailStackPurgeService(
     // apt-get purge plus autoremove: as generous as the setup that installed the stack.
     internal const int TimeoutSeconds = 900;
 
-    /// <summary>A setup and a purge never run side by side on one server (R2-085: two setups 3 s apart).</summary>
+    /// <summary>Setup and purge are mutually exclusive on one server.</summary>
     internal static readonly OperationKind[] StackRebuildKinds = [OperationKind.MailSetup, OperationKind.MailPurge];
 
     public async Task<MailTaskQueuedDto> PurgeAsync(int serverId, MailPurgeRequest request, CancellationToken ct = default)

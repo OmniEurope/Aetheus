@@ -3,12 +3,8 @@ using System.Net;
 using Aetheus.Front.Components.Pipelines;
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Shared pre-flight gate before launching a pipeline run. Resolves each stage's target server
-/// up-front and, if any stage has no online agent, asks the user to confirm (or aborts). Invalid
-/// YAML is surfaced here too so the user is never sent into a doomed run. Centralises the logic
-/// previously duplicated in PipelineEdit and Pipelines.
-/// </summary>
+/// <summary>Centralizes launch preflight: invalid YAML aborts launch, and stages without online
+/// agents require confirmation.</summary>
 public sealed class PipelineRunGate(
     ApiClient api,
     OmniDialogService dialog,
@@ -19,29 +15,7 @@ public sealed class PipelineRunGate(
     public async Task<bool> ConfirmPreflightAsync(int pipelineId, string? sourceBranch = null)
     {
         var pre = await api.Pipelines.PreflightPipelineAsync(pipelineId, sourceBranch);
-
-        // R2-039: a refused preflight is read from its body whatever its shape; Error.Errors is null
-        // when the body is the error middleware's object, and joining it threw into the error boundary.
-        if (pre.Error is not null || pre.ErrorMessage is not null)
-        {
-            toast.Notify(OmniSeverity.Danger, "PipelineRunFailed", pre.ErrorMessage ?? string.Empty);
-            return false;
-        }
-
-        // S-UX-TRGE: a 401/403/500 preflight previously left both Value and Error null and the gate
-        // fell through to an empty stage list, returning true and dispatching a doomed run. Surface the
-        // real reason and abort instead of silently proceeding.
-        if (pre.IsTransportFailure)
-        {
-            var reasonKey = pre.StatusCode switch
-            {
-                HttpStatusCode.Unauthorized => "PreflightSessionExpired",
-                HttpStatusCode.Forbidden => "PreflightForbidden",
-                _ => "PreflightServerError"
-            };
-            toast.Notify(OmniSeverity.Danger, "PipelineRunFailed", localizer[reasonKey].Value);
-            return false;
-        }
+        if (NotifyRefusal(pre)) return false;
 
         var warnings = pre.Value?.Warnings ?? [];
         if (warnings.Count > 0)
@@ -56,14 +30,7 @@ public sealed class PipelineRunGate(
         var unresolved = stages.Where(s => !s.Resolved).ToList();
         if (unresolved.Count == 0)
         {
-            // Show which runners were picked (fallback transparency)
-            var fallbacks = stages.Where(s => s.Resolved && s.ServerName is not null).ToList();
-            if (fallbacks.Count > 0)
-            {
-                var info = string.Join("\n", fallbacks.Select(s =>
-                    $"• {s.StageName}: {s.ServerName}" + (s.Reason is not null ? $" ({s.Reason})" : "")));
-                toast.Notify(OmniSeverity.Info, "PreflightResolved", info);
-            }
+            NotifyPickedRunners(stages);
             return await ConfirmReadinessAsync(pipelineId);
         }
 
@@ -82,13 +49,43 @@ public sealed class PipelineRunGate(
         return confirmed is true && await ConfirmReadinessAsync(pipelineId);
     }
 
-    /// <summary>
-    /// Recette R1-28: what is not configured and would make this run fail (an adapter script or the
-    /// scanner configuration absent from the repository, a missing environment, a library or vault a
-    /// template requires), named in one confirmation. It never blocks: the user may run anyway. Runner
-    /// findings are left to the agent preflight above, which already asked about them. A verdict that
-    /// cannot be read asks nothing.
-    /// </summary>
+    /// <summary>Shows why the preflight refused the launch, and says whether it did.</summary>
+    private bool NotifyRefusal(ApiOutcome<PipelinePreflightDto, YamlValidationResultDto> pre)
+    {
+        // Read the refusal from its actual response body because middleware errors need not
+        // populate the typed Errors collection.
+        if (pre.Error is not null || pre.ErrorMessage is not null)
+        {
+            toast.Notify(OmniSeverity.Danger, "PipelineRunFailed", pre.ErrorMessage ?? string.Empty);
+            return true;
+        }
+
+        // A failed preflight request must show its error and abort rather than treating missing
+        // data as an empty, valid stage list.
+        if (!pre.IsTransportFailure) return false;
+        var reasonKey = pre.StatusCode switch
+        {
+            HttpStatusCode.Unauthorized => "PreflightSessionExpired",
+            HttpStatusCode.Forbidden => "PreflightForbidden",
+            _ => "PreflightServerError"
+        };
+        toast.Notify(OmniSeverity.Danger, "PipelineRunFailed", localizer[reasonKey].Value);
+        return true;
+    }
+
+    // Show which runners were picked (fallback transparency)
+    private void NotifyPickedRunners(IEnumerable<PreflightStageDto> stages)
+    {
+        var fallbacks = stages.Where(s => s.Resolved && s.ServerName is not null).ToList();
+        if (fallbacks.Count == 0) return;
+        var info = string.Join("\n", fallbacks.Select(s =>
+            $"• {s.StageName}: {s.ServerName}" + (s.Reason is not null ? $" ({s.Reason})" : "")));
+        toast.Notify(OmniSeverity.Info, "PreflightResolved", info);
+    }
+
+    /// <summary>Offer one nonblocking confirmation for missing run configuration so users can still
+    /// proceed knowingly; leave runner findings to agent preflight and ask nothing when the verdict
+    /// cannot be read.</summary>
     private async Task<bool> ConfirmReadinessAsync(int pipelineId)
     {
         PipelineSetupReadinessDto? readiness;

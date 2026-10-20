@@ -22,13 +22,12 @@ public partial class Performance : IAsyncDisposable
     private AetheusDataGrid<ApiEndpointTimingDto>? _endpointsGrid;
     private AetheusDataGrid<ClientApiCall>? _browserGrid;
 
-    /// <summary>Recette R-210: the date column shows local time, so its range filter and sort read the
-    /// same local instant rather than the UTC one the API sends.</summary>
+    /// <summary>The date column shows local time, so its range filter and sort read the same local
+    /// instant rather than the UTC one the API sends.</summary>
     private static readonly Func<ApiCallTimingDto, object?> LocalAt = call => call.At.ToLocalTime();
     private bool _loadFailed;
 
-    // R-181: replaces the Refresh button. The backend announces new samples on the admin hub
-    // (AdminEntities.ApiPerformance, coalesced server-side); bursts are coalesced here too.
+    // Refresh from coalesced ApiPerformance admin-hub events and coalesce bursts on the client too.
     private AdminEntitySubscription? _realtime;
     private readonly TrailingReloadCoalescer _realtimeReload = new(500);
 
@@ -64,8 +63,8 @@ public partial class Performance : IAsyncDisposable
         try
         {
             var report = await Api.Security.GetApiPerformanceAsync() ?? new ApiPerformanceReportDto();
-            // Recette R-227: the grids note the rows they hold before the new ones land, so a new
-            // sample reads bold for a few seconds.
+            // The grids note the rows they hold before the new ones land, so a new sample reads
+            // bold for a few seconds.
             if (_slowestGrid is not null) await _slowestGrid.Refresh();
             if (_endpointsGrid is not null) await _endpointsGrid.Refresh();
             if (_browserGrid is not null) await _browserGrid.Refresh();
@@ -109,13 +108,12 @@ public partial class Performance : IAsyncDisposable
 
     private string? SlowestCallRouteText => SlowestCall is { } call ? string.Concat(call.Method, " ", call.Route) : null;
 
-    /// <summary>Recette R-454: the tab slugs, in the order of the tabs.</summary>
+    /// <summary>The tab slugs, in the order of the tabs.</summary>
     private static readonly string[] TabSlugs = ["slowest", "routes", "browser"];
 
-    /// <summary>
-    /// Recette R2-124: the header of each table's export, the page's source and address, then the server
-    /// window the page writes above the tabs, so a file read alone still says since when the figures count.
-    /// </summary>
+    /// <summary> The header of each table's export, the page's source and address, then the server
+    /// window the page writes above the tabs, so a file read alone still says since when the
+    /// figures count. </summary>
     private IReadOnlyList<OmniTableExportField> ExportFields =>
         [.. ExportContext.Fields(), .. WindowFields(_report ?? new ApiPerformanceReportDto(), key => L[key].Value)];
 
@@ -131,6 +129,10 @@ public partial class Performance : IAsyncDisposable
             new(text("PerformanceExportTruncated"), text(report.Truncated ? "Yes" : "No"))
         ];
     }
+
+    // Recette R1-96: the column title carries the unit, so a cell is the bare rounded number.
+    internal static string WholeMilliseconds(double value) =>
+        Math.Round(value).ToString("N0", CultureInfo.CurrentCulture);
 
     private static string Milliseconds(double value) =>
         value >= 1000

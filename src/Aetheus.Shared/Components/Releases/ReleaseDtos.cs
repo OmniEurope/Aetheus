@@ -19,9 +19,12 @@ public sealed record ReleaseDto
         : DetectedAt.Year >= 2000 ? DetectedAt : null;
     public DateTime? PromotedAt { get; init; }
     public DateTime? RolledBackAt { get; init; }
+    /// <summary>When the retention archived the release (<see cref="ReleaseStatus.Archived"/>).</summary>
+    public DateTime? ArchivedAt { get; init; }
     public int? PipelineRunId { get; init; }
-    /// <summary>R-10: the outcome of <see cref="PipelineRunId"/>, the last run that recorded this release -
-    /// its candidate, or a deployment of it. "Published" beside "Failed" is a deployment that failed.</summary>
+    /// <summary>The outcome of <see cref="PipelineRunId"/>, the last run that recorded this release
+    /// - its candidate, or a deployment of it. "Published" beside "Failed" is a deployment that
+    /// failed.</summary>
     public PipelineStatus? PipelineRunStatus { get; init; }
     public int? SourcePipelineId { get; init; }
     public string? SourcePipelineName { get; init; }
@@ -37,14 +40,14 @@ public sealed record ReleaseDto
     public bool? Deployable { get; init; }
     public int? BlockingTestCount { get; init; }
 
-    /// <summary>PLAN-007 lot 5: this is the release deployed just before the one production runs.</summary>
+    /// <summary>This is the release deployed just before the one production runs.</summary>
     public bool IsPreviousDeployment { get; init; }
     /// <summary>The pipeline that deployed the live release, set only when this previous deployment can
     /// be redeployed by it: it declares a <c>candidateVersion</c> and this release has a sealed grade and
     /// retained artifacts. Null otherwise, including for a release-fast release with no seal.</summary>
     public int? RedeployPipelineId { get; init; }
-    /// <summary>PLAN-003 2.7: on the live release, the pipeline that puts traffic back on the colour
-    /// kept in reserve ("Revenir à N-1"). Null when the project has none or nothing was deployed before.</summary>
+    /// <summary>On the live release, identifies the pipeline that restores traffic to the reserved
+    /// colour. Null when no rollback pipeline or previous deployment exists.</summary>
     public int? RevertPipelineId { get; init; }
 
     public string? RepositoryUrl { get; init; }

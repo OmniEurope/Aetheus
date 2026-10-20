@@ -3,10 +3,8 @@ using Aetheus.Front.Components.Servers;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// Recette R2-030: a success stays on its row long enough to be read, even when the service list that
-/// reflects it arrives a moment after (the success itself refreshes the server).
-/// </summary>
+/// <summary> A success stays on its row long enough to be read, even when the service list that
+/// reflects it arrives a moment after (the success itself refreshes the server). </summary>
 public class ServiceActionTrackerTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);

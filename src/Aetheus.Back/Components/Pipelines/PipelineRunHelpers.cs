@@ -63,7 +63,7 @@ public static partial class PipelineRunHelpers
         return masked;
     }
 
-    // Recette R-263: both readers moved with the run list row to Monitoring.PipelineRunListRows.
+    // Run-list readers delegate to the Monitoring read model.
     public static Dictionary<string, string> DeserializeResolvedVariables(string? json) =>
         PipelineRunListRows.DeserializeResolvedVariables(json);
 

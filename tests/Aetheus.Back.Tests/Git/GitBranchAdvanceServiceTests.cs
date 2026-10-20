@@ -67,8 +67,8 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
     [Fact]
     public async Task R2105_A_Branch_Already_Past_The_Commit_Contains_It_And_Is_Left_Alone()
     {
-        // Recette R2-105: 'main' pushed past the deployed candidate (and the rollback case, an older
-        // release deployed): the branch already holds the commit, it is not moved backwards.
+        // 'main' pushed past the deployed candidate (and the rollback case, an older release
+        // deployed): the branch already holds the commit, it is not moved backwards.
         var first = Commit("one");
         var second = Commit("two");
         SetBareRef("refs/heads/main", second);

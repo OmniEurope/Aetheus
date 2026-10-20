@@ -21,13 +21,14 @@ public interface IAppMetricRepository
     /// the UI can offer a series picker instead of merging unrelated attribute sets into one line.</summary>
     Task<List<string?>> GetMetricAttributeGroupsAsync(int appId, string metricName, CancellationToken ct = default);
 
-    /// <summary>R-455: the newest point of each series of <paramref name="metricNames"/> among the samples
-    /// written within <paramref name="lookback"/> of the newest one. R2-082: an idle route is not exported,
+    /// <summary>The newest point of each series of <paramref name="metricNames"/> among the samples
+    /// written within <paramref name="lookback"/> of the newest one. an idle route is not exported,
     /// so its newest point may be older than the application's last export.</summary>
     Task<List<AppMetricSample>> GetLatestExportAsync(int appId, IReadOnlyCollection<string> metricNames, TimeSpan lookback, CancellationToken ct = default);
 
-    /// <summary>PLAN-013 lot 1: the newest point of each series of <paramref name="metricNames"/> written
-    /// between <paramref name="floor"/> and <paramref name="ceiling"/> (the trend's earlier measurement).</summary>
+    /// <summary>The newest point of each series of <paramref name="metricNames"/> written between
+    /// <paramref name="floor"/> and <paramref name="ceiling"/> (the trend's earlier
+    /// measurement).</summary>
     Task<List<AppMetricSample>> GetLatestBetweenAsync(int appId, IReadOnlyCollection<string> metricNames, DateTime floor, DateTime ceiling, CancellationToken ct = default);
 
     /// <summary>The distinct instants of the application's samples since <paramref name="since"/>, newest
@@ -46,9 +47,11 @@ public interface IAppMetricRepository
     Task SaveChangesAsync(CancellationToken ct = default);
 
     // Retention
-    /// <summary>R2-020: rolls up one completed hour, application by application; a no-op for the rolled-up ones.</summary>
+    /// <summary>Rolls up one completed hour, application by application; a no-op for the rolled-up
+    /// ones.</summary>
     Task<int> AggregateHourAsync(DateTime hourUtc, CancellationToken ct = default);
-    /// <summary>PLAN-013 lot 4: purges the samples of these applications only, each project having its own duration.</summary>
+    /// <summary>Purges the samples of these applications only, each project having its own
+    /// duration.</summary>
     Task<int> PurgeRawOlderThanAsync(DateTime cutoff, IReadOnlyCollection<int> appIds, CancellationToken ct = default);
     Task<int> PurgeHourlyOlderThanAsync(DateTime cutoff, IReadOnlyCollection<int> appIds, CancellationToken ct = default);
 }

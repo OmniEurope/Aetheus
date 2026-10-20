@@ -3,12 +3,9 @@ using System.Data.Common;
 
 namespace Aetheus.Telemetry;
 
-/// <summary>
-/// The optional database size measurement (PLAN-013 lot 1, R2-113): the size of the host's database and
-/// of its largest tables, read from the PostgreSQL catalog, never a row of their content. Off by default;
-/// the host turns it on by handing over a connection it already has (<see cref="UsePostgreSql"/>), and
-/// configuration (<c>Aetheus:Telemetry:DatabaseSize</c>) bounds how often and how many tables.
-/// </summary>
+/// <summary>Optionally measure database and largest-table sizes from PostgreSQL metadata without
+/// reading table contents. Enable through a host-provided connection, with configuration bounding
+/// interval and table count.</summary>
 public sealed class DatabaseSizeOptions
 {
     public const int DefaultIntervalMinutes = 15;

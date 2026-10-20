@@ -10,7 +10,7 @@ public partial class PipelineRunAiResultsCard
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
-    // Recette R-210: header filter text, built once so the column sees the same delegate on every render.
+    // Header filter text, built once so the column sees the same delegate on every render.
     private Func<string, string>? _verdictText;
     private Func<string, string> VerdictText => _verdictText ??= GridFilterText.ForEnum<AiVerdict>(L);
 

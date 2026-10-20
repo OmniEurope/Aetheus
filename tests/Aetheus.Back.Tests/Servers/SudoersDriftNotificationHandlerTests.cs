@@ -12,12 +12,9 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>
-/// Audit R2-023 follow-up: a sudoers drift was only pushed to the browsers connected at that moment.
-/// Over the real user notification service and repository, it is now recorded in the notifications of
-/// every active administrator (a server attached to no project has no subscriber) and handed to the
-/// <c>alert.triggered</c> notification rules.
-/// </summary>
+/// <summary>Exercise the notification service and repository to persist sudoers drift for active
+/// administrators and dispatch alert.triggered rules independently of project
+/// subscriptions.</summary>
 public sealed class SudoersDriftNotificationHandlerTests : IDisposable
 {
     private static readonly DateTime Now = new(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc);

@@ -28,9 +28,9 @@ public partial class PipelineDependencyGrid
 
     private IReadOnlyList<PipelineDependencyDto> DisplayItems => Items;
 
-    // Recette R-213: header filters of the catalogue. The model and status columns have no property of
-    // their own, so they carry a key and read the fleet data; every delegate is built once so the
-    // columns see the same one on every render.
+    // Header filters of the catalogue. The model and status columns have no property of their own,
+    // so they carry a key and read the fleet data; every delegate is built once so the columns see
+    // the same one on every render.
     internal const string TemplateColumn = "Template";
     internal const string StatusColumn = "CatalogStatus";
     private static readonly string[] AllStatusCandidates =
@@ -62,8 +62,8 @@ public partial class PipelineDependencyGrid
             .Distinct()];
     private string GridCssClass => $"pipeline-dependency-grid aetheus-clickable-rows{(FillHeight ? " pipeline-grid-fill" : string.Empty)}{(Virtualize ? " pipeline-grid-virtualized pipeline-grid-five-rows" : string.Empty)}";
 
-    /// <summary>Recette R-121: decided per row, not per grid. A row expands only when it launches
-    /// other pipelines; a leaf shows no chevron.</summary>
+    /// <summary>Decided per row, not per grid. A row expands only when it launches other pipelines;
+    /// a leaf shows no chevron.</summary>
     internal static bool HasChildren(PipelineDependencyDto pipeline) => pipeline.References.Count > 0;
 
     private bool IsFavorite(int pipelineId) => FavoritePipelineIds.Contains(pipelineId);
@@ -77,11 +77,11 @@ public partial class PipelineDependencyGrid
         _ => L["AutonomousPipeline"]
     };
 
-    private static OmniTone FreshnessStyle(PipelineFleetFreshness freshness) => freshness switch
+    internal static OmniTone FreshnessStyle(PipelineFleetFreshness freshness) => freshness switch
     {
         PipelineFleetFreshness.Current => OmniTone.Success,
-        // Recette R2-145: a pinned version is a choice (aetheus-candidate pins application-candidate@1 on
-        // purpose), not a delay: a newer version in the catalogue is information, not a warning.
+        // A pinned version is a choice (aetheus-candidate pins application-candidate@1 on purpose),
+        // not a delay: a newer version in the catalogue is information, not a warning.
         PipelineFleetFreshness.Outdated => OmniTone.Info,
         _ => OmniTone.Neutral
     };

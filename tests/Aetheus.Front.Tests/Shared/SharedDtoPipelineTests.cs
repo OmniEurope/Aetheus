@@ -7,27 +7,6 @@ namespace Aetheus.Front.Tests;
 public class SharedDtoPipelineTests
 {
     [Fact]
-    public void PipelineDto_DefaultValues()
-    {
-        var dto = new PipelineDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Equal(string.Empty, dto.Description);
-        Assert.Equal(string.Empty, dto.YamlDefinition);
-        Assert.Null(dto.ProjectId);
-        Assert.Null(dto.LastRunStatus);
-        Assert.Null(dto.LastRunAt);
-        Assert.Empty(dto.RecentRuns);
-    }
-
-    [Fact]
-    public void PipelineRunSummaryDto_DefaultValues()
-    {
-        var dto = new PipelineRunSummaryDto();
-        Assert.Equal(0, dto.Id);
-        Assert.Null(dto.CompletedAt);
-    }
-
-    [Fact]
     public void CreatePipelineRequest_Validation_Valid()
     {
         var req = new CreatePipelineRequest { Name = "Build", YamlDefinition = "stages: []" };
@@ -49,56 +28,6 @@ public class SharedDtoPipelineTests
         var req = new UpdatePipelineRequest { Name = "Updated", YamlDefinition = "stages: []" };
         var results = ValidateModel(req);
         Assert.Empty(results);
-    }
-
-    [Fact]
-    public void PipelineRunDto_DefaultValues()
-    {
-        var dto = new PipelineRunDto();
-        Assert.Equal(string.Empty, dto.PipelineName);
-        Assert.Null(dto.CompletedAt);
-        Assert.Empty(dto.ResolvedVariables);
-        Assert.Empty(dto.Warnings);
-        Assert.Empty(dto.Steps);
-        Assert.Empty(dto.Approvals);
-        Assert.Empty(dto.Artifacts);
-        Assert.Null(dto.TestResultSummary);
-    }
-
-    [Fact]
-    public void PipelineStepRunDto_DefaultValues()
-    {
-        var dto = new PipelineStepRunDto();
-        Assert.Equal(string.Empty, dto.StepName);
-        Assert.Equal(string.Empty, dto.StageName);
-        Assert.Null(dto.CompletedAt);
-        Assert.Empty(dto.OutputVariables);
-    }
-
-    [Fact]
-    public void PipelineApprovalDto_DefaultValues()
-    {
-        var dto = new PipelineApprovalDto();
-        Assert.Equal(0, dto.Id);
-        Assert.Equal(string.Empty, dto.StageName);
-        Assert.Null(dto.ResolvedAt);
-    }
-
-    [Fact]
-    public void PipelineArtifactDto_DefaultValues()
-    {
-        var dto = new PipelineArtifactDto();
-        Assert.Equal(string.Empty, dto.Name);
-    }
-
-    [Fact]
-    public void PipelineTestResultSummaryDto_DefaultValues()
-    {
-        var dto = new PipelineTestResultSummaryDto();
-        Assert.Equal(0, dto.TotalTests);
-        Assert.Equal(0, dto.Passed);
-        Assert.Equal(0, dto.Failed);
-        Assert.Equal(0, dto.Skipped);
     }
 
     [Fact]

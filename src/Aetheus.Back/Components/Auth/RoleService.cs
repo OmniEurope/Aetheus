@@ -182,14 +182,9 @@ public class RoleService(
         return await BuildPermissionSummaryAsync(user, ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Recette R2-014: the bootstrap identity (the deployment smoke test's run-scoped account, or the
-    /// configured bootstrap admin) is signed in without a user row, so the user lookup found nothing and
-    /// the endpoint answered 404 after every delivery. Its summary is read from its token instead: the
-    /// role claims it carries and the permissions those roles grant, nothing else (no organization
-    /// membership, which belongs to user rows). It is never looked up by name, so a user row that
-    /// happens to share the name lends it nothing.
-    /// </summary>
+    /// <summary>Build summaries for identities without user rows from token roles and their
+    /// permissions, without organisation memberships. Never borrow authority from a user row
+    /// sharing the same name.</summary>
     private async Task<UserPermissionSummaryDto> BuildBootstrapPermissionSummaryAsync(
         ClaimsPrincipal principal, CancellationToken ct)
     {

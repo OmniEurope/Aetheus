@@ -51,14 +51,17 @@
                            Class="w-rem-16"  ValueExpression="@(() => _searchText)"/>
         </OmniStack>
 
-        @* Recette R-181: no Refresh and no polling toggle, the page follows the log files live. *@
+        @* No Refresh and no polling toggle, the page follows the log files live. *@
 
+        @* STD-BTN detection 11: Download visible, the other actions in the menu. *@
         @if (!string.IsNullOrWhiteSpace(_selectedFile))
         {
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="OnDownloadAsync" Class="@(_isDownloading ? "btn-busy" : null)" Busy="@(_isDownloading)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Download"]</span></OmniButton>
         }
 
-        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="OnPurgeAsync" title="@L["PurgeLogs"]"><OmniIcon Name="OmniIconName.Broom" /> <span>@L["Purge"]</span></OmniButton>
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem Tone="OmniTone.Danger" OnClick="OnPurgeAsync" title="@L["PurgeLogs"]"><Icon><OmniIcon Name="OmniIconName.Broom" /></Icon><ChildContent>@L["Purge"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
     </OmniRow>
 </OmniCard>
 
@@ -66,10 +69,8 @@
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">@L["LoadFailed"]</OmniAlert>
 }
-@* Recette R-453 (after R-240 / R-202): no "Load more". The grid reads the log from the API block by
-   block as it scrolls (remote virtualization); the filters of the bar above, the column sort and the
-   header filters travel with each block and the API applies them to the whole log, not to the rows
-   already on screen. *@
+@* Fetch virtualized log blocks with bar filters, sort and column filters applied by the API to the
+   entire log. *@
 <AetheusDataGrid ShowFooterBar="true" @ref="_grid" TItem="SystemLogEntryDto" Data="@_items" Count="@_total" IsLoading="@_loading"
                  LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="50" Virtualize="@AetheusGrid.RemoteVirtualization"
                  VirtualData="@(() => new OmniDataGridResult<SystemLogEntryDto>(_items, _total))"

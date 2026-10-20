@@ -3,10 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>Guards accessible labels on the OE switches. A switch is named by the text it carries
-/// between its tags (OmniSwitch draws its content inside its button; recette R-381 retired the local
-/// LabeledToggle wrapper, which relied on the same thing), by aria-label/aria-labelledby, or is a
-/// decorative, keyboard-inert mirror inside a clickable wrapper.</summary>
+/// <summary>Switches require content or ARIA labels unless they are decorative, keyboard-inert
+/// mirrors inside named clickable wrappers.</summary>
 public class ToggleLabelAssociationAuditTests
 {
     [Fact]

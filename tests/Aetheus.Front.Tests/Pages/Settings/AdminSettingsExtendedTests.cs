@@ -38,7 +38,7 @@ public class AdminSettingsExtendedTests : BunitContext
         SetupAllMocks();
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         var method = typeof(AdminSettings).GetMethod("CopyToken", BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -58,7 +58,7 @@ public class AdminSettingsExtendedTests : BunitContext
         SetupAllMocks(settings: []);
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // Buffer is empty; key "NonExistent" is not in _editBuffer - covers the TryGetValue guard
         var notif = Services.GetRequiredService<OmniOverlayService>();
@@ -76,7 +76,7 @@ public class AdminSettingsExtendedTests : BunitContext
         _handler.SetJsonResponse("api/settings/SiteName", true);
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         var method = typeof(AdminSettings).GetMethod("SaveSetting", BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -94,7 +94,7 @@ public class AdminSettingsExtendedTests : BunitContext
         SetupAllMocks();
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var toggle = typeof(AdminSettings).GetMethod("ToggleTokenReveal", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var field = typeof(AdminSettings).GetField("_revealedTokens", BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -113,7 +113,7 @@ public class AdminSettingsExtendedTests : BunitContext
         SetupAllMocks();
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var toggle = typeof(AdminSettings).GetMethod("ToggleTokenReveal", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var field = typeof(AdminSettings).GetField("_revealedTokens", BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -141,7 +141,7 @@ public class AdminSettingsExtendedTests : BunitContext
         SetupAllMocks();
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         _handler.SetResponse("api/auth/registration-tokens", System.Net.HttpStatusCode.NotFound);
 
@@ -164,7 +164,7 @@ public class AdminSettingsExtendedTests : BunitContext
         SetupAllMocks();
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         _handler.SetResponse("api/settings/secrets", System.Net.HttpStatusCode.NotFound);
 
@@ -191,7 +191,7 @@ public class AdminSettingsExtendedTests : BunitContext
         ]);
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var settings = (List<AppSettingDto>)typeof(AdminSettings)
             .GetField("_settings", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -209,7 +209,7 @@ public class AdminSettingsExtendedTests : BunitContext
         ]);
 
         var cut = Render<AdminSettings>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var tokens = (List<RegistrationTokenDto>)typeof(AdminSettings)
             .GetField("_tokens", BindingFlags.NonPublic | BindingFlags.Instance)!

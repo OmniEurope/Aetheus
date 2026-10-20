@@ -12,6 +12,8 @@ namespace Aetheus.E2E;
 [Category("Projects")]
 public class ProjectsTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     [SetUp]
     public async Task SetUp()
     {
@@ -25,8 +27,8 @@ public class ProjectsTests : E2ETestBase
         await Expect(Page.GetByText("Projects").First).ToBeVisibleAsync(new() { Timeout = 10000 });
         await Expect(Page).ToHaveTitleAsync(new System.Text.RegularExpressions.Regex("Projects"));
 
-        // Scope to the page header's actions - the empty-state also renders a create CTA when the list
-        // is empty. PLAN-003 lot 1 moved the button into the header; recette R-220 named it "Create".
+        // Scope Create to page-header actions because the empty state can also expose a creation
+        // button.
         var newButton = Page.Locator(".omni-page-header__actions").GetByRole(AriaRole.Button, new() { Name = "Create", Exact = true });
         await Expect(newButton).ToBeVisibleAsync(new() { Timeout = 10000 });
         var searchBox = Page.Locator(".project-list-search");
@@ -45,9 +47,8 @@ public class ProjectsTests : E2ETestBase
 
         var dropdown = Page.Locator("select.omni-drop-down").First;
         await Expect(dropdown).ToBeVisibleAsync();
-        // PLAN-003 lot 6 took the "N total" badge and the Refresh button out of this header: the list
-        // already reloads itself on every project change (EntityChanged on the entities hub). The
-        // header is held to that decision rather than left unchecked.
+        // Assert that the header omits total and refresh controls because entity events already
+        // refresh the project list.
         var header = Page.Locator(".omni-page-header");
         await Expect(header.Locator("button[title='Refresh']")).ToHaveCountAsync(0);
         await Expect(header.Locator(".omni-badge").Filter(new() { HasTextRegex = new System.Text.RegularExpressions.Regex(@"\d+\s*total", System.Text.RegularExpressions.RegexOptions.IgnoreCase) }))
@@ -55,6 +56,7 @@ public class ProjectsTests : E2ETestBase
     }
 
     [Test]
+    [RollbackRelevant]
     public async Task Projects_NewProject_PersistsAndIsDeletedThroughTheUi()
     {
         var projectName = $"e2e-project-{Guid.NewGuid():N}";
@@ -91,8 +93,8 @@ public class ProjectsTests : E2ETestBase
             {
                 NameRegex = new System.Text.RegularExpressions.Regex("Delete$")
             }).ClickAsync();
-            // Recette R2-122: the deletion counts what it removes and asks for the project's name before
-            // its Delete button wakes up.
+            // The deletion counts what it removes and asks for the project's name before its Delete
+            // button wakes up.
             var deleteDialog = Page.GetByRole(AriaRole.Dialog, new() { Name = "Delete the project", Exact = true });
             await Expect(deleteDialog).ToBeVisibleAsync(new() { Timeout = 5000 });
             var submit = deleteDialog.Locator("#project-delete-submit");
@@ -136,27 +138,16 @@ public class ProjectsTests : E2ETestBase
     }
 
     [Test]
-    public async Task Projects_NavigateFromSidebar_Works()
-    {
-        await NavigateToAsync("");
-        var nav = Page.Locator(".omni-panel-menu");
-        await nav.GetByText("Projects").ClickAsync();
-
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/projects"), new() { Timeout = 5000 });
-    }
-
-    [Test]
     [NewSinceDeployedBaseline("R-455")]
     public async Task TotoMonitoring_ShowsPersistedTelemetryAudienceAndPerformance()
     {
         var evidence = await SeedTotoMonitoringEvidenceAsync();
 
         await NavigateToAsync($"projects/{evidence.ProjectId}/monitoring?tab=telemetry");
-        // PLAN-003 D7: a project section is titled by the section, and the project it belongs to is
-        // its ancestor in the trail, a link back to the project.
+        // A project section uses its section title and a linked project ancestor in the breadcrumb.
         await Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Monitoring", Exact = true }))
             .ToBeVisibleAsync(new() { Timeout = 10000 });
-        // R-395: the trail is OmniPageHeader's own, an OmniBreadcrumb navigation landmark named by OE.
+        // The trail is OmniPageHeader's own, an OmniBreadcrumb navigation landmark named by OE.
         var projectCrumb = Page.GetByRole(AriaRole.Navigation, new() { Name = "Breadcrumb", Exact = true })
             .GetByRole(AriaRole.Link, new() { Name = evidence.ProjectName, Exact = true });
         await Expect(projectCrumb).ToBeVisibleAsync(new() { Timeout = 10000 });
@@ -175,11 +166,10 @@ public class ProjectsTests : E2ETestBase
         await Expect(Page.GetByText("Average browser navigation", new() { Exact = true }))
             .ToBeVisibleAsync();
 
-        // The month's top pages moved to their own sub-tab (R-355): asserted by
-        // TotoMonitoring_TopPagesHaveTheirOwnTelemetryTab, so this test stays valid on a V-1 without it.
+        // Top-page telemetry has its own dedicated test so this scenario remains applicable to a
+        // preceding release without that tab.
 
-        // R-455: the Performance tab replaced Metrics; the metric chart lives in its "Explore a metric"
-        // disclosure, rendered only once opened.
+        // Open the Performance metric disclosure before inspecting its lazily rendered chart.
         await Page.GetByRole(AriaRole.Tab, new() { Name = "Performance", Exact = true }).ClickAsync();
         await Page.Locator("summary.omni-fieldset__summary", new() { HasText = "Explore a metric" }).ClickAsync();
         var metricChart = Page.Locator(".omni-chart:visible").First;

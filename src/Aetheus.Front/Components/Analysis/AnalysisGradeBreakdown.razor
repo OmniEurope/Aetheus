@@ -1,13 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R2-052: what a grade is made of, domain by domain and measure by measure (observed value, its
-   letter, how far the next letter is). It was drawn only on the project's Quality page; a run's Quality
-   tab showed a B over "0 findings" and nothing else, because a measure is often a metric (coverage,
-   duplication, complexity, a dependency cycle) with no finding behind it. Both pages now draw this. *@
+@* Show domain and measure breakdowns on both project and run Quality pages. Metrics such as
+   coverage or complexity can affect a grade without producing findings. *@
 @if (Grade is not null)
 {
-    @* Recette R-176: two wide columns, one line per measure (label, value, grade); a domain with nothing
-       to show is a compact muted line after the cards. Recette R2-139: no "limiting domain" sentence,
-       every domain that sets the grade has its title in bold instead. *@
+    @* Use two columns with one line per measure and compact empty domains. Bold each domain title
+       that determines the overall grade. *@
     <div class="analysis-grade-domains">
         @foreach (var domain in Domains.Where(HasDetails))
         {
@@ -20,7 +17,7 @@
                 {
                     <div class="analysis-grade-domain-state">@L["Incomplete"]</div>
                 }
-                @foreach (var measure in domain.Measures)
+                @foreach (var measure in domain.Measures.Where(IsShown))
                 {
                     <div class="analysis-grade-measure">
                         <span class="analysis-grade-measure-label" title="@MeasureLabel(measure.Key)">@MeasureLabel(measure.Key)</span>

@@ -33,7 +33,7 @@ public partial class Users : IAsyncDisposable
         if (!AdminPageEntry.TryEnter(Auth, Nav, Breadcrumb, L, "Users"))
             return;
 
-        // Recette R-316: the search shared with Organizations and Roles, in the section bar.
+        // The search shared with Organizations and Roles, in the section bar.
         Search.Changed += OnSharedSearchChangedAsync;
         // Realtime: reload the grid whenever any session creates/updates/deletes a user (the creator
         // also receives this broadcast, so the list refreshes even within the acting session). RT4M.
@@ -42,7 +42,7 @@ public partial class Users : IAsyncDisposable
             () => InvokeAsync(async () =>
             {
                 Cache.InvalidatePrefix("users:");
-                // Recette R-226: a change pushed by the hub refreshes the grid quietly (rows, page, filters kept).
+                // A change pushed by the hub refreshes the grid quietly (rows, page, filters kept).
                 await RefreshSilentlyAsync(() => _grid?.Refresh() ?? Task.CompletedTask);
             }));
         // Stale-while-revalidate: pre-seed the grid from the cached default view (grid PageSize = 20)
@@ -52,7 +52,7 @@ public partial class Users : IAsyncDisposable
         await LoadRoleNamesAsync();
     }
 
-    // Recette R-210: the role names the Roles header filter offers (every role, not only those on screen).
+    // The role names the Roles header filter offers (every role, not only those on screen).
     private async Task LoadRoleNamesAsync()
     {
         try
@@ -76,7 +76,8 @@ public partial class Users : IAsyncDisposable
         _totalCount = result.TotalCount;
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// grid.</summary>
     private Task<PaginatedResult<UserDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -89,7 +90,7 @@ public partial class Users : IAsyncDisposable
         _loadFailed = false;
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, sortDescending) = args.ToSortRequest(nameof(UserDto.Username));
-        // Recette R-210 / R-224: the header filters, applied by the API (and part of the cache key).
+        // The header filters, applied by the API (and part of the cache key).
         _columnFilters = args.ToApiFilters();
         var filters = _columnFilters;
         var search = Search.Search;
@@ -116,8 +117,8 @@ public partial class Users : IAsyncDisposable
         if (_grid is not null) await _grid.GoToPage(0);
     }
 
-    // Recette R-316: a new term reloads the first page even when the grid is already on it (a plain
-    // GoToPage(0) is a no-op there, which left the list unfiltered while the counts moved).
+    // Reload page zero explicitly when the search changes, since GoToPage(0) alone does nothing
+    // when already there.
     private Task OnSharedSearchChangedAsync() => _grid?.GoToPage(0, forceReload: true) ?? Task.CompletedTask;
 
     private async Task RefreshSilentlyAsync(Func<Task> refresh)
@@ -180,6 +181,6 @@ public partial class Users : IAsyncDisposable
         if (_adminRt is not null) await _adminRt.DisposeAsync();
     }
 
-    /// <summary>Recette R2-124: the export writes every role of the user, the cell shows three.</summary>
+    /// <summary>The export writes every role of the user, the cell shows three.</summary>
     private static readonly Func<UserDto, object?> RolesExport = user => string.Join(", ", user.Roles);
 }

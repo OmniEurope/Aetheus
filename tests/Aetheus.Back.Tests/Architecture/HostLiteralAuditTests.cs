@@ -3,16 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 2.1, "zéro nom en dur": a value that names a host or an environment (a domain, a state
-/// directory, an Apache path, a port of the production box, an environment's Compose project) lives in
-/// a variable library, never in a deployment script or a pipeline definition. Every such literal that
-/// existed was replaced by a library key or a name derived from the run; this keeps a new one out.
-/// <para>
-/// Comment lines are not scanned: they explain history ("nightly 1204 failed on demo.aetheus...") and
-/// name pipeline files, which is documentation rather than a value anything runs with.
-/// </para>
-/// </summary>
+/// <summary>Host and environment values come from configuration or run-derived names rather than
+/// deployment literals. Comment lines are excluded because they do not supply executable
+/// values.</summary>
 public sealed partial class HostLiteralAuditTests
 {
     private static readonly string Root = RepositoryScan.Root;
@@ -50,14 +43,12 @@ public sealed partial class HostLiteralAuditTests
     public void TheLiteralPattern_LeavesDerivedNamesAlone(string line) =>
         Assert.DoesNotMatch(HostLiteral(), line);
 
-    /// <summary>Shell and Node scripts under deploy/scripts except the disposable QA stacks and the
-    /// tests, and every pipeline definition and configuration template under .pipeline.</summary>
+    /// <summary>Shell and Node scripts under deploy/scripts except the tests, and every pipeline definition and configuration template under .pipeline.</summary>
     private static IEnumerable<string> Candidates()
     {
         var scripts = RepositoryScan.Enumerate(Path.Combine(Root, "deploy", "scripts"), "*")
             .Where(path => path.EndsWith(".sh", StringComparison.Ordinal)
-                || (path.EndsWith(".mjs", StringComparison.Ordinal) && !path.EndsWith(".test.mjs", StringComparison.Ordinal)))
-            .Where(path => !path.Replace('\\', '/').Contains("/deploy/scripts/qa/", StringComparison.Ordinal));
+                || (path.EndsWith(".mjs", StringComparison.Ordinal) && !path.EndsWith(".test.mjs", StringComparison.Ordinal)));
         var pipelines = RepositoryScan.Enumerate(Path.Combine(Root, ".pipeline"), "*")
             .Where(path => path.EndsWith(".yaml", StringComparison.Ordinal)
                 || path.EndsWith(".yml", StringComparison.Ordinal)

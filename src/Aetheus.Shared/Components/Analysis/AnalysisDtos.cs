@@ -42,8 +42,8 @@ public sealed record AnalysisReportDto
 
 public sealed record AnalysisRunGateDto
 {
-    /// <summary>Recette R-485: <c>GET runs/{id}/result</c> lists at most this many findings, the most
-    /// severe; the counts cover them all and <c>GET runs/findings</c> pages through the rest.</summary>
+    /// <summary><c>GET runs/{id}/result</c> lists at most this many findings, the most severe; the
+    /// counts cover them all and <c>GET runs/findings</c> pages through the rest.</summary>
     public const int SummaryFindingLimit = 50;
 
     public int PipelineRunId { get; init; }
@@ -51,9 +51,9 @@ public sealed record AnalysisRunGateDto
     public int ReportCount { get; init; }
     public int FindingCount { get; init; }
     public int NewFindingCount { get; init; }
-    /// <summary>Recette R-527: the findings of the run that are no longer open (accepted, false
-    /// positive, mitigated, fixed since). They are left out of <see cref="FindingCount"/> and
-    /// <see cref="NewFindingCount"/>; the list carries them, hidden until asked for.</summary>
+    /// <summary>The findings of the run that are no longer open (accepted, false positive,
+    /// mitigated, fixed since). They are left out of <see cref="FindingCount"/> and <see
+    /// cref="NewFindingCount"/>; the list carries them, hidden until asked for.</summary>
     public int DecidedFindingCount { get; init; }
     public int ComponentCount { get; init; }
     public int MetricCount { get; init; }
@@ -248,13 +248,13 @@ public sealed record AnalysisFindingPaginationRequest : PaginationRequest
     public AnalysisSeverity? Severity { get; init; }
     public AnalysisFindingStatus? Status { get; init; }
 
-    /// <summary>Recette R-210: several categories ticked in the column filter; a finding matches any.</summary>
+    /// <summary>Several categories ticked in the column filter; a finding matches any.</summary>
     [MaxLength(32)] public List<AnalysisCategory>? Categories { get; init; }
 
-    /// <summary>Recette R-210: several severities; a finding matches any.</summary>
+    /// <summary>Several severities; a finding matches any.</summary>
     [MaxLength(32)] public List<AnalysisSeverity>? Severities { get; init; }
 
-    /// <summary>Recette R-210: several statuses; a finding matches any.</summary>
+    /// <summary>Several statuses; a finding matches any.</summary>
     [MaxLength(32)] public List<AnalysisFindingStatus>? Statuses { get; init; }
 
     public bool? IsNew { get; init; }
@@ -277,10 +277,8 @@ public sealed record AnalysisFindingPaginationRequest : PaginationRequest
     public string? Responsible { get; init; }
 }
 
-/// <summary>
-/// Recette R-485: one page of the findings a set of pipeline runs observed (a run and the runs it
-/// triggered, as its Gate tab merges them), most severe first.
-/// </summary>
+/// <summary> One page of the findings a set of pipeline runs observed (a run and the runs it
+/// triggered, as its Gate tab merges them), most severe first. </summary>
 public sealed record AnalysisRunFindingsRequest : PaginationRequest
 {
     public const int MaxRuns = 50;
@@ -288,8 +286,8 @@ public sealed record AnalysisRunFindingsRequest : PaginationRequest
     [Required, MinLength(1), MaxLength(MaxRuns)]
     public List<int> RunIds { get; init; } = [];
 
-    /// <summary>Recette R-527: the findings already decided on (accepted, false positive, mitigated,
-    /// fixed since) are left out unless asked for.</summary>
+    /// <summary>The findings already decided on (accepted, false positive, mitigated, fixed since)
+    /// are left out unless asked for.</summary>
     public bool IncludeDecided { get; init; }
 
     /// <summary>The Gate tab's column filters; <see cref="PaginationRequest.Search"/> matches the title or the rule.</summary>
@@ -310,8 +308,8 @@ public sealed record AnalysisRunFindingsRequest : PaginationRequest
     public int? IdNot { get; init; }
 }
 
-/// <summary>Recette R-485: a page of run findings with the counts of the whole set, worked out by the
-/// database (a finding observed by several runs of the set counts once).</summary>
+/// <summary>A page of run findings with the counts of the whole set, worked out by the database (a
+/// finding observed by several runs of the set counts once).</summary>
 public sealed record AnalysisRunFindingsPageDto
 {
     public IReadOnlyList<AnalysisRunGateFindingDto> Items { get; init; } = [];
@@ -360,8 +358,8 @@ public sealed record AnalysisPortfolioRowDto
     public int WarningCount { get; init; }
     public DateTime CompletedAt { get; init; }
 
-    /// <summary>Recette R-373: the internal repository the report's run built, when its clone URL names
-    /// one, so the commit links to its Aetheus page; null otherwise (the commit is then text).</summary>
+    /// <summary>The internal repository the report's run built, when its clone URL names one, so
+    /// the commit links to its Aetheus page; null otherwise (the commit is then text).</summary>
     public int? RepositoryId { get; init; }
 }
 
@@ -394,14 +392,14 @@ public sealed record AnalysisProjectSummaryDto
     public DateTime? LastAnalysisAt { get; init; }
     public AnalysisGradeSummaryDto? Grade { get; init; }
 
-    /// <summary>Recette R-430: the recorded commit the grade was measured on (its page), when the
-    /// project's commit history holds it.</summary>
+    /// <summary>The recorded commit the grade was measured on (its page), when the project's commit
+    /// history holds it.</summary>
     public int? GradeCommitId { get; init; }
 
-    /// <summary>Recette R-430: the pipeline run of the project's latest analysis evaluation.</summary>
+    /// <summary>The pipeline run of the project's latest analysis evaluation.</summary>
     public int? LastAnalysisRunId { get; init; }
 
-    /// <summary>Recette R-430: the project's latest release (published first, then detected).</summary>
+    /// <summary>The project's latest release (published first, then detected).</summary>
     public int? LatestReleaseId { get; init; }
     [StringLength(200)] public string? LatestReleaseVersion { get; init; }
 }

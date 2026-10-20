@@ -16,7 +16,7 @@ internal static class GitCommitCountCache
         int repoId, string diskPath, string? effectiveRef, string? search, CancellationToken ct,
         GitCommitLogFilter? filter = null)
     {
-        // Recette R-224 / R2-004: the column filters change the total, so they are part of the key.
+        // Include column filters in the cache key because they change the total.
         var key = $"git:commit-count:{repoId}:{effectiveRef}:{search}:{filter?.CacheText()}";
         if (cache.TryGetValue(key, out int cached)) return cached;
         var count = await cli.GetCommitCountAsync(diskPath, effectiveRef, search, ct, filter).ConfigureAwait(false);

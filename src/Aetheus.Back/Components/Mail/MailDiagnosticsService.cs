@@ -16,16 +16,16 @@ public interface IMailDiagnosticsService
     /// <summary>Verifies the DNS of one domain now and persists its SPF / DKIM / DMARC flags.</summary>
     Task<MailDnsCheckDto> VerifyDomainDnsAsync(int serverId, int domainId, CancellationToken ct = default);
 
-    /// <summary>Recette R2-080: the DNS prerequisites of a first configuration, for the host name the setup
-    /// assistant proposes: its A record resolves to the server, the server's reverse DNS names it.</summary>
+    /// <summary>The DNS prerequisites of a first configuration, for the host name the setup
+    /// assistant proposes: its A record resolves to the server, the server's reverse DNS names
+    /// it.</summary>
     Task<MailDiagnosticsDto> CheckPrerequisitesAsync(int serverId, string hostname, CancellationToken ct = default);
 }
 
-/// <summary>
-/// PLAN-005 lot 7: a "why does my mail not work" checklist computed without SSH, from the last heartbeat
-/// inventory and backend DNS lookups. Keys and details are stable codes the UI localises. The listening
-/// ports are checked on the server itself by the <c>MailTestConfig</c> task (mail-manage check).
-/// </summary>
+/// <summary> A "why does my mail not work" checklist computed without SSH, from the last heartbeat
+/// inventory and backend DNS lookups. Keys and details are stable codes the UI localises. The
+/// listening ports are checked on the server itself by the <c>MailTestConfig</c> task (mail-manage
+/// check). </summary>
 public sealed class MailDiagnosticsService(
     IMailInventoryRepository inventory,
     IMailRepository mailRepo,
@@ -34,7 +34,7 @@ public sealed class MailDiagnosticsService(
     IMailDnsVerifier verifier,
     TimeProvider timeProvider) : IMailDiagnosticsService
 {
-    internal const int CurrentHelperVersion = 3;
+    internal const int CurrentHelperVersion = 6;
     internal static readonly TimeSpan CertificateWarning = TimeSpan.FromDays(14);
     private const int MaxDomainsChecked = 20;
 
@@ -137,7 +137,7 @@ public sealed class MailDiagnosticsService(
         _ => Item("spam-filter", MailCheckVerdict.Missing)
     };
 
-    private static MailDiagnosticItemDto Certificate(MailState state, DateTime now)
+    internal static MailDiagnosticItemDto Certificate(MailState state, DateTime now)
     {
         if (string.IsNullOrEmpty(state.TlsCertPath)) return Item("tls", MailCheckVerdict.Missing);
         if (!state.TlsIsReadable) return Item("tls", MailCheckVerdict.Unknown, "unreadable");
@@ -150,7 +150,7 @@ public sealed class MailDiagnosticsService(
     private async Task<MailDiagnosticItemDto> HostnameAsync(string hostname, string serverIp, CancellationToken ct)
     {
         if (!MailValidation.IsValidDomainName(hostname)) return Item("hostname-dns", MailCheckVerdict.Unknown, "no-hostname");
-        // Recette R2-090: the record the line expects, shown to copy when the line is red.
+        // The record the line expects, shown to copy when the line is red.
         var record = string.IsNullOrWhiteSpace(serverIp)
             ? Item("hostname-dns", MailCheckVerdict.Unknown)
             : Item("hostname-dns", MailCheckVerdict.Unknown) with
@@ -193,8 +193,8 @@ public sealed class MailDiagnosticsService(
         }
     }
 
-    /// <summary>MX, then (recette R2-090) SPF, DKIM and DMARC of every active domain, each with the record to
-    /// publish. Read-only: the verifier's <c>CheckAsync</c> leaves the domains' stored flags alone.</summary>
+    /// <summary>Check MX, SPF, DKIM and DMARC for each active domain and provide the records to
+    /// publish. CheckAsync is read-only and leaves stored flags unchanged.</summary>
     private async Task<List<MailDiagnosticItemDto>> DomainDnsAsync(int serverId, string hostname, string serverAddress, CancellationToken ct)
     {
         var domains = (await mailRepo.GetDomainsAsync(serverId, ct).ConfigureAwait(false))

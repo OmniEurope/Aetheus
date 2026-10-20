@@ -40,8 +40,7 @@ public sealed class PipelineRunFormattingBehaviorTests
 
         Assert.True(PipelineRunFormatting.IsRolledBack(rolledBack));
         Assert.Equal(OmniTone.Warning, PipelineRunFormatting.GetStepBadge(rolledBack));
-        // PLAN-003 lot 22 / D13: an advisory failure is red like any failure, distinguished by being
-        // outlined rather than by a warning colour.
+        // Advisory failure remains red and uses an outline to distinguish its nonblocking outcome.
         Assert.Equal(OmniTone.Danger, PipelineRunFormatting.GetStepBadge(advisory));
         Assert.Equal(OmniFill.Outline, PipelineRunFormatting.GetStepBadgeVariant(advisory));
         Assert.False(PipelineRunFormatting.IsRolledBack(blocking));

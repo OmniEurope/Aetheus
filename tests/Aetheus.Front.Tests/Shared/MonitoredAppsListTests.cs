@@ -32,7 +32,7 @@ public class MonitoredAppsListTests : BunitContext
     {
         SeedApps();
         var cut = Render<MonitoredAppsList>(p => p.Add(c => c.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("toto-qa"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("toto-qa"));
 
         Assert.Contains("toto-qa", cut.Markup);
         Assert.Contains("AppHealthDown", cut.Markup);   // status badge (stub localizer echoes the key)
@@ -51,7 +51,7 @@ public class MonitoredAppsListTests : BunitContext
 
         SeedApps();
         var cut = Render<MonitoredAppsList>(p => p.Add(c => c.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("toto-qa"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("toto-qa"));
 
         Assert.DoesNotContain("AddMonitoredApp", cut.Markup);
     }
@@ -73,7 +73,7 @@ public class MonitoredAppsListTests : BunitContext
         _handler.SetJsonResponse("api/appmonitoring/apps/1/samples", new List<AppHealthSampleDto>());
 
         var cut = Render<MonitoredAppsList>(p => p.Add(c => c.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("portfolio"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("portfolio"));
 
         Assert.Contains("AppHealthUnknown", cut.Markup);
         Assert.DoesNotContain("AppHealthNeverProbed", cut.Markup);

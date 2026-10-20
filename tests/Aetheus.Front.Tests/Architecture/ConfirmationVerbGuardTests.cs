@@ -3,10 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R-407 (user decision 2026-09-28): a confirmation's button says a short precise verb (Créer,
-/// Mettre à jour, Supprimer), never a generic "Valider", and its dismiss button says "Revenir".
-/// </summary>
+/// <summary>Confirmation buttons use specific action verbs and dismiss with the return
+/// label.</summary>
 public sealed class ConfirmationVerbGuardTests
 {
     private static readonly Regex ValidateKey = new(@"\[""Validate""\]", RegexOptions.Compiled);

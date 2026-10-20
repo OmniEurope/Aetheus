@@ -17,9 +17,9 @@ internal static class PipelineRunTablePresentation
             : $"/pipelines/runs/{run.RunId}";
 
     /// <summary>Link to the branch: its Aetheus repository page when the run names an internal
-    /// repository Aetheus resolved (recette R-373), otherwise the hosting web UI. Null (text) when the
-    /// run has no branch, when the URL is an internal clone Aetheus could not resolve (the smart-HTTP
-    /// endpoint has no branch page), or when it is not http(s) (a local path or an ssh remote).</summary>
+    /// repository Aetheus resolved, otherwise the hosting web UI. Null (text) when the run has no
+    /// branch, when the URL is an internal clone Aetheus could not resolve (the smart-HTTP endpoint
+    /// has no branch page), or when it is not http(s) (a local path or an ssh remote).</summary>
     public static string? BranchHref(PipelineRunTableItem run)
     {
         if (string.IsNullOrWhiteSpace(run.BranchName)) return null;
@@ -30,9 +30,9 @@ internal static class PipelineRunTablePresentation
         return $"{WebBase(run.RepositoryUrl!)}/tree/{Uri.EscapeDataString(run.BranchName)}";
     }
 
-    /// <summary>Link to the commit (recette R-373): its git-graph page when the run recorded it, its
-    /// Aetheus repository page when the run names an internal repository Aetheus resolved, otherwise
-    /// the hosting web UI. Same null (text) cases as the branch: an internal clone URL is never linked,
+    /// <summary>Link to the commit : its git-graph page when the run recorded it, its Aetheus
+    /// repository page when the run names an internal repository Aetheus resolved, otherwise the
+    /// hosting web UI. Same null (text) cases as the branch: an internal clone URL is never linked,
     /// it serves git, not a page.</summary>
     public static string? CommitHref(PipelineRunTableItem run)
     {

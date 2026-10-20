@@ -4,13 +4,8 @@ using Microsoft.AspNetCore.Components;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// The windowing of <see cref="AetheusVirtualList{TItem}"/>, which replaced Blazor's
-/// <c>Virtualize</c> so the production policy can keep refusing <c>style-src-attr 'unsafe-inline'</c>
-/// (PLAN-008 lot 44). What matters is that it renders a window rather than the whole list, that the
-/// window follows the scroll position, and that the space above and below is reserved through the
-/// CSSOM rather than a style attribute.
-/// </summary>
+/// <summary>Virtual-list tests cover windowing, scroll-position changes and CSSOM spacer sizing
+/// without inline style attributes under the strict CSP.</summary>
 public class AetheusVirtualListTests : BunitContext
 {
     public AetheusVirtualListTests() => BunitTestHelper.RegisterServices(this);

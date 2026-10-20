@@ -66,10 +66,11 @@ public sealed class ListCacheSessionCallerTests : BunitContext
 
         cache.Clear();
         dashboard.SetResult(new DashboardOverviewDto { TotalServers = 4242, Servers = [], RecentRuns = [] });
-        cut.WaitForState(() => _handler.Requests.Any(r => r.Url.Contains("appmonitoring/summary", StringComparison.Ordinal)), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => _handler.Requests.Any(r => r.Url.Contains("appmonitoring/summary", StringComparison.Ordinal)));
 
         Assert.False(cache.TryGet<DashboardOverviewDto>("dashboard:overview", out _));
-        Assert.DoesNotContain("4242", cut.Markup, StringComparison.Ordinal);
+        // The rendered text, not the markup: a generated element id (a GUID) can hold "4242" by chance.
+        Assert.DoesNotContain("4242", string.Concat(cut.Nodes.Select(node => node.TextContent)), StringComparison.Ordinal);
     }
 
     [Fact]

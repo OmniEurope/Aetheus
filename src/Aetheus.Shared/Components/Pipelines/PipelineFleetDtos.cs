@@ -93,7 +93,7 @@ public sealed record PipelinePromotePreviewDto
     public string EffectivePipelineYaml { get; init; } = string.Empty;
 }
 
-/// <summary>Recette R-224: the template names the fleet's Template column filter offers, read across every
+/// <summary>The template names the fleet's Template column filter offers, read across every
 /// pipeline the caller can read.</summary>
 public sealed record PipelineFleetFilterValuesDto
 {

@@ -4,10 +4,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recette R-357: the production Metrics tab crashed ("Une erreur est survenue") on an app whose metric
-/// had a series without attributes (a null group), and a failed names call read as "no metrics yet".
-/// </summary>
+/// <summary>Metric views handle attribute-free series and distinguish name-load failure from an
+/// empty metric list.</summary>
 public sealed class AppMetricsViewTests : BunitContext
 {
     [Fact]
@@ -61,6 +59,7 @@ public sealed class AppMetricsViewTests : BunitContext
         Assert.DoesNotContain("NoMetricsYet", cut.Markup);
 
         names.SetResult([]);
+        // Under load the answered list was measured drawn 25 to 1143 ms after bUnit's 1 s default (PLAN-002 B7bis).
         cut.WaitForAssertion(() => Assert.Contains("NoMetricsYet", cut.Markup));
         Assert.Empty(cut.FindComponents<AetheusLoader>());
     }

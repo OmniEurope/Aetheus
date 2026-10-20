@@ -233,12 +233,8 @@ public class PipelineHostOperationSmokeTaskTests
         _repo.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
     }
 
-    /// <summary>
-    /// D-01: a rollback after a failure that came before the image tags were published still runs.
-    /// Recette R2-092 (aetheus-demo #2534): it no longer writes a run warning about the names it could
-    /// not forward. bluegreen-up refuses an undefined name, so such a rollback belongs to a run that
-    /// never started a colour; the agent's rollback says there is nothing to undo.
-    /// </summary>
+    /// <summary>Rollback without startup variables reports that nothing needs undoing rather than
+    /// adding redundant run warnings; startup itself refuses undefined required values.</summary>
     [Fact]
     public async Task R2092_ARollbackMissingPublishedTags_IsDispatchedWithoutARunWarning()
     {

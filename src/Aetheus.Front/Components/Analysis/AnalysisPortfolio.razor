@@ -4,13 +4,12 @@
 
 <PageTitle>@L["AnalysisPortfolio"] - Aetheus</PageTitle>
 
-@* Recette R-275: no empty ChildContent, it made the phone header show a toggle that opened nothing. *@
+@* Omit empty ChildContent so the mobile header has no empty section to toggle. *@
 <OmniPageHeader Title="@L["AnalysisPortfolio"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("shield")" /></Icon>
 </OmniPageHeader>
 
-@* Recette R-303: two tabs, the project tiles and the pipeline runs. Recette R-224: the grid filters
-   itself from its column headers; the filter bar that sat here is gone. *@
+@* Separate project tiles and pipeline runs into tabs; filter the grid through its column headers. *@
 <UrlSyncedTabs Slugs="@(new[] { "projects", "runs" })" Class="analysis-portfolio-tabs" RenderAllPanels="true">
     <Tabs>
 <OmniTabsItem Key="projects" Title="@L["Projects"]"><Icon><OmniIcon Name="OmniIconName.Folder" /></Icon><ChildContent>
@@ -32,13 +31,12 @@ else
                             @project.OrganizationName
                         </OmniText>
                     </div>
-                    @* One rendering for a grade (PLAN-003 lot 18): the badge draws its own neutral dash
-                       when the project has no grade yet. *@
+                    @* The shared grade badge renders a neutral dash when the project has no grade. *@
                     <GradeBadge Value="@project.Grade?.OverallGrade" Title="@L["AnalysisGlobalGrade"]"
                                 Class="analysis-portfolio-grade" />
                 </div>
-                @* Recette R-303: each count is a solid, coloured badge: reports and open findings blue,
-                   new green, critical red, high orange. *@
+                @* Each count is a solid, coloured badge: reports and open findings blue, new
+                   green, critical red, high orange. *@
                 <div class="analysis-portfolio-project-metrics">
                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Info">@($"{project.ReportCount} {L["AnalysisReports"]}")</OmniBadge>
                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Info">@($"{project.OpenCount} {L["AnalysisOpenFindings"]}")</OmniBadge>
@@ -55,8 +53,7 @@ else
 }
 </ChildContent></OmniTabsItem>
 <OmniTabsItem Key="runs" Title="@L["Runs"]"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
-@* Recette R-303: virtualized, rows pulled from the server as the list scrolls (LoadData alone made a
-   paged grid). *@
+@* Virtualization fetches rows from the server as the list scrolls. *@
 <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_rows" Count="@_count" TItem="AnalysisPortfolioRowDto"
                 LoadData="LoadDataAsync" ExportRead="@ReadExportAsync" RowClick="OpenRun" AllowSorting="true"
                 AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple"

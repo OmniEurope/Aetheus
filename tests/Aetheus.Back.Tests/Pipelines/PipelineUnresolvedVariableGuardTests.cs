@@ -40,8 +40,8 @@ public class PipelineUnresolvedVariableGuardTests
         Assert.Equal(["step 'render'"], failures["DOCS_DOMAIN"]);
     }
 
-    /// <summary>PLAN-004 R-02: the launch preflight leaves a pipeline name still carrying a reference
-    /// to the step, so a reference nothing provides has to be refused here or it reaches dispatch.</summary>
+    /// <summary>Unresolved child references with no provider must be refused before
+    /// dispatch.</summary>
     [Fact]
     public void ATriggeredOrArtifactSourcePipelineNameNothingProvides_IsReported()
     {
@@ -92,10 +92,8 @@ public class PipelineUnresolvedVariableGuardTests
         Assert.Empty(failures);
     }
 
-    /// <summary>
-    /// D-02: prod-deploy-prepare.sh publishes SOURCE_COMMIT from inside the script, so the step text
-    /// shows no directive and the name used to be refused. The step now says what it publishes.
-    /// </summary>
+    /// <summary>Script-published variables must be declared as outputs when their assignment is not
+    /// visible in step text.</summary>
     [Fact]
     public void ANameAStepDeclaresUnderOutputs_IsAccepted()
     {
@@ -157,5 +155,17 @@ public class PipelineUnresolvedVariableGuardTests
         Assert.Contains("revision", deferred);
         Assert.Contains("AGENT_NAME", deferred);
         Assert.DoesNotContain("API_DOMAIN", deferred);
+    }
+
+    [Fact]
+    public void BuildDeferredNames_CoversTheOutputsOfACatalogFunctionStep()
+    {
+        var definition = Definition(
+            new PipelineStepDefinition { Name = "detect", Type = "aetheus", Function = "detect-project-languages" });
+
+        var deferred = PipelineUnresolvedVariableGuard.BuildDeferredNames(definition);
+
+        Assert.Contains("HAS_DOTNET", deferred);
+        Assert.Contains("HAS_JAVA", deferred);
     }
 }

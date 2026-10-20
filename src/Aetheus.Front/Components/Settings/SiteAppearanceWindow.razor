@@ -1,10 +1,9 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Settings
-@* Recette R-390: the user menu's "Theme" opens OE's appearance window, the small draggable window that
-   holds theme and palette above the scales. Every row it shows is one Aetheus stores and applies
-   (SiteAppearanceState). No theme is OE's own default, Essentiel (user decision 2026-09-29: no separate
-   "Aetheus" theme). Decision of 2026-10-06: the whole window, as OE draws it, every row bound: the mode
-   beside the palette, the font, and the moving field under a theme that has one (Givre, Trou noir). *@
+@* Bind every appearance-window control to OE's OmniAppearanceState (the user preference omni.appearance)
+   so changes are stored and applied; bound rather than left to follow the state, so the content width
+   row, which Aetheus does not apply (its main column is full width), stays hidden. An unset theme uses
+   Essentiel, and theme-specific motion controls remain available. *@
 <OmniAppearanceWindow Open="_open" OpenChanged="@(open => _open = open)"
                       Title="@L["Theme"]"
                       Appearance="Appearance.Appearance" AppearanceChanged="Appearance.SetAppearanceAsync"

@@ -3,13 +3,9 @@ using System.Globalization;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// R-459: times each stage of one heartbeat's processing, so a slow heartbeat (6.3 s once, unexplained
-/// by the code alone) says where the time went. Nothing is written for a heartbeat faster than
-/// <see cref="SlowThreshold"/>; a slower one writes one line with every stage's duration, at Information
-/// up to <see cref="WarningThreshold"/> and at Warning from there (recette R-479: beats of 2 to 7 s are
-/// common while a host compiles or deploys, and are not by themselves something to act on).
-/// </summary>
+/// <summary>Log per-stage durations only when a heartbeat exceeds <see cref="SlowThreshold"/>. Use
+/// Information below <see cref="WarningThreshold"/> and Warning above it to distinguish slower
+/// processing from actionable delays.</summary>
 internal sealed class HeartbeatStageTimer(TimeProvider time)
 {
     public static readonly TimeSpan SlowThreshold = TimeSpan.FromSeconds(2);

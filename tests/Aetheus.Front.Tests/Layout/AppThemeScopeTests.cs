@@ -6,10 +6,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Front.Tests.Layout;
 
-/// <summary>
-/// STD-SHELL (user decision 2026-10-04): the application is wrapped in OE's OmniThemeScope, which paints the
-/// look stored in this browser. These tests render the real App and read what its scope received.
-/// </summary>
+/// <summary>STD-SHELL with OE 1.8.1 (R1-66): the real App's OmniThemeScope binds no appearance parameter and
+/// follows OE's OmniAppearanceState, the user's appearance preference; it keeps the boot snapshot under
+/// the key omni-boot.js replays before the first paint.</summary>
 public sealed class AppThemeScopeTests : BunitContext
 {
     public AppThemeScopeTests()
@@ -23,73 +22,42 @@ public sealed class AppThemeScopeTests : BunitContext
             NullLogger<TaskTrackerService>.Instance));
     }
 
-    [Fact]
-    public void TheScope_ReceivesTheStoredModeThemePaletteFontAndDensity()
-    {
-        var theme = OmniThemePresets.All.First(preset => !preset.DarkOnly && preset != OmniThemePresets.All[0]);
-        var palette = OmniThemePalettes.All[^1];
-        var font = OmniThemeFonts.All[^1];
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.Theme).SetResult("light");
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.ThemePreset).SetResult(theme.Name);
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.ThemePalette).SetResult(palette.Name);
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.ThemeFont).SetResult(font.Name);
-        JSInterop.Setup<string?>("localStorage.getItem", StorageKeys.Density).SetResult("compact");
+    private OmniAppearanceState State => Services.GetRequiredService<OmniAppearanceState>();
 
+    /// <summary>Signed out, nothing chosen: the scope paints OE's shipped look in dark mode, the
+    /// application's default, and binds nothing itself.</summary>
+    [Fact]
+    public void SignedOut_TheScopeIsDarkWithTheShippedLook_AndFollowsTheState()
+    {
         var cut = Render<App>();
 
-        cut.WaitForAssertion(() =>
-        {
-            var scope = cut.FindComponent<OmniThemeScope>().Instance;
-            Assert.Equal(OmniAppearance.Light, scope.Appearance);
-            Assert.Same(theme, scope.Preset);
-            Assert.Same(palette, scope.Palette);
-            Assert.Same(font, scope.Font);
-            Assert.Equal(OmniDensity.Compact, scope.Density);
-        });
-        var element = cut.Find("#app-theme-scope");
-        Assert.Equal("light", element.GetAttribute("data-omni-theme"));
-        Assert.Equal("compact", element.GetAttribute("data-omni-density"));
-        // Recette R2-112: the scope carries the resolved mode; nothing is copied on the document root.
-        Assert.Equal("light", element.GetAttribute("data-omni-theme-resolved"));
-        Assert.DoesNotContain(JSInterop.Invocations, call => call.Identifier == "Aetheus.setOmniTheme");
-        // Recette R2-112: OE keeps the boot snapshot itself, under the key omni-boot.js reads in index.html.
+        cut.WaitForAssertion(() => Assert.Equal("dark", cut.Find("#app-theme-scope").GetAttribute("data-omni-theme")));
+        Assert.Equal(OmniAppearance.Dark, State.Appearance);
+        Assert.Null(State.Preset);
+        Assert.Equal("comfortable", cut.Find("#app-theme-scope").GetAttribute("data-omni-density"));
+        // OE keeps the boot snapshot itself, under the key omni-boot.js reads in index.html.
         Assert.Equal("aetheus:theme", cut.FindComponent<OmniThemeScope>().Instance.SnapshotKey);
-        Assert.DoesNotContain(JSInterop.Invocations, call => call.Identifier == "Aetheus.followThemeScope");
+        Assert.DoesNotContain(JSInterop.Invocations, call => call.Identifier is "Aetheus.setOmniTheme" or "Aetheus.followThemeScope");
     }
 
-    /// <summary>Nothing stored: the scope paints OE's shipped look in dark mode, the application's default.</summary>
+    /// <summary>A change made in the Theme window, the settings page or received for the user repaints the
+    /// scope at once.</summary>
     [Fact]
-    public void NothingStored_TheScopeIsDarkWithTheShippedLook()
+    public async Task AChangeOfTheUsersAppearance_ReachesTheScope()
     {
         var cut = Render<App>();
+        cut.WaitForAssertion(() => Assert.Equal("dark", cut.Find("#app-theme-scope").GetAttribute("data-omni-theme")));
 
-        var scope = cut.FindComponent<OmniThemeScope>().Instance;
-        Assert.Equal(OmniAppearance.Dark, scope.Appearance);
-        Assert.Null(scope.Preset);
-        Assert.Null(scope.Palette);
-        Assert.Null(scope.Font);
-        Assert.Equal(OmniDensity.Comfortable, scope.Density);
-        Assert.Equal("dark", cut.Find("#app-theme-scope").GetAttribute("data-omni-theme"));
-    }
-
-    /// <summary>A change made in the Theme window or the settings page repaints the scope at once.</summary>
-    [Fact]
-    public async Task AChangeOfTheLook_ReachesTheScope()
-    {
-        var cut = Render<App>();
-        var state = Services.GetRequiredService<Aetheus.Front.Components.Settings.SiteAppearanceState>();
-        var theme = OmniThemePresets.All[^1];
-
-        await cut.InvokeAsync(() => state.SetPresetAsync(theme));
-        await cut.InvokeAsync(() => state.SetDensityAsync(OmniDensity.Spacious));
-        await cut.InvokeAsync(() => state.SetAppearanceAsync(OmniAppearance.System));
+        await cut.InvokeAsync(() => State.SetAppearanceAsync(OmniAppearance.Light));
+        await cut.InvokeAsync(() => State.SetDensityAsync(OmniDensity.Compact));
 
         cut.WaitForAssertion(() =>
         {
-            var scope = cut.FindComponent<OmniThemeScope>().Instance;
-            Assert.Same(theme, scope.Preset);
-            Assert.Equal(OmniDensity.Spacious, scope.Density);
-            Assert.Equal(OmniAppearance.System, scope.Appearance);
+            var element = cut.Find("#app-theme-scope");
+            Assert.Equal("light", element.GetAttribute("data-omni-theme"));
+            Assert.Equal("compact", element.GetAttribute("data-omni-density"));
+            // The scope carries the resolved mode; nothing is copied on the document root by Aetheus.
+            Assert.Equal("light", element.GetAttribute("data-omni-theme-resolved"));
         });
     }
 }

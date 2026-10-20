@@ -8,7 +8,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>PLAN-005 lot 3 / D34: the finalizer closes the approvals of the run it ends.</summary>
+/// <summary>Finalization closes the ended run's pending approvals.</summary>
 public sealed class PipelineRunFinalizerApprovalTests
 {
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();

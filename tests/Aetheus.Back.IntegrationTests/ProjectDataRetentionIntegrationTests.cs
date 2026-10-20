@@ -9,11 +9,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-013 lot 4 on PostgreSQL: a project in the Light profile loses its telemetry detail after 2 days,
-/// its logs after 7 and its analysis detail after 7, while a Standard project keeps the same rows
-/// (7, 14 and 30 days); the ingest key of a Light application reads a 15-minute send interval.
-/// </summary>
+/// <summary>On PostgreSQL, Light and Standard projects retain telemetry, logs and analysis for
+/// their distinct configured windows; Light ingestion reports its longer send interval.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class ProjectDataRetentionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

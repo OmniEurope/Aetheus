@@ -658,8 +658,8 @@ public class PipelineRepositoryTests : IDisposable
         Assert.Null(await _repo.GetTestResultSummaryAsync(9999, ct));
     }
 
-    /// <summary>Recette R-484: the detail loads no coverage, lint, metric or artifact rows; their figures
-    /// come from the database: the canonical coverage report without its per-file list, the last lint
+    /// <summary>The detail loads no coverage, lint, metric or artifact rows; their figures come
+    /// from the database: the canonical coverage report without its per-file list, the last lint
     /// report, the metrics and the artifacts with the run's branch and commit.</summary>
     [Fact]
     public async Task R484_TheRunDetail_LeavesItsResultRowsOut_AndTheSummariesComeFromTheDatabase()
@@ -704,7 +704,7 @@ public class PipelineRepositoryTests : IDisposable
         Assert.Equal(("drop", "develop", "abc123", (string?)null), (artifact.Name, artifact.BranchName, artifact.CommitHash, artifact.Sha256));
     }
 
-    /// <summary>Recette R-483: the source endpoint reads four columns of the pipeline.</summary>
+    /// <summary>The source endpoint reads four columns of the pipeline.</summary>
     [Fact]
     public async Task R483_GetPipelineSourceFieldsAsync_GivesTheProjectNameAndSourceBinding()
     {

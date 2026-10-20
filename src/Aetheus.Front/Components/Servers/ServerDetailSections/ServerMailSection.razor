@@ -1,19 +1,20 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-@* "Réinstaller la messagerie" (R2-083 / R2-088): offered whenever a mail stack is on the host. *@
+@* Reinstallation is offered whenever the host has a mail stack. *@
 <AgentOfflineNotice Server="@Server" />
 
 <ServerMailReinstall @ref="_reinstall" Server="@Server" ServerId="@ServerId" Mail="@Mail" CanManage="@Server.MailSetupAvailable" RunningChanged="@(() => StateHasChanged())" />
 
-@* Recette R2-126: while the stack is erased, only the banner above; the state and the tabs come back after. *@
+@* While the stack is erased, only the banner above; the state and the tabs come back after. *@
 @if (_reinstall?.Erasing != true)
 {
 
-@* Recette R2-080: not configured yet, the page is the step-by-step setup assistant. "Installed" means a
-   configured mail stack (R2-059): Postfix and Dovecot installed alone from the Services tab, with no domain
-   and no account, still need the setup. Recette R2-089: until the counts are read nothing is concluded. *@
+@* Mail setup is required until services, domain and account configuration are confirmed. The page
+   waits for counts before deciding. *@
 @if (!Mail.IsInstalled)
 {
+    @* Recette R3-23: after an uninstall or a reinstall, whether anything of the stack is left. *@
+    <MailLeftoversCheck Server="@Server" ServerId="@ServerId" />
     <ServerMailSetupAssistant @ref="_assistant" Server="@Server" ServerId="@ServerId" />
 }
 else if (_countsFailed)
@@ -34,7 +35,7 @@ else if (_domainCount == 0 && _accountCount == 0)
 }
 else
 {
-    @* Recette R2-090: the page opens on the state of the stack, the work tabs below. *@
+    @* The page opens on the state of the stack, the work tabs below. *@
     <ServerMailStatusList @ref="_statusList" ServerId="@ServerId" Mail="@Mail" CanManage="@CanManageTasks"
         DefaultSender="@DefaultSender" OnUsageMeasured="@ReloadDataAsync" />
 }
@@ -51,7 +52,7 @@ else
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddDomainDialogAsync" Disabled="@AgentOffline" title="@L["AddDomain"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_domainsGrid" Data="@_domains" Count="@_domainCount"
-                    TItem="MailDomainDto" IsLoading="@_domainsLoading" LoadData="@LoadDomainsAsync" ExportRead="@ReadDomainsExportAsync" ExportName="@L["MailDomains"]"
+                    TItem="MailDomainDto" RowClick="@ShowDnsRecordsAsync" IsLoading="@_domainsLoading" LoadData="@LoadDomainsAsync" ExportRead="@ReadDomainsExportAsync" ExportName="@L["MailDomains"]"
                     PageSize="25" Density="OmniDensity.Compact" AllowSorting="true" EmptyText="@L["NoMailDomains"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<MailDomainDto>(_domains, _domainCount))">
@@ -78,12 +79,16 @@ else
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="MailDomainDto" Title="@L["Actions"]" Width="200px" Sortable="false">
                             <Template Context="d">
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
+                                @* One visible action per row (the DNS records, also run by a click on the row), the others
+                                   behind "…", the destructive one in Danger. *@
+                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Class="mail-domain-row-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDnsRecordsAsync(d))" title="@L["DnsRecords"]" Label="@L["DnsRecords"]"><OmniIcon Name="OmniIconName.Database" /></OmniButton>
-                                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => VerifyDnsAsync(d))" title="@L["MailVerifyDns"]" Label="@L["MailVerifyDns"]"><OmniIcon Name="OmniIconName.ShieldCheck" /></OmniButton>
-                                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDkimRotation(d))" Disabled="@AgentOffline" title="@L["RotateDkimKey"]" Label="@L["RotateDkimKey"]"><OmniIcon Name="OmniIconName.Key" /></OmniButton>
-                                    <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteDomain"], string.Format(L["ConfirmDeleteMailDomain"], d.Name),
-                                            () => DeleteDomainAsync(d.Id)))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                                        <OmniMenuItem OnClick="@(() => VerifyDnsAsync(d))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["MailVerifyDns"]</ChildContent></OmniMenuItem>
+                                        <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => ShowDkimRotation(d))"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>@L["RotateDkimKey"]</ChildContent></OmniMenuItem>
+                                        <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteDomain"], string.Format(L["ConfirmDeleteMailDomain"], d.Name),
+                                                () => DeleteDomainAsync(d.Id)))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                                    </OmniOverflowMenu>
                                 </OmniStack>
                             </Template>
                         </OmniDataGridColumn>
@@ -96,12 +101,12 @@ else
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                     <CountBadge Value="@_accountCount" Variant="OmniTone.Accent" />
                     <div class="blade-content-spacer"></div>
-                    @* Recette R1-17: how to read these mailboxes in an external mail client. *@
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OpenMailClientHelpAsync"><OmniIcon Name="@MaterialIconMap.Resolve("help")" /> <span>@L["MailClientHelpButton"]</span></OmniButton>
+                    @* Recette R3-49: Add is the one visible action; "Client mail" (R1-17), "Purger" and, for an administrator, the administrator access (R1-41) sit in the menu next to it. *@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddAccountDialogAsync" Disabled="@AgentOffline" title="@L["AddAccount"]"><OmniIcon Name="OmniIconName.UserPlus" /> <span>@L["Add"]</span></OmniButton>
+                    <ServerMailAccountsMenu ServerId="@ServerId" CanManage="@CanManageTasks" OnAccountsChanged="@ReloadDataAsync" />
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_accountsGrid" Data="@_accounts" Count="@_accountCount"
-                    TItem="MailAccountDto" IsLoading="@_accountsLoading" LoadData="@LoadAccountsAsync" ExportRead="@ReadAccountsExportAsync" ExportName="@L["MailAccounts"]"
+                    TItem="MailAccountDto" RowClick="@OpenMailboxFromRow" IsLoading="@_accountsLoading" LoadData="@LoadAccountsAsync" ExportRead="@ReadAccountsExportAsync" ExportName="@L["MailAccounts"]"
                     PageSize="25" Density="OmniDensity.Compact" AllowSorting="true" EmptyText="@L["NoRecords"]"
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<MailAccountDto>(_accounts, _accountCount))">
@@ -132,10 +137,13 @@ else
                         <OmniDataGridColumn TItem="MailAccountDto" Title="@L["Actions"]" Width="120px" Sortable="false">
                             <Template Context="a">
                                 @* Recette R1-17: the integrated mailbox of the account. *@
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenMailbox(a))" Disabled="@(!a.IsActive || a.MissingSince is not null)" title="@L["MailboxOpen"]" Label="@L["MailboxOpen"]"><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></OmniButton>
-                                    <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteAccount"], string.Format(L["ConfirmDeleteMailAccount"], a.Email),
-                                            () => DeleteAccountAsync(a.Id)))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                @* Recette R3-51: the mailbox is the main action of the row (blue, user-chosen exception), a click on the row opens it. *@
+                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenMailbox(a))" Disabled="@(!a.IsActive || a.MissingSince is not null)" title="@L["MailboxOpen"]" Label="@L["MailboxOpen"]"><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></OmniButton>
+                                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                                        <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteAccount"], string.Format(L["ConfirmDeleteMailAccount"], a.Email),
+                                                () => DeleteAccountAsync(a.Id)))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                                    </OmniOverflowMenu>
                                 </OmniStack>
                             </Template>
                         </OmniDataGridColumn>
@@ -185,7 +193,7 @@ else
 
             @* --- Queue tab --- *@
             <OmniTabsItem Key="queue" Title="@L["MailQueue"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("queue")" /></Icon><ChildContent>
-                <ServerMailQueueTab @ref="_queueTab" ServerId="@ServerId" QueueSize="@Mail.QueueSize" CanManage="@CanManageTasks" />
+                <ServerMailQueueTab @ref="_queueTab" ServerId="@ServerId" QueueSize="@Mail.QueueSize" CanManage="@CanManageTasks" Delivery="@Mail.Delivery" HostIpv4="@Server.IpAddress" HelperVersion="@Mail.HelperVersion" />
             </ChildContent></OmniTabsItem>
 
             @* --- Logs tab --- *@

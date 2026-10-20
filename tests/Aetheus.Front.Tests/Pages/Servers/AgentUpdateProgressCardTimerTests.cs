@@ -6,7 +6,7 @@ namespace Aetheus.Front.Tests.Pages.Servers;
 
 /// <summary>
 /// Targets the zero-covered methods in <see cref="AgentUpdateProgressCard"/>:
-/// - <c>StartStaleTimer(int)</c> - creates a System.Threading.Timer; verify _staleTimer becomes non-null
+/// - <c>StartStaleTimer(int)</c> - creates a timer on the injected clock; verify _staleTimer becomes non-null
 /// - <c>CancelStaleTimer</c> - disposes the timer; verify _staleTimer becomes null
 /// - <c>HandleHeartbeat</c> version-changed → Done transition (AgentOffline or LaunchingUpdater phase)
 /// - Timer expiry callback behaviour
@@ -21,6 +21,7 @@ public class AgentUpdateProgressCardTimerTests
         var instance = new AgentUpdateProgressCard();
         var localizer = new BunitTestHelper.StubLocalizer();
         CardType.GetProperty("L", Priv)!.SetValue(instance, localizer);
+        instance.Clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider();
         CardType.GetProperty("Toast", Priv)!.SetValue(instance,
             new Aetheus.Front.Components.Shared.NotifyHelper(new OmniEurope.Blazor.Components.OmniOverlayService(new Microsoft.Extensions.Time.Testing.FakeTimeProvider()), localizer));
         return instance;
@@ -42,7 +43,7 @@ public class AgentUpdateProgressCardTimerTests
         var method = CardType.GetMethod("StartStaleTimer", Priv)!;
         method.Invoke(instance, [300]); // 300 s - won't fire in test
 
-        var timer = GetField<System.Threading.Timer?>(instance, "_staleTimer");
+        var timer = GetField<ITimer?>(instance, "_staleTimer");
         Assert.NotNull(timer);
 
         // Cleanup
@@ -56,10 +57,10 @@ public class AgentUpdateProgressCardTimerTests
         var method = CardType.GetMethod("StartStaleTimer", Priv)!;
 
         method.Invoke(instance, [300]);
-        var first = GetField<System.Threading.Timer?>(instance, "_staleTimer");
+        var first = GetField<ITimer?>(instance, "_staleTimer");
 
         method.Invoke(instance, [300]); // second call disposes first
-        var second = GetField<System.Threading.Timer?>(instance, "_staleTimer");
+        var second = GetField<ITimer?>(instance, "_staleTimer");
 
         Assert.NotNull(second);
         // second timer replaces first (may be same object if pooled, but must be set)
@@ -76,12 +77,12 @@ public class AgentUpdateProgressCardTimerTests
         var startMethod = CardType.GetMethod("StartStaleTimer", Priv)!;
         startMethod.Invoke(instance, [300]);
 
-        Assert.NotNull(GetField<System.Threading.Timer?>(instance, "_staleTimer"));
+        Assert.NotNull(GetField<ITimer?>(instance, "_staleTimer"));
 
         var cancelMethod = CardType.GetMethod("CancelStaleTimer", Priv)!;
         cancelMethod.Invoke(instance, []);
 
-        Assert.Null(GetField<System.Threading.Timer?>(instance, "_staleTimer"));
+        Assert.Null(GetField<ITimer?>(instance, "_staleTimer"));
     }
 
     [Fact]
@@ -91,7 +92,7 @@ public class AgentUpdateProgressCardTimerTests
         // _staleTimer starts as null before any update is launched.
         var method = CardType.GetMethod("CancelStaleTimer", Priv)!;
         method.Invoke(instance, []); // must not throw
-        Assert.Null(GetField<System.Threading.Timer?>(instance, "_staleTimer"));
+        Assert.Null(GetField<ITimer?>(instance, "_staleTimer"));
     }
 
     // ── Backend confirmation is the only transition to Done ─────────────────
@@ -146,11 +147,11 @@ public class AgentUpdateProgressCardTimerTests
         var startMethod = CardType.GetMethod("StartStaleTimer", Priv)!;
         startMethod.Invoke(instance, [300]);
 
-        Assert.NotNull(GetField<System.Threading.Timer?>(instance, "_staleTimer"));
+        Assert.NotNull(GetField<ITimer?>(instance, "_staleTimer"));
 
         await instance.DisposeAsync();
 
-        Assert.Null(GetField<System.Threading.Timer?>(instance, "_staleTimer"));
+        Assert.Null(GetField<ITimer?>(instance, "_staleTimer"));
     }
 
     // Helper for int field

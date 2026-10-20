@@ -18,7 +18,8 @@ public partial class PackageFeedsAdmin : Aetheus.Front.Components.Shared.Realtim
             return;
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// grid.</summary>
     private Task<PaginatedResult<PackageFeedDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -33,7 +34,7 @@ public partial class PackageFeedsAdmin : Aetheus.Front.Components.Shared.Realtim
         _loading = true;
         try
         {
-            // Recette R-210: the header filters are applied by the API, not by the grid.
+            // The header filters are applied by the API, not by the grid.
             var result = await Api.Packages.GetPackageFeedsAsync(
                 page, pageSize, _search, sortBy, sortDescending, filters: args.ToApiFilters());
             _feeds = result.Items;

@@ -6,15 +6,9 @@ using Bunit;
 
 namespace Aetheus.Front.Tests;
 
-/// <summary>
-/// Coverage for the "don't clobber an unsaved edit" guard on <see cref="OrganizationDetail"/>'s
-/// realtime reload: a live <c>Organization</c> broadcast (any org, not just this one) used to
-/// unconditionally re-hydrate <c>_general</c>/<c>_selectedProjectIds</c> and flip the loading
-/// spinner, wiping whatever the user was mid-typing in the General tab or mid-selecting in the
-/// Projects tab. The fix gates the reload behind <c>IsGeneralTabDirty</c>/<c>IsProjectsTabDirty</c>,
-/// exercised here via reflection since the SignalR round-trip itself is not observable in a
-/// standalone bUnit render (the hub never actually connects in this harness).
-/// </summary>
+/// <summary>Verifies that realtime broadcasts preserve unsaved general and project edits in
+/// OrganizationDetail. Reflection drives the reload guard because this bUnit harness does not
+/// establish a SignalR connection.</summary>
 public class OrganizationDetailDirtyGuardTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;

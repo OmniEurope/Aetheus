@@ -40,7 +40,7 @@ public sealed class QualityGatePolicyEditorPresetTests : BunitContext
             .Add(component => component.ProjectId, 4)
             .Add(component => component.CanEdit, true)
             .Add(component => component.InitialPolicies, new List<AnalysisPolicyDto> { Local() }));
-        cut.WaitForState(() => cut.Markup.Contains("No cycles"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("No cycles"));
         return cut;
     }
 
@@ -63,12 +63,11 @@ public sealed class QualityGatePolicyEditorPresetTests : BunitContext
         StubBatchAndReload();
         var cut = RenderEditor();
 
-        Button(cut, "QualityGateRecommended").Click();
+        cut.FindMenuItem("QualityGateRecommended")!.Click();
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "POST" && r.Url.EndsWith("projects/4/policies/batch", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "POST" && r.Url.EndsWith("projects/4/policies/batch", StringComparison.Ordinal)));
         Assert.DoesNotContain(_handler.Requests, r => r.Url.Contains("policies/global", StringComparison.Ordinal));
     }
 
@@ -78,12 +77,11 @@ public sealed class QualityGatePolicyEditorPresetTests : BunitContext
         StubBatchAndReload();
         var cut = RenderEditor();
 
-        Button(cut, "QualityGateStrict").Click();
+        cut.FindMenuItem("QualityGateStrict")!.Click();
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "POST" && r.Url.EndsWith("projects/4/policies/batch", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "POST" && r.Url.EndsWith("projects/4/policies/batch", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -93,17 +91,15 @@ public sealed class QualityGatePolicyEditorPresetTests : BunitContext
         StubBatchAndReload();
 
         var recommended = RenderEditor();
-        Button(recommended, "QualityGateRecommended").Click();
+        recommended.FindMenuItem("QualityGateRecommended")!.Click();
         recommended.WaitForAssertion(
-            () => Assert.Contains(_handler.Requests, r => r.Method == "POST"),
-            TimeSpan.FromSeconds(3));
+            () => Assert.Contains(_handler.Requests, r => r.Method == "POST"));
         var recommendedBody = _handler.RequestDetails.Last(r => r.Method == "POST").Body;
 
         var strict = RenderEditor();
-        Button(strict, "QualityGateStrict").Click();
+        strict.FindMenuItem("QualityGateStrict")!.Click();
         strict.WaitForAssertion(
-            () => Assert.True(_handler.RequestDetails.Count(r => r.Method == "POST") >= 2),
-            TimeSpan.FromSeconds(3));
+            () => Assert.True(_handler.RequestDetails.Count(r => r.Method == "POST") >= 2));
         var strictBody = _handler.RequestDetails.Last(r => r.Method == "POST").Body;
 
         Assert.NotEqual(recommendedBody, strictBody);
@@ -117,12 +113,11 @@ public sealed class QualityGatePolicyEditorPresetTests : BunitContext
         StubBatchAndReload();
         var cut = RenderEditor();
 
-        Button(cut, "QualityGateRecommended").Click();
+        cut.FindMenuItem("QualityGateRecommended")!.Click();
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "GET" && r.Url.Contains("projects/4/policies", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "GET" && r.Url.Contains("projects/4/policies", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -134,11 +129,10 @@ public sealed class QualityGatePolicyEditorPresetTests : BunitContext
             HttpMethod.Post, "api/analysis/projects/4/policies/batch", System.Net.HttpStatusCode.BadRequest);
         var cut = RenderEditor();
 
-        Button(cut, "QualityGateRecommended").Click();
+        cut.FindMenuItem("QualityGateRecommended")!.Click();
 
         cut.WaitForAssertion(
-            () => Assert.Contains(_handler.Requests, r => r.Method == "POST"),
-            TimeSpan.FromSeconds(3));
+            () => Assert.Contains(_handler.Requests, r => r.Method == "POST"));
         Assert.DoesNotContain(_handler.Requests, r =>
             r.Method == "GET" && r.Url.Contains("projects/4/policies", StringComparison.Ordinal));
     }
@@ -152,14 +146,13 @@ public sealed class QualityGatePolicyEditorPresetTests : BunitContext
             HttpMethod.Post, "api/analysis/projects/4/policies/preview", new AnalysisPolicySetPreviewDto());
         var cut = RenderEditor();
         cut.Find("button[title='Edit']").Click();
-        cut.WaitForState(() => cut.FindAll("form").Count > 0, TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.FindAll("form").Count > 0);
 
-        Button(cut, "QualityGatePreview").Click();
+        cut.FindMenuItem("QualityGatePreview")!.Click();
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "POST" && r.Url.EndsWith("policies/preview", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "POST" && r.Url.EndsWith("policies/preview", StringComparison.Ordinal)));
         Assert.DoesNotContain(_handler.Requests, r => r.Method == "PUT");
     }
 
@@ -168,7 +161,7 @@ public sealed class QualityGatePolicyEditorPresetTests : BunitContext
     {
         var cut = RenderEditor();
         cut.Find("button[title='Edit']").Click();
-        cut.WaitForState(() => cut.FindAll("form").Count > 0, TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.FindAll("form").Count > 0);
         var before = _handler.Requests.Count;
 
         Button(cut, "Cancel").Click();

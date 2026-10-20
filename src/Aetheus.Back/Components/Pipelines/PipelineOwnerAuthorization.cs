@@ -6,15 +6,8 @@ namespace Aetheus.Back.Components.Pipelines;
 /// <summary>Authorizes the owner a pipeline is being given, beyond the project the controller checks.</summary>
 public interface IPipelineOwnerAuthorization
 {
-    /// <summary>
-    /// Whether <paramref name="user"/> may own a pipeline through this owner triple. A pipeline is
-    /// owned by exactly one of a project, an environment or a project server, but the create and update
-    /// requests carry all three and the service persists all three. The controller used to authorize
-    /// only <c>ProjectId</c>, leaving the other two columns unchecked, so Pipeline/Write on any one
-    /// project was enough to attach a pipeline, which is a deployment vehicle, to another team's
-    /// environment or server. Every owner named is checked; one that cannot be resolved is refused
-    /// rather than skipped.
-    /// </summary>
+    /// <summary>Checks every supplied project, environment and project-server owner for pipeline
+    /// ownership authorization. An unresolved owner is refused rather than skipped.</summary>
     Task<bool> CanOwnAsync(
         ClaimsPrincipal user, int? projectId, int? environmentId, int? projectServerId, CancellationToken ct = default);
 }

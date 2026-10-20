@@ -15,7 +15,9 @@ internal sealed class PipelineRunLogStreamer(
     ILogger logger,
     PipelineRunLogWindow logs,
     Func<Func<Task>, Task> invokeAsync,
-    Action stateHasChanged) : IAsyncDisposable
+    Action stateHasChanged,
+    // Paces the poll fallback; the system clock unless a test drives it.
+    TimeProvider? clock = null) : IAsyncDisposable
 {
     private HubConnection? _logHub;
     private int? _streamingTaskId;
@@ -48,7 +50,7 @@ internal sealed class PipelineRunLogStreamer(
     {
         try
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2), clock ?? TimeProvider.System);
             while (await timer.WaitForNextTickAsync(cts.Token))
                 await PollTaskLogsAsync(taskId, generation, cts.Token);
         }

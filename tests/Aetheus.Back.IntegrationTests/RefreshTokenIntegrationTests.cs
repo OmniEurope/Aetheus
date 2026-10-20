@@ -76,11 +76,8 @@ public sealed class RefreshTokenIntegrationTests(PostgresFixture fixture)
         Assert.False(string.IsNullOrEmpty(thirdLogin!.Token));
     }
 
-    /// <summary>
-    /// R-072: after a back restart the browser fired several refreshes with the same token at once, and
-    /// each of them pruned the same dead rows, so the later ones failed with DbUpdateConcurrencyException
-    /// (HTTP 500). Parallel refreshes must all succeed, and exactly one of them rotates the token.
-    /// </summary>
+    /// <summary>Concurrent refreshes must succeed while only one rotates the shared
+    /// token.</summary>
     [Fact]
     public async Task ParallelRefreshesOfOneToken_NeverFail_AndRotateExactlyOnce()
     {
@@ -125,8 +122,9 @@ public sealed class RefreshTokenIntegrationTests(PostgresFixture fixture)
         Assert.All(bodies, b => Assert.False(string.IsNullOrEmpty(b!.Token)));
         var rotated = Assert.Single(bodies, b => b!.RefreshToken is not null);
 
-        // The collection runs serially, so every token minted since the burst belongs to it: the one
-        // rotated token is the only live one, the losers' replacements were retired. No fork of the chain.
+        // The collection runs serially, so every token minted since the burst belongs to it: the
+        // one rotated token is the only live one, the losers' replacements were retired. No fork of
+        // the chain.
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -153,15 +151,13 @@ public sealed class RefreshTokenIntegrationTests(PostgresFixture fixture)
         }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, refreshResp.StatusCode);
-        // PLAN-005 lot 9 / D48: the 401 names its reason, through the real serializer.
+        // The serialized unauthorized response identifies its reason.
         var error = await refreshResp.Content.ReadFromJsonAsync<ApiError>(IntegrationJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(Aetheus.Shared.Components.Auth.RefreshRejectionCodes.UnknownToken, error!.Code);
     }
 
-    /// <summary>
-    /// PLAN-005 lot 9 / D48: the anonymous session-end report takes a known reason and a plain
-    /// correlation id, and nothing else.
-    /// </summary>
+    /// <summary>Anonymous session-end reports accept only a known reason and a plain correlation
+    /// identifier.</summary>
     [Fact]
     public async Task SessionEnded_AcceptsAKnownReasonAnonymously_AndRefusesAnythingElse()
     {

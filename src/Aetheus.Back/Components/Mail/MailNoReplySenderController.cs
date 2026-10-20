@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.Mail;
 
-/// <summary>Recette R1-16: the platform settings' action that prepares the default sender's mailbox.</summary>
+/// <summary>The platform settings' action that prepares the default sender's mailbox.</summary>
 [ApiController]
 [Route("api/mail/no-reply-sender")]
 [Authorize(Roles = "Admin")]

@@ -3,15 +3,9 @@ using System.Net;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Outcome of an HTTP call that can succeed (2xx + a <typeparamref name="TValue"/> body),
-/// be rejected with a typed payload (400 → <typeparamref name="TError"/>, e.g. a validation
-/// result), or target a missing resource (404). Centralises the
-/// "200 → value / 400 → typed error / 404 → not found" pattern so callers don't reinvent it.
-/// <see cref="ErrorMessage"/> is the readable reason of a 400, read from its body whatever shape it
-/// has (recette R2-039): a caller shows it instead of picking fields out of <see cref="Error"/>,
-/// which is filled from a body of another shape too and then carries nulls where a list is declared.
-/// </summary>
+/// <summary>Represent success, typed HTTP 400 refusal and missing resources through one result
+/// contract so callers handle them consistently; use ErrorMessage for readable refusal text because
+/// a differently shaped error body can leave typed members null.</summary>
 public sealed record ApiOutcome<TValue, TError>(
     TValue? Value, TError? Error, bool NotFound, HttpStatusCode? StatusCode = null, string? ErrorMessage = null)
     where TValue : class

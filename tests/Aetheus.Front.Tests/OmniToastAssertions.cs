@@ -4,12 +4,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests;
 
-/// <summary>
-/// Reads the toasts raised through NotifyHelper back from the real <see cref="OmniOverlayService"/>
-/// (PLAN-008 lot 11). NotifyHelper puts the summary in the notification's title and the detail in its
-/// message, or, when there is no detail, the summary in the message and no title; this undoes that
-/// mapping so a test states the summary and detail it expects.
-/// </summary>
+/// <summary>Read notifications from the real OmniOverlayService and reverse NotifyHelper
+/// title/message mapping for summary and detail assertions.</summary>
 internal static class OmniToastAssertions
 {
     public static IReadOnlyList<RaisedToast> Toasts(this OmniOverlayService overlay) =>

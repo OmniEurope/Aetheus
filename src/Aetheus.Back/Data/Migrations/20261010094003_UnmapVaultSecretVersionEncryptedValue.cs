@@ -4,21 +4,18 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Aetheus.Back.Data.Migrations
 {
-    /// <summary>
-    /// Recette R-287, contract step 1 of 2: the model stops mapping VaultSecretVersions.EncryptedValue,
-    /// the database keeps the column. The previous colour (V-1, v1.3.9) still maps it NOT NULL and inserts
-    /// an empty string; this version omits it from its inserts, so the column receives a database default
-    /// of '' for both colours to work against the shared schema during blue-green. Step 2, a later release
-    /// whose V-1 is this one, drops the column (docs/contracts/deployment.md, pending contract steps).
-    /// </summary>
+    /// <summary>Keep the unmapped EncryptedValue column with an empty-string default so both the
+    /// preceding release, which writes it explicitly, and this release, which omits it, can insert
+    /// rows. Column removal is a later contract step documented in
+    /// docs/contracts/deployment.md.</summary>
     public partial class UnmapVaultSecretVersionEncryptedValue : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: additive default only (recette R-287). The column stays
-            // NOT NULL text; adding DEFAULT '' changes no row and nothing the previous colour relies on (it
-            // always writes the column explicitly), and lets this version's inserts omit the unmapped column.
+            // AETHEUS_EXPAND_CONTRACT_SQL_REVIEWED: additive empty-string default on the retained
+            // NOT NULL text column. It changes no stored row and supports inserts omitting the
+            // unmapped field.
             migrationBuilder.Sql("ALTER TABLE \"VaultSecretVersions\" ALTER COLUMN \"EncryptedValue\" SET DEFAULT '';");
         }
 

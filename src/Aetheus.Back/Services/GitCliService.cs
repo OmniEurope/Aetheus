@@ -27,45 +27,25 @@ public sealed partial class GitCliService(ILogger<GitCliService> logger, GitProc
         if (pinnedEndpoint is null)
             throw new BadRequestException("The external repository host does not resolve to a public address.");
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "git",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        psi.ArgumentList.Add("-c");
-        psi.ArgumentList.Add("protocol.file.allow=never");
-        psi.ArgumentList.Add("-c");
-        psi.ArgumentList.Add($"http.curloptResolve={pinnedEndpoint.Value.Host}:{pinnedEndpoint.Value.Port}:{pinnedEndpoint.Value.Address}");
-        psi.ArgumentList.Add("-c");
-        psi.ArgumentList.Add("http.followRedirects=false");
-        psi.ArgumentList.Add("ls-remote");
-        psi.ArgumentList.Add("--exit-code");
-        psi.ArgumentList.Add(string.IsNullOrWhiteSpace(branch) ? "--symref" : "--heads");
-        psi.ArgumentList.Add("--");
-        psi.ArgumentList.Add(repositoryUrl);
-        psi.ArgumentList.Add(string.IsNullOrWhiteSpace(branch) ? "HEAD" : $"refs/heads/{branch}");
-        psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
-        psi.Environment["GCM_INTERACTIVE"] = "never";
-        GitProcessStartInfoFactory.NeutralizeInheritedGitEnvironment(psi);
+        return await RunLsRemoteAsync(BuildResolveBranchStartInfo(repositoryUrl, branch, pinnedEndpoint.Value), branch, Timeout, ct)
+            .ConfigureAwait(false);
+    }
 
-        using var process = new Process { StartInfo = psi };
+    /// <summary>Runs the <c>ls-remote</c> and reads the branch it names, or refuses: no answer within
+    /// <paramref name="timeout"/>, a failed run, or no such branch.</summary>
+    internal static async Task<GitRemoteBranch> RunLsRemoteAsync(
+        ProcessStartInfo startInfo, string? branch, TimeSpan timeout, CancellationToken ct)
+    {
+        using var process = new Process { StartInfo = startInfo };
         process.Start();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(Timeout);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(timeout);
         try
         {
-            var outputTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            var errorTask = process.StandardError.ReadToEndAsync(timeout.Token);
-            await Task.WhenAll(outputTask, errorTask, process.WaitForExitAsync(timeout.Token)).ConfigureAwait(false);
-            var output = await outputTask.ConfigureAwait(false);
-            var resolved = string.IsNullOrWhiteSpace(branch)
-                ? ParseDefaultHead(output)
-                : ParseBranchCommit(output, branch) is { } commit
-                    ? new GitRemoteBranch(branch, commit)
-                    : null;
+            var outputTask = process.StandardOutput.ReadToEndAsync(deadline.Token);
+            var errorTask = process.StandardError.ReadToEndAsync(deadline.Token);
+            await Task.WhenAll(outputTask, errorTask, process.WaitForExitAsync(deadline.Token)).ConfigureAwait(false);
+            var resolved = ParseLsRemote(await outputTask.ConfigureAwait(false), branch);
             if (process.ExitCode == 0 && resolved is not null) return resolved;
         }
         catch (OperationCanceledException)
@@ -77,6 +57,47 @@ public sealed partial class GitCliService(ILogger<GitCliService> logger, GitProc
 
         throw new BadRequestException("The external repository or selected branch could not be reached.");
     }
+
+    /// <summary><c>git ls-remote</c> of one branch, or of the default HEAD when none is named, pinned to
+    /// the validated address, never following a redirect and never prompting.</summary>
+    internal static ProcessStartInfo BuildResolveBranchStartInfo(
+        string repositoryUrl, string? branch, (string Host, int Port, string Address) endpoint)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        var defaultHead = string.IsNullOrWhiteSpace(branch);
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("protocol.file.allow=never");
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add($"http.curloptResolve={endpoint.Host}:{endpoint.Port}:{endpoint.Address}");
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("http.followRedirects=false");
+        psi.ArgumentList.Add("ls-remote");
+        psi.ArgumentList.Add("--exit-code");
+        psi.ArgumentList.Add(defaultHead ? "--symref" : "--heads");
+        psi.ArgumentList.Add("--");
+        psi.ArgumentList.Add(repositoryUrl);
+        psi.ArgumentList.Add(defaultHead ? "HEAD" : $"refs/heads/{branch}");
+        psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        psi.Environment["GCM_INTERACTIVE"] = "never";
+        GitProcessStartInfoFactory.NeutralizeInheritedGitEnvironment(psi);
+        return psi;
+    }
+
+    /// <summary>The branch and commit an <c>ls-remote</c> answer names: the default HEAD when no branch
+    /// was asked, otherwise the asked branch with its full hash.</summary>
+    internal static GitRemoteBranch? ParseLsRemote(string output, string? branch) =>
+        string.IsNullOrWhiteSpace(branch)
+            ? ParseDefaultHead(output)
+            : ParseBranchCommit(output, branch) is { } commit
+                ? new GitRemoteBranch(branch, commit)
+                : null;
 
     internal static string? ParseBranchCommit(string output, string branch)
     {
@@ -93,31 +114,50 @@ public sealed partial class GitCliService(ILogger<GitCliService> logger, GitProc
 
     public async Task<string?> ReadPipelineYamlAsync(string repositoryUrl, string commit, string pipelineName, CancellationToken ct = default)
     {
-        if (!IsRepositoryUrlAllowed(repositoryUrl)
-            || commit.Length is not (40 or 64) || !commit.All(Uri.IsHexDigit))
+        if (!IsRepositoryUrlAllowed(repositoryUrl) || !IsFullCommitHash(commit))
             throw new BadRequestException("A public HTTPS repository and a full commit hash are required.");
         var endpoint = await ResolveSafeEndpointAsync(repositoryUrl, ct).ConfigureAwait(false)
             ?? throw new BadRequestException("The external repository host does not resolve to a public address.");
+        return await ReadPipelineYamlAtCommitAsync(repositoryUrl, commit, pipelineName, endpoint, ct).ConfigureAwait(false);
+    }
+
+    private async Task<string?> ReadPipelineYamlAtCommitAsync(
+        string repositoryUrl, string commit, string pipelineName, (string Host, int Port, string Address) endpoint, CancellationToken ct)
+    {
         var directory = Directory.CreateTempSubdirectory("aetheus-pipeline-").FullName;
         try
         {
-            var init = await runner.RunGitAsync(directory, ["init", "--bare"], ct).ConfigureAwait(false);
-            if (init.ExitCode != 0) throw new BadRequestException("Could not prepare the external repository read.");
-            var fetch = await runner.RunGitBoundedAsync(directory,
-                ["-c", "protocol.file.allow=never", "-c", "http.followRedirects=false",
-                 "-c", $"http.curloptResolve={endpoint.Host}:{endpoint.Port}:{endpoint.Address}",
-                 "-c", "credential.helper=", "-c", "credential.interactive=false",
-                 "fetch", "--depth=1", "--no-tags", "--no-recurse-submodules", "--", repositoryUrl, commit],
-                4096, ct, Timeout, ignoreExitCode: true).ConfigureAwait(false);
-            if (fetch.ExitCode != 0) throw new BadRequestException("Could not read the selected external repository commit.");
+            await FetchCommitAsync(directory, repositoryUrl, commit, endpoint, ct).ConfigureAwait(false);
             return await ReadPipelineYamlFromSnapshotAsync(directory, commit, pipelineName, ct).ConfigureAwait(false);
         }
         finally
         {
-            foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
-                File.SetAttributes(file, FileAttributes.Normal);
-            Directory.Delete(directory, recursive: true);
+            DeleteSnapshot(directory);
         }
+    }
+
+    private static bool IsFullCommitHash(string commit) => commit.Length is 40 or 64 && commit.All(Uri.IsHexDigit);
+
+    // A bare repository holding only the one commit, fetched through the pinned address.
+    private async Task FetchCommitAsync(
+        string directory, string repositoryUrl, string commit, (string Host, int Port, string Address) endpoint, CancellationToken ct)
+    {
+        var init = await runner.RunGitAsync(directory, ["init", "--bare"], ct).ConfigureAwait(false);
+        if (init.ExitCode != 0) throw new BadRequestException("Could not prepare the external repository read.");
+        var fetch = await runner.RunGitBoundedAsync(directory,
+            ["-c", "protocol.file.allow=never", "-c", "http.followRedirects=false",
+             "-c", $"http.curloptResolve={endpoint.Host}:{endpoint.Port}:{endpoint.Address}",
+             "-c", "credential.helper=", "-c", "credential.interactive=false",
+             "fetch", "--depth=1", "--no-tags", "--no-recurse-submodules", "--", repositoryUrl, commit],
+            4096, ct, Timeout, ignoreExitCode: true).ConfigureAwait(false);
+        if (fetch.ExitCode != 0) throw new BadRequestException("Could not read the selected external repository commit.");
+    }
+
+    private static void DeleteSnapshot(string directory)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+            File.SetAttributes(file, FileAttributes.Normal);
+        Directory.Delete(directory, recursive: true);
     }
 
     internal async Task<string?> ReadPipelineYamlFromSnapshotAsync(string directory, string commit, string pipelineName, CancellationToken ct)
@@ -179,13 +219,21 @@ public sealed partial class GitCliService(ILogger<GitCliService> logger, GitProc
             return [];
         }
 
-        var psi = BuildListReleaseBranchesStartInfo(repositoryUrl, pinnedEndpoint.Value);
+        return await RunListReleaseBranchesAsync(
+            BuildListReleaseBranchesStartInfo(repositoryUrl, pinnedEndpoint.Value), repositoryUrl, Timeout, ct).ConfigureAwait(false);
+    }
 
+    /// <summary>Runs the <c>ls-remote</c> of the release branches and parses its answer, or logs and
+    /// returns nothing: no answer within <paramref name="timeout"/> (the process is killed) or a failed run.
+    /// A cancellation by the caller propagates.</summary>
+    internal async Task<List<(string BranchName, string Version)>> RunListReleaseBranchesAsync(
+        ProcessStartInfo psi, string repositoryUrl, TimeSpan timeout, CancellationToken ct)
+    {
         using var process = new Process { StartInfo = psi };
         process.Start();
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(Timeout);
+        cts.CancelAfter(timeout);
 
         string output;
         string error;
@@ -198,7 +246,7 @@ public sealed partial class GitCliService(ILogger<GitCliService> logger, GitProc
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             SafeKill(process);
-            logger.LogWarning("git ls-remote timed out after {Timeout}s for {Url}", Timeout.TotalSeconds, StripCredentials(repositoryUrl));
+            logger.LogWarning("git ls-remote timed out after {Timeout}s for {Url}", timeout.TotalSeconds, StripCredentials(repositoryUrl));
             return [];
         }
 
@@ -244,7 +292,7 @@ public sealed partial class GitCliService(ILogger<GitCliService> logger, GitProc
         return results;
     }
 
-    private void SafeKill(Process process)
+    private static void SafeKill(Process process)
     {
         try { process.Kill(entireProcessTree: true); }
         catch (InvalidOperationException) { /* already exited */ }

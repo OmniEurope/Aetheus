@@ -2,22 +2,9 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Whether the realtime side is catching up after the page came back to the foreground, for the small
-/// "synchronising" indicator. A phone put down during a run freezes the tab: its sockets die while it
-/// sleeps, and on return every hub reconnects, re-joins its groups and refetches what it missed. That
-/// short catch-up used to be silent, so the page looked current while it was not.
-///
-/// Two inputs, nothing polled. The page reports when it is hidden and visible again (see
-/// <c>RealtimeSyncIndicator</c>); every realtime owner reports the span of its reconnect and refetch
-/// through <see cref="BeginCatchUp"/> (see <see cref="HubConnectionExtensions.RejoinOnReconnect"/>).
-/// On return, a catch-up already running shows the indicator at once. Otherwise the status watches for
-/// <see cref="SettleWindow"/>, because a socket that died in the background is usually noticed only a
-/// moment after the tab wakes: a catch-up starting in that window shows it, a quiet window shows
-/// nothing. It hides when the last catch-up ends, or after <see cref="SafetyTimeout"/> whatever
-/// happens, so it can never stay up; a real outage belongs to the connection-lost overlay.
-/// The timers only bound the UI, they fetch nothing.
-/// </summary>
+/// <summary>Shows foreground catch-up while hubs reconnect and refetch, including work starting
+/// within SettleWindow after a tab wakes. Hides after the final catch-up or SafetyTimeout; timers
+/// bound display only and never fetch data.</summary>
 public sealed class RealtimeSyncStatus(TimeProvider timeProvider) : IDisposable
 {
     /// <summary>How long after the page is visible again a starting catch-up still counts as the return's.</summary>

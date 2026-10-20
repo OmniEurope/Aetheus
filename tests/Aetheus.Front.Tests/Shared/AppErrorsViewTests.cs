@@ -249,7 +249,7 @@ public sealed class AppErrorsViewTests : BunitContext
         return module;
     }
 
-    /// <summary>Recette R2-011: the Markdown button of the grid's export bar (Markdown, then CSV).</summary>
+    /// <summary>The Markdown button of the grid's export bar (Markdown, then CSV).</summary>
     private static AngleSharp.Dom.IElement MarkdownExportButton(IRenderedComponent<AppErrorsView> cut) =>
         cut.FindAll(".omni-data-grid__export-button")[0];
 
@@ -261,7 +261,7 @@ public sealed class AppErrorsViewTests : BunitContext
         var cut = Render<AppErrorsView>(parameters => parameters.Add(component => component.AppId, 7).Add(component => component.AppName, "Shop"));
         cut.WaitForAssertion(() => Assert.Contains("group 1", cut.Markup, StringComparison.Ordinal));
         Assert.Empty(cut.FindComponents<OmniMarkdownExportButton<AppErrorEventDto>>());
-        // Recette R2-009: Markdown is the bar's one blue button, CSV stays Ghost.
+        // Markdown is the bar's one blue button, CSV stays Ghost.
         Assert.Contains("omni-button--primary", MarkdownExportButton(cut).ClassList);
         Assert.Single(cut.FindAll(".omni-data-grid__export .omni-button--primary"));
 
@@ -269,7 +269,7 @@ public sealed class AppErrorsViewTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Single(module.Invocations["download"]));
         var download = module.Invocations["download"].Single();
-        // Recette R2-036: the application's name, then the content; OE appends its generation time once.
+        // The application's name, then the content; OE appends its generation time once.
         Assert.Matches(@"^shop-errors-\d{4}-\d{2}-\d{2}-\d{4}\.md$", Assert.IsType<string>(download.Arguments[0]));
         var markdown = System.Text.Encoding.UTF8.GetString(Assert.IsType<byte[]>(download.Arguments[2]));
         Assert.Contains(handler.Requests, request => request.Url.Contains("errors?page=1&pageSize=200", StringComparison.Ordinal)

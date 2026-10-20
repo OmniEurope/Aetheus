@@ -3,15 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R-373: an opaque long identifier (commit SHA, c-/vc- release name, artifact digest, release
-/// tag) is shown in one short form and always leads to its object. Both halves go through
-/// <c>ShortId</c>: (a) no page renders <c>ShortSha(</c> or <c>ShortVersion(</c> as element content
-/// (attribute uses such as a page title stay allowed, and so does a badge text, the content of an
-/// <c>OmniBadge</c> since OE 1.2.0), and (b) every <c>&lt;ShortId</c>
-/// declares an <c>Href</c>, except the few listed below with their reason. A null Href at runtime
-/// (no destination known for that value) is the assumed exception and renders plain text.
-/// </summary>
+/// <summary>Opaque identifiers use ShortId and an object destination unless explicitly excepted.
+/// Null runtime destinations remain plain text; title attributes and badge content retain their
+/// documented allowances.</summary>
 public sealed class ShortIdentifierLinkAuditTests
 {
     /// <summary>File name and Value expression of a ShortId allowed without Href, with the reason.</summary>
@@ -105,8 +99,8 @@ public sealed class ShortIdentifierLinkAuditTests
         return false;
     }
 
-    /// <summary>True when the position sits in the content of an <c>OmniBadge</c>: OE 1.2.0 retired the badge's
-    /// <c>Text</c> attribute, so the badge text allowed above now reads as its child content.</summary>
+    /// <summary>Identifies text inside an OmniBadge, where short non-link labels are
+    /// allowed.</summary>
     private static bool IsBadgeText(string text, int index)
     {
         var open = text.LastIndexOf("<OmniBadge", index, StringComparison.Ordinal);

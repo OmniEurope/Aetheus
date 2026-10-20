@@ -71,6 +71,12 @@ public sealed record ServerMetricDto : StorageUsageDto
     public double MemoryTotalMb { get; init; }
     public double DiskUsedGb { get; init; }
     public double DiskTotalGb { get; init; }
+    /// <summary>Fullest inode table, in percent; null when the agent did not measure it.</summary>
+    public double? InodeUsedPercent { get; init; }
+    /// <summary>Agent clock offset against the backend's, in milliseconds (positive = agent ahead),
+    /// and its uncertainty; both null when the heartbeat carried no usable clock sample.</summary>
+    public double? ClockOffsetMs { get; init; }
+    public double? ClockOffsetUncertaintyMs { get; init; }
     public bool StorageMaintenanceDryRun { get; init; }
     public bool DeploymentOnly { get; init; }
     public bool BuildActive { get; init; }
@@ -85,6 +91,7 @@ public sealed record ServerMetricDto : StorageUsageDto
     public static ServerMetricDto FromHeartbeat(ServerHeartbeatDto heartbeat, int serverId, DateTime timestamp)
     {
         var storage = heartbeat.StorageDiagnostics;
+        var clock = heartbeat.ClockSample?.Estimate();
         return new ServerMetricDto
         {
             ServerId = serverId,
@@ -93,6 +100,9 @@ public sealed record ServerMetricDto : StorageUsageDto
             MemoryTotalMb = heartbeat.MemoryTotalMb,
             DiskUsedGb = heartbeat.Disks.Sum(d => d.UsedGb),
             DiskTotalGb = heartbeat.Disks.Sum(d => d.TotalGb),
+            InodeUsedPercent = DiskInfoDto.MaxInodeUsedPercent(heartbeat.Disks),
+            ClockOffsetMs = clock?.OffsetMs,
+            ClockOffsetUncertaintyMs = clock?.UncertaintyMs,
             BuildCacheAvailable = storage.BuildCacheAvailable,
             DockerInventoryAvailable = storage.DockerInventoryAvailable,
             BuildCacheBytes = storage.BuildCacheBytes,

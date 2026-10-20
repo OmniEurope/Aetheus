@@ -144,8 +144,8 @@ internal static class AnalysisReportNormalizer
                 if (item.Severity > finding.Severity) finding.Severity = item.Severity;
                 if (finding.Status == AnalysisFindingStatus.Fixed)
                 {
-                    // Recette R2-135: a fixed finding drops out of the active ones whatever was decided;
-                    // when it comes back, the decision still standing (not revoked, not expired) applies
+                    // A fixed finding drops out of the active ones whatever was decided; when it
+                    // comes back, the decision still standing (not revoked, not expired) applies
                     // again, otherwise it is open.
                     finding.Status = StandingDecisionStatus(finding, now) ?? AnalysisFindingStatus.Open;
                     finding.ResolvedAt = null;

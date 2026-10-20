@@ -52,7 +52,6 @@ public class GitLightIntegrationTests
             new Microsoft.Extensions.Caching.Memory.MemoryCache(
                 new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             new GitBranchProtectionService(_lightRepoMock, _cliMock, _auditMock, options),
-            new GitAiPatchService(_lightRepoMock, _cliMock, _auditMock, options),
             Substitute.For<ILogger<GitLightService>>(),
             TimeProvider.System);
     }

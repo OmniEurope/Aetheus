@@ -1,7 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* PLAN-005 lot 2 / D33: the information, success and warning notifications that did not get a
-   toast of their own because three were already on screen. Errors never land here. *@
+@* Present the supplied notifications together so their full text remains accessible in one dialog. *@
 <OmniStack Gap="OmniSpacing.Small">
     @foreach (var message in Messages)
     {

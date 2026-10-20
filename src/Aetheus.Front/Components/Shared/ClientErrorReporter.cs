@@ -5,12 +5,14 @@ namespace Aetheus.Front.Components.Shared;
 
 public sealed class ClientErrorReporter(HttpClient http, NavigationManager navigation)
 {
-    public void Report(string correlationId, string summary, string message, string? stackTrace = null)
+    /// <summary>Posts a report to the system log; <paramref name="level"/> is one of
+    /// <see cref="ClientErrorLogLevels"/>, null meaning an error.</summary>
+    public void Report(string correlationId, string summary, string message, string? stackTrace = null, string? level = null)
     {
-        _ = ReportAsync(correlationId, summary, message, stackTrace);
+        _ = ReportAsync(correlationId, summary, message, stackTrace, level);
     }
 
-    private async Task ReportAsync(string correlationId, string summary, string message, string? stackTrace)
+    private async Task ReportAsync(string correlationId, string summary, string message, string? stackTrace, string? level)
     {
         try
         {
@@ -22,7 +24,8 @@ public sealed class ClientErrorReporter(HttpClient http, NavigationManager navig
                 Path = Truncate(PageAddress(), ClientErrorLogRequest.MaxPathLength),
                 StackTrace = string.IsNullOrWhiteSpace(stackTrace)
                     ? null
-                    : Truncate(stackTrace, ClientErrorLogRequest.MaxStackTraceLength)
+                    : Truncate(stackTrace, ClientErrorLogRequest.MaxStackTraceLength),
+                Level = level
             }).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
@@ -31,11 +34,8 @@ public sealed class ClientErrorReporter(HttpClient http, NavigationManager navig
         }
     }
 
-    /// <summary>
-    /// The page the error happened on, as an absolute path ("/" for the dashboard, which a base-relative
-    /// path rendered as nothing: recette R2-100). The query string and fragment are left out: they can
-    /// carry a token or a search the user typed, and the route alone says which screen failed.
-    /// </summary>
+    /// <summary>Report the failing page as an absolute path so the dashboard remains identifiable
+    /// as /; omit query and fragment because they may contain tokens or user input.</summary>
     private string PageAddress() =>
         ClientErrorLogRequest.PathWithoutQuery("/" + navigation.ToBaseRelativePath(navigation.Uri));
 

@@ -3,13 +3,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Back.Data.Entities;
 
-/// <summary>
-/// A resource one pipeline run holds alone: today an environment (<c>environment:{id}</c>). The key
-/// is the primary key, so two runs can never both hold it (decision of 2026-10-02: a run that acts on
-/// an environment locks it, the others wait). The lock counts only while its run is still active;
-/// a finished, failed, cancelled or timed-out holder no longer blocks anyone, whether or not the row
-/// was removed yet, so a lock cannot outlive the run that took it.
-/// </summary>
+/// <summary>The resource key is unique so only one active run can hold an environment lock
+/// (ADR-049). Terminal holders do not block new owners even if their rows remain.</summary>
 public class PipelineResourceLock
 {
     [MaxLength(MaxKeyLength)]

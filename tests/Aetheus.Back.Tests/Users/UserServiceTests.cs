@@ -243,7 +243,7 @@ public class UserServiceTests
 
         Assert.True(result);
         await _repoMock.Received(1).RemoveUserAsync(user, Arg.Any<CancellationToken>());
-        // R1-37: a deleted user's session is over, so what the modules hold in memory for them goes too.
+        // A deleted user's session is over, so what the modules hold in memory for them goes too.
         await _domainEvents.Received(1).DispatchAsync(
             new UserSessionEndedEvent(1, UserSessionEndReasons.Deleted), Arg.Any<CancellationToken>());
     }
@@ -474,7 +474,7 @@ public class UserServiceTests
         Assert.True(result);
         Assert.True(user.MustChangePassword);
         Assert.True(BCrypt.Net.BCrypt.Verify("newpass123", user.PasswordHash));
-        // R1-37: an admin reset does not end the target's session (its refresh token stays valid).
+        // An admin reset does not end the target's session (its refresh token stays valid).
         await _domainEvents.DidNotReceive().DispatchAsync(
             Arg.Any<UserSessionEndedEvent>(), Arg.Any<CancellationToken>());
     }
@@ -503,9 +503,47 @@ public class UserServiceTests
 
         Assert.True(result);
         Assert.False(user.MustChangePassword);
-        // R1-37: the client signs out right after, with a token the server already refuses.
+        // The client signs out right after, with a token the server already refuses.
         await _domainEvents.Received(1).DispatchAsync(
             new UserSessionEndedEvent(3, UserSessionEndReasons.PasswordChanged), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_NonAdminOnAnotherUser_IsRefusedAndChangesNothing()
+    {
+        var principal = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "someone")], "test"));
+        _httpContextAccessorMock.HttpContext.Returns(new DefaultHttpContext { User = principal });
+        var user = new User { Id = 8, Username = "target", PasswordHash = "oldhash" };
+        _repoMock.FindUserAsync(8, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.ChangePasswordAsync(8, new ChangeUserPasswordRequest { NewPassword = "newpass123" }, ct: TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        Assert.Equal("oldhash", user.PasswordHash);
+        await _repoMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrongpass")]
+    public async Task ChangePasswordAsync_SelfWithoutTheRightCurrentPassword_IsRefused(string? currentPassword)
+    {
+        var principal = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "self")], "test"));
+        _httpContextAccessorMock.HttpContext.Returns(new DefaultHttpContext { User = principal });
+        var oldHash = BCrypt.Net.BCrypt.HashPassword("oldpass");
+        var user = new User { Id = 3, Username = "self", PasswordHash = oldHash, MustChangePassword = true };
+        _repoMock.FindUserAsync(3, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.ChangePasswordAsync(3,
+            new ChangeUserPasswordRequest { CurrentPassword = currentPassword, NewPassword = "newpass123" }, ct: TestContext.Current.CancellationToken);
+
+        Assert.False(result);
+        Assert.Equal(oldHash, user.PasswordHash);
+        Assert.True(user.MustChangePassword);
     }
 
     [Fact]
@@ -734,5 +772,72 @@ public class UserServiceTests
                 Roles = ["Admin"]
             }, ct: TestContext.Current.CancellationToken));
         await _repoMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    // --- Audit AUD-01 to AUD-03 (recette R1-50): sessions end with the identity they were opened on ---
+
+    [Fact]
+    public async Task ChangePasswordAsync_RevokesEveryRefreshToken()
+    {
+        _httpContextAccessorMock.HttpContext.Returns((HttpContext?)null);
+        var user = new User { Id = 1, Username = "user", PasswordHash = "oldhash" };
+        _repoMock.FindUserAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+
+        Assert.True(await _sut.ChangePasswordAsync(
+            1, new ChangeUserPasswordRequest { NewPassword = "newpass123" }, TestContext.Current.CancellationToken));
+
+        await _repoMock.Received(1).RevokeRefreshTokensAsync(1, user.UpdatedAt, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("renamed", false)]
+    [InlineData("u", true)]
+    public async Task UpdateUserAsync_RenameOrArmedForcedChange_RotatesTheSecurityStamp(string username, bool mustChange)
+    {
+        var user = new User
+        {
+            Id = 1,
+            Username = "u",
+            IsActive = true,
+            MustChangePassword = false,
+            SecurityStamp = "old-stamp",
+            UserRoles = []
+        };
+        _repoMock.GetUserDetailAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+
+        await _sut.UpdateUserAsync(1, new UpdateUserRequest
+        {
+            Username = username,
+            IsActive = true,
+            MustChangePassword = mustChange,
+            Roles = []
+        }, TestContext.Current.CancellationToken);
+
+        Assert.NotEqual("old-stamp", user.SecurityStamp);
+    }
+
+    [Fact]
+    public async Task UpdateUserAsync_WithoutSecurityChange_KeepsTheSecurityStamp()
+    {
+        var user = new User
+        {
+            Id = 1,
+            Username = "u",
+            Email = "old@test.com",
+            IsActive = true,
+            SecurityStamp = "old-stamp",
+            UserRoles = []
+        };
+        _repoMock.GetUserDetailAsync(1, Arg.Any<CancellationToken>()).Returns(user);
+
+        await _sut.UpdateUserAsync(1, new UpdateUserRequest
+        {
+            Username = "u",
+            Email = "new@test.com",
+            IsActive = true,
+            Roles = []
+        }, TestContext.Current.CancellationToken);
+
+        Assert.Equal("old-stamp", user.SecurityStamp);
     }
 }

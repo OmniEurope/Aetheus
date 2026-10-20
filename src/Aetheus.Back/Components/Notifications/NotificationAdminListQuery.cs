@@ -4,7 +4,7 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Notifications;
 
-/// <summary>Recette R-224: the column header filters of the notification channels and rules grids of the
+/// <summary>The column header filters of the notification channels and rules grids of the
 /// administration page; each key is the grid column's key.</summary>
 internal static class NotificationAdminListQuery
 {

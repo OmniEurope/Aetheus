@@ -64,7 +64,7 @@ public class VaultEditDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // New-vault mode (Id=0) loads the project list but must never fetch a vault detail.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/projects"));
@@ -79,7 +79,7 @@ public class VaultEditDeepTests : BunitContext
         SetupProjects();
         SetupVault(1);
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
         var detail = (VaultDetailDto?)typeof(VaultEdit).GetField("_detail", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(detail);
     }
@@ -112,7 +112,7 @@ public class VaultEditDeepTests : BunitContext
         nav.NavigateTo("http://localhost/?ProjectId=1");
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // Matching project id → bound onto the model.
         Assert.Equal(1, ModelInt(cut, "ProjectId"));
@@ -125,7 +125,7 @@ public class VaultEditDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         typeof(VaultEdit).GetProperty("EnvironmentId")!.SetValue(cut.Instance, (int?)5);
         var method = typeof(VaultEdit).GetMethod("OnParametersSetAsync",
@@ -143,7 +143,7 @@ public class VaultEditDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         typeof(VaultEdit).GetProperty("ProjectServerId")!.SetValue(cut.Instance, (int?)7);
         var method = typeof(VaultEdit).GetMethod("OnParametersSetAsync",
@@ -162,7 +162,7 @@ public class VaultEditDeepTests : BunitContext
         SetupProjects();
         SetupVault(1);
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // Mutate the loaded detail so we can detect whether a reload overwrote it.
         var detailField = typeof(VaultEdit).GetField("_detail", Priv)!;
@@ -186,7 +186,7 @@ public class VaultEditDeepTests : BunitContext
         SetupProjects();
         _handler.SetJsonResponse("api/vaults", new VaultDetailDto { Id = 99, Name = "Created" });
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var model = typeof(VaultEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
         model.GetType().GetProperty("Name")!.SetValue(model, "Created Vault");
@@ -208,7 +208,7 @@ public class VaultEditDeepTests : BunitContext
         SetupProjects();
         SetupVault(1);
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var method = typeof(VaultEdit).GetMethod("OnSubmit", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -225,7 +225,7 @@ public class VaultEditDeepTests : BunitContext
         SetupProjects();
         SetupVault(1);
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         SetFormValue(cut.Instance, "_newSecret", "Key", "");
@@ -246,7 +246,7 @@ public class VaultEditDeepTests : BunitContext
         SetupVault(1);
         _handler.SetJsonResponse("api/vaults/1/secrets", new VaultSecretDto { Id = 50, Key = "API_KEY" });
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         SetFormValue(cut.Instance, "_newSecret", "Key", "API_KEY");
@@ -296,7 +296,7 @@ public class VaultEditDeepTests : BunitContext
         SetupProjects();
         SetupVault(1);
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // Clear the loaded detail, then ReloadDetail must re-fetch it from the API.
         typeof(VaultEdit).GetField("_detail", Priv)!.SetValue(cut.Instance, null);

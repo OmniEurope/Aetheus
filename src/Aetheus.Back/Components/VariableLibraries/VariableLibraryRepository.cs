@@ -5,7 +5,7 @@ namespace Aetheus.Back.Components.VariableLibraries;
 
 public class VariableLibraryRepository(AppDbContext db) : IVariableLibraryRepository
 {
-    /// <summary>Recette R-210 / R-224: the header filters of the variable libraries list.</summary>
+    /// <summary>The header filters of the variable libraries list.</summary>
     internal static readonly GridQueryMap<VariableLibrary> Columns = new GridQueryMap<VariableLibrary>()
         .Text("Name", vl => vl.Name)
         .Text("ProjectName", vl => vl.Project != null ? vl.Project.Name : null)
@@ -14,12 +14,12 @@ public class VariableLibraryRepository(AppDbContext db) : IVariableLibraryReposi
         .Date("CreatedAt", vl => vl.CreatedAt)
         .Date("UpdatedAt", vl => vl.UpdatedAt);
 
-    /// <summary>Recette R-210: the header filters of a library's entries grid.</summary>
+    /// <summary>The header filters of a library's entries grid.</summary>
     internal static readonly GridQueryMap<VariableLibraryEntry> EntryColumns = new GridQueryMap<VariableLibraryEntry>()
         .Text("Key", entry => entry.Key)
         .Text("Value", entry => entry.Value);
 
-    /// <summary>Recette R-210 / R-224: the header filters of an entry's version history grid.</summary>
+    /// <summary>The header filters of an entry's version history grid.</summary>
     internal static readonly GridQueryMap<VariableLibraryEntryVersion> EntryVersionColumns = new GridQueryMap<VariableLibraryEntryVersion>()
         .Number("Version", version => version.Version)
         .Text("Key", version => version.Key)
@@ -27,7 +27,7 @@ public class VariableLibraryRepository(AppDbContext db) : IVariableLibraryReposi
         .Enum("ChangeType", version => version.ChangeType)
         .Date("ChangedAt", version => version.ChangedAt);
 
-    /// <summary>Recette R-210: the project names present across the libraries the caller can read.</summary>
+    /// <summary>The project names present across the libraries the caller can read.</summary>
     public async Task<VariableLibraryFilterValuesDto> GetFilterValuesAsync(List<int>? accessibleIds, CancellationToken ct = default)
     {
         var query = db.VariableLibraries.AsNoTracking().Where(vl => vl.Project != null);

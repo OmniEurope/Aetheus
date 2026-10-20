@@ -4,7 +4,7 @@
     <OmniCodeBlock Code="@Message" Title="@L["Message"]" Wrap="true" Class="code-block-bounded code-block-tall" />
     @if (!string.IsNullOrWhiteSpace(Exception))
     {
-        <OmniCodeBlock Code="@Exception" Title="@L["ExceptionDetails"]" Wrap="true" Class="omni-u-mt-md code-block-bounded code-block-tall" />
+        <OmniCodeBlock Code="@Exception" Title="@(DetailsTitle ?? L["ExceptionDetails"])" Wrap="true" Class="omni-u-mt-md code-block-bounded code-block-tall" />
     }
     <DialogFooter CancelText="@L["Close"]" OnCancel="Close">
         <SecondaryContent>

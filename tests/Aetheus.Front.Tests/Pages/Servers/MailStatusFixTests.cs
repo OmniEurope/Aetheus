@@ -6,9 +6,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>Recette R1-9 / R1-11 / R1-14: under each red mail line, what the record is, the record to copy,
-/// the effect of publishing it, and for an MX still showing the old host, the DNS cache it may come from.
-/// Rendered with the real French resources, so the sentences the user reads are the ones asserted.</summary>
+/// <summary>Under each red mail line, what the record is, the record to copy, the effect of
+/// publishing it, and for an MX still showing the old host, the DNS cache it may come from.
+/// Rendered with the real French resources, so the sentences the user reads are the ones
+/// asserted.</summary>
 public sealed class MailStatusFixTests : BunitContext
 {
     private readonly CultureInfo _previousUiCulture = CultureInfo.CurrentUICulture;

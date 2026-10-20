@@ -12,7 +12,7 @@ public class PipelineArtifactServiceTrendTests
     private readonly PipelineArtifactService _sut;
 
     public PipelineArtifactServiceTrendTests() =>
-        _sut = new PipelineArtifactService(_repo, TimeProvider.System, NullLogger<PipelineArtifactService>.Instance);
+        _sut = new PipelineArtifactService(_repo, _repo, _repo, TimeProvider.System, NullLogger<PipelineArtifactService>.Instance);
 
     [Fact]
     public async Task GetCoverageTrendAsync_MapsRowsToDtos()
@@ -66,7 +66,7 @@ public class PipelineArtifactServiceTrendTests
     [Fact]
     public async Task PublishCoverageAsync_RunNotFound_ReturnsNull()
     {
-        _repo.GetPipelineRunWithPipelineAsync(9, Arg.Any<CancellationToken>()).Returns((PipelineRun?)null);
+        _repo.GetPipelineIdForRunAsync(9, Arg.Any<CancellationToken>()).Returns((int?)null);
 
         var result = await _sut.PublishCoverageAsync(9, new PublishCoverageRequest { XmlContent = "<coverage/>" }, ct: TestContext.Current.CancellationToken);
 
@@ -76,8 +76,8 @@ public class PipelineArtifactServiceTrendTests
     [Fact]
     public async Task PublishCoverageAsync_InvalidXml_ReturnsNull()
     {
-        _repo.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>())
-            .Returns(new PipelineRun { Id = 1, PipelineId = 1, Pipeline = new Pipeline { Id = 1, Name = "CI" } });
+        _repo.GetPipelineIdForRunAsync(1, Arg.Any<CancellationToken>())
+            .Returns((int?)1);
 
         var result = await _sut.PublishCoverageAsync(1, new PublishCoverageRequest { XmlContent = "not xml at all" }, ct: TestContext.Current.CancellationToken);
 
@@ -87,8 +87,8 @@ public class PipelineArtifactServiceTrendTests
     [Fact]
     public async Task PublishCoverageAsync_ValidCobertura_StoresAndReturnsSummary()
     {
-        _repo.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>())
-            .Returns(new PipelineRun { Id = 1, PipelineId = 1, Pipeline = new Pipeline { Id = 1, Name = "CI" } });
+        _repo.GetPipelineIdForRunAsync(1, Arg.Any<CancellationToken>())
+            .Returns((int?)1);
 
         var xml = "<?xml version=\"1.0\"?><coverage line-rate=\"0.85\" branch-rate=\"0.7\" " +
                   "lines-covered=\"85\" lines-valid=\"100\" branches-covered=\"7\" branches-valid=\"10\"></coverage>";
@@ -165,10 +165,44 @@ public class PipelineArtifactServiceTrendTests
         Assert.Equal("C", result.Items[0].Name);
     }
 
+    [Theory]
+    [InlineData("Name", false, "A,B,C")]
+    [InlineData("name", true, "C,B,A")]
+    [InlineData("LineRate", false, "B,C,A")]
+    [InlineData("linerate", true, "A,C,B")]
+    [InlineData("LinesValid", false, "A,C,B")]
+    [InlineData("linesvalid", true, "B,C,A")]
+    [InlineData(null, false, "B,C,A")]
+    [InlineData("unknown", true, "B,C,A")]
+    public async Task GetCoverageAssembliesAsync_SortsByTheRequestedColumn(string? sortBy, bool descending, string expected)
+    {
+        _repo.GetCoverageResultsAsync(1, Arg.Any<CancellationToken>()).Returns(
+        [
+            new CoverageResult
+            {
+                PipelineRunId = 1,
+                LinesValid = 800,
+                FilesJson = "[{\"Assembly\":\"A\",\"File\":\"A.cs\",\"LinesCovered\":80,\"LinesValid\":100},"
+                    + "{\"Assembly\":\"B\",\"File\":\"B.cs\",\"LinesCovered\":50,\"LinesValid\":400},"
+                    + "{\"Assembly\":\"C\",\"File\":\"C.cs\",\"LinesCovered\":90,\"LinesValid\":300}]"
+            }
+        ]);
+
+        var result = await _sut.GetCoverageAssembliesAsync(1, new PaginationRequest
+        {
+            Page = 1,
+            PageSize = 10,
+            SortBy = sortBy,
+            SortDescending = descending
+        }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, string.Join(",", result.Items.Select(item => item.Name)));
+    }
+
     [Fact]
     public async Task GetCoverageAssembliesAsync_FilesWithoutPackage_AreGroupedByTheProjectTheirPathNames()
     {
-        // Recette R-428: a report stored without package names used to give an empty table.
+        // Package-free coverage reports still produce project-grouped results.
         _repo.GetCoverageResultsAsync(1, Arg.Any<CancellationToken>()).Returns(
         [
             new CoverageResult
@@ -211,15 +245,15 @@ public class PipelineArtifactServiceTrendTests
     [Fact]
     public async Task PublishLintAsync_RunNotFound_ReturnsNull()
     {
-        _repo.GetPipelineRunWithPipelineAsync(9, Arg.Any<CancellationToken>()).Returns((PipelineRun?)null);
+        _repo.GetPipelineIdForRunAsync(9, Arg.Any<CancellationToken>()).Returns((int?)null);
         Assert.Null(await _sut.PublishLintAsync(9, new PublishLintRequest { SarifContent = "{}" }, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task PublishLintAsync_InvalidSarif_ReturnsNull()
     {
-        _repo.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>())
-            .Returns(new PipelineRun { Id = 1, PipelineId = 1, Pipeline = new Pipeline { Id = 1, Name = "CI" } });
+        _repo.GetPipelineIdForRunAsync(1, Arg.Any<CancellationToken>())
+            .Returns((int?)1);
 
         Assert.Null(await _sut.PublishLintAsync(1, new PublishLintRequest { SarifContent = "not valid sarif" }, ct: TestContext.Current.CancellationToken));
     }

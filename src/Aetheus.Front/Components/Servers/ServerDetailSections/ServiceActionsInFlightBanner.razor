@@ -1,0 +1,14 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Servers.ServerDetailSections
+@* Recette R2-030: what runs on the services is said above them, with a moving bar, until it ends.
+   Recette R3-22: one banner for the whole page, so it stays where it is when a service changes grid. *@
+@if (InFlightActions is { Count: > 0 } running)
+{
+    <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-sm service-actions-in-flight">
+        @foreach (var (service, action) in running)
+        {
+            <div class="service-action-in-flight"><OmniLink Href="@($"/tasks/{action.TaskId}")">@InFlightText(service, action)</OmniLink></div>
+        }
+        <OmniProgressBar Indeterminate="true" Shape="OmniProgressShape.Linear" Label="@InFlightText(running[0].Service, running[0].Action)" Class="omni-u-mt-xs" />
+    </OmniAlert>
+}

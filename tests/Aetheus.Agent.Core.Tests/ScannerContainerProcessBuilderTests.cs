@@ -121,8 +121,7 @@ public sealed class ScannerContainerProcessBuilderTests
     public void Build_JscpdWithRepositoryConfiguration_PassesNoIgnoreThatWouldReplaceIt(
         string fileName, string content)
     {
-        // Recette R2-120: jscpd 5 replaces the configured lists with any list given on the command
-        // line, which once dropped the repository's ignorePattern and kept reporting duplicate #1156.
+        // Preserve repository jscpd lists by omitting command-line list overrides.
         using var source = new TemporaryDirectory();
         File.WriteAllText(Path.Combine(source.Path, fileName), content);
 
@@ -148,6 +147,55 @@ public sealed class ScannerContainerProcessBuilderTests
         Assert.InRange(index, arguments.IndexOf("/src/node_modules/jscpd/run-jscpd.js"), arguments.Count - 2);
         Assert.Equal("**/node_modules/**", arguments[index + 1]);
         Assert.DoesNotContain("--ignore-pattern", arguments);
+    }
+
+    /// <summary>Recette R3-63, option 3: a repository without <c>.gitleaks.toml</c> is scanned with
+    /// Gitleaks' built-in rules (no <c>--config</c>, which Gitleaks refuses for a missing path); a
+    /// repository with one keeps it, path included.</summary>
+    [Theory]
+    [InlineData("gitleaks")]
+    [InlineData("gitleaks-history")]
+    public void Build_GitleaksReadsTheRepositoryConfigurationOnlyWhenItExists(string key)
+    {
+        using var withoutFile = new TemporaryDirectory();
+        using var withFile = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(withFile.Path, ".gitleaks.toml"), "[extend]\nuseDefault = true\n");
+
+        var defaults = BuildScanner(key, withoutFile.Path);
+        var configured = BuildScanner(key, withFile.Path);
+
+        Assert.DoesNotContain("--config", defaults);
+        Assert.DoesNotContain("/src/.gitleaks.toml", defaults);
+        Assert.Contains("--report-path", defaults);
+        var index = configured.IndexOf("--config");
+        Assert.True(index >= 0, "The repository's own Gitleaks configuration must be passed.");
+        Assert.Equal("/src/.gitleaks.toml", configured[index + 1]);
+    }
+
+    [Fact]
+    public void DropAbsentConfiguration_LeavesAConfigurationOutsideTheSourceUntouched()
+    {
+        using var source = new TemporaryDirectory();
+        List<string> outside = ["dir", "/src", "--config", "/rules/gitleaks.toml"];
+        List<string> dangling = ["dir", "/src", "--config"];
+
+        Assert.False(GitleaksRepositoryConfiguration.DropAbsentConfiguration(outside, source.Path));
+        Assert.False(GitleaksRepositoryConfiguration.DropAbsentConfiguration(dangling, source.Path));
+        Assert.Equal(["dir", "/src", "--config", "/rules/gitleaks.toml"], outside);
+        Assert.Equal(["dir", "/src", "--config"], dangling);
+    }
+
+    private static List<string> BuildScanner(string key, string sourceDirectory)
+    {
+        var scanner = Assert.Single(ScannerManifestCatalog.Default.Scanners, entry => entry.Key == key);
+        return ScannerContainerProcessBuilder.Build(
+            scanner,
+            sourceDirectory,
+            sourceDirectory,
+            null,
+            null,
+            new Dictionary<string, string>(),
+            null).ArgumentList.ToList();
     }
 
     private static List<string> BuildJscpd(string sourceDirectory)

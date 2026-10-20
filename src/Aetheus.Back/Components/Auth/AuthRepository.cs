@@ -15,8 +15,7 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
                                       && t.ExpiresAt > timeProvider.GetUtcNow().UtcDateTime, ct).ConfigureAwait(false);
     }
 
-    // PLAN-004 R-11: enrollment matching must see retired servers, so the same machine revives its
-    // row (same id, links intact) instead of enrolling a duplicate.
+    // Include retired servers in enrollment matching to revive the same row and preserve links.
     public async Task<Server?> FindServerByHostnameAsync(string hostname, CancellationToken ct = default)
     {
         return await db.Servers
@@ -196,8 +195,8 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
 
     public async Task<int?> ValidateServerTokenHashAsync(string tokenHash, CancellationToken ct = default)
     {
-        // PLAN-004 R-11: retiring revokes the tokens; the explicit DeletedAt check also closes the race
-        // where a heartbeat already in flight renews a token right after the revocation.
+        // Check DeletedAt as well as revoked tokens to prevent an in-flight heartbeat from renewing
+        // credentials after retirement.
         var serverToken = await db.ServerTokens
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.TokenHash == tokenHash
@@ -382,8 +381,9 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
         var now = timeProvider.GetUtcNow().UtcDateTime;
         if (db.Database.IsRelational())
         {
-            // R-072: compare-and-set on "still active", so of two concurrent rotations of one token
-            // exactly one revokes it; the row lock makes the later UPDATE re-check and match nothing.
+            // Compare-and-set on "still active", so of two concurrent rotations of one token
+            // exactly one revokes it; the row lock makes the later UPDATE re-check and match
+            // nothing.
             var revoked = await db.RefreshTokens
                 .Where(r => r.Id == tokenId && r.RevokedAt == null)
                 .ExecuteUpdateAsync(
@@ -417,14 +417,13 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
     public async Task DeleteExpiredRefreshTokensAsync(int userId, CancellationToken ct = default)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var graceStart = now.AddMinutes(-5);
+        var graceStart = RefreshTokenRetention.RevokedCutoff(now);
         var dead = db.RefreshTokens
             .Where(r => r.UserId == userId && (r.ExpiresAt <= now || (r.RevokedAt != null && r.RevokedAt < graceStart)));
         if (db.Database.IsRelational())
         {
-            // R-072: a set-based delete is idempotent. Staging tracked deletes made two concurrent
-            // refreshes of one user delete the same rows, and the later SaveChanges then failed with
-            // DbUpdateConcurrencyException (0 rows affected), which surfaced as HTTP 500.
+            // Use idempotent set-based deletion so concurrent refresh requests cannot stage
+            // conflicting tracked deletes.
             await dead.ExecuteDeleteAsync(ct).ConfigureAwait(false);
             return;
         }
@@ -437,10 +436,13 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
 
     public async Task<int> DeleteAllExpiredRefreshTokensAsync(DateTime utcNow, CancellationToken ct = default)
     {
-        var grace = utcNow.AddMinutes(-5);
-        var dead = await db.RefreshTokens
-            .Where(r => r.ExpiresAt <= utcNow || (r.RevokedAt != null && r.RevokedAt < grace))
-            .ToListAsync(ct).ConfigureAwait(false);
+        var grace = RefreshTokenRetention.RevokedCutoff(utcNow);
+        var deadQuery = db.RefreshTokens
+            .Where(r => r.ExpiresAt <= utcNow || (r.RevokedAt != null && r.RevokedAt < grace));
+        if (db.Database.IsRelational())
+            return await deadQuery.ExecuteDeleteAsync(ct).ConfigureAwait(false);
+
+        var dead = await deadQuery.ToListAsync(ct).ConfigureAwait(false);
         if (dead.Count == 0)
             return 0;
         db.RefreshTokens.RemoveRange(dead);

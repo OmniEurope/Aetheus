@@ -71,6 +71,8 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
         builder.Property(e => e.TokenHash).HasMaxLength(64);
         builder.HasIndex(e => e.TokenHash);
         builder.HasIndex(e => e.UserId);
+        // Serves the cleanup sweep of revoked rows (RevokedAt < cutoff) without scanning live tokens.
+        builder.HasIndex(e => e.RevokedAt).HasFilter("\"RevokedAt\" IS NOT NULL");
         builder.HasOne(e => e.User)
                .WithMany(u => u.RefreshTokens)
                .HasForeignKey(e => e.UserId)

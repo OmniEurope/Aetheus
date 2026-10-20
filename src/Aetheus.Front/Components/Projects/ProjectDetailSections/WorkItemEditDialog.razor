@@ -29,10 +29,9 @@
             </ChildContent></OmniFormField>
         </OmniColumn>
         <OmniColumn Span="12">
-            <OmniFormField For="oe-pages-projects-projectdetailsections-workitemeditdialog-6" Class="omni-u-w-100"><LabelContent>@L["Tags"]</LabelContent><ChildContent>
+            <OmniFormField For="oe-pages-projects-projectdetailsections-workitemeditdialog-6" Help="@L["TagsHint"]" Class="omni-u-w-100"><LabelContent>@L["Tags"]</LabelContent><ChildContent>
                 <OmniTextBox @bind-Value="_model.TagsCsv" Placeholder="@L["PlaceholderTags"]" Id="oe-pages-projects-projectdetailsections-workitemeditdialog-6" />
             </ChildContent></OmniFormField>
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["TagsHint"]</OmniText>
         </OmniColumn>
     </OmniRow>
     <DialogFooter OnCancel="@Cancel">

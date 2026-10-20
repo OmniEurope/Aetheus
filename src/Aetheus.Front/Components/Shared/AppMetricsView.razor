@@ -3,12 +3,12 @@
 @* ADR-021 phase 2: OTLP metric time-series chart for a monitored app. *@
 @if (_namesLoading)
 {
-    @* Recette R-444: the list of metrics is being read; "no metric yet" would be a false statement. *@
+    @* The list of metrics is being read; "no metric yet" would be a false statement. *@
     <AetheusLoader Size="OmniControlSize.Small" />
 }
 else if (_namesLoadFailed)
 {
-    @* Recette R-357: the names call failed; say so instead of claiming nothing was ingested. *@
+    @* The names call failed; say so instead of claiming nothing was ingested. *@
     <EmptyState Icon="error" Title="@L["MetricsLoadFailed"]" />
 }
 else if (_names.Count == 0)
@@ -17,8 +17,8 @@ else if (_names.Count == 0)
 }
 else
 {
-    @* Recette R-444: Metric, Series and Period on one line, each label beside its field, the fields
-       sharing the width; a phone stacks them (app.css). *@
+    @* Metric, Series and Period on one line, each label beside its field, the fields sharing the
+       width; a phone stacks them (app.css). *@
     <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Class="app-metrics-filters omni-u-mb-md">
         <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="app-metrics-filter">
             <OmniLabel For="app-metrics-metric">@L["Metric"]</OmniLabel>

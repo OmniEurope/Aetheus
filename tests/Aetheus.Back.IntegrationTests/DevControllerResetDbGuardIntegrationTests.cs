@@ -6,13 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Fail-safe guard (incident 2026-06-26): <c>POST /api/dev/reset-db</c> DROPS the entire database,
-/// so it must refuse any database whose name does not end with <c>_e2e</c>. The Testcontainers DB is
-/// <c>aetheus_it</c> - a stand-in for the dev/prod <c>aetheus</c> database - so the endpoint must
-/// be refused (403) and drop nothing. This proves a mis-wired E2E backend that fell back to the dev
-/// connection string can no longer wipe real data, without running any E2E flow.
-/// </summary>
+/// <summary>The destructive reset endpoint must reject databases without the _e2e suffix. The
+/// disposable integration database verifies refusal without dropping its contents.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class DevControllerResetDbGuardIntegrationTests(PostgresFixture fixture)
 {

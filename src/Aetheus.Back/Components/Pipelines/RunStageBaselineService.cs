@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>PLAN-003 lot 20 / D26: usual stage and step durations of a pipeline, as seen from one run.</summary>
+/// <summary>Provides historical stage and step duration baselines for a pipeline run.</summary>
 public interface IRunStageBaselineService
 {
     Task<RunStageBaselinesDto> GetAsync(int pipelineId, int runId, CancellationToken ct = default);

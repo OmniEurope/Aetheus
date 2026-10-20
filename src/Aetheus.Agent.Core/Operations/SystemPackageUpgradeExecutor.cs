@@ -32,7 +32,15 @@ public sealed class SystemPackageUpgradeExecutor(
             await onOutput("System package upgrade is only supported on Linux", TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
         }
+        return await UpgradeAsync(envVars, timeoutSeconds, onOutput, cancellationToken).ConfigureAwait(false);
+    }
 
+    /// <summary>The upgrade itself, past the platform check: simulate, report, refuse a blocked package,
+    /// stop on a dry run or when nothing is pending, and only then apply.</summary>
+    internal async Task<ExecutorResult> UpgradeAsync(
+        IReadOnlyDictionary<string, string> envVars, int timeoutSeconds,
+        Func<string, TaskLogLevel, Task> onOutput, CancellationToken cancellationToken)
+    {
         var dryRun = envVars.TryGetValue(PatchingConstants.DryRunEnvVar, out var d) && d == "1";
         var extraBlocklist = envVars.TryGetValue(PatchingConstants.BlocklistEnvVar, out var b) && !string.IsNullOrWhiteSpace(b)
             ? b.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -49,14 +57,11 @@ public sealed class SystemPackageUpgradeExecutor(
                 await onOutput("apt-get simulation failed; aborting (no changes made)", TaskLogLevel.Error).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(sim.StdErr))
                     await onOutput(sim.StdErr.Trim(), TaskLogLevel.Error).ConfigureAwait(false);
-                return new ExecutorResult(sim.ExitCode == 0 ? 1 : sim.ExitCode, false);
+                return new ExecutorResult(sim.ExitCode, false);
             }
 
             var pending = AptSimulateParser.Parse(sim.StdOut);
-            var securityCount = pending.Count(p => p.IsSecurity);
-            await onOutput($"{pending.Count} package(s) would be upgraded ({securityCount} security).", TaskLogLevel.Info).ConfigureAwait(false);
-            foreach (var p in pending)
-                await onOutput($"  {p.Package} {p.CurrentVersion} -> {p.CandidateVersion}{(p.IsSecurity ? " [security]" : "")}", TaskLogLevel.Info).ConfigureAwait(false);
+            await ReportPendingAsync(pending, onOutput).ConfigureAwait(false);
 
             // 2) Critical-package abort (honest, before any change).
             var blocked = AptSimulateParser.BlockedPackages(pending, extraBlocklist);
@@ -88,6 +93,15 @@ public sealed class SystemPackageUpgradeExecutor(
         {
             AptLock.Gate.Release();
         }
+    }
+
+    private static async Task ReportPendingAsync(
+        IReadOnlyList<PendingUpdateDto> pending, Func<string, TaskLogLevel, Task> onOutput)
+    {
+        var securityCount = pending.Count(p => p.IsSecurity);
+        await onOutput($"{pending.Count} package(s) would be upgraded ({securityCount} security).", TaskLogLevel.Info).ConfigureAwait(false);
+        foreach (var p in pending)
+            await onOutput($"  {p.Package} {p.CurrentVersion} -> {p.CandidateVersion}{(p.IsSecurity ? " [security]" : "")}", TaskLogLevel.Info).ConfigureAwait(false);
     }
 
     // `sudo -n /usr/bin/apt-get upgrade -y` - argv-exact, matches the aetheus-patch allow-list one-to-one.

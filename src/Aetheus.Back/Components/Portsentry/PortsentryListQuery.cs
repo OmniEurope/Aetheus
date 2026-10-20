@@ -4,10 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Portsentry;
 
-/// <summary>
-/// Recette R-210 / R-224: the column filters of a server's PortSentry grids (blocked IPs, whitelist). The
-/// keys are the grids' column keys.
-/// </summary>
+/// <summary> The column filters of a server's PortSentry grids (blocked IPs, whitelist). The keys
+/// are the grids' column keys. </summary>
 internal static class PortsentryListQuery
 {
     internal static readonly GridQueryMap<PortsentryBlockedIp> BlockedColumns = new GridQueryMap<PortsentryBlockedIp>()

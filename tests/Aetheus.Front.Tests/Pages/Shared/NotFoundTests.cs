@@ -18,7 +18,7 @@ public class NotFoundTests : BunitContext
     [Fact]
     public void TheTitleIsTheHeaderOnly_NotRepeatedInTheBody()
     {
-        // PLAN-003 lot 1: a page has one title, the OmniPageHeader's; a second heading under it repeats it.
+        // A page has one title, the OmniPageHeader's; a second heading under it repeats it.
         BunitTestHelper.RegisterServices(this);
         var cut = Render<NotFound>();
 

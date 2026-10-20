@@ -82,8 +82,8 @@ public sealed class GridQueryMapTests
         Assert.Equal([1, 2], Ids(and));
     }
 
-    /// <summary>Recette R-210: a checkable list keeps the rows equal to any ticked value, text without
-    /// case, enums and numbers parsed as an Equals value would be; NotIn keeps the others.</summary>
+    /// <summary>A checkable list keeps the rows equal to any ticked value, text without case, enums
+    /// and numbers parsed as an Equals value would be; NotIn keeps the others.</summary>
     [Fact]
     public void AListFilter_MatchesAnyOfItsValues()
     {

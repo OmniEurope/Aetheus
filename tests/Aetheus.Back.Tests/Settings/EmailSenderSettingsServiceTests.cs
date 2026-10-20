@@ -9,7 +9,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-16: the custom SMTP server is saved with its password encrypted, never returned.</summary>
+/// <summary>The custom SMTP server is saved with its password encrypted, never returned.</summary>
 public sealed class EmailSenderSettingsServiceTests
 {
     private readonly ISettingsRepository _repo = Substitute.For<ISettingsRepository>();

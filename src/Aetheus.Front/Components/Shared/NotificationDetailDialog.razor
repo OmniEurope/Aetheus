@@ -1,6 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* PLAN-005 lot 2 / D32: the whole text of a notification, and the id that finds it in the logs. *@
+@* Show the full notification text with its correlation identifier so the corresponding logs can be
+   found. *@
 <OmniStack Gap="OmniSpacing.Medium">
     <div class="notification-detail-text">@Detail</div>
     @if (!string.IsNullOrWhiteSpace(CorrelationId))

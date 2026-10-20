@@ -62,6 +62,16 @@ public sealed record UpdateUserRequest
     [MaxLength(50)]
     [MaxItemStringLength(50)]
     public List<string> Roles { get; init; } = [];
+
+    /// <summary> When this request deactivates a user who owns pipelines, the active user that
+    /// takes them over first. Without it (or <see cref="ForceWithOwnedPipelines"/>) the
+    /// deactivation is refused (409). </summary>
+    [StringLength(50)]
+    public string? TransferPipelinesToUsername { get; init; }
+
+    /// <summary>Deactivates a pipeline owner without transferring the pipelines; their chained runs
+    /// are then refused by the F-EXEC-1b gate until an administrator changes the owner.</summary>
+    public bool ForceWithOwnedPipelines { get; init; }
 }
 
 public sealed record ChangeUserPasswordRequest

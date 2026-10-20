@@ -45,7 +45,7 @@ public partial class RoleEdit
     private string? _availableUsersSearch;
     private Func<string, string>? _activeText;
 
-    // Recette R-210: the users grid's Status filter reads as the column does (Active / Inactive).
+    // The users grid's Status filter reads as the column does (Active / Inactive).
     private Func<string, string> ActiveText => _activeText ??= value =>
         bool.TryParse(value, out var active) ? L[active ? "Active" : "Inactive"].Value : value;
 
@@ -156,7 +156,8 @@ public partial class RoleEdit
         await InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>Recette R2-124: one page of the role's users export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the role's users export, with the grid's sort and column
+    /// filters.</summary>
     private Task<PaginatedResult<RoleUserDto>> ReadRoleUsersExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(25);
@@ -470,7 +471,7 @@ public partial class RoleEdit
         await OnSavePermissions();
     }
 
-    // Recette R2-124: the matrix is a dropdown and checkboxes; its export writes what they say.
+    // The matrix is a dropdown and checkboxes; its export writes what they say.
     private Func<PermissionRowModel, object?>? _resourceTypeExport;
     private Func<PermissionRowModel, object?>? _readExport;
     private Func<PermissionRowModel, object?>? _writeExport;

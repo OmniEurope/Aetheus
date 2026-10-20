@@ -96,8 +96,7 @@ public class ProjectOverviewSectionTests : BunitContext
             Assert.Contains("Branch", cut.Markup);
             Assert.Contains("main", cut.Markup);
             Assert.Contains("develop", cut.Markup);
-            // PLAN-003 lot 18: the overview grade is the shared badge. C is a warning there, where
-            // the retired GradeCss scale called it informational.
+            // Use the shared grade badge; C has the warning tone.
             var grade = Assert.Single(cut.FindAll(".grade-badge"));
             Assert.Equal("C", grade.TextContent.Trim());
             Assert.Contains("omni-badge--warning", grade.ClassName, StringComparison.Ordinal);
@@ -143,8 +142,8 @@ public class ProjectOverviewSectionTests : BunitContext
             Assert.Contains("Readme", cut.Markup);
             Assert.Contains("Changelog", cut.Markup);
             Assert.Single(cut.FindAll("table.onboarding-steps"));
-            // Git, environment, server, pipeline. PLAN-003 lot 30 / D22: no pipeline requires a library
-            // here, so the library row is not part of the checklist at all.
+            // Include Git, environment, server and pipeline readiness; no library step is needed
+            // when no pipeline requires one.
             Assert.Equal(4, cut.FindAll("tr[data-testid='onboarding-step']").Count);
             Assert.Equal(4, cut.FindAll("tr[data-testid='onboarding-step'] .omni-badge").Count);
             Assert.DoesNotContain("project-onboarding-grid", cut.Markup);
@@ -154,7 +153,7 @@ public class ProjectOverviewSectionTests : BunitContext
             Assert.Single(cut.FindAll("tr[data-testid='onboarding-step'] a[href='/projects/1/servers']"));
             Assert.DoesNotContain("variable-libraries/new?projectId=1", cut.Markup);
             Assert.Contains("pipelines/setup?projectId=1", cut.Markup);
-            // Recette R-097: no Overview tile on the Overview page, 13 of the 14 sections.
+            // No Overview tile on the Overview page, 13 of the 14 sections.
             Assert.Equal(13, cut.FindAll(".project-section-link").Count);
             Assert.Equal(13, cut.FindAll(".project-section-tile").Count);
             Assert.Empty(cut.FindAll(".project-section-link[href='/projects/1/overview']"));
@@ -239,6 +238,8 @@ public class ProjectOverviewSectionTests : BunitContext
             });
         _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
         _handler.SetPaginatedJsonResponse("api/git/repos/5/tree", new List<GitLightTreeEntryDto>());
+        // R3-67: the finished checklist was already shown its last time.
+        ((InMemoryUserPreferences)Services.GetRequiredService<IUserPreferences>()).Seed(PreferenceKeys.GettingStartedClosed(2), true);
 
         var cut = Render<ProjectOverviewSection>(parameters => parameters.Add(component => component.Project,
             new ProjectDetailDto
@@ -259,9 +260,8 @@ public class ProjectOverviewSectionTests : BunitContext
     [Fact]
     public void Renders_ServerOnlyThroughEnvironment_HidesGettingStarted()
     {
-        // PLAN-003 lot 29 / D23: the project has no direct attachment, but one of its environments
-        // carries a server, so it can already run somewhere. Reading only ServerCount left the
-        // checklist up on a project that was in fact ready.
+        // An environment-linked server satisfies execution readiness even without a direct project
+        // server attachment.
         _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=2", new List<PipelineRunDto>());
         _handler.SetPaginatedJsonResponse(HttpMethod.Get,
             "api/git/repos?page=1&pageSize=100&projectId=2&sortDescending=False",
@@ -271,6 +271,8 @@ public class ProjectOverviewSectionTests : BunitContext
             });
         _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
         _handler.SetPaginatedJsonResponse("api/git/repos/5/tree", new List<GitLightTreeEntryDto>());
+        // R3-67: the finished checklist was already shown its last time.
+        ((InMemoryUserPreferences)Services.GetRequiredService<IUserPreferences>()).Seed(PreferenceKeys.GettingStartedClosed(2), true);
 
         var cut = Render<ProjectOverviewSection>(parameters => parameters.Add(component => component.Project,
             new ProjectDetailDto
@@ -405,9 +407,8 @@ public class ProjectOverviewSectionTests : BunitContext
             Assert.Contains("main", cut.Markup, StringComparison.Ordinal);
         });
 
-        // Recette R1-27: the clone address sits in OE's read-only copyable field (it scrolls inside
-        // itself instead of widening the card), with the Copy button welded to it, and is no longer a
-        // nowrap link that overflowed its cell.
+        // The clone address uses the OE read-only copyable field, whose internal scrolling prevents
+        // the card from widening.
         var cloneUrl = cut.Find("input#project-overview-clone-url");
         Assert.Equal("https://git.example/portfolio.git", cloneUrl.GetAttribute("value"));
         Assert.True(cloneUrl.HasAttribute("readonly"));
@@ -439,14 +440,13 @@ public class ProjectOverviewSectionTests : BunitContext
         var method = typeof(ProjectOverviewSection).GetMethod("OnPipelineRunStarted", BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [43, 7])!);
 
-        cut.WaitForAssertion(() => Assert.Contains(">#43<", cut.Markup), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.Contains(">#43<", cut.Markup));
     }
 
     [Fact]
     public void InformationCard_GroupsStatusWithGradeAndTheTwoDates()
     {
-        // PLAN-003 lot 11 / D18: six stacked items became three lines. Without a description and
-        // without tags, only two rows are left: status + grade, then the two dates.
+        // Without description or tags, show status and grade on one row and dates on the next.
         _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=2", new List<PipelineRunDto>());
         _handler.SetPaginatedJsonResponse(HttpMethod.Get,
             "api/git/repos?page=1&pageSize=100&projectId=2&sortDescending=False",
@@ -492,7 +492,7 @@ public class ProjectOverviewSectionTests : BunitContext
             }));
 
         var link = cut.Find(".overview-info-card a.project-grade-run-link");
-        // Recette R2-147: the grade opens the run on its Gate tab, where an F gives its cause.
+        // The grade opens the run on its Gate tab, where an F gives its cause.
         Assert.Equal("/pipelines/runs/2478?projectId=2&tab=gate", link.GetAttribute("href"));
         Assert.Equal("ProjectGradeLatestCandidate", link.GetAttribute("title"));
         Assert.Empty(cut.FindAll(".overview-info-card a[href='/projects/2/quality']"));
@@ -501,8 +501,8 @@ public class ProjectOverviewSectionTests : BunitContext
     [Fact]
     public void APipelineWaitingForAMissingLibrary_PutsTheLibraryAfterThePipeline_AndWarns()
     {
-        // PLAN-003 lot 30 / D22: the library step exists because something reads it, so it follows
-        // the pipeline; and the Information card says who is waiting, with the one-click fix.
+        // A required library follows the pipeline readiness step, and the Information card
+        // identifies the unmet requirement and its action.
         _handler.SetJsonResponse("api/pipelines/runs/recent?projectId=3", new List<PipelineRunDto>());
         _handler.SetPaginatedJsonResponse<GitLightRepoDto>(HttpMethod.Get,
             "api/git/repos?page=1&pageSize=100&projectId=3&sortDescending=False", []);
@@ -551,8 +551,65 @@ public class ProjectOverviewSectionTests : BunitContext
 
         var cut = Render<ProjectOverviewSection>(p =>
             p.Add(x => x.Project, new ProjectDetailDto { Id = 1, Name = "Web", DefaultBranch = "main" }));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
+    }
+
+    private void StubInitializedProjectReads(int projectId)
+    {
+        _handler.SetJsonResponse($"api/pipelines/runs/recent?projectId={projectId}", new List<PipelineRunDto>());
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get,
+            $"api/git/repos?page=1&pageSize=100&projectId={projectId}&sortDescending=False",
+            new List<GitLightRepoDto>
+            {
+                new() { Id = 5, ProjectId = projectId, Name = "api", DefaultBranch = "main", IsEmpty = true }
+            });
+        _handler.SetJsonResponse("api/releases", new PaginatedResult<ReleaseDto>());
+        _handler.SetPaginatedJsonResponse("api/git/repos/5/tree", new List<GitLightTreeEntryDto>());
+    }
+
+    private static ProjectDetailDto Project(int id, int serverCount) => new()
+    {
+        Id = id,
+        Name = "Wordmorrow",
+        EnvironmentCount = 1,
+        ServerCount = serverCount,
+        Pipelines = [new PipelineDto { Id = 9, Name = "CI" }]
+    };
+
+    [Fact]
+    public void R3_67_AFinishedChecklist_IsShownOneLastTime_SayingSo_ThenNeverAgain()
+    {
+        StubInitializedProjectReads(7);
+        var preferences = (InMemoryUserPreferences)Services.GetRequiredService<IUserPreferences>();
+
+        var first = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, Project(7, serverCount: 1)));
+
+        first.WaitForAssertion(() => Assert.Contains("NoRecentCommits", first.Markup));
+        Assert.Contains("ProjectGettingStartedTitle", first.Markup, StringComparison.Ordinal);
+        Assert.Contains("ProjectGettingStartedDoneDescription", first.Markup, StringComparison.Ordinal);
+        Assert.All(first.FindAll("tr[data-testid='onboarding-step'] .omni-badge"), badge => Assert.Contains("Done", badge.TextContent));
+        Assert.True(preferences.Read<bool>(PreferenceKeys.GettingStartedClosed(7)));
+
+        var next = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, Project(7, serverCount: 1)));
+
+        next.WaitForAssertion(() => Assert.Contains("NoRecentCommits", next.Markup));
+        Assert.DoesNotContain("ProjectGettingStartedTitle", next.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R3_67_AnUnfinishedChecklist_SaysItGoesOnceDone_AndIsNotClosed()
+    {
+        StubInitializedProjectReads(7);
+        var preferences = (InMemoryUserPreferences)Services.GetRequiredService<IUserPreferences>();
+
+        var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, Project(7, serverCount: 0)));
+
+        cut.WaitForAssertion(() => Assert.Contains("NoRecentCommits", cut.Markup));
+        Assert.Contains("ProjectGettingStartedTitle", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("ProjectGettingStartedDescription", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectGettingStartedDoneDescription", cut.Markup, StringComparison.Ordinal);
+        Assert.False(preferences.Values.ContainsKey(PreferenceKeys.GettingStartedClosed(7)));
     }
 }

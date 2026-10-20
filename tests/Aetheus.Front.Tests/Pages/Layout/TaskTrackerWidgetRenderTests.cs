@@ -37,8 +37,7 @@ public class TaskTrackerWidgetRenderTests : BunitContext
     [InlineData(120, "99+")]
     public void Renders_WithNonZeroCount_TheIconThenTheNumber_InAWiderButton(int count, string shown)
     {
-        // Recette R-170 (replaces PLAN-005 D31): the icon stays and the number follows it, the button
-        // doubles its width; still no badge. Above 99 it reads "99+".
+        // Keep the task icon and widen the button when a count is present, displaying 99+ above 99.
         var cut = Render<TaskTrackerWidget>();
         var tracker = Services.GetRequiredService<TaskTrackerService>();
         var byId = typeof(TaskTrackerService)

@@ -1,8 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.VariableLibraries
-@* PLAN-005 lot 5 - checks the library's own PORT_* values instead of asking the operator to retype
-   ports that are already written down, and answers with both facts: nobody claims it, and nothing is
-   listening on it. *@
+@* Check the library PORT_ values for both declared claims and observed listeners. *@
 <OmniStack Gap="OmniSpacing.Large">
     <OmniText Element="OmniTextElement.Paragraph">@L["PortCheckLibraryHint"]</OmniText>
 

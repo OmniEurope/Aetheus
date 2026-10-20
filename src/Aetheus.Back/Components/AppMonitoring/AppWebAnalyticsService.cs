@@ -21,7 +21,7 @@ public sealed class AppWebAnalyticsService(
         CancellationToken ct = default)
     {
         var outcome = await StoreAsync(appId, events, ct).ConfigureAwait(false);
-        // R-469: the open Visitors tab re-reads its figures and the date of the last event, as the Logs
+        // The open Visitors tab re-reads its figures and the date of the last event, as the Logs
         // and Errors tabs do after an OTLP batch. Pushed once the per-app gate is released.
         if (outcome.Accepted > 0)
             await telemetryChanges.PublishAsync(appId, ct).ConfigureAwait(false);
@@ -89,10 +89,8 @@ public sealed class AppWebAnalyticsService(
                 }, ct).ConfigureAwait(false);
             }
 
-            // Recette R2-007: the audience rolls instead of refusing. At the budget, the oldest raw rows of
-            // the app go until it is back under RollTargetPercent of it, and the batch is accepted.
-            // Audit follow-up: only under the rolling-hour volume cap. Past it the anonymous ingest is a
-            // flood that would erase the app's history, so the batch is refused and nothing is deleted.
+            // Audience budgets roll off old data for normal ingestion, but the rolling-hour volume
+            // cap refuses floods without deleting history.
             if (storageBytes >= budgetBytes
                 && await RefuseFloodOrRollAsync(app, capped.Count, budgetBytes, now, ct).ConfigureAwait(false))
                 return new WebAnalyticsIngestOutcome(0, 0, rejected + capped.Count);
@@ -125,12 +123,8 @@ public sealed class AppWebAnalyticsService(
         }
     }
 
-    /// <summary>
-    /// Recette R-487: how long the two figures every batch read under the lock are trusted. The route
-    /// set was a DISTINCT over the page aggregates and the storage estimate six counts, both paid by
-    /// each call. The route set only grows through this ingestion, which writes it back; the estimate
-    /// is at most a minute behind, so the quota may be passed by what a minute of events weighs.
-    /// </summary>
+    /// <summary>Cached route sets are updated by ingestion; storage estimates can lag by one
+    /// minute, allowing bounded temporary quota overshoot.</summary>
     internal static readonly TimeSpan IngestSnapshotLifetime = TimeSpan.FromSeconds(60);
 
     private static string RouteNamesCacheKey(int appId) => $"analytics-routes:{appId}";
@@ -147,14 +141,11 @@ public sealed class AppWebAnalyticsService(
         return routes;
     }
 
-    /// <summary>Recette R2-007: the share of its budget an app is brought back under when it reaches it.</summary>
+    /// <summary>The share of its budget an app is brought back under when it reaches it.</summary>
     internal const int RollTargetPercent = 90;
 
-    /// <summary>
-    /// Audit R2-007 follow-up, for an app at its budget: refuses the batch as a flood (reason
-    /// <c>flood</c>, nothing deleted) when it would take the app past its rolling-hour cap, and
-    /// otherwise rolls the oldest rows off so the batch is accepted. Returns whether it was refused.
-    /// </summary>
+    /// <summary>At the budget, refuse flood batches without deleting data; otherwise roll off old
+    /// rows before accepting.</summary>
     private async Task<bool> RefuseFloodOrRollAsync(
         Aetheus.Back.Data.Entities.MonitoredApp app,
         int batchSize,
@@ -173,11 +164,8 @@ public sealed class AppWebAnalyticsService(
         return false;
     }
 
-    /// <summary>
-    /// Audit R2-007 follow-up: whether accepting <paramref name="batchSize"/> more events would take the
-    /// app past its rolling-hour cap. The hour is read from the volumes the batches saved in the shared
-    /// database, so both blue-green colours count against the same cap.
-    /// </summary>
+    /// <summary>Checks <paramref name="batchSize"/> against shared database volumes so all backend
+    /// colours count toward one hourly cap.</summary>
     private async Task<bool> ExceedsRollingCapAsync(int appId, int batchSize, DateTime now, CancellationToken ct)
     {
         var cap = Math.Clamp(
@@ -194,11 +182,9 @@ public sealed class AppWebAnalyticsService(
         ? configuredBytes
         : AppMonitoringDefaults.DefaultAnalyticsStorageBudgetBytes;
 
-    /// <summary>
-    /// Recette R2-007: brings one app back under <see cref="RollTargetPercent"/> of its budget (oldest raw
-    /// events first, then sessions, then period identities) and refreshes the cached estimate with what
-    /// remains, so the next batches do not roll again on a stale figure.
-    /// </summary>
+    /// <summary> Brings one app back under <see cref="RollTargetPercent"/> of its budget (oldest
+    /// raw events first, then sessions, then period identities) and refreshes the cached estimate
+    /// with what remains, so the next batches do not roll again on a stale figure. </summary>
     private async Task<int> RollAsync(int appId, long budgetBytes, CancellationToken ct)
     {
         var trimmed = await repository.TrimToAsync(appId, budgetBytes * RollTargetPercent / 100, ct)
@@ -207,11 +193,9 @@ public sealed class AppWebAnalyticsService(
         return trimmed.Total;
     }
 
-    /// <summary>
-    /// Recette R2-007: the hourly sweep's pass. Every app whose audience data reached its budget is rolled
-    /// back under it, under the same per-app gate as the ingestion, so a batch never reads an estimate
-    /// the roll is changing. Returns the rows removed.
-    /// </summary>
+    /// <summary> The hourly sweep's pass. Every app whose audience data reached its budget is
+    /// rolled back under it, under the same per-app gate as the ingestion, so a batch never reads
+    /// an estimate the roll is changing. Returns the rows removed. </summary>
     public async Task<int> RollStorageAsync(CancellationToken ct = default)
     {
         var removed = 0;

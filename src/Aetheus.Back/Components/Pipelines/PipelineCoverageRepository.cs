@@ -4,12 +4,15 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-internal sealed class PipelineCoverageRepository(AppDbContext db)
+/// <summary>Coverage and code-quality queries, and the implementation of
+/// <see cref="IPipelineQualityResultRepository"/> (the test result read and write moved unchanged from
+/// <c>PipelineCoreRepository</c>); the <see cref="IPipelineRepository"/> facade delegates to them.</summary>
+internal sealed class PipelineCoverageRepository(AppDbContext db) : IPipelineQualityResultRepository
 {
     private static readonly string[] ComplexityKeys =
         ["complexity.cyclomatic.avg", "complexity.cyclomatic.max", "complexity.crap.avg"];
 
-    /// <summary>Recette R-484: the tests of a run counted by outcome in the database.</summary>
+    /// <summary>The tests of a run counted by outcome in the database.</summary>
     public async Task<PipelineTestResultSummaryDto?> GetTestResultSummaryAsync(int runId, CancellationToken ct = default)
     {
         var outcomes = await db.TestResults
@@ -30,6 +33,22 @@ internal sealed class PipelineCoverageRepository(AppDbContext db)
             Errors = Count(TestOutcome.Error),
             TotalDurationMs = outcomes.Sum(item => item.DurationMs)
         };
+    }
+
+    public async Task<List<TestResult>> GetTestResultsAsync(int runId, CancellationToken ct = default)
+    {
+        return await db.TestResults
+            .AsNoTracking()
+            .Where(t => t.PipelineRunId == runId)
+            .OrderBy(t => t.TestSuite)
+            .ThenBy(t => t.TestName)
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task AddTestResultsAsync(IEnumerable<TestResult> results, CancellationToken ct = default)
+    {
+        db.TestResults.AddRange(results);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
     public async Task<List<CoverageResult>> GetCoverageResultsAsync(int runId, CancellationToken ct = default)

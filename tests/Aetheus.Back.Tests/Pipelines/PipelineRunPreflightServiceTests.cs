@@ -18,6 +18,7 @@ namespace Aetheus.Back.Tests.Pipelines;
 public sealed class PipelineRunPreflightServiceTests
 {
     private readonly IPipelineRepository _repo = Substitute.For<IPipelineRepository>();
+    private readonly IPipelineRequirementsChecker _requirements = Substitute.For<IPipelineRequirementsChecker>();
 
     private PipelineRunPreflightService BuildSut(IPipelineEnvironmentCheckGuard? checks = null)
         => new(
@@ -27,9 +28,10 @@ public sealed class PipelineRunPreflightServiceTests
             SilentPortGuard(),
             new PipelineChildPipelineResolver(
                 Substitute.For<IPipelineTemplateResolver>(), Substitute.For<IPipelineVariableResolver>()),
-            Substitute.For<IPipelineRequirementsChecker>(),
+            _requirements,
             new PipelineScannerManifestPreflight(_repo, new PipelineDispatchServerResolver(_repo)),
-            new PipelineReleaseArtifactPreflight(Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactRepository>()),
+            new PipelineReleaseArtifactPreflight(Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactRepository>(), Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactStorageService>()),
+            new PipelineAiProfilePreflight(Substitute.For<Aetheus.Back.Components.AiTasks.IAiTaskService>()),
             Substitute.For<ILogger<PipelineRunPreflightService>>());
 
     private static IPipelineEnvironmentCheckGuard Admits(bool verdict)
@@ -115,8 +117,7 @@ public sealed class PipelineRunPreflightServiceTests
     [Fact]
     public async Task EnvironmentCheckThatRefuses_IsReportedAtLaunchInsteadOfHoursIn()
     {
-        // The regression this service exists for: a broken QA environment check used to surface only
-        // when the QA stage was finally dispatched, after CI, Quality and Security had run.
+        // An invalid QA environment must refuse launch before earlier stages consume resources.
         ConfiguredTargets(42);
         var sut = BuildSut(Admits(false));
 
@@ -185,11 +186,7 @@ public sealed class PipelineRunPreflightServiceTests
         ]
         };
 
-    /// <summary>
-    /// PLAN-004 R-02, the refusal of 2026-09-13: application-candidate-v1 names its CI pipeline as
-    /// "$(APPLICATION_CI_PIPELINE)" and the extending pipeline sets it to aetheus-ci. The dispatcher
-    /// substitutes it before its lookup; the preflight looked up the raw text and refused the launch.
-    /// </summary>
+    /// <summary>Preflight resolves variable-based child names just as dispatch does.</summary>
     [Fact]
     public async Task TemplateVariableNamingTheArtifactSource_IsJudgedOnTheExpandedName()
     {
@@ -343,5 +340,30 @@ public sealed class PipelineRunPreflightServiceTests
         var problems = await RunAsync(Definition(Stage("build", agent: "linux-01")));
 
         Assert.Empty(problems);
+    }
+
+    /// <summary>R3-67: a declared requirement written relative to the project is checked under the
+    /// project's own name, the one the setup wizard created.</summary>
+    [Fact]
+    public async Task DeclaredRequirements_AreCheckedUnderTheProjectPrefixedNames()
+    {
+        ConfiguredTargets(11);
+        _repo.GetProjectNameAsync(7, Arg.Any<CancellationToken>()).Returns("Mon Projet");
+        var definition = Definition(Stage("build")) with
+        {
+            Requires = new PipelineRequiresDefinition
+            {
+                Libraries = ["${{ project.slug }}.share"],
+                Vaults = ["${{project.slug}}.qa"]
+            }
+        };
+
+        await RunAsync(definition);
+
+        await _requirements.Received(1).CheckAsync(
+            Arg.Is<PipelineRequiresDefinition?>(requires => requires != null
+                && requires.Libraries.SequenceEqual(new[] { "mon-projet.share" })
+                && requires.Vaults.SequenceEqual(new[] { "mon-projet.qa" })),
+            7, 3, Arg.Any<CancellationToken>());
     }
 }

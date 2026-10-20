@@ -157,7 +157,7 @@ public class YamlParsingHelperTests
     [Fact]
     public void ParseAndValidate_UnknownTopLevelAndStepKeys_AreSkipped()
     {
-        // Recette R2-041: a key added for a newer backend must not make the whole definition invalid.
+        // A key added for a newer backend must not make the whole definition invalid.
         var yaml = """
             name: deploy
             new_top_level_option: true

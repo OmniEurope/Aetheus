@@ -3,7 +3,7 @@ using Environment = Aetheus.Back.Data.Entities.Environment;
 
 namespace Aetheus.Back.Components.Environments;
 
-/// <summary>Recette R-224: the column filters of the environments list (global and project scopes).</summary>
+/// <summary>The column filters of the environments list (global and project scopes).</summary>
 internal static class EnvironmentListQuery
 {
     internal static readonly GridQueryMap<Environment> Columns = new GridQueryMap<Environment>()

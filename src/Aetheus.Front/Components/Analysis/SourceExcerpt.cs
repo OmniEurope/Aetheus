@@ -2,12 +2,11 @@
 
 namespace Aetheus.Front.Components.Analysis;
 
-/// <summary>
-/// Recette R-433: the passage of a source file a finding points at, shown under its location: the
-/// lines of the finding and a few lines around them, never the whole file. <see cref="FirstLine"/> and
-/// <see cref="LastLine"/> are the file's own line numbers, and so are <see cref="HighlightedLines"/>, the
-/// lines of the finding: OE's OmniCodeViewer numbers the passage from <see cref="FirstLine"/>.
-/// </summary>
+/// <summary> The passage of a source file a finding points at, shown under its location: the lines
+/// of the finding and a few lines around them, never the whole file. <see cref="FirstLine"/> and
+/// <see cref="LastLine"/> are the file's own line numbers, and so are <see
+/// cref="HighlightedLines"/>, the lines of the finding: OE's OmniCodeViewer numbers the passage
+/// from <see cref="FirstLine"/>. </summary>
 internal sealed record SourceExcerpt(int FirstLine, int LastLine, string Code, IReadOnlyList<int> HighlightedLines)
 {
     /// <summary>Lines shown before and after the finding's own lines.</summary>

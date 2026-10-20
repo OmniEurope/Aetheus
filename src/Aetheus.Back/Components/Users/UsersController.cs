@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Back.Components.Users;
 
@@ -51,9 +52,12 @@ public class UsersController(IUserService service) : ControllerBase
 
     [HttpDelete("{id:int}")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> DeleteUser(int id, CancellationToken ct)
+    public async Task<IActionResult> DeleteUser(
+        int id, CancellationToken ct,
+        [FromQuery, StringLength(50)] string? transferPipelinesTo = null,
+        [FromQuery] bool force = false)
     {
-        var deleted = await service.DeleteUserAsync(id, ct);
+        var deleted = await service.DeleteUserAsync(id, ct, transferPipelinesTo, force);
         if (!deleted) return NotFound();
         return NoContent();
     }

@@ -7,10 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests.Analysis;
 
-/// <summary>
-/// Recette R-430: the quality page links the commit its grade was measured on, the latest analysis run
-/// and the latest release. The summary carries what those links need.
-/// </summary>
+/// <summary> The quality page links the commit its grade was measured on, the latest analysis run
+/// and the latest release. The summary carries what those links need. </summary>
 public sealed class AnalysisProjectSummaryLinksTests : IDisposable
 {
     private const string Sha = "773f2080aabbccddeeff00112233445566778899";

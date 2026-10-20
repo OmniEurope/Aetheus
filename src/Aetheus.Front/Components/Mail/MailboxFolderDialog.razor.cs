@@ -2,7 +2,8 @@
 
 namespace Aetheus.Front.Components.Mail;
 
-/// <summary>Recette R1-17: closes with the trimmed folder name; the backend checks it again and creates it.</summary>
+/// <summary>Closes with the trimmed folder name; the backend checks it again and creates
+/// it.</summary>
 public partial class MailboxFolderDialog
 {
     [Inject] private OmniDialogService Dialog { get; set; } = default!;

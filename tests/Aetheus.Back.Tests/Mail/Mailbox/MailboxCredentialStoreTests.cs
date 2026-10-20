@@ -5,7 +5,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-17: the typed mailbox passwords are held in memory, per user, for a bounded time.</summary>
+/// <summary>The typed mailbox passwords are held in memory, per user, for a bounded time.</summary>
 public sealed class MailboxCredentialStoreTests
 {
     private const string Password = "s3cret-mailbox-pass";
@@ -137,5 +137,34 @@ public sealed class MailboxCredentialStoreTests
         var endpoint = new MailboxEndpoint("mail.example.org", 993, 587, "me@example.org", Password);
 
         Assert.DoesNotContain(Password, endpoint.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_administrator_access_keeps_its_master_login_and_is_told_apart()
+    {
+        // Recette R1-41: the master login rides with the held password; a typed password has none.
+        _store.Store(s_alice, Password, "me@example.org*aetheus-master");
+
+        var held = _store.TryUseCredential(s_alice);
+
+        Assert.Equal(Password, held?.Password);
+        Assert.Equal("me@example.org*aetheus-master", held?.Login);
+        Assert.True(_store.IsAdministratorAccess(s_alice));
+        _store.Store(s_alice, Password);
+        Assert.False(_store.IsAdministratorAccess(s_alice));
+        Assert.Null(_store.TryUseCredential(s_alice)?.Login);
+    }
+
+    [Fact]
+    public void An_administrator_access_expires_and_ends_with_the_session_like_a_typed_password()
+    {
+        _store.Store(s_alice, Password, "me@example.org*aetheus-master");
+        Assert.Equal(1, _store.ForgetUser(1));
+        Assert.False(_store.IsAdministratorAccess(s_alice));
+
+        _store.Store(s_alice, Password, "me@example.org*aetheus-master");
+        _time.Advance(MailboxCredentialStore.IdleTimeout);
+        Assert.Null(_store.TryUseCredential(s_alice));
+        Assert.False(_store.IsAdministratorAccess(s_alice));
     }
 }

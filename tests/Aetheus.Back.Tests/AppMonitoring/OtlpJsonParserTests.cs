@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
 using Aetheus.Back.Components.AppMonitoring.Ingest;
+using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Tests.AppMonitoring;
 
@@ -133,5 +134,58 @@ public class OtlpJsonParserTests
     {
         using var doc = JsonDocument.Parse("""{"foo":"bar"}""");
         Assert.Empty(OtlpJsonParser.ParseMetrics(doc));
+    }
+
+    [Theory]
+    [InlineData("\"explicitBounds\":[10,20],\"bucketCounts\":[5,90,5]", 20.0)]
+    [InlineData("\"explicitBounds\":[10,20],\"bucketCounts\":[\"0\",\"0\",\"10\"],\"max\":42.5", 42.5)]
+    [InlineData("\"explicitBounds\":[10],\"bucketCounts\":[0,10],\"max\":\"n/a\"", 10.0)]
+    [InlineData("\"explicitBounds\":[],\"bucketCounts\":[3]", 0.0)]
+    [InlineData("\"explicitBounds\":[10],\"bucketCounts\":[1]", null)]
+    [InlineData("\"explicitBounds\":[10],\"bucketCounts\":[-1,5]", null)]
+    [InlineData("\"explicitBounds\":[10],\"bucketCounts\":[0,0]", null)]
+    [InlineData("\"explicitBounds\":10,\"bucketCounts\":[1,1]", null)]
+    [InlineData("\"bucketCounts\":[1]", null)]
+    [InlineData("\"explicitBounds\":[],\"bucketCounts\":\"1\"", null)]
+    public void ParseMetrics_HistogramP95_UsesTheRankBucketAndRejectsMalformedPoints(string point, double? expected)
+    {
+        using var doc = JsonDocument.Parse(
+            "{\"resourceMetrics\":[{\"scopeMetrics\":[{\"metrics\":[{\"name\":\"latency\",\"histogram\":{\"dataPoints\":[{"
+            + point + "}]}}]}]}]}");
+
+        var points = OtlpJsonParser.ParseMetrics(doc);
+
+        if (expected is null)
+        {
+            Assert.Empty(points);
+            return;
+        }
+        var parsed = Assert.Single(points);
+        Assert.Equal(expected.Value, parsed.Value);
+        Assert.Equal(MetricKind.Histogram, parsed.Kind);
+    }
+
+    [Theory]
+    [InlineData("{\"stringValue\":\"text\"}", "text")]
+    [InlineData("{\"intValue\":\"42\"}", "42")]
+    [InlineData("{\"intValue\":7}", "7")]
+    [InlineData("{\"doubleValue\":1.5}", "1.5")]
+    [InlineData("{\"boolValue\":true}", "true")]
+    [InlineData("{\"boolValue\":false}", "false")]
+    [InlineData("{\"doubleValue\":\"1.5\"}", "")]
+    [InlineData("{\"arrayValue\":{}}", "")]
+    public void ParseLogs_ReadsEveryScalarBodyKind(string body, string expected)
+    {
+        using var doc = JsonDocument.Parse(
+            "{\"resourceLogs\":[{\"scopeLogs\":[{\"logRecords\":[{\"body\":" + body
+            + ",\"attributes\":[{\"key\":\"attempt\",\"value\":" + body + "}]}]}]}]}");
+
+        var log = Assert.Single(OtlpJsonParser.ParseLogs(doc));
+
+        Assert.Equal(expected, log.Body);
+        if (expected.Length == 0)
+            Assert.Null(log.AttributesJson);
+        else
+            Assert.Equal(expected, JsonDocument.Parse(log.AttributesJson!).RootElement.GetProperty("attempt").GetString());
     }
 }

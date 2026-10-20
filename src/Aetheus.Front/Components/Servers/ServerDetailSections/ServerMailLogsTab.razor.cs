@@ -2,8 +2,8 @@
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>PLAN-005 lot 7: journal of postfix, dovecot, opendkim or rspamd read as root by the mail
-/// helper, optionally filtered by a queue id or an address, displayed once the task completes.</summary>
+/// <summary>Journal of postfix, dovecot, opendkim or rspamd read as root by the mail helper,
+/// optionally filtered by a queue id or an address, displayed once the task completes.</summary>
 public partial class ServerMailLogsTab
 {
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -45,7 +45,7 @@ public partial class ServerMailLogsTab
     {
         if (notification.TaskId != _pendingTaskId) return;
         _pendingTaskId = null;
-        _content = await MailTaskOutputLoader.ReadAsync(Api, notification.TaskId);
+        _content = await ServerTaskOutputLoader.ReadAsync(Api, notification.TaskId);
         await InvokeAsync(StateHasChanged);
     }
 }

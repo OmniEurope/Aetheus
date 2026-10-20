@@ -4,7 +4,7 @@
 @layout Aetheus.Front.Layout.ServerDetailLayout
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
 
-@* Recette R1-17: the integrated mailbox of one account of the server's mail stack. *@
+@* The integrated mailbox of one account of the server's mail stack. *@
 <PageTitle>@(Loader?.Server?.Name ?? L["Server"]) - @L["Mailbox"] - Aetheus</PageTitle>
 
 <Aetheus.Front.Components.Mail.MailboxView ServerId="@Id" AccountId="@AccountId" />

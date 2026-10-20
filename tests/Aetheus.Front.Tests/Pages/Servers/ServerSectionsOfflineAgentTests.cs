@@ -9,11 +9,8 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// SITE-OFFLINE-001: a module section of a server whose agent is offline says so, disables the actions
-/// that would queue an agent task, and its handlers send nothing (the Apache "Test" used to create a
-/// Pending task for an offline agent). An online agent keeps every action live.
-/// </summary>
+/// <summary>Offline-agent sections disable task actions and their handlers send nothing; online
+/// agents retain available operations.</summary>
 public sealed class ServerSectionsOfflineAgentTests : BunitContext
 {
     private static readonly BindingFlags Priv = BindingFlags.NonPublic | BindingFlags.Instance;
@@ -49,7 +46,8 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
         var cut = Render<ServerApacheSection>(p => p.Add(x => x.Server, Server(ServerStatus.Offline)).Add(x => x.ServerId, 30));
 
         Assert.Contains("AgentOfflineActionBlocked", cut.Find(".agent-offline-notice").TextContent, StringComparison.Ordinal);
-        Assert.True(cut.Find("button[title='TestConfig']").HasAttribute("disabled"));
+        cut.Find(".omni-overflow-menu__trigger").Click();
+        Assert.True(cut.Find(".omni-menu__item[title='TestConfig']").HasAttribute("disabled"));
 
         // The handler behind the disabled button refuses too (a stale render, a keyboard path).
         var execute = typeof(ServerApacheSection).GetMethod("ExecuteActionAsync", Priv)!;
@@ -68,7 +66,8 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
         var cut = Render<ServerApacheSection>(p => p.Add(x => x.Server, Server(ServerStatus.Online)).Add(x => x.ServerId, 30));
 
         Assert.Empty(cut.FindAll(".agent-offline-notice"));
-        var test = cut.Find("button[title='TestConfig']");
+        cut.Find(".omni-overflow-menu__trigger").Click();
+        var test = cut.Find(".omni-menu__item[title='TestConfig']");
         Assert.False(test.HasAttribute("disabled"));
         await cut.InvokeAsync(() => test.Click());
 
@@ -207,7 +206,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
         var cut = RenderPortsentry(await LoaderAsync(ServerStatus.Offline));
 
         Assert.NotEmpty(cut.FindAll(".agent-offline-notice"));
-        Assert.True(cut.FindAll("button").Single(b => b.TextContent.Contains("ViewLogs", StringComparison.Ordinal)).HasAttribute("disabled"));
+        Assert.True(cut.FindMenuItem("ViewLogs")!.HasAttribute("disabled"));
         var execute = typeof(ServerPortsentrySection).GetMethod("ExecuteActionAsync", Priv)!;
         await cut.InvokeAsync(() => (Task)execute.Invoke(cut.Instance, [PortsentryAction.Restart])!);
         var unblock = typeof(ServerPortsentrySection).GetMethod("UnblockIpAsync", Priv)!;
@@ -252,8 +251,15 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
             .Add(x => x.Server, WithDocker(status)).Add(x => x.ServerId, 30).Add(x => x.CanAdmin, true).Add(x => x.InitialLoaded, true));
 
         var offline = status == ServerStatus.Offline;
-        Assert.Equal(offline, cut.Find("button[title='Stop']").HasAttribute("disabled"));
-        Assert.Equal(offline, cut.Find("button[title='ViewLogs']").HasAttribute("disabled"));
+        // R3-42: Restart is the row's button; Stop and the logs sit behind its menu, which cannot open offline.
+        Assert.Equal(offline, cut.Find("button[title='Restart']").HasAttribute("disabled"));
+        Assert.Equal(offline, cut.Find("tbody .omni-overflow-menu__trigger").HasAttribute("disabled"));
+        if (!offline)
+        {
+            cut.Find("tbody .omni-overflow-menu__trigger").Click();
+            Assert.False(cut.FindAll(".omni-menu__item").Single(i => i.TextContent.Trim() == "Stop").HasAttribute("disabled"));
+            Assert.False(cut.FindAll(".omni-menu__item").Single(i => i.TextContent.Trim() == "ViewLogs").HasAttribute("disabled"));
+        }
         var execute = typeof(DockerContainersTab).GetMethod("DockerActionAsync", Priv)!;
         await cut.InvokeAsync(() => (Task)execute.Invoke(cut.Instance, ["abc123def456", DockerContainerAction.Restart])!);
 
@@ -279,7 +285,9 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
 
         var offline = status == ServerStatus.Offline;
         Assert.Equal(offline, images.Find("button[title='Delete']").HasAttribute("disabled"));
-        Assert.Equal(offline, compose.Find("button[title='Restart']").HasAttribute("disabled"));
+        // Restart sits in the stack row's "More actions" menu (STD-BTN detection 11).
+        compose.Find(".omni-overflow-menu__trigger").Click();
+        Assert.Equal(offline, compose.Find(".omni-menu__item[title='Restart']").HasAttribute("disabled"));
         var remove = typeof(DockerImagesTab).GetMethod("RemoveImageAsync", Priv)!;
         await images.InvokeAsync(() => (Task)remove.Invoke(images.Instance, ["sha256:0123456789ab"])!);
         var action = typeof(DockerComposeTab).GetMethod("ComposeActionAsync", Priv)!;
@@ -339,7 +347,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
     public async Task MailReinstall_IsOfferedOnlyWhileTheAgentIsOnline_WithTheOfflineReason(ServerStatus status)
     {
         var server = ServerTestData.MakeMailServer() with { Status = status, MailSetupAvailable = true };
-        // Recette R1-12: the button is drawn in the page header.
+        // The button is drawn in the page header.
         var host = this.RenderWithOutlets<ServerMailReinstall>(new Dictionary<string, object?>
         {
             [nameof(ServerMailReinstall.Server)] = server,

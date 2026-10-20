@@ -10,15 +10,10 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Aetheus.Back.Components.Servers;
 
-/// <summary>
-/// S-TECH-15: compares the agent-reported sudoers hashes with the server's stored baseline and raises a
-/// Sec-Audit alert when a drop-in changed out-of-band. Recette R2-023: an agent update re-renders the
-/// drop-ins from the installer templates, so the heartbeat that confirms the update re-captures the
-/// baseline; a drifted state is alerted once (its fingerprint is persisted on the server), not on every
-/// heartbeat, and a different drifted state alerts again. Audit follow-up: the alert is also dispatched as
-/// <see cref="SudoersDriftDetectedEvent"/>, whose handlers persist it (audit trail, administrators'
-/// notifications), and raised again every <see cref="ReminderInterval"/> while the same drift lasts.
-/// </summary>
+/// <summary>Compare reported sudoers hashes with the stored baseline, recapturing it on confirmed
+/// agent updates because installation re-renders drop-ins. Persist drift fingerprints to
+/// deduplicate alerts, dispatch <see cref="SudoersDriftDetectedEvent"/> for durable records, and
+/// repeat alerts after <see cref="ReminderInterval"/> while drift persists.</summary>
 internal sealed class SudoersDriftMonitor(
     IHubContext<AlertHub> alertHub,
     TimeProvider timeProvider,

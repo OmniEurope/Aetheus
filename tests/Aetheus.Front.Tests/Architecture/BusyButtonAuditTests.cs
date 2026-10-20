@@ -3,12 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// PLAN-005 lot 4 / D35, STD-BUSY: a button in progress keeps its size and content, and shows it
-/// through the OE busy state and shared veil, never a BusyText label swap or a spinner branch
-/// inside the button. 145 buttons were moved; this keeps
-/// the next one from coming back.
-/// </summary>
+/// <summary>Busy buttons preserve size and content through OE busy state and the shared veil,
+/// without label swaps or spinner branches.</summary>
 public sealed partial class BusyButtonAuditTests
 {
     [GeneratedRegex(@"(?<![\w-])(IsBusy|BusyText)=""")]

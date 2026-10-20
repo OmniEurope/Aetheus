@@ -4,8 +4,7 @@ using Aetheus.Back.Services.DomainEvents;
 
 namespace Aetheus.Back.Components.Certbot;
 
-/// <summary>PLAN-007: a failed renewal rehearsal reaches the notification rules while the certificates
-/// are still valid, instead of being discovered when one expires.</summary>
+/// <summary>Notifies about failed renewal rehearsals while certificates are still valid.</summary>
 public sealed class CertbotRenewalCheckNotificationHandler(INotificationService notifications)
     : IDomainEventHandler<CertbotRenewalCheckFailedEvent>
 {

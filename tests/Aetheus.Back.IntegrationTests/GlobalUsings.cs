@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
-// PLAN-008 lot 43: the shared contracts follow their module folder, one namespace per module.
+// Import shared contracts by module namespace.
 global using Aetheus.Shared.Components.AgentPools;
 global using Aetheus.Shared.Components.Agents;
 global using Aetheus.Shared.Components.AgentUpdate;
@@ -21,6 +21,7 @@ global using Aetheus.Shared.Components.Firewall;
 global using Aetheus.Shared.Components.Git;
 global using Aetheus.Shared.Components.Logs;
 global using Aetheus.Shared.Components.Mail;
+global using Aetheus.Shared.Components.MailTemplates;
 global using Aetheus.Shared.Components.ModuleLinks;
 global using Aetheus.Shared.Components.Monitoring;
 global using Aetheus.Shared.Components.Notifications;

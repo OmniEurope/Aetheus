@@ -5,15 +5,9 @@ using System.Reflection;
 
 namespace Aetheus.Back.Components.Shared;
 
-/// <summary>
-/// The allow-list of an endpoint's grid columns (PLAN-008 lot 12): each key a grid may filter or sort
-/// on, bound to the expression that reads it. A request only ever names keys; the column behind a
-/// key is decided here, so a filter can never reach a property the endpoint did not choose to expose.
-/// <para>Filters are applied after the caller's organisation scope and before the count, so the
-/// total the grid reports is the size of the filtered set. Text comparisons are case-insensitive
-/// (<c>ToLower()</c> on both sides: Npgsql translates it to <c>lower()</c>, and the in-memory
-/// provider of the unit tests can run it, which <c>EF.Functions.ILike</c> cannot).</para>
-/// </summary>
+/// <summary>Allow only endpoint-defined grid keys and apply filters after organisation scope but
+/// before counting. Lowercase text comparisons work in both Npgsql and the in-memory unit-test
+/// provider.</summary>
 public sealed class GridQueryMap<TEntity>
 {
     private static readonly MethodInfo StringContains = typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!;
@@ -63,7 +57,7 @@ public sealed class GridQueryMap<TEntity>
         return this;
     }
 
-    /// <summary>Recette R-210: the candidates of an <see cref="GridFilterOperator.In"/> value, bounded.</summary>
+    /// <summary>The candidates of an <see cref="GridFilterOperator.In"/> value, bounded.</summary>
     public static IReadOnlyList<string> SplitList(string? value)
     {
         var items = (value ?? string.Empty).Split(GridFilter.ListSeparator, StringSplitOptions.RemoveEmptyEntries);
@@ -181,11 +175,9 @@ public sealed class GridQueryMap<TEntity>
         return column.Kind == Kind.Text ? TextCondition(member, op, value) : ValueCondition(column, member, op, value);
     }
 
-    /// <summary>
-    /// Recette R-210: the column equals one of the candidates. Text compares case-insensitively, the
-    /// other kinds parse each candidate as a single Equals value would be parsed. The list reaches SQL
-    /// as one parameter (<c>= ANY</c> on Npgsql).
-    /// </summary>
+    /// <summary> The column equals one of the candidates. Text compares case-insensitively, the
+    /// other kinds parse each candidate as a single Equals value would be parsed. The list reaches
+    /// SQL as one parameter (<c>= ANY</c> on Npgsql). </summary>
     private static Expression ListCondition(Column column, Expression member, IReadOnlyList<string> values)
     {
         if (values.Count == 0)

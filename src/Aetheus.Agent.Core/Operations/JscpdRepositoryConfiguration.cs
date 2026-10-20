@@ -3,14 +3,8 @@ using System.Text.Json;
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// Recette R2-120: the jscpd scanner reads the analysed repository's own configuration. jscpd 5
-/// replaces (does not merge) a configuration list with any list given on the command line, so the
-/// manifest passes no ignore option: a <c>--ignore-pattern</c> there once replaced the repository's
-/// <c>ignorePattern</c> and kept reporting a duplicate the repository had excluded. A repository
-/// without any jscpd configuration still must not have the installed packages it was projected with
-/// scanned as its own code, so only then the agent adds the <c>node_modules</c> file ignore.
-/// </summary>
+/// <summary>Let jscpd use repository configuration without command-line lists that would replace
+/// it. Add the node_modules exclusion only when no repository configuration exists.</summary>
 internal static class JscpdRepositoryConfiguration
 {
     internal const string IgnoreOption = "--ignore";

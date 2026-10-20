@@ -55,7 +55,7 @@ public class ProjectServersSectionMethodTests : BunitContext
     public void Renders_WithServerData()
     {
         var cut = RenderSection();
-        cut.WaitForState(() => cut.Markup.Contains("Web Server"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Web Server"));
         Assert.Contains("Web Server", cut.Markup);
         Assert.Contains("DB Server", cut.Markup);
     }

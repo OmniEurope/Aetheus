@@ -3,13 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R1-35, STD-FOCUS: no page or dialog puts the cursor in a field when it opens. Three dialogs
-/// (project form, dashboard name, secret value) used to call a <c>focusById</c> script from their first
-/// render; the script and its callers are gone, and this guard keeps the ways back out: an
-/// <c>autofocus</c> attribute in markup, a <c>FocusAsync</c> call, or a script call whose name moves
-/// the focus. The initial focus of an OE dialog is OE's (its close button), not the application's.
-/// </summary>
+/// <summary>STD-FOCUS forbids application-driven focus on page or dialog opening through markup,
+/// component calls or scripts. OE retains responsibility for its dialog's initial focus.</summary>
 public class NoAutofocusOnOpenAuditTests
 {
     private static readonly Regex AutofocusAttribute =

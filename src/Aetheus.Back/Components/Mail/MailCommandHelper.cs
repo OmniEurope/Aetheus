@@ -26,10 +26,8 @@ public static class MailCommandHelper
         return "'" + value.Replace("'", "'\\''") + "'";
     }
 
-    // S-FEAT-W8KN: add-domain / add-account / add-alias / dkim-rotate no longer build free-form shell
-    // strings (they always failed for the non-root agent). They dispatch the typed MailAddDomain /
-    // MailAddAccount / MailAddAlias / MailDkimRotate operations through the root-owned mail-manage
-    // helper. Covered by MailServiceTests (dispatch) and MailOperationExecutorTests (argv + validation).
+    // Dispatch typed domain, account, alias and DKIM operations through the root-owned mail-manage
+    // helper. MailServiceTests cover dispatch and MailOperationExecutorTests cover argv validation.
 
     // BuildRemoveDomainCommand / BuildDeleteAccountCommand / BuildRemoveAliasCommand /
     // BuildDkimKeyReadCommand were removed: those shell builders carried $(...), &&, sed and redirection
@@ -39,7 +37,5 @@ public static class MailCommandHelper
     // through the root-owned mail-manage helper (argv-exact, re-validated), like the add-* ops.
     // (SedEscape went with them - it was only used by those sed-based builders.)
 
-    // PLAN-005: BuildServiceCommand / BuildGetLogsCommand / BuildSpamAssassinServiceCommand were removed.
-    // Their shell strings needed privileges the non-root agent never had; service control, queue, logs
-    // and the rspamd spam filter now dispatch typed operations through the mail-manage helper.
+    // Service control, queues, logs and spam filtering use typed mail-manage operations.
 }

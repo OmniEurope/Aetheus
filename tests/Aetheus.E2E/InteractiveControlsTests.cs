@@ -8,6 +8,8 @@ namespace Aetheus.E2E;
 [Category("Security")]
 public sealed class InteractiveControlsTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     [SetUp]
     public async Task SetUp()
     {
@@ -28,8 +30,7 @@ public sealed class InteractiveControlsTests : E2ETestBase
         var projectSelector = Page.Locator("select.omni-drop-down");
         await Expect(projectSelector).ToBeVisibleAsync(new() { Timeout = 5000 });
 
-        // Click the visible radio text, not the input circle. This is the user
-        // interaction that previously had only been inferred from the markup.
+        // Clicks the visible radio label to exercise the user's interaction path.
         var globalText = Page.GetByText("Global", new() { Exact = true });
         await Expect(globalText).ToBeVisibleAsync();
         await globalText.ClickAsync();
@@ -95,16 +96,16 @@ public sealed class InteractiveControlsTests : E2ETestBase
             // the real task-tracker SignalR negotiate/connect calls fail at the network
             // layer. A healthy HTTP backend must keep the application usable instead of
             // surfacing the blocking backend-offline overlay.
+            var firstHubRequest = Page.WaitForRequestAsync(request => request.Url.Contains("/hubs/servers", StringComparison.Ordinal),
+                new() { Timeout = 0 });
             await Page.ReloadAsync(new() { WaitUntil = WaitUntilState.DOMContentLoaded });
 
-            // Wait for the condition, not for a guessed duration. A flat 2.5s budget assumed the WASM
-            // frontend had booted and opened its first hub call by then; on a loaded agent it had not,
-            // the counter was still 0, and the run failed with "Expected: greater than 0" even though
-            // nothing was broken. The assertion below is unchanged and still blocking - only the wait
-            // became deterministic.
-            var hubCallDeadline = DateTime.UtcNow.AddSeconds(20);
-            while (Volatile.Read(ref blockedHubRequests) == 0 && DateTime.UtcNow < hubCallDeadline)
-                await Page.WaitForTimeoutAsync(250);
+            // Wait for the condition, not for a guessed duration: the booted WASM frontend opens its first
+            // hub call when it is ready, which on a loaded agent takes longer than any fixed budget.
+            // ResponseAsync settles once the route has aborted the call, so the counter is read after it.
+            var hubRequest = await firstHubRequest.WaitAsync(TimeSpan.FromMilliseconds(PlaywrightConfig.AppReadyTimeoutMs));
+            var hubResponse = await hubRequest.ResponseAsync();
+            Assert.That(hubResponse, Is.Null, "The first SignalR request must be the one the route aborted.");
 
             Assert.That(Volatile.Read(ref blockedHubRequests), Is.GreaterThan(0),
                 "The browser must have exercised a blocked SignalR request.");
@@ -157,24 +158,9 @@ public sealed class InteractiveControlsTests : E2ETestBase
                 """,
                 new { backendUrl = BackendUrl, serverId, taskName });
 
-            // The budget must cover the reconnect backoff, not a guessed delay. Blocking the hub
-            // walks FrontendRuntimeDefaults.SignalRRetryDelays up to its 30s step, so the tracker
-            // can legitimately stay disconnected for 30s after the route is restored - TaskQueued
-            // is then missed and only the SeedActiveAsync of the next successful connect brings the
-            // task back. A 10s budget was shorter than that worst case and failed the run with
-            // "element(s) not found" while nothing was broken. The probe task never terminates on
-            // its own (no real agent answers it), so waiting longer cannot mask a lost event: the
-            // badge is owed to us for as long as the task stays in flight.
-            //
-            // That worst case no longer exists, and padding the budget was the wrong answer to it.
-            // 45s made this the only flaky test in the suite (it failed QA run 2306, 1 of 61, and
-            // graded candidate 2302 F while passing run 2288 on equivalent code) because restoring
-            // the route mid-delay cost the full clamped 30s before the next attempt even started,
-            // leaving 15s for StartAsync, JoinAllServers and SeedActiveAsync on an agent running the
-            // whole stack. The application now listens for `online` and cuts that sleep short, and
-            // the unroute above raises that event the way a real network recovery does, so the
-            // reconnect lands in seconds. The budget below covers a slow connect, not a backoff step
-            // waited out for nothing.
+            // The simulated online event wakes the reconnect loop, so the timeout covers connection
+            // and state recovery. The probe task stays unfinished without an agent, keeping its
+            // badge observable throughout recovery.
             await Expect(Page.Locator(".task-tracker-count")).ToBeVisibleAsync(new() { Timeout = 30000 });
 
             // The overlay can come back once more here: SignalR backs off between reconnect

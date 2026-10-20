@@ -16,6 +16,29 @@ public sealed record CertbotDataDto
     // Null when none was recorded yet.
     public DateTime? RenewalCheckedAt { get; init; }
     public bool? RenewalCheckSucceeded { get; init; }
+
+    /// <summary>Version of the root-owned <c>aetheus-certbot-manage</c> helper installed on the server (0 when
+    /// absent or unversioned, which is older than <see cref="CertbotHelperVersion.Current"/>).</summary>
+    public int HelperVersion { get; init; }
+
+    /// <summary>Recette R3-56: the lineages the last rehearsal failed, each with certbot's reason. Empty
+    /// when it passed, or when certbot printed no per-lineage reason.</summary>
+    [MaxLength(CertbotRenewalFailureDto.MaxFailures)]
+    public List<CertbotRenewalFailureDto> RenewalCheckFailures { get; init; } = [];
+}
+
+/// <summary>Recette R3-56: one certificate that failed <c>certbot renew --dry-run</c>, and why.</summary>
+public sealed record CertbotRenewalFailureDto
+{
+    public const int MaxFailures = 256;
+    public const int MaxNameLength = 255;
+    public const int MaxReasonLength = 500;
+
+    [StringLength(MaxNameLength)]
+    public string Name { get; init; } = string.Empty;
+
+    [StringLength(MaxReasonLength)]
+    public string Reason { get; init; } = string.Empty;
 }
 
 // --- Certificate info ---
@@ -32,7 +55,7 @@ public sealed record CertbotCertificateDto
     public string CertPath { get; init; } = string.Empty;
     [StringLength(4096)]
     public string KeyPath { get; init; } = string.Empty;
-    // How this lineage renews, read from /etc/letsencrypt/renewal/<name>.conf (PLAN-007).
+    // Renewal method read from /etc/letsencrypt/renewal/<name>.conf.
     [StringLength(100)]
     public string Authenticator { get; init; } = string.Empty;
     [StringLength(4096)]
@@ -71,4 +94,11 @@ public sealed record CertbotCreateRequest
 
     [StringLength(500)]
     public string? WebrootPath { get; init; }
+}
+
+/// <summary>The <c>aetheus-certbot-manage</c> helper version this release ships; a server reporting less
+/// (or none) is shown as "to update". Bumped together with the <c>aetheus-certbot-helper-version</c> marker.</summary>
+public static class CertbotHelperVersion
+{
+    public const int Current = 1;
 }

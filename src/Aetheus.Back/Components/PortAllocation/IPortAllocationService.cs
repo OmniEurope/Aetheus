@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.PortAllocation;
 
-/// <summary>
-/// PLAN-005 lot 5: allocating ports straight into a variable library. It sits above the registry and
-/// the libraries, which are both storage and therefore cannot call each other; this is where the two
-/// are joined - in one transaction on a relational provider (the scope is re-entrant), with the
-/// compensation kept for the InMemory provider, as spelled out on the service.
-/// </summary>
+/// <summary>Coordinates port reservations and library entries above their separate storage modules.
+/// Relational providers use a re-entrant transaction, while the InMemory provider uses
+/// compensation.</summary>
 public interface IPortAllocationService
 {
     /// <summary>

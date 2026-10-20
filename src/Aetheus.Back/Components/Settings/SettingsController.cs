@@ -21,7 +21,8 @@ public class SettingsController(ISettingsService settingsService, IEmailSenderSe
         return Ok();
     }
 
-    /// <summary>Recette R1-16: the platform e-mail sender, default no-reply account or custom SMTP server.</summary>
+    /// <summary>The platform e-mail sender, default no-reply account or custom SMTP
+    /// server.</summary>
     [HttpGet("email-sender")]
     public async Task<ActionResult<EmailSenderSettingsDto>> GetEmailSender(CancellationToken ct) =>
         Ok(await emailSender.GetAsync(ct));

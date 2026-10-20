@@ -102,7 +102,7 @@ public class RunGanttStripTests : BunitContext
     [Fact]
     public void TheAxisIsGraduatedInQuartersWithALineThroughEveryRow()
     {
-        // Recette R-158.
+        // Quarter-axis labels.
         var component = Render(Step(1, "Compile", 0, 100), Step(2, "Test", 100, 200));
 
         Assert.Equal(
@@ -115,7 +115,7 @@ public class RunGanttStripTests : BunitContext
     [Fact]
     public void AStageThatWaitedGetsAHatchedSegmentEndingWhereItsBarBegins()
     {
-        // Recette R-154 / R-155: 50 s between Compile's end and Test's start.
+        // 50 s between Compile's end and Test's start.
         var component = Render(
             Step(1, "Compile", 0, 100, depth: 0),
             Step(2, "Test", 150, 200, depth: 1));
@@ -131,7 +131,7 @@ public class RunGanttStripTests : BunitContext
     [Fact]
     public void TheWaitColumnAppearsOnlyWhenAStageWaited()
     {
-        // Recette R-156: same rule as the other columns.
+        // Same rule as the other columns.
         var noWait = Render(Step(1, "Compile", 0, 100, depth: 0), Step(2, "Test", 100, 200, depth: 1));
         Assert.DoesNotContain(noWait.FindAll(".run-gantt-head .run-gantt-cols > span"),
             span => span.GetAttribute("data-column") == "Wait");
@@ -145,7 +145,7 @@ public class RunGanttStripTests : BunitContext
     [Fact]
     public void EachRowCarriesItsStatusAsAnIconAndNotOnlyAsAColour()
     {
-        // Recette R-155: success, failed, cancelled and running each get their own shape.
+        // Success, failed, cancelled and running each get their own shape.
         var component = Render(
             Step(1, "A", 0, 10),
             Step(2, "B", 10, 20, TaskExecutionStatus.Failed),
@@ -161,8 +161,8 @@ public class RunGanttStripTests : BunitContext
     [Fact]
     public void TheTotalLineAddsExecutionAndWaitAndGivesTheRunDuration()
     {
-        // Recette R-157: 12 s of execution and 37 s of wait over a 49 s axis; the run itself, measured
-        // like the Started tile, lasted from its own start to its end.
+        // 12 s of execution and 37 s of wait over a 49 s axis; the run itself, measured like the
+        // Started tile, lasted from its own start to its end.
         var clock = new FakeTimeProvider(Origin.AddSeconds(1000));
         var component = Render<RunGanttStrip>(parameters => parameters
             .Add(p => p.Run, new PipelineRunDto
@@ -190,8 +190,8 @@ public class RunGanttStripTests : BunitContext
     [Fact]
     public void AStageRowUnfoldsIntoItsStepsAndFoldsBack()
     {
-        // Recette R-160: collapsed by default; the button carries aria-expanded and, once pressed,
-        // the stage's steps appear as thinner bars on the same axis, with only Duration filled.
+        // Collapsed by default; the button carries aria-expanded and, once pressed, the stage's
+        // steps appear as thinner bars on the same axis, with only Duration filled.
         var component = Render(
             Step(1, "Compile", 0, 100),
             Step(2, "Test", 100, 150),
@@ -236,7 +236,7 @@ public class RunGanttStripTests : BunitContext
     [Fact]
     public void AStepSkippedByItsCondition_IsNamedSkipped_WhileACancelledOneStaysCancelled()
     {
-        // Recette R-246: both are stored Cancelled with no start; only the condition tells them apart.
+        // Both are stored Cancelled with no start; only the condition tells them apart.
         var skipped = Step(2, "Lint", null, 100, TaskExecutionStatus.Cancelled) with
         {
             SkippedCondition = "eq(variables['HAS_PYTHON'], 'true')"
@@ -257,7 +257,7 @@ public class RunGanttStripTests : BunitContext
     [Fact]
     public void TheBarTooltipGivesStartEndDurationWaitAndTheGapToTheUsualDuration()
     {
-        // Recette R-159.
+        // Stage duration tooltip.
         var clock = new FakeTimeProvider(Origin.AddSeconds(1000));
         var component = Render<RunGanttStrip>(parameters => parameters
             .Add(p => p.Run, new PipelineRunDto

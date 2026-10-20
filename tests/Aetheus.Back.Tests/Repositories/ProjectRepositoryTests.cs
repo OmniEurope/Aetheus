@@ -50,7 +50,7 @@ public class ProjectRepositoryTests : IDisposable
     [Fact]
     public async Task GetProjectsPagedAsync_GivesThePipelineCountAndTheLastRun_WithoutThePipelineYaml()
     {
-        // Recette R-481: the tile needs a count and the latest run, not the pipelines' definitions.
+        // The tile needs a count and the latest run, not the pipelines' definitions.
         var project = new Project { Name = "Aetheus", Description = "d" };
         var older = new DateTime(2026, 9, 29, 8, 0, 0, DateTimeKind.Utc);
         project.Pipelines.Add(new Pipeline
@@ -319,7 +319,7 @@ public class ProjectRepositoryTests : IDisposable
     [Fact]
     public async Task GetTasksPagedAsync_AppliesColumnFilters_AndFilterValuesListTheServers()
     {
-        // Recette R-212: the project tasks section sends real column filters, applied before the count.
+        // The project tasks section sends real column filters, applied before the count.
         var (project, _, run, server) = await SetupProjectWithPipelineRunAsync();
         _db.Tasks.AddRange(
             new ServerTask { ServerId = server.Id, Name = "build", Command = "echo", Status = TaskExecutionStatus.Failed, PipelineRunId = run.Id },
@@ -418,8 +418,8 @@ public class ProjectRepositoryTests : IDisposable
     [Fact]
     public async Task GetLogsPagedAsync_AppliesColumnFilters_BeforeTheCount()
     {
-        // Recette R-212: the project logs section sends the Level list, the Time range and the Message
-        // text as real column filters, applied inside the project's scope and before the count.
+        // The project logs section sends the Level list, the Time range and the Message text as
+        // real column filters, applied inside the project's scope and before the count.
         var (project, _, run, server) = await SetupProjectWithPipelineRunAsync();
         var task = new ServerTask { ServerId = server.Id, Name = "t", Command = "echo", Executor = ExecutorType.Shell, Status = TaskExecutionStatus.Pending, PipelineRunId = run.Id };
         _db.Tasks.Add(task);
@@ -461,8 +461,8 @@ public class ProjectRepositoryTests : IDisposable
     [Fact]
     public async Task GetProjectServersPageAsync_AppliesColumnFilters_BeforeTheCount()
     {
-        // Recette R-212: the project servers section sends the Type list, the Name and Host texts and the
-        // Port number as real column filters; another project's server never leaks in.
+        // The project servers section sends the Type list, the Name and Host texts and the Port
+        // number as real column filters; another project's server never leaks in.
         var project = new Project { Name = "Filtered", Description = "d" };
         var other = new Project { Name = "Other", Description = "d" };
         _db.Projects.AddRange(project, other);
@@ -717,8 +717,7 @@ public class ProjectRepositoryTests : IDisposable
 
         var insight = Assert.Single(result).Value;
         Assert.Equal("0123456789abcdef", insight.LastCommitSha);
-        // PLAN-003 lot 8 / D24: the child run is the newest one, and the tile still names the parent,
-        // the run a person launched. Before, it named the child and explained it with "child of #N".
+        // Select the parent root run even when a triggered child is newer.
         Assert.Equal(parentRun.Id, insight.LastRunId);
         Assert.NotEqual(childRun.Id, insight.LastRunId);
         // And its status is the parent's: a green child under a parent still running is not "done".
@@ -732,10 +731,8 @@ public class ProjectRepositoryTests : IDisposable
     [Fact]
     public async Task GetProjectSectionCountsAsync_CountsAServerCarriedByAnEnvironment_ApartFromDirectAttachments()
     {
-        // PLAN-003 lot 29 / D23: attaching a server to an environment of the project is a way of
-        // giving the project somewhere to run, so the count has to see it. It stays a separate
-        // number: the Servers section lists direct attachments only, and its tile must not claim
-        // rows it does not show.
+        // Count environment-linked servers separately from direct attachments so readiness sees
+        // both while section counts match their rows.
         var project = new Project { Name = "API", Description = "d" };
         _db.Projects.Add(project);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -779,11 +776,8 @@ public class ProjectRepositoryTests : IDisposable
     private async Task<ProjectListInsight> TileInsightAsync(Project project) =>
         (await _repo.GetProjectListInsightsAsync([project.Id], TileNow.AddMinutes(-5), TestContext.Current.CancellationToken))[project.Id];
 
-    /// <summary>
-    /// PLAN-005 lot 7 / D45: a root run still Running is named even when a finished root run started
-    /// after it, with the step it is on. Before, the newest start always won and the tile said "last
-    /// run: success" in the middle of a deployment.
-    /// </summary>
+    /// <summary>A Running root takes precedence over a newer finished root and includes its active
+    /// step.</summary>
     [Fact]
     public async Task GetProjectListInsightsAsync_AnOlderRunningRootWinsOverANewerFinishedOne_WithItsStep()
     {

@@ -77,7 +77,7 @@ public sealed class DefaultShellRunnerTests
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 _runner.RunExecAsync(file, args, TestContext.Current.CancellationToken, TimeSpan.FromMilliseconds(100)));
 
-            await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+            await Task.Delay(TimeSpan.FromSeconds(WitnessDelaySeconds + 1), TestContext.Current.CancellationToken);
             Assert.False(File.Exists(marker), "The descendant process survived cancellation and wrote its marker.");
         }
         finally
@@ -148,6 +148,11 @@ public sealed class DefaultShellRunnerTests
         ? ("cmd.exe", ["/d", "/s", "/c", "ping 127.0.0.1 -n 6 >NUL"])
         : ("/bin/sh", ["-c", "sleep 5"]);
 
+    /// <summary>How long the witness waits before writing its marker. Wide on purpose: on a loaded CI
+    /// host the tree kill once landed more than 0.5 s after the 100 ms timeout, so the marker was
+    /// written before the kill and the survival assertion failed with no defect in the runner.</summary>
+    private const int WitnessDelaySeconds = 3;
+
     private static (string File, IReadOnlyList<string> Args) DescendantMarkerCommand(string marker)
     {
         if (OperatingSystem.IsWindows())
@@ -156,13 +161,13 @@ public sealed class DefaultShellRunnerTests
             // PowerShell as a string literal, which it printed instead of running, and the marker
             // was never written.
             var windowsMarker = marker.Replace("'", "''", StringComparison.Ordinal);
-            var script = $"Start-Sleep -Milliseconds 500; [IO.File]::WriteAllText('{windowsMarker}', 'child-survived')";
+            var script = $"Start-Sleep -Seconds {WitnessDelaySeconds}; [IO.File]::WriteAllText('{windowsMarker}', 'child-survived')";
             var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
             var child = $"powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {encoded}";
             return ("cmd.exe", ["/d", "/s", "/c", child]);
         }
 
         var escapedMarker = marker.Replace("'", "'\\''", StringComparison.Ordinal);
-        return ("/bin/sh", ["-c", $"/bin/sh -c 'sleep 0.5; printf child-survived > \"{escapedMarker}\"' & wait"]);
+        return ("/bin/sh", ["-c", $"/bin/sh -c 'sleep {WitnessDelaySeconds}; printf child-survived > \"{escapedMarker}\"' & wait"]);
     }
 }

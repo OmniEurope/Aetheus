@@ -15,18 +15,9 @@ public enum ServerLiveFeedTriggers
     HeartbeatAndTasks
 }
 
-/// <summary>
-/// R-181 "full temps réel": the reusable replacement for the per-view Refresh buttons of a server's
-/// detail sections. It joins the server's SignalR group on the <c>servers</c> hub and calls the view's
-/// reload whenever that server reports a heartbeat (the agent's inventory, the source of what these
-/// views read back, was just rewritten) and, when <see cref="ServerLiveFeedTriggers.HeartbeatAndTasks"/>
-/// is chosen, when one of its tasks completes. Bursts are coalesced through
-/// <see cref="TrailingReloadCoalescer"/>: at most one reload runs, and a push arriving during it
-/// schedules exactly one more. Best effort like every realtime surface: an unavailable hub leaves the
-/// view on its last load, it never throws into the page. The group is re-joined and the view reloaded
-/// after a reconnect, since pushes sent during the outage are lost. Each view owns and disposes its
-/// instance.
-/// </summary>
+/// <summary>Follow server heartbeats and optional task completion with coalesced reloads so views
+/// track the inventory without overlapping requests; rejoin and reload after reconnect, preserving
+/// the last state when the hub is unavailable.</summary>
 public sealed class ServerLiveFeed(
     HubConnectionFactory hubFactory,
     Func<int, CancellationToken, Task>? coalesceDelay = null) : IAsyncDisposable
@@ -91,8 +82,8 @@ public sealed class ServerLiveFeed(
             });
             _hub = hub;
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-            timeout.CancelAfter(FrontendRuntimeDefaults.SignalRStartTimeout);
+            using var deadline = new CancellationTokenSource(FrontendRuntimeDefaults.SignalRStartTimeout, hubFactory.Clock);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, deadline.Token);
             await hub.StartAsync(timeout.Token).ConfigureAwait(false);
             await hub.InvokeAsync("JoinServerGroup", serverId, timeout.Token).ConfigureAwait(false);
         }

@@ -5,12 +5,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// The redeployable window of <see cref="ArtifactRepository.GetExpiredAsync"/> (PLAN-007 lot 5): the
-/// last three releases a project deployed keep their payloads past ordinary retention. The rule is a
-/// correlated count inside the purge query, so only a relational provider proves it translates and
-/// ranks the same way the InMemory unit test does.
-/// </summary>
+/// <summary>Checks the correlated retention query on PostgreSQL: the last three deployed releases
+/// retain payloads beyond ordinary expiry.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class ArtifactRetentionWindowIntegrationTests(PostgresFixture fixture)
     : RelationalTestBase(fixture)

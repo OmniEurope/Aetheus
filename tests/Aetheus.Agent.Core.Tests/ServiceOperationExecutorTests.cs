@@ -145,4 +145,57 @@ public class ServiceOperationExecutorTests
         Assert.Equal(-1, result.ExitCode);
         Assert.Contains(messages, m => m.Contains("Invalid service name", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public async Task ExecuteAsync_GetLogsOutsideLinux_ReportsItAndDoesNotSpawn()
+    {
+        var messages = new List<string>();
+        var spawned = false;
+        var executor = Build(isLinux: false, runner: (_, _, _, _, _) =>
+        {
+            spawned = true;
+            return Task.FromResult(new ExecutorResult(0, false));
+        });
+
+        var result = await executor.ExecuteAsync(
+            OperationKind.ServiceGetLogs, "nginx", new Dictionary<string, string>(), 30,
+            (m, _) => { messages.Add(m); return Task.CompletedTask; },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.False(spawned);
+        Assert.Contains(messages, m => m.Contains("only supported on Linux", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(null, null, "100", false)]
+    [InlineData("25", "true", "25", true)]
+    [InlineData("25", "false", "25", false)]
+    [InlineData("0", "yes", "1", false)]
+    [InlineData("-5", null, "1", false)]
+    [InlineData("99999", "TRUE", "10000", true)]
+    [InlineData("many", "true", "100", true)]
+    public async Task ExecuteAsync_GetLogsOnLinux_RunsJournalctlWithTheClampedLineCount(
+        string? lines, string? follow, string expectedLines, bool expectedFollow)
+    {
+        ProcessStartInfo? captured = null;
+        var executor = Build(isLinux: true, runner: (psi, _, _, _, _) =>
+        {
+            captured = psi;
+            return Task.FromResult(new ExecutorResult(0, false));
+        });
+        var env = new Dictionary<string, string>();
+        if (lines is not null) env[Aetheus.Shared.Components.Shared.ServiceLogsEnv.Lines] = lines;
+        if (follow is not null) env[Aetheus.Shared.Components.Shared.ServiceLogsEnv.Follow] = follow;
+
+        var result = await executor.ExecuteAsync(
+            OperationKind.ServiceGetLogs, "apache2.service", env, 30, NoOutput, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.NotNull(captured);
+        Assert.Equal("journalctl", captured.FileName);
+        var expected = new List<string> { "-u", "apache2", "-n", expectedLines, "--no-pager" };
+        if (expectedFollow) expected.Add("-f");
+        Assert.Equal(expected, captured.ArgumentList);
+    }
 }

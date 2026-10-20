@@ -1,13 +1,9 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @using System.Globalization
 
-@*
-    PLAN-008 lot 44: the node's coordinates are runtime data (layout pass plus drag positions), so a
-    class cannot carry them. They ride as data attributes and `Aetheus.applyNodePositions` copies
-    them into `--node-x`/`--node-y` through the CSSOM, which a strict `style-src-attr` allows while
-    a style attribute in markup would be refused. Values are formatted with InvariantCulture so a
-    comma-decimal UI locale (fr-FR) cannot corrupt the CSS.
-*@
+@* Runtime node coordinates pass through data attributes into CSSOM custom properties to respect
+   style-src-attr restrictions. InvariantCulture prevents localized decimals from corrupting CSS
+   values. *@
 <div id="@ElementId" class="vp-node stage-node-positioned @(IsSelected ? "vp-node-selected" : "") @(ReadOnly ? "vp-provenance-inherited" : "")"
      data-node-x="@(X.ToString(CultureInfo.InvariantCulture))" data-node-y="@(Y.ToString(CultureInfo.InvariantCulture))"
      role="button" tabindex="0" aria-label="@Stage.Name"

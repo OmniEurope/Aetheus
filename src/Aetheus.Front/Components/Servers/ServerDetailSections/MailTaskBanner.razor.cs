@@ -3,11 +3,9 @@ using System.Globalization;
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>
-/// Recette R1-13: the banner shown while the mail page's tasks run. It names them and counts the time
-/// since the first was queued, moving once a second while it is on the page; the host removes it when
-/// the last task completes.
-/// </summary>
+/// <summary> The banner shown while the mail page's tasks run. It names them and counts the time
+/// since the first was queued, moving once a second while it is on the page; the host removes it
+/// when the last task completes. </summary>
 public partial class MailTaskBanner : IDisposable
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;

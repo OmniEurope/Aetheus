@@ -76,7 +76,7 @@ internal static class AetheusModulesExtensions
             .AddDockerModule()
             .AddApacheModule()
             .AddTasksModule()
-            .AddAiTasksModule()
+            .AddAiTasksModule(configuration)
             .AddPipelinesModule()
             .AddArtifactsModule()
             .AddProjectsModule()

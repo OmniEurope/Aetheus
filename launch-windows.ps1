@@ -10,7 +10,7 @@
     - Ensures the local PostgreSQL dev database container is running
     - Optionally resets the local PostgreSQL database (-r) by recreating the docker volume
     - Optionally runs tests with granular control (-t unit, -ti integration, -te E2E, -ta all)
-    - Optionally generates an HTML coverage report (-c)
+    - Optionally generates an HTML coverage report, then runs the CRAP gate (-c)
     - Mode flags: -mf (Back+Front, default), -ma (Agent), combinable
     - Starts selected services in parallel
     - Opens the browser to https://localhost:5401 (when -mf)
@@ -46,6 +46,8 @@
 .PARAMETER Coverage
     Collect code coverage and open the HTML report. Implies -tb and -tf, and also runs the
     Agent.Core unit suite so the aggregated % covers all three xUnit+bUnit suites (Back+Front+Agent.Core).
+    Once the coverage is green, runs the CRAP gate (scripts/crap-gate.ps1) on every report of the run;
+    -c fails when the gate fails.
 .PARAMETER ModeFront
     Start Backend + Frontend (default mode if neither -mf nor -ma is specified).
 .PARAMETER ModeAgent
@@ -197,6 +199,8 @@ $root = $PSScriptRoot
 # PowerShell treats an unquoted comma as an array separator. Keep the documented
 # `-tec Auth,Smoke` form working by passing one comma-separated filter to the core.
 if ($TestE2eFilter) { $TestE2eFilter = [string]::Join(',', $TestE2eFilter) }
+# STD-CRAP: the kit's CRAP gate, a verbatim copy run by the core after a green -c coverage run.
+$crapGate = Join-Path $PSScriptRoot "scripts\crap-gate.ps1"
 $script:ylaunchExitCode = 0
 . "$PSScriptRoot\scripts\launch-core.ps1"
 exit $script:ylaunchExitCode

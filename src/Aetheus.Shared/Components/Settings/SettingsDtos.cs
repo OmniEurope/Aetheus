@@ -116,10 +116,8 @@ public sealed record RefreshTokenRequest
     public string RefreshToken { get; init; } = string.Empty;
 }
 
-/// <summary>
-/// PLAN-005 lot 9 / D48: a session the client ended without being asked to. Sent anonymously (the
-/// session is gone by then), so it carries nothing but a known reason code and a correlation id.
-/// </summary>
+/// <summary>Reports an unsolicited client session end anonymously, using only an allowed reason
+/// code and correlation identifier.</summary>
 public sealed record SessionEndedReport
 {
     /// <summary>One of <c>SessionEndReasons.All</c>; anything else is refused.</summary>

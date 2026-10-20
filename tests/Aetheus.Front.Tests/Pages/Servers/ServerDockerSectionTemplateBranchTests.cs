@@ -271,7 +271,7 @@ public class ServerDockerSectionTemplateBranchTests : BunitContext
         typeof(DockerContainersTab).GetField("_inspectContent", Priv)!.SetValue(tab.Instance, "{\"Id\":\"abc\"}");
         cut.Render();
 
-        // R-516: the inspect result is OE's code block, whose header carries the copy button.
+        // The inspect result is OE's code block, whose header carries the copy button.
         var block = cut.Find(".omni-code-block.docker-logs");
         Assert.Contains("\"Id\":\"abc\"", block.QuerySelector("pre")!.TextContent, StringComparison.Ordinal);
         Assert.NotNull(block.QuerySelector("figcaption button"));
@@ -330,7 +330,7 @@ public class ServerDockerSectionTemplateBranchTests : BunitContext
     }
 
     // ── TEST 13: Browse panel - root path, no content → waiting, no up-button ─
-    // Exercises lines 254-278, including the _browsePath != "/" sub-branch (lines 261-265)
+    // The file browser only ever lists the container root, so it offers no way up.
 
     [Fact]
     public void Render_BrowsePanel_AtRoot_NoUpButton()
@@ -348,20 +348,18 @@ public class ServerDockerSectionTemplateBranchTests : BunitContext
         Assert.DoesNotContain(cut.FindComponents<OmniIcon>(), icon => icon.Instance.Name == OmniIconName.Upgrade);
     }
 
-    // ── TEST 14: Browse panel - non-root path, content → pre and up-button ───
+    // ── TEST 14: Browse panel - content → pre ───
 
     [Fact]
-    public void Render_BrowsePanel_NonRootPath_ShowsUpButtonAndContent()
+    public void Render_BrowsePanel_WithContent_ShowsTheListing()
     {
         var cut = RenderSection();
         var tab = cut.FindComponent<DockerContainersTab>();
         typeof(DockerContainersTab).GetField("_browseContainerId", Priv)!.SetValue(tab.Instance, "bwsctr000000bws0");
         typeof(DockerContainersTab).GetField("_browseContainerName", Priv)!.SetValue(tab.Instance, "browse-target");
-        typeof(DockerContainersTab).GetField("_browsePath", Priv)!.SetValue(tab.Instance, "/etc");
         typeof(DockerContainersTab).GetField("_browseContent", Priv)!.SetValue(tab.Instance, "hosts  resolv.conf  passwd");
         cut.Render();
 
-        Assert.Contains(cut.FindComponents<OmniIcon>(), icon => icon.Instance.Name == OmniIconName.Upgrade);
         Assert.Contains("docker-logs", cut.Markup);
         Assert.Contains("hosts", cut.Markup);
     }
@@ -395,7 +393,9 @@ public class ServerDockerSectionTemplateBranchTests : BunitContext
         Assert.DoesNotContain("yaml-editor", cut.Markup);
         Assert.DoesNotContain("RequestingCompose", cut.Markup);
 
-        await cut.Find("button[title='EditCompose']").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        // Edit compose sits in the stack row's "More actions" menu (STD-BTN detection 11).
+        cut.Find(".omni-overflow-menu__trigger").Click();
+        await cut.Find(".omni-menu__item[title='EditCompose']").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         // compose/file mock returns true ⇒ the success branch leaves the panel in its loading state.
         Assert.Contains("RequestingCompose", cut.Markup);

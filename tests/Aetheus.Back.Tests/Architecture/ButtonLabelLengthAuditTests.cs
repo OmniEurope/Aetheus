@@ -4,11 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Back.Tests.Architecture;
 
-/// <summary>
-/// PLAN-003 lot 5 / D10: the page title carries the context, the button does not repeat it. A button
-/// on /projects says "Nouveau", not "Nouveau projet"; the one on a server says "Journaux", not
-/// "Récupérer les logs". This keeps the drift from creeping back one label at a time.
-/// </summary>
+/// <summary>Button labels use concise verbs because page titles supply context.</summary>
 public sealed class ButtonLabelLengthAuditTests
 {
     private const int MaxButtonLabelLength = 18;
@@ -32,10 +28,9 @@ public sealed class ButtonLabelLengthAuditTests
         "CreatePipeline", "AttachFirstServer",
         // Questions and qualified variants: the extra words ARE the meaning, not the page context.
         "WhyOffline", "ApplyOnProposedBranch", "PipelineRun",
-        // Recette R-234: the wording the user asked for on the security settings.
+        // Explicit security-settings wording.
         "ChangePassword",
-        // Recette R2-123 (decided 2026-10-05): the wording the user asked for on the public demo sign-in;
-        // the button sits outside the form it fills, so "le formulaire" says what it acts on.
+        // The public-demo button names the form it fills because it sits outside that form.
         "PublicDemoFillForm"
     };
 

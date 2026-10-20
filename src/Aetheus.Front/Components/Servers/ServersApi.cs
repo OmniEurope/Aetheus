@@ -31,12 +31,12 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
             query["sortBy"] = sortBy;
             query["sortDescending"] = sortDescending.ToString();
         }
-        // Recette R-211: the list's column header filters.
+        // The list's column header filters.
         var url = GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/servers", query), filters);
         return await Http.GetFromJsonAsync<PaginatedResult<ServerDto>>(url, JsonOptions.Web) ?? new();
     }
 
-    /// <summary>Recette R-211: the OS, agent versions and tags the list's checkable filters offer.</summary>
+    /// <summary>The OS, agent versions and tags the list's checkable filters offer.</summary>
     public async Task<ServerFilterValuesDto> GetServerFilterValuesAsync(CancellationToken ct = default) =>
         await GetJsonAsync<ServerFilterValuesDto>("api/servers/filter-values", ct) ?? new();
 
@@ -92,15 +92,15 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
             ct);
 
 
-    /// <summary>PLAN-004 R-11: retires the server (DELETE keeps the row and its links; a reinstall of
-    /// the same machine revives it).</summary>
+    /// <summary>Retires the server while preserving its row and links so re-enrollment of the same
+    /// machine can revive it.</summary>
     public Task<ApiStatus> RetireServerAsync(int id, CancellationToken ct = default)
         => DeleteAsync($"api/servers/{id}", ct);
 
     public async Task<PaginatedResult<RetiredServerDto>> GetRetiredServersAsync(
         int page = 1, int pageSize = 25, string? sortBy = null, bool sortDescending = false, CancellationToken ct = default,
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
-        // Recette R-210 / R-224: the dialog's column header filters.
+        // The dialog's column header filters.
         => await GetJsonAsync<PaginatedResult<RetiredServerDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString("api/servers/retired", PageQuery(page, pageSize, null, sortBy, sortDescending)), filters),
             ct).ConfigureAwait(false) ?? new();
@@ -152,6 +152,16 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
         => PostNoBodyAsync<AgentUpdateResponse>($"api/servers/{serverId}/agent/update", ct);
 
 
+    /// <summary>Queues an agent self-update that also enables the named capabilities (R3-58, whitelist
+    /// only). Null when the request itself failed or the backend refused it.</summary>
+    public Task<AgentUpdateResponse?> EnableAgentCapabilitiesAsync(
+        int serverId, IReadOnlyCollection<string> capabilities, CancellationToken ct = default)
+        => PostJsonAsync<AgentEnableCapabilitiesRequest, AgentUpdateResponse>(
+            $"api/servers/{serverId}/agent/enable-capabilities",
+            new AgentEnableCapabilitiesRequest { Capabilities = [.. capabilities] },
+            ct);
+
+
     /// <summary>Queues an agent self-update for every server the caller can administer.</summary>
     public Task<AgentUpdateAllResponse?> UpdateAllAgentsAsync(CancellationToken ct = default)
         => PostNoBodyAsync<AgentUpdateAllResponse>("api/servers/agent/update-all", ct);
@@ -166,7 +176,7 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210 / R-224: the projects grid's column header filters.
+        // The projects grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<ProjectDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/servers/{serverId}/projects", query), filters), JsonOptions.Web) ?? new();
     }
@@ -197,23 +207,20 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
     }
 
 
-    /// <summary>
-    /// One page of a server's releases. A360-18: this used to fetch every release of every project the
-    /// server had ever touched and page it in the browser, which is an unbounded transfer on a table
-    /// built for long retention.
-    /// </summary>
+    /// <summary>Fetches one server-side page of releases to bound transfer independently of
+    /// retention history.</summary>
     public async Task<PaginatedResult<ReleaseDto>> GetServerReleasesAsync(
         int serverId, int page = 1, int pageSize = 25,
         string? sortBy = null, bool sortDescending = true,
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = PageQuery(page, pageSize, search: null, sortBy, sortDescending);
-        // Recette R-224: the releases list's column header filters.
+        // The releases list's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<ReleaseDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/servers/{serverId}/releases", query), filters), JsonOptions.Web) ?? new();
     }
 
-    /// <summary>Recette R-224: the project and pipeline names a server's releases list filters offer.</summary>
+    /// <summary>The project and pipeline names a server's releases list filters offer.</summary>
     public async Task<ReleaseFilterValuesDto> GetServerReleaseFilterValuesAsync(int serverId, CancellationToken ct = default) =>
         await GetJsonAsync<ReleaseFilterValuesDto>($"api/servers/{serverId}/releases/filter-values", ct).ConfigureAwait(false) ?? new();
 
@@ -224,8 +231,8 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
     }
 
 
-    /// <summary>A page of the server's task log. Recette R-210 / R-224: the grid's header filters and sort
-    /// travel with it, so they apply to the whole log and not to the rows already loaded.</summary>
+    /// <summary>A page of the server's task log. the grid's header filters and sort travel with it,
+    /// so they apply to the whole log and not to the rows already loaded.</summary>
     public async Task<PaginatedResult<TaskLogDto>> GetServerLogsAsync(
         int serverId,
         int page = 1,
@@ -277,12 +284,12 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210: the applications grid's column header filters.
+        // The applications grid's column header filters.
         return await GetJsonAsync<PaginatedResult<ServerAppDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/servers/{serverId}/apps", query), filters), ct).ConfigureAwait(false) ?? new();
     }
 
-    /// <summary>Recette R-210: the sources the applications grid's Source filter offers.</summary>
+    /// <summary>The sources the applications grid's Source filter offers.</summary>
     public async Task<ServerAppFilterValuesDto> GetServerAppFilterValuesAsync(int serverId, CancellationToken ct = default) =>
         await GetJsonAsync<ServerAppFilterValuesDto>($"api/servers/{serverId}/apps/filter-values", ct).ConfigureAwait(false) ?? new();
 
@@ -354,7 +361,7 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
     {
         var query = PageQuery(page, pageSize, search, sortBy, sortDescending);
         if (projectId.HasValue) query["projectId"] = projectId.Value.ToString();
-        // Recette R-224: the environments list's column header filters.
+        // The environments list's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<EnvironmentDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString("api/environments", query), filters), JsonOptions.Web) ?? new();
     }
@@ -453,7 +460,7 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
         var qs = $"?page={page}&pageSize={pageSize}";
         if (!string.IsNullOrWhiteSpace(search)) qs += $"&search={Uri.EscapeDataString(search)}";
         if (!string.IsNullOrWhiteSpace(sortBy)) qs += $"&sortBy={Uri.EscapeDataString(sortBy)}&sortDescending={sortDescending.ToString().ToLowerInvariant()}";
-        // Recette R-210: the list's column header filters.
+        // The list's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<OrganizationDto>>(
             GridColumnFilters.AddTo($"api/organizations{qs}", filters), JsonOptions.Web, ct);
     }

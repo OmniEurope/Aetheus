@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Agent.Core.Services;
 
-/// <summary>
-/// Where the installer puts the root-owned helpers the agent calls through sudo (certbot, Apache
-/// reload, firewall...). Published to every task as <see cref="VariableName"/> so a deployment script
-/// names the directory the agent actually uses instead of restating it (PLAN-003 2.1).
-/// </summary>
+/// <summary>Expose the installer root-owned helper directory through <see cref="VariableName"/> so
+/// tasks use the agent actual helper paths.</summary>
 internal static class AgentHelperPaths
 {
     internal const string VariableName = "AGENT_HELPERS_DIR";

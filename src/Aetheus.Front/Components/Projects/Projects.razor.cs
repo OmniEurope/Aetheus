@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Text.Json;
 using Microsoft.AspNetCore.Components.Web;
 
 namespace Aetheus.Front.Components.Projects;
@@ -13,7 +12,7 @@ public partial class Projects : IAsyncDisposable
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
-    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private IUserPreferences Preferences { get; set; } = default!;
     [Inject] private ListCacheService Cache { get; set; } = default!;
 
     private List<ProjectDto> _projects = [];
@@ -32,8 +31,6 @@ public partial class Projects : IAsyncDisposable
     private HubConnection? _hubConnection;
     private HubConnection? _pipelineHub;
     private readonly TrailingReloadCoalescer _pipelineReload = new(1000);
-    private const string FavoriteStorageKey = "aetheus.projects.favorites";
-    private const string ViewModeStorageKey = "aetheus.projects.view-mode";
 
     private string CacheKey => $"projects:{_search}:{_statusFilter}";
 
@@ -78,20 +75,11 @@ public partial class Projects : IAsyncDisposable
     {
         if (!firstRender) return;
 
-        try
-        {
-            var favoritesJson = await JS.InvokeAsync<string?>("localStorage.getItem", FavoriteStorageKey);
-            if (!string.IsNullOrWhiteSpace(favoritesJson))
-                _favoriteProjectIds = JsonSerializer.Deserialize<HashSet<int>>(favoritesJson) ?? [];
-
-            var viewMode = await JS.InvokeAsync<string?>("localStorage.getItem", ViewModeStorageKey);
-            if (Enum.TryParse<ProjectViewMode>(viewMode, ignoreCase: true, out var parsed))
-                _viewMode = parsed;
-        }
-        catch (JSException)
-        {
-            // Preferences are an enhancement; the project list remains fully usable without storage.
-        }
+        // R1-66: the user's own favourites and view, kept on the server and cached in this browser.
+        _favoriteProjectIds = await Preferences.GetAsync<HashSet<int>>(PreferenceKeys.ProjectFavorites) ?? [];
+        var viewMode = await Preferences.GetAsync<string>(PreferenceKeys.ProjectViewMode);
+        if (Enum.TryParse<ProjectViewMode>(viewMode, ignoreCase: true, out var parsed))
+            _viewMode = parsed;
 
         StateHasChanged();
     }
@@ -223,8 +211,8 @@ public partial class Projects : IAsyncDisposable
         }
     }
 
-    // Recette R-319: the last commit is the project's, from any repository its runs cloned; the commit
-    // page finds the repository that holds it (or explains that none of the internal ones does).
+    // The last commit is the project's, from any repository its runs cloned; the commit page finds
+    // the repository that holds it (or explains that none of the internal ones does).
     private static string GitCommitHref(ProjectDto project) => $"/git-repositories/commits/{project.LastCommitId}";
 
     private static DateTime ActivityAt(ProjectDto project)
@@ -255,30 +243,13 @@ public partial class Projects : IAsyncDisposable
         if (!_favoriteProjectIds.Add(project.Id))
             _favoriteProjectIds.Remove(project.Id);
 
-        try
-        {
-            await JS.InvokeVoidAsync(
-                "localStorage.setItem",
-                FavoriteStorageKey,
-                JsonSerializer.Serialize(_favoriteProjectIds));
-        }
-        catch (JSException)
-        {
-            // Keep the in-memory preference for this session when storage is unavailable.
-        }
+        await Preferences.SetAsync(PreferenceKeys.ProjectFavorites, _favoriteProjectIds);
     }
 
     private async Task SetViewModeAsync(ProjectViewMode mode)
     {
         _viewMode = mode;
-        try
-        {
-            await JS.InvokeVoidAsync("localStorage.setItem", ViewModeStorageKey, mode.ToString());
-        }
-        catch (JSException)
-        {
-            // Keep the selected mode for this session when storage is unavailable.
-        }
+        await Preferences.SetAsync(PreferenceKeys.ProjectViewMode, mode.ToString());
     }
 
     /// <summary>Opens the create-project dialog; reloads the list when a project is created.</summary>
@@ -291,9 +262,9 @@ public partial class Projects : IAsyncDisposable
         if (result is ProjectDto created)
         {
             await LoadDataAndRender();
-            // Recette R2-121: a project is only its record until its pipelines exist. Offer the next
-            // step, the setup wizard for this project, whose readiness check names each missing
-            // prerequisite (repository, runner, environments, libraries, adapters) with its fix.
+            // A project is only its record until its pipelines exist. Offer the next step, the
+            // setup wizard for this project, whose readiness check names each missing prerequisite
+            // (repository, runner, environments, libraries, adapters) with its fix.
             var setUp = await Dialog.Confirm(
                 string.Format(L["SetUpNewProjectPipelinesConfirm"].Value, created.Name),
                 L["ProjectCreated"].Value,

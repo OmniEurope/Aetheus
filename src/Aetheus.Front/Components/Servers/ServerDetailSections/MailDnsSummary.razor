@@ -1,0 +1,30 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R3-48: one sentence on whether the DNS provider of the domain has anything to change, after a
+   setup or a reinstall: nothing when every published record matches the server, otherwise the exact
+   records to publish (a new DKIM key, for instance). The reverse DNS is set at the host, not there. *@
+@if (State == DnsSummaryState.NothingToChange)
+{
+    <OmniAlert Severity="OmniSeverity.Success" Class="mail-dns-summary mail-dns-summary--ok">@L["MailDnsNothingToChange"]</OmniAlert>
+}
+else if (State == DnsSummaryState.Incomplete)
+{
+    <OmniAlert Severity="OmniSeverity.Info" Class="mail-dns-summary mail-dns-summary--incomplete">@L["MailDnsSummaryIncomplete"]</OmniAlert>
+}
+else if (State == DnsSummaryState.ToPublish)
+{
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["MailDnsRecordsToPublish"]" Class="mail-dns-summary mail-dns-summary--publish">
+        <OmniStack Gap="OmniSpacing.Small">
+            @foreach (var record in ToPublish)
+            {
+                @if (record.RecordValue.Length > 0)
+                {
+                    <OmniCodeBlock Title="@($"{record.RecordType} {record.RecordName}")" Code="@record.RecordValue" Wrap="true" Class="mail-dns-summary__record" />
+                }
+                else
+                {
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 mail-dns-summary__record">@string.Format(L["MailDnsRecordValueUnknown"], record.RecordType, record.RecordName)</OmniText>
+                }
+            }
+        </OmniStack>
+    </OmniAlert>
+}

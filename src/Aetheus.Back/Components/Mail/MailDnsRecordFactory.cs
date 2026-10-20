@@ -3,10 +3,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Mail;
 
-/// <summary>
-/// PLAN-005: the DNS records a mail domain needs, derived from the server inventory. Shared by the
-/// "records to publish" dialog and the DNS verification so both always expect the same values.
-/// </summary>
+/// <summary>Derive required mail DNS records from server inventory for both publication guidance
+/// and verification.</summary>
 internal static class MailDnsRecordFactory
 {
     public const string SpfRecord = "v=spf1 mx a ~all";
@@ -15,19 +13,19 @@ internal static class MailDnsRecordFactory
     public static string MxHost(MailDomain domain, string? hostname) =>
         MailValidation.IsValidDomainName(hostname) ? hostname!.ToLowerInvariant() : $"mail.{domain.Name}";
 
-    /// <summary>Recette R1-10: the record Aetheus proposes is published: it starts with <c>mx</c> and <c>a</c>
-    /// (pass), alone (<see cref="SpfRecord"/>) or put before the terms already published (<see cref="SpfToPublish"/>).</summary>
+    /// <summary>The record Aetheus proposes is published: it starts with <c>mx</c> and <c>a</c>
+    /// (pass), alone (<see cref="SpfRecord"/>) or put before the terms already published (<see
+    /// cref="SpfToPublish"/>).</summary>
     public static bool IsProposedSpf(string spf)
     {
         var terms = MailDnsVerifier.Terms(spf).Take(2).Select(t => t.TrimStart('+')).Order(StringComparer.Ordinal).ToList();
         return terms.SequenceEqual(["a", "mx"]);
     }
 
-    /// <summary>
-    /// Recette R1-10: the SPF record to publish when the one published does not authorise this server. A
-    /// single published record keeps its terms (another provider that still sends for the domain stays
-    /// authorised) and gets <c>mx a</c> in front; otherwise the plain <see cref="SpfRecord"/>.
-    /// </summary>
+    /// <summary> The SPF record to publish when the one published does not authorise this server. A
+    /// single published record keeps its terms (another provider that still sends for the domain
+    /// stays authorised) and gets <c>mx a</c> in front; otherwise the plain <see
+    /// cref="SpfRecord"/>. </summary>
     public static string SpfToPublish(MailDnsRecordCheckDto check)
     {
         ArgumentNullException.ThrowIfNull(check);

@@ -14,7 +14,7 @@ public class ServerPortsentrySectionTests : BunitContext
     public ServerPortsentrySectionTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
-        // Recette R-210: the section also reads the protocols its Protocol header filter offers.
+        // The section also reads the protocols its Protocol header filter offers.
         _handler.SetJsonResponse("portsentry/filter-values", new PortsentryFilterValuesDto());
     }
 
@@ -52,7 +52,7 @@ public class ServerPortsentrySectionTests : BunitContext
     public void Renders_InstalledState_ShowsPortSentryHeading()
     {
         var cut = RenderInstalled();
-        Assert.Contains("PortSentry", cut.Markup);
+        Assert.Contains("Restart", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -170,5 +170,20 @@ public class ServerPortsentrySectionTests : BunitContext
             .GetField("_whitelist", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(cut.Instance)!;
         Assert.Contains(whitelist, ip => ip.IpAddress == "192.168.1.1");
+    }
+
+    [Fact]
+    public void R3_41_Installed_ShowsRestartAsTheOneAction_AndKeepsStartStopAndLogsInTheMenu()
+    {
+        var cut = RenderInstalled();
+
+        var standalone = cut.FindAll("button:not(.omni-menu__item)").Select(b => b.TextContent.Trim()).ToList();
+        Assert.Contains("Restart", standalone);
+        Assert.DoesNotContain("Start", standalone);
+        Assert.DoesNotContain("Stop", standalone);
+        Assert.DoesNotContain(standalone, text => text.Contains("ViewLogs", StringComparison.Ordinal));
+        Assert.NotNull(cut.FindMenuItem("Start"));
+        Assert.NotNull(cut.FindMenuItem("Stop"));
+        Assert.NotNull(cut.FindMenuItem("ViewLogs"));
     }
 }

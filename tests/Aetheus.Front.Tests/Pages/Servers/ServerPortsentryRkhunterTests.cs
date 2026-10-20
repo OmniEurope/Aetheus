@@ -11,9 +11,9 @@ public class ServerPortsentryRkhunterTests : BunitContext
     public ServerPortsentryRkhunterTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
-        // Recette R-210: the section also reads the protocols its Protocol header filter offers.
+        // The section also reads the protocols its Protocol header filter offers.
         _handler.SetJsonResponse("portsentry/filter-values", new PortsentryFilterValuesDto());
-        // R-181: an installed RKHunter section loads its scan history on first render too.
+        // An installed RKHunter section loads its scan history on first render too.
         _handler.SetJsonResponse("api/servers/8/rkhunter/history", new List<RkhunterScanResultDto>());
     }
 
@@ -58,7 +58,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
             .Add(x => x.ServerId, 7)
             .Add(x => x.Ps, ps));
 
-        Assert.Contains("PortSentry", cut.Markup);
+        Assert.Contains("Restart", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Installed", cut.Markup);
         Assert.Contains("v1.2", cut.Markup);
     }

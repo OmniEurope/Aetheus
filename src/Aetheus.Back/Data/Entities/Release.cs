@@ -13,11 +13,14 @@ public class Release
     public DateTime? PublishedAt { get; set; }
     public DateTime? PromotedAt { get; set; }
     public DateTime? RolledBackAt { get; set; }
+    /// <summary>When the retention archived the release (decision D2); null otherwise, and cleared when
+    /// a new publication of the same version makes it live again.</summary>
+    public DateTime? ArchivedAt { get; set; }
     public int? PipelineRunId { get; set; }
-    /// <summary>Recette R-366: the run that first published this release. Unlike
-    /// <see cref="PipelineRunId"/> (the last run that recorded it, a deployment included) it is never
-    /// overwritten. Stamped by <c>ReleaseRepository</c>; null for releases published before it existed
-    /// and for releases only detected from a branch.</summary>
+    /// <summary>The run that first published this release. Unlike <see cref="PipelineRunId"/> (the
+    /// last run that recorded it, a deployment included) it is never overwritten. Stamped by
+    /// <c>ReleaseRepository</c>; null for releases published before it existed and for releases
+    /// only detected from a branch.</summary>
     public int? CreatedByPipelineRunId { get; set; }
     public string? Changelog { get; set; }
     public int BuildNumber { get; set; }

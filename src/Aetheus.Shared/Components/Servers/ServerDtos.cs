@@ -27,6 +27,17 @@ public record ServerDto
     /// older agents that predate the marker file simply omit the field.</summary>
     public DateTime? AgentInstalledAt { get; init; }
 
+    /// <summary>PLAN-010 lot 1: what the backend's external TCP probe found the last time this
+    /// server's agent stopped heartbeating. Meaningful only while <see cref="Status"/> is Offline.</summary>
+    public ServerReachability ExternalProbe { get; init; }
+
+    /// <summary>When the external probe last ran (UTC on the wire); null when never probed.</summary>
+    public DateTime? ExternalProbeAt { get; init; }
+
+    /// <summary>The address and port(s) the external probe tried, e.g. <c>203.0.113.5:22</c>;
+    /// null when no address was probed.</summary>
+    public string? ExternalProbeTarget { get; init; }
+
     /// <summary>Whether this server is allowed to execute pipeline steps. Off by default on
     /// enrollment (secure-by-default); flipped on by an admin via the server detail UI. When
     /// off, the scheduler never resolves a stage target to this server even if tags/pool match.
@@ -75,10 +86,10 @@ public record ServerDto
     /// S-TECH-CUNK: tri-state on the list/tile - <c>null</c> = UNKNOWN (agent never phoned home yet).</summary>
     public bool? DeploymentTargetAvailable { get; init; }
 
-    /// <summary>PLAN-005 lot 2: the agent publishes <c>ports.observe</c>, so it can scan the host's
-    /// listening TCP ports. Unlike the sudo-derived flags this needs no grant, only an agent recent
-    /// enough to carry the collector; the UI gates the "refresh scan" action on it.
-    /// Tri-state - <c>null</c> = UNKNOWN (agent never phoned home yet).</summary>
+    /// <summary>The agent publishes <c>ports.observe</c>, so it can scan the host's listening TCP
+    /// ports. Unlike the sudo-derived flags this needs no grant, only an agent recent enough to
+    /// carry the collector; the UI gates the "refresh scan" action on it. Tri-state - <c>null</c> =
+    /// UNKNOWN (agent never phoned home yet).</summary>
     public bool? PortObservationAvailable { get; init; }
 
     /// <summary>When the host's listening ports were last observed, null when never scanned. It is a
@@ -161,6 +172,12 @@ public sealed record ServerDetailDto : ServerDto
     public double MemoryTotalMb { get; init; }
     public double DiskUsedGb { get; init; }
     public double DiskTotalGb { get; init; }
+    /// <summary>Fullest inode table of the last metric, in percent; null when unknown.</summary>
+    public double? InodeUsedPercent { get; init; }
+    /// <summary>Agent clock offset against the backend's, in milliseconds (positive = agent ahead),
+    /// and its uncertainty; both null when unknown (PLAN-010 lot 1).</summary>
+    public double? ClockOffsetMs { get; init; }
+    public double? ClockOffsetUncertaintyMs { get; init; }
     [MaxLength(2048)]
     public List<ServiceInfoDto> Services { get; init; } = [];
     public List<ServerTaskDto> RecentTasks { get; init; } = [];
@@ -172,6 +189,12 @@ public sealed record ServerDetailDto : ServerDto
     public TeamspeakDataDto Teamspeak { get; init; } = new();
     public PortsentryDataDto Portsentry { get; init; } = new();
     public RkhunterDataDto Rkhunter { get; init; } = new();
+    /// <summary>OOM kills since the host's last boot; null when the agent does not measure them.</summary>
+    public long? OomKillsSinceBoot { get; init; }
+
+    /// <summary>PLAN-010 lot 1: the stored SSH snapshot and its recent changes; null until the
+    /// agent reported one.</summary>
+    public SshConfigStatusDto? SshConfig { get; init; }
 
     /// <summary>S-TECH-N8R3: recent metric-report timestamps (UTC, oldest→newest) over the last
     /// ~30 minutes. Each entry is a heartbeat the server sent; the UI buckets these into a real
@@ -223,6 +246,8 @@ public sealed record ServerHeartbeatDto
     public RkhunterDataDto Rkhunter { get; init; } = new();
     public SecurityUpdatesDataDto SecurityUpdates { get; init; } = new();
     public FirewallDataDto Firewall { get; init; } = new();
+    /// <summary>OOM kills since boot (Linux); null when not measured, which never alerts.</summary>
+    public OomKillReportDto? OomKills { get; init; }
 
     /// <summary>
     /// S-TECH-15: SHA256 hashes of the agent's sudoers drop-in files
@@ -240,6 +265,10 @@ public sealed record ServerHeartbeatDto
     /// </summary>
     public bool? SudoersInventoryAvailable { get; init; }
 
+    /// <summary>PLAN-010 lot 1: the effective sshd settings and the authorized-key fingerprints.
+    /// Null for an agent predating the field or before its first collection completed.</summary>
+    public SshConfigDataDto? SshConfig { get; init; }
+
     /// <summary>
     /// S-FEAT-HBDX / S-TECH-CAPX: agent-reported capability diagnostics that explain WHY a derived
     /// capability shows OFF despite the grant being installed - e.g. "sudoers drop-in aetheus-package
@@ -256,11 +285,9 @@ public sealed record ServerHeartbeatDto
     public List<string> ScannerCapabilities { get; init; } = [];
     public StorageDiagnosticsDto StorageDiagnostics { get; init; } = new();
 
-    /// <summary>
-    /// PLAN-005 lot 2: the TCP ports actually listening on the host, refreshed on the slow inventory
-    /// period. Paired with <see cref="ObservedPortsAvailable"/> because an empty list is ambiguous on
-    /// its own - it also describes an agent that has never had the collector.
-    /// </summary>
+    /// <summary> The TCP ports actually listening on the host, refreshed on the slow inventory
+    /// period. Paired with <see cref="ObservedPortsAvailable"/> because an empty list is ambiguous
+    /// on its own - it also describes an agent that has never had the collector. </summary>
     [MaxLength(PortRegistryLimits.MaxObservedPorts)]
     public List<ObservedPortDto> ObservedPorts { get; init; } = [];
 
@@ -270,6 +297,13 @@ public sealed record ServerHeartbeatDto
     /// every observation the registry holds for the server on the first legacy heartbeat.
     /// </summary>
     public bool? ObservedPortsAvailable { get; init; }
+
+    /// <summary>
+    /// The four instants of the agent's previous heartbeat exchange, from which the backend estimates
+    /// the agent's clock offset. Null from an agent predating the measure, on the first beat after a
+    /// start, or when the backend did not stamp its reply: the offset is then unknown, never zero.
+    /// </summary>
+    public ClockSampleDto? ClockSample { get; init; }
 }
 
 /// <summary>
@@ -285,6 +319,13 @@ public sealed record ServerHeartbeatResponseDto
         Justification = "Rotation response. The renewed agent token reaches the one agent whose heartbeat just authenticated, and returning it is how a token can be rotated without a human handling it.")]
     public string? RenewedToken { get; init; }
     public DateTime? RenewedTokenExpiresAtUtc { get; init; }
+
+    /// <summary>
+    /// When this reply's request was received and when the reply left, both on the backend's clock
+    /// (T2 and T3 of <see cref="ClockSampleDto"/>). Null from a backend predating the clock measure.
+    /// </summary>
+    public DateTime? ReceivedAtUtc { get; init; }
+    public DateTime? RepliedAtUtc { get; init; }
 }
 
 public sealed record DiskInfoDto
@@ -293,6 +334,32 @@ public sealed record DiskInfoDto
     public string MountPoint { get; init; } = string.Empty;
     public double UsedGb { get; init; }
     public double TotalGb { get; init; }
+
+    /// <summary>
+    /// Inodes of the filesystem and how many are in use. Null when the agent could not read them
+    /// (Windows, an agent predating the measure, a filesystem without a fixed inode table such as
+    /// btrfs): unknown, never "0 % used".
+    /// </summary>
+    public long? InodesTotal { get; init; }
+    public long? InodesUsed { get; init; }
+
+    /// <summary>
+    /// The fullest inode table among <paramref name="disks"/>, in percent. Inodes run out per
+    /// filesystem, so a sum would hide a full one behind an empty one: the highest share is the one
+    /// that stops writes. Null when no disk carries an inode count.
+    /// </summary>
+    public static double? MaxInodeUsedPercent(IEnumerable<DiskInfoDto> disks)
+    {
+        ArgumentNullException.ThrowIfNull(disks);
+        double? highest = null;
+        foreach (var disk in disks)
+        {
+            if (disk is not { InodesTotal: > 0 and var total, InodesUsed: >= 0 and var used }) continue;
+            var percent = Math.Round(Math.Min(used, total) * 100d / total, 1);
+            if (highest is null || percent > highest) highest = percent;
+        }
+        return highest;
+    }
 }
 
 public sealed record ServerRegistrationRequest
@@ -341,10 +408,8 @@ public sealed record ServerRegistrationRequest
     /// <summary>S-DES-23: agent runs with TLS validation disabled (AllowInsecureCerts, dev only).</summary>
     public bool InsecureTls { get; init; }
 
-    /// <summary>PLAN-004 R-11: lowercase SHA-256 hex of the host's stable machine identity (Linux
-    /// <c>/etc/machine-id</c>, Windows <c>MachineGuid</c>); never the raw value. Lets the backend
-    /// recognise a reinstalled machine and revive its retired server. Null from older agents or when
-    /// the host exposes no identity, in which case the hostname rule alone applies.</summary>
+    /// <summary>Carries the lowercase machine-identity fingerprint, never the raw host value, so
+    /// enrollment can revive the same server. Null falls back to hostname matching.</summary>
     [StringLength(64)]
     [RegularExpression("^[0-9a-f]{64}$")]
     public string? MachineIdHash { get; init; }
@@ -384,10 +449,8 @@ public sealed record ContactAgentResultDto
     public string? Error { get; init; }
 }
 
-/// <summary>
-/// PLAN-004 R-11: a retired server as listed for its possible permanent deletion. The row and its
-/// links are still there; re-enrolling the same machine revives it with the same id.
-/// </summary>
+/// <summary>Lists a retired server eligible for permanent deletion while its row and links remain
+/// available for revival.</summary>
 public sealed record RetiredServerDto
 {
     public int Id { get; init; }

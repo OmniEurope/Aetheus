@@ -5,11 +5,9 @@ using Aetheus.Back.Services;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Recette R2-110: <c>release_number: allocate</c> is how a pipeline that produces a release (candidate,
-/// release-fast) asks for the project's next release number. The key is read from YAML and takes one
-/// mode, refused otherwise at save and at launch.
-/// </summary>
+/// <summary> <c>release_number: allocate</c> is how a pipeline that produces a release (candidate,
+/// release-fast) asks for the project's next release number. The key is read from YAML and takes
+/// one mode, refused otherwise at save and at launch. </summary>
 public sealed class PipelineReleaseNumberDefinitionTests
 {
     private static PipelineYamlDefinition Parse(string releaseNumberLine) =>

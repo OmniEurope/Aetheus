@@ -48,7 +48,7 @@ public class PortsentryRepository(AppDbContext db) : IPortsentryRepository
                 EF.Functions.ILike(item.Reason, pattern));
         }
 
-        // Recette R-210 / R-224: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = PortsentryListQuery.BlockedColumns.ApplyFilters(query, filters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -80,7 +80,7 @@ public class PortsentryRepository(AppDbContext db) : IPortsentryRepository
                 EF.Functions.ILike(item.Description, pattern));
         }
 
-        // Recette R-210 / R-224: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = PortsentryListQuery.WhitelistColumns.ApplyFilters(query, filters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);

@@ -16,14 +16,9 @@ internal static class ReleaseHelper
         _ => OmniTone.Neutral
     };
 
-    /// <summary>
-    /// PLAN-005 D39: the one short form of a release name, everywhere. A candidate is named
-    /// <c>c-</c> plus the full 40-character commit SHA, which is exact and unreadable on screen:
-    /// since recette R-373 it becomes <c>c-384f63d4</c>, the prefix and the first eight characters,
-    /// the rule <see cref="ShortId"/> applies to every opaque id (a bare SHA included). A readable
-    /// version (a semantic version, a short name) is returned as it is. The full name stays in a
-    /// <c>title</c> wherever this is rendered.
-    /// </summary>
+    /// <summary>Shorten opaque identifiers through <see cref="ShortId"/>, retaining the candidate
+    /// prefix and eight SHA characters; leave readable versions unchanged. Render the full value in
+    /// a title.</summary>
     internal static string ShortVersion(string? version) => ShortId.Shorten(version);
 
     /// <summary>

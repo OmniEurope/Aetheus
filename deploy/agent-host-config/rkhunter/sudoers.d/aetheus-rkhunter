@@ -4,13 +4,14 @@
 # 1. Run scan (rkhunter --check needs root to read /var/lib/rkhunter/db + scan certain paths).
 # 2. Update signature DB (rkhunter --update fetches new mirror data, writes /var/lib/rkhunter).
 # 3. Refresh baseline (rkhunter --propupd recomputes file checksums after legitimate upgrades).
-# Every entry uses an EXACT fully-resolved binary path + fixed argv string. No wildcards.
+# Each entry is the root-owned helper with one fixed word; the helper runs the fixed rkhunter argv.
+# noexec is intentionally omitted (ADR-019 vetted-helper exception): rkhunter is a shell script that
+# must exec grep/tr/cut/id, and under noexec every scan died on "Permission denied" (recette R3-36).
 Cmnd_Alias AETHEUS_RKHUNTER_MANAGE = \
-    /usr/bin/rkhunter --check --skip-keypress --nocolors --report-warnings-only, \
-    /usr/bin/rkhunter --update --nocolors, \
-    /usr/bin/rkhunter --propupd --nocolors
+    #{RKHUNTER_HELPER_PATH}# check, \
+    #{RKHUNTER_HELPER_PATH}# update, \
+    #{RKHUNTER_HELPER_PATH}# propupd
 
-Defaults!AETHEUS_RKHUNTER_MANAGE noexec
 Defaults!AETHEUS_RKHUNTER_MANAGE timestamp_timeout=0
 Defaults!AETHEUS_RKHUNTER_MANAGE env_reset
 Defaults!AETHEUS_RKHUNTER_MANAGE secure_path="/usr/sbin:/usr/bin:/sbin:/bin"

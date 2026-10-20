@@ -5,8 +5,7 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests;
 
-/// <summary>
-/// PLAN-008 lot 11: ConfirmHelper asks its question through the real <see cref="OmniOverlayService"/>,
+/// <summary> ConfirmHelper asks its question through the real <see cref="OmniOverlayService"/>,
 /// shown by a real <see cref="OmniComponentsHost"/>, and answers with the button the user presses.
 /// </summary>
 public sealed class ConfirmHelperTests : BunitContext
@@ -62,7 +61,7 @@ public sealed class ConfirmHelperTests : BunitContext
         _host.WaitForAssertion(() => Assert.Equal("Confirm", _host.Find(".omni-dialog__title").TextContent));
         Assert.Equal("AreYouSure", _host.Find(".omni-confirm__message").TextContent);
         var action = _host.Find("button.omni-confirm__action");
-        // R-407: the confirm button says its verb, the dismiss button "Revenir" (GoBack).
+        // The confirm button says its verb, the dismiss button "Revenir" (GoBack).
         Assert.Equal("Promote", action.TextContent.Trim());
         Assert.Contains("omni-button--primary", action.ClassList);
         Assert.Equal("GoBack", _host.Find("button.omni-confirm__cancel").TextContent.Trim());

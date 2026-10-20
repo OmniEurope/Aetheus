@@ -12,8 +12,8 @@ public sealed class LoggedErrorBoundary : ErrorBoundary
     protected override Task OnErrorAsync(Exception exception)
     {
         CorrelationId = Guid.NewGuid().ToString("N");
-        // Recette R2-100: the type and message alone ("ObjectDisposedException -
-        // CancellationTokenSource_Disposed") could not name the failing screen; the call stack can.
+        // Include the call stack so a reported exception identifies the failing screen and call
+        // path.
         Reporter.Report(
             CorrelationId,
             $"Unhandled client exception: {exception.GetType().Name}",

@@ -3,8 +3,11 @@ namespace Aetheus.E2E;
 
 [Category("E2E")]
 [Category("Logs")]
+[RollbackRelevant]
 public class LogsTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     [SetUp]
     public async Task SetUp()
     {
@@ -56,16 +59,5 @@ public class LogsTests : E2ETestBase
         await Expect(logPanel.Locator(".log-entry")).ToHaveCountAsync(0);
         await Expect(logPanel.GetByText("No log entries yet.", new() { Exact = true }))
             .ToBeVisibleAsync(new() { Timeout = 5000 });
-    }
-
-    [Test]
-    public async Task Logs_NavigateFromSidebar_Works()
-    {
-        // "Logs" is a contextual sub-item of the Servers section, only rendered
-        // while inside that section. Start from /servers so it is in the sidebar.
-        await NavigateToAsync("servers");
-        await ClickSidebarNavItemAsync("Logs");
-
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/logs"), new() { Timeout = 5000 });
     }
 }

@@ -5,13 +5,11 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-// Pipeline lifecycle queries: retention, webhook/schedule triggers, active-run checks, stuck-run reconcile.
+// Pipeline lifecycle queries: active-run checks, stuck-run reconcile (the run retention lives in
+// PipelineRunRetentionRepository, the webhook/schedule trigger queries in PipelineAutoTriggerRepository,
+// the approval queries in PipelineApprovalRepository).
 internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider timeProvider)
 {
-    /// <summary>Delay of a pending approval that carries none and names no environment. The gate never
-    /// raises one (a pipeline approval always has its own delay); a day, like an environment's default.</summary>
-    private const int DefaultApprovalTimeoutMinutes = 1440;
-
     public async Task<bool> IsStepRetryEligibleAsync(
         int pipelineRunId,
         int stepRunId,
@@ -100,15 +98,8 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
                 .ToListAsync(ct).ConfigureAwait(false));
         if (failedSteps.Count == 0) return 0;
 
-        // A retry re-enters a workspace the agent may no longer have. `checkout: true` stopped cloning
-        // (PipelineCommandBuilder's double-clone fix): only System:Prepare puts the repository in the
-        // workspace, and it is Success, so it was never reset and the sources never came back.
-        // Production run 2240 failed its retry twice on "cannot open
-        // deploy/scripts/finalize-fast-release-transaction.sh" for exactly that reason, an agent
-        // restart having taken its workspace with it. Replay the preparation together with the retry:
-        // a shallow clone over a workspace that still holds one costs seconds, a retry that cannot see
-        // the repository costs the whole run. FindReadyStages always lets System:Prepare through and
-        // gates every user stage on its completion, so it runs first and the failed step follows it.
+        // Retries replay System:Prepare because an agent may have lost its workspace. User stages
+        // remain gated on preparation so the retried step has its sources.
         var prepareSteps = await db.PipelineStepRuns
             .Where(s => s.PipelineRunId == runId
                 && s.IsSystem
@@ -159,145 +150,6 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>F2: approvals still Pending whose environment's <c>ApprovalTimeoutMinutes</c> has
-    /// elapsed since they were requested. Used by the reconcile sweep to auto-expire a request nobody
-    /// answered instead of leaving the run parked forever.</summary>
-    public async Task<List<int>> GetExpiredPendingApprovalIdsAsync(DateTime now, CancellationToken ct = default)
-    {
-        return await db.PipelineApprovals
-            .AsNoTracking()
-            .Where(a => a.Status == ApprovalStatus.Pending)
-            // R-370: no inner join on the environment any more. A pipeline approval may have none, and
-            // an inner join would leave it pending forever; it always carries its own delay instead.
-            .Select(a => new
-            {
-                a.Id,
-                a.RequestedAt,
-                Timeout = a.TimeoutMinutes ?? (a.Environment != null ? a.Environment.ApprovalTimeoutMinutes : DefaultApprovalTimeoutMinutes)
-            })
-            .Where(x => x.RequestedAt.AddMinutes(x.Timeout) < now)
-            .Select(x => x.Id)
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    /// <summary>PLAN-007 lot 7: approvals still waiting for a decision on a run that is still waiting for
-    /// it, oldest first, limited to the pipelines the caller may read (null = all).</summary>
-    public async Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(
-        List<int>? accessiblePipelineIds, CancellationToken ct = default)
-    {
-        return await db.PipelineApprovals
-            .AsNoTracking()
-            .Where(a => a.Status == ApprovalStatus.Pending
-                && a.PipelineRun.Status == PipelineStatus.WaitingForApproval
-                && (accessiblePipelineIds == null || accessiblePipelineIds.Contains(a.PipelineRun.PipelineId)))
-            .OrderBy(a => a.RequestedAt)
-            .Select(a => new PendingApprovalDto
-            {
-                ApprovalId = a.Id,
-                PipelineRunId = a.PipelineRunId,
-                PipelineId = a.PipelineRun.PipelineId,
-                PipelineName = a.PipelineRun.Pipeline.Name,
-                ProjectId = a.PipelineRun.Pipeline.ProjectId,
-                StageName = a.StageName,
-                Scope = a.Scope,
-                EnvironmentName = a.Environment != null ? a.Environment.Name : null,
-                RequestedAt = a.RequestedAt
-            })
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<int> CloseApprovalsOfEndedRunsAsync(int? runId, DateTime now, string reason, CancellationToken ct = default)
-    {
-        var query = db.PipelineApprovals
-            .Where(a => a.Status == ApprovalStatus.Pending
-                        && PipelineStatusFacts.Terminal.Contains(a.PipelineRun.Status));
-        if (runId is { } id)
-            query = query.Where(a => a.PipelineRunId == id);
-
-        if (db.Database.IsRelational())
-            return await query.ExecuteUpdateAsync(setters => setters
-                    .SetProperty(a => a.Status, ApprovalStatus.Rejected)
-                    .SetProperty(a => a.ResolvedAt, now)
-                    .SetProperty(a => a.ResolvedByUserId, (int?)null)
-                    .SetProperty(a => a.Comments, reason), ct)
-                .ConfigureAwait(false);
-
-        var pending = await query.ToListAsync(ct).ConfigureAwait(false);
-        foreach (var approval in pending)
-        {
-            approval.Status = ApprovalStatus.Rejected;
-            approval.ResolvedAt = now;
-            approval.ResolvedByUserId = null;
-            approval.Comments = reason;
-        }
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return pending.Count;
-    }
-
-    public async Task<List<StrandedApprovalRun>> GetStrandedApprovalRunsAsync(CancellationToken ct = default)
-    {
-        return await db.PipelineRuns
-            .AsNoTracking()
-            .Where(run => run.Status == PipelineStatus.WaitingForApproval
-                          && !db.PipelineApprovals.Any(a => a.PipelineRunId == run.Id
-                                                           && a.Status == ApprovalStatus.Pending))
-            .OrderBy(run => run.Id)
-            .Select(run => new StrandedApprovalRun(
-                run.Id,
-                db.PipelineApprovals
-                    .Where(a => a.PipelineRunId == run.Id)
-                    .OrderByDescending(a => a.ResolvedAt)
-                    .Select(a => (ApprovalStatus?)a.Status)
-                    .FirstOrDefault()))
-            // Bounded: this is an anomaly list, so a sweep that suddenly matches thousands of runs means
-            // something systemic, and re-applying decisions to all of them at once is the wrong answer.
-            // The cap keeps one sweep's blast radius small; the next sweep picks the rest up - which only
-            // holds if the 50 are chosen deterministically. Without an order, PostgreSQL may hand back the
-            // same arbitrary page every sweep and starve the rest forever, so take the oldest runs first:
-            // they are the ones that have been parked the longest, and each sweep then makes real progress.
-            .Take(50)
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<PipelineApproval?> TryResolveApprovalAsync(
-        int approvalId, ApprovalStatus decision, DateTime resolvedAt,
-        int? resolvedByUserId, string? comments, CancellationToken ct = default)
-    {
-        if (db.Database.IsRelational())
-        {
-            var rows = await db.PipelineApprovals
-                .Where(a => a.Id == approvalId && a.Status == ApprovalStatus.Pending)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(a => a.Status, decision)
-                    .SetProperty(a => a.ResolvedAt, resolvedAt)
-                    .SetProperty(a => a.ResolvedByUserId, resolvedByUserId)
-                    .SetProperty(a => a.Comments, comments), ct)
-                .ConfigureAwait(false);
-            if (rows != 1) return null;
-            var tracked = db.ChangeTracker.Entries<PipelineApproval>().FirstOrDefault(e => e.Entity.Id == approvalId);
-            if (tracked is not null) tracked.State = EntityState.Detached;
-        }
-        else
-        {
-            var approval = await db.PipelineApprovals
-                .FirstOrDefaultAsync(a => a.Id == approvalId && a.Status == ApprovalStatus.Pending, ct)
-                .ConfigureAwait(false);
-            if (approval is null) return null;
-            approval.Status = decision;
-            approval.ResolvedAt = resolvedAt;
-            approval.ResolvedByUserId = resolvedByUserId;
-            approval.Comments = comments;
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        }
-
-        return await db.PipelineApprovals
-            .AsNoTracking()
-            .Include(a => a.Environment)
-            .Include(a => a.ResolvedByUser)
-            .FirstAsync(a => a.Id == approvalId, ct)
-            .ConfigureAwait(false);
-    }
-
     // A trigger step waits on a child run and has NO
     // ServerTask, so TaskTimeoutService never sees it; if the child's completion event was lost (backend
     // restart, missed hook) the step hangs Running forever. The sweeper re-checks these; the age filter
@@ -310,13 +162,6 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
                         && s.StartedAt != null
                         && s.StartedAt < startedBefore)
             .ToListAsync(ct).ConfigureAwait(false);
-
-    public async Task<Dictionary<int, PipelineStatus>> GetRunStatusesByIdsAsync(IReadOnlyCollection<int> runIds, CancellationToken ct = default)
-        => await db.PipelineRuns
-            .AsNoTracking()
-            .Where(r => runIds.Contains(r.Id))
-            .Select(r => new { r.Id, r.Status })
-            .ToDictionaryAsync(x => x.Id, x => x.Status, ct).ConfigureAwait(false);
 
     public async Task<bool> DidStagesAllSucceedAsync(int runId, IReadOnlyCollection<string> stageNames, CancellationToken ct = default)
     {
@@ -378,78 +223,6 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
             .Select(r => r.Id)
             .ToListAsync(ct).ConfigureAwait(false);
 
-    public async Task<int> DeleteRunsOlderThanAsync(DateTime cutoff, CancellationToken ct = default)
-    {
-        if (db.Database.IsRelational())
-            return await db.PipelineRuns
-                .Where(r => r.StartedAt < cutoff
-                            && !r.Tasks.Any(task => task.IsDeferredCleanup
-                                && (task.Status == TaskExecutionStatus.Pending
-                                    || task.Status == TaskExecutionStatus.Assigned
-                                    || task.Status == TaskExecutionStatus.Running)))
-                .ExecuteDeleteAsync(ct).ConfigureAwait(false);
-
-        var old = await db.PipelineRuns
-            .Where(r => r.StartedAt < cutoff
-                        && !r.Tasks.Any(task => task.IsDeferredCleanup
-                            && (task.Status == TaskExecutionStatus.Pending
-                                || task.Status == TaskExecutionStatus.Assigned
-                                || task.Status == TaskExecutionStatus.Running)))
-            .ToListAsync(ct).ConfigureAwait(false);
-        db.PipelineRuns.RemoveRange(old);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return old.Count;
-    }
-
-    public async Task<List<Pipeline>> GetWebhookTriggeredPipelinesWithProjectAsync(CancellationToken ct = default)
-    {
-        return await db.Pipelines
-            .AsNoTracking()
-            .Where(p => p.TriggerType == PipelineTriggerType.Webhook)
-            .Include(p => p.Project)
-                .ThenInclude(pr => pr!.GitConnection)
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<List<Pipeline>> GetWebhookTriggeredPipelinesForProjectAsync(int projectId, CancellationToken ct = default)
-    {
-        return await db.Pipelines
-            .AsNoTracking()
-            .Where(p => p.ProjectId == projectId && p.TriggerType == PipelineTriggerType.Webhook)
-            .Include(p => p.Project)
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<List<Pipeline>> GetScheduledPipelinesAsync(CancellationToken ct = default)
-    {
-        return await db.Pipelines
-            .AsNoTracking()
-            .Where(p => p.TriggerType == PipelineTriggerType.Schedule)
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<bool> HasActiveRunAsync(int pipelineId, CancellationToken ct = default)
-    {
-        return await db.PipelineRuns
-            .AnyAsync(r => r.PipelineId == pipelineId &&
-                           (r.Status == PipelineStatus.Running || r.Status == PipelineStatus.Pending || r.Status == PipelineStatus.WaitingForApproval), ct)
-            .ConfigureAwait(false);
-    }
-
-    public async Task<bool> LockPipelineForWebhookAsync(int pipelineId, CancellationToken ct = default)
-    {
-        if (!db.Database.IsRelational())
-            return await db.Pipelines.AnyAsync(pipeline => pipeline.Id == pipelineId, ct).ConfigureAwait(false);
-
-        var rows = await db.Pipelines
-            .Where(pipeline => pipeline.Id == pipelineId)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(pipeline => pipeline.Name, pipeline => pipeline.Name),
-                ct)
-            .ConfigureAwait(false);
-        return rows == 1;
-    }
-
     /// <summary>
     /// Every run still in flight, whatever its pipeline. Feeds the agents' workspace reaper, so the
     /// set has to be complete: a run missing from it has its sources deleted underneath it.
@@ -463,28 +236,6 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
                           || run.Status == PipelineStatus.WaitingForApproval)
             .Select(run => run.Id)
             .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<List<int>> GetActiveRunIdsAsync(int pipelineId, CancellationToken ct = default)
-    {
-        return await db.PipelineRuns
-            .Where(run => run.PipelineId == pipelineId
-                          && (run.Status == PipelineStatus.Running
-                              || run.Status == PipelineStatus.Pending
-                              || run.Status == PipelineStatus.WaitingForApproval))
-            .OrderBy(run => run.Id)
-            .Select(run => run.Id)
-            .ToListAsync(ct).ConfigureAwait(false);
-    }
-
-    public async Task<HashSet<int>> GetPipelineIdsWithActiveRunsAsync(CancellationToken ct = default)
-    {
-        var ids = await db.PipelineRuns
-            .Where(r => r.Status == PipelineStatus.Running || r.Status == PipelineStatus.Pending || r.Status == PipelineStatus.WaitingForApproval)
-            .Select(r => r.PipelineId)
-            .Distinct()
-            .ToListAsync(ct).ConfigureAwait(false);
-        return ids.ToHashSet();
     }
 
     public async Task<List<PipelineRunDto>> GetActiveRunsAsync(
@@ -505,7 +256,8 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
             .Select(PipelineRunDtoMapper.RunListProjection)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        var hydrated = runs.Select(PipelineRunDtoMapper.HydrateListWarnings).ToList();
+        var hydrated = await PipelineAdvisorySteps.ApplyToListAsync(
+            db, runs.Select(PipelineRunDtoMapper.HydrateListWarnings).ToList(), ct).ConfigureAwait(false);
         var graded = await PipelineRunGradeAggregation.ApplyAsync(db, hydrated, ct).ConfigureAwait(false);
         return await PipelineRunRepositoryLinks.ApplyAsync(db, graded, ct).ConfigureAwait(false);
     }
@@ -528,7 +280,8 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
             .Select(PipelineRunDtoMapper.RunListProjection)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        var hydrated = runs.Select(PipelineRunDtoMapper.HydrateListWarnings).ToList();
+        var hydrated = await PipelineAdvisorySteps.ApplyToListAsync(
+            db, runs.Select(PipelineRunDtoMapper.HydrateListWarnings).ToList(), ct).ConfigureAwait(false);
         var graded = await PipelineRunGradeAggregation.ApplyAsync(db, hydrated, ct).ConfigureAwait(false);
         return await PipelineRunRepositoryLinks.ApplyAsync(db, graded, ct).ConfigureAwait(false);
     }

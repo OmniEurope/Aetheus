@@ -12,7 +12,7 @@ public partial class Servers : IAsyncDisposable
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private PermissionService Permissions { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
-    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private IUserPreferences Preferences { get; set; } = default!;
     [Inject] private ListCacheService Cache { get; set; } = default!;
 
     private AetheusDataGrid<ServerDto>? _grid;
@@ -22,7 +22,7 @@ public partial class Servers : IAsyncDisposable
     private bool _loading;
     private bool _loadFailed;
     internal bool _canWrite;
-    // Recette R-211: the column header filters, and only they, filter the list (no toolbar any more).
+    // Column header filters are the list filter source.
     private List<Aetheus.Shared.Components.Shared.GridFilter> _columnFilters = [];
     private ServerFilterValuesDto _filterValues = new();
     private IReadOnlyList<string> _agentCandidates = [];
@@ -32,8 +32,7 @@ public partial class Servers : IAsyncDisposable
     private AgentCompatibilitySummaryDto _compatibilitySummary = new();
     private HubConnection? _hubConnection;
 
-    // --- Column chooser (S-FEAT-10): per-user column visibility persisted to localStorage ---
-    private const string ColumnVisibilityStorageKey = "servers-columns-hidden";
+    // --- Column chooser (S-FEAT-10): per-user column visibility kept per user on the server (R1-66) ---
     private bool _showColumnChooser;
     // Toggleable columns (Name/Status/Actions always visible). Default = all shown.
     private readonly Dictionary<string, bool> _columnVisibility = new()
@@ -72,12 +71,12 @@ public partial class Servers : IAsyncDisposable
     {
         // Store only the hidden columns (compact); absence => visible.
         var hidden = _columnVisibility.Where(kv => !kv.Value).Select(kv => kv.Key).ToList();
-        await JS.InvokeVoidAsync("Aetheus.setLocal", ColumnVisibilityStorageKey, string.Join(",", hidden));
+        await Preferences.SetAsync(PreferenceKeys.ServerHiddenColumns, string.Join(",", hidden));
     }
 
     private async Task LoadColumnVisibilityAsync()
     {
-        var raw = await JS.InvokeAsync<string?>("Aetheus.getLocal", ColumnVisibilityStorageKey);
+        var raw = await Preferences.GetAsync<string>(PreferenceKeys.ServerHiddenColumns);
         if (string.IsNullOrWhiteSpace(raw)) return;
         var hidden = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         foreach (var key in _columnVisibility.Keys.ToList())
@@ -99,7 +98,8 @@ public partial class Servers : IAsyncDisposable
     private Func<string, string> TypeText => _typeText ??= GridFilterText.ForEnum<ServerType>(L);
     private Func<string, string> StatusText => _statusText ??= GridFilterText.ForEnum<ServerStatus>(L);
 
-    /// <summary>Recette R-211: the agent column's one list reads a version as itself and a state as its label.</summary>
+    /// <summary>The agent column's one list reads a version as itself and a state as its
+    /// label.</summary>
     private Func<string, string> AgentText => _agentText ??= value =>
         value.StartsWith(ServerAgentFilter.StatePrefix, StringComparison.Ordinal)
         && Enum.TryParse<AgentCompatibilityStatus>(value[ServerAgentFilter.StatePrefix.Length..], out var state)
@@ -153,7 +153,7 @@ public partial class Servers : IAsyncDisposable
         await StartHubAsync();
     }
 
-    /// <summary>Recette R2-056: an agent update changes the compatibility count and the row's badge.</summary>
+    /// <summary>An agent update changes the compatibility count and the row's badge.</summary>
     private async Task RefreshAfterAgentUpdateAsync()
     {
         try
@@ -188,7 +188,7 @@ public partial class Servers : IAsyncDisposable
             _hubConnection.On<ServerDto>("ServerUpdated", _ => InvokeAsync(InvalidateAndReloadGridAsync));
             _hubConnection.On<int>("ServerRemoved", _ => InvokeAsync(InvalidateAndReloadGridAsync));
             _hubConnection.On<int>("ServerOffline", _ => InvokeAsync(InvalidateAndReloadGridAsync));
-            // Recette R2-056: "Update recommended: 1" was read once at load and stayed after the update.
+            // Refresh the compatibility count after the agent update.
             _hubConnection.On<int, int>("AgentUpdateConfirmed", (_, _) => InvokeAsync(RefreshAfterAgentUpdateAsync));
             _hubConnection.On<int, int>("AgentUpdateFailed", (_, _) => InvokeAsync(RefreshAfterAgentUpdateAsync));
             _hubConnection.On<int, ServerHeartbeatDto>("ServerHeartbeat", (id, heartbeat) => InvokeAsync(() => OnHeartbeatAsync(id, heartbeat)));
@@ -270,7 +270,8 @@ public partial class Servers : IAsyncDisposable
         _totalCount = Math.Max(0, result.TotalCount - optimisticRowsStillReturned);
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort (none by default) and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort (none by default) and column
+    /// filters.</summary>
     private Task<PaginatedResult<ServerDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -308,7 +309,8 @@ public partial class Servers : IAsyncDisposable
             _ => _loadFailed = true);
     }
 
-    /// <summary>Recette R-211: a tag clicked in a row filters the Tags column on it, visibly, in its header.</summary>
+    /// <summary>A tag clicked in a row filters the Tags column on it, visibly, in its
+    /// header.</summary>
     internal async Task FilterByTag(string tag)
     {
         if (_grid?.Grid is { } grid)
@@ -325,7 +327,8 @@ public partial class Servers : IAsyncDisposable
             new Dictionary<string, object?> { { "ServerId", server.Id }, { "ServerName", server.Name } },
             new OmniDialogOptions { Width = "480px", CloseDialogOnOverlayClick = false, AutoFocusFirstElement = false });
 
-    // PLAN-004 R-11: retired servers leave this grid; the dialog lists them and offers the purge.
+    // Retired servers are excluded from this grid and listed in the dialog that offers permanent
+    // deletion.
     private Task OpenRetiredServersDialog()
         => Dialog.OpenAsync<RetiredServersDialog>(
             L["RetiredServers"],
@@ -376,8 +379,8 @@ public partial class Servers : IAsyncDisposable
             Toast.Error("Error", "UpdateAgentFailed");
     }
 
-    // PLAN-004 R-11: the row action retires the server (links kept, a reinstall of the same machine
-    // restores it); permanent deletion is only offered on a retired server, in RetiredServersDialog.
+    // The row action retires the server while preserving links. Permanent deletion is available
+    // only for retired servers in RetiredServersDialog.
     private async Task OnRetireServer(ServerDto server)
     {
         if (_pendingDeleteIds.Contains(server.Id)) return;
@@ -441,6 +444,6 @@ public partial class Servers : IAsyncDisposable
         }
     }
 
-    /// <summary>Recette R2-124: the export writes every tag of the server, the cell shows three.</summary>
+    /// <summary>The export writes every tag of the server, the cell shows three.</summary>
     private static readonly Func<ServerDto, object?> TagsExport = server => string.Join(", ", server.Tags);
 }

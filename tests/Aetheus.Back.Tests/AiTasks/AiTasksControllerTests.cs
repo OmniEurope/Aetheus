@@ -14,6 +14,7 @@ namespace Aetheus.Back.Tests.AiTasks;
 public sealed class AiTasksControllerTests
 {
     private readonly IAiTaskService _service = Substitute.For<IAiTaskService>();
+    private readonly IAiRunnerProfileService _profiles = Substitute.For<IAiRunnerProfileService>();
     private readonly IResourceAuthorizationService _authorization =
         Substitute.For<IResourceAuthorizationService>();
     // The run-scoped RBAC lookup is an own-read on this module's repository now.
@@ -38,6 +39,7 @@ public sealed class AiTasksControllerTests
             .Returns([1, 2]);
         _controller = new AiTasksController(
             _service,
+            _profiles,
             _authorization,
             _tasks)
         {
@@ -57,17 +59,17 @@ public sealed class AiTasksControllerTests
             Items = [profile],
             TotalCount = 1
         };
-        _service.GetProfilesAsync(Arg.Any<PaginationRequest>(), ct).Returns(page);
-        _service.GetProfileAsync(3, ct).Returns(profile);
-        _service.GetProfileAsync(404, ct).Returns((AiRunnerProfileDto?)null);
-        _service.CreateProfileAsync(Arg.Any<CreateAiRunnerProfileRequest>(), ct)
+        _profiles.GetProfilesAsync(Arg.Any<PaginationRequest>(), ct).Returns(page);
+        _profiles.GetProfileAsync(3, ct).Returns(profile);
+        _profiles.GetProfileAsync(404, ct).Returns((AiRunnerProfileDto?)null);
+        _profiles.CreateProfileAsync(Arg.Any<CreateAiRunnerProfileRequest>(), ct)
             .Returns(profile);
-        _service.UpdateProfileAsync(3, Arg.Any<UpdateAiRunnerProfileRequest>(), ct)
+        _profiles.UpdateProfileAsync(3, Arg.Any<UpdateAiRunnerProfileRequest>(), ct)
             .Returns(profile);
-        _service.UpdateProfileAsync(404, Arg.Any<UpdateAiRunnerProfileRequest>(), ct)
+        _profiles.UpdateProfileAsync(404, Arg.Any<UpdateAiRunnerProfileRequest>(), ct)
             .Returns((AiRunnerProfileDto?)null);
-        _service.DeleteProfileAsync(3, ct).Returns(true);
-        _service.DeleteProfileAsync(404, ct).Returns(false);
+        _profiles.DeleteProfileAsync(3, ct).Returns(true);
+        _profiles.DeleteProfileAsync(404, ct).Returns(false);
 
         Assert.IsType<OkObjectResult>(
             (await _controller.GetProfiles(new PaginationRequest(), ct)).Result);
@@ -85,6 +87,18 @@ public sealed class AiTasksControllerTests
     }
 
     [Fact]
+    public async Task TestProfile_ReturnsTheServiceOutcome()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var request = new TestAiRunnerProfileRequest { Name = "p", Provider = AiProvider.Anthropic, Model = "m", ProfileId = 3 };
+        _profiles.TestConnectionAsync(request, ct).Returns(new AiConnectionTestDto { Succeeded = true, Message = "ok" });
+
+        var result = Assert.IsType<OkObjectResult>((await _controller.TestProfile(request, ct)).Result);
+
+        Assert.True(Assert.IsType<AiConnectionTestDto>(result.Value).Succeeded);
+    }
+
+    [Fact]
     public async Task ProfileOptions_NonAdmin_UsesAuthorizedOrganizations()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -93,13 +107,13 @@ public sealed class AiTasksControllerTests
                 Arg.Any<ClaimsPrincipal>(),
                 ct)
             .Returns([7]);
-        _service.GetProfileOptionsAsync(
+        _profiles.GetProfileOptionsAsync(
                 Arg.Is<List<int>>(ids => ids.SequenceEqual(new[] { 7 })),
                 ct)
             .Returns([new AiRunnerProfileDto { Id = 3 }]);
 
         Assert.IsType<OkObjectResult>((await _controller.GetProfileOptions(ct)).Result);
-        await _service.Received(1).GetProfileOptionsAsync(
+        await _profiles.Received(1).GetProfileOptionsAsync(
             Arg.Is<List<int>>(ids => ids.SequenceEqual(new[] { 7 })),
             ct);
     }
@@ -187,13 +201,6 @@ public sealed class AiTasksControllerTests
         _service.GetResultsAsync(11, null, Arg.Any<PaginationRequest>(), ct)
             .Returns(new PaginatedResult<AiRunResultDto> { Items = [result] });
         _service.GetResultAsync(88, ct).Returns(result);
-        _service.ApplyProposedPatchAsync(88, ct)
-            .Returns(new AiPatchApplicationDto
-            {
-                RepositoryId = 13,
-                BranchName = "ai-proposed/88",
-                CommitSha = new string('a', 40)
-            });
         _service.GetConsumptionAsync(12, ct).Returns(new AiConsumptionDto { RunCount = 3 });
         _tasks.GetTaskServerIdAsync(91, ct).Returns(9);
         _service.PublishResultAsync(request, ct).Returns(result);
@@ -203,7 +210,6 @@ public sealed class AiTasksControllerTests
 
         Assert.IsType<OkObjectResult>(
             (await _controller.GetResults(11, null, new PaginationRequest(), ct)).Result);
-        Assert.IsType<OkObjectResult>((await _controller.ApplyProposedPatch(88, ct)).Result);
         Assert.IsType<OkObjectResult>((await _controller.GetConsumption(12, ct)).Result);
         Assert.IsType<OkObjectResult>((await _controller.PublishResult(request, ct)).Result);
     }
@@ -227,7 +233,6 @@ public sealed class AiTasksControllerTests
             (await _controller.GetResults(404, null, new PaginationRequest(), ct)).Result);
         Assert.IsType<ForbidResult>(
             (await _controller.GetResults(null, null, new PaginationRequest(), ct)).Result);
-        Assert.IsType<NotFoundResult>((await _controller.ApplyProposedPatch(404, ct)).Result);
         Assert.IsType<ForbidResult>((await _controller.GetConsumption(null, ct)).Result);
         Assert.IsType<ForbidResult>((await _controller.PublishResult(request, ct)).Result);
     }
@@ -239,6 +244,35 @@ public sealed class AiTasksControllerTests
         ProfileId = 3,
         ProjectId = 12
     };
+
+    [Fact]
+    public async Task R3_7_ReadTheModelListNow_IsOk_NotFound_OrTooManyRequestsWithRetryAfter()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var profile = new AiRunnerProfileDto { Id = 3, Name = "reviewer", AvailableModels = ["gpt-5.5"] };
+        _profiles.RefreshModelListAsync(3, ct).Returns(new AiModelListRefreshAttempt(profile, null));
+        _profiles.RefreshModelListAsync(404, ct).Returns((AiModelListRefreshAttempt?)null);
+        _profiles.RefreshModelListAsync(5, ct).Returns(new AiModelListRefreshAttempt(profile, TimeSpan.FromSeconds(41.2)));
+
+        var ok = Assert.IsType<OkObjectResult>((await _controller.RefreshModelList(3, ct)).Result);
+        Assert.Same(profile, ok.Value);
+        Assert.IsType<NotFoundResult>((await _controller.RefreshModelList(404, ct)).Result);
+        var tooSoon = Assert.IsType<ObjectResult>((await _controller.RefreshModelList(5, ct)).Result);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, tooSoon.StatusCode);
+        Assert.Contains("42 s", Assert.IsType<ApiError>(tooSoon.Value).Message, StringComparison.Ordinal);
+        Assert.Equal("42", _controller.Response.Headers.RetryAfter.ToString());
+    }
+
+    [Fact]
+    public void R3_7_ReadTheModelListNow_IsAdminOnly_LikeEditingTheProfile()
+    {
+        static string? Roles(string name) => typeof(AiTasksController).GetMethod(name)!
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single().Roles;
+
+        Assert.Equal(Roles(nameof(AiTasksController.UpdateProfile)), Roles(nameof(AiTasksController.RefreshModelList)));
+        Assert.Equal("Admin", Roles(nameof(AiTasksController.RefreshModelList)));
+    }
 
     private static ControllerContext Context(params Claim[] claims) => new()
     {

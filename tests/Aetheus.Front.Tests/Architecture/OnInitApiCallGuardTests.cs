@@ -35,9 +35,7 @@ public class OnInitApiCallGuardTests
 
         foreach (var (pagesDir, file) in RepositoryScan.EnumerateUnion(RepositoryScan.PageRoots, "*.razor.cs"))
         {
-            // The guard covers the page area: the module folders, not Components/Shared, which holds
-            // the cross-module pieces. It used to be told apart by the Aetheus.Front.Pages namespace;
-            // PLAN-008 lot 43 aligned the namespaces on the folders, so the folder is the criterion.
+            // The guard targets module page folders and excludes cross-module shared components.
             if (IsSharedComponent(file))
                 continue;
             var source = File.ReadAllText(file);

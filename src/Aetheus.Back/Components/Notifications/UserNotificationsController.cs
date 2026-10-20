@@ -3,18 +3,9 @@ using System.Security.Claims;
 
 namespace Aetheus.Back.Components.Notifications;
 
-/// <summary>
-/// The current user's notifications, preferences and project subscriptions. Any signed-in user, no
-/// Admin role: every action is scoped to the caller's own user id, and a delivery that belongs to
-/// someone else answers 404 exactly like one that does not exist. The admin channel and rule
-/// endpoints stay on <see cref="NotificationsController"/>.
-///
-/// An identity without a user row (the self-expiring deployment identity, NameIdentifier
-/// "bootstrap") is signed in but has no inbox: it reads an empty one, and what it cannot hold
-/// (preferences, subscriptions) is refused with 403. It used to get 401, which the front reads as a
-/// rejected session: the deployment smoke was signed out onto /login, and deploy-prod 2442 and 2443
-/// rolled back on it.
-/// </summary>
+/// <summary>Scope inbox operations to the signed-in user and return 404 for another user delivery.
+/// Authenticated identities without a user row read an empty inbox and receive 403 for preferences
+/// or subscriptions they cannot hold.</summary>
 [ApiController]
 [Route("api/notifications/me")]
 [Authorize]
@@ -31,7 +22,7 @@ public sealed class UserNotificationsController(
         return Ok(await service.GetDeliveriesAsync(userId, request, ct));
     }
 
-    /// <summary>Recette R-224: the event types the caller's /notifications Event filter offers.</summary>
+    /// <summary>The event types the caller's /notifications Event filter offers.</summary>
     [HttpGet("filter-values")]
     public async Task<ActionResult<UserNotificationFilterValuesDto>> GetFilterValues(CancellationToken ct)
     {
@@ -95,10 +86,8 @@ public sealed class UserNotificationsController(
         return subscription is null ? NotFound() : Ok(subscription);
     }
 
-    /// <summary>
-    /// Recette R2-034, "follow all my projects": follows every project the caller can read (the same
-    /// Project/Read grant as following one project) and returns all of the caller's subscriptions.
-    /// </summary>
+    /// <summary>Follow every project the caller can read through Project/Read permission and return
+    /// all caller subscriptions.</summary>
     [HttpPost("subscriptions/all")]
     public async Task<ActionResult<List<ProjectSubscriptionDto>>> FollowAll(CancellationToken ct)
     {

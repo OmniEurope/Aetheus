@@ -12,7 +12,7 @@
     <Actions>
         @if (Auth.IsAdmin)
         {
-            @* The page's main action, so it carries the primary colour (recette R-013). *@
+            @* The page's main action, so it carries the primary colour. *@
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo("/dashboards"))" title="@L["ManageDashboards"]" Label="@L["ManageDashboards"]"><OmniIcon Name="OmniIconName.Settings" /> <span>@L["Manage"]</span></OmniButton>
         }
     </Actions>
@@ -39,8 +39,7 @@ else
                     <OmniIcon Name="OmniIconName.Database" />
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Servers"]</OmniHeading>
                 </OmniStack>
-                @* Recette R-066 to R-069: the tile summary, one badge per non-zero count, like Monitored applications.
-                   R2-109: the status icon in place of its name on a phone. *@
+                @* Show one badge per nonzero count, replacing status names with icons on phones. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     @if (_dashboard?.OnlineServers > 0)
                     {
@@ -139,7 +138,7 @@ else
                     <OmniIcon Name="OmniIconName.Reset" />
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["RecentRuns"]</OmniHeading>
                 </OmniStack>
-                @* Recette R-066 to R-069: the tile summary, one badge per non-zero count, like Monitored applications. *@
+                @* Show one badge per nonzero count. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <StatusCountBadge Count="@RecentRunCount(PipelineStatus.Success)" Label="@L.Localize(PipelineStatus.Success)" Icon="OmniIconName.Check" Tone="OmniTone.Success" />
                     <StatusCountBadge Count="@RecentRunCount(PipelineStatus.Failed)" Label="@L.Localize(PipelineStatus.Failed)" Icon="OmniIconName.Close" Tone="OmniTone.Danger" />
@@ -161,7 +160,7 @@ else
                     <OmniIcon Name="OmniIconName.Folder" />
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Projects"]</OmniHeading>
                 </OmniStack>
-                @* Recette R-066 to R-069: the tile summary, one badge per non-zero count, like Monitored applications. *@
+                @* Show one badge per nonzero count. *@
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     @if (_dashboard?.TotalProjects > 0)
                     {

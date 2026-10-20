@@ -13,10 +13,9 @@ public interface IAnalysisRunResultService
     Task<AnalysisRunFindingsPageDto> GetRunFindingsAsync(AnalysisRunFindingsRequest request, CancellationToken ct = default);
 }
 
-/// <summary>
-/// Recette R-485: <c>GET api/Analysis/runs/{runId}/result</c> and its findings pages. The run is read as
-/// its stamp (one statement of indexed lookups) instead of its context, which carried the pipeline YAML;
-/// a finished run's result is reused while its stamp holds; Dependency-Track is applied live.
+/// <summary> <c>GET api/Analysis/runs/{runId}/result</c> and its findings pages. The run is read as
+/// its stamp (one statement of indexed lookups) instead of its context, which carried the pipeline
+/// YAML; a finished run's result is reused while its stamp holds; Dependency-Track is applied live.
 /// </summary>
 public sealed class AnalysisRunResultService(
     IAnalysisRepository repository,

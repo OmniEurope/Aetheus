@@ -3,10 +3,8 @@ using Aetheus.Agent.Core.Collectors;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// PLAN-007: the convention verdict per lineage, from real certbot renewal file shapes. The two
-/// production failures of 2026-09 are the NotWebroot (Apache plugin) and WrongWebroot (old path) cases.
-/// </summary>
+/// <summary>Validate renewal-method and webroot conventions against captured Certbot renewal-file
+/// shapes.</summary>
 public sealed class CertbotRenewalInspectorTests
 {
     private const string Webroot = "/var/www/aetheus-acme";
@@ -135,6 +133,36 @@ public sealed class CertbotRenewalInspectorTests
 
         Assert.Equal(new DateTime(2026, 9, 18, 12, 8, 8, DateTimeKind.Utc), checkedAt);
         Assert.Equal(succeeded, result);
+    }
+
+    [Fact]
+    public void R3_56_ReadRenewalCheckFailures_NamesEachFailedLineageAndItsReason()
+    {
+        const string content = "checked_at=1789733288\nexit_code=1\n"
+            + "failed=shop.example.com\tSome challenges have failed.\r\n"
+            + "failed=old.example.org\turn:ietf:params:acme:error:connection timeout. Skipping.\n"
+            + "failed=\tno name, ignored\n";
+        var sut = new CertbotRenewalInspector(
+            new Dictionary<string, string> { ["/var/lib/aetheus-certbot/renewal-check"] = content }.GetValueOrDefault,
+            _ => false);
+
+        var failures = sut.ReadRenewalCheckFailures();
+
+        Assert.Equal(["shop.example.com", "old.example.org"], failures.Select(failure => failure.Name).ToArray());
+        Assert.Equal("Some challenges have failed.", failures[0].Reason);
+        Assert.Equal("urn:ietf:params:acme:error:connection timeout. Skipping.", failures[1].Reason);
+        Assert.Equal((new DateTime(2026, 9, 18, 12, 8, 8, DateTimeKind.Utc), (bool?)false), sut.ReadRenewalCheck());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("checked_at=1789733288\nexit_code=0\n")]
+    public void R3_56_ARecordWithoutFailedLines_HasNoFailure(string? content)
+    {
+        var files = new Dictionary<string, string>();
+        if (content is not null) files["/var/lib/aetheus-certbot/renewal-check"] = content;
+
+        Assert.Empty(new CertbotRenewalInspector(files.GetValueOrDefault, _ => false).ReadRenewalCheckFailures());
     }
 
     [Theory]

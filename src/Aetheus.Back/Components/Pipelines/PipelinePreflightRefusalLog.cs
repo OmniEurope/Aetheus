@@ -2,14 +2,8 @@
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Recette R2-040: how a preflight refusal is written to the log. One Warning counts the refusal, then
-/// one Warning per unmet requirement, each in its own short attribute. The whole list used to travel in
-/// a single attribute, which exceeded the OTLP ingest bound on a record's attributes and was dropped
-/// entirely, leaving "6 unmet requirement(s)" with no way to read which. These are the only warnings a
-/// refusal writes: the launcher and the scheduler, which used to repeat it as two more warnings
-/// (recette R-521), note it at Information.
-/// </summary>
+/// <summary>Each preflight requirement is logged separately to keep attributes within ingest
+/// limits. Launcher and scheduler summaries use Information to avoid duplicate warnings.</summary>
 internal static class PipelinePreflightRefusalLog
 {
     /// <summary>A problem longer than this is cut in the log (never in the refusal itself), so one

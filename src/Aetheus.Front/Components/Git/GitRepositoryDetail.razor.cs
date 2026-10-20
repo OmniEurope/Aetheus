@@ -45,7 +45,7 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     // Commits
     // Any failure: a git revision walk can fail in more ways than the transport, and the tab shows them all.
     private readonly GitPagedList<GitLightCommitDto> _commits = new(static _ => true);
-    // R2-003: the zip download in the header actions.
+    // The zip download in the header actions.
     private bool _downloadingArchive;
     // Branches
     // _branches: the first block, what the ref pickers offer; _branchRows: the block the grid last fetched.
@@ -81,7 +81,7 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     private List<GitLightCommitDto> _graphCommits = [];
     private bool _graphLoading;
     private bool _graphError;
-    // Recette R-224 / R-226: the grids, their kept header filters and the values those offer.
+    // The grids, their kept header filters and the values those offer.
     private readonly GitRepositoryGrids _grids = new();
     // Blame
     private List<GitLightBlameLine>? _blameLines;
@@ -110,12 +110,15 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         _loadedFileRef = FileRef;
         _loadedFilePath = FilePath;
         _loadedFileLine = FileLine;
-        // R2-004: a ?search= link is the Message column's default filter (DefaultFilterValue); the first
+        // A ?search= link is the Message column's default filter (DefaultFilterValue); the first
         // load, made before the grid exists, sends the same filter.
         _grids.CommitFilters = GitRepositoryGrids.MessageFilter(CommitSearch);
-        _dataGeneration++;
+        var generation = ++_dataGeneration;
         await ResetRepositoryStateAsync(previousId);
         await LoadData();
+        // A load superseded by another repository (or by the page's disposal) must not connect: it would
+        // replace the current subscription, which would then never be disposed.
+        if (generation != _dataGeneration) return;
         if (_repo is not null) await ConnectHub();
     }
     private void OnPermissionsChanged()
@@ -182,16 +185,10 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         var generation = _dataGeneration;
         var repositoryId = Id;
         _loading = true;
-        // The loader below replaces the tab strip, so every grid it held is disposed (recette R-327).
+        // The loader below replaces the tab strip, so every grid it held is disposed.
         _grids.ForgetMountedGrids();
-        // The initial repo fetch was previously unguarded - when the user lands here with an
-        // expired token, GetFromJsonAsync throws HttpRequestException (401), the exception
-        // bubbles through OnInitializedAsync, and Blazor's ErrorBoundary takes over with a
-        // generic "Une erreur est survenue" screen even though the auth handler is already
-        // navigating to /login. Same behaviour for any non-success status the API returns
-        // (403, 5xx). Containing the exception here lets the page fall through to its
-        // existing `_repo is null → NotFound` branch and lets the auth redirect complete
-        // cleanly. The sub-resource loaders below already use SafeLoad for the same reason.
+        // Contains initial repository-load failures so the page can show its empty state and let
+        // authentication redirects complete without invoking ErrorBoundary.
         GitLightRepoDto? repository;
         try { repository = await Api.Git.GetGitRepoAsync(repositoryId); }
         catch (Exception ex) when (ex is HttpRequestException or JsonException)
@@ -258,7 +255,7 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     // ── Commits ──────────────────────────────────────────────────────
     // The grid is not rendered while the commits failed to load (the alert replaces it).
     private AetheusDataGrid<GitLightCommitDto>? MountedCommitsGrid => _commits.Error ? null : _grids.Commits;
-    // R2-004: the grid walks every ref; its Branch column filter narrows the walk to the ticked branches.
+    // The grid walks every ref; its Branch column filter narrows the walk to the ticked branches.
     private Task LoadCommits() =>
         _commits.LoadAsync(() => Api.Git.GetGitCommitsAsync(Id, GitReference.AllBranches, filters: _grids.CommitFilters));
     private Task OnLoadCommits(GridLoadArgs args)
@@ -274,8 +271,8 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     // ── Branches ─────────────────────────────────────────────────────
     private Task LoadBranches() => LoadBranchesPageAsync(1, 25);
     private Task ReloadBranchesAsync() => GitRepositoryGrids.ReloadOrLoadAsync(_grids.Branches, LoadBranches);
-    // Recette R-327: the grid scrolls and fetches further blocks; only the first one feeds the ref
-    // pickers, so scrolling the branch list does not change what the Commits and Files tabs offer.
+    // The grid scrolls and fetches further blocks; only the first one feeds the ref pickers, so
+    // scrolling the branch list does not change what the Commits and Files tabs offer.
     private Task LoadBranchesPageAsync(int page, int pageSize, string? sortBy = null, bool sortDescending = false) => LoadPageAsync(
         _branchPage,
         () => Api.Git.GetGitBranchesPageAsync(Id, page, pageSize, BranchSearch, sortBy, sortDescending, filters: _grids.BranchFilters),
@@ -344,8 +341,8 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     }
     private async Task LoadTree()
     {
-        // Recette R-327: the file grid is only rendered when no file is open and the tree loaded; while
-        // it is, another folder or ref reloads it from its first row through its own loader.
+        // The file grid is only rendered when no file is open and the tree loaded; while it is,
+        // another folder or ref reloads it from its first row through its own loader.
         var mountedGrid = _treeError || _blobContent is not null ? null : _grids.Tree;
         await DisposeMonacoAsync();
         _blobRequest++;
@@ -495,8 +492,8 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     // ── Branch Protection ───────────────────────────────────────────
     private Task LoadProtectionRules() => LoadProtectionRulesPageAsync(1, 25);
     private Task ReloadProtectionRulesAsync() => GitRepositoryGrids.ReloadOrLoadAsync(_grids.Protection, LoadProtectionRules);
-    // Recette R-327: the grid scrolls and fetches further blocks; the branch lock icons read the first
-    // one only, so scrolling the rules does not change which branches read as protected.
+    // The grid scrolls and fetches further blocks; the branch lock icons read the first one only,
+    // so scrolling the rules does not change which branches read as protected.
     private Task LoadProtectionRulesPageAsync(int page, int pageSize, string? sortBy = null, bool sortDescending = false) => LoadPageAsync(
         _protectionPage,
         () => Api.Git.GetGitBranchProtectionRulesPageAsync(Id, page, pageSize, search: null, sortBy, sortDescending, filters: _grids.ProtectionFilters),
@@ -544,7 +541,7 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         var generation = _dataGeneration;
         var request = _blobRequest;
         var blame = await Api.Git.GetGitBlameAsync(Id, _treeRef ?? _repo!.DefaultBranch, _blobContent.Path);
-        // FRONT-002: an answer for a file that is no longer open is not shown under the next one.
+        // Only the still-open file may receive its loading result.
         if (!IsLatest(generation, request, _blobRequest)) return;
         _blameLines = blame;
         if (_blameLines.Count > 0)
@@ -559,7 +556,7 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         }
     }
     private static OmniTone GetPrStatusBadge(PullRequestStatus status) => GitRepositoryViewHelpers.GetPullRequestStatusBadge(status);
-    // R2-003: the repository as a zip (default branch), streamed by the API and handed to the browser.
+    // The repository as a zip (default branch), streamed by the API and handed to the browser.
     private async Task DownloadArchiveAsync()
     {
         if (_repo is null || _downloadingArchive) return;
@@ -582,10 +579,9 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         }
         finally { _downloadingArchive = false; }
     }
-    /// <summary>
-    /// Recette R2-002: the clone URL field copies itself (OE's Copyable) and its button shows the check;
-    /// a copy the browser refused shows nothing visible on the button, so it gets the app's warning.
-    /// </summary>
+    /// <summary> The clone URL field copies itself (OE's Copyable) and its button shows the check;
+    /// a copy the browser refused shows nothing visible on the button, so it gets the app's
+    /// warning. </summary>
     private void OnCloneUrlCopied(bool copied)
     {
         if (!copied)
@@ -596,7 +592,7 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         _realtime = new GitRepositoryRealtimeSubscription(HubFactory);
         await _realtime.StartAsync(
             Id,
-            // Recette R-226: a live event refreshes the grid in place (page, sort and filters kept).
+            // A live event refreshes the grid in place (page, sort and filters kept).
             () => InvokeAsync(async () => { await GitRepositoryGrids.RefreshOrLoadAsync(_grids.Branches, LoadBranches); StateHasChanged(); }),
             () => InvokeAsync(async () => { await GitRepositoryGrids.RefreshOrLoadAsync(_grids.Tags, LoadTags); StateHasChanged(); }),
             () => InvokeAsync(async () => { Cache.InvalidatePrefix($"git-commits:{Id}:"); await GitRepositoryGrids.RefreshOrLoadAsync(MountedCommitsGrid, LoadCommits); StateHasChanged(); }),

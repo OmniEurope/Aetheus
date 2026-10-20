@@ -37,11 +37,8 @@ public record PaginationRequest
     /// <summary>At most this many sort keys travel with one page request.</summary>
     public const int MaxSorts = 3;
 
-    /// <summary>
-    /// Column filters of a server-side grid (PLAN-008 lot 12), applied after the caller's
-    /// organisation scope and before the count. Optional: a request without them reads as before,
-    /// which keeps an older front compatible with this back.
-    /// </summary>
+    /// <summary>Optional grid filters applied after organisation scope and before counting. Omitted
+    /// filters preserve compatibility with clients that send none.</summary>
     [MaxLength(MaxFilters)]
     public List<GridFilter>? Filters { get; init; }
 

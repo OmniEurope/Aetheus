@@ -6,17 +6,13 @@
 
 <OmniPageHeader Title="@L["AiRunnerProfiles"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("smart_toy")" /></Icon>
+    <Actions>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+    </Actions>
 </OmniPageHeader>
 
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
-             Justify="OmniJustification.Between" Class="omni-u-mb-md" Gap="OmniSpacing.Large">
-    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["AiRunnerProfilesDescription"]</OmniText>
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-</OmniStack>
-
-@* Recette R-239: the grid stays mounted while it loads (IsLoading shows the state). Swapping it for a
-   loader recreated it on every load, and the new grid loaded again: the page flickered in a loop until
-   the server answered 429. A failed load reads as a message with Retry, never as a raw exception. *@
+@* Keep the grid mounted while IsLoading indicates progress to avoid restarting its initial fetch
+   on each render. Show failures with a Retry action. *@
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
@@ -24,7 +20,7 @@
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadPageAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
     </OmniAlert>
 }
-    <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_profiles" Count="@_totalCount"
+    <AetheusDataGrid FullHeight="true" @ref="_grid" RowClick="@(profile => OpenDialogAsync(profile))" Data="@_profiles" Count="@_totalCount"
                 TItem="AiRunnerProfileDto" PageSize="25"
                 LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" IsLoading="@_loading"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
@@ -32,12 +28,29 @@
                 class="omni-u-w-100">
         <EmptyTemplate>
             <EmptyState Icon="smart_toy" Title="@L["NoAiRunnerProfiles"]"
-                        Description="@L["NoAiRunnerProfilesDescription"]" />
+                        Description="@L["NoAiRunnerProfilesDescription"]">
+                <ActionContent>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+                </ActionContent>
+            </EmptyState>
         </EmptyTemplate>
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="AiRunnerProfileDto" Property="Name" Title="@L["Name"]" Filterable="true" />
-            <OmniDataGridColumn TItem="AiRunnerProfileDto" Property="Binary" Title="@L["Binary"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_binaries" FilterSearchable="true" >
-                <Template Context="profile"><code>@profile.Binary</code></Template>
+            <OmniDataGridColumn TItem="AiRunnerProfileDto" Property="Priority" Title="@L["AiProfilePriority"]" Width="110px" SortOrder="OmniDataGridSortOrder.Ascending" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
+            <OmniDataGridColumn TItem="AiRunnerProfileDto" Property="Provider" Title="@L["Provider"]" Width="200px" Sortable="false" Filterable="false">
+                <Template Context="profile">
+                    @if (profile.NeedsReconfiguration)
+                    {
+                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" title="@L["AiProfileNeedsReconfiguration"]">@L["AiToReconfigure"]</OmniBadge>
+                    }
+                    else
+                    {
+                        @ProviderName(profile.Provider)
+                    }
+                </Template>
+            </OmniDataGridColumn>
+            <OmniDataGridColumn TItem="AiRunnerProfileDto" Property="Model" Title="@L["AiModel"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_models" FilterSearchable="true" >
+                <Template Context="profile"><code>@profile.Model</code></Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AiRunnerProfileDto" Property="TimeoutSeconds" Title="@L["Timeout"]" Width="110px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                 <Template Context="profile">@profile.TimeoutSeconds s</Template>
@@ -50,8 +63,10 @@
             <OmniDataGridColumn TItem="AiRunnerProfileDto" Title="@L["Actions"]" Width="120px"
                                   Sortable="false" Filterable="false" TextAlign="OmniDataGridTextAlign.Center">
                 <Template Context="profile">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenDialogAsync(profile))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(profile))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(profile))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    </span>
                 </Template>
             </OmniDataGridColumn>
         </Columns>

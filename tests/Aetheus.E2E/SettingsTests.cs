@@ -5,6 +5,8 @@ namespace Aetheus.E2E;
 [Category("Settings")]
 public class SettingsTests : E2ETestBase
 {
+    protected override bool ShareBrowserContextAcrossTests => true;
+
     // The Secrets / Registration Tokens / General tabs these tests assert against
     // now live on the admin "Platform Settings" page (/admin/settings). The
     // /settings route is the per-user profile page (Profile/Appearance/...).
@@ -46,6 +48,7 @@ public class SettingsTests : E2ETestBase
     }
 
     [Test]
+    [RollbackRelevant]
     public async Task Settings_RegistrationTokensTab_GenerateToken()
     {
         await NavigateToAsync("admin/settings");
@@ -101,15 +104,5 @@ public class SettingsTests : E2ETestBase
         Assert.That(bounds, Is.Not.Null);
         Assert.That(bounds!.X, Is.GreaterThanOrEqualTo(0));
         Assert.That(bounds.X + bounds.Width, Is.LessThanOrEqualTo(375));
-    }
-
-    [Test]
-    public async Task Settings_NavigateFromSidebar_Works()
-    {
-        // The top-level "Settings" nav item points at the per-user /settings page.
-        await NavigateToAsync("");
-        await ClickSidebarNavItemAsync("Settings");
-
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/settings"), new() { Timeout = 5000 });
     }
 }

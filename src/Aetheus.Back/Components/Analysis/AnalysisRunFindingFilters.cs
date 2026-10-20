@@ -3,11 +3,10 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Analysis;
 
-/// <summary>
-/// Recette R-485: the Gate tab's column filters and sort, applied by the database to a run set's
-/// findings. The finding's own fields (status, category, severity, title, rule) narrow the occurrences
-/// before they are grouped; "new", which is worked out per group, filters the grouped rows.
-/// </summary>
+/// <summary> The Gate tab's column filters and sort, applied by the database to a run set's
+/// findings. The finding's own fields (status, category, severity, title, rule) narrow the
+/// occurrences before they are grouped; "new", which is worked out per group, filters the grouped
+/// rows. </summary>
 internal static class AnalysisRunFindingFilters
 {
     public static IQueryable<AnalysisFindingOccurrence> Narrow(

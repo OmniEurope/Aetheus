@@ -1,0 +1,34 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@page "/mail"
+
+@* Recette R1-41: the "Messagerie" page of the main menu, the mailboxes of every server the reader sees. A row
+   click opens the integrated mailbox (an administrator then opens it without its password). *@
+<PageTitle>@L["MailboxDirectory"] - Aetheus</PageTitle>
+
+<OmniPageHeader Title="@L["MailboxDirectory"]" Subtitle="@Breadcrumb.Subtitle()">
+    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></Icon>
+</OmniPageHeader>
+
+<AetheusDataGrid @ref="_grid" TItem="MailboxDirectoryEntryDto" Data="@_items" Count="@_total" IsLoading="@_loading"
+    LoadData="@LoadAsync" KeyProperty="AccountId" PageSize="25" ExportRead="@ReadExportAsync" ExportName="@L["MailboxDirectory"]"
+    AllowSorting="true" EmptyText="@L["MailboxDirectoryEmpty"]" RowClick="@Open" Class="mailbox-directory"
+    Virtualize="@AetheusGrid.RemoteVirtualization"
+    VirtualData="@(() => new OmniDataGridResult<MailboxDirectoryEntryDto>(_items, _total))">
+    <Columns>
+        <OmniDataGridColumn Frozen="true" TItem="MailboxDirectoryEntryDto" Property="Email" Title="@L["Email"]" Width="300px" Filterable="true" />
+        <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Property="ServerName" Title="@L["Server"]" Width="220px" Filterable="false" />
+        <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Property="Domain" Title="@L["MailboxDirectoryDomain"]" Width="200px" Sortable="false" Filterable="false" />
+        <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Title="@L["Quota"]" Width="160px" Sortable="false" Filterable="false">
+            <Template Context="entry">
+                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@QuotaText(entry)</OmniText>
+            </Template>
+        </OmniDataGridColumn>
+        <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Title="@L["Actions"]" Width="100px" Sortable="false" Filterable="false">
+            <Template Context="entry">
+                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Open(entry))" title="@L["MailboxOpen"]" Label="@L["MailboxOpen"]"><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></OmniButton>
+                </OmniStack>
+            </Template>
+        </OmniDataGridColumn>
+    </Columns>
+</AetheusDataGrid>

@@ -28,7 +28,7 @@ public class ServerAppRepository(AppDbContext db) : IServerAppRepository
                 || app.Source.ToLower().Contains(normalized));
         }
 
-        // Recette R-210: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = ServerAppListQuery.Columns.ApplyFilters(query, filters);
 
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);

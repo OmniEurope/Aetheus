@@ -9,10 +9,11 @@ using Npgsql;
 
 namespace Aetheus.Back.Components.Mail;
 
-public class MailService(IMailRepository repo, IAuditService audit, IEncryptionService encryption, IServerRepository serverRepo, ITaskService taskService) : IMailService
+public class MailService(
+    IMailRepository repo, IAuditService audit, IEncryptionService encryption, IServerRepository serverRepo, ITaskService taskService,
+    IMailMasterSecrets masterSecrets) : IMailService
 {
-    // PLAN-005: every action is a typed operation run by the root-owned mail-manage helper. The former
-    // shell fallback (SpamAssassin systemctl strings) could never run under the non-root agent.
+    // Dispatch typed operations through the root-owned mail-manage helper for the non-root agent.
     private static readonly Dictionary<MailAction, (OperationKind Kind, string Target)> s_actions = new()
     {
         [MailAction.StartPostfix] = (OperationKind.MailStartPostfix, "-"),
@@ -29,12 +30,13 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         [MailAction.StartSpamFilter] = (OperationKind.MailServiceControl, "rspamd:start"),
         [MailAction.StopSpamFilter] = (OperationKind.MailServiceControl, "rspamd:stop"),
         [MailAction.RestartSpamFilter] = (OperationKind.MailServiceControl, "rspamd:restart"),
-        [MailAction.RestartOpenDkim] = (OperationKind.MailServiceControl, "opendkim:restart")
+        [MailAction.RestartOpenDkim] = (OperationKind.MailServiceControl, "opendkim:restart"),
+        [MailAction.ApplyRetryTuning] = (OperationKind.MailRetryTuning, "-")
     };
 
     private const string SetupAlreadyRunning = "A mail setup or reinstall is already running on this server.";
 
-    // One setup recorded and queued at a time per server inside this process (recette R2-101).
+    // One setup recorded and queued at a time per server inside this process.
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> s_setupGates = new();
 
     private Task QueueTaskAsync(ServerTask task, CancellationToken ct = default)
@@ -177,16 +179,11 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
             ?? throw new BadRequestException($"Domain '{emailDomain}' is not configured on this server.");
 
         await EnsureMailManageableAsync(serverId, ct).ConfigureAwait(false);
+        // A limited mailbox needs the helper that writes the quota; an unlimited one (0) works with any helper.
+        if (request.QuotaMb > 0)
+            await EnsureQuotaHelperAsync(serverId, ct).ConfigureAwait(false);
 
-        var account = new MailAccount
-        {
-            MailDomainId = domain.Id,
-            Email = request.Email,
-            QuotaMb = request.QuotaMb,
-            IsActive = true
-        };
-
-        await repo.AddAccountAsync(account, ct).ConfigureAwait(false);
+        var account = await ClaimAccountRowAsync(serverId, domain, request, ct).ConfigureAwait(false);
 
         // S-FEAT-W8KN: typed MailAddAccount via the mail-manage helper. The email is the target; the
         // parent domain and quota ride in env vars and the password is piped to the helper over stdin
@@ -206,12 +203,67 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         return MapAccount(account);
     }
 
+    /// <summary>The Aetheus row the new mailbox is recorded on. The address is unique across servers, so a
+    /// row already holding it is either reused or refused (409), never inserted twice. A row the heartbeat
+    /// reconciliation flagged absent from the server (<c>MissingSince</c> set) records a mailbox that is gone:
+    /// creating it again is the way back, so the same row is reused and treated like a new one (active, not
+    /// missing, new quota); the reconciliation then keeps or flags it again from what the server reports. Any
+    /// other existing row is a mailbox that is (or was deliberately kept) on a server: it is updated, not
+    /// created.</summary>
+    private async Task<MailAccount> ClaimAccountRowAsync(
+        int serverId, MailDomain domain, CreateMailAccountRequest request, CancellationToken ct)
+    {
+        var existing = await repo.FindAccountByEmailAsync(request.Email, ct).ConfigureAwait(false);
+        if (existing is null)
+        {
+            var created = new MailAccount
+            {
+                MailDomainId = domain.Id,
+                Email = request.Email,
+                QuotaMb = request.QuotaMb,
+                IsActive = true
+            };
+            await repo.AddAccountAsync(created, ct).ConfigureAwait(false);
+            return created;
+        }
+
+        if (existing.MailDomain.ServerId != serverId)
+            throw new ConflictException($"The address {request.Email} already belongs to a mail domain on another server.");
+        if (existing.MissingSince is null)
+            throw new ConflictException($"The mailbox {request.Email} already exists on this server: update it instead of creating it.");
+
+        existing.MailDomainId = domain.Id;
+        existing.QuotaMb = request.QuotaMb;
+        existing.IsActive = true;
+        existing.MissingSince = null;
+        await repo.UpdateAccountAsync(existing, ct).ConfigureAwait(false);
+        return existing;
+    }
+
     public async Task<MailAccountDto> UpdateAccountAsync(int serverId, int accountId, UpdateMailAccountRequest request, CancellationToken ct = default)
     {
         var account = await GetAccountForServerAsync(serverId, accountId, ct).ConfigureAwait(false);
 
-        if (request.QuotaMb.HasValue)
-            account.QuotaMb = request.QuotaMb.Value;
+        if (request.QuotaMb is { } quotaMb && quotaMb != account.QuotaMb)
+        {
+            if (!MailValidation.IsValidQuotaMb(quotaMb))
+                throw new BadRequestException("Invalid mailbox quota.");
+
+            await EnsureMailManageableAsync(serverId, ct).ConfigureAwait(false);
+            await EnsureQuotaHelperAsync(serverId, ct).ConfigureAwait(false);
+
+            // DEP-005: the stored quota is only a number until Dovecot knows it. mail-manage set-quota
+            // writes it on the account's users-file line, where the quota plugin refuses an IMAP APPEND
+            // or an LMTP delivery that would exceed it.
+            account.QuotaMb = quotaMb;
+            await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"Mail - set quota {account.Email}",
+                OperationKind.MailSetQuota, target: account.Email,
+                environmentVariables: new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [MailSetupEnv.QuotaMb] = quotaMb.ToString(CultureInfo.InvariantCulture)
+                },
+                timeoutSeconds: 30), ct).ConfigureAwait(false);
+        }
         if (request.IsActive.HasValue)
             account.IsActive = request.IsActive.Value;
         if (!string.IsNullOrWhiteSpace(request.NewPassword))
@@ -266,6 +318,8 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         var (kind, target) = operation;
 
         await EnsureMailManageableAsync(serverId, ct).ConfigureAwait(false);
+        if (request.Action == MailAction.ApplyRetryTuning)
+            await EnsureRetryTuningHelperAsync(serverId, ct).ConfigureAwait(false);
         var task = ServerTaskFactory.Operation(serverId, $"Mail - {request.Action}", kind, target, timeoutSeconds: 90);
         await QueueTaskAsync(task, ct).ConfigureAwait(false);
         await audit.LogAsync($"Mail{request.Action}", "Mail", serverId, request.Action.ToString(), ct).ConfigureAwait(false);
@@ -322,10 +376,8 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
             throw new BadRequestException(
                 "Mail setup is not enabled on this server. Re-run the agent installer with the mail-setup " +
                 "capability (--enable-mail-setup) to grant the controlled-sudo helper.");
-        // Recette R2-101: two simultaneous setups of a NEW domain both passed the open-task check below,
-        // both inserted the domain, and the second died on the unique index with HTTP 500. The check, the
-        // records and the queued task now form one step per server, so the second request sees the first
-        // one's task and is refused like any setup launched while another runs.
+        // Serialize setup checks, database records and task queuing per server so concurrent
+        // requests observe the open task before creating another setup.
         var gate = s_setupGates.GetOrAdd(serverId, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -340,7 +392,7 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
 
     private async Task<MailTaskQueuedDto> QueueSetupAsync(int serverId, MailSetupRequest request, CancellationToken ct)
     {
-        // Recette R2-085: one "Configurer" launched two full setups 3 s apart (tasks 23257 and 23258).
+        // Reject setup while a setup task is already open.
         if (await repo.HasOpenTaskAsync(serverId, MailStackPurgeService.StackRebuildKinds, ct).ConfigureAwait(false))
             throw new ConflictException(SetupAlreadyRunning);
 
@@ -349,6 +401,7 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
         // invokes the root-owned `mail-setup` helper through the argv-exact aetheus-mail sudoers
         // grant. The domain is the operation target; hostname/selector/email/quota travel as env vars,
         // and the admin password is piped to the helper over stdin (never argv - off the process list).
+        var masterPassword = MailMasterAccess.NewPassword();
         var env = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [MailSetupEnv.Hostname] = request.Hostname,
@@ -356,19 +409,21 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
             [MailSetupEnv.AdminEmail] = request.AdminEmail,
             [MailSetupEnv.QuotaMb] = request.QuotaMb.ToString(CultureInfo.InvariantCulture),
             [MailSetupEnv.AdminPassword] = request.AdminPassword,
-            [MailSetupEnv.SpamFilter] = request.EnableSpamFilter ? "rspamd" : "none"
+            [MailSetupEnv.SpamFilter] = request.EnableSpamFilter ? "rspamd" : "none",
+            // Recette R1-41 / R3-50: the administrator access is (re)created with the stack, so a reinstall
+            // brings it back; mail-setup hands this password to mail-manage master-set (helper version 4).
+            [MailSetupEnv.MasterPassword] = masterPassword
         };
 
-        var task = ServerTaskFactory.Operation(serverId, $"Mail - full setup ({request.Domain})",
+        var task = ServerTaskFactory.Operation(serverId, $"{MailTaskNames.SetupPrefix} ({request.Domain})",
             OperationKind.MailSetup, request.Domain, env, timeoutSeconds: 900);
         // F-001 / F11b: the admin password rides in EnvironmentVariables. Encrypt it at rest (AES-256)
         // like every other secret-bearing task instead of leaving plaintext JSON in the DB - the
         // backend decrypts it only when the task is dispatched to the agent (TaskService env mapping).
         task.EnvironmentVariables = TaskEnvProtection.Protect(encryption, JsonSerializer.Serialize(env));
 
-        // Recette R2-101: the records are written FIRST and the task is queued only once they are saved.
-        // A setup re-run on a domain already recorded used to queue its task, then die on the unique
-        // (ServerId, Name) index with HTTP 500: the setup ran while the screen announced a failure.
+        // Persist domain records before queuing setup so a database failure cannot leave an
+        // unreported task running.
         try
         {
             await RecordSetupAsync(serverId, request, ct).ConfigureAwait(false);
@@ -380,9 +435,11 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
             throw new ConflictException(SetupAlreadyRunning);
         }
         await QueueTaskAsync(task, ct).ConfigureAwait(false);
+        // Stored once the task is queued, like the no-reply password (R1-16): a refused setup keeps the old one.
+        await masterSecrets.StoreAsync(serverId, masterPassword, ct).ConfigureAwait(false);
 
         await audit.LogAsync("MailSetup", "Mail", serverId, request.Domain, ct).ConfigureAwait(false);
-        // R2-085: the page keeps "Configurer" busy until this task completes.
+        // The page keeps "Configurer" busy until this task completes.
         return new MailTaskQueuedDto { TaskId = task.Id };
     }
 
@@ -438,9 +495,8 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
             ?? throw new NotFoundException($"Mail domain {domainId} not found.");
         var state = await repo.GetStateAsync(serverId, ct).ConfigureAwait(false);
 
-        // PLAN-005: the DKIM public key comes from the heartbeat inventory (the agent reads the .txt the
-        // helper leaves world-readable). Only when it is still unknown is the key read on demand through
-        // mail-manage, whose output lands in the task log.
+        // Use the DKIM public key reported in heartbeat inventory, reading it on demand through
+        // mail-manage only while unknown.
         var records = MailDnsRecordFactory.Build(domain, state?.Hostname);
         if (records.DkimKeyStatus != MailDkimKeyStatus.Available)
         {
@@ -527,6 +583,30 @@ public class MailService(IMailRepository repo, IAuditService audit, IEncryptionS
             throw new BadRequestException(
                 "Mail management is not enabled on this server. Re-run the agent installer with the mail-setup " +
                 "capability (--enable-mail-setup) to grant the controlled-sudo helper.");
+    }
+
+    /// <summary>DEP-005: the first mail-manage helper version that writes and enforces the mailbox quota.</summary>
+    internal const int QuotaMinimumHelperVersion = 5;
+
+    private async Task EnsureQuotaHelperAsync(int serverId, CancellationToken ct)
+    {
+        var state = await repo.GetStateAsync(serverId, ct).ConfigureAwait(false);
+        if (state is null || state.HelperVersion < QuotaMinimumHelperVersion)
+            throw new BadRequestException(
+                $"The mail helper of this server cannot enforce a mailbox quota (version {state?.HelperVersion ?? 0}, " +
+                $"{QuotaMinimumHelperVersion} required). Update the agent on this server (re-run the agent installer with --enable-mail-setup), then retry.");
+    }
+
+    /// <summary>The first mail-manage helper version that has the <c>retry-tuning</c> sub-command.</summary>
+    internal const int RetryTuningMinimumHelperVersion = 6;
+
+    private async Task EnsureRetryTuningHelperAsync(int serverId, CancellationToken ct)
+    {
+        var state = await repo.GetStateAsync(serverId, ct).ConfigureAwait(false);
+        if (state is null || state.HelperVersion < RetryTuningMinimumHelperVersion)
+            throw new BadRequestException(
+                $"The mail helper of this server cannot apply the retry timings (version {state?.HelperVersion ?? 0}, " +
+                $"{RetryTuningMinimumHelperVersion} required). Update the agent on this server (re-run the agent installer with --enable-mail-setup), then retry.");
     }
 
     // --- Aliases ---

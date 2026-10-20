@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Projects.ProjectDetailSections;
 
-/// <summary>PLAN-013 lot 4: the « Conservation des données » form; an empty value keeps the profile's.</summary>
+/// <summary>The « Conservation des données » form; an empty value keeps the profile's.</summary>
 public sealed class DataRetentionFormModel
 {
     public DataRetentionProfile Profile { get; set; }

@@ -44,8 +44,8 @@ public class GitLightController(IGitLightService service, IResourceAuthorization
         return Ok(await service.GetRepositoriesPageAsync(null, accessibleIds, request, ct));
     }
 
-    /// <summary>Recette R-224: the default branches the list's checkable column filter offers, in the
-    /// same scope as the list (one project, or every project the caller can read).</summary>
+    /// <summary>The default branches the list's checkable column filter offers, in the same scope
+    /// as the list (one project, or every project the caller can read).</summary>
     [HttpGet("filter-values")]
     public async Task<ActionResult<GitRepositoryFilterValuesDto>> GetRepositoryFilterValues(
         [FromQuery] int? projectId, [FromServices] GitFilterValuesService filterValues, CancellationToken ct)
@@ -116,13 +116,13 @@ public class GitLightController(IGitLightService service, IResourceAuthorization
 
         page = Math.Max(page, 1);
         pageSize = PaginationDefaults.Clamp(pageSize);
-        // Recette R-224 / R2-004 / R2-005: the grid's Message, Author, Branch and Date column filters.
+        // The grid Message, Author, Branch and Date column filters.
         var filter = GitCommitListQuery.Parse(filters);
         return Ok(await service.GetCommitsAsync(repoId, @ref, page, pageSize, search, ct, filter));
     }
 
-    /// <summary>R2-003: the repository at <paramref name="ref"/> (its default branch when omitted) as a zip,
-    /// streamed from <c>git archive</c>. Read access, like browsing the files.</summary>
+    /// <summary>The repository at <paramref name="ref"/> (its default branch when omitted) as a
+    /// zip, streamed from <c>git archive</c>. Read access, like browsing the files.</summary>
     [HttpGet("{repoId:int}/archive")]
     public async Task<IActionResult> GetArchive(
         int repoId, [FromQuery, StringLength(255)] string? @ref, [FromServices] GitArchiveService archives, CancellationToken ct)
@@ -134,7 +134,7 @@ public class GitLightController(IGitLightService service, IResourceAuthorization
         return new FileStreamResult(archive.Content, "application/zip") { FileDownloadName = archive.FileName };
     }
 
-    /// <summary>Recette R-224: the authors the commits and pull requests grids' Author filters offer.</summary>
+    /// <summary>The authors the commits and pull requests grids' Author filters offer.</summary>
     [HttpGet("{repoId:int}/filter-values")]
     public async Task<ActionResult<GitRepositoryDetailFilterValuesDto>> GetRepositoryDetailFilterValues(
         int repoId, [FromServices] GitFilterValuesService filterValues, CancellationToken ct)

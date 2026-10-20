@@ -24,7 +24,7 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
         if (status.HasValue)
             query = query.Where(t => t.Status == status.Value);
 
-        // Recette R-212: the header filters, after the scope and before the count.
+        // The header filters, after the scope and before the count.
         query = TaskListQuery.Columns.ApplyFilters(query, columnFilters);
 
         return await PageTasksAsync(query, page, pageSize, ct, sortBy, sortDescending).ConfigureAwait(false);
@@ -154,9 +154,9 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
         if (!fencingToken.HasValue)
             return [];
 
-        // Recette R1-42: while the agent replaces itself nothing else is handed to it. The swap ends
-        // with the process exiting, so a task claimed meanwhile is cancelled without a completion and
-        // later reported as a timeout. The other work stays Pending for the new agent.
+        // While the agent replaces itself nothing else is handed to it. The swap ends with the
+        // process exiting, so a task claimed meanwhile is cancelled without a completion and later
+        // reported as a timeout. The other work stays Pending for the new agent.
         var selfUpdateInFlight = await db.Tasks.AnyAsync(t => t.ServerId == serverId
             && t.Operation == OperationKind.AgentSelfUpdate
             && (t.Status == TaskExecutionStatus.Assigned || t.Status == TaskExecutionStatus.Running), ct)
@@ -190,7 +190,6 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
 
         var protocolSupported = serverContract.AgentProtocolVersion is { } protocol
             && AgentProtocol.IsSupported(protocol);
-        var declaredCapabilities = serverContract.AgentCapabilitiesJson ?? "[]";
         var scannerManifestSha256 = ExtractScannerManifestSha256(serverContract.ScannerCapabilitiesJson);
         candidates = candidates
             .Where(candidate =>
@@ -200,7 +199,7 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
                         && candidate.CreatedAt <= reservedAt))
                     && (protocolSupported
                     && AgentCapabilities.RequiredFor(candidate.Operation) is { } capability
-                    && declaredCapabilities.Contains($"\"{capability}\"", StringComparison.Ordinal)))
+                    && AgentCapabilities.IsDeclared(serverContract.AgentCapabilitiesJson, capability)))
             .ToList();
 
         // A self-update is exclusive and takes priority over normal work. Claiming it alongside an
@@ -273,6 +272,45 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
                     .ThenInclude(pipeline => pipeline.Project)
             .OrderBy(t => t.CreatedAt)
             .ToListAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<bool> TryFailPendingTaskAsync(
+        int taskId,
+        string failureCode,
+        string failureReason,
+        DateTime failedAt,
+        CancellationToken ct = default)
+    {
+        // Compare-and-set on Pending: an agent that claims the task between the caller's read and
+        // this write keeps it, so a task that started running is never overwritten with a failure.
+        if (db.Database.IsRelational())
+        {
+            var updated = await db.Tasks
+                .Where(t => t.Id == taskId && t.Status == TaskExecutionStatus.Pending)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(t => t.Status, TaskExecutionStatus.Failed)
+                    .SetProperty(t => t.ExitCode, -1)
+                    .SetProperty(t => t.CompletedAt, failedAt)
+                    .SetProperty(t => t.FailureCode, failureCode)
+                    .SetProperty(t => t.FailureReason, failureReason)
+                    .SetProperty(t => t.EnvironmentVariables, TaskEnvProtection.EmptyEnv), ct)
+                .ConfigureAwait(false);
+            return updated > 0;
+        }
+
+        var task = await db.Tasks
+            .FirstOrDefaultAsync(t => t.Id == taskId && t.Status == TaskExecutionStatus.Pending, ct)
+            .ConfigureAwait(false);
+        if (task is null)
+            return false;
+        task.Status = TaskExecutionStatus.Failed;
+        task.ExitCode = -1;
+        task.CompletedAt = failedAt;
+        task.FailureCode = failureCode;
+        task.FailureReason = failureReason;
+        task.EnvironmentVariables = TaskEnvProtection.EmptyEnv;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return true;
     }
 
     internal static string? ExtractScannerManifestSha256(string? capabilitiesJson)
@@ -404,8 +442,8 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
         // including empty polls, so an active busy runner retains its queued work.
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var cutoff = now - threshold;
-        // PLAN-004 R-11: a retired server (Offline, tokens revoked) must still age out the work queued
-        // for it, or its pipeline runs would wait forever on a filtered-out server.
+        // Include retired servers in timeout reconciliation so pending work cannot wait forever
+        // behind retirement filters.
         var servers = db.Servers.IgnoreQueryFilters([ServerQueryFilters.ExcludeRetired]);
         return await db.Tasks
             .Where(t => t.Status == TaskExecutionStatus.Pending

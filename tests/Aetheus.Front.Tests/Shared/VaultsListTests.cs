@@ -28,7 +28,7 @@ public class VaultsListTests : BunitContext
         });
 
         var cut = Render<VaultsList>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("Prod Secrets"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Prod Secrets"));
 
         Assert.Contains("Prod Secrets", cut.Markup);
     }
@@ -40,8 +40,7 @@ public class VaultsListTests : BunitContext
 
         var cut = Render<VaultsList>(p => p.Add(x => x.ServerId, 2));
         cut.WaitForState(() =>
-            ((List<VaultDto>?)ListType.GetField("_serverAll", Priv)!.GetValue(cut.Instance)) is not null,
-            TimeSpan.FromSeconds(2));
+            ((List<VaultDto>?)ListType.GetField("_serverAll", Priv)!.GetValue(cut.Instance)) is not null);
 
         var all = (List<VaultDto>)ListType.GetField("_serverAll", Priv)!.GetValue(cut.Instance)!;
         Assert.Empty(all);
@@ -57,7 +56,7 @@ public class VaultsListTests : BunitContext
         });
 
         var cut = Render<VaultsList>();
-        cut.WaitForState(() => cut.Markup.Contains("Globals"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Globals"));
 
         Assert.Contains("Globals", cut.Markup);
     }
@@ -72,7 +71,7 @@ public class VaultsListTests : BunitContext
         });
 
         var cut = Render<VaultsList>(p => p.Add(x => x.ProjectId, 7));
-        cut.WaitForState(() => cut.Markup.Contains("ProjVault"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("ProjVault"));
 
         Assert.Contains("ProjVault", cut.Markup);
         Assert.DoesNotContain("Scoped", cut.Markup);
@@ -112,7 +111,7 @@ public class VaultsListTests : BunitContext
         });
 
         var cut = Render<VaultsList>(p => p.Add(x => x.ServerId, 1));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }

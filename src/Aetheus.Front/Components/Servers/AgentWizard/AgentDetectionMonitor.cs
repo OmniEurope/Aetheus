@@ -249,18 +249,25 @@ internal sealed class AgentDetectionMonitor(
                 if (AgentFound || !Listening) return;
                 if (ElapsedSeconds >= MaxSeconds)
                 {
-                    if (Interlocked.CompareExchange(ref _completionState, 1, 0) != 0) return;
-                    TimedOut = true;
-                    Listening = false;
-                    _monitorCts?.Cancel();
-                    await DisposeHubAsync().ConfigureAwait(false);
-                    await onChanged().ConfigureAwait(false);
+                    await TimeOutAsync().ConfigureAwait(false);
                     return;
                 }
                 await onChanged().ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+    }
+
+    // The detection window ran out, unless the agent was found in the same instant: stop listening,
+    // release the hub and say so once.
+    private async Task TimeOutAsync()
+    {
+        if (Interlocked.CompareExchange(ref _completionState, 1, 0) != 0) return;
+        TimedOut = true;
+        Listening = false;
+        _monitorCts?.Cancel();
+        await DisposeHubAsync().ConfigureAwait(false);
+        await onChanged().ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()

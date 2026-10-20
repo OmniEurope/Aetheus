@@ -5,10 +5,8 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Monitoring;
 
-/// <summary>
-/// PLAN-003 lot 28: one page lists every supervised app, all projects together, with the last event
-/// it sent, which is what distinguishes "collected, then stopped" from "never configured".
-/// </summary>
+/// <summary> One page lists every supervised app, all projects together, with the last event it
+/// sent, which is what distinguishes "collected, then stopped" from "never configured". </summary>
 public sealed class SupervisionTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -16,7 +14,7 @@ public sealed class SupervisionTests : BunitContext
     public SupervisionTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
-        // PLAN-013 lot 5: the page also lists the storage of each project.
+        // The page also lists the storage of each project.
         _handler.SetJsonResponse("api/data-storage/projects", new ProjectStorageReportDto());
     }
 
@@ -37,7 +35,7 @@ public sealed class SupervisionTests : BunitContext
         var cut = Render<Supervision>();
 
         cut.WaitForAssertion(() => Assert.Contains("Orpheus web", cut.Markup, StringComparison.Ordinal));
-        // R-467: each application opens its project's supervision page on itself.
+        // Each application opens its project's supervision page on itself.
         Assert.Contains("href=\"/projects/1/monitoring?app=3\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("href=\"/projects/4/monitoring?app=8\"", cut.Markup, StringComparison.Ordinal);
         Assert.Contains(lastEvent.ToLocalTime().ToString("g"), cut.Markup, StringComparison.Ordinal);
@@ -116,8 +114,19 @@ public sealed class SupervisionTests : BunitContext
 
         var cut = Render<Supervision>();
 
-        cut.WaitForAssertion(() => Assert.Contains("ProjectStorage", cut.Markup, StringComparison.Ordinal));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".supervision-projects-grid")));
         Assert.DoesNotContain("ReclaimSpaceHelp", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain(_handler.Requests, request => request.Url.Contains("reclaim", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void R171_ThePageHasNoExplanatoryParagraph()
+    {
+        _handler.SetJsonResponse("api/appmonitoring/summary", new AppMonitoringSummaryDto());
+
+        var cut = Render<Supervision>();
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".supervision-projects-grid")));
+        Assert.DoesNotContain("SupervisionDescription", cut.Markup, StringComparison.Ordinal);
     }
 }

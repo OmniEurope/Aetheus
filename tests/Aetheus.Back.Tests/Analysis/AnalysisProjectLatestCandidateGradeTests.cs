@@ -7,11 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests.Analysis;
 
-/// <summary>
-/// Recette R2-024: the project grade is the grade of its latest candidate run (the root run and the
-/// runs its trigger steps started, merged domain by domain since R2-118), no longer the latest grade
-/// of each domain across every recent run.
-/// </summary>
+/// <summary>Use the latest candidate root and triggered descendants, merging each domain
+/// independently.</summary>
 public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
 {
     private const int ProjectId = 5;
@@ -35,8 +32,7 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
     [Fact]
     public async Task TheLatestCandidate_GivesTheGrade_TheWorstOfItsTree_EvenWhenANewerNightlyGradedBetter()
     {
-        // Candidate 2478 (sealed) and its CI child 2479, then a newer nightly 2490 graded A on a domain
-        // the candidate also measured: the cross-run mix used to take the nightly's A for that domain.
+        // A newer nightly grade must not replace a measured domain from the sealed candidate tree.
         Run(2478, _now.AddHours(-3), sealedCandidate: true);
         Run(2479, _now.AddHours(-3).AddMinutes(1), parentRunId: 2478);
         Run(2490, _now.AddHours(-1));
@@ -81,9 +77,8 @@ public sealed class AnalysisProjectLatestCandidateGradeTests : IDisposable
     [Fact]
     public async Task TheCandidateTree_ShowsTheSecurityDomainOfItsSecurityRun_WhenItsQualityRunTiesOnTheOverallGrade()
     {
-        // Recette R2-118: candidate 600 triggered quality 601 and security 602, both graded B overall. The
-        // quality run has no security rule (its security domain is advisory and incomplete); keeping the
-        // one worst run took the quality run on the tie and the security tile read "Indicatif · Incomplet · -".
+        // Keep security grades from the security child even when a tied quality child has an
+        // incomplete security domain.
         Run(600, _now.AddHours(-2), sealedCandidate: true);
         Run(601, _now.AddHours(-2).AddMinutes(1), parentRunId: 600);
         Run(602, _now.AddHours(-2).AddMinutes(2), parentRunId: 600);

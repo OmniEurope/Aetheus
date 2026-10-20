@@ -22,4 +22,11 @@ public sealed record PipelineRunRequest
 
     [StringLength(MaxIdempotencyKeyLength)]
     public string? IdempotencyKey { get; init; }
+
+    /// <summary>
+    /// "Run to end": every step of the run continues on error, so one run exercises everything that
+    /// can still run. Accepted only when the platform setting <see cref="PipelineRunToEndSetting.Key"/>
+    /// allows it; a run launched this way that had a failure ends Failed and publishes no release.
+    /// </summary>
+    public bool RunToEnd { get; init; }
 }

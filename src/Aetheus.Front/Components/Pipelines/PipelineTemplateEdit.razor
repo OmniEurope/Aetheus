@@ -4,7 +4,13 @@
 
 <PageTitle>@(_isNew ? L["NewTemplate"] : _template?.Name ?? L["EditTemplate"]) - Aetheus</PageTitle>
 
-<OmniPageHeader Title="@(_isNew ? L["NewTemplate"] : _template?.Name ?? L["EditTemplate"])" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+@{
+    // STD-BTN detection 11: Versions sits in the header menu, shown only once a template is loaded.
+    RenderFragment templateMenu = @<text>
+        <OmniMenuItem OnClick="@ViewHistory"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent>@L["Versions"]</ChildContent></OmniMenuItem>
+    </text>;
+}
+<OmniPageHeader Title="@(_isNew ? L["NewTemplate"] : _template?.Name ?? L["EditTemplate"])" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()" MenuContent="@(_template is null ? null : templateMenu)">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("description")" /></Icon>
     <Badges>
         @if (_template is not null)
@@ -15,8 +21,8 @@
     <Actions>
         @if (_template is not null)
         {
+            @* STD-BTN detection 11: Use template visible, the other actions in the menu. *@
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UseTemplate"><OmniIcon Name="OmniIconName.Add" /> <span>@L["UseTemplate"]</span></OmniButton>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ViewHistory"><OmniIcon Name="OmniIconName.Reset" /> <span>@L["Versions"]</span></OmniButton>
         }
     </Actions>
 </OmniPageHeader>

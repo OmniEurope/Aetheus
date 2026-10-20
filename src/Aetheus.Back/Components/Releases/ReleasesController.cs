@@ -12,7 +12,8 @@ public class ReleasesController(
     IResourceAuthorizationService authz,
     IConfiguration configuration,
     IPipelineRunService pipelineRunService,
-    IReleaseDeploymentAnnouncer deploymentAnnouncer) : ControllerBase
+    IReleaseDeploymentAnnouncer deploymentAnnouncer,
+    IReleaseStatusRestoreService statusRestore) : ControllerBase
 {
     /// <summary>
     /// Releases of every project a server is involved in.
@@ -38,7 +39,7 @@ public class ReleasesController(
         return Ok(await service.GetServerReleasesAsync(serverId, request, ct));
     }
 
-    /// <summary>Recette R-224: the project and pipeline names a server's releases list filters offer.</summary>
+    /// <summary>The project and pipeline names a server's releases list filters offer.</summary>
     [HttpGet("/api/servers/{serverId:int}/releases/filter-values")]
     public async Task<ActionResult<ReleaseFilterValuesDto>> GetServerReleaseFilterValues(int serverId, CancellationToken ct)
     {
@@ -48,8 +49,8 @@ public class ReleasesController(
         return Ok(await service.GetReleaseFilterValuesAsync(null, null, serverId, ct));
     }
 
-    /// <summary>Recette R-224: the project and pipeline names the releases list filters offer, across
-    /// the releases the caller can read (of one project when <paramref name="projectId"/> is set).</summary>
+    /// <summary>The project and pipeline names the releases list filters offer, across the releases
+    /// the caller can read (of one project when <paramref name="projectId"/> is set).</summary>
     [HttpGet("filter-values")]
     public async Task<ActionResult<ReleaseFilterValuesDto>> GetReleaseFilterValues([FromQuery] int? projectId, CancellationToken ct)
     {
@@ -65,7 +66,7 @@ public class ReleasesController(
     {
         var accessibleIds = await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Release, Permission.Read, ct);
         if (accessibleIds is { Count: 0 }) return Ok(new PaginatedResult<ReleaseDto>());
-        // PLAN-005 lot 5 / D40: deployable=true narrows to what a deployment's release restore accepts.
+        // deployable=true restricts results to releases whose payload can be restored.
         return Ok(await service.GetReleasesAsync(projectId, request, accessibleIds, ct, deployable));
     }
 
@@ -118,6 +119,24 @@ public class ReleasesController(
         return AcceptedAtAction(nameof(GetRelease), new { id = result.Id }, result);
     }
 
+    /// <summary>Decision D2: runs a complete pipeline again from the commit of an archived release, the
+    /// snapshot pinned to that commit (definition and workspace), authorized like any other launch.</summary>
+    [HttpPost("{id:int}/relaunch")]
+    public async Task<ActionResult<PipelineRunDto>> RelaunchFromCommit(int id, [FromBody] TriggerReleaseBuildRequest request, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Release, id, Permission.Write, ct))
+            return Forbid();
+        var release = await service.GetReleaseAsync(id, ct);
+        if (release is null) return NotFound();
+        if (!ReleaseRelaunch.CanRelaunch(release.Status, release.CommitHash))
+            return BadRequest("Only an archived release with a full commit hash can be relaunched from its commit.");
+        var branch = PipelineBranchValidator.IsValid(release.BranchName) ? release.BranchName : null;
+        var (refusal, authorizedRun) = await AuthorizePipelineLaunchAsync(request.PipelineId, ct, branch, release.CommitHash);
+        if (refusal is not null) return refusal;
+        var run = await service.RelaunchFromCommitAsync(id, request, authorizedRun!, ct);
+        return Accepted(run);
+    }
+
     [HttpPost("{id:int}/rollback")]
     public async Task<ActionResult<ReleaseRollbackDto>> Rollback(int id, [FromBody] RollbackReleaseRequest request, CancellationToken ct)
     {
@@ -134,6 +153,21 @@ public class ReleasesController(
         if (refusal is not null) return refusal;
         var result = await service.RollbackReleaseAsync(id, request, authorizedRun!, ct);
         return AcceptedAtAction(nameof(GetRelease), new { id }, result);
+    }
+
+    /// <summary>Recette R-13: puts a release whose recorded status is wrong back to a status its deployment
+    /// history can end in (the release production still serves, left Failed, becomes Deployed again). A record
+    /// correction over the project's deployment history: Release.Write and Project.Admin, reason audited.</summary>
+    [HttpPost("{id:int}/status")]
+    public async Task<ActionResult<ReleaseDto>> RestoreStatus(int id, [FromBody] RestoreReleaseStatusRequest request, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Release, id, Permission.Write, ct))
+            return Forbid();
+        var release = await service.GetReleaseAsync(id, ct);
+        if (release is null) return NotFound();
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, release.ProjectId, Permission.Admin, ct))
+            return Forbid();
+        return Ok(await statusRestore.RestoreAsync(id, request, ct));
     }
 
     [HttpPost("{id:int}/promote")]
@@ -163,12 +197,19 @@ public class ReleasesController(
         var runContext = await pipelineRunService.GetRunPipelineContextAsync(pipelineRunId, ct);
         if (runContext?.ProjectId != projectId)
             return Forbid();
+        // A "run to end" run went past a failure a normal run stops at: whatever it would publish
+        // carries no proof, so it publishes nothing.
+        if (await pipelineRunService.HasRunToEndFailureAsync(pipelineRunId, ct))
+            return BadRequest(new ApiError
+            {
+                Message = "This run was launched in run-to-end mode and a step already failed: it cannot publish a release."
+            });
 
         var result = await service.CreateReleaseFromPipelineAsync(
             projectId, pipelineRunId, request.Version, request.Changelog,
             request.CommitHash, request.TagName, request.BranchName, request.ArtifactPipelineRunId,
             request.Deployed, ct);
-        // R-520: a release step that records its release as deployed is a deployment like any other.
+        // A release step that records its release as deployed is a deployment like any other.
         if (request.Deployed && result.Status == ReleaseStatus.Deployed)
             await deploymentAnnouncer.AnnounceAsync(result.Id, pipelineRunId, agentServerId, ct);
         return CreatedAtAction(nameof(GetRelease), new { id = result.Id }, result);
@@ -181,7 +222,7 @@ public class ReleasesController(
     public async Task<IActionResult> Webhook(CancellationToken ct)
     {
         var secret = configuration["Webhook:Secret"];
-        // R2-120: without a secret the release webhook is not enabled on this instance: 404 with the
+        // Without a secret the release webhook is not enabled on this instance: 404 with the
         // ApiError body (never 503, which reads as an outage), and nothing is read or processed.
         if (string.IsNullOrEmpty(secret))
             return NotFound(new ApiError { Message = "Release webhook is not enabled on this instance." });
@@ -208,11 +249,13 @@ public class ReleasesController(
     /// preparation authorized here is the one the service launches.
     /// </summary>
     private async Task<(ActionResult? Refusal, PipelineRunPreparation? Run)> AuthorizePipelineLaunchAsync(
-        int pipelineId, CancellationToken ct)
+        int pipelineId, CancellationToken ct, string? sourceBranch = null, string? commitHash = null)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId, Permission.Write, ct))
             return (Forbid(), null);
-        var preparation = await pipelineRunService.PrepareRunAsync(pipelineId, ct: ct);
+        var preparation = commitHash is null
+            ? await pipelineRunService.PrepareRunAsync(pipelineId, ct: ct)
+            : await pipelineRunService.PrepareRunAtCommitAsync(pipelineId, sourceBranch, commitHash, ct);
         if (preparation is null) return (NotFound(), null);
         var authorizedRun = await pipelineRunService.ResolveRunParametersAsync(preparation, null, ct);
         foreach (var serverId in authorizedRun.TargetServerIds)

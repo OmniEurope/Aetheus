@@ -26,11 +26,13 @@ public static class NotificationLabels
     {
         [NotificationEventTypes.PipelineFailed] = OmniIconName.Error,
         [NotificationEventTypes.PipelineSucceeded] = OmniIconName.CheckCircle,
+        [NotificationEventTypes.PipelineRejected] = OmniIconName.Prohibit,
         [NotificationEventTypes.PipelineApprovalRequested] = OmniIconName.Stamp,
         [NotificationEventTypes.PipelineLaunchRefused] = OmniIconName.Prohibit,
         [NotificationEventTypes.ReleaseDeployed] = OmniIconName.CloudArrowUp,
         [NotificationEventTypes.AgentUpdateCompleted] = OmniIconName.Upgrade,
         [NotificationEventTypes.AgentUpdateFailed] = OmniIconName.Error,
+        [NotificationEventTypes.AiTaskCompleted] = OmniIconName.Sparkle,
         ["app.down"] = OmniIconName.WifiSlash,
         ["app.recovered"] = OmniIconName.WifiHigh,
         ["SecretExpiring"] = OmniIconName.Key
@@ -47,7 +49,7 @@ public static class NotificationLabels
         ("certbot.", OmniIconName.Lock)
     ];
 
-    /// <summary>Recette R-193: the one icon of a row in the bell, on its left, says what happened.</summary>
+    /// <summary>The one icon of a row in the bell, on its left, says what happened.</summary>
     public static OmniIconName EventIcon(string eventType)
     {
         if (ExactIcons.TryGetValue(eventType, out var icon)) return icon;
@@ -60,6 +62,17 @@ public static class NotificationLabels
 
     public static string StatusLabel(IStringLocalizer localizer, NotificationDeliveryStatus status) =>
         localizer.Localize(status);
+
+    /// <summary>Recette R3-16: an event the catalogue never e-mails (a finished AI task) has no e-mail
+    /// outcome to show; its badge says it lives in the inbox, not that e-mail is not configured.</summary>
+    public static bool IsInboxOnly(string eventType) =>
+        NotificationEventTypes.Find(eventType) is { SentByEmail: false };
+
+    public static string StatusLabel(IStringLocalizer localizer, NotificationDeliveryDto delivery) =>
+        IsInboxOnly(delivery.EventType) ? localizer["NotificationInboxOnly"] : StatusLabel(localizer, delivery.Status);
+
+    public static OmniTone StatusVariant(NotificationDeliveryDto delivery) =>
+        IsInboxOnly(delivery.EventType) ? OmniTone.Neutral : StatusVariant(delivery.Status);
 
     /// <summary>Recette R-169: waiting, sent, failed and not configured each have their own shape.</summary>
     public static OmniIconName StatusIcon(NotificationDeliveryStatus status) => status switch

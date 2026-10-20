@@ -17,15 +17,15 @@ public partial class PipelinesList : IAsyncDisposable
     [Inject] private PermissionService Permissions { get; set; } = default!;
     [Inject] private PipelineRunGate RunGate { get; set; } = default!;
     [Inject] private PipelineRunDialogCoordinator RunDialogs { get; set; } = default!;
-    [Inject] private IJSRuntime Js { get; set; } = default!;
+    [Inject] private IUserPreferences Preferences { get; set; } = default!;
     [Inject] private PipelineImportState ImportState { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private ILogger<PipelinesList> Logger { get; set; } = default!;
-    [Inject] private AuthStateProvider Auth { get; set; } = default!;
     [Inject] private PageStateCache PageState { get; set; } = default!;
+    [Inject] private TimeProvider Clock { get; set; } = default!;
 
-    /// <summary>Name of the page-header outlet the list fills with its actions (recette R-124): the list has no toolbar row of its own. The
-    /// three hosts pass it to their <see cref="PageHeader"/> as <c>ActionsSection</c>.</summary>
+    /// <summary>Fill the host's PageHeader ActionsSection so all list hosts place actions
+    /// consistently without a separate toolbar.</summary>
     internal const string HeaderActionsSection = "pipelines-header-actions";
 
     /// <summary>Project filter (project detail scope). Mutually exclusive with <see cref="ServerId"/>.</summary>
@@ -41,7 +41,8 @@ public partial class PipelinesList : IAsyncDisposable
     private bool IsProjectScope => ProjectId.HasValue;
     private bool IsGlobal => !IsServerScope && !IsProjectScope;
 
-    // Recette R-121: the "with children" and "without children" groups are one list now.
+    // Keep pipelines with and without children in one catalogue so filters and ordering apply to
+    // the complete list.
     private List<PipelineDependencyDto> _pipelines = [];
     private List<PipelineRunDto> _recentRuns = [];
     private Dictionary<int, PipelineFleetItemDto> _fleetItems = [];
@@ -53,12 +54,12 @@ public partial class PipelinesList : IAsyncDisposable
     private bool _canWrite;
     private bool _favoritesOnly;
     private bool _withChildrenOnly;
-    // Recette R-167: every filter takes one value or several.
+    // Every filter takes one value or several.
     private readonly HashSet<PipelineCatalogStatus> _statusFilters = [];
 
-    // Recette R-120 / R-215: the Catalogue and Runs views (PipelineListViews).
+    // The Catalogue and Runs views (PipelineListViews).
     private PipelineListViews? _views;
-    private PipelineListViews Views => _views ??= new PipelineListViews(Js, Logger, () => $"aetheus.pipelines.view-tab.{Auth.Username ?? "anonymous"}");
+    private PipelineListViews Views => _views ??= new PipelineListViews(Preferences);
 
     /// <summary>The view named in the URL (<c>?tab=catalog|runs</c>). A slug of an enclosing tab set
     /// (the pipelines hub's <c>?tab=used</c>) names no view here and leaves the current one.</summary>
@@ -101,14 +102,18 @@ public partial class PipelinesList : IAsyncDisposable
 
         _triggerOptions = [.. Enum.GetValues<PipelineTriggerType>().Select(trigger => new OmniOption<PipelineTriggerType>(trigger, L.Localize(trigger)))];
 
-        // The tabs render once the overview is in, so the remembered tab is known before they do.
-        // Recette R2-087: a return shows the list as it was left, filters included, and refreshes it.
+        // Restore the remembered view and filters before rendering the tabs, then refresh so
+        // returning users retain their context.
         _stateTicket = PageState.Begin();
         _overviewLoaded = RestoreState();
         _loading = !_overviewLoaded;
         await Views.RestoreAsync();
         await LoadOverviewAsync();
         RememberState();
+        // The catalogue is drawn as soon as it is read: the realtime hubs below only refresh it, and
+        // ComponentBase would otherwise hold this render until both hubs have started or failed (a
+        // negotiate that never answers kept the page on its loader).
+        StateHasChanged();
 
         await StartHubAsync();
     }
@@ -129,8 +134,8 @@ public partial class PipelinesList : IAsyncDisposable
 
     private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.Pipeline);
 
-    /// <summary>The catalogue as the table shows it: every filter applied, starred pipelines first
-    /// (recette R-119).</summary>
+    /// <summary>The catalogue as the table shows it: every filter applied, starred pipelines
+    /// first.</summary>
     private IReadOnlyList<PipelineDependencyDto> FilteredCatalog => PipelineCatalogView.DefaultOrder(
         FilteredBeforeStatus.Where(item => PipelineCatalogView.MatchesAny(item, _statusFilters, _fleetItems)),
         _favoritePipelineIds);
@@ -178,9 +183,8 @@ public partial class PipelinesList : IAsyncDisposable
 
     private async Task LoadOverviewAsync()
     {
-        // R-10: the page-wide loader is for a page with nothing to show yet. A launch, a run event or
-        // the refresh button reload in place: pressing Run used to replace the whole page by the
-        // loader, over the run it had just added.
+        // Use the page-wide loader only before any content exists; subsequent refreshes keep the
+        // current list and newly launched run visible.
         _loading = !_overviewLoaded;
         try
         {
@@ -206,9 +210,8 @@ public partial class PipelinesList : IAsyncDisposable
     {
         try
         {
-            // PLAN-003 lot 12: this used to page through the WHOLE fleet - every pipeline of every
-            // project, MaxPageSize at a time - and then keep only the rows of the project being
-            // looked at. The endpoint has always accepted a projectId; the page simply never sent it.
+            // Pass projectId to the API so project-scoped loading does not fetch the whole fleet
+            // before filtering it.
             var items = new List<PipelineFleetItemDto>();
             var page = 1;
             while (true)
@@ -411,9 +414,9 @@ public partial class PipelinesList : IAsyncDisposable
     private async Task OnPipelineFileSelected(IReadOnlyList<IBrowserFile> files)
     {
         var file = files.Single();
-        if (file.Size == 0 || file.Size > 50_000) return;
+        if (file.Size == 0 || file.Size > PipelineDefinitionLimits.MaxYamlLength) return;
 
-        using var reader = new StreamReader(file.OpenReadStream(50_000));
+        using var reader = new StreamReader(file.OpenReadStream(PipelineDefinitionLimits.MaxYamlLength));
         var yaml = await reader.ReadToEndAsync();
         if (string.IsNullOrWhiteSpace(yaml)) return;
 
@@ -434,10 +437,9 @@ public partial class PipelinesList : IAsyncDisposable
 
     private async Task StartHubAsync()
     {
-        // Recette R2-100: the page can be left while its overview loads. DisposeAsync then cancels and
-        // disposes the live lifetime, and reading its Token here threw ObjectDisposedException into the
-        // error boundary. Cancellation always precedes disposal, so IsCancellationRequested (which never
-        // throws) says the page is gone; the token is read once, while the source is alive.
+        // Check IsCancellationRequested before reading the token because cancellation precedes
+        // disposal and this property remains safe after disposal; capture the token while the
+        // source is alive.
         if (_liveLifetime.IsCancellationRequested) return;
         var lifetime = _liveLifetime.Token;
         try
@@ -458,8 +460,10 @@ public partial class PipelinesList : IAsyncDisposable
                 await SyncRunGroupsAsync();
                 await RefreshLiveAsync();
             });
-            await _hubConnection.StartAsync();
-            await _hubConnection.InvokeAsync("JoinPipelineUpdatesGroup");
+            // Bound to the page: leaving it cancels a negotiate that does not answer instead of holding
+            // the disposal until the HTTP timeout.
+            await _hubConnection.StartAsync(lifetime);
+            await _hubConnection.InvokeAsync("JoinPipelineUpdatesGroup", lifetime);
             await SyncRunGroupsAsync();
             Logger.LogInformation("Pipeline live connection subscribed");
         }
@@ -480,8 +484,8 @@ public partial class PipelinesList : IAsyncDisposable
                 await _entityHub.InvokeAsync("JoinEntityUpdates", ResourceType.Pipeline);
                 await RefreshLiveAsync();
             });
-            await _entityHub.StartAsync();
-            await _entityHub.InvokeAsync("JoinEntityUpdates", ResourceType.Pipeline);
+            await _entityHub.StartAsync(lifetime);
+            await _entityHub.InvokeAsync("JoinEntityUpdates", ResourceType.Pipeline, lifetime);
             Logger.LogInformation("Pipeline entity live connection subscribed");
         }
         catch (Exception exception)
@@ -499,7 +503,7 @@ public partial class PipelinesList : IAsyncDisposable
         {
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                await Task.Delay(TimeSpan.FromSeconds(5), Clock, ct);
                 var recovered = false;
                 if (_hubConnection is { State: HubConnectionState.Disconnected })
                 {

@@ -82,7 +82,7 @@ public class EnvironmentEditExtendedTests : BunitContext
     {
         SetupStubs();
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var isNew = (bool)typeof(EnvironmentEdit).GetProperty("_isNew", Priv)!.GetValue(cut.Instance)!;
         Assert.True(isNew);
@@ -93,7 +93,7 @@ public class EnvironmentEditExtendedTests : BunitContext
     {
         SetupStubs();
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)0));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var isNew = (bool)typeof(EnvironmentEdit).GetProperty("_isNew", Priv)!.GetValue(cut.Instance)!;
         Assert.True(isNew);
@@ -104,7 +104,7 @@ public class EnvironmentEditExtendedTests : BunitContext
     {
         SetupStubs(1);
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var isNew = (bool)typeof(EnvironmentEdit).GetProperty("_isNew", Priv)!.GetValue(cut.Instance)!;
         Assert.False(isNew);
@@ -117,7 +117,7 @@ public class EnvironmentEditExtendedTests : BunitContext
     {
         SetupStubs(1);
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var detail = (EnvironmentDto?)typeof(EnvironmentEdit)
             .GetField("_detail", Priv)!.GetValue(cut.Instance);
@@ -130,7 +130,7 @@ public class EnvironmentEditExtendedTests : BunitContext
     {
         SetupStubs();
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var model = typeof(EnvironmentEdit)
             .GetField("_model", Priv)!.GetValue(cut.Instance);
@@ -142,7 +142,7 @@ public class EnvironmentEditExtendedTests : BunitContext
     {
         SetupStubs();
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var projects = (List<ProjectDto>?)typeof(EnvironmentEdit)
             .GetField("_projects", Priv)!.GetValue(cut.Instance);
@@ -163,7 +163,7 @@ public class EnvironmentEditExtendedTests : BunitContext
         nav.NavigateTo("http://localhost/?ProjectId=1");
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // The ?ProjectId=1 query matches a loaded project, so the new model pre-selects it.
         var model = typeof(EnvironmentEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
@@ -180,7 +180,7 @@ public class EnvironmentEditExtendedTests : BunitContext
         _handler.SetJsonResponse(HttpMethod.Post, "api/environments", new EnvironmentDto { Id = 42, Name = "New" });
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // Set a valid model name to allow submit
         var modelField = typeof(EnvironmentEdit).GetField("_model", Priv)!;
@@ -203,7 +203,7 @@ public class EnvironmentEditExtendedTests : BunitContext
         _handler.SetJsonResponse(HttpMethod.Put, "api/environments/1", new EnvironmentDto { Id = 1, Name = "Updated" });
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var modelField = typeof(EnvironmentEdit).GetField("_model", Priv)!;
         var model = modelField.GetValue(cut.Instance)!;
@@ -225,7 +225,7 @@ public class EnvironmentEditExtendedTests : BunitContext
         _handler.SetJsonResponse(HttpMethod.Post, "api/environments", (EnvironmentDto?)null);
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var modelField = typeof(EnvironmentEdit).GetField("_model", Priv)!;
         var model = modelField.GetValue(cut.Instance)!;
@@ -249,7 +249,7 @@ public class EnvironmentEditExtendedTests : BunitContext
         _handler.SetJsonResponse("api/environments/1", env);
 
         var cut = Render<EnvironmentEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var detail = (EnvironmentDto?)typeof(EnvironmentEdit)
             .GetField("_detail", Priv)!.GetValue(cut.Instance);

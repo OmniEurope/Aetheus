@@ -163,17 +163,13 @@ public class ServerApacheSectionTests : BunitContext
         Assert.Contains(_handler.Requests, r => r.Method == "PUT" && r.Url.Contains("api/servers/1/apache/vhosts/site/config"));
     }
 
-    // Item #5.4 - .htaccess editor removed from the UI; the back endpoints + API client
-    // methods are preserved but no longer reachable from the front. The associated tests
-    // (OpenHtaccessEditorAsync, SaveHtaccessAsync, HandleTaskCompleted_ApacheHtaccess) are
-    // removed since the front-side functionality is gone.
 
     [Fact]
     public void HandleTaskCompleted_ApacheLogs_SetsContent()
     {
         var cut = RenderSection();
         var notification = new TaskCompletedNotification { TaskName = "Apache logs fetch", Output = "log output here" };
-        cut.InvokeAsync(() => { cut.Instance.HandleTaskCompleted(notification); return Task.CompletedTask; });
+        cut.InvokeAsync(() => { cut.Instance.HandleTaskCompleted(_handler.Logged(notification)); return Task.CompletedTask; });
         var content = (string?)typeof(ServerApacheSection).GetField("_logContent", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
         Assert.Equal("log output here", content);
     }
@@ -188,7 +184,7 @@ public class ServerApacheSectionTests : BunitContext
         typeof(ServerApacheSection).GetField("_configEditor", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, model);
 
         var notification = new TaskCompletedNotification { TaskName = "Apache config read", Output = "<VirtualHost>...</VirtualHost>" };
-        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(notification));
+        await cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(_handler.Logged(notification)));
 
         Assert.Equal("<VirtualHost>...</VirtualHost>", model.Content);
         Assert.False(model.Loading);

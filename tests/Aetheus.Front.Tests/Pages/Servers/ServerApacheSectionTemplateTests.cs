@@ -183,8 +183,8 @@ public class ServerApacheSectionTemplateTests : BunitContext
     [Fact]
     public void StopButton_IsDisabled_WhileAnotherApacheActionRuns()
     {
-        // PLAN-005 lot 4: Stop carries no veil of its own, so its Disabled keeps the "an action is
-        // running" interlock; without it Stop could be sent in the middle of a Restart.
+        // Stop carries no veil of its own, so its Disabled keeps the "an action is running"
+        // interlock; without it Stop could be sent in the middle of a Restart.
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/servers/1/apache/action", async ct =>
         {
@@ -196,18 +196,49 @@ public class ServerApacheSectionTemplateTests : BunitContext
             p.Add(x => x.Server, BuildServer(isRunning: true));
             p.Add(x => x.ServerId, 1);
         });
+        // R3-42: Restart is the bar's button, Stop an entry of its "More actions" menu (kept open here).
         AngleSharp.Dom.IElement Button(string text) => cut.FindAll("button").Single(b => b.TextContent.Trim() == text);
-        Assert.False(Button("Stop").HasAttribute("disabled"));
+        AngleSharp.Dom.IElement StopEntry() => cut.FindAll(".omni-menu__item").Single(b => b.TextContent.Trim() == "Stop");
+        cut.Find(".omni-overflow-menu__trigger").Click();
+        Assert.False(StopEntry().HasAttribute("disabled"));
 
         Button("Restart").Click();
 
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("btn-busy", Button("Restart").ClassName, StringComparison.Ordinal);
-            Assert.True(Button("Stop").HasAttribute("disabled"));
+            Assert.True(StopEntry().HasAttribute("disabled"));
         });
         release.SetResult();
-        cut.WaitForAssertion(() => Assert.False(Button("Stop").HasAttribute("disabled")));
+        // Loaded-machine ceiling: the action's answer comes back through the thread pool before its
+        // handler ends and renders; a failure left here was a wait whose first check never ran.
+        cut.WaitForAssertion(() => Assert.False(StopEntry().HasAttribute("disabled")));
+    }
+
+    [Fact]
+    public void TheBarHasOneButton_Restart_AndStartStopReloadTestAreInTheMoreActionsMenu()
+    {
+        // Recette R3-41/R3-42 (Apache: Restart is the main action, decided by the user).
+        _handler.SetJsonResponse(HttpMethod.Post, "api/servers/1/apache/action", new { });
+        var cut = Render<ServerApacheSection>(p =>
+        {
+            p.Add(x => x.Server, BuildServer(isRunning: true));
+            p.Add(x => x.ServerId, 1);
+        });
+
+        var restart = Assert.Single(cut.FindAll(".omni-row > .omni-button"));
+        Assert.Contains("Restart", restart.TextContent, StringComparison.Ordinal);
+        Assert.Contains("omni-button--primary", restart.ClassName, StringComparison.Ordinal);
+
+        cut.Find(".omni-row > .omni-overflow-menu .omni-overflow-menu__trigger").Click();
+        var entries = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item");
+        Assert.Equal(["Start", "Stop", "Reload", "Test"], entries.Select(e => e.TextContent.Trim()).ToArray());
+        Assert.True(entries[0].HasAttribute("disabled"), "Start stays disabled while Apache runs.");
+        Assert.Contains("danger", entries[1].ClassName, StringComparison.OrdinalIgnoreCase);
+
+        entries[2].Click();
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, r =>
+            r.Method == "POST" && r.Url.Contains("apache/action", StringComparison.Ordinal)));
     }
 
     [Fact]

@@ -24,8 +24,8 @@ public sealed record PipelineStepDefinition
     /// <summary>Marks a release created after a verified production go-live as the project's active
     /// deployment. The backend demotes the previously active release atomically.</summary>
     public bool Deployed { get; init; }
-    /// <summary>Recette R2-001: for a <c>type: advance-branch</c> step, the branch the backend
-    /// fast-forwards onto the commit of the release this run deploys (the release named by
+    /// <summary>For a <c>type: advance-branch</c> step, the branch the backend fast-forwards onto
+    /// the commit of the release this run deploys (the release named by
     /// <c>AETHEUS_CANDIDATE_VERSION</c>, as its candidate recorded it). The backend hosts the
     /// repository and writes the ref itself, so the agent needs no git credential.</summary>
     public string? Branch { get; init; }
@@ -36,12 +36,11 @@ public sealed record PipelineStepDefinition
     /// the step, because a version names exactly one commit.</summary>
     public string? Tag { get; init; }
     public List<string> TargetFiles { get; init; } = [];
-    /// <summary>PLAN-003 2.2 (4.5): for a <c>type: artifacts</c> step, the name the files matched by
-    /// <see cref="TargetFiles"/> are stored and restored under. Several such steps in one stage publish
-    /// several artifacts, where each used to need a stage of its own. Maps to YAML <c>artifact_name</c>.</summary>
+    /// <summary>Names the artifact published by an artifacts step from <see cref="TargetFiles"/>,
+    /// allowing multiple artifacts per stage; maps to YAML artifact_name.</summary>
     public string? ArtifactName { get; init; }
-    /// <summary>PLAN-003 2.4: the category a <c>type: lint</c> step publishes its SARIF under,
-    /// <c>code-quality</c> (default) or <c>accessibility</c>. Maps to YAML <c>analysis_category</c>.</summary>
+    /// <summary>Sets the lint SARIF category to code-quality (default) or accessibility through
+    /// YAML analysis_category.</summary>
     public string? AnalysisCategory { get; init; }
     /// <summary>Run variables this step publishes at run time from a script (a
     /// <c>##aetheus[setvariable]</c> line the step text does not show). Declaring them is what lets a
@@ -63,31 +62,49 @@ public sealed record PipelineStepDefinition
     /// <summary>Workspace-relative prompt file for a <c>type: ai</c> step.</summary>
     public string? PromptFile { get; init; }
 
-    /// <summary>Name of the organization-scoped AI runner profile.</summary>
+    /// <summary>Name of the organization-scoped AI runner profile. Optional: when it names no profile that
+    /// can run, the run takes the pipeline's assigned profile, then the organization's most preferred
+    /// usable profile, and says which in the step log.</summary>
     public string? Profile { get; init; }
 
     /// <summary>When true, only an explicit <c>VERDICT: PASS</c> makes the step succeed.</summary>
     public bool Gate { get; init; }
 
-    /// <summary>Workspace-relative paths explicitly highlighted to the AI runner.</summary>
+    /// <summary>type: ai only. Workspace-relative files whose contents the agent adds to the prompt
+    /// (a directory contributes its file list), within a fixed size budget. Maps to YAML
+    /// <c>context_paths</c>.</summary>
     public List<string> ContextPaths { get; init; } = [];
 
     /// <summary>type: ai only. An advisory step informs and never decides: its failure, including a
-    /// profile that does not exist or a CLI that is missing, marks the step failed with its reason and
-    /// changes nothing else. Dependents still run and the run's status is computed as if the step had
-    /// not failed, so it cannot turn a run Partial nor stop an <c>on_success</c> chain. Incompatible
-    /// with <see cref="Gate"/>, a verdict nobody may act on. Maps to YAML <c>advisory</c>.</summary>
+    /// profile that does not exist or a provider that does not answer, marks the step failed with its
+    /// reason and changes nothing else. Dependents still run and the run's status is computed as if the
+    /// step had not failed, so it cannot turn a run Partial nor stop an <c>on_success</c> chain.
+    /// Incompatible with <see cref="Gate"/>, a verdict nobody may act on. Maps to YAML <c>advisory</c>.</summary>
     public bool Advisory { get; init; }
 
-    /// <summary>type: ai only. Workspace-relative SARIF 2.1.0 file the CLI writes its findings to. The
-    /// agent publishes it as an analysis report (scanner <c>ai-review</c>, code quality) after the CLI
-    /// exits. Missing or rejected on an advisory step is a warning; otherwise it fails the step. Maps to
-    /// YAML <c>findings_sarif</c>.</summary>
+    /// <summary>type: ai only. True asks the model to end its answer with a JSON findings block; the
+    /// agent converts it to SARIF 2.1.0 and publishes it as an analysis report (scanner
+    /// <c>ai-review</c>, code quality) in the run's Gate tab. A missing or malformed block is a warning
+    /// on an advisory step and a failure otherwise. Maps to YAML <c>findings</c>.</summary>
+    public bool Findings { get; init; }
+
+    /// <summary>type: ai with <see cref="Findings"/> only. When the model reports no finding, the agent
+    /// publishes one synthetic note instead, its message starting with <c>[FAKE]</c>, so an experiment
+    /// can see the whole chain (real API call, SARIF, Gate tab) work on a clean commit. It never replaces
+    /// a real finding. Maps to YAML <c>findings_placeholder</c>.</summary>
+    public bool FindingsPlaceholder { get; init; }
+
+    /// <summary>type: ai only. A commit range (<c>A..B</c>, run variables substituted) whose
+    /// <c>git log --stat</c> and <c>git diff</c> the agent adds to the prompt from the workspace, within a
+    /// fixed size budget. Maps to YAML <c>git_range</c>.</summary>
+    public string? GitRange { get; init; }
+
+    /// <summary>Recognizes findings_sarif only to reject it with an explicit validation error
+    /// because API models do not write files. Use <see cref="Findings"/> instead.</summary>
     public string? FindingsSarif { get; init; }
 
-    /// <summary>type: ai only. <c>false</c> skips the capture of the workspace diff after the run, for a
-    /// read-only review in a shared workspace whose untracked files (restored artifacts) are not the
-    /// AI's work. Unset keeps the capture. Maps to YAML <c>capture_diff</c>.</summary>
+    /// <summary>Recognizes capture_diff only to reject it with an explicit validation error because
+    /// API calls do not change workspace files.</summary>
     public bool? CaptureDiff { get; init; }
 
     /// <summary>DAST target for a scanner that requires one. It must be an absolute HTTP(S) URL and is
@@ -102,9 +119,9 @@ public sealed record PipelineStepDefinition
     /// the exact allowlisted hostname of the trusted non-production environment.</summary>
     public string? ApiSpecificationUrl { get; init; }
 
-    /// <summary>Recette R2-099: several definition URLs for one <c>zap-api</c> step, in place of
-    /// <see cref="ApiSpecificationUrl"/>. The agent scans them one after the other, each bounded to
-    /// <see cref="TimeoutSeconds"/> divided by their number, and publishes one merged report.</summary>
+    /// <summary>Several definition URLs for one <c>zap-api</c> step, in place of <see
+    /// cref="ApiSpecificationUrl"/>. The agent scans them one after the other, each bounded to <see
+    /// cref="TimeoutSeconds"/> divided by their number, and publishes one merged report.</summary>
     public List<string> ApiSpecificationUrls { get; init; } = [];
 
     /// <summary>ZAP API definition format: <c>openapi</c> or <c>graphql</c>.</summary>
@@ -136,10 +153,8 @@ public sealed record PipelineStepDefinition
     /// When set, the step fails if the highest method CC exceeds it (respecting continue_on_error).</summary>
     public int? MaxComplexity { get; init; }
 
-    // ── Typed .NET test run (type: dotnet-test) ────────────────────────────────────────────────────
-    // PLAN-006 lot 11.3. The command is the trivial part; what this step exists for is classifying its
-    // result, so a suite that ran and failed is published as a finding while a suite whose evidence
-    // cannot be trusted fails the run outright. Every project that wrote that in shell got it wrong.
+    // Typed dotnet-test steps distinguish valid test failures, published as findings, from
+    // untrustworthy evidence that fails execution outright.
 
     /// <summary>The test project, relative to the workspace. Required for <c>type: dotnet-test</c>.
     /// Named <c>test_project</c> rather than <c>project</c> because <c>project</c> already means the
@@ -167,10 +182,17 @@ public sealed record PipelineStepDefinition
     /// <summary>Build configuration for the test run. Defaults to Release.</summary>
     public string? Configuration { get; init; }
 
-    // ── Aggregated gate (type: gate-status) ───────────────────────────────────────────────────────
-    // PLAN-006 lot 11.3. Typed for one reason: a status nobody published must read as a failure. In
-    // shell the default falls the other way, and a gate that passes because its input never arrived
-    // is the worst way for a gate to fail.
+    /// <summary>The dotnet executable of a <c>type: dotnet-test</c> step, for instance
+    /// <c>$(DOTNET)</c> published by the <c>ensure-dotnet-sdk</c> function: <c>dotnet</c> or an
+    /// absolute path. Defaults to the <c>dotnet</c> on the host's PATH.</summary>
+    public string? Dotnet { get; init; }
+
+    /// <summary>Absolute directories a <c>type: dotnet-test</c> step prepends to the test host's PATH,
+    /// for the tools its tests start (a pinned Node.js, for instance).</summary>
+    public List<string> ToolPaths { get; init; } = [];
+
+    // Typed gate-status steps fail when no status was published, preventing absent evidence from
+    // passing a gate.
 
     /// <summary>The run variables to aggregate. Required for <c>type: gate-status</c>.</summary>
     public List<string> StatusVariables { get; init; } = [];
@@ -184,6 +206,16 @@ public sealed record PipelineStepDefinition
 
     /// <summary>What the gate is about, used in its log lines.</summary>
     public string? GateLabel { get; init; }
+
+    // Typed aetheus steps run one function of PipelineFunctionCatalog instead of a versioned script.
+
+    /// <summary>type: aetheus - the catalog function to run. Required for that type; an unknown name
+    /// is refused at save time.</summary>
+    public string? Function { get; init; }
+
+    /// <summary>type: aetheus - the function's parameters, keyed by the names its catalog entry
+    /// declares. Values accept run-variable substitution. Maps to YAML <c>with</c>.</summary>
+    public Dictionary<string, string> With { get; init; } = [];
 
     // ── Cross-agent deploy (type: deploy) ──────────────────────────────────────────────────────────
     // The four fields below configure a deployment step. The backend resolves which artifact to ship
@@ -388,9 +420,8 @@ public sealed record PipelineStepDefinition
     /// previous colour is still serving. Maps to <c>migrations_dir</c>.</summary>
     public string? MigrationsDir { get; init; }
 
-    /// <summary>type: bluegreen-switch - PLAN-003 2.7: minutes the host gives the deployment to be
-    /// committed before it puts traffic back on the previous colour by itself. Empty or 0 arms
-    /// nothing. Maps to <c>confirm_minutes</c>.</summary>
+    /// <summary>For bluegreen-switch, confirm_minutes is the host rollback deadline in minutes
+    /// unless deployment is committed. Empty or zero leaves the deadline unarmed.</summary>
     public string? ConfirmMinutes { get; init; }
 
     /// <summary>type: bluegreen-* - comma-separated names of run variables to expose to the

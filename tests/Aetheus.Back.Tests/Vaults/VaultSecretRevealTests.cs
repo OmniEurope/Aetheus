@@ -11,7 +11,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R-292: copying a secret's value reads it once, audited, never cached, Write only.</summary>
+/// <summary>Copying a secret's value reads it once, audited, never cached, Write only.</summary>
 public class VaultSecretRevealTests
 {
     private readonly IVaultRepository _repo = Substitute.For<IVaultRepository>();

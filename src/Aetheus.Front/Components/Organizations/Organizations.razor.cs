@@ -28,7 +28,7 @@ public partial class Organizations : IAsyncDisposable
         if (!Aetheus.Front.Components.Shared.AdminPageEntry.TryEnter(Auth, Nav, Breadcrumb, L, "Organizations"))
             return;
 
-        // Recette R-316: the search shared with Users and Roles, in the section bar.
+        // The search shared with Users and Roles, in the section bar.
         Search.Changed += ResetSearchAsync;
 
         // Realtime: refresh the list on any org create/update/delete, and on member/project changes
@@ -36,13 +36,14 @@ public partial class Organizations : IAsyncDisposable
         _adminRt = new AdminEntitySubscription(HubFactory);
         await _adminRt.StartAsync(AdminEntities.Organization, () => InvokeAsync(async () =>
         {
-            // Recette R-226: a pushed change refreshes the grid quietly (rows, page, filters kept).
+            // A pushed change refreshes the grid quietly (rows, page, filters kept).
             await RefreshSilentlyAsync(() => _grid?.Refresh() ?? Task.CompletedTask);
             StateHasChanged();
         }));
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// grid.</summary>
     private async Task<PaginatedResult<OrganizationDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -55,7 +56,7 @@ public partial class Organizations : IAsyncDisposable
     {
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, sortDescending) = args.ToSortRequest("Name");
-        // Recette R-210: the header filters, applied by the API.
+        // The header filters, applied by the API.
         var filters = args.ToApiFilters();
         var showLoading = _silentRefreshDepth == 0;
         if (showLoading) _loading = true;
@@ -86,7 +87,7 @@ public partial class Organizations : IAsyncDisposable
         }
     }
 
-    // Recette R-316: forced, the first page reloads even when the grid is already on it.
+    // Forced, the first page reloads even when the grid is already on it.
     private Task ResetSearchAsync() => _grid?.GoToPage(0, forceReload: true) ?? Task.CompletedTask;
 
     private async Task OnCreate()

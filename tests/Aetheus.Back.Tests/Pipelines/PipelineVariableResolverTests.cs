@@ -82,10 +82,9 @@ public class PipelineVariableResolverTests
         Assert.Equal("1.1.12", vars["APP_VERSION"]);
     }
 
-    /// <summary>
-    /// Recette R2-110: every stage is resolved again from the run, so the release number the run was
-    /// created with reaches each one (app-version.sh composes 1.3.<number>), and a run without one reads 0.
-    /// </summary>
+    /// <summary> Every stage is resolved again from the run, so the release number the run was
+    /// created with reaches each one (app-version.sh composes 1.3.<number>), and a run without one
+    /// reads 0. </summary>
     [Fact]
     public async Task ResolveFullVariablesForRunAsync_ExposesTheRunReleaseNumberToEveryStage()
     {
@@ -224,11 +223,8 @@ public class PipelineVariableResolverTests
         Assert.Equal("true", vars["AETHEUS_RUN_SMOKE_CHECKS"]);
     }
 
-    /// <summary>
-    /// D-03: a variables block can fall back. A pipeline referencing a capability the control plane
-    /// does not serve yet stays launchable, and the value it expands to is the default rather than
-    /// the literal text - which used to be baked into the images.
-    /// </summary>
+    /// <summary>Variable fallbacks allow absent capabilities to resolve to explicit defaults rather
+    /// than literal references.</summary>
     [Fact]
     public async Task ResolveFullVariablesForRunAsync_AppliesADefaultForANameNothingProvides()
     {
@@ -283,10 +279,8 @@ public class PipelineVariableResolverTests
         Assert.Equal("smoke:$(SOURCE_COMMIT:-latest)", vars["BROWSER_IMAGE"]);
     }
 
-    /// <summary>
-    /// D-02: a value referencing a name a script publishes (not visible as a setvariable line in the
-    /// step text) used to be refused at every stage dispatch. Declaring it under outputs: is enough.
-    /// </summary>
+    /// <summary>Declaring script-published names under outputs makes them available to stage
+    /// resolution.</summary>
     [Fact]
     public async Task ResolveFullVariablesForRunAsync_AcceptsAReferenceToADeclaredOutput()
     {

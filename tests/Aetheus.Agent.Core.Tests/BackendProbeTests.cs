@@ -78,6 +78,49 @@ public class BackendProbeTests
         Assert.Equal(200, result.HttpStatus);
     }
 
+    [Theory]
+    [InlineData(new string[0], 10)]
+    [InlineData(new[] { "--timeout", "25" }, 25)]
+    [InlineData(new[] { "--TIMEOUT", "25" }, 25)]
+    [InlineData(new[] { "--timeout", "600" }, 60)]
+    [InlineData(new[] { "--timeout", "0" }, 10)]
+    [InlineData(new[] { "--timeout", "-3" }, 10)]
+    [InlineData(new[] { "--timeout", "soon" }, 10)]
+    [InlineData(new[] { "--timeout" }, 10)]
+    [InlineData(new[] { "--probe-backend", "--timeout", "5" }, 5)]
+    public void ParseTimeout_TakesAPositiveTimeoutCappedAtOneMinute(string[] args, int expectedSeconds)
+        => Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), BackendProbe.ParseTimeout(args));
+
+    [Fact]
+    public void CreateHandler_WithoutPinOrInsecureFlag_KeepsPlatformValidation()
+        => Assert.Null(BackendProbe.CreateHandler("https://aetheus.example", allowInsecure: false, pinnedThumbprint: null));
+
+    [Fact]
+    public void CreateHandler_WithAPin_RejectsAMissingCertificate()
+    {
+        using var handler = BackendProbe.CreateHandler("https://aetheus.example", allowInsecure: true, pinnedThumbprint: "AA:BB");
+
+        var callback = Assert.IsType<SocketsHttpHandler>(handler).SslOptions.RemoteCertificateValidationCallback!;
+        // The pin wins over the insecure flag: no certificate never matches it.
+        Assert.False(callback(this, null, null, System.Net.Security.SslPolicyErrors.None));
+    }
+
+    [Fact]
+    public void CreateHandler_InsecureWithoutPin_AcceptsAnyCertificate()
+    {
+        using var handler = BackendProbe.CreateHandler("https://localhost:5001", allowInsecure: true, pinnedThumbprint: null);
+
+        var callback = Assert.IsType<SocketsHttpHandler>(handler).SslOptions.RemoteCertificateValidationCallback!;
+        Assert.True(callback(this, null, null, System.Net.Security.SslPolicyErrors.RemoteCertificateNotAvailable));
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, "AA:BB")]
+    public async Task RunWithTlsOptions_AnUnusableServerUrl_ExitsWithOne(bool allowInsecure, string? pin)
+        => Assert.Equal(1, await BackendProbe.RunWithTlsOptionsAsync(
+            string.Empty, ["--timeout", "2"], allowInsecure, pin, TestContext.Current.CancellationToken));
+
     private sealed class StubHandler(Func<CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

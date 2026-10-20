@@ -61,7 +61,8 @@ public sealed class PipelineScannerManifestPreflightTests
             new PipelineChildPipelineResolver(_templates, _variables),
             Substitute.For<IPipelineRequirementsChecker>(),
             new PipelineScannerManifestPreflight(_repo, dispatch),
-            new PipelineReleaseArtifactPreflight(Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactRepository>()),
+            new PipelineReleaseArtifactPreflight(Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactRepository>(), Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactStorageService>()),
+            new PipelineAiProfilePreflight(Substitute.For<Aetheus.Back.Components.AiTasks.IAiTaskService>()),
             Substitute.For<ILogger<PipelineRunPreflightService>>());
     }
 
@@ -172,8 +173,8 @@ public sealed class PipelineScannerManifestPreflightTests
         Assert.DoesNotContain(outcome.Checks, check => check.Kind == "scanner-manifest");
     }
 
-    /// <summary>Recette R2-121: a project's candidate created by the setup wizard is a candidate because
-    /// it extends application-candidate, not because of its name.</summary>
+    /// <summary>A project's candidate created by the setup wizard is a candidate because it extends
+    /// application-candidate, not because of its name.</summary>
     [Fact]
     public async Task AnyProjectsCandidate_ExtendingTheCandidateTemplate_IsHeldToTheManifest()
     {

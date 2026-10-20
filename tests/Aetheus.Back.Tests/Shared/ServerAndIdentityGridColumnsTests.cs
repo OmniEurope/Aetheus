@@ -16,11 +16,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R-210 / R-224: the column maps of the server detail grids and of the identity pages. Each map
-/// is proved against rows it must keep and rows it must drop; the repositories that own a map are proved
-/// to apply it before the count, so the grid's total is the filtered one.
-/// </summary>
+/// <summary> The column maps of the server detail grids and of the identity pages. Each map is
+/// proved against rows it must keep and rows it must drop; the repositories that own a map are
+/// proved to apply it before the count, so the grid's total is the filtered one. </summary>
 public sealed class ServerAndIdentityGridColumnsTests : IDisposable
 {
     private readonly AppDbContext _db = new(new DbContextOptionsBuilder<AppDbContext>()

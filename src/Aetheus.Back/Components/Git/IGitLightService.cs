@@ -29,8 +29,6 @@ public interface IGitLightService
     // Branches
     Task<List<GitLightBranchDto>> GetBranchesAsync(int repoId, CancellationToken ct = default);
     Task CreateBranchAsync(int repoId, CreateGitLightBranchRequest request, CancellationToken ct = default);
-    Task<(bool Success, string? CommitSha, string? Error)> ApplyPatchAsync(
-        int repoId, string branch, string patch, CancellationToken ct = default);
     Task DeleteBranchAsync(int repoId, string name, CancellationToken ct = default);
 
     // Tags

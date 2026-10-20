@@ -41,7 +41,8 @@ public class PipelinesControllerReadTests
         var service = Substitute.For<IPipelineService>();
         _sut = new PipelinesController(service, _runService,
             Substitute.For<IPipelineApprovalService>(), _artifactService,
-            Substitute.For<IPipelineWebhookService>(), new PipelineOwnerAuthorization(service, _authz), _authz);
+            Substitute.For<IPipelineWebhookService>(), new PipelineOwnerAuthorization(service, _authz), _authz,
+            Substitute.For<IPipelineRunToEndPolicy>());
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext

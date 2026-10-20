@@ -47,7 +47,7 @@ public class HomeDeepTests : BunitContext
     {
         _handler.SetJsonResponse("api/monitoring/dashboard", MakeDashboard());
         var cut = Render<Home>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         // OnInitializedAsync fetches the overview and stores it in _dashboard with the stub's counts.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/monitoring/dashboard"));
         var dash = (DashboardOverviewDto?)typeof(Home).GetField("_dashboard", Priv)!.GetValue(cut.Instance);
@@ -73,7 +73,7 @@ public class HomeDeepTests : BunitContext
             var summary = (AppMonitoringSummaryDto?)typeof(Home).GetField("_appSummary", Priv)!.GetValue(cut.Instance);
             Assert.NotNull(summary);
             Assert.Equal(degraded, summary.DegradedCount);
-        }, TimeSpan.FromSeconds(2));
+        });
 
         // OmniTone.Warning is unique to the Degraded badge in the app-summary row (Up=Success, Down=Danger,
         // Unknown=Neutral). Matched on its own label so the first-run onboarding card, which also renders
@@ -159,8 +159,7 @@ public class HomeDeepTests : BunitContext
         // With a 500 error, Home catches HttpRequestException and _dashboard stays null.
         // Wait deterministically for the init fetch to have been attempted (no fixed sleep).
         cut.WaitForAssertion(
-            () => Assert.Contains(_handler.Requests, r => r.Url.Contains("api/monitoring/dashboard")),
-            TimeSpan.FromSeconds(2));
+            () => Assert.Contains(_handler.Requests, r => r.Url.Contains("api/monitoring/dashboard")));
         var dash = (DashboardOverviewDto?)typeof(Home).GetField("_dashboard", Priv)!.GetValue(cut.Instance);
         // The 500 makes GetDashboardAsync throw HttpRequestException; Home swallows it and _dashboard stays null.
         Assert.Null(dash);
@@ -197,7 +196,7 @@ public class HomeDeepTests : BunitContext
     {
         _handler.SetJsonResponse("api/monitoring/dashboard", MakeDashboard(5, 3));
         var cut = Render<Home>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         var dash = (DashboardOverviewDto?)typeof(Home).GetField("_dashboard", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(dash);
         Assert.Equal(5, dash.TotalServers);
@@ -216,7 +215,7 @@ public class HomeDeepTests : BunitContext
         };
         _handler.SetJsonResponse("api/monitoring/dashboard", overview);
         var cut = Render<Home>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         // The single recent run from the stub ("Deploy", Running) lands in _dashboard.RecentRuns.
         var dash = (DashboardOverviewDto?)typeof(Home).GetField("_dashboard", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(dash);

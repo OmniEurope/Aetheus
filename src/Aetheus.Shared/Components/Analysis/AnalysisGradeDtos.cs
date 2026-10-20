@@ -28,8 +28,8 @@ public sealed record AnalysisGradeMeasureDto
     /// weighted score of the open findings (<see cref="AnalysisFindingScore"/>).</summary>
     public bool WeightedFindingScore { get; init; }
 
-    /// <summary>True for a <c>finding_score: count</c> rule: <see cref="ObservedValue"/> is the number
-    /// of open findings (recette R1-4).</summary>
+    /// <summary>True for a <c>finding_score: count</c> rule: <see cref="ObservedValue"/> is the
+    /// number of open findings.</summary>
     public bool CountedFindingScore { get; init; }
 
     /// <summary>The open findings behind a finding score, by severity; null for any other rule.</summary>

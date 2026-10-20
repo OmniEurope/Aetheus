@@ -100,7 +100,6 @@ public class OrganizationDetailDeepTests : BunitContext
         Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo("/admin/organizations/2?tab=members");
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 2));
         cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<OmniAutocomplete<int?>>()));
-        // The page no longer preloads a capped user list.
         Assert.DoesNotContain(_handler.Requests, request => request.Url.Contains("pageSize=100", StringComparison.Ordinal));
 
         var picker = cut.FindComponent<OmniAutocomplete<int?>>();
@@ -241,7 +240,7 @@ public class OrganizationDetailDeepTests : BunitContext
         _handler.SetJsonResponse("api/organizations/8/projects", false);
 
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 8));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var method = PageType.GetMethod("OnSaveProjects", Priv)!;
         var ex = await Record.ExceptionAsync(async () =>
@@ -325,9 +324,9 @@ public class OrganizationDetailDeepTests : BunitContext
         SetupForId(1);
 
         var cut = Render<OrganizationDetail>(p => p.Add(x => x.Id, 1));
-        cut.WaitForAssertion(() => Assert.Contains("Org-1", cut.Markup), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.Contains("Org-1", cut.Markup));
         cut.FindAll("[role='tab']").First(tab => tab.TextContent.Contains("Members", StringComparison.Ordinal)).Click();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // Per member: the user link, the role list and the remove button.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);

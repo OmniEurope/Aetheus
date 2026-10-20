@@ -17,7 +17,8 @@
             <OmniTextBox Value="@_revealedToken" ReadOnly="true" Class="omni-u-w-100" aria-label="@L["PersonalAccessTokens"]"  ValueExpression="@(() => _revealedToken)"/>
             <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CopyRevealedAsync"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["Copy"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DismissReveal"><OmniIcon Name="OmniIconName.Check" /> <span>@L["Done"]</span></OmniButton>
+                @* STD-BTN detection 11: Copy visible, the reveal's dismiss action labelled Close (it only hides the card). *@
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DismissReveal"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Close"]</span></OmniButton>
             </OmniStack>
         </OmniStack>
     </OmniCard>

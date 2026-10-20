@@ -26,8 +26,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# R-249: the helpers are templates under deploy/agent-host-config. Render them with the installer's
-# own render_host_config and the default ACME web root, exactly as the installer writes them.
+# Renders host-configuration templates through the installer's render_host_config with the default
+# ACME web root.
 log_error() { printf '[ERROR] %s\n' "$1" >&2; }
 sed -n '/^render_host_config() {$/,/^}$/p' "$installer" > "$work/render.sh"
 grep -q '^render_host_config() {$' "$work/render.sh" || { echo "FAIL: render_host_config not found in $installer" >&2; exit 1; }

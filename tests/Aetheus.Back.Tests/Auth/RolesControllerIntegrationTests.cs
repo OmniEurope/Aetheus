@@ -195,8 +195,8 @@ public class RolesControllerIntegrationTests : IClassFixture<CustomWebApplicatio
             cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(summary);
         Assert.Contains("Admin", summary.Roles);
-        // Recette R2-014: the test token is the bootstrap identity's ("bootstrap" subject); its summary
-        // now comes from its role claims, not from a user row looked up by name.
+        // Build the bootstrap identity summary from token role claims rather than a same-name user
+        // row.
         Assert.Equal(0, summary.UserId);
     }
 

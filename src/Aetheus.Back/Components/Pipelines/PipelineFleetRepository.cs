@@ -17,7 +17,7 @@ internal sealed class PipelineFleetRepository(AppDbContext db) : IPipelineFleetR
             fleet = fleet.Where(item => item.TemplateId == request.TemplateId.Value);
         if (request.Freshness.HasValue)
             fleet = fleet.Where(item => item.Freshness == request.Freshness.Value);
-        // Recette R-224: the grid's column header filters, after the scope and before the count.
+        // The grid's column header filters, after the scope and before the count.
         fleet = PipelineFleetQuery.Columns.ApplyFilters(fleet, request.Filters);
         fleet = Sort(fleet, request.SortBy, request.SortDescending);
         var totalCount = await fleet.CountAsync(ct).ConfigureAwait(false);
@@ -210,7 +210,10 @@ internal sealed class PipelineFleetRepository(AppDbContext db) : IPipelineFleetR
                 ? pipeline.Project.OrganizationId
                 : pipeline.Environment != null && pipeline.Environment.Project != null
                     ? pipeline.Environment.Project.OrganizationId
-                    : pipeline.ProjectServer != null ? pipeline.ProjectServer.Project.OrganizationId : 0));
+                    : pipeline.ProjectServer != null ? pipeline.ProjectServer.Project.OrganizationId : 0)
+        {
+            AiRunnerProfileId = pipeline.AiRunnerProfileId
+        });
 
     private static IQueryable<PipelineFleetItemDto> Sort(
         IQueryable<PipelineFleetItemDto> items,

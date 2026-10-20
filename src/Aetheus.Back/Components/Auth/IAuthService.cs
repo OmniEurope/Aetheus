@@ -29,16 +29,15 @@ public interface IAuthService
     Task BumpSecurityStampAsync(int userId, CancellationToken ct = default);
     Task<LoginResponse?> RenewTokenAsync(int userId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Recette R1-37: the signed-in user logs out. Announces the end of their session in-process so the
-    /// modules holding per-user state in memory drop it now (the typed mailbox passwords); revokes no token.
-    /// </summary>
+    /// <summary> The signed-in user logs out. Announces the end of their session in-process so the
+    /// modules holding per-user state in memory drop it now (the typed mailbox passwords); revokes
+    /// no token. </summary>
     Task LogoutAsync(int userId, CancellationToken ct = default);
 
     // --- Refresh Token Rotation (F-012) ---
     Task<LoginResponse?> RefreshTokenAsync(string refreshToken, CancellationToken ct = default);
 
-    /// <summary>The refresh, with the <c>RefreshRejectionCodes</c> reason when it is refused (PLAN-005 lot 9 / D48).</summary>
+    /// <summary>Returns refresh results with a RefreshRejectionCodes reason for refusals.</summary>
     Task<RefreshTokenOutcome> RefreshTokenWithReasonAsync(string refreshToken, CancellationToken ct = default);
 
     // --- TOTP 2FA (F-010) ---

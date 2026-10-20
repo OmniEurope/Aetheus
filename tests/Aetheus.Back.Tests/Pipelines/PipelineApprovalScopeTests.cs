@@ -9,12 +9,10 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R-370 / R-104: a pipeline asks for its own approval (a stage declaring
-/// <c>approval_timeout_minutes</c>), with or without an environment, and that approval is told apart
-/// from the environment's. When both apply they are two decisions: the pipeline's first, then the
-/// environment's, and approving one never stands for the other.
-/// </summary>
+/// <summary> A pipeline asks for its own approval (a stage declaring
+/// <c>approval_timeout_minutes</c>), with or without an environment, and that approval is told
+/// apart from the environment's. When both apply they are two decisions: the pipeline's first, then
+/// the environment's, and approving one never stands for the other. </summary>
 public class PipelineApprovalScopeTests
 {
     private const int RunId = 9370;

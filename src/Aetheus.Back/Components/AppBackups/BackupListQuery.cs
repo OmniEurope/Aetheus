@@ -4,10 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.AppBackups;
 
-/// <summary>
-/// Recette R-224: the column header filters of the backups page, its policies grid and the run history
-/// of one policy. Each key is the grid column's key.
-/// </summary>
+/// <summary> The column header filters of the backups page, its policies grid and the run history
+/// of one policy. Each key is the grid column's key. </summary>
 internal static class BackupListQuery
 {
     internal static readonly GridQueryMap<BackupPolicy> PolicyColumns = new GridQueryMap<BackupPolicy>()

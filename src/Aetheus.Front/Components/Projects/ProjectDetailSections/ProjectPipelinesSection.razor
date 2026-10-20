@@ -7,9 +7,15 @@ else
 {
     @* Recette R-124: the New button lives in the project header now (the pipelines list adds it to
        the layout's actions), so the section no longer spends a row of its own on it. *@
-    @* Recette R1-28: what would make a run of these pipelines fail, above them. *@
-    <Aetheus.Front.Components.Pipelines.ProjectPipelinesReadiness ProjectId="@ProjectId" />
-    @* Recette R1-34: where these definitions are kept, Git or Aetheus. *@
-    <Aetheus.Front.Components.Pipelines.ProjectPipelinesStorage ProjectId="@ProjectId" />
-    <PipelinesList ProjectId="ProjectId" />
+    @* Recette R1-28: what would make a run of these pipelines fail, above them. Recette R3-68: the verdict is
+       read before the list is drawn, so the banners are part of the first render and the grid does not jump. *@
+    <Aetheus.Front.Components.Pipelines.ProjectPipelinesReadiness ProjectId="@ProjectId" Loaded="@OnReadinessLoaded" />
+    @if (_readinessLoaded)
+    {
+        <PipelinesList ProjectId="ProjectId" />
+    }
+    else
+    {
+        <AetheusLoader />
+    }
 }

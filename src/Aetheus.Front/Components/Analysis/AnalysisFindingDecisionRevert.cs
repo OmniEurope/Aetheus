@@ -2,11 +2,9 @@
 
 namespace Aetheus.Front.Components.Analysis;
 
-/// <summary>
-/// Recette R2-027: going back on a finding's decision (accepted, false positive, mitigated), from the
-/// Gate tab of a run or from the finding's own page. Asked for confirmation, then the finding is open
-/// again; the decision stays in its history.
-/// </summary>
+/// <summary> Going back on a finding's decision (accepted, false positive, mitigated), from the
+/// Gate tab of a run or from the finding's own page. Asked for confirmation, then the finding is
+/// open again; the decision stays in its history. </summary>
 internal sealed class AnalysisFindingDecisionRevert(
     ApiClient api,
     OmniDialogService dialog,

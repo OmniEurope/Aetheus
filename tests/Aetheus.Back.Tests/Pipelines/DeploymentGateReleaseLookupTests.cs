@@ -6,8 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>R-368: the release whose grade the deployment gate reads is the one of the run's own
-/// project, picked as the restore-artifacts step picks it (numeric = id, else newest exact version).</summary>
+/// <summary>The release whose grade the deployment gate reads is the one of the run's own project,
+/// picked as the restore-artifacts step picks it (numeric = id, else newest exact
+/// version).</summary>
 public sealed class DeploymentGateReleaseLookupTests : IDisposable
 {
     private static readonly DateTime Origin = new(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);

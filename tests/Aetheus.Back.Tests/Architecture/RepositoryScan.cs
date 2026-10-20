@@ -1,4 +1,4 @@
-// kit-model RepositoryScan 1
+// kit-model RepositoryScan 2
 // SPDX-License-Identifier: EUPL-1.2
 //
 // File enumeration for repository-wide guard tests, with one property the raw
@@ -60,16 +60,21 @@ internal static class RepositoryScan
     internal static IReadOnlyList<string> EnumerateOptional(string directory, string pattern)
         => Directory.Exists(directory)
             ? Directory.EnumerateFiles(directory, pattern, SearchOption.AllDirectories)
-                .Where(file => !IsBuildOutput(file))
+                .Where(file => !IsBuildOutput(Path.DirectorySeparatorChar + Path.GetRelativePath(directory, file)))
                 .ToList()
             : [];
 
+    // Judged on the path below the scanned directory: the checkout running the scan may itself live
+    // under .worktrees, which would otherwise exclude every file.
     private static bool IsBuildOutput(string file)
     {
         var separator = Path.DirectorySeparatorChar;
         return file.Contains($"{separator}bin{separator}", StringComparison.OrdinalIgnoreCase)
             || file.Contains($"{separator}obj{separator}", StringComparison.OrdinalIgnoreCase)
-            || file.Contains($"{separator}node_modules{separator}", StringComparison.OrdinalIgnoreCase);
+            || file.Contains($"{separator}node_modules{separator}", StringComparison.OrdinalIgnoreCase)
+            || file.Contains($"{separator}.git{separator}", StringComparison.OrdinalIgnoreCase)
+            || file.Contains($"{separator}.worktrees{separator}", StringComparison.OrdinalIgnoreCase)
+            || file.Contains($"{separator}.claude{separator}worktrees{separator}", StringComparison.OrdinalIgnoreCase);
     }
 
     // Aetheus extension beyond the kit model (candidate for the model): the model only scans recursively.

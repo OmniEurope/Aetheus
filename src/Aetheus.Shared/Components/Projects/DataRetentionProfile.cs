@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 4 (recette R2-115): how much data a project keeps. Each profile sets the five values of
-/// <see cref="DataRetentionValues"/>; a project may override any of them. Standard is zero so every
-/// existing project, and every project created without a choice, is Standard.
-/// </summary>
+/// <summary>Sets five retention defaults that individual projects can override. Standard is zero so
+/// unspecified values resolve to that profile.</summary>
 public enum DataRetentionProfile
 {
     Standard = 0,

@@ -8,7 +8,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Auth;
 
-/// <summary>Recette R2-018: the normal end of a session is information; only an anomaly is a warning.</summary>
+/// <summary>The normal end of a session is information; only an anomaly is a warning.</summary>
 public sealed class AuthControllerSessionEndedTests
 {
     private readonly RecordingLogger<AuthController> _log = new();

@@ -94,12 +94,9 @@ internal sealed record BlueGreenContext
         return true;
     }
 
-    /// <summary>
-    /// The part of a context that putting traffic back needs - state directory and ports - for the
-    /// confirmation watchdog (PLAN-003 2.7), which acts when the backend that dispatches tasks is gone
-    /// and may find the run's workspace, and so its Compose files, already reaped. Compose operations
-    /// on such a context fail and say so; the upstream restore and the journal do not need them.
-    /// </summary>
+    /// <summary>Rebuild only state-directory and port context for watchdog rollback without relying
+    /// on retained workspace or Compose files. Upstream restoration and journal operations work
+    /// with this context; Compose operations fail explicitly.</summary>
     internal static bool TryCreateForRecovery(
         string project, IReadOnlyDictionary<string, string> env, out BlueGreenContext? context, out string error)
     {

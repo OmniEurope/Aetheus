@@ -16,14 +16,9 @@ internal static class WorkspaceFileMatcher
         {
             var searchPattern = Path.GetFileName(pattern);
             var searchDir = Path.GetDirectoryName(pattern)?.Replace("**", "").TrimStart(Path.DirectorySeparatorChar, '/');
-            var fullSearchDir = string.IsNullOrEmpty(searchDir) ? baseDir : Path.Combine(baseDir, searchDir);
-            if (!Directory.Exists(fullSearchDir) || !IsUnderBase(fullSearchDir, baseFull)) return [];
-
-            return EnumerateConfinedFiles(
-                fullSearchDir,
-                searchPattern,
-                recursive: pattern.Contains("**"),
-                baseFull);
+            var recursive = pattern.Contains("**");
+            return ExpandDirectories(baseDir, searchDir, baseFull)
+                .SelectMany(directory => EnumerateConfinedFiles(directory, searchPattern, recursive, baseFull));
         }
 
         var fullPath = Path.Combine(baseDir, pattern);
@@ -31,6 +26,29 @@ internal static class WorkspaceFileMatcher
         if (File.Exists(fullPath)) return [fullPath];
         if (Directory.Exists(fullPath)) return EnumerateConfinedFiles(fullPath, "*", recursive: true, baseFull);
         return [];
+    }
+
+    /// <summary>
+    /// The existing workspace directories the directory part of a pattern names. A segment holding
+    /// <c>*</c> or <c>?</c> (<c>.qa-evidence/*-current/e2e</c>) matches the sibling directories it
+    /// selects instead of being read as a literal name, which matched nothing (QA run 1283: the
+    /// accessibility SARIF was there and the lint step published nothing). Every candidate stays
+    /// confined to the workspace, reparse points included.
+    /// </summary>
+    private static List<string> ExpandDirectories(string baseDir, string? searchDir, string baseFull)
+    {
+        var segments = (searchDir ?? string.Empty).Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+        IEnumerable<string> current = [baseDir];
+        foreach (var segment in segments)
+        {
+            current = segment.Contains('*') || segment.Contains('?')
+                ? current.SelectMany(directory => Directory.EnumerateDirectories(directory, segment, SearchOption.TopDirectoryOnly))
+                    .Order(StringComparer.Ordinal)
+                    .ToList()
+                : current.Select(directory => Path.Combine(directory, segment)).Where(Directory.Exists).ToList();
+            current = current.Where(directory => IsUnderBase(directory, baseFull)).ToList();
+        }
+        return current.Where(Directory.Exists).ToList();
     }
 
     private static IEnumerable<string> EnumerateConfinedFiles(

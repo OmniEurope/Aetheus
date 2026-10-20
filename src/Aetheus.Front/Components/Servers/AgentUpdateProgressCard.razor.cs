@@ -12,6 +12,8 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
+    // Internal so a test that builds the card by hand gives it its clock without reflection.
+    [Inject] internal TimeProvider Clock { get; set; } = default!;
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
     [Parameter, EditorRequired] public HubConnection? Hub { get; set; }
@@ -21,8 +23,9 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     /// <summary>Invoked from the Retry button shown in the Failed state (S-DES-17). Wired by the
     /// parent to its UpdateAgent action so a failed self-update can be relaunched in place.</summary>
     [Parameter] public EventCallback OnRetry { get; set; }
-    /// <summary>Recette R1-42: invoked when no news of the update arrived in time, so the parent re-reads
-    /// the persisted request instead of the card concluding a failure the server never stated.</summary>
+    /// <summary>Invoked when no news of the update arrived in time, so the parent re-reads the
+    /// persisted request instead of the card concluding a failure the server never
+    /// stated.</summary>
     [Parameter] public EventCallback OnStale { get; set; }
 
     /// <summary>The backend's confirmation window after handoff (<c>AgentUpdateRepository</c>), plus a
@@ -49,7 +52,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     private IDisposable? _onOffline;
     private IDisposable? _onConfirmed;
     private IDisposable? _onFailed;
-    private System.Threading.Timer? _staleTimer;
+    private ITimer? _staleTimer;
 
     protected override void OnParametersSet()
     {
@@ -161,13 +164,9 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     {
     }
 
-    /// <summary>
-    /// Applies the persisted request. A new request is shown as it stands. For the request already
-    /// followed, recette R1-42: a status change read again (after a reconnect or a silent stretch) is
-    /// applied too, because a hub event lost while the tab slept is never replayed; a persisted
-    /// confirmation ends the card on Done whatever it showed, a persisted failure on Failed, and an
-    /// in-progress status only moves the card forward.
-    /// </summary>
+    /// <summary>Apply persisted request status after reconnects because missed hub events are not
+    /// replayed. Terminal confirmation or failure determines the card result; in-progress updates
+    /// only advance it.</summary>
     private void ApplyPersistedRequest()
     {
         if (Request is null) return;
@@ -179,10 +178,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
 
         if (!followed)
         {
-            _phase = phase;
-            _percent = percent;
-            _message = PersistedMessage(Request);
-            _checking = false;
+            ShowPersisted(Request, phase, percent);
             return;
         }
 
@@ -200,15 +196,28 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
                 _message = Request.FailureDiagnostic ?? L["AgentUpdateFailed"];
                 return;
             default:
-                if (phase is null || _phase is AgentUpdatePhase.Done or AgentUpdatePhase.Failed
-                    || (_phase is { } current && phase <= current))
-                    return;
-                _phase = phase;
-                _percent = percent;
-                _message = PersistedMessage(Request);
-                _checking = false;
+                AdvanceToPersisted(Request, phase, percent);
                 return;
         }
+    }
+
+    // A request the card was not following yet: shown as persisted, whatever it showed before.
+    private void ShowPersisted(AgentUpdateRequestSummaryDto request, AgentUpdatePhase? phase, int percent)
+    {
+        _phase = phase;
+        _percent = percent;
+        _message = PersistedMessage(request);
+        _checking = false;
+    }
+
+    // An in-progress status of the followed request only moves the card forward, never back from a
+    // later phase or from a terminal one.
+    private void AdvanceToPersisted(AgentUpdateRequestSummaryDto request, AgentUpdatePhase? phase, int percent)
+    {
+        if (phase is null || _phase is AgentUpdatePhase.Done or AgentUpdatePhase.Failed
+            || (_phase is { } current && phase <= current))
+            return;
+        ShowPersisted(request, phase, percent);
     }
 
     private static (AgentUpdatePhase? Phase, int Percent) MapStatus(AgentUpdateRequestStatus status) => status switch
@@ -297,18 +306,17 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     {
         if (phase is not (AgentUpdatePhase.LaunchingUpdater or AgentUpdatePhase.AgentOffline))
             return 90;
+        // The browser's local clock, as the DTO dates are (JsonOptions), read through the injected clock.
+        var now = Clock.GetLocalNow().LocalDateTime;
         var deadline = Request is { HandoffAt: { } handoffAt } request && request.RequestId == _requestId
             ? handoffAt + HandoffWindow
-            : DateTime.Now + HandoffWindow;
-        return Math.Max(5, (int)Math.Ceiling((deadline - DateTime.Now).TotalSeconds));
+            : now + HandoffWindow;
+        return Math.Max(5, (int)Math.Ceiling((deadline - now).TotalSeconds));
     }
 
-    /// <summary>
-    /// Recette R1-42: silence is not a failure. The verdict belongs to the server, which fails an
-    /// expired request itself and says so (<c>AgentUpdateFailed</c>); a confirmation sent while the tab
-    /// slept is simply lost. So the card shows that it is checking, asks its parent to re-read the
-    /// persisted request, and asks again later while nothing settles.
-    /// </summary>
+    /// <summary>Silence triggers a persisted-status check rather than a client-side failure
+    /// verdict. The server determines expiry, confirmation or failure; repeat the check while the
+    /// request remains unsettled.</summary>
     internal void OnStaleTimerElapsed()
     {
         if (_phase is AgentUpdatePhase.Done or AgentUpdatePhase.Failed or null)
@@ -326,7 +334,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     private void StartStaleTimer(int seconds)
     {
         _staleTimer?.Dispose();
-        _staleTimer = new System.Threading.Timer(
+        _staleTimer = Clock.CreateTimer(
             _ => OnStaleTimerElapsed(), null, TimeSpan.FromSeconds(seconds), Timeout.InfiniteTimeSpan);
     }
 

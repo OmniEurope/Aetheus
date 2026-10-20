@@ -4,15 +4,9 @@ using Microsoft.Extensions.Configuration;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// A360-59. The deployment bootstrap identity used to fall back on Auth:EncryptionKey whenever no
-/// dedicated key was configured. HKDF separates the derivation domains, but it cannot separate the
-/// consequences: while the two share a secret, leaking the data-encryption key also leaks an
-/// administrator credential for every environment this backend deploys.
-///
-/// The fallback is refused in production only. Forcing it everywhere would make a developer configure
-/// a second secret before running any deployment, which buys nothing.
-/// </summary>
+/// <summary>Production requires a dedicated deployment-bootstrap key so compromise of the
+/// data-encryption key cannot also grant deployment administrator credentials. Development retains
+/// its explicit fallback.</summary>
 public sealed class DeploymentBootstrapIdentityKeyPolicyTests
 {
     private static readonly DateTime Now = new(2026, 8, 21, 12, 0, 0, DateTimeKind.Utc);

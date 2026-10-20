@@ -42,6 +42,9 @@ public sealed class BlueGreenOperationExecutor(
     /// <summary>Returns traffic to the colour kept in reserve; see <see cref="BlueGreenRevert"/>.</summary>
     private readonly BlueGreenRevert _revert = new(shell);
 
+    /// <summary>The expand/contract gate of the migrate step; see <see cref="BlueGreenMigrationGateCheck"/>.</summary>
+    private readonly BlueGreenMigrationGateCheck _gate = new(shell);
+
     public override bool CanHandle(OperationKind kind) => kind
         is OperationKind.BlueGreenMigrate
         or OperationKind.BlueGreenUp
@@ -63,9 +66,9 @@ public sealed class BlueGreenOperationExecutor(
         }
         if (!BlueGreenContext.TryCreate(target, envVars, out var context, out var contextError))
         {
-            // Recette R2-092: a run that failed before it prepared the host has no env file, and
-            // nothing to undo either. The journal decides, not the missing file: an open transaction
-            // still fails below, because a switch the rollback cannot restore must not read as success.
+            // Use the journal to determine whether rollback is needed when context files are
+            // absent. An unreachable open transaction must fail rather than claim successful
+            // restoration.
             if (kind == OperationKind.BlueGreenRollback
                 && BlueGreenJournal.HoldsNoOpenTransaction(envVars.GetValueOrDefault("AETHEUS_BG_STATE_DIR", string.Empty).Trim()))
             {
@@ -128,72 +131,9 @@ public sealed class BlueGreenOperationExecutor(
 
         var target = journal.ReadLiveColour() is { } live ? BlueGreenContext.Opposite(live) : "blue";
 
-        // Expand/contract gate. Both colours share this schema, and the previous one is still
-        // answering requests while the new one migrates, so a pending migration that drops or
-        // renames anything would break production mid-deployment.
-        var migrationsDirectory = envVars.GetValueOrDefault("AETHEUS_BG_MIGRATIONS_DIR", string.Empty).Trim();
-        if (migrationsDirectory.Length == 0)
-        {
-            await onOutput(
-                "AETHEUS_BG_MIGRATIONS_DIR is required: the expand/contract gate cannot run without the migration sources.",
-                TaskLogLevel.Error).ConfigureAwait(false);
-            return new ExecutorResult(-1, false);
-        }
-        // An unreadable directory yields no discovered migrations, which would otherwise read as
-        // "nothing pending" and wave the bundle through with the gate silently disabled. A gate that
-        // cannot see its inputs has to fail, not report success.
-        if (!Directory.Exists(migrationsDirectory))
-        {
-            await onOutput(
-                $"Migration sources not found at '{migrationsDirectory}'; the expand/contract gate cannot inspect what is about to run. "
-                + "Provide an absolute path, or one that exists for the agent.",
-                TaskLogLevel.Error).ConfigureAwait(false);
-            return new ExecutorResult(-1, false);
-        }
-
-        var (historyRead, applied) = await BlueGreenSchemaHistory
-            .ReadAsync(shell, context, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
-        if (!historyRead) return new ExecutorResult(1, false);
-
-        var discovered = BlueGreenMigrationGate.DiscoverMigrationIds(migrationsDirectory);
-        var pending = BlueGreenMigrationGate.Pending(discovered, applied);
-        if (pending.Count == 0)
-        {
-            await onOutput("No pending EF migration; the schema is already current.", TaskLogLevel.Info).ConfigureAwait(false);
-        }
-        else if (applied.Count == 0)
-        {
-            // An empty history is an initial schema creation: there is no live colour serving the
-            // old shape, so the compatibility contract has nothing to protect yet.
-            await onOutput(
-                $"Initial schema creation ({pending.Count} migration(s)); no live colour to stay compatible with.",
-                TaskLogLevel.Info).ConfigureAwait(false);
-        }
-        else
-        {
-            var violations = new List<string>();
-            foreach (var migrationId in pending)
-            {
-                var path = Path.Combine(migrationsDirectory, migrationId + ".cs");
-                if (!File.Exists(path))
-                {
-                    violations.Add($"{migrationId}: pending migration source is missing at {path}.");
-                    continue;
-                }
-                violations.AddRange(BlueGreenMigrationGate.Inspect(migrationId, await File.ReadAllTextAsync(path, ct).ConfigureAwait(false)));
-            }
-            if (violations.Count > 0)
-            {
-                await onOutput(
-                    "Pending migrations are not expand-compatible. Ship expand and contract in separate releases:",
-                    TaskLogLevel.Error).ConfigureAwait(false);
-                foreach (var violation in violations)
-                    await onOutput(violation, TaskLogLevel.Error).ConfigureAwait(false);
-                return new ExecutorResult(1, false);
-            }
-            await onOutput($"All {pending.Count} pending migration(s) are expand-compatible.", TaskLogLevel.Info)
-                .ConfigureAwait(false);
-        }
+        // Expand/contract gate: see BlueGreenMigrationGateCheck. It also publishes its verdict for the run page.
+        if (await _gate.RunAsync(context, envVars, timeoutSeconds, onOutput, ct).ConfigureAwait(false) is { } refused)
+            return refused;
 
         await onOutput($"Running the migration bundle once against the shared database ({target} job)…", TaskLogLevel.Info)
             .ConfigureAwait(false);
@@ -239,9 +179,8 @@ public sealed class BlueGreenOperationExecutor(
                 : $"Live colour is {live}; preparing {idle}.",
             TaskLogLevel.Info).ConfigureAwait(false);
 
-        // PLAN-003 2.7: the idle colour IS the reserve the last commit kept running. Rebuilding it ends
-        // that reserve, so the record goes first: a return to it after this point would be a return
-        // to whatever this deployment is about to start.
+        // Rebuilding the idle colour invalidates its reserve record before startup, because it can
+        // no longer identify the preceding deployment.
         var reserve = new BlueGreenReserve(context);
         if (reserve.Colour == idle)
         {
@@ -294,39 +233,12 @@ public sealed class BlueGreenOperationExecutor(
     {
         var live = journal.ReadLiveColour();
         var idle = live is null ? "blue" : BlueGreenContext.Opposite(live);
-        var revision = envVars.GetValueOrDefault("AETHEUS_BG_REVISION", string.Empty).Trim();
-        if (revision.Length == 0)
+        if (BlueGreenSwitchInputs.Read(envVars, out var refusal) is not { } inputs)
         {
-            await onOutput("AETHEUS_BG_REVISION is required so the journal records what was deployed.", TaskLogLevel.Error)
-                .ConfigureAwait(false);
+            await onOutput(refusal, TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(-1, false);
         }
-
-        var reloadCommand = envVars.GetValueOrDefault("AETHEUS_BG_RELOAD_HELPER", string.Empty).Trim();
-        if (reloadCommand.Length == 0)
-        {
-            await onOutput("AETHEUS_BG_RELOAD_HELPER is required to apply the switch.", TaskLogLevel.Error)
-                .ConfigureAwait(false);
-            return new ExecutorResult(-1, false);
-        }
-
-        // Rendering the configuration is the switch. Reloading without rewriting it would reload the
-        // configuration that is already live, so the step would report success while traffic stayed
-        // on the previous colour.
-        var templatePath = envVars.GetValueOrDefault("AETHEUS_BG_UPSTREAM_TEMPLATE", string.Empty).Trim();
-        var confPath = envVars.GetValueOrDefault("AETHEUS_BG_UPSTREAM_CONF", string.Empty).Trim();
-        if (templatePath.Length == 0 || confPath.Length == 0)
-        {
-            await onOutput(
-                "AETHEUS_BG_UPSTREAM_TEMPLATE and AETHEUS_BG_UPSTREAM_CONF are required: without them the switch would reload the live configuration unchanged.",
-                TaskLogLevel.Error).ConfigureAwait(false);
-            return new ExecutorResult(-1, false);
-        }
-        if (!File.Exists(templatePath))
-        {
-            await onOutput($"Upstream template is missing: {templatePath}", TaskLogLevel.Error).ConfigureAwait(false);
-            return new ExecutorResult(-1, false);
-        }
+        var (revision, reloadCommand, templatePath, confPath) = inputs;
 
         if (!journal.TryOpen(live ?? "none", idle, revision, BlueGreenTransactionOwnership.OwnerOf(envVars), out var journalError))
         {
@@ -360,20 +272,9 @@ public sealed class BlueGreenOperationExecutor(
             .ConfigureAwait(false);
         if (reload.ExitCode != 0)
         {
-            await onOutput(
-                $"Reload rejected the new configuration; restoring the previous one: {reload.StdErr}",
-                TaskLogLevel.Error).ConfigureAwait(false);
-            // Announcing a restore without checking it would be the worst kind of lie here: the site
-            // would be down while the step claims it put the old configuration back. Keep the journal
-            // when the restore also fails, since it is the only record left to reconcile from.
-            if (!await BlueGreenUpstream.RestoreAsync(shell, confPath, previousConf, reloadCommand, timeoutSeconds, ct).ConfigureAwait(false))
-            {
-                await onOutput(
-                    $"Restoring the previous configuration ALSO failed; the site may be down and manual intervention is required. Journal retained at {context.JournalDir}.",
-                    TaskLogLevel.Error).ConfigureAwait(false);
-                return new ExecutorResult(1, false);
-            }
-            journal.Clear();
+            await RestoreAfterRejectedReloadAsync(
+                context, journal, confPath, previousConf, reloadCommand, reload.StdErr, timeoutSeconds, onOutput, ct)
+                .ConfigureAwait(false);
             return new ExecutorResult(1, false);
         }
 
@@ -389,6 +290,27 @@ public sealed class BlueGreenOperationExecutor(
         await onOutput($"Traffic now points at {idle}. The previous colour is still running for rollback.", TaskLogLevel.Info)
             .ConfigureAwait(false);
         return new ExecutorResult(0, false);
+    }
+
+    // The reload refused the rendered configuration: put back what was serving. Announcing a restore
+    // without checking it would be the worst kind of lie here: the site would be down while the step
+    // claims it put the old configuration back. Keep the journal when the restore also fails, since it
+    // is the only record left to reconcile from.
+    private async Task RestoreAfterRejectedReloadAsync(
+        BlueGreenContext context, BlueGreenJournal journal, string confPath, string? previousConf, string reloadCommand,
+        string reloadError, int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
+        await onOutput(
+            $"Reload rejected the new configuration; restoring the previous one: {reloadError}",
+            TaskLogLevel.Error).ConfigureAwait(false);
+        if (!await BlueGreenUpstream.RestoreAsync(shell, confPath, previousConf, reloadCommand, timeoutSeconds, ct).ConfigureAwait(false))
+        {
+            await onOutput(
+                $"Restoring the previous configuration ALSO failed; the site may be down and manual intervention is required. Journal retained at {context.JournalDir}.",
+                TaskLogLevel.Error).ConfigureAwait(false);
+            return;
+        }
+        journal.Clear();
     }
 
     // ── Commit ──────────────────────────────────────────────────────────────────────────────────
@@ -407,7 +329,7 @@ public sealed class BlueGreenOperationExecutor(
         var previous = journal.PreviousLive;
         var revision = journal.Revision ?? string.Empty;
 
-        // PLAN-003 2.7: the replaced colour is no longer stopped; it is kept running in reserve.
+        // Keep the replaced colour running as the reserve.
         await new BlueGreenReserve(context).KeepPreviousAsync(journal, onOutput, ct).ConfigureAwait(false);
 
         if (revision.Length > 0) journal.WriteDeployedRevision(revision);
@@ -419,18 +341,9 @@ public sealed class BlueGreenOperationExecutor(
     }
 
     // ── Rollback ────────────────────────────────────────────────────────────────────────────────
-    /// <summary>
-    /// Puts traffic back on the colour that was serving before the switch. This exists because the
-    /// evidence steps run after the cutover: without it, a smoke failure would leave traffic on a
-    /// bad colour with the journal stuck half-open and no way back.
-    ///
-    /// A <c>PREPARED</c> journal is reconciled, never waved through. The switch writes the upstream
-    /// configuration and reloads it before it records <c>SWITCHED</c>, so an interruption in that
-    /// window leaves traffic possibly already moved while the journal still reads <c>PREPARED</c>.
-    /// Answering "nothing to undo" there was a double fault: it reported success without restoring
-    /// anything, and it left a journal that <see cref="BlueGreenJournal.TryOpen"/> then refused to
-    /// replace, freezing the environment exactly when an operator was trying to repair it.
-    /// </summary>
+    /// <summary>Restore traffic to the colour serving before the switch, including when the journal
+    /// is still PREPARED. Traffic can already have moved if interruption occurs between reload and
+    /// recording SWITCHED.</summary>
     // ── Retire ──────────────────────────────────────────────────────────────────────────────────
     /// <summary>
     /// Undoes a FIRST deployment that already moved traffic, which a rollback cannot: there is no
@@ -454,7 +367,8 @@ public sealed class BlueGreenOperationExecutor(
         var state = journal.Exists ? journal.State : null;
         if (state is null or BlueGreenJournal.Committed)
         {
-            // PLAN-003 2.7: with no transaction open, retiring means ending the reserve, never the live colour.
+            // Without an open transaction, retirement stops only the reserve, never the live
+            // colour.
             if (await new BlueGreenReserve(context).RetireAsync(journal, _compose, timeoutSeconds, onOutput, ct).ConfigureAwait(false) is { } retiredReserve)
                 return retiredReserve;
             await onOutput("No open deployment transaction and no colour in reserve; nothing to retire.", TaskLogLevel.Info).ConfigureAwait(false);
@@ -511,23 +425,8 @@ public sealed class BlueGreenOperationExecutor(
         int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct, bool recoveringOrphan)
     {
         var state = journal.Exists ? journal.State : null;
-        if (state is null or BlueGreenJournal.Committed)
-        {
-            await onOutput("No open deployment transaction; nothing to undo.", TaskLogLevel.Info).ConfigureAwait(false);
-            return new ExecutorResult(0, false);
-        }
-        // A failed run undoes its own deployment, never another run's (decision of 2026-10-02).
-        if (!recoveringOrphan
-            && await BlueGreenTransactionOwnership.RefuseAnotherRunsRollbackAsync(journal, envVars, onOutput).ConfigureAwait(false) is { } notOurs)
-            return notOurs;
-        if (state is not (BlueGreenJournal.Prepared or BlueGreenJournal.Switched))
-        {
-            await onOutput(
-                $"The deployment transaction is in an unrecognised state ('{state}'); refusing to guess what to restore. "
-                + $"Inspect {context.JournalDir} and resolve it by hand.",
-                TaskLogLevel.Error).ConfigureAwait(false);
-            return new ExecutorResult(1, false);
-        }
+        if (await RefuseRollbackAsync(context, journal, state, envVars, onOutput, recoveringOrphan).ConfigureAwait(false) is { } refused)
+            return refused;
 
         if (!BlueGreenUpstream.TryReadTargets(envVars, out var confPath, out var reloadCommand))
         {
@@ -548,9 +447,40 @@ public sealed class BlueGreenOperationExecutor(
         if (previous is not ("blue" or "green"))
         {
             return await _initialDeployment.ReconcileAsync(
-                context, journal, state, confPath, reloadCommand, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+                context, journal, state!, confPath, reloadCommand, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
         }
+        return await RestorePreviousColourAsync(
+            context, journal, previous, confPath, reloadCommand, timeoutSeconds, onOutput, ct).ConfigureAwait(false);
+    }
 
+    /// <summary>The result that ends the rollback before anything is touched: nothing open to undo
+    /// (success), another run's transaction, or a state nobody wrote; <c>null</c> to go on.</summary>
+    private static async Task<ExecutorResult?> RefuseRollbackAsync(
+        BlueGreenContext context, BlueGreenJournal journal, string? state, IReadOnlyDictionary<string, string> envVars,
+        Func<string, TaskLogLevel, Task> onOutput, bool recoveringOrphan)
+    {
+        if (state is null or BlueGreenJournal.Committed)
+        {
+            await onOutput("No open deployment transaction; nothing to undo.", TaskLogLevel.Info).ConfigureAwait(false);
+            return new ExecutorResult(0, false);
+        }
+        // A failed run undoes its own deployment, never another run's (decision of 2026-10-02).
+        if (!recoveringOrphan
+            && await BlueGreenTransactionOwnership.RefuseAnotherRunsRollbackAsync(journal, envVars, onOutput).ConfigureAwait(false) is { } notOurs)
+            return notOurs;
+        if (state is BlueGreenJournal.Prepared or BlueGreenJournal.Switched)
+            return null;
+        await onOutput(
+            $"The deployment transaction is in an unrecognised state ('{state}'); refusing to guess what to restore. "
+            + $"Inspect {context.JournalDir} and resolve it by hand.",
+            TaskLogLevel.Error).ConfigureAwait(false);
+        return new ExecutorResult(1, false);
+    }
+
+    private async Task<ExecutorResult> RestorePreviousColourAsync(
+        BlueGreenContext context, BlueGreenJournal journal, string previous, string confPath, string reloadCommand,
+        int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
         // The colour was stopped only at commit, which has not run, so it should still be up. Start
         // it anyway and health-gate it: restoring traffic to a colour that cannot serve would turn a
         // failed deployment into an outage.

@@ -252,7 +252,7 @@ internal sealed class AnalysisReportPublisher(
     internal static bool IsUniqueViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
-    private static void ValidateEnvelope(PublishAnalysisReportRequest request)
+    internal static void ValidateEnvelope(PublishAnalysisReportRequest request)
     {
         if (request.StartedAt.Year < 2000 || request.CompletedAt.Year < 2000)
             throw new BadRequestException("Scanner start and completion timestamps are required.");

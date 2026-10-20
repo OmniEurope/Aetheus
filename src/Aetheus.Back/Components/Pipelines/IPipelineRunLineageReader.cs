@@ -14,8 +14,8 @@ public interface IPipelineRunLineageReader
     /// <summary>When the run started and, once it has, ended; null for an unknown run.</summary>
     Task<PipelineRunWindow?> GetRunWindowAsync(int runId, CancellationToken ct = default);
 
-    /// <summary>Recette R-498, R2-026: the follow-up runs started by <paramref name="runId"/> (an
-    /// <c>on_success</c> chain), among those started between the two instants, oldest first.</summary>
+    /// <summary>Follow-up runs started by <paramref name="runId"/> through a success chain, within
+    /// the requested interval and ordered oldest first.</summary>
     Task<List<PipelineRunLinkDto>> GetDownstreamRunsAsync(
         int runId, DateTime startedFromUtc, DateTime startedToUtc, CancellationToken ct = default);
 }

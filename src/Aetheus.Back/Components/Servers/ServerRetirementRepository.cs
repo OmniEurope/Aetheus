@@ -39,7 +39,7 @@ public class ServerRetirementRepository(AppDbContext db) : IServerRetirementRepo
             query = query.Where(server => accessibleIds.Contains(server.Id));
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(server => server.Name.Contains(search) || server.Hostname.Contains(search));
-        // Recette R-210 / R-224: the header filters, after the access scope and before the count.
+        // The header filters, after the access scope and before the count.
         query = RetiredServerListQuery.Columns.ApplyFilters(query, filters);
 
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);

@@ -2,12 +2,8 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// Recette R-181, point 1 of the follow-up: the pipeline edit page has no Refresh entry. When the
-/// definition changes elsewhere (another tab, another user, a model update) the entities hub says so;
-/// the page reloads it at once when nothing is being edited, and otherwise shows a banner so an edit
-/// in progress is never overwritten silently.
-/// </summary>
+/// <summary>Definition changes reload an unedited page through the entities hub. Unsaved edits are
+/// preserved and a banner signals the external change.</summary>
 internal sealed class PipelineDefinitionLiveSync(HubConnectionFactory hubFactory, int pipelineId, Func<Task> onChanged)
     : IAsyncDisposable
 {
@@ -50,7 +46,8 @@ internal sealed class PipelineDefinitionLiveSync(HubConnectionFactory hubFactory
             || model.YamlDefinition != saved.YamlDefinition
             || model.ProjectId != saved.ProjectId
             || model.EnvironmentId != saved.EnvironmentId
-            || model.ProjectServerId != saved.ProjectServerId);
+            || model.ProjectServerId != saved.ProjectServerId
+            || model.AiRunnerProfileId != saved.AiRunnerProfileId);
 
     /// <summary>
     /// SITE-FUNC-SELF-SAVE-001: the hub announces this client's own save too, often before the save's
@@ -67,7 +64,8 @@ internal sealed class PipelineDefinitionLiveSync(HubConnectionFactory hubFactory
         && (sent.SourceBranch?.Trim() ?? string.Empty) == (stored.SourceBranch ?? string.Empty)
         && sent.ProjectId == stored.ProjectId
         && sent.EnvironmentId == stored.EnvironmentId
-        && sent.ProjectServerId == stored.ProjectServerId;
+        && sent.ProjectServerId == stored.ProjectServerId
+        && sent.AiRunnerProfileId == stored.AiRunnerProfileId;
 
     public async ValueTask DisposeAsync()
     {

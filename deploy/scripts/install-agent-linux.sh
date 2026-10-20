@@ -50,7 +50,7 @@ LEGACY_PRODUCTION_ENV_FILE="$WORK_DIR/aetheus-prod/.env-prod"
 # for them here any more. A directory an older installer created (/var/lib/aetheus-demo,
 # /var/lib/aetheus-nightly) is left as it is: removing data is the operator's call.
 SERVICE_NAME="aetheus-agent"
-AGENT_POSTURE_VERSION="2"
+AGENT_POSTURE_VERSION="3"
 AGENT_POSTURE_VERSION_FILE="/etc/aetheus-agent-posture-version"
 # Root-owned record that THIS installer added the agent account to the docker group (decision D12).
 DOCKER_GROUP_MARKER_FILE="/etc/aetheus-agent-docker-group-added"
@@ -68,6 +68,8 @@ APACHE_RELOAD_HELPER_PATH="/usr/local/lib/aetheus/aetheus-apache-reload"
 CERTBOT_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-certbot"
 # Items #10.2/#10.3 - same recipe as Apache for RKHunter scan/update/propupd.
 RKHUNTER_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-rkhunter"
+# Root-owned helper the RKHunter grant names (ADR-019): rkhunter must exec its tools, so no noexec.
+RKHUNTER_HELPER_PATH="/usr/local/lib/aetheus/aetheus-rkhunter"
 # Phase 3 - cron management (sudo helper), portsentry IP unblock (sudo helper), and the
 # fixed-unit service-enable allow-list. The two helpers are root-owned, agent-non-writable,
 # input-validating binaries the agent invokes via NOPASSWD sudoers (the helper is the boundary).
@@ -85,6 +87,9 @@ FIREWALL_HELPER_PATH="/usr/local/lib/aetheus/aetheus-firewall"
 # install+configure). Same root-owned-helper-boundary recipe as cron.
 MAIL_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-mail"
 AETHEUS_HELPER_DIR="/usr/local/lib/aetheus"
+# Root-owned helper that aetheus-agent-read-grant.service (a oneshot unit of its own) runs before every agent start: it
+# gives the agent account READ-only ACLs on the SSH configuration it monitors. No sudo, no capability.
+AGENT_READ_GRANT_HELPER_PATH="$AETHEUS_HELPER_DIR/aetheus-agent-read-grant"
 CRON_HELPER_PATH="$AETHEUS_HELPER_DIR/cron-apply"
 UNBLOCK_HELPER_PATH="$AETHEUS_HELPER_DIR/unblock-ip"
 # Root-owned helper for the typed PortsentrySetup op (apt-install portsentry + write mode/port lists into
@@ -113,9 +118,9 @@ CERTBOT_ISSUE_HELPER_PATH="$AETHEUS_HELPER_DIR/aetheus-certbot-issue"
 # Certbot lifecycle management (renew/delete/revoke a named lineage). Same boundary model as the issue
 # helper: root-owned, re-validates the cert name, runs a fixed certbot verb (no free-form argv).
 CERTBOT_MANAGE_HELPER_PATH="$AETHEUS_HELPER_DIR/aetheus-certbot-manage"
-# Certbot convention (PLAN-007): every lineage renews through the Aetheus ACME web root. cli.ini makes
-# that the default of a manual certbot run too; the deploy hook reloads Apache after a renewal; the
-# weekly renewal check records its outcome where the agent collector can read it.
+# Use the ACME web root for automated and manual renewals so one validation path applies; the hook
+# reloads Apache and the weekly check leaves evidence for the agent collector. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 CERTBOT_CLI_INI="/etc/letsencrypt/cli.ini"
 CERTBOT_APACHE_DEPLOY_HOOK="/etc/letsencrypt/renewal-hooks/deploy/aetheus-apache"
 CERTBOT_STATE_DIR="/var/lib/aetheus-certbot"
@@ -130,6 +135,8 @@ DEPLOY_WEB_ROOT="/var/www"
 # joining the agent's own group - so a deployed app shares no surface with the agent.
 DEPLOY_READ_GROUP="aetheus-deploy"
 SYSTEMD_UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
+# The oneshot unit that runs the read-grant helper before every start of the agent.
+AGENT_READ_GRANT_SERVICE_PATH="/etc/systemd/system/aetheus-agent-read-grant.service"
 DEFAULT_SERVER_URL="https://aetheus.example.com"
 
 # If the wizard command created a source URL marker, use it as prompt default.
@@ -151,10 +158,9 @@ log_info()  { printf "${GREEN}[INFO]${NC} %s\n" "$1"; }
 log_warn()  { printf "${YELLOW}[WARN]${NC} %s\n" "$1"; }
 log_error() { printf "${RED}[ERROR]${NC} %s\n" "$1"; }
 
-# R-249 - every host configuration file this installer writes (units, sudoers drop-ins, root-owned
-# helpers, appsettings.json) is a versioned template under agent-host-config/: next to this script
-# in the agent archive, deploy/agent-host-config in a repository checkout. Its manifest declares the
-# #{NAME}# placeholders of each template.
+# Render host configuration from the versioned agent-host-config templates so installed units,
+# helpers and settings share an explicit placeholder contract. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 if [ -d "$SCRIPT_DIR_PREVIEW/agent-host-config" ]; then
     HOST_CONFIG_DIR="$SCRIPT_DIR_PREVIEW/agent-host-config"
 else
@@ -341,7 +347,7 @@ Install options:
   --name NAME               Display name for this agent (default: hostname)
 
 Capability modules:
-  --module pipeline-runner  (DEFAULT ON) Install Git, sshpass, acl and optional
+  --module pipeline-runner  (DEFAULT ON) Install Git, sshpass, acl, libatomic and optional
                             Buildx support. Application SDKs run in locked OCI
                             images instead of being installed on the agent.
   --no-pipeline-runner      Skip the pipeline-runner toolchain install.
@@ -516,10 +522,9 @@ ENABLE_FIREWALL_MANAGE=0   # opt-in: ufw control via root-owned helper (firewall
 ENABLE_MAIL_SETUP=0        # opt-in: root-owned mail-setup helper (full postfix/dovecot/opendkim setup)
 ENABLE_TEAMSPEAK_SETUP=0   # opt-in: root-owned teamspeak-setup helper (full TS3 server install)
 POSTURE_EXPLICIT=0         # set if any --enable-*/--disable-* flag or module was passed explicitly
-# The capabilities those flags named, space-delimited. On an upgrade or a reinstall the existing
-# posture is kept for every other capability: one flag changes what it names and nothing else. A
-# single global "explicit" switch used to make derive_existing_posture ignore the whole host, so
-# --disable-cron-manage also revoked Apache, certbot and deployment (audit DEP-021).
+# Track explicit capability flags independently so an upgrade changes only named capabilities and
+# preserves the host's remaining posture. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 EXPLICIT_CAPABILITIES=" "
 mark_explicit() {
     POSTURE_EXPLICIT=1
@@ -533,7 +538,7 @@ is_explicit() {
 }
 
 # Capability modules (higher-level than the granular --enable-* flags below).
-#   pipeline-runner    : ON by default. Installs Git, sshpass and optional Buildx
+#   pipeline-runner    : ON by default. Installs Git, sshpass, libatomic and optional Buildx
 #                        support. Application SDKs stay in locked OCI images.
 #   server-management  : opt-in. Turns on the server-administration capabilities
 #                        (service-control, Apache, Certbot, RKHunter, Docker,
@@ -550,7 +555,7 @@ MODULE_SERVER_MANAGEMENT=0
 MODULE_DEPLOYMENT=0
 ENABLE_DEPLOYMENT=0        # derived from MODULE_DEPLOYMENT (and preserved on --upgrade)
 DOTNET_CHANNEL="10.0"
-DOTNET_RUNTIME_VERSION="10.0.12"
+DOTNET_RUNTIME_VERSION="10.0.13"
 DOTNET_INSTALLER_URL="https://raw.githubusercontent.com/dotnet/install-scripts/da3ce11ba63f3dbb0fb835d41bda2665d5c48e84/src/dotnet-install.sh"
 DOTNET_INSTALLER_SHA256="082f7685e156738a1b2e2ed8381a621870d4ce8e8c59278034556f05c186eb2e"
 
@@ -736,17 +741,10 @@ install_agent_update_supervisor() {
     systemctl enable --now aetheus-agent-upgrade.path
 }
 
-# --disable-docker or --disable-all on a host where the agent account is already in the docker group:
-# the membership is removed, otherwise "fully sandboxed" kept a root-equivalent socket access (audit
-# DEP-019). Only the agent's own account is touched, and only when it is the dedicated system account
-# this installer creates (home $WORK_DIR, no login shell); any other account is reported, not changed.
-# The running agent keeps its old groups until it restarts, which every install and upgrade does.
-#
-# Decision D12 (DEP-019, option A): the installer records in $DOCKER_GROUP_MARKER_FILE that IT added
-# the membership. That marker is what authorizes a removal on any account; a membership it did not add
-# (the marker is absent) is never removed on a shared account, only reported, and the agent then shows
-# "in the docker group: root-equivalent" on the server page. The marker is root-owned under /etc, not
-# in the agent's own directories, so the agent account can neither erase nor forge it.
+# Revoke Docker membership when disabling the capability only for the dedicated account or when a
+# root-owned marker proves the installer added it; otherwise report the shared account's
+# root-equivalent access without changing membership. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 docker_group_added_by_installer() {
     [ -f "$DOCKER_GROUP_MARKER_FILE" ] && [ "$(cat "$DOCKER_GROUP_MARKER_FILE" 2>/dev/null)" = "$AGENT_USER" ]
 }
@@ -946,6 +944,31 @@ ask_install_package() {
     esac
 }
 
+# Ask user confirmation and install a package if a shared library is missing.
+# Args: $1 = soname to look up in the linker cache, $2 = apt package, $3 = yum package,
+# $4 = reason description. Respects ASSUME_YES. Returns 0 if the library is present after.
+ask_install_library() {
+    _ail_soname="$1"; _ail_reason="$4"
+    _ail_pkg="$2"
+    if ! command -v apt-get >/dev/null 2>&1; then
+        _ail_pkg="$3"
+    fi
+    if ldconfig -p 2>/dev/null | grep -Fq "$_ail_soname"; then
+        return 0
+    fi
+    if [ "$ASSUME_YES" -eq 1 ]; then
+        log_info "  Installing '$_ail_pkg' (assume-yes mode)..."
+    else
+        printf "  '%s' is not installed (%s). Install it? [Y/n] " "$_ail_pkg" "$_ail_reason"
+        read _ail_answer
+        case "$_ail_answer" in
+            [nN]*) log_info "  Skipping '$_ail_pkg'."; return 1 ;;
+        esac
+    fi
+    install_package "$_ail_pkg" || return 1
+    ldconfig -p 2>/dev/null | grep -Fq "$_ail_soname"
+}
+
 # Install the host tools the pipeline-runner module needs. Language SDKs are resolved
 # from the repository lock manifest and run inside immutable OCI images.
 # No elevation is granted here - these are ordinary packages the agent invokes as
@@ -957,6 +980,12 @@ ensure_pipeline_runner_packages() {
     # S-FEAT-BLDX: buildx is the modern (non-legacy) docker build backend. Best-effort: on a box without
     # the plugin, docker build still works via the legacy builder, so a missing plugin never blocks install.
     ask_install_package "docker-buildx" "docker-buildx-plugin" "used for BuildKit / multi-platform container builds" || true
+    # The .NET SDK the pipelines download runs on this host, and its wasm-tools workload links the
+    # frontend with the Node.js bundled in the Emscripten pack. That Node.js needs libatomic.so.1, which
+    # a minimal Ubuntu image does not ship: the frontend publish then dies with "error while loading
+    # shared libraries: libatomic.so.1" (local mirror CI run 1272). An unprivileged pipeline cannot
+    # install it, so the runner module does.
+    ask_install_library "libatomic.so.1" "libatomic1" "libatomic" "needed by the Node.js of the .NET wasm-tools workload" || true
 }
 
 # The deployment module also owns explicit, verified database restores during a release rollback.
@@ -1005,6 +1034,11 @@ ensure_optional_packages() {
             log_error "'acl' (setfacl) is required for the elevation you requested but could not be installed. Run 'apt-get install -y acl' then re-run, or drop the elevation flags."
             exit 1
         fi
+    else
+        # Not required by an elevation, but the read-only SSH configuration grant (aetheus-agent-read-grant)
+        # is an ACL: without setfacl it is skipped and the SSH card shows those files as unknown.
+        ask_install_package "setfacl" "acl" "lets the agent read the SSH configuration it monitors" \
+            || log_warn "  setfacl unavailable: the agent will not be able to read the SSH files that need an ACL (the SSH card shows them as unknown)."
     fi
 }
 
@@ -1080,10 +1114,9 @@ apply_read_acls() {
     fi
 }
 
-# On --upgrade, re-derive the elevation posture from what is already on the box so
-# an upgrade never silently widens *or* drops what the operator chose. A capability named by an
-# --enable-*/--disable-* flag or a module on this command keeps the value the command gave it; every
-# other one keeps what the host shows (audit DEP-021). preserve only ever turns a capability on.
+# Derive unchanged capabilities from the installed host posture so upgrades neither widen nor drop
+# operator-selected privileges; explicit flags retain precedence for their own capability. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 preserve() {
     is_explicit "$1" && return 0
     eval "ENABLE_$1=1"
@@ -1151,11 +1184,9 @@ derive_existing_posture() {
     fi
 }
 
-# Purges the agent's own state from the work dir before a reinstall: SQLite offline queue, cached
-# logs, enrollment state and keys, run workspaces. The deployment tree ($DEPLOY_BASE_DIR, each
-# application's releases, current and secrets) is not agent state and stays: wiping it on a return to
-# enrolment left every deployed application unable to start until it was delivered again (audit
-# DEP-020). The directory itself is kept so the chown below stays idempotent.
+# Clear only agent state during reinstallation and preserve the deployment tree so delivered
+# applications retain their releases and secrets; keep the work directory for idempotent ownership
+# setup. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 purge_agent_work_dir() {
     [ -d "$WORK_DIR" ] || return 0
     [ -n "$(ls -A "$WORK_DIR" 2>/dev/null)" ] || return 0
@@ -1271,10 +1302,9 @@ write_certbot_manage() {
     log_info "Configuring certbot management: root-owned production ACME/local TLS helper + sudoers..."
     ensure_helper_dir
 
-    # Nothing in the helper is expanded at install time except #{ACME_WEBROOT}#, the one value that
-    # belongs to the host rather than to the helper (R-249: it replaces the former sed of
-    # __AETHEUS_ACME_WEBROOT__, and render_host_config refuses to install it unsubstituted). Bounded
-    # by require_web_root above, so this can only ever be a direct child of /var/www.
+    # Substitute only the host's ACME_WEBROOT and reject unresolved placeholders; require_web_root
+    # bounds it to a direct child of /var/www. See
+    # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
     render_host_config certbot/aetheus-certbot-issue "$CERTBOT_ISSUE_HELPER_PATH"
     chown root:root "$CERTBOT_ISSUE_HELPER_PATH"
     chmod 755 "$CERTBOT_ISSUE_HELPER_PATH"
@@ -1296,7 +1326,8 @@ write_certbot_manage() {
     write_certbot_conventions
 }
 
-# PLAN-007: make the Aetheus ACME web root the only renewal path, for Aetheus and for a manual run.
+# Use the same ACME web root for automated and manual certificate renewal. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 write_certbot_conventions() {
     _cc_webroot="${ACME_WEBROOT_OVERRIDE:-/var/www/aetheus-acme}"
     mkdir -p "$(dirname "$CERTBOT_CLI_INI")" "$(dirname "$CERTBOT_APACHE_DEPLOY_HOOK")" "$CERTBOT_STATE_DIR"
@@ -1346,11 +1377,9 @@ remove_certbot_conventions() {
     # cli.ini and the deploy hook stay: they keep manual renewals working without the agent.
 }
 
-# Migration cleanup: a host previously provisioned by the PRE-RENAME "prometheus" agent still carries
-# /etc/sudoers.d/prometheus-* drop-ins (defining the old PROM_* aliases) and a /usr/local/lib/prometheus
-# helper dir. Left in place they (a) DUPLICATE alias names the sudo parser reads across all drop-ins ->
-# "Alias already defined" warnings on every sudo call, and (b) leave orphaned root grants for the defunct
-# prometheus-agent user. Remove the old agent's artifacts before writing ours. Best-effort, never blocks.
+# Remove legacy prometheus sudoers and helper artifacts best-effort so duplicate aliases and
+# orphaned root grants cannot conflict with the installed agent. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 cleanup_legacy_prometheus_artifacts() {
     # EXACT names only - never a blind `prometheus-*` glob: an unrelated third party (the Prometheus
     # monitoring stack) ships its OWN sudoers drop-ins (prometheus-node-exporter, prometheus-alertmanager,
@@ -1395,7 +1424,7 @@ apply_sudoers() {
     if [ "$ENABLE_RKHUNTER_MANAGE" -eq 1 ]; then
         write_rkhunter_manage_sudoers
     else
-        rm -f "$RKHUNTER_MANAGE_SUDOERS_FILE"
+        rm -f "$RKHUNTER_MANAGE_SUDOERS_FILE" "$RKHUNTER_HELPER_PATH"
     fi
     # Phase 3 - cron management: root-owned helper + NOPASSWD sudoers for that one binary.
     if [ "$ENABLE_CRON_MANAGE" -eq 1 ]; then
@@ -1513,6 +1542,16 @@ grant_sudoers_read_acls() {
     if [ "$_gsr_any" -eq 1 ]; then
         log_info "  Granted $AGENT_USER read access to sudoers drop-ins (capability self-report)."
     fi
+}
+
+# Major version of the running systemd ("systemd 245 (245.4-4ubuntu3)" gives 245); 0 when it cannot be
+# read, so a caller testing for a minimum treats an unknown version as too old.
+systemd_major_version() {
+    _sd_version="$(systemctl --version 2>/dev/null | awk 'NR == 1 { print $2; exit }')"
+    case "$_sd_version" in
+        ""|*[!0-9]*) echo 0 ;;
+        *) echo "$_sd_version" ;;
+    esac
 }
 
 # Create the root-owned helper directory (root:root, 0755 - agent can traverse + exec but NOT
@@ -1670,7 +1709,7 @@ write_service_enable_sudoers() {
 
 # S-FEAT-W8KN - install/uninstall a managed OS package via apt-get. Each entry is an EXACT argv for a
 # package in the closed allow-list (kept in lockstep with Aetheus.Shared.Constants.ManageablePackages
-# by ManageablePackagesSudoersAuditTests). Names are the real apt package names (docker.io / mysql-server
+# by SudoersAuditTests). Names are the real apt package names (docker.io / mysql-server
 # / mariadb-server / mongodb-org), NOT the service keys. `apt-get update` is allow-listed so a fresh box
 # with an empty index can refresh before install. INSTALL covers the full list; PURGE is restricted to
 # the Removable subset (protected packages - databases, ufw/fail2ban, docker - cannot be uninstalled). No
@@ -1732,11 +1771,9 @@ write_mail_setup() {
     chown root:root "$MAIL_SETUP_HELPER_PATH"
     chmod 755 "$MAIL_SETUP_HELPER_PATH"
 
-    # S-FEAT-W8KN incremental ops helper (add-domain / add-account / add-alias / dkim-rotate). Same
-    # root-owned boundary recipe as mail-setup: re-validates every argument, reads an account password
-    # from stdin (never argv), and operates on the stack mail-setup provisioned. Never evals input. The
-    # agent (MailOperationExecutor.ManageHelperPath) shells out to exactly this binary via sudo -n.
-    # Same web root as the certbot helpers (PLAN-007): a mail certificate renews like every other one.
+    # Keep mail operations behind the root-owned helper with argument validation and passwords on
+    # stdin; share the certbot ACME web root so mail certificates use the same renewal path. See
+    # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
     render_host_config mail/mail-manage "$MAIL_MANAGE_HELPER_PATH"
     chown root:root "$MAIL_MANAGE_HELPER_PATH"
     chmod 755 "$MAIL_MANAGE_HELPER_PATH"
@@ -1774,11 +1811,22 @@ write_teamspeak_setup() {
     }
 }
 
-# Items #10.2/#10.3 - same recipe as Apache: argv-exact allow-list + Defaults noexec /
+# Items #10.2/#10.3 - root-owned helper (ADR-019) + argv-exact allow-list + Defaults
 # timestamp_timeout=0 / env_reset / secure_path. Three commands strictly: check, update,
-# propupd. Any other rkhunter flag (e.g. --logfile, --configfile) is refused by sudo.
+# propupd. No rkhunter flag reaches sudo; the helper runs the fixed rkhunter argv. noexec is
+# omitted because rkhunter, a shell script, must exec grep/tr/cut (recette R3-36).
 write_rkhunter_manage_sudoers() {
-    log_info "Configuring RKHunter-manage sudoers (items #10.2/#10.3, ultra-strict allow-list)..."
+    log_info "Configuring RKHunter-manage helper + sudoers (items #10.2/#10.3, ultra-strict allow-list)..."
+    ensure_helper_dir
+    render_host_config rkhunter/aetheus-rkhunter "$RKHUNTER_HELPER_PATH"
+    chown root:root "$RKHUNTER_HELPER_PATH"
+    chmod 755 "$RKHUNTER_HELPER_PATH"
+    # rkhunter writes its log 0600 root; the helper re-grants read after each run, this covers the log
+    # already on disk (left by the package's own daily run) so the collector reads it from now on.
+    if [ -f /var/log/rkhunter.log ]; then
+        setfacl -m "u:$AGENT_USER:r" /var/log/rkhunter.log 2>/dev/null \
+            || log_warn "  Could not grant $AGENT_USER read access to /var/log/rkhunter.log"
+    fi
     render_host_config rkhunter/sudoers.d/aetheus-rkhunter "$RKHUNTER_MANAGE_SUDOERS_FILE"
     chmod 440 "$RKHUNTER_MANAGE_SUDOERS_FILE"
     visudo -cf "$RKHUNTER_MANAGE_SUDOERS_FILE" || {
@@ -1808,7 +1856,7 @@ print_posture_summary() {
         log_info "    apache manage   : off (no Apache write/reload privileges)"
     fi
     if [ "$ENABLE_RKHUNTER_MANAGE" -eq 1 ]; then
-        log_info "    rkhunter manage : ON  (sudoers ${RKHUNTER_MANAGE_SUDOERS_FILE}; argv-exact, noexec)"
+        log_info "    rkhunter manage : ON  (sudoers ${RKHUNTER_MANAGE_SUDOERS_FILE}; root helper ${RKHUNTER_HELPER_PATH}, argv-exact)"
     else
         log_info "    rkhunter manage : off (cannot run rkhunter scan/update/propupd)"
     fi
@@ -1912,11 +1960,9 @@ write_systemd_unit() {
         EXEC_START="/usr/bin/dotnet $INSTALL_DIR/Aetheus.Agent.Linux.dll"
     fi
 
-    # NoNewPrivileges neutralises ALL sudo/setuid escalation - so it can only be true when no sudo
-    # grant is in play. Every grant apply_sudoers installs counts (sudo_grant_enabled): cron,
-    # portsentry, service-enable and rkhunter were once left out, and their grants were dead on
-    # arrival under NoNewPrivileges=true (audit DEP-018). When relaxed we document the regression;
-    # the rest of the sandbox still applies.
+    # Enable NoNewPrivileges only when no sudo grant is active because it blocks all sudo and setuid
+    # escalation; retain the remaining sandbox when an explicit grant requires elevation. See
+    # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
     if sudo_grant_enabled; then
         NNP_BLOCK="# RELAXED: a sudo grant (any --enable-* capability that installs a sudoers drop-in, or
 # --module deployment) requires NoNewPrivileges=false (sudo needs setgid(0) for 'systemctl reload
@@ -1933,8 +1979,8 @@ NoNewPrivileges=false"
         SANDBOX_PRIV_BLOCK="RestrictSUIDSGID=false
 # CapabilityBoundingSet intentionally left at the default (full set) so the sudo grant can elevate."
     else
-        # R-249: restores the block commit df6895eb9 dropped by mistake (its sandboxed branch left
-        # NNP_BLOCK unset, so the unit carried an empty line instead). Same text and position as before.
+        # Set NoNewPrivileges in the sandboxed branch so the rendered service unit retains its
+        # zero-elevation boundary. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
         NNP_BLOCK="# Fully sandboxed: no sudo grant, so privilege escalation is blocked outright.
 NoNewPrivileges=true"
         # Fully sandboxed collector: no sudo grant, so strip every capability and block setuid exec.
@@ -1943,10 +1989,9 @@ NoNewPrivileges=true"
 CapabilityBoundingSet="
     fi
 
-    # Package/mail/deploy operations genuinely need broad system writes, and so do the portsentry and
-    # TeamSpeak setup helpers (apt-get install, /etc/default, /etc/systemd/system, /opt). Apache,
-    # certbot, cron and rkhunter only need narrow trees, so retain ProtectSystem=strict and open those
-    # exact paths (audit DEP-018: cron, portsentry, rkhunter and TeamSpeak setup had none).
+    # Allow broad writes only for helpers that install or manage system software; keep ProtectSystem
+    # strict with narrow writable paths for Apache, certbot, cron and rkhunter. See
+    # docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
     READ_WRITE_PATHS_BLOCK=""
     if [ "$ENABLE_PACKAGE_MANAGE" -eq 1 ] || [ "$ENABLE_PATCH_MANAGE" -eq 1 ] \
        || [ "$ENABLE_FIREWALL_MANAGE" -eq 1 ] || [ "$ENABLE_MAIL_SETUP" -eq 1 ] \
@@ -1971,8 +2016,8 @@ ProtectSystem=false"
             READ_WRITE_PATHS_BLOCK="$READ_WRITE_PATHS_BLOCK -/var/lib/rkhunter -/var/log"
         fi
         if [ "$ENABLE_CERTBOT_MANAGE" -eq 1 ]; then
-            # The helpers run inside this unit's mount namespace: the ACME web root receives the
-            # challenge files and the state directory the renewal-check outcome (PLAN-007).
+            # Allow the unit's helpers to write challenge files and renewal-check evidence inside
+            # its mount namespace. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
             _rw_acme_webroot="${ACME_WEBROOT_OVERRIDE:-/var/www/aetheus-acme}"
             mkdir -p /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt "$_rw_acme_webroot" "$CERTBOT_STATE_DIR"
             READ_WRITE_PATHS_BLOCK="$READ_WRITE_PATHS_BLOCK /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt $_rw_acme_webroot $CERTBOT_STATE_DIR"
@@ -1991,12 +2036,65 @@ ProtectSystem=false"
     # the homes are reachable; the leading '-' lets the unit start without it, certbot then failing as
     # it did before rather than the whole agent.
     PROTECT_HOME_BLOCK="ProtectHome=true"
+    #
+    # ProtectHome=tmpfs exists from systemd 242 only (see the SSH binds below): an older systemd, or one
+    # whose version cannot be read, ignores the value and leaves the homes readable. There the unit
+    # keeps ProtectHome=true and snap certbot stays unable to create its user data directory.
     if [ "$ENABLE_CERTBOT_MANAGE" -eq 1 ]; then
-        if ! mkdir -p /root/snap 2>/dev/null; then
-            echo "WARNING: /root/snap cannot be created here (homes hidden); snap certbot needs it, run the installer outside the upgrade worker to create it." >&2
-        fi
-        PROTECT_HOME_BLOCK="ProtectHome=tmpfs
+        if [ "$(systemd_major_version)" -ge 242 ]; then
+            if ! mkdir -p /root/snap 2>/dev/null; then
+                echo "WARNING: /root/snap cannot be created here (homes hidden); snap certbot needs it, run the installer outside the upgrade worker to create it." >&2
+            fi
+            PROTECT_HOME_BLOCK="ProtectHome=tmpfs
 BindPaths=-/root/snap"
+        else
+            log_warn "systemd older than 242 (or its version is unreadable): the homes stay hidden with ProtectHome=true and snap certbot cannot create its user data directory under /root/snap."
+        fi
+    fi
+
+    # Read-only host observation (docs/contracts/security.md, "Read-only host observation rights"):
+    # fresh install and --upgrade both end here, so both end with the same rights.
+    #  1. The root-owned helper, run by its own oneshot unit before every start of the agent: read ACLs
+    #     on the SSH configuration.
+    #  2. The unit joins systemd-journal, whose members may read the journal and nothing else: the kernel
+    #     messages that name an OOM victim come from it, ProtectKernelLogs=true staying on.
+    #  3. The .ssh directory of each login user is bound read-only into the otherwise empty homes. The
+    #     list comes from /etc/passwd, which stays readable when this script runs from the upgrade
+    #     worker (ProtectHome=true): a '-' skips a directory that does not exist.
+    ensure_helper_dir
+    render_host_config agent/aetheus-agent-read-grant "$AGENT_READ_GRANT_HELPER_PATH"
+    chown root:root "$AGENT_READ_GRANT_HELPER_PATH"
+    chmod 755 "$AGENT_READ_GRANT_HELPER_PATH"
+    render_host_config agent/aetheus-agent-read-grant.service "$AGENT_READ_GRANT_SERVICE_PATH"
+    chown root:root "$AGENT_READ_GRANT_SERVICE_PATH"
+    chmod 644 "$AGENT_READ_GRANT_SERVICE_PATH"
+
+    JOURNAL_GROUP_BLOCK="# systemd-journal does not exist on this host: the kernel log cannot be read, OOM kills are counted without a process name."
+    if getent group systemd-journal >/dev/null 2>&1; then
+        JOURNAL_GROUP_BLOCK="# Read-only access to the systemd journal (kernel messages: the process an OOM kill took). A group, not
+# capability: ProtectKernelLogs=true stays on and the agent still cannot write the kernel log.
+SupplementaryGroups=systemd-journal"
+    fi
+
+    #     ProtectHome=tmpfs exists from systemd 242 only: an older systemd (Debian 10, CentOS 7/8, Ubuntu
+    #     18.04) does not know the value, ignores the line and leaves the homes readable. Below 242 the
+    #     unit keeps ProtectHome=true and binds nothing; the SSH key files then stay "unknown".
+    _ssh_bind=""
+    if [ "$(systemd_major_version)" -ge 242 ]; then
+        for _ssh_dir in $("$AGENT_READ_GRANT_HELPER_PATH" --list-ssh-dirs); do
+            _ssh_bind="$_ssh_bind -$_ssh_dir"
+        done
+    else
+        log_warn "systemd older than 242 (or its version is unreadable): the homes stay hidden with ProtectHome=true and the SSH key files cannot be shown to the agent (they stay unknown)."
+    fi
+    if [ -n "$_ssh_bind" ]; then
+        # Opening any path below the homes needs them replaced by an empty tmpfs; only the listed
+        # directories are bound in, read-only.
+        if [ "$PROTECT_HOME_BLOCK" = "ProtectHome=true" ]; then
+            PROTECT_HOME_BLOCK="ProtectHome=tmpfs"
+        fi
+        PROTECT_HOME_BLOCK="$PROTECT_HOME_BLOCK
+BindReadOnlyPaths=${_ssh_bind# }"
     fi
 
     # A deployment target needs an ACL mask with execute on the private state directory so the
@@ -2204,8 +2302,8 @@ run_health_check() {
     return 1
 }
 
-# R-249: every mode but --purge renders host configuration templates; check they are all present
-# before the first change to the host.
+# Check all required host templates before changing the host because every mode except purge renders
+# them. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 if [ "$MODE" != "purge" ]; then
     require_host_config
 fi
@@ -2268,6 +2366,13 @@ if [ "$MODE" = "purge" ]; then
         "$AGENT_POSTURE_VERSION_FILE" "$AGENT_UPDATE_REQUEST_FILE"
     remove_systemd_unit
 
+    # Take the agent account's read ACLs back (SSH configuration) before the account and the helper go.
+    if [ -x "$AGENT_READ_GRANT_HELPER_PATH" ]; then
+        "$AGENT_READ_GRANT_HELPER_PATH" --revoke || true
+    fi
+    rm -f "$AGENT_READ_GRANT_HELPER_PATH" "$AGENT_READ_GRANT_SERVICE_PATH"
+    systemctl daemon-reload 2>/dev/null || true
+
     if [ -f "$SUDOERS_FILE" ]; then
         log_info "Removing sudoers file..."
         rm -f "$SUDOERS_FILE"
@@ -2279,7 +2384,7 @@ if [ "$MODE" = "purge" ]; then
     rm -f "$APACHE_CONFIGTEST_HELPER_PATH"
     if [ -f "$RKHUNTER_MANAGE_SUDOERS_FILE" ]; then
         log_info "Removing RKHunter-manage sudoers file..."
-        rm -f "$RKHUNTER_MANAGE_SUDOERS_FILE"
+        rm -f "$RKHUNTER_MANAGE_SUDOERS_FILE" "$RKHUNTER_HELPER_PATH"
     fi
     if [ -f "$CRON_MANAGE_SUDOERS_FILE" ] || [ -f "$PORTSENTRY_MANAGE_SUDOERS_FILE" ] || \
        [ -f "$SERVICE_ENABLE_SUDOERS_FILE" ] || [ -f "$PACKAGE_MANAGE_SUDOERS_FILE" ] || \
@@ -2342,6 +2447,24 @@ if [ "$MODE" = "purge" ]; then
     exit 0
 fi
 
+# Restores the executable bit on the native binaries the agent runs, after the files land in
+# $INSTALL_DIR. A tarball packed on Windows (.NET TarFile) loses the Unix +x bit, so this is never
+# left to the archive. Two kinds of binary:
+#   - Aetheus.Agent.Linux: the self-contained apphost that systemd ExecStart and the pre-start probe
+#     run directly (absent in a framework-dependent build, hence the existence check).
+#   - aetheus-fn/<rid>/aetheus-fn: the pipeline-functions executable (PLAN-002 lot 1.0g), one per
+#     Linux C library. It is bind-mounted read-only into a step container that runs as a non-root
+#     user, so it must be world-readable and world-executable (755), not only owner-executable.
+restore_executable_modes() {
+    if [ -f "$INSTALL_DIR/Aetheus.Agent.Linux" ]; then
+        chmod +x "$INSTALL_DIR/Aetheus.Agent.Linux"
+    fi
+    for _fn_bin in "$INSTALL_DIR"/aetheus-fn/*/aetheus-fn; do
+        [ -f "$_fn_bin" ] || continue
+        chmod 755 "$_fn_bin"
+    done
+}
+
 # =============================================================================
 # Mode: UPGRADE
 # =============================================================================
@@ -2401,11 +2524,8 @@ if [ "$MODE" = "upgrade" ]; then
         log_warn "User $AGENT_USER missing - upgrade continued but service will fail to start. Run default install mode."
     fi
 
-    # Self-contained apphost may have lost its +x bit if the tarball was packed on
-    # Windows - restore it so the swapped-in binary stays runnable. No-op otherwise.
-    if [ -f "$INSTALL_DIR/Aetheus.Agent.Linux" ]; then
-        chmod +x "$INSTALL_DIR/Aetheus.Agent.Linux"
-    fi
+    # The swapped-in native binaries may have lost their +x bit (tarball packed on Windows).
+    restore_executable_modes
 
     # Preserve the operator's existing elevation posture across the upgrade
     # (never silently widen or drop it); explicit --enable-* flags override.
@@ -2586,7 +2706,7 @@ fi
 rm -f "$APACHE_CONFIGTEST_HELPER_PATH"
 if [ -f "$RKHUNTER_MANAGE_SUDOERS_FILE" ]; then
     log_info "  Removing old RKHunter-manage sudoers rules..."
-    rm -f "$RKHUNTER_MANAGE_SUDOERS_FILE"
+    rm -f "$RKHUNTER_MANAGE_SUDOERS_FILE" "$RKHUNTER_HELPER_PATH"
 fi
 
 if [ -f "$INSTALL_DIR/appsettings.json" ]; then
@@ -2627,13 +2747,8 @@ mkdir -p "$WORK_DIR"
 chown "$AGENT_USER:$AGENT_GROUP" "$WORK_DIR"
 chown -R "$AGENT_USER:$AGENT_GROUP" "$INSTALL_DIR"
 
-# Self-contained builds ship a native apphost (Aetheus.Agent.Linux) that the
-# systemd ExecStart and the pre-start probe run directly. A tarball packed on
-# Windows (.NET TarFile) loses the Unix +x bit, so restore it here. No-op for
-# framework-dependent builds (the apphost file is absent there).
-if [ -f "$INSTALL_DIR/Aetheus.Agent.Linux" ]; then
-    chmod +x "$INSTALL_DIR/Aetheus.Agent.Linux"
-fi
+# Native binaries (agent apphost, aetheus-fn per C library) get their modes back here.
+restore_executable_modes
 
 # --- Write configuration ---
 # JSON-escape operator-supplied values so a " or \ in the URL/token/name cannot

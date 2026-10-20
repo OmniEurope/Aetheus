@@ -5,7 +5,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Git;
 
-/// <summary>Recette R-534: the mirror a pipeline takes its workspace from is fetched on demand.</summary>
+/// <summary>The mirror a pipeline takes its workspace from is fetched on demand.</summary>
 public sealed class ExternalMirrorRefresherTests
 {
     private readonly IGitLightRepository _repositories = Substitute.For<IGitLightRepository>();

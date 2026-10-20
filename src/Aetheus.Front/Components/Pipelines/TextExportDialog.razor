@@ -1,15 +1,14 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Pipelines
-@*
-    PLAN-003 lot 22: an export is read before it is kept. The run's "Export" used to download a file
-    straight away, so the only way to see what it contained was to open it elsewhere. The text is
-    shown in full here, with the three things one does with it: download, copy, close.
-*@
+@* The export preview exposes the full text with download, copy and close actions. *@
 <OmniStack Gap="OmniSpacing.Medium">
     <OmniTextArea Value="@Text" ReadOnly="true" Rows="18" Class="w-100 text-export-dialog-body"
                     aria-label="@L["ExportContent"]"  ValueExpression="@(() => Text)"/>
     <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]">
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyAsync"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["Copy"]</span></OmniButton>
+        @* STD-BTN detection 11: Download visible, the other actions in the menu. *@
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem OnClick="@CopyAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["Copy"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@DownloadAsync"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Download"]</span></OmniButton>
     </DialogFooter>
 </OmniStack>

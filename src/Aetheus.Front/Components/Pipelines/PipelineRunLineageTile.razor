@@ -1,9 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R-498: where the run comes from and what it started, in one tile of the overview. The origin
-   is the parent run when another run started this one, else the person who launched it, else
-   "automatic" (a schedule, a push, a webhook). Under it, the follow-up runs launched after this one
-   (recette R2-026: not the runs of its own trigger stages, already in the timeline). Each run named
-   here is a link. *@
+@* The lineage tile links to the parent run or initiating user and to subsequent follow-up runs.
+   Trigger-stage children belong in the timeline. *@
 <OmniCard Class="@TileClass">
     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Path" Class="run-tile-icon" /> @L["RunLineage"]</OmniText>
     <div class="run-tile-main run-tile-main-rows">
@@ -31,7 +28,7 @@
         @if (_lineage is { Downstream.Count: > 0 } lineage)
         {
             <span class="run-tile-sublabel">@L["RunStarted"]</span>
-            @* Recette R2-026: the first follow-ups only, the full list behind "See all". *@
+            @* The first follow-ups only, the full list behind "See all". *@
             @foreach (var child in lineage.Downstream.Take(MaxShown))
             {
                 <span class="run-tile-subrow">

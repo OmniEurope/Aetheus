@@ -12,7 +12,8 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
 {
     private const string BranchVariable = "AETHEUS_RUN_BRANCH";
     private const string IdempotencyVariable = "AETHEUS_RUN_IDEMPOTENCY_KEY";
-    private static readonly string[] CurrentShapeNames = ["parameters", "sourceBranch", "idempotencyKey"];
+    private const string RunToEndVariable = "AETHEUS_RUN_TO_END";
+    private static readonly string[] CurrentShapeNames = ["parameters", "sourceBranch", "idempotencyKey", "runToEnd"];
 
     public override PipelineRunRequest? Read(
         ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -28,6 +29,7 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
             TryGetProperty(root, "parameters", out var parametersElement);
             TryGetProperty(root, "sourceBranch", out var branchElement);
             TryGetProperty(root, "idempotencyKey", out var idempotencyElement);
+            TryGetProperty(root, "runToEnd", out var runToEndElement);
             return new PipelineRunRequest
             {
                 Parameters = parametersElement.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null
@@ -38,13 +40,15 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
                     : null,
                 IdempotencyKey = idempotencyElement.ValueKind == JsonValueKind.String
                     ? idempotencyElement.GetString()
-                    : null
+                    : null,
+                RunToEnd = runToEndElement.ValueKind == JsonValueKind.True
             };
         }
 
-        var legacy = ReadStringDictionary(root, PipelineRunRequest.MaxParameterCount + 2);
+        var legacy = ReadStringDictionary(root, PipelineRunRequest.MaxParameterCount + 3);
         legacy.Remove(BranchVariable, out var sourceBranch);
         legacy.Remove(IdempotencyVariable, out var idempotencyKey);
+        legacy.Remove(RunToEndVariable, out var runToEnd);
         if (legacy.Count > PipelineRunRequest.MaxParameterCount)
             throw new JsonException(
                 $"Pipeline run parameters cannot contain more than {PipelineRunRequest.MaxParameterCount} entries.");
@@ -52,7 +56,8 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
         {
             Parameters = legacy.Count == 0 ? null : legacy,
             SourceBranch = sourceBranch,
-            IdempotencyKey = idempotencyKey
+            IdempotencyKey = idempotencyKey,
+            RunToEnd = PipelineRunToEndSetting.IsAllowed(runToEnd)
         };
     }
 
@@ -68,6 +73,8 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
             writer.WriteString("sourceBranch", value.SourceBranch);
         if (!string.IsNullOrWhiteSpace(value.IdempotencyKey))
             writer.WriteString("idempotencyKey", value.IdempotencyKey);
+        if (value.RunToEnd)
+            writer.WriteBoolean("runToEnd", true);
         writer.WriteEndObject();
     }
 
@@ -96,8 +103,9 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
     /// <summary>
     /// SHARED-002: the legacy shape is a flat dictionary of strings, and its keys are parameter names a
     /// pipeline may legally choose, <c>parameters</c> and <c>sourceBranch</c> included. Seeing one of
-    /// the current names is therefore not enough. The current shape has only those three names, and its
-    /// <c>parameters</c> is an object or null, never a string; anything else is a legacy dictionary.
+    /// the current names is therefore not enough. The current shape has only those four names, its
+    /// <c>parameters</c> is an object or null, never a string, and its <c>runToEnd</c> is never a string
+    /// either; anything else is a legacy dictionary.
     /// A body made only of <c>sourceBranch</c> and/or <c>idempotencyKey</c> strings is intrinsically
     /// ambiguous and is read as the current shape, the one today's clients send.
     /// </summary>
@@ -106,7 +114,8 @@ public sealed class PipelineRunRequestJsonConverter : JsonConverter<PipelineRunR
         foreach (var property in root.EnumerateObject())
         {
             if (!CurrentShapeNames.Contains(property.Name, StringComparer.OrdinalIgnoreCase)) return false;
-            if (property.Name.Equals("parameters", StringComparison.OrdinalIgnoreCase)
+            if ((property.Name.Equals("parameters", StringComparison.OrdinalIgnoreCase)
+                    || property.Name.Equals("runToEnd", StringComparison.OrdinalIgnoreCase))
                 && property.Value.ValueKind == JsonValueKind.String) return false;
         }
         return true;

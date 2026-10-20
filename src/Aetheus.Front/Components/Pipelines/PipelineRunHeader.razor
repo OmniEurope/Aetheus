@@ -2,16 +2,13 @@
 @using static Aetheus.Front.Components.Pipelines.PipelineRunFormatting
 @inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
 
-@* PLAN-003 lot 1: the run page uses THE page header like every other route. The title is the run
-   itself; the back arrow and the trail lead to its pipeline. R-496: the header no longer repeats what
-   the overview tiles say (pipeline name, status, candidate verdict, parent pipeline); it keeps the
-   badges that call for attention. *@
+@* The header identifies the run and links to its pipeline; attention badges complement the
+   detailed overview tiles. *@
 <OmniPageHeader Title="@($"{L["PipelineRun"]} #{Run.Id}")" ShowBack="@(!string.IsNullOrWhiteSpace(PipelineHref))"
                                  Class="pipeline-run-page-header" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon>
     <Badges>
-        @* D15: the states that used to stack banners above the tabs. Each is one badge whose tooltip
-           carries the short reason; the full detail lives in the overview tab. *@
+        @* Badges expose short reasons through tooltips and full details through the overview tab. *@
         @if (WaitingReasonCount > 0)
         {
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent"
@@ -34,7 +31,7 @@
     <Actions>
         @if (CanRerun)
         {
-            @* Recette R-137: an action button is primary. Recette R-320: each rerun choice has its icon. *@
+            @* Rerun actions use a primary button with an icon for each choice. *@
             <OmniSplitButton Variant="OmniButtonVariant.Primary" Class="@(Rerunning ? "btn-busy" : null)" aria-busy="@(Rerunning ? "true" : null)" Text="@L["Rerun"]" OnClick="@(() => RerunRequested.InvokeAsync(null))" Busy="@Rerunning"
                 aria-label="@L["Rerun"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>
                 <OmniMenuItem OnClick="@(() => RerunRequested.InvokeAsync("current"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["RerunCurrent"]</span></OmniMenuItem>

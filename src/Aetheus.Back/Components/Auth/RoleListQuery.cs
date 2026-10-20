@@ -4,12 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Auth;
 
-/// <summary>
-/// Recette R-210: the column filters of the role grids. The roles list (and the role picker) filters the
-/// projected <see cref="RoleDto"/>, so the counts are compared as the grid shows them; a role's users
-/// grid filters the <see cref="User"/> entity (SITE-FUNC-ROLE-001: Npgsql cannot translate a filter on the
-/// positional <see cref="RoleUserDto"/>, which is projected after paging). The keys are the grids' column keys.
-/// </summary>
+/// <summary>Map role-grid filters to RoleDto and role-user filters to User before paging, since
+/// Npgsql cannot translate those filters on positional RoleUserDto projections.</summary>
 internal static class RoleListQuery
 {
     internal static readonly GridQueryMap<RoleDto> Columns = new GridQueryMap<RoleDto>()

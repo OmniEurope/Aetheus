@@ -16,8 +16,8 @@ public partial class AnalysisFindingColumns
     /// filtered, which a list read from the server page by page cannot do.</summary>
     [Parameter] public bool LocalData { get; set; }
 
-    /// <summary>Recette R-504: the pipeline run whose findings are listed. A finding opened from that
-    /// list shows the file and the commit this run analysed, not those of its latest occurrence.</summary>
+    /// <summary>The pipeline run whose findings are listed. A finding opened from that list shows
+    /// the file and the commit this run analysed, not those of its latest occurrence.</summary>
     [Parameter] public int? RunId { get; set; }
 
     /// <summary>The status column. A list of findings all in one status leaves it out.</summary>
@@ -27,8 +27,8 @@ public partial class AnalysisFindingColumns
     /// findings of one run.</summary>
     [Parameter] public bool ShowOwnership { get; set; } = true;
 
-    /// <summary>Recette R2-027: the rows of decided findings carry "Revert the decision" (the caller
-    /// shows decided findings and may decide on them).</summary>
+    /// <summary>The rows of decided findings carry "Revert the decision" (the caller shows decided
+    /// findings and may decide on them).</summary>
     [Parameter] public bool CanRevertDecisions { get; set; }
 
     /// <summary>Raised by "Revert the decision" on a row; the caller confirms and reverts.</summary>
@@ -44,8 +44,8 @@ public partial class AnalysisFindingColumns
     private Func<string, string> CategoryText => _categoryText ??= GridFilterText.ForEnum<AnalysisCategory>(L);
     private Func<string, string> YesNoText => _yesNoText ??= GridFilterText.YesNo(L);
 
-    // Recette R2-124: what the export bar writes for the columns whose cell is a badge or a composed
-    // text, so the file reads as the screen (translated names, path:line, yes or no), not enum members.
+    // What the export bar writes for the columns whose cell is a badge or a composed text, so the
+    // file reads as the screen (translated names, path:line, yes or no), not enum members.
     private Func<AnalysisFindingDto, object?>? _severityExport;
     private Func<AnalysisFindingDto, object?>? _categoryExport;
     private Func<AnalysisFindingDto, object?>? _statusExport;
@@ -65,13 +65,14 @@ public partial class AnalysisFindingColumns
 
     private void Open(AnalysisFindingDto finding) => Navigation.NavigateTo(FindingHref(finding.Id, RunId));
 
-    /// <summary>Recette R2-053: the title and, under it, the message, read on hover of the one-line title.</summary>
+    /// <summary>The title and, under it, the message, read on hover of the one-line
+    /// title.</summary>
     internal static string TitleTooltip(AnalysisFindingDto finding) =>
         string.IsNullOrWhiteSpace(finding.Message) || finding.Message == finding.Title
             ? finding.Title
             : $"{finding.Title}\n{finding.Message}";
 
-    /// <summary>Recette R2-053: <c>path:line</c>, the form an editor and a terminal both read.</summary>
+    /// <summary><c>path:line</c>, the form an editor and a terminal both read.</summary>
     internal static string LocationText(AnalysisFindingOccurrenceDto occurrence) =>
         occurrence.StartLine is { } line
             ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{occurrence.FilePath}:{line}")

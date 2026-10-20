@@ -73,8 +73,7 @@ public class ProjectServersSectionDeepTests : BunitContext
     {
         var cut = RenderWithServers(1);
         cut.WaitForState(
-            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null);
 
         Assert.Contains("web-01", cut.Markup);
         Assert.Contains("db-01", cut.Markup);
@@ -154,8 +153,7 @@ public class ProjectServersSectionDeepTests : BunitContext
     {
         var cut = RenderWithServers(2, []);
         cut.WaitForState(
-            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null);
 
         Assert.Contains("NoProjectServers", cut.Markup);
         Assert.Contains("AddServer", cut.Markup);
@@ -169,8 +167,7 @@ public class ProjectServersSectionDeepTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/projects/300/servers", new List<ProjectServerDto>());
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 300));
         cut.WaitForState(
-            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null);
 
         // An empty API payload loads into an empty (non-null) _servers list and renders the empty state.
         var servers = (List<ProjectServerDto>?)typeof(ProjectServersSection)
@@ -195,8 +192,7 @@ public class ProjectServersSectionDeepTests : BunitContext
 
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 3));
         cut.WaitForState(
-            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null);
 
         var method = typeof(ProjectServersSection).GetMethod("EnsureAgentServersAsync", Priv)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -216,8 +212,7 @@ public class ProjectServersSectionDeepTests : BunitContext
 
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 4));
         cut.WaitForState(
-            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null);
 
         // Pre-set _agentServers to a known value
         var existing = new List<ServerDto> { new() { Id = 200, Name = "pre-loaded" } };
@@ -240,8 +235,7 @@ public class ProjectServersSectionDeepTests : BunitContext
     {
         var cut = RenderWithServers(5);
         cut.WaitForState(
-            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null,
-            TimeSpan.FromSeconds(2));
+            () => typeof(ProjectServersSection).GetField("_servers", Priv)!.GetValue(cut.Instance) != null);
 
         // Agent server with ServerId should have a link to /servers/{ServerId}/overview
         Assert.Contains("/servers/10/overview", cut.Markup);
@@ -253,7 +247,7 @@ public class ProjectServersSectionDeepTests : BunitContext
         // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and
         // Enter/Space, or the row click runs after its own and wins the navigation.
         var cut = RenderWithServers(1);
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // Per server: the server link, the edit and the delete buttons.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);

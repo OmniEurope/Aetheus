@@ -25,6 +25,14 @@ public sealed record DockerContainerDto
     public double MemoryLimitMb { get; init; }
     [StringLength(500)]
     public string Project { get; init; } = string.Empty;
+    /// <summary>False when the agent did not read the container's settings (older agent, inspect
+    /// failed): <see cref="Risks"/> is then unknown, not clean.</summary>
+    public bool SecurityInspected { get; init; }
+    public DockerContainerRisks Risks { get; init; }
+    /// <summary>Comma-separated added capabilities among <see cref="DockerContainerSecurity.DangerousCapabilityNames"/>.</summary>
+    [StringLength(500)]
+    public string DangerousCapabilities { get; init; } = string.Empty;
+    public AetheusContainerRole AetheusRole { get; init; }
 }
 
 public sealed record DockerImageDto

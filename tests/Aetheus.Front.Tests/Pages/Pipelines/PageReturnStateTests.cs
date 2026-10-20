@@ -7,10 +7,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Front.Tests.Pages;
 
-/// <summary>
-/// Recette R2-087 (decided 2026-10-03): a page come back to shows at once what it showed, without the
-/// page-wide loader, then refreshes behind it; the loader stays for a first visit.
-/// </summary>
+/// <summary>Returning to a page shows its cached state immediately and refreshes in the background;
+/// first visits use the page loader.</summary>
 public sealed class PageReturnStateTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -46,17 +44,17 @@ public sealed class PageReturnStateTests : BunitContext
         // First visit: nothing to show yet, the page-wide loader.
         Assert.NotEmpty(first.FindAll(".aetheus-loader"));
         firstSource.SetResult(new PipelineSourceDto());
-        first.WaitForState(() => first.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        first.WaitForState(() => first.Markup.Contains("Deploy Prod"));
 
         SetupPipeline("Deploy Prod renamed");
         var refresh = HoldSource("api/pipelines/5/source");
         var back = Render<PipelineEdit>(parameters => parameters.Add(page => page.Id, 5));
 
-        back.WaitForState(() => back.Markup.Contains("Deploy Prod"), TimeSpan.FromSeconds(2));
+        back.WaitForState(() => back.Markup.Contains("Deploy Prod"));
         Assert.Empty(back.FindAll(".aetheus-loader"));
         Assert.DoesNotContain("Deploy Prod renamed", back.Markup);
         refresh.SetResult(new PipelineSourceDto());
-        back.WaitForState(() => back.Markup.Contains("Deploy Prod renamed"), TimeSpan.FromSeconds(2));
+        back.WaitForState(() => back.Markup.Contains("Deploy Prod renamed"));
     }
 
     [Fact]
@@ -74,17 +72,17 @@ public sealed class PageReturnStateTests : BunitContext
         Assert.NotEmpty(first.FindAll(".aetheus-loader"));
         Assert.DoesNotContain("Nightly", first.Markup);
         firstLoad.SetResult(Run("Nightly"));
-        first.WaitForState(() => first.Markup.Contains("Nightly"), TimeSpan.FromSeconds(2));
+        first.WaitForState(() => first.Markup.Contains("Nightly"));
 
         var refresh = new TaskCompletionSource<PipelineRunDto>(TaskCreationOptions.RunContinuationsAsynchronously);
         _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/pipelines/runs/77", ct => refresh.Task.WaitAsync(ct));
         var back = Render<PipelineRun>(parameters => parameters.Add(page => page.RunId, 77));
 
         // The run is shown while it is read again: the loader branch renders nothing but the loader.
-        back.WaitForState(() => back.Markup.Contains("Nightly"), TimeSpan.FromSeconds(2));
+        back.WaitForState(() => back.Markup.Contains("Nightly"));
         Assert.DoesNotContain("Nightly renamed", back.Markup);
         refresh.SetResult(Run("Nightly renamed"));
-        back.WaitForState(() => back.Markup.Contains("Nightly renamed"), TimeSpan.FromSeconds(2));
+        back.WaitForState(() => back.Markup.Contains("Nightly renamed"));
     }
 
     [Fact]
@@ -104,7 +102,7 @@ public sealed class PageReturnStateTests : BunitContext
         Assert.False(load.IsCompleted);
         Assert.Equal("vps-1", back.Server?.Name);
         refresh.SetResult(new ServerDetailDto { Id = 9, Name = "vps-1 renamed" });
-        await load.WaitAsync(TimeSpan.FromSeconds(2), Xunit.TestContext.Current.CancellationToken);
+        await load.WaitAsync(Aetheus.Front.Tests.TestDoubles.HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("vps-1 renamed", back.Server?.Name);
         await back.DisposeAsync();
     }

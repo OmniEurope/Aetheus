@@ -5,11 +5,9 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recette R-432: a server-virtualized grid shows OE's loading bar between its headers and its first
-/// row while a request of the grid runs. Every server grid of
-/// Aetheus goes through <see cref="AetheusDataGrid{TItem}"/>, so the wrapper is where it is proved.
-/// </summary>
+/// <summary> A server-virtualized grid shows OE's loading bar between its headers and its first row
+/// while a request of the grid runs. Every server grid of Aetheus goes through <see
+/// cref="AetheusDataGrid{TItem}"/>, so the wrapper is where it is proved. </summary>
 public sealed class AetheusDataGridLoadingBarTests : BunitContext
 {
     private const string Bar = "thead > tr.omni-data-grid__progress .omni-loading-bar";
@@ -37,12 +35,13 @@ public sealed class AetheusDataGridLoadingBarTests : BunitContext
 
         gate.SetResult();
         await Task.Yield();
+        // Loaded-machine ceiling: the answer's continuation comes back through the thread pool; under load
+        // the failures left here had run 0 or 1 check and passed 20 to 32 ms later (PLAN-002 B7).
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(Bar)));
     }
 
-    /// <summary>R-432: a load the page runs by itself (outside a request of the grid) reaches the grid
-    /// through <c>Busy</c> and shows the same bar on the table, the rows staying; no Aetheus veil is drawn
-    /// over the grid any more, on the first load either.</summary>
+    /// <summary>Page-owned busy state reaches the grid through Busy and uses the same loading bar
+    /// while retaining rows.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

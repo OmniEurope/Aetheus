@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>Recette R2-122: reads and removes everything a project owns (see <see cref="ProjectDeletionScope"/>).</summary>
+/// <summary>Reads and removes everything a project owns (see <see
+/// cref="ProjectDeletionScope"/>).</summary>
 public interface IProjectDeletionRepository
 {
     /// <summary>Null when the project does not exist.</summary>

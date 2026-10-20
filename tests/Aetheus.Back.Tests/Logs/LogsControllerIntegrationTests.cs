@@ -62,7 +62,7 @@ public class LogsControllerIntegrationTests : IClassFixture<CustomWebApplication
         Assert.Empty(logs);
     }
 
-    // ──── GetTaskLogPage (recette R2-104) ────
+    // ──── GetTaskLogPage ────
 
     [Fact]
     public async Task GetTaskLogPage_PagesTheCompleteLogFromItsFirstLine_InLogOrder()

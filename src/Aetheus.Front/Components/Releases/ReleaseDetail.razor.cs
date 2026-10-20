@@ -34,12 +34,12 @@ public partial class ReleaseDetail : IAsyncDisposable
     private bool HasDeliverables =>
         _release is not null &&
         (_release.Artifacts.Count > 0 || !string.IsNullOrEmpty(_release.EnvironmentName));
-    /// <summary>Recette R-373: the repository holding the release's bare commit hash, resolved from its
-    /// repository URL; null when unknown.</summary>
+    /// <summary>The repository holding the release's bare commit hash, resolved from its repository
+    /// URL; null when unknown.</summary>
     private int? _repositoryId;
 
-    /// <summary>Recette R-373: a bare commit hash leads to the commit's own page when its repository is
-    /// known; a release whose repository cannot be told shows it as text (null), never a list of
+    /// <summary>A bare commit hash leads to the commit's own page when its repository is known; a
+    /// release whose repository cannot be told shows it as text (null), never a list of
     /// repositories to search in.</summary>
     private string? BareCommitHref => _repositoryId is { } repositoryId && !string.IsNullOrWhiteSpace(_release?.CommitHash)
         ? $"/git-repositories/{repositoryId}/commits/{Uri.EscapeDataString(_release.CommitHash)}"
@@ -55,12 +55,10 @@ public partial class ReleaseDetail : IAsyncDisposable
         release.Commits.FirstOrDefault(c => string.Equals(c.Sha, release.CommitHash, StringComparison.OrdinalIgnoreCase))
         ?? (release.Commits.Count == 1 ? release.Commits[0] : null);
 
-    /// <summary>
-    /// Recette R-373: the repository of a release that carries its commit hash but no linked commit:
-    /// the project's repository its URL names (by project and slug for an internal clone URL, whatever
-    /// host it was re-homed to), or the project's only repository when the release names none. Never
-    /// guessed among several.
-    /// </summary>
+    /// <summary> The repository of a release that carries its commit hash but no linked commit: the
+    /// project's repository its URL names (by project and slug for an internal clone URL, whatever
+    /// host it was re-homed to), or the project's only repository when the release names none.
+    /// Never guessed among several. </summary>
     private async Task<int?> ResolveRepositoryAsync(ReleaseDto release)
     {
         if (string.IsNullOrWhiteSpace(release.CommitHash) || LinkedReleaseCommit(release) is not null) return null;
@@ -129,7 +127,7 @@ public partial class ReleaseDetail : IAsyncDisposable
         }
     }
 
-    // Recette R-366/R-367: the provenance enriches the page; the release stays readable without it.
+    // The provenance enriches the page; the release stays readable without it.
     private async Task<ReleaseProvenanceDto?> LoadProvenanceAsync(int releaseId)
     {
         try { return await Api.Projects.GetReleaseProvenanceAsync(releaseId); }
@@ -144,6 +142,18 @@ public partial class ReleaseDetail : IAsyncDisposable
     {
         _canWrite = Permissions.CanWrite(ResourceType.Release);
         InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Decision D2: an archived release offers the relaunch of a complete pipeline from its commit.</summary>
+    private bool IsArchived => _release?.Status == ReleaseStatus.Archived;
+    private bool CanRelaunch => _release is not null && ReleaseRelaunch.CanRelaunch(_release.Status, _release.CommitHash);
+    private string RelaunchTitle => !_canWrite ? L["InsufficientPermissions"]
+        : CanRelaunch ? L["RelaunchFromCommit"] : L["RelaunchFromCommitUnavailable"];
+
+    private async Task RelaunchFromCommitAsync()
+    {
+        if (_release is null) return;
+        await new ArchivedReleaseRelauncher(Api, Dialog, Toast, Nav, L).RelaunchAsync(_release);
     }
 
     private async Task RollbackAsync()
@@ -162,6 +172,32 @@ public partial class ReleaseDetail : IAsyncDisposable
         if (request is not RollbackReleaseRequest rollbackRequest) return;
         if (await Api.Projects.RollbackReleaseAsync(_release.Id, rollbackRequest) is not null)
             Toast.Success("RollbackQueued", _release.Version);
+    }
+
+    /// <summary>Recette R-13: the backend asks Release.Write and Project.Admin; an archived release only
+    /// comes back through a new publication.</summary>
+    private bool CanRestoreStatus => _release is not null && _canWrite
+        && ReleaseStatusRestore.CanRestoreFrom(_release.Status)
+        && Permissions.CanAdmin(ResourceType.Project, _release.ProjectId);
+
+    private async Task RestoreStatusAsync()
+    {
+        if (_release is null) return;
+        var answer = await Dialog.OpenAsync<RestoreReleaseStatusDialog>(L["ReleaseStatusRestore"].Value,
+            new Dictionary<string, object?>
+            {
+                ["Version"] = _release.Version,
+                ["CurrentStatus"] = _release.Status
+            }, new OmniDialogOptions { Width = "520px", AutoFocusFirstElement = false });
+        if (answer is not RestoreReleaseStatusRequest request) return;
+        var outcome = await Api.Projects.RestoreReleaseStatusAsync(_release.Id, request);
+        if (outcome.Value is { } restored)
+        {
+            _release = restored;
+            Toast.Success("ReleaseStatusRestored", restored.Version);
+            return;
+        }
+        Toast.ErrorRaw(L["ReleaseStatusRestoreFailed"].Value, outcome.Error?.Message ?? string.Empty);
     }
 
     // The release status (Pending -> Deploying -> Deployed/Failed) flips while this page is open.

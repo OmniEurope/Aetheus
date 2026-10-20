@@ -11,7 +11,7 @@ public partial class ChangePasswordRequired
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private RealtimeSessionLifecycle RealtimeSession { get; set; } = default!;
 
-    /// <summary>PLAN-005 lot 8 / D47: carried through the new sign-in that follows the change.</summary>
+    /// <summary>Preserve the return path through sign-in after changing the password.</summary>
     [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
 
     private readonly PasswordChangeModel _model = new();
@@ -21,8 +21,9 @@ public partial class ChangePasswordRequired
     // FP3K: explicit sign-out for the forced-change screen (the user is otherwise trapped here).
     private async Task LogoutAsync()
     {
-        // R1-37: while the token is still held, so the server forgets the mailbox passwords it keeps for us.
-        // (After a password change the server already did, and the rotated stamp refuses this token.)
+        // While the token is still held, so the server forgets the mailbox passwords it keeps for
+        // us. (After a password change the server already did, and the rotated stamp refuses this
+        // token.)
         await Api.Auth.NotifyLogoutAsync();
         await StopRealtimeAndLogoutAsync();
         Nav.NavigateTo("/login");

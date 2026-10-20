@@ -43,10 +43,9 @@ public sealed class ExternalRepoService(
         var project = await projectRepo.FindProjectAsync(request.ProjectId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Project {request.ProjectId} not found.");
 
-        // One external repository per project. On a project without any repository it becomes the
-        // project's source, as before. On a project that has its internal repository it is attached
-        // beside it (recette R-534): an additional source for the pipelines that name it, which leaves
-        // the project's own source, default branch and clone URL untouched.
+        // An external repository becomes the source of a project without a repository. Beside an
+        // internal repository, it is an additional pipeline source and leaves the project's default
+        // branch and clone URL unchanged.
         var existing = await lightRepo.GetByProjectAsync(request.ProjectId, ct).ConfigureAwait(false);
         if (project.GitConnectionId is not null || existing.Any(GitLightMapper.IsAdditionalSource))
         {

@@ -7,11 +7,8 @@ using OmniStrings = OmniEurope.Blazor.Resources.AppStrings;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// PLAN-008 lot 10: the texts the OmniEurope.Blazor components write themselves (close buttons, pager,
-/// validation, empty grids...) resolve in every culture Aetheus runs in, including one Aetheus does not
-/// translate: an unknown culture must fall back to the library's neutral resources, never to the key.
-/// </summary>
+/// <summary>OE component text resolves in supported cultures and falls back to neutral library
+/// resources for unknown cultures.</summary>
 public sealed class OmniLocalizationTests
 {
     public static TheoryData<string> Cultures => new() { "fr-FR", "en-US", "de-DE" };

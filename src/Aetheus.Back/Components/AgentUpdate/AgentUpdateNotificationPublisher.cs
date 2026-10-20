@@ -4,13 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.AgentUpdate;
 
-/// <summary>
-/// Recette R2-034: tells the subscribers of the server's projects that its agent update ended
-/// (<see cref="NotificationEventTypes.AgentUpdateCompleted"/> or
-/// <see cref="NotificationEventTypes.AgentUpdateFailed"/>). The recipients are the subscribers of every
-/// project the server is attached to; a server attached to no project notifies nobody. User deliveries
-/// only, nothing goes to the admin channels.
-/// </summary>
+/// <summary>Publishes completed or failed agent updates to followers of the server’s projects.
+/// Servers without a project have no recipients, and admin channels are excluded.</summary>
 internal sealed class AgentUpdateNotificationPublisher(
     IUserNotificationService userNotifications,
     ILogger<AgentUpdateNotificationPublisher> logger)

@@ -281,6 +281,83 @@ public sealed class GitleaksHistoryModeResolverTests
         Assert.Equal("missing-baseline", selection.Reason);
     }
 
+    [Fact]
+    public async Task ResolveAsync_ShortHead_IsRejected()
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() => GitleaksHistoryModeResolver.ResolveAsync(
+            Directory.GetCurrentDirectory(),
+            new Dictionary<string, string> { ["AETHEUS_GITLEAKS_MODE"] = "full", ["BUILD_SOURCEVERSION"] = "abc123" },
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_CheckoutOnAnotherCommitForcesFullMode()
+    {
+        var repository = CreateRepository();
+        try
+        {
+            Write(repository, "one.txt", "one");
+            Commit(repository, "one");
+            var baseline = Git(repository, "rev-parse", "HEAD");
+
+            var selection = await GitleaksHistoryModeResolver.ResolveAsync(
+                repository, Environment("release-range", baseline, new string('c', 40)),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal("full", selection.Mode);
+            Assert.Equal("head-mismatch", selection.Reason);
+            Assert.Equal(baseline, selection.BaselineSha);
+        }
+        finally
+        {
+            DeleteRepository(repository);
+        }
+    }
+
+    [Fact]
+    public async Task ResolveEnvironmentAsync_OtherScanner_LeavesTheEnvironmentAsIs()
+    {
+        var env = new Dictionary<string, string> { ["AETHEUS_GITLEAKS_MODE"] = "--all" };
+
+        var resolved = await GitleaksHistoryModeResolver.ResolveEnvironmentAsync(
+            new ScannerManifestEntry { Key = "trivy" }, Directory.GetCurrentDirectory(), env,
+            (_, _) => Task.CompletedTask, TestContext.Current.CancellationToken);
+
+        Assert.Same(env, resolved);
+    }
+
+    [Fact]
+    public async Task ResolveEnvironmentAsync_HistoryScanner_PublishesTheSelectionAndDropsFreeFormOptions()
+    {
+        var head = new string('A', 40);
+        var output = new List<string>();
+
+        var resolved = await GitleaksHistoryModeResolver.ResolveEnvironmentAsync(
+            new ScannerManifestEntry { Key = "gitleaks-history" },
+            Directory.GetCurrentDirectory(),
+            new Dictionary<string, string>
+            {
+                ["BUILD_SOURCEVERSION"] = head,
+                ["AETHEUS_GITLEAKS_LOG_OPTIONS"] = "--all --not-safe"
+            },
+            (line, _) => { output.Add(line); return Task.CompletedTask; },
+            TestContext.Current.CancellationToken);
+
+        Assert.False(resolved.ContainsKey("AETHEUS_GITLEAKS_LOG_OPTIONS"));
+        Assert.Equal("full", resolved["AETHEUS_GITLEAKS_HISTORY_MODE_RESOLVED"]);
+        Assert.Equal(string.Empty, resolved["AETHEUS_GITLEAKS_BASE_SHA_RESOLVED"]);
+        Assert.Equal(new string('a', 40), resolved["AETHEUS_GITLEAKS_HEAD_SHA_RESOLVED"]);
+        Assert.Equal("explicit-full", resolved["AETHEUS_GITLEAKS_HISTORY_REASON_RESOLVED"]);
+        Assert.Equal(
+        [
+            $"Gitleaks history mode=full, baseSha=none, headSha={new string('a', 40)}, reason=explicit-full.",
+            "##aetheus[setvariable name=GITLEAKS_HISTORY_MODE]full",
+            "##aetheus[setvariable name=GITLEAKS_BASE_SHA]none",
+            $"##aetheus[setvariable name=GITLEAKS_HEAD_SHA]{new string('a', 40)}",
+        ], output);
+    }
+
+
     private static Dictionary<string, string> Environment(string mode, string baseline, string head) => new()
     {
         ["AETHEUS_GITLEAKS_MODE"] = mode,

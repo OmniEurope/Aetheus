@@ -3,13 +3,9 @@ using System.Net;
 
 namespace Aetheus.Back.Components.Mail.Mailbox;
 
-/// <summary>
-/// Recette R1-17. The page's Content Security Policy only lets it draw images from itself and from
-/// <c>data:</c> URLs, so "show images" is the backend fetching them and inlining them. The client is the
-/// SSRF-protected one (no private or loopback target, no automatic redirect, no cookie); a redirect is
-/// followed by hand, at most three times, through the same guard. Only raster image types are kept,
-/// and the count and sizes are bounded so one message cannot make the backend download without end.
-/// </summary>
+/// <summary>Fetch user-requested images through the SSRF-protected client with private and loopback
+/// targets blocked, no cookies, and at most three manually validated redirects. Inline only raster
+/// images within count and size limits to satisfy the page CSP.</summary>
 public sealed class MailboxRemoteImageFetcher(IHttpClientFactory httpClientFactory) : IMailboxRemoteImageFetcher
 {
     public const string HttpClientName = "mailbox-images";

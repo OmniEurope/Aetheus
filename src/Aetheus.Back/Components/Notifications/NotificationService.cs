@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -21,7 +20,8 @@ public class NotificationService(
     IEncryptionService encryption,
     TimeProvider timeProvider,
     IUserNotificationService userNotifications,
-    INotificationEmailer emailer) : INotificationService
+    INotificationEmailer emailer,
+    PublicHostCheck? hostCheck = null) : INotificationService
 {
     public async Task<PaginatedResult<NotificationChannelDto>> GetChannelsAsync(
         PaginationRequest request, CancellationToken ct = default)
@@ -118,8 +118,8 @@ public class NotificationService(
         var channel = await repo.FindChannelAsync(id, ct).ConfigureAwait(false);
         if (channel is null) return null;
 
-        // R1-16: a real e-mail to the administrator who asked, through the platform sender; the status
-        // and the message are the SMTP outcome, the server's text verbatim on a failure.
+        // A real e-mail to the administrator who asked, through the platform sender; the status and
+        // the message are the SMTP outcome, the server's text verbatim on a failure.
         if (channel.Type == NotificationChannelType.Email)
             return await TestEmailChannelAsync(channel, requestingUserId, ct).ConfigureAwait(false);
 
@@ -171,10 +171,9 @@ public class NotificationService(
         };
     }
 
-    /// <summary>
-    /// R1-16: an E-mail channel has no address list of its own; it is an administrator channel, so its
-    /// rules reach the active administrators at their account address. Each failure is logged verbatim.
-    /// </summary>
+    /// <summary> An E-mail channel has no address list of its own; it is an administrator channel,
+    /// so its rules reach the active administrators at their account address. Each failure is
+    /// logged verbatim. </summary>
     private async Task SendEmailChannelAsync(NotificationChannel channel, string eventType, string jsonPayload, CancellationToken ct)
     {
         var addresses = await repo.GetActiveAdministratorEmailsAsync(ct).ConfigureAwait(false);
@@ -389,24 +388,19 @@ public class NotificationService(
         response.EnsureSuccessStatusCode();
     }
 
-    private static async Task<bool> IsUrlSafeAsync(string? targetUrl, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(targetUrl) || !Uri.TryCreate(targetUrl, UriKind.Absolute, out var uri))
-            return false;
-        if (uri.Scheme is not ("http" or "https"))
-            return false;
-        if (IPAddress.TryParse(uri.Host, out var literal))
-            return !WebhookSsrfGuard.IsForbiddenAddress(literal);
-        try
-        {
-            var addresses = await Dns.GetHostAddressesAsync(uri.Host, ct).ConfigureAwait(false);
-            return addresses.Length > 0 && !addresses.Any(WebhookSsrfGuard.IsForbiddenAddress);
-        }
-        catch (System.Net.Sockets.SocketException)
-        {
-            return false;
-        }
-    }
+    // A channel posts only to an absolute http(s) URL whose host names public addresses only.
+    private Task<bool> IsUrlSafeAsync(string? targetUrl, CancellationToken ct) =>
+        HttpTarget(targetUrl) is { } uri
+            ? (hostCheck ?? PublicHostCheck.Default).IsPublicAsync(uri.Host, ct)
+            : Task.FromResult(false);
+
+    /// <summary>The URL a channel may post to, when it is an absolute http or https URL; otherwise null.</summary>
+    internal static Uri? HttpTarget(string? targetUrl) =>
+        !string.IsNullOrWhiteSpace(targetUrl)
+        && Uri.TryCreate(targetUrl, UriKind.Absolute, out var uri)
+        && uri.Scheme is "http" or "https"
+            ? uri
+            : null;
 
     private NotificationChannelDto MapChannelToDto(NotificationChannel c) => new()
     {

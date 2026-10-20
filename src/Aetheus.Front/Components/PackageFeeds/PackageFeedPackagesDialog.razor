@@ -3,7 +3,10 @@
 <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md">
         <OmniTextBox aria-label="@L["PackageName"]" @bind-Value="_newPackage" Placeholder="@L["PackageName"]" Class="omni-u-grow" />
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newPackage)" Class="@(_adding ? "btn-busy" : null)" Busy="@(_adding)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@SyncAsync" Class="@(_syncing ? "btn-busy" : null)" Busy="@(_syncing)"><OmniIcon Name="OmniIconName.Sync" /> <span>@L["SyncNow"]</span></OmniButton>
+        @* STD-BTN detection 11: Add visible, the other actions in the menu. *@
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem OnClick="@SyncAsync" Disabled="@(_syncing)"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent>@L["SyncNow"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
     </OmniStack>
 
     @if (_lastSync is not null)

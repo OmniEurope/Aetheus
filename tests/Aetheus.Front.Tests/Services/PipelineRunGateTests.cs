@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using Aetheus.Front.Components.Pipelines;
+using Aetheus.Front.Resources;
 using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Localization;
 using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Services;
@@ -126,10 +128,8 @@ public class PipelineRunGateTests : BunitContext
         Assert.Equal(1, Dialog.OpenCount);
         Assert.Equal("PreflightNoAgentTitle", Dialog.LastTitle);
 
-        // The gate no longer concatenates one sentence per stage into a plain Confirm: an
-        // eleven-stage pipeline rendered eleven copies of the same reason and was unreadable. It
-        // hands the unresolved stages to a dialog that groups them by cause, so the contract to
-        // assert is the data handed over, not a formatted string.
+        // Assert unresolved-stage data passed to the grouped gate dialog rather than repeated
+        // formatted reason strings.
         Assert.Equal(typeof(PipelineRunPreflightDialog), Dialog.LastComponent);
         var unresolved = Assert.IsAssignableFrom<IReadOnlyList<PreflightStageDto>>(
             Dialog.LastParameters![nameof(PipelineRunPreflightDialog.Unresolved)]);
@@ -232,8 +232,8 @@ public class PipelineRunGateTests : BunitContext
     [Fact]
     public async Task ConfirmPreflightAsync_MiddlewareErrorBody_ToastsItsMessageInsteadOfThrowing()
     {
-        // Recette R2-039: a BadRequestException becomes the middleware's error object, whose
-        // "errors": null used to deserialize into a validation result with a null Errors list.
+        // An HTTP 400 middleware error object with errors:null must not become a successful
+        // validation response.
         RegisterBadRequest("api/pipelines/9/preflight", new ApiError
         {
             Message = "The authoritative pipeline YAML is invalid and cannot be run.",
@@ -246,6 +246,23 @@ public class PipelineRunGateTests : BunitContext
         var toast = Assert.Single(Toasts.Toasts());
         Assert.Equal(OmniSeverity.Danger, toast.Severity);
         Assert.Contains("cannot be run", toast.Detail?.ToString() ?? "", StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "PreflightSessionExpired")]
+    [InlineData(HttpStatusCode.Forbidden, "PreflightForbidden")]
+    [InlineData(HttpStatusCode.InternalServerError, "PreflightServerError")]
+    public async Task ConfirmPreflightAsync_TransportFailure_ToastsItsCauseAndAborts(HttpStatusCode status, string reasonKey)
+    {
+        _handler.SetResponse("api/pipelines/10/preflight", status);
+
+        var result = await Sut.ConfirmPreflightAsync(10);
+
+        Assert.False(result);
+        var toast = Assert.Single(Toasts.Toasts());
+        Assert.Equal(OmniSeverity.Danger, toast.Severity);
+        Assert.Equal("PipelineRunFailed", toast.Summary?.ToString());
+        Assert.Equal(Services.GetRequiredService<IStringLocalizer<AppStrings>>()[reasonKey].Value, toast.Detail?.ToString());
     }
 
     /// <summary>

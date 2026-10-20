@@ -29,19 +29,26 @@ public static class ServerQueryHelper
         return null;
     }
 
-    public static async Task<string?> ReadCredentialAsync(
+    public static Task<string?> ReadCredentialAsync(
+        Func<string, TaskLogLevel, Task> onOutput,
+        CancellationToken ct)
+        => ReadCredentialAsync(CredentialPath, onOutput, ct);
+
+    // The credential file is a parameter so the read can be exercised on a temporary file.
+    internal static async Task<string?> ReadCredentialAsync(
+        string credentialPath,
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken ct)
     {
         string credential;
         try
         {
-            credential = (await File.ReadAllTextAsync(CredentialPath, ct).ConfigureAwait(false)).Trim();
+            credential = (await File.ReadAllTextAsync(credentialPath, ct).ConfigureAwait(false)).Trim();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             await onOutput(
-                $"Cannot read TeamSpeak query credential at {CredentialPath}: {ex.Message}",
+                $"Cannot read TeamSpeak query credential at {credentialPath}: {ex.Message}",
                 TaskLogLevel.Error).ConfigureAwait(false);
             return null;
         }

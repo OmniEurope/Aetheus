@@ -5,12 +5,8 @@ using System.Security.Cryptography;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-005 end to end over real HTTP, as the bootstrap admin, against the real controller → service →
-/// repository → PostgreSQL stack. This is the automatable half of the plan's per-lot field controls:
-/// what a person would do on the Ports page - list, add, check, allocate, release - done through the
-/// same API the page calls, so a break is caught here rather than on somebody's screen.
-/// </summary>
+/// <summary>Exercises listing, creation, checking, allocation and release through the HTTP
+/// controller-service-repository path on PostgreSQL.</summary>
 [Collection(ApiSmokeCollection.Name)]
 public sealed class PortRegistryApiRoundTripTests(ApiSmokeFixture fixture)
 {

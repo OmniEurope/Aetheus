@@ -15,8 +15,8 @@ public partial class PipelineSetupWizard
     [SupplyParameterFromQuery] public int? ProjectId { get; set; }
     [SupplyParameterFromQuery] public int? TemplateId { get; set; }
 
-    // Recette R1-19: the summary with its choices travels in its own address (prefix, chosen options,
-    // step), so a page opened from it to fix something comes back to the same summary. Nothing here is
+    // The summary with its choices travels in its own address (prefix, chosen options, step), so a
+    // page opened from it to fix something comes back to the same summary. Nothing here is
     // sensitive: a pipeline name prefix and option names.
     [SupplyParameterFromQuery(Name = "prefix")] public string? PrefixQuery { get; set; }
     [SupplyParameterFromQuery(Name = "options")] public string? OptionsQuery { get; set; }
@@ -38,11 +38,10 @@ public partial class PipelineSetupWizard
     private int? _selectedProjectId;
     private string _prefix = string.Empty;
 
-    /// <summary>Recette R1-18 / R1-31: asked first, nothing chosen in advance (a default once gave a
-    /// one-project Blazor Server application a separate frontend).</summary>
+    /// <summary>The application shape is explicitly selected, with no default choice.</summary>
     private PipelineArchitecture? _architecture;
-    /// <summary>Recette R1-31 decision: for an application, is the interface served by the server project?
-    /// Yes, no, or not answered yet; no default answer.</summary>
+    /// <summary>Whether the server project serves the application's interface is a tri-state choice
+    /// with no default answer.</summary>
     private bool? _sameProject;
     private PipelineSetupStack _stack = PipelineSetupStack.DotNet;
     private bool _frontend = true;
@@ -68,7 +67,7 @@ public partial class PipelineSetupWizard
     private bool _readinessLoading;
     private string? _readinessSignature;
 
-    /// <summary>Recette R1-29: start from an existing project instead of the templates.</summary>
+    /// <summary>Start from an existing project instead of the templates.</summary>
     private bool _copyMode;
 
     private IReadOnlyList<OmniOption<bool>> StartOptions =>
@@ -178,11 +177,9 @@ public partial class PipelineSetupWizard
         ("external-security", () => _externalSecurity, value => _externalSecurity = value)
     ];
 
-    /// <summary>
-    /// Recette R1-19: the address of this summary with the user's choices. The pages the summary opens
-    /// to fix something come back to it, and it replaces the wizard's own entry in the history, so the
-    /// browser's Back lands on the same summary too.
-    /// </summary>
+    /// <summary> The address of this summary with the user's choices. The pages the summary opens
+    /// to fix something come back to it, and it replaces the wizard's own entry in the history, so
+    /// the browser's Back lands on the same summary too. </summary>
     private string? SummaryUrl => _selectedProjectId is { } projectId
         ? $"/pipelines/setup?projectId={projectId}&prefix={Uri.EscapeDataString(_prefix)}"
             + $"&options={Uri.EscapeDataString(string.Join(",", Choices.Where(choice => choice.Get() && InAddress(choice.Name)).Select(choice => choice.Name)))}"
@@ -248,6 +245,16 @@ public partial class PipelineSetupWizard
     {
         builder.OpenComponent<PipelineSetupWizardStep>(0);
         builder.AddAttribute(1, nameof(PipelineSetupWizardStep.Step), step);
+        AddProjectAttributes(builder);
+        AddPipelineToggles(builder);
+        AddOptionToggles(builder);
+        AddSummaryAttributes(builder);
+        AddArchitectureAttributes(builder);
+        builder.CloseComponent();
+    };
+
+    private void AddProjectAttributes(RenderTreeBuilder builder)
+    {
         builder.AddAttribute(2, nameof(PipelineSetupWizardStep.Projects), _projects);
         builder.AddAttribute(3, nameof(PipelineSetupWizardStep.ProjectId), _selectedProjectId);
         builder.AddAttribute(4, nameof(PipelineSetupWizardStep.ProjectIdChanged),
@@ -255,6 +262,10 @@ public partial class PipelineSetupWizard
         builder.AddAttribute(5, nameof(PipelineSetupWizardStep.Prefix), _prefix);
         builder.AddAttribute(6, nameof(PipelineSetupWizardStep.PrefixChanged),
             EventCallback.Factory.Create<string>(this, value => Update(value, next => _prefix = next)));
+    }
+
+    private void AddPipelineToggles(RenderTreeBuilder builder)
+    {
         AddToggle(builder, 10, nameof(PipelineSetupWizardStep.Frontend), _frontend,
             nameof(PipelineSetupWizardStep.FrontendChanged), value => _frontend = value);
         AddToggle(builder, 20, nameof(PipelineSetupWizardStep.Backend), _backend,
@@ -271,6 +282,10 @@ public partial class PipelineSetupWizard
             nameof(PipelineSetupWizardStep.QaChanged), value => _qa = value);
         AddToggle(builder, 80, nameof(PipelineSetupWizardStep.Candidate), _candidate,
             nameof(PipelineSetupWizardStep.CandidateChanged), value => _candidate = value);
+    }
+
+    private void AddOptionToggles(RenderTreeBuilder builder)
+    {
         AddToggle(builder, 90, nameof(PipelineSetupWizardStep.Nightly), _nightly,
             nameof(PipelineSetupWizardStep.NightlyChanged), value => _nightly = value);
         AddToggle(builder, 100, nameof(PipelineSetupWizardStep.Production), _production,
@@ -285,6 +300,10 @@ public partial class PipelineSetupWizard
             nameof(PipelineSetupWizardStep.QaExtendedChanged), value => _qaExtended = value);
         AddToggle(builder, 160, nameof(PipelineSetupWizardStep.SecurityHistory), _securityHistory,
             nameof(PipelineSetupWizardStep.SecurityHistoryChanged), value => _securityHistory = value);
+    }
+
+    private void AddSummaryAttributes(RenderTreeBuilder builder)
+    {
         builder.AddAttribute(140, nameof(PipelineSetupWizardStep.ProjectName), SelectedProject?.Name ?? string.Empty);
         builder.AddAttribute(141, nameof(PipelineSetupWizardStep.ArchitectureSummary), ArchitectureSummary);
         builder.AddAttribute(142, nameof(PipelineSetupWizardStep.SummaryItems), SelectedRoles
@@ -294,6 +313,10 @@ public partial class PipelineSetupWizard
         builder.AddAttribute(145, nameof(PipelineSetupWizardStep.OnReadinessChanged),
             EventCallback.Factory.Create(this, RecheckReadinessAsync));
         builder.AddAttribute(146, nameof(PipelineSetupWizardStep.ReturnUrl), SummaryUrl);
+    }
+
+    private void AddArchitectureAttributes(RenderTreeBuilder builder)
+    {
         builder.AddAttribute(170, nameof(PipelineSetupWizardStep.Architecture), _architecture);
         builder.AddAttribute(171, nameof(PipelineSetupWizardStep.ArchitectureChanged),
             EventCallback.Factory.Create<PipelineArchitecture?>(this, OnArchitectureChanged));
@@ -305,8 +328,7 @@ public partial class PipelineSetupWizard
             EventCallback.Factory.Create<bool?>(this, value => Update(value, next => _sameProject = next)));
         AddToggle(builder, 176, nameof(PipelineSetupWizardStep.ExternalSecurity), _externalSecurity,
             nameof(PipelineSetupWizardStep.ExternalSecurityChanged), value => _externalSecurity = value);
-        builder.CloseComponent();
-    };
+    }
 
     private void AddToggle(
         RenderTreeBuilder builder,
@@ -438,8 +460,8 @@ public partial class PipelineSetupWizard
         }
     }
 
-    /// <summary>PLAN-003 lot 30: after the required libraries and vaults were created, the previous
-    /// verdict is stale; forget its fingerprint so the same selection is checked again.</summary>
+    /// <summary>Creating required libraries and vaults invalidates the cached verdict, so the same
+    /// selection must be checked again.</summary>
     private async Task RecheckReadinessAsync()
     {
         _readinessSignature = null;
@@ -522,11 +544,9 @@ public partial class PipelineSetupWizard
         static string Flag(bool value) => value ? "true" : "false";
     }
 
-    /// <summary>
-    /// Recette R2-121: the template the backend will resolve for this project, so the pinned version
-    /// written into <c>extends:</c> is that template's. The project's organization's own template wins;
-    /// otherwise the shipped one the platform shares with every organization.
-    /// </summary>
+    /// <summary> The template the backend will resolve for this project, so the pinned version
+    /// written into <c>extends:</c> is that template's. The project's organization's own template
+    /// wins; otherwise the shipped one the platform shares with every organization. </summary>
     private PipelineTemplateSummaryDto? TemplateFor(string name) => _templates
         .Where(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
         .OrderByDescending(item => item.OrganizationId == SelectedProject?.OrganizationId)

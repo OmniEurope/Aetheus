@@ -2,10 +2,9 @@
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recette R2-031: after a service action the page re-reads the server, but the stored service list only
-/// changes when the agent's next heartbeat is stored. That read must neither replace a newer list the live
-/// heartbeat already brought nor pass an unchanged list off as the result of the action.
+/// <summary> After a service action the page re-reads the server, but the stored service list only
+/// changes when the agent's next heartbeat is stored. That read must neither replace a newer list
+/// the live heartbeat already brought nor pass an unchanged list off as the result of the action.
 /// </summary>
 public class ServerDetailLoaderRefreshTests
 {

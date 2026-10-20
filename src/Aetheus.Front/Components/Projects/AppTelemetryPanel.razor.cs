@@ -15,8 +15,8 @@ public partial class AppTelemetryPanel : IAsyncDisposable
 
     [Parameter] public int ProjectId { get; set; }
 
-    /// <summary>Recette R-467: the application named by the page's <c>?app=</c>; the panel opens on it,
-    /// and writes the reader's own choice back to the URL so the page can be linked and reloaded.</summary>
+    /// <summary>The application named by the page's <c>?app=</c>; the panel opens on it, and writes
+    /// the reader's own choice back to the URL so the page can be linked and reloaded.</summary>
     [Parameter] public int? SelectedAppId { get; set; }
 
     private List<MonitoredAppDto> _apps = [];

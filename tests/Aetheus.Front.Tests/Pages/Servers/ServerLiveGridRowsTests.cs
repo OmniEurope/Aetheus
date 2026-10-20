@@ -4,11 +4,9 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>
-/// Recette R-227: a heartbeat that replaces a server section's list marks the rows the grid did not
-/// hold (bold for a few seconds), and only those; the first list and a list without new rows mark
-/// nothing.
-/// </summary>
+/// <summary> A heartbeat that replaces a server section's list marks the rows the grid did not hold
+/// (bold for a few seconds), and only those; the first list and a list without new rows mark
+/// nothing. </summary>
 public class ServerLiveGridRowsTests : BunitContext
 {
     private const string NewRowClass = "omni-data-grid__row--new";

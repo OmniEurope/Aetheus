@@ -44,9 +44,9 @@ public class AuditLogsRenderTests : BunitContext
     }
 
     [Fact]
-    public void NonAdmin_Redirects_WithoutCrash()
+    public async Task NonAdmin_Redirects_WithoutCrash()
     {
-        using var ctx = new BunitContext();
+        await using var ctx = new BunitContext();
         BunitTestHelper.RegisterServices(ctx, isAdmin: false);
         var nav = ctx.Services.GetRequiredService<BunitNavigationManager>();
         var cut = ctx.Render<AuditLogs>();
@@ -71,8 +71,7 @@ public class AuditLogsRenderTests : BunitContext
     [Fact]
     public async Task TimestampRange_IsAHeaderFilter_SentToTheServer_AndThePickersAreGone()
     {
-        // Recette R-238: the two date pickers above the grid are gone; the Timestamp column's range
-        // travels as a column filter with its two bounds.
+        // The Timestamp column sends its date range as a column filter with both bounds.
         var cut = Render<AuditLogs>();
         Assert.Null(PageType.GetField("_dateFrom", Priv));
         Assert.Null(PageType.GetField("_dateTo", Priv));
@@ -100,8 +99,8 @@ public class AuditLogsRenderTests : BunitContext
         }));
     }
 
-    /// <summary>Recette R-452: every action takes the colour of the change it records, not only
-    /// Created / Updated / Deleted; a failure or a deletion wins over any other word of the name.</summary>
+    /// <summary>Every action takes the colour of the change it records, not only Created / Updated
+    /// / Deleted; a failure or a deletion wins over any other word of the name.</summary>
     [Theory]
     [InlineData("Created", OmniTone.Success)]
     [InlineData("Updated", OmniTone.Accent)]
@@ -121,7 +120,7 @@ public class AuditLogsRenderTests : BunitContext
         Assert.Equal(expected, AuditActionPresentation.Badge(action));
     }
 
-    /// <summary>Recette R-452: an action with no label yet reads as words, never as a resource key.</summary>
+    /// <summary>An action with no label yet reads as words, never as a resource key.</summary>
     [Theory]
     [InlineData("RotatedIngestKeyForDeploy", "Rotated ingest key for deploy")]
     [InlineData("Role.UserAdded", "Role: user added")]
@@ -146,9 +145,7 @@ public class AuditLogsRenderTests : BunitContext
     [Fact]
     public async Task HeaderFilters_FeedTheServerQuery()
     {
-        // Recette R-238: the search box and the action/entity dropdowns are gone; the column header
-        // filters are what narrow the audit query, each one sent as a column filter (the action and
-        // entity lists as checkable lists).
+        // Column headers narrow the audit query, including checkable action and entity lists.
         var cut = Render<AuditLogs>();
         var grid = cut.FindComponent<AetheusDataGrid<AuditLogDto>>();
         var separator = Aetheus.Shared.Components.Shared.GridFilter.ListSeparator;
@@ -203,7 +200,7 @@ public class AuditLogsRenderTests : BunitContext
     [Fact]
     public async Task RefreshData_SetsLoadingFalseAfterCompletion()
     {
-        // Recette R-226: a new audit entry refreshes the grid quietly through RefreshData.
+        // A new audit entry refreshes the grid quietly through RefreshData.
         var cut = Render<AuditLogs>();
         await cut.InvokeAsync(() => Task.CompletedTask);
         var method = PageType.GetMethod("RefreshData", Priv)!;

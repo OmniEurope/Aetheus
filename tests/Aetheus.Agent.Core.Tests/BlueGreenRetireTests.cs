@@ -79,6 +79,60 @@ public sealed class BlueGreenRetireTests : IDisposable
     }
 
     [Fact]
+    public async Task SwitchedInitialDeployment_WithNoIdleColour_ClosesTheTransactionWithoutStoppingAnything()
+    {
+        var conf = Path.Combine(_root, "upstream.conf");
+        File.WriteAllText(conf, "Define AETHEUS_FRONT_PORT 1\n");
+        var messages = new List<string>();
+
+        var result = await RunRetireAsync(
+            WriteJournal: dir =>
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "state"), "SWITCHED");
+                File.WriteAllText(Path.Combine(dir, "previous-live"), "none");
+                File.WriteAllText(Path.Combine(dir, "idle"), "none");
+                File.WriteAllText(Path.Combine(dir, "upstream.before"), "# Active colour: none\n");
+            },
+            confPath: conf,
+            onOutput: messages.Add,
+            stopExitCode: 1);
+
+        // A stop that Docker would refuse is never attempted: there is no colour to stop.
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(Directory.Exists(Path.Combine(_root, "deployment-transaction")));
+        Assert.Contains(messages, m => m.Contains("colour none is stopped", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task UpstreamRestoreFailing_KeepsTheTransactionAndStopsNothing()
+    {
+        var conf = Path.Combine(_root, "upstream.conf");
+        File.WriteAllText(conf, "Define AETHEUS_FRONT_PORT 1\n");
+        var messages = new List<string>();
+
+        var result = await RunRetireAsync(
+            WriteJournal: dir =>
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "state"), "SWITCHED");
+                File.WriteAllText(Path.Combine(dir, "previous-live"), "none");
+                File.WriteAllText(Path.Combine(dir, "idle"), "blue");
+                File.WriteAllText(Path.Combine(dir, "upstream.before"), "# Active colour: none\n");
+            },
+            confPath: conf,
+            onOutput: messages.Add,
+            reloadExitCode: 1);
+
+        // Traffic could not be moved off the colour, so stopping it would be an outage: the journal
+        // stays for the manual intervention the message asks for.
+        Assert.Equal(1, result.ExitCode);
+        Assert.True(Directory.Exists(Path.Combine(_root, "deployment-transaction")));
+        Assert.Contains(messages, m => m.Contains("manual intervention required", StringComparison.Ordinal));
+        Assert.DoesNotContain(messages, m => m.Contains("BLUEGREEN_RETIRED", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task StopRefusedByDocker_KeepsTheTransactionAndFails()
     {
         var conf = Path.Combine(_root, "upstream.conf");
@@ -155,7 +209,8 @@ public sealed class BlueGreenRetireTests : IDisposable
         Action<string>? WriteJournal,
         string? confPath = null,
         Action<string>? onOutput = null,
-        int stopExitCode = 0)
+        int stopExitCode = 0,
+        int reloadExitCode = 0)
     {
         WriteJournal?.Invoke(Path.Combine(_root, "deployment-transaction"));
 
@@ -168,7 +223,7 @@ public sealed class BlueGreenRetireTests : IDisposable
 
         // A shell that answers the Docker probe, so a failure here is the executor's own decision
         // rather than the absence of Docker on the test machine.
-        var shell = new RetireShell(stopExitCode);
+        var shell = new RetireShell(stopExitCode, reloadExitCode);
 
         return await CreateExecutor(shell).ExecuteAsync(
             OperationKind.BlueGreenRetire, "aetheus-demo", env, 60,
@@ -212,7 +267,7 @@ public sealed class BlueGreenRetireTests : IDisposable
     }
 
     /// <summary>Answers the Docker probe and lets every other invocation succeed.</summary>
-    private sealed class RetireShell(int stopExitCode = 0) : IShellRunner
+    private sealed class RetireShell(int stopExitCode = 0, int reloadExitCode = 0) : IShellRunner
     {
         [Obsolete("Matches the interface; the executor never uses the shell form.")]
         public Task<string> RunAsync(string command, CancellationToken ct, TimeSpan? timeout = null) =>
@@ -226,6 +281,7 @@ public sealed class BlueGreenRetireTests : IDisposable
             string fileName, IReadOnlyList<string> args, CancellationToken ct, TimeSpan? timeout = null)
         {
             if (args.Count > 0 && args[0] == "info") return Task.FromResult(new ShellExecResult(0, "27.0.0", string.Empty));
+            if (fileName == "sudo") return Task.FromResult(new ShellExecResult(reloadExitCode, string.Empty, "reload failed"));
             if (args.Contains("stop")) return Task.FromResult(new ShellExecResult(stopExitCode, string.Empty, "refused"));
             return Task.FromResult(new ShellExecResult(0, string.Empty, string.Empty));
         }

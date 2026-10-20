@@ -11,6 +11,8 @@ public class GitRepositoryCreateDialogTests : BunitContext
     public GitRepositoryCreateDialogTests()
     {
         _handler = BunitTestHelper.RegisterServices(this);
+        _handler.SetJsonResponse(HttpMethod.Get, "api/projects/1", new ProjectDetailDto { Id = 1, Name = "Shop" });
+        _handler.SetJsonResponse(HttpMethod.Get, "api/projects/42", new ProjectDetailDto { Id = 42, Name = "Wordmorrow" });
     }
 
     [Fact]
@@ -67,5 +69,14 @@ public class GitRepositoryCreateDialogTests : BunitContext
         Assert.Equal("new-repo", request.Name);
         Assert.Equal("Local Portfolio test repository.", request.Description);
         Assert.Equal("develop", request.DefaultBranch);
+    }
+
+    [Fact]
+    public void TheNameStartsAsTheProjectName()
+    {
+        // Recette R3-60: a project's repository is proposed under the project's name.
+        var cut = Render<GitRepositoryCreateDialog>(p => p.Add(x => x.ProjectId, 42));
+
+        cut.WaitForAssertion(() => Assert.Equal("Wordmorrow", cut.Find("input#Name").GetAttribute("value")));
     }
 }

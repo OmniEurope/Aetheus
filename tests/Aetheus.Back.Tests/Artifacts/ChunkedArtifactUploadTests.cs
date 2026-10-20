@@ -49,6 +49,49 @@ public sealed class ChunkedArtifactUploadTests : IDisposable
             7, uploadId, index, digest ?? Sha(content), new MemoryStream(content),
             TestContext.Current.CancellationToken);
 
+    /// <summary>Completes the upload and returns the bytes of the verified file handed to the publisher.</summary>
+    private Task<byte[]> AssembleAsync(string uploadId) =>
+        _sut.CompleteAsync(7, uploadId,
+            file => File.ReadAllBytesAsync(file.Path, TestContext.Current.CancellationToken),
+            TestContext.Current.CancellationToken);
+
+    [Fact]
+    public async Task ThePublisherReceivesTheVerifiedFile_AndTheSessionIsGoneAfterwards()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var content = Bytes("verified payload");
+        var session = await BeginAsync(1, Sha(content));
+        await SendAsync(session.UploadId, 0, content);
+
+        var handed = await _sut.CompleteAsync(7, session.UploadId, file => Task.FromResult(file), ct);
+
+        Assert.Equal(Sha(content), handed.Sha256);
+        Assert.Equal(content.Length, handed.Length);
+        Assert.False(File.Exists(handed.Path));
+        await Assert.ThrowsAsync<NotFoundException>(() => AssembleAsync(session.UploadId));
+    }
+
+    [Fact]
+    public async Task ARefusedPublication_DeletesTheAssembledCopyAndKeepsThePartsForARetry()
+    {
+        // Recette R1-91: the store now takes the assembled file itself; a quota refusal must neither
+        // leave a gigabyte copy behind nor cost the agent the parts it already sent.
+        var ct = TestContext.Current.CancellationToken;
+        var content = Bytes("retry me");
+        var session = await BeginAsync(1, Sha(content));
+        await SendAsync(session.UploadId, 0, content);
+        string? assembledPath = null;
+
+        await Assert.ThrowsAsync<ConflictException>(() => _sut.CompleteAsync<int>(7, session.UploadId, file =>
+        {
+            assembledPath = file.Path;
+            throw new ConflictException("quota");
+        }, ct));
+
+        Assert.False(File.Exists(assembledPath));
+        Assert.Equal("retry me", System.Text.Encoding.UTF8.GetString(await AssembleAsync(session.UploadId)));
+    }
+
     [Fact]
     public async Task PartsAreAssembledInOrderAndTheWholeDigestIsVerified()
     {
@@ -59,9 +102,7 @@ public sealed class ChunkedArtifactUploadTests : IDisposable
         Assert.True((await SendAsync(session.UploadId, 0, first)).Accepted);
         Assert.True((await SendAsync(session.UploadId, 1, second)).Accepted);
 
-        await using var assembled = await _sut.OpenCompletedAsync(7, session.UploadId, TestContext.Current.CancellationToken);
-        using var reader = new StreamReader(assembled);
-        Assert.Equal("hello world", await reader.ReadToEndAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("hello world", System.Text.Encoding.UTF8.GetString(await AssembleAsync(session.UploadId)));
     }
 
     [Fact]
@@ -92,8 +133,7 @@ public sealed class ChunkedArtifactUploadTests : IDisposable
 
         Assert.True(retry.Accepted);
         Assert.Equal(2, retry.ReceivedParts);
-        await using var assembled = await _sut.OpenCompletedAsync(7, session.UploadId, TestContext.Current.CancellationToken);
-        Assert.Equal(8, assembled.Length);
+        Assert.Equal(8, (await AssembleAsync(session.UploadId)).Length);
     }
 
     [Fact]
@@ -103,7 +143,7 @@ public sealed class ChunkedArtifactUploadTests : IDisposable
         await SendAsync(session.UploadId, 0, Bytes("x"));
 
         var error = await Assert.ThrowsAsync<BadRequestException>(
-            () => _sut.OpenCompletedAsync(7, session.UploadId, TestContext.Current.CancellationToken));
+            () => AssembleAsync(session.UploadId));
 
         Assert.Contains("2 of 3", error.Message, StringComparison.Ordinal);
     }
@@ -117,7 +157,7 @@ public sealed class ChunkedArtifactUploadTests : IDisposable
         await SendAsync(session.UploadId, 0, Bytes("valid but other"));
 
         await Assert.ThrowsAsync<BadRequestException>(
-            () => _sut.OpenCompletedAsync(7, session.UploadId, TestContext.Current.CancellationToken));
+            () => AssembleAsync(session.UploadId));
     }
 
     [Fact]
@@ -157,7 +197,7 @@ public sealed class ChunkedArtifactUploadTests : IDisposable
         _time.Advance(TimeSpan.FromHours(2));
         Assert.Equal(1, _sut.PurgeExpired(TimeSpan.FromHours(24)));
         await Assert.ThrowsAsync<NotFoundException>(
-            () => _sut.OpenCompletedAsync(7, session.UploadId, TestContext.Current.CancellationToken));
+            () => AssembleAsync(session.UploadId));
     }
 
     [Fact]
@@ -171,5 +211,45 @@ public sealed class ChunkedArtifactUploadTests : IDisposable
     public async Task ADigestThatIsNotASha256IsRefusedAtBegin()
     {
         await Assert.ThrowsAsync<BadRequestException>(() => BeginAsync(1, "not-a-digest"));
+    }
+
+    // --- Audit AUD-04 and AUD-06 (recette R1-50) ---
+
+    [Fact]
+    public async Task APartThatWouldExceedTheProjectQuota_IsRefusedAndNotStored()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ArtifactStorage:BasePath"] = _root,
+                ["ArtifactStorage:ProjectQuotaBytes"] = "8"
+            })
+            .Build();
+        var sut = new ChunkedArtifactUploadService(configuration, _time);
+        var ct = TestContext.Current.CancellationToken;
+        var first = Bytes("12345");
+        var second = Bytes("67890");
+        var session = await sut.BeginAsync(7, "payload.tar.gz", "Build", 2, Sha(first, second), ct);
+
+        Assert.True((await sut.AcceptPartAsync(7, session.UploadId, 0, Sha(first), new MemoryStream(first), ct)).Accepted);
+        var refused = await sut.AcceptPartAsync(7, session.UploadId, 1, Sha(second), new MemoryStream(second), ct);
+
+        Assert.False(refused.Accepted);
+        Assert.Contains("quota", refused.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, refused.ReceivedParts);
+    }
+
+    [Fact]
+    public async Task AnotherRunCannotDiscardTheUpload_ItsOwnRunCan()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var content = Bytes("payload");
+        var session = await BeginAsync(1, Sha(content));
+
+        Assert.False(await _sut.DiscardForRunAsync(8, session.UploadId, ct));
+        Assert.True((await SendAsync(session.UploadId, 0, content)).Accepted);
+
+        Assert.True(await _sut.DiscardForRunAsync(7, session.UploadId, ct));
+        await Assert.ThrowsAsync<NotFoundException>(() => AssembleAsync(session.UploadId));
     }
 }

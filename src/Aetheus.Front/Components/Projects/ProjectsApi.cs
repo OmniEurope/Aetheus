@@ -12,7 +12,8 @@ namespace Aetheus.Front.Components.Projects;
 public sealed class ProjectsApi(HttpClient http) : ApiClientBase(http)
 {
 
-    /// <summary>Recette R-212: a page of the project's servers; the section's header filters are real column filters.</summary>
+    /// <summary>A page of the project's servers; the section's header filters are real column
+    /// filters.</summary>
     public async Task<PaginatedResult<ProjectServerDto>> GetProjectServersPageAsync(
         int projectId, int page = 1, int pageSize = 25,
         string? sortBy = null, bool sortDescending = false, CancellationToken ct = default,
@@ -57,17 +58,18 @@ public sealed class ProjectsApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, null, sortBy, sortDescending);
-        // Recette R-212: the section's column header filters.
+        // The section's column header filters.
         return await GetJsonAsync<PaginatedResult<ServerTaskDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/projects/{projectId}/tasks", query), filters), ct).ConfigureAwait(false) ?? new();
     }
 
-    /// <summary>Recette R-212: the server names the project tasks grid's Server filter offers.</summary>
+    /// <summary>The server names the project tasks grid's Server filter offers.</summary>
     public async Task<TaskFilterValuesDto> GetProjectTaskFilterValuesAsync(int projectId, CancellationToken ct = default) =>
         await GetJsonAsync<TaskFilterValuesDto>($"api/projects/{projectId}/tasks/filter-values", ct).ConfigureAwait(false) ?? new();
 
 
-    /// <summary>Recette R-212: a page of the project's logs; the section's header filters are real column filters.</summary>
+    /// <summary>A page of the project's logs; the section's header filters are real column
+    /// filters.</summary>
     public async Task<PaginatedResult<TaskLogDto>> GetProjectLogsAsync(
         int projectId, int page = 1, int pageSize = 50,
         string? sortBy = null, bool sortDescending = false, CancellationToken ct = default,
@@ -138,14 +140,14 @@ public sealed class ProjectsApi(HttpClient http) : ApiClientBase(http)
     public Task<ApiStatus> DeleteProjectAsync(int id, CancellationToken ct = default)
         => DeleteAsync($"api/projects/{id}", ct);
 
-    /// <summary>PLAN-013 lot 4: the project's « Conservation des données » setting.</summary>
+    /// <summary>The project's « Conservation des données » setting.</summary>
     public Task<ProjectDataRetentionDto?> GetDataRetentionAsync(int id, CancellationToken ct = default)
         => GetJsonAsync<ProjectDataRetentionDto>($"api/projects/{id}/data-retention", ct);
 
     public Task<ProjectDataRetentionDto?> UpdateDataRetentionAsync(int id, UpdateProjectDataRetentionRequest request, CancellationToken ct = default)
         => PutJsonAsync<UpdateProjectDataRetentionRequest, ProjectDataRetentionDto>($"api/projects/{id}/data-retention", request, ct);
 
-    /// <summary>Recette R2-122: what deleting the project would remove, counted per kind.</summary>
+    /// <summary>What deleting the project would remove, counted per kind.</summary>
     public Task<ProjectDeletionPreviewDto?> GetDeletionPreviewAsync(int id, CancellationToken ct = default)
         => GetJsonAsync<ProjectDeletionPreviewDto>($"api/projects/{id}/deletion-preview", ct);
 
@@ -166,12 +168,12 @@ public sealed class ProjectsApi(HttpClient http) : ApiClientBase(http)
             query["sortDescending"] = sortDescending.ToString();
         }
         if (projectId.HasValue) query["projectId"] = projectId.Value.ToString();
-        // Recette R-224: the releases list's column header filters.
+        // The releases list's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<ReleaseDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString("api/releases", query), filters), JsonOptions.Web) ?? new();
     }
 
-    /// <summary>Recette R-224: the project and pipeline names the releases list filters offer.</summary>
+    /// <summary>The project and pipeline names the releases list filters offer.</summary>
     public async Task<ReleaseFilterValuesDto> GetReleaseFilterValuesAsync(int? projectId = null, CancellationToken ct = default) =>
         await GetJsonAsync<ReleaseFilterValuesDto>(
             projectId is { } id ? $"api/releases/filter-values?projectId={id}" : "api/releases/filter-values", ct).ConfigureAwait(false) ?? new();
@@ -205,8 +207,12 @@ public sealed class ProjectsApi(HttpClient http) : ApiClientBase(http)
     public Task<ReleaseDto?> TriggerReleaseBuildAsync(int id, TriggerReleaseBuildRequest request, CancellationToken ct = default)
         => PostJsonAsync<TriggerReleaseBuildRequest, ReleaseDto>($"api/releases/{id}/build", request, ct);
 
+    /// <summary>Decision D2: runs the chosen pipeline again from an archived release's commit.</summary>
+    public Task<PipelineRunDto?> RelaunchReleaseFromCommitAsync(int id, TriggerReleaseBuildRequest request, CancellationToken ct = default)
+        => PostJsonAsync<TriggerReleaseBuildRequest, PipelineRunDto>($"api/releases/{id}/relaunch", request, ct);
 
-    /// <summary>Recette R-366/R-367: the release's creator, later uses and build inputs.</summary>
+
+    /// <summary>The release's creator, later uses and build inputs.</summary>
     public async Task<ReleaseProvenanceDto?> GetReleaseProvenanceAsync(int id, CancellationToken ct = default)
         => await Http.GetFromJsonAsync<ReleaseProvenanceDto>($"api/releases/{id}/provenance", JsonOptions.Web, ct);
 
@@ -215,10 +221,39 @@ public sealed class ProjectsApi(HttpClient http) : ApiClientBase(http)
         => await Http.GetFromJsonAsync<ReleaseRollbackPreviewDto>($"api/releases/{id}/rollback-preview", JsonOptions.Web, ct);
 
 
+    /// <summary>The version series of a project with the release number each one hands out next.</summary>
+    public Task<List<ProjectReleaseSeriesDto>?> GetReleaseSeriesAsync(int projectId, CancellationToken ct = default)
+        => GetJsonAsync<List<ProjectReleaseSeriesDto>>($"api/projects/{projectId}/release-series", ct);
+
+    /// <summary>Fixes the next release number of a series. The API answers 409 when a run already took
+    /// the number: that refusal is returned as <see cref="SetNextReleaseNumberResult.NumberAlreadyUsed"/>
+    /// (no global toast) so the caller can explain it in place; other failures stay with the global notifier.</summary>
+    public async Task<SetNextReleaseNumberResult> SetNextReleaseNumberAsync(
+        int projectId, SetNextReleaseNumberRequest request, CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Put, $"api/projects/{projectId}/release-series")
+        {
+            Content = JsonContent.Create(request)
+        };
+        message.Options.Set(ErrorNotificationHandler.CallerHandlesConflict, true);
+        using var response = await Http.SendAsync(message, ct).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+            return new SetNextReleaseNumberResult(null, true);
+        if (!response.IsSuccessStatusCode)
+            return new SetNextReleaseNumberResult(null, false);
+        return new SetNextReleaseNumberResult(
+            await response.Content.ReadFromJsonAsync<ProjectReleaseSeriesDto>(JsonOptions.Web, ct).ConfigureAwait(false), false);
+    }
+
     public Task<ReleaseRollbackDto?> RollbackReleaseAsync(int id, RollbackReleaseRequest request, CancellationToken ct = default)
         => PostJsonAsync<RollbackReleaseRequest, ReleaseRollbackDto>($"api/releases/{id}/rollback", request, ct);
 
 
     public async Task<ReleaseDto?> PromoteReleaseAsync(int id, CancellationToken ct = default)
         => await PostNoBodyAsync<ReleaseDto>($"api/releases/{id}/promote", ct);
+
+    /// <summary>Recette R-13: puts a release back to a status its deployment history can end in; the
+    /// refusal's reason is kept for the page to show.</summary>
+    public Task<ApiOutcome<ReleaseDto, ApiError>> RestoreReleaseStatusAsync(int id, RestoreReleaseStatusRequest request, CancellationToken ct = default)
+        => PostForApiErrorOutcomeAsync<RestoreReleaseStatusRequest, ReleaseDto>($"api/releases/{id}/status", request, ct);
 }

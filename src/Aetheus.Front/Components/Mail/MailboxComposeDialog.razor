@@ -1,13 +1,13 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* Recette R1-17: a new message, a reply, a reply to all or a forward. The dialog sends it itself and
-   stays open when the server refuses it, so nothing typed is lost. No field takes the focus on open. *@
+@* A new message, a reply, a reply to all or a forward. The dialog sends it itself and stays open
+   when the server refuses it, so nothing typed is lost. No field takes the focus on open. *@
 <OmniTemplateForm TModel="MailboxComposeModel" Model="@_model" OnValidSubmit="@SendAsync">
     <OmniDataAnnotationsValidator Localizer="@L" />
     <OmniStack Gap="OmniSpacing.Small">
         <OmniFormField Label="@L["MailboxFrom"]" For="mailbox-compose-from">
             <OmniTextBox Id="mailbox-compose-from" Value="@From" ValueExpression="@(() => From)" ReadOnly="true" />
         </OmniFormField>
-        <OmniFormField Label="@L["MailboxTo"]" Description="@L["MailboxAddressesHint"]" For="mailbox-compose-to" Error="@_recipientError">
+        <OmniFormField Label="@L["MailboxTo"]" Help="@L["MailboxAddressesHint"]" For="mailbox-compose-to" Error="@_recipientError">
             <OmniTextBox Id="mailbox-compose-to" @bind-Value="_model.To" Autocomplete="off" />
         </OmniFormField>
         <ValidationMessage For="@(() => _model.To)" />
@@ -25,7 +25,7 @@
             <OmniTextArea Id="mailbox-compose-body" @bind-Value="_model.Body" Rows="12" />
         </OmniFormField>
         <ValidationMessage For="@(() => _model.Body)" />
-        <OmniFormField Label="@L["MailboxAttachments"]" Description="@AttachmentsHint" For="mailbox-compose-attachments">
+        <OmniFormField Label="@L["MailboxAttachments"]" Help="@AttachmentsHint" For="mailbox-compose-attachments">
             <OmniUpload Id="mailbox-compose-attachments"
                         Multiple="true"
                         MaximumFiles="@MailboxLimits.MaxAttachmentCount"

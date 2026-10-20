@@ -6,9 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>Recette R-163 / R-395: one header model everywhere, OE's <see cref="OmniPageHeader"/> (title, then
-/// the trail under it), and the outlet through which the pipelines list puts its New button into the
-/// host's header actions (R-124).</summary>
+/// <summary>One header model everywhere, OE's <see cref="OmniPageHeader"/> (title, then the trail
+/// under it), and the outlet through which the pipelines list puts its New button into the host's
+/// header actions.</summary>
 public sealed class PageHeaderActionsSectionTests : BunitContext
 {
     public PageHeaderActionsSectionTests() => BunitTestHelper.RegisterServices(this);

@@ -5,13 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// Recette R2-122: deleting a project removes everything it owns. The foreign keys alone do not:
-/// pipelines, environments, service connections and package feeds are SET NULL (they used to survive
-/// detached), monitored apps, project servers and vaults are RESTRICT (the delete failed with 23503),
-/// and the tasks of a run are SET NULL from the run. So the rows are removed explicitly, leaf to root,
-/// the large tables in bounded batches so no single statement grows with the project's history.
-/// </summary>
+/// <summary>Remove owned rows explicitly from leaves to root because SET NULL and RESTRICT foreign
+/// keys do not cascade the whole project. Delete large tables in bounded batches so individual
+/// statements do not grow with project history.</summary>
 internal sealed class ProjectDeletionRepository(AppDbContext db) : IProjectDeletionRepository
 {
     internal const int BatchSize = 5_000;
@@ -131,6 +127,7 @@ internal sealed class ProjectDeletionRepository(AppDbContext db) : IProjectDelet
         await DeleteAllAsync(Approvals(scope), ct).ConfigureAwait(false);
         await DeleteInBatchesAsync(db.TestResults.Where(item => runIds.Contains(item.PipelineRunId)), item => item.Id, ct).ConfigureAwait(false);
         await DeleteInBatchesAsync(db.RunMetrics.Where(item => runIds.Contains(item.PipelineRunId)), item => item.Id, ct).ConfigureAwait(false);
+        await DeleteInBatchesAsync(db.PipelineMigrationGateVerdicts.Where(item => runIds.Contains(item.PipelineRunId)), item => item.Id, ct).ConfigureAwait(false);
         await DeleteAllAsync(db.ReleaseRollbacks.Where(item => scope.PipelineIds.Contains(item.PipelineId)
             || scope.ReleaseIds.Contains(item.SourceReleaseId)
             || scope.ReleaseIds.Contains(item.TargetReleaseId)), ct).ConfigureAwait(false);

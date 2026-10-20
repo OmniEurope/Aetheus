@@ -9,15 +9,14 @@ internal static class PipelineHelper
         PipelineStatus.Success => OmniTone.Success,
         PipelineStatus.Failed => OmniTone.Danger,
         PipelineStatus.Running => OmniTone.Accent,
-        // D13: amber now means "finished with a swallowed failure", so Cancelled is not amber. Recette
-        // R-347: the neutral grey barely stood out from the table in the dark theme; Cancelled takes the
-        // info blue, the one variant no other run status uses.
+        // Use the distinct info-blue variant for Cancelled so it remains readable in the dark theme
+        // and separate from amber partial failures.
         PipelineStatus.Partial => OmniTone.Warning,
-        // R-14: the deployment did not happen and the previous version serves again: a warning, not
-        // the red of a run that left something broken. The label, not the colour, tells it from Partial.
+        // Use warning styling when rollback restored the previous serving version; the label
+        // distinguishes it from a partially successful run.
         PipelineStatus.RolledBack => OmniTone.Warning,
-        // Recette R2-146 (user's choice, as a trial): a refused result is a warning, not the red of a
-        // technical failure.
+        // Use warning styling for a refused result so it remains distinct from a technical
+        // execution failure.
         PipelineStatus.Rejected => OmniTone.Warning,
         PipelineStatus.Cancelled => OmniTone.Info,
         _ => OmniTone.Neutral

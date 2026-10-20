@@ -153,4 +153,26 @@ public class SecretMaskingServiceTests
 
         Assert.Equal("Log: *** here", result);
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    public void RegisterRuntimeSecret_TooShortToMask_IsIgnored(string secret)
+    {
+        _sut.RegisterRuntimeSecret(7, secret);
+
+        Assert.Empty(_sut.GetRuntimeSecretValues(7));
+    }
+
+    [Fact]
+    public void RegisterRuntimeSecret_KeepsEachValueOnce_LongestFirst_PerRun()
+    {
+        _sut.RegisterRuntimeSecret(7, "token");
+        _sut.RegisterRuntimeSecret(7, "token-with-suffix");
+        _sut.RegisterRuntimeSecret(7, "token");
+        _sut.RegisterRuntimeSecret(8, "other-run");
+
+        Assert.Equal(["token-with-suffix", "token"], _sut.GetRuntimeSecretValues(7));
+        Assert.Equal(["other-run"], _sut.GetRuntimeSecretValues(8));
+    }
 }

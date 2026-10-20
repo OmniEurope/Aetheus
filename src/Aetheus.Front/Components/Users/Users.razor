@@ -54,7 +54,7 @@
                                     title="@string.Join(", ", user.Roles.Skip(3))">@($"+{user.Roles.Count - 3}")</OmniBadge>
                             }
                             <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/users/{user.Id}"))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo($"/users/{user.Id}"))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
                             </span>
                         </OmniRow>
                     </Template>

@@ -58,10 +58,9 @@ public class GitProcessRunner(ILogger<GitProcessRunner> logger)
         // non-zero result that the callers already degrade on (empty tree/commits, surfaced error on writes).
         if (!Directory.Exists(workDir))
         {
-            // Recette R-126: a page that lists the repository runs several git reads on every visit, so
-            // the same missing folder filled the log with dozens of identical warnings. The absence is
-            // a state, not a fault of the request: said once per folder at Information while the process
-            // runs, the repeats stay at Debug.
+            // Log an absent repository once per folder at Information within the process, with
+            // repeated reads at Debug. Missing storage is a repository state shared by multiple
+            // read requests.
             if (MissingDirectoriesReported.TryAdd(workDir, 0))
                 logger.LogInformation("git {Args} skipped - working directory does not exist: {Dir} (reported once per folder)",
                     string.Join(' ', args), workDir);

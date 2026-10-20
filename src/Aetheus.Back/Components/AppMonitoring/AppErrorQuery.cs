@@ -3,12 +3,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
-/// <summary>
-/// The columns of an app's error-group grid. The grid reads the groups page by page from the API, so
-/// its header filters and its sort are applied here, to every stored group of the app, and not to the
-/// rows already on screen (the defect the log grid had before recette R-358). A request only names
-/// keys; the column behind each key is decided here.
-/// </summary>
+/// <summary>Error-grid filters and sorting apply server-side to all stored groups through an
+/// explicit column-key map.</summary>
 internal static class AppErrorQuery
 {
     /// <summary>Most exception types the type column's checkable list offers.</summary>

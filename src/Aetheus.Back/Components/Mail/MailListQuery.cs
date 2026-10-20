@@ -4,10 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Mail;
 
-/// <summary>
-/// Recette R-210 / R-224: the column filters of a server's mail grids (domains, mailboxes, aliases). The
-/// keys are the grids' column keys.
-/// </summary>
+/// <summary> The column filters of a server's mail grids (domains, mailboxes, aliases). The keys
+/// are the grids' column keys. </summary>
 internal static class MailListQuery
 {
     internal static readonly GridQueryMap<MailDomain> DomainColumns = new GridQueryMap<MailDomain>()

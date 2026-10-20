@@ -8,29 +8,24 @@ internal static class PipelineRunGatePresentation
     {
         AnalysisGateStatus.Passed => OmniTone.Success,
         AnalysisGateStatus.Warning => OmniTone.Warning,
-        // Recette R2-146: a gate a required control blocked reads "Rejeté" in warning; red stays for a
-        // gate in error (a report missing, a technical failure).
+        // A gate a required control blocked reads "Rejeté" in warning; red stays for a gate in
+        // error (a report missing, a technical failure).
         AnalysisGateStatus.Blocked => OmniTone.Warning,
         AnalysisGateStatus.Error => OmniTone.Danger,
         _ => OmniTone.Neutral
     };
 
-    /// <summary>
-    /// PLAN-003 lot 22: the status word is dropped when the grade letter carries the same verdict.
-    /// The letter comes from the grade alone, so it can stay green on a gate blocked by a finding or
-    /// in error for a missing report: for those two the word is always drawn.
-    /// </summary>
+    /// <summary> The status word is dropped when the grade letter carries the same verdict. The
+    /// letter comes from the grade alone, so it can stay green on a gate blocked by a finding or in
+    /// error for a missing report: for those two the word is always drawn. </summary>
     public static bool ShowsStatusWord(AnalysisRunGateDto gate) =>
         gate.Grade?.OverallGrade is null
         || gate.Status is AnalysisGateStatus.Blocked or AnalysisGateStatus.Error;
 
     public static string StatusKey(AnalysisGateStatus status) => $"AnalysisGateStatus{status}";
 
-    /// <summary>
-    /// Recette R2-129: the letter a run is listed with (its own evaluations, else the sealed contract a
-    /// candidate published, see <c>PipelineRunGradeHydration</c>) is the letter its gate shows. Candidate
-    /// #2571 was listed F (sealed: current E2E failed) while its gate showed the analysis A.
-    /// </summary>
+    /// <summary>The gate uses the same grade as the run list, including the sealed candidate
+    /// contract when applicable; see <c>PipelineRunGradeHydration</c>.</summary>
     public static AnalysisGrade? HeadlineGrade(AnalysisRunGateDto gate, AnalysisGrade? runGrade) =>
         runGrade ?? gate.Grade?.OverallGrade;
 

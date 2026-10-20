@@ -2,7 +2,7 @@
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
-/// <summary>Rows the storage budget removed from one application's audience data (recette R2-007).</summary>
+/// <summary>Rows the storage budget removed from one application's audience data.</summary>
 public readonly record struct WebAnalyticsTrimResult(int Events, int Sessions, int PeriodIdentities, long RemainingBytes)
 {
     public int Total => Events + Sessions + PeriodIdentities;
@@ -11,11 +11,10 @@ public readonly record struct WebAnalyticsTrimResult(int Events, int Sessions, i
 /// <summary>An application holding audience data, with the storage budget it is held to.</summary>
 public readonly record struct WebAnalyticsStorageBudget(int AppId, long BudgetBytes);
 
-/// <summary>
-/// The storage side of the audience data: what it weighs, the age-based purge, and the roll-off that
-/// keeps an application under its budget (recette R2-007). Held by <see cref="AppWebAnalyticsRepository"/>
-/// on the same context, so the recording code and this one see the same rows.
-/// </summary>
+/// <summary> The storage side of the audience data: what it weighs, the age-based purge, and the
+/// roll-off that keeps an application under its budget. Held by <see
+/// cref="AppWebAnalyticsRepository"/> on the same context, so the recording code and this one see
+/// the same rows. </summary>
 internal sealed class AppWebAnalyticsStorageRepository(AppDbContext db)
 {
     internal const int EventEstimatedBytes = 480;
@@ -24,11 +23,8 @@ internal sealed class AppWebAnalyticsStorageRepository(AppDbContext db)
     internal const int AggregateEstimatedBytes = 192;
     internal const int PageEstimatedBytes = 256;
 
-    /// <summary>
-    /// The estimated size of an application's audience data. Recette R2-007: the rejection rows are not
-    /// counted; they only say how many events were refused and are purged on their own short window, and
-    /// counting them made a refusal grow the very figure that caused it.
-    /// </summary>
+    /// <summary>Storage estimates exclude separately retained rejection counters so rejecting
+    /// events does not increase the budgeted data size.</summary>
     public async Task<long> EstimateStorageBytesAsync(int appId, CancellationToken ct)
     {
         var events = await db.AppAnalyticsEvents.CountAsync(item => item.MonitoredAppId == appId, ct)
@@ -48,12 +44,11 @@ internal sealed class AppWebAnalyticsStorageRepository(AppDbContext db)
                + (long)pages * PageEstimatedBytes;
     }
 
-    /// <summary>
-    /// Recette R2-007: brings an application's audience data down to <paramref name="targetBytes"/> by
-    /// deleting its oldest raw events first, then, when the events alone do not free enough, its oldest
-    /// sessions, then its oldest period identities. The daily, weekly and monthly aggregates and the page
-    /// counts are the history the tab draws and are never removed here (the age-based purge owns them).
-    /// </summary>
+    /// <summary> Brings an application's audience data down to <paramref name="targetBytes"/> by
+    /// deleting its oldest raw events first, then, when the events alone do not free enough, its
+    /// oldest sessions, then its oldest period identities. The daily, weekly and monthly aggregates
+    /// and the page counts are the history the tab draws and are never removed here (the age-based
+    /// purge owns them). </summary>
     public async Task<WebAnalyticsTrimResult> TrimToAsync(int appId, long targetBytes, CancellationToken ct)
     {
         var remaining = await EstimateStorageBytesAsync(appId, ct).ConfigureAwait(false);
@@ -113,7 +108,7 @@ internal sealed class AppWebAnalyticsStorageRepository(AppDbContext db)
         return [.. budgets.Select(item => new WebAnalyticsStorageBudget(item.Id, item.AnalyticsStorageBudgetBytes))];
     }
 
-    /// <summary>Audit R2-007 follow-up: the events the application accepted since <paramref name="sinceUtc"/>.</summary>
+    /// <summary>Counts accepted events since <paramref name="sinceUtc"/>.</summary>
     public async Task<int> CountAcceptedSinceAsync(int appId, DateTime sinceUtc, CancellationToken ct) =>
         await db.AppAnalyticsIngestVolumes.AsNoTracking()
             .Where(item => item.MonitoredAppId == appId && item.ReceivedAtUtc >= sinceUtc)

@@ -25,8 +25,8 @@ public partial class ProjectArtifactsSection : IAsyncDisposable
     private ArtifactRetentionPolicy? _selectedPolicy;
     private AetheusDataGrid<PipelineArtifactDto>? _grid;
 
-    // Recette R-210: the grid's header filters travel with every page request, the pipeline and
-    // environment lists offer the names present across the project's artifacts.
+    // The grid's header filters travel with every page request, the pipeline and environment lists
+    // offer the names present across the project's artifacts.
     private List<Aetheus.Shared.Components.Shared.GridFilter> _columnFilters = [];
     private ProjectArtifactFilterValuesDto _filterValues = new();
     private Func<string, string>? _policyText;
@@ -64,11 +64,9 @@ public partial class ProjectArtifactsSection : IAsyncDisposable
         if (ProjectId == projectId) _filterValues = values;
     }
 
-    /// <summary>
-    /// Recette R-181: artifacts are produced by pipeline runs, so a finished run reloads the list;
-    /// the Refresh button is gone. Best effort like the other realtime lists: without the hub the
-    /// page still shows what it loaded.
-    /// </summary>
+    /// <summary> Artifacts are produced by pipeline runs, so a finished run reloads the list; the
+    /// Refresh button is gone. Best effort like the other realtime lists: without the hub the page
+    /// still shows what it loaded. </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -91,9 +89,10 @@ public partial class ProjectArtifactsSection : IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>Recette R-226: a finished run refreshes the grid quietly (rows, page, filters and scroll
-    /// kept) and brings the names of a new pipeline or environment into the filters. Recette R-327: the grid
-    /// is always rendered and scrolls (remote virtualization): it only shows what it fetched itself.</summary>
+    /// <summary>A finished run refreshes the grid quietly (rows, page, filters and scroll kept) and
+    /// brings the names of a new pipeline or environment into the filters. the grid is always
+    /// rendered and scrolls (remote virtualization): it only shows what it fetched
+    /// itself.</summary>
     private async Task RefreshAsync()
     {
         await (_grid is not null ? _grid.Refresh() : LoadDataAsync());
@@ -135,8 +134,9 @@ public partial class ProjectArtifactsSection : IAsyncDisposable
             () => InvokeAsync(StateHasChanged));
     }
 
-    // R-260: the grid owns loading; its headers stay mounted while the rows arrive.
-    /// <summary>Recette R2-124: one page of the export, with the retention filter, sort and column filters of the grid.</summary>
+    // The grid owns loading; its headers stay mounted while the rows arrive.
+    /// <summary>One page of the export, with the retention filter, sort and column filters of the
+    /// grid.</summary>
     private Task<PaginatedResult<PipelineArtifactDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -194,6 +194,6 @@ public partial class ProjectArtifactsSection : IAsyncDisposable
 
     private sealed record PolicyOption(string Label, ArtifactRetentionPolicy Value);
 
-    /// <summary>Recette R2-124: the export writes the version of every release the artifact is in.</summary>
+    /// <summary>The export writes the version of every release the artifact is in.</summary>
     private static readonly Func<PipelineArtifactDto, object?> ReleaseExport = artifact => string.Join(", ", artifact.Releases.Select(release => release.Version));
 }

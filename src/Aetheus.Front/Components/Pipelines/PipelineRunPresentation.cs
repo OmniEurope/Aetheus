@@ -12,7 +12,7 @@ internal static class PipelineRunPresentation
         ? $"/pipelines/runs/{runId}?serverId={server}"
         : projectId is { } project ? $"/pipelines/runs/{runId}?projectId={project}" : $"/pipelines/runs/{runId}";
 
-    /// <summary>Recette R2-128: the run opened on its Gate tab, where its findings are listed.</summary>
+    /// <summary>The run opened on its Gate tab, where its findings are listed.</summary>
     public static string GateHref(int runId, int? projectId, int? serverId)
     {
         var href = Href(runId, projectId, serverId);
@@ -28,9 +28,8 @@ internal static class PipelineRunPresentation
         !run.CancellationRequested
         && run.Status is PipelineStatus.Pending or PipelineStatus.Running or PipelineStatus.WaitingForApproval;
 
-    /// <summary>Recette R2-103: "Cancelled by alice", or "Cancelled by Aetheus" for a cancellation the
-    /// system made (latest-wins replacement, recovery); null when the author is unknown (a run cancelled
-    /// before it was recorded).</summary>
+    /// <summary>Cancellation attribution distinguishes a named operator from system cancellation;
+    /// unknown authors remain unspecified.</summary>
     public static string? CancelledByText(PipelineRunDto run, IStringLocalizer localizer)
     {
         ArgumentNullException.ThrowIfNull(run);
@@ -41,16 +40,9 @@ internal static class PipelineRunPresentation
             : string.Format(System.Globalization.CultureInfo.CurrentCulture, localizer["RunCancelledBy"], run.CancelledBy);
     }
 
-    /// <summary>
-    /// Recette R-329: the width of the frozen ID column of a pipeline's runs, sized to what it holds:
-    /// "#" and the digits of the longest id, plus one row action (cancel a live run, rerun a failed one;
-    /// never both) when a listed run offers one, plus the cell padding. A fixed width (150px, then
-    /// 112px) wasted room beside the scrolled columns, and "auto" is no better: under the grid's fixed
-    /// table layout an auto column takes an equal share of what the others leave, not its content.
-    /// Digits count 1ch each (the grid's figures are tabular); two more cover the "#" and the link's
-    /// medium weight, never below the link's own 2.5rem floor (<c>.pipeline-name-link</c>), so the id
-    /// never wraps (it may break anywhere on a phone).
-    /// </summary>
+    /// <summary>The frozen ID column accounts for the longest ID, an available row action and cell
+    /// padding. Explicit content-based sizing avoids equal-share allocation under fixed table
+    /// layout.</summary>
     public static string IdColumnWidth(IEnumerable<PipelineRunDto> runs)
     {
         var digits = 1;
@@ -122,7 +114,7 @@ internal static class PipelineRunPresentation
         var steps = run.Steps.Where(step => !step.IsSystem).ToList();
         var completed = steps.Count(step => step.Status is TaskExecutionStatus.Success
             or TaskExecutionStatus.Failed or TaskExecutionStatus.Timeout or TaskExecutionStatus.Cancelled);
-        // Recette R-336: the total is every declared step, including those a terminal run never reached.
+        // The total is every declared step, including those a terminal run never reached.
         return (completed, steps.Count);
     }
 

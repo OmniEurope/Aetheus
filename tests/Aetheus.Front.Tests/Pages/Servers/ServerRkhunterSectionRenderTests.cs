@@ -63,7 +63,12 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         var cut = RenderInstalled();
         Assert.Contains(cut.FindAll(".omni-badge"), badge => badge.TextContent.Trim() == "Installed");
         Assert.Contains("RunScan", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("ViewLogs", cut.Markup, StringComparison.Ordinal);
+        // R3-42: Scan is the zone's only button; the logs sit in its split-button menu.
+        Assert.Single(cut.FindAll(".omni-row > .omni-split-button"));
+        Assert.Empty(cut.Find(".omni-row").QuerySelectorAll("button.omni-button").Where(b => !b.ClassName!.Contains("omni-split-button", StringComparison.Ordinal)).Select(b => b.OuterHtml[..Math.Min(300, b.OuterHtml.Length)]));
+        cut.Find(".omni-split-button__toggle").Click();
+        Assert.Contains(cut.FindAll(".omni-split-button__menu .omni-menu__item"),
+            item => item.TextContent.Contains("ViewLogs", StringComparison.Ordinal));
         // The page header already shows the title: the section no longer repeats it.
         Assert.DoesNotContain("RKHunter", cut.Markup, StringComparison.Ordinal);
     }
@@ -274,7 +279,7 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         Assert.Null(ex);
     }
 
-    // ── R-181: realtime instead of Refresh ────────────────────────────────────
+    // Live refresh.
 
     [Fact]
     public void R181_NoRefreshButtons_AndTheHistoryIsLoadedWithoutAClick()
@@ -282,7 +287,7 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         var cut = RenderInstalled();
 
         Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Refresh", StringComparison.Ordinal));
-        // The history used to stay empty until its Refresh button was clicked.
+        // History loads when the section initializes.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/servers/50/rkhunter/history", StringComparison.Ordinal));
     }
 

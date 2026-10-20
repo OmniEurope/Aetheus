@@ -104,44 +104,6 @@ public class PaginationAndServiceConnectionTests
         Assert.True(result.HasNext);
     }
 
-    // --- Pagination request subtypes ---
-
-    [Fact]
-    public void TaskPaginationRequest_Status()
-    {
-        var req = new TaskPaginationRequest { Status = TaskExecutionStatus.Success, Page = 2, PageSize = 10 };
-        Assert.Equal(TaskExecutionStatus.Success, req.Status);
-        Assert.Equal(2, req.Page);
-    }
-
-    [Fact]
-    public void ProjectPaginationRequest_ProjectStatus()
-    {
-        var req = new ProjectPaginationRequest { ProjectStatus = ProjectStatus.Active };
-        Assert.Equal(ProjectStatus.Active, req.ProjectStatus);
-    }
-
-    [Fact]
-    public void PipelinePaginationRequest_TriggerType()
-    {
-        var req = new PipelinePaginationRequest { TriggerType = PipelineTriggerType.Webhook };
-        Assert.Equal(PipelineTriggerType.Webhook, req.TriggerType);
-    }
-
-    [Fact]
-    public void ImportResultDto_Defaults()
-    {
-        var dto = new ImportResultDto();
-        Assert.Equal(0, dto.ImportedCount);
-    }
-
-    [Fact]
-    public void ImportResultDto_CanSet()
-    {
-        var dto = new ImportResultDto { ImportedCount = 42 };
-        Assert.Equal(42, dto.ImportedCount);
-    }
-
     // --- ServiceConnectionDetailDto ---
 
     [Fact]
@@ -155,27 +117,5 @@ public class PaginationAndServiceConnectionTests
         Assert.Null(dto.Url);
         Assert.Null(dto.ProjectId);
         Assert.Null(dto.ProjectName);
-    }
-
-    [Fact]
-    public void ServiceConnectionDetailDto_CanSetAll()
-    {
-        var now = DateTime.UtcNow;
-        var dto = new ServiceConnectionDetailDto
-        {
-            Id = 1,
-            Name = "GitHub",
-            Description = "Main repo",
-            Type = ServiceConnectionType.GitHub,
-            ProjectId = 5,
-            ProjectName = "MyProject",
-            Url = "https://github.com",
-            ConfigurationJson = "{\"token\":\"***\"}",
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-        Assert.Equal("GitHub", dto.Name);
-        Assert.Equal("{\"token\":\"***\"}", dto.ConfigurationJson);
-        Assert.Equal(5, dto.ProjectId);
     }
 }

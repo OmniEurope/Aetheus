@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: EUPL-1.2
-# Deploys an already-qualified candidate release through the project's production adapter. Restore,
-# deploy and the "deployed" mark are three stages: the steps of one stage run concurrently (ADR-012), so
-# in one stage the release could be marked deployed before the adapter had run.
+# Deploys an already-qualified candidate release with the project's production commands, shell written in
+# its pipeline in APPLICATION_DEPLOY_PROD_COMMANDS (run with `sh -eu -c` from the workspace): nothing is
+# required in its repository (ADR-050, recette R3-64), and without commands the step fails and says so,
+# before the release is marked deployed. Restore, deploy and the "deployed" mark are three stages: the
+# steps of one stage run concurrently (ADR-012), so in one stage the release could be marked deployed
+# before the commands had run.
 name: application-deploy-prod-template
 trigger: manual
 parameters:
@@ -12,6 +15,14 @@ parameters:
 variables:
   APPLICATION_CANDIDATE_VERSION: "${{ parameters.candidateVersion }}"
   APPLICATION_ROLLBACK_ENABLED: "true"
+  APPLICATION_DEPLOY_PROD_COMMANDS: ""
+
+# Recette R3-67: the libraries a production deployment reads, named like the platform's own
+# (`<project>.share`, `<project>.prod`): `${{ project.slug }}` is the project's slug, so the setup wizard creates
+# them in the project under the name its runs read.
+variable_libraries:
+  - "${{ project.slug }}.share"
+  - "${{ project.slug }}.prod"
 
 stages:
   - name: Restore candidate
@@ -31,14 +42,17 @@ stages:
     os: linux
     depends_on: [Restore candidate]
     steps:
-      - name: Run project production deployment adapter
+      - name: Run project production deployment commands
         working_directory: "$(WORKSPACE)"
         shell: |
           set -eu
-          test -f .pipeline/scripts/deploy-prod.sh
+          if test -z "${APPLICATION_DEPLOY_PROD_COMMANDS:-}"; then
+            echo "No production deployment command declared: set APPLICATION_DEPLOY_PROD_COMMANDS in this pipeline." >&2
+            exit 1
+          fi
           APPLICATION_CANDIDATE_VERSION="$(APPLICATION_CANDIDATE_VERSION)" \
           APPLICATION_ROLLBACK_ENABLED="$(APPLICATION_ROLLBACK_ENABLED)" \
-            sh .pipeline/scripts/deploy-prod.sh
+            sh -eu -c "$APPLICATION_DEPLOY_PROD_COMMANDS"
         timeout_seconds: 7200
 
   - name: Mark deployed

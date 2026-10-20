@@ -2,10 +2,8 @@
 
 namespace Aetheus.Front.Components.Servers;
 
-/// <summary>
-/// PLAN-004 R-11: lists retired servers (hidden from the fleet grid, links kept, revived by a
-/// reinstall of the same machine) and offers the only irreversible step, the permanent deletion.
-/// </summary>
+/// <summary>Lists retired servers whose links remain available for re-enrollment and offers
+/// permanent deletion.</summary>
 public partial class RetiredServersDialog
 {
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -21,7 +19,7 @@ public partial class RetiredServersDialog
     private bool _loading;
     private bool _loadFailed;
 
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>One page of the export, with the grid's sort and column filters.</summary>
     private Task<PaginatedResult<RetiredServerDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -33,7 +31,7 @@ public partial class RetiredServersDialog
     {
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, descending) = args.ToSortRequest(nameof(RetiredServerDto.RetiredAt), fallbackDescending: true);
-        // Recette R-210 / R-224: the header filters, applied by the API.
+        // The header filters, applied by the API.
         var filters = args.ToApiFilters();
         await PaginatedGridLoader.LoadAsync(
             () => Api.Servers.GetRetiredServersAsync(page, pageSize, sortBy, descending, filters: filters),

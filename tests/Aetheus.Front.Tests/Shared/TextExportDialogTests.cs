@@ -5,7 +5,7 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>PLAN-003 lot 22: an export is shown before it is kept, with download, copy and close.</summary>
+/// <summary>An export is shown before it is kept, with download, copy (in the "More actions" menu) and close.</summary>
 public sealed class TextExportDialogTests : BunitContext
 {
     public TextExportDialogTests() => BunitTestHelper.RegisterServices(this);
@@ -43,7 +43,7 @@ public sealed class TextExportDialogTests : BunitContext
     {
         var cut = RenderDialog();
 
-        cut.FindAll("button").Single(button => button.TextContent.Contains("Copy", StringComparison.Ordinal)).Click();
+        cut.FindMenuItem("Copy")!.Click();
 
         var copy = Assert.Single(JSInterop.Invocations, invocation => invocation.Identifier == "Aetheus.copyToClipboard");
         Assert.Equal("# Findings\n- First finding", copy.Arguments[0]);
@@ -57,7 +57,7 @@ public sealed class TextExportDialogTests : BunitContext
         JSInterop.Setup<bool>("Aetheus.copyToClipboard", _ => true).SetResult(accepted);
         var cut = RenderDialog();
 
-        cut.FindAll("button").Single(button => button.TextContent.Contains("Copy", StringComparison.Ordinal)).Click();
+        cut.FindMenuItem("Copy")!.Click();
 
         var message = Assert.Single(Services.Toasts());
         Assert.Equal(expected, message.Severity);

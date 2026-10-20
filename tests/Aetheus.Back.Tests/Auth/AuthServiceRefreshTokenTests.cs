@@ -35,7 +35,7 @@ public class AuthServiceRefreshTokenTests
             Substitute.For<ITotpService>(), TimeProvider.System,
             Substitute.For<IHttpContextAccessor>(), Substitute.For<Aetheus.Back.Services.IAdminChangeNotifier>(), _domainEvents, Substitute.For<ILogger<AuthService>>());
 
-        // The revoke is a compare-and-set (R-072): by default this request is the one that wins it.
+        // The revoke is a compare-and-set : by default this request is the one that wins it.
         _repo.RevokeRefreshTokenAsync(Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
@@ -121,7 +121,7 @@ public class AuthServiceRefreshTokenTests
 
         Assert.Null(result);
         await _repo.Received(1).RevokeAllUserRefreshTokensAsync(5, Arg.Any<CancellationToken>());
-        // R1-37: the revoked chain also ends what the modules hold in memory for that user.
+        // The revoked chain also ends what the modules hold in memory for that user.
         await _domainEvents.Received(1).DispatchAsync(
             new Aetheus.Back.Components.Users.Events.UserSessionEndedEvent(5, Aetheus.Back.Components.Users.Events.UserSessionEndReasons.RefreshReplay),
             Arg.Any<CancellationToken>());
@@ -140,6 +140,10 @@ public class AuthServiceRefreshTokenTests
             User = ActiveUser()
         });
 
+        // AUD-01: the grace window holds only while the replacement is live.
+        _repo.FindRefreshTokenStateAsync(99, Arg.Any<CancellationToken>())
+            .Returns(new RefreshToken { Id = 99, UserId = 1, ExpiresAt = DateTime.UtcNow.AddDays(1) });
+
         var result = await _sut.RefreshTokenAsync("plaintext", ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
@@ -148,11 +152,8 @@ public class AuthServiceRefreshTokenTests
         await _repo.DidNotReceive().AddRefreshTokenAsync(Arg.Any<RefreshToken>(), Arg.Any<CancellationToken>());
     }
 
-    /// <summary>
-    /// R-072: two requests read the same active token, and the other one revoked it first. The loser
-    /// must not fail (it used to end in a 500) nor fork the chain: it retires the replacement it minted
-    /// and is answered like a request arriving inside the grace window, an access token only.
-    /// </summary>
+    /// <summary>When another request wins token rotation, retire the unused replacement and return
+    /// an access token within the grace window without forking the chain.</summary>
     [Fact]
     public async Task RefreshToken_LostConcurrentRotation_ReissuesAccessTokenOnly()
     {
@@ -161,6 +162,9 @@ public class AuthServiceRefreshTokenTests
         _repo.RevokeRefreshTokenAsync(30, Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns(false);
         _repo.FindRefreshTokenStateAsync(30, Arg.Any<CancellationToken>())
             .Returns(new RefreshToken { Id = 30, UserId = 1, RevokedAt = DateTime.UtcNow, ReplacedById = 31 });
+
+        _repo.FindRefreshTokenStateAsync(31, Arg.Any<CancellationToken>())
+            .Returns(new RefreshToken { Id = 31, UserId = 1, ExpiresAt = DateTime.UtcNow.AddDays(1) });
 
         var outcome = await _sut.RefreshTokenWithReasonAsync("plaintext", ct);
 
@@ -175,9 +179,8 @@ public class AuthServiceRefreshTokenTests
         await _repo.DidNotReceive().DeleteExpiredRefreshTokensAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
-    /// <summary>
-    /// R-072: when what beat this request was a revocation without replacement (a logout), the reuse
-    /// keeps the existing replay rule: the chain is revoked and the refusal names the replay.
+    /// <summary> When what beat this request was a revocation without replacement (a logout), the
+    /// reuse keeps the existing replay rule: the chain is revoked and the refusal names the replay.
     /// </summary>
     [Fact]
     public async Task RefreshToken_LostToARevocationWithoutReplacement_IsTreatedAsReplay()
@@ -195,10 +198,7 @@ public class AuthServiceRefreshTokenTests
         await _repo.Received(1).RevokeAllUserRefreshTokensAsync(7, Arg.Any<CancellationToken>());
     }
 
-    /// <summary>
-    /// PLAN-005 lot 9 / D48: each of the refusals has its own code, so a session that ended can say
-    /// which one ended it; a success carries none.
-    /// </summary>
+    /// <summary>Return a distinct refusal code and none on success.</summary>
     [Fact]
     public async Task RefreshTokenWithReason_NamesEachRefusal()
     {
@@ -222,7 +222,7 @@ public class AuthServiceRefreshTokenTests
         Assert.Null(success.RejectionCode);
     }
 
-    /// <summary>Recette R1-37: an explicit logout announces the end of the user's session in-process.</summary>
+    /// <summary>An explicit logout announces the end of the user's session in-process.</summary>
     [Fact]
     public async Task Logout_AnnouncesTheEndOfTheUsersSession()
     {

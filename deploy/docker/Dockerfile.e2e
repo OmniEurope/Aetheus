@@ -8,7 +8,7 @@ ARG DOTNET_INSTALLER_URL=https://raw.githubusercontent.com/dotnet/install-script
 ARG DOTNET_INSTALLER_SHA256=082f7685e156738a1b2e2ed8381a621870d4ce8e8c59278034556f05c186eb2e
 RUN curl -fsSL "$DOTNET_INSTALLER_URL" -o /tmp/di.sh \
     && echo "$DOTNET_INSTALLER_SHA256  /tmp/di.sh" | sha256sum -c - \
-    && bash /tmp/di.sh --version 10.0.100 --install-dir /usr/lib/dotnet-10 \
+    && bash /tmp/di.sh --version 10.0.402 --install-dir /usr/lib/dotnet-10 \
     && ln -sf /usr/lib/dotnet-10/dotnet /usr/local/bin/dotnet
 ENV DOTNET_ROOT=/usr/lib/dotnet-10
 WORKDIR /src

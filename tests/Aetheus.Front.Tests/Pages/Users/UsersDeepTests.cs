@@ -33,7 +33,7 @@ public class UsersDeepTests : BunitContext
     {
         SetupDefaults();
         var cut = Render<UsersPage>();
-        cut.WaitForState(() => cut.Markup.Contains("alice"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("alice"));
 
         // The grid auto-loads the first page; both stubbed users are rendered.
         Assert.Contains("alice", cut.Markup);
@@ -58,8 +58,8 @@ public class UsersDeepTests : BunitContext
     [Fact]
     public async Task SharedSearch_FiltersTheUsers()
     {
-        // Recette R-316: the search of the section bar, shared with Organizations and Roles, filters
-        // this grid; the page has no search box of its own any more.
+        // The shared identity section-bar search filters this grid without a separate page search
+        // box.
         SetupDefaults();
         var cut = Render<UsersPage>();
         cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));

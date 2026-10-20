@@ -30,7 +30,7 @@ public class AddAgentWizardTests : BunitContext
     private IRenderedComponent<AddAgent> RenderWizard()
     {
         var cut = Render<AddAgent>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
         return cut;
     }
 
@@ -57,7 +57,7 @@ public class AddAgentWizardTests : BunitContext
     {
         _handler.SetResponse("api/servers/agent-server-url", System.Net.HttpStatusCode.InternalServerError);
         var cut = Render<AddAgent>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
         var serverUrl = (string)typeof(AddAgent).GetField("_serverBaseUrl", Priv)!.GetValue(cut.Instance)!;
         Assert.Contains("127.0.0.1", serverUrl);
     }
@@ -271,5 +271,14 @@ public class AddAgentWizardTests : BunitContext
         // Disposal is idempotent: a second DisposeAsync (no hub was ever connected) must not throw.
         var ex = await Record.ExceptionAsync(async () => await cut.Instance.DisposeAsync());
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public void R357_PatchManage_IsCheckedByDefault_AndEmittedInTheInstallCommand()
+    {
+        var cut = RenderWizard();
+        var patch = (bool)typeof(AddAgent).GetField("_includePatchManagement", Priv)!.GetValue(cut.Instance)!;
+        Assert.True(patch);
+        Assert.Contains("--enable-patch-manage", AgentInstallFlags.BuildLinux(true, true, false, patch, false, true), StringComparison.Ordinal);
     }
 }

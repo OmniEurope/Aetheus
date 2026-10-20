@@ -6,7 +6,7 @@ using NSubstitute;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>PLAN-005: split-button routing, quota colouring and code localisation of the mail section.</summary>
+/// <summary>Mail split-button routing, quota colours and code localization.</summary>
 public sealed class MailSectionHelpersTests
 {
     private static readonly IStringLocalizer<AppStrings> L = CreateLocalizer();

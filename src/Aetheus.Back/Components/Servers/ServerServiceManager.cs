@@ -78,7 +78,7 @@ internal sealed class ServerServiceManager(
                 "The target server's agent is offline, so this action cannot run. Reconnect the agent and try again.");
     }
 
-    private static (string Command, ExecutorType Executor) BuildServiceCommand(
+    internal static (string Command, ExecutorType Executor) BuildServiceCommand(
         ServiceAction action, string serviceName, ServiceType serviceType)
     {
         var verb = action.ToString().ToLowerInvariant();
@@ -103,6 +103,10 @@ internal sealed class ServerServiceManager(
         => await DispatchPackageOperationAsync(
             serverId, serviceName, OperationKind.ServiceUninstall, "Uninstall", "ServiceUninstall", ct).ConfigureAwait(false);
 
+    internal static bool IsMailStackPackage(string service) =>
+        string.Equals(service, "postfix", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(service, "dovecot", StringComparison.OrdinalIgnoreCase);
+
     // S-FEAT-W8KN: install/uninstall a managed package via the typed controlled-sudo operation. The old
     // path enqueued a bare `apt-get install` shell task that always failed for the non-root agent (no
     // sudoers grant); this dispatches OperationKind.ServiceInstall/Uninstall, which the agent runs as
@@ -124,6 +128,13 @@ internal sealed class ServerServiceManager(
 
         var server = await repo.FindServerAsync(serverId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Server {serverId} not found.");
+        // Recette R3-24/R3-25/R3-43: Postfix and Dovecot of a stack Aetheus set up are one unit with OpenDKIM,
+        // rspamd and their configuration. Installing or removing one package here left a half stack (pop3
+        // configured without its package, OpenDKIM still listening); the Mail page reinstalls or purges it whole.
+        if (IsMailStackPackage(service) && await repo.IsMailStackManagedAsync(serverId, ct).ConfigureAwait(false))
+            throw new BadRequestException(
+                $"'{service}' belongs to the mail stack Aetheus manages on this server. Reinstall or remove the " +
+                "whole stack from the server's Mail page, so no part of it is left behind.");
         EnsureOnline(server);
         if (!server.PackageManagementAvailable)
             throw new BadRequestException(
@@ -136,6 +147,27 @@ internal sealed class ServerServiceManager(
 
         await audit.LogAsync(auditAction, "Service", serverId, aptPackage, ct).ConfigureAwait(false);
 
+        return task.Id;
+    }
+
+    // Recette R3-59: queue the read-only list of every installed package. No package grant (nothing is
+    // installed or removed, the agent only reads the package database), only an online Linux agent that
+    // publishes the package.inventory capability.
+    public async Task<int> ListInstalledPackagesAsync(int serverId, CancellationToken ct = default)
+    {
+        var server = await repo.FindServerAsync(serverId, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException($"Server {serverId} not found.");
+        EnsureOnline(server);
+        if (server.OsType == OsType.Windows)
+            throw new BadRequestException("The installed package list is read on Linux servers only.");
+        if (server.AgentCapabilitiesJson?.Contains($"\"{AgentCapabilities.PackageInventory}\"", StringComparison.Ordinal) != true)
+            throw new BadRequestException(
+                $"The agent on '{server.Name}' does not publish the '{AgentCapabilities.PackageInventory}' capability: " +
+                "update the agent to list the installed packages.");
+
+        var task = ServerTaskFactory.Operation(serverId, InstalledPackages.TaskName, OperationKind.PackageInventory, "-", 120);
+        await repo.AddTaskAsync(task, ct).ConfigureAwait(false);
+        await taskService.NotifyTaskQueuedAsync(task, ct: ct).ConfigureAwait(false);
         return task.Id;
     }
 

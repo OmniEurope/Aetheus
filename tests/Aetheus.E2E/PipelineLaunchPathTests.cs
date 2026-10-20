@@ -23,6 +23,7 @@ namespace Aetheus.E2E;
 /// </summary>
 [Category("E2E")]
 [Category("Pipelines")]
+[RollbackRelevant]
 public class PipelineLaunchPathTests : E2ETestBase
 {
     [SetUp]

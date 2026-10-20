@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Data.Entities;
 
-/// <summary>
-/// Audit R2-007 follow-up: how many audience events one accepted batch stored, and when. The rolling
-/// hour of an application is the sum of its rows of the last hour; read from the shared database, it
-/// holds across both blue-green colours, where a process counter would only see half the traffic.
-/// </summary>
+/// <summary>Records the size and time of an accepted audience batch in the shared database. Summing
+/// the application rows over the last hour accounts for traffic across both blue-green
+/// colours.</summary>
 public class AppAnalyticsIngestVolume
 {
     public long Id { get; set; }

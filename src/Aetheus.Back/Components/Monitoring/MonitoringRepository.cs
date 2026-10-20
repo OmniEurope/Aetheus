@@ -19,9 +19,9 @@ public class MonitoringRepository(AppDbContext db) : IMonitoringRepository
         var query = db.Servers.AsNoTracking().AsQueryable();
         if (accessibleIds is not null)
             query = query.Where(s => accessibleIds.Contains(s.Id));
-        // Recette R-480: only the columns the tile shows, ordered by the database (online first, then
-        // the most recently active). The server row also carries inventory, capability and sudoers
-        // JSON the dashboard never reads.
+        // Only the columns the tile shows, ordered by the database (online first, then the most
+        // recently active). The server row also carries inventory, capability and sudoers JSON the
+        // dashboard never reads.
         return await query
             .OrderByDescending(s => s.Status == ServerStatus.Online)
             .ThenByDescending(s => s.LastHeartbeat)
@@ -67,11 +67,10 @@ public class MonitoringRepository(AppDbContext db) : IMonitoringRepository
         return await query.CountAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Recette R-480: the runs the tile lists and nothing more. The tile shows <paramref name="groupCount"/>
-    /// groups, each a run nobody triggered with the runs it triggered nested under it, so the newest
-    /// such roots are read, then their descendants, instead of the hundred newest runs of every kind.
-    /// </summary>
+    /// <summary> The runs the tile lists and nothing more. The tile shows <paramref
+    /// name="groupCount"/> groups, each a run nobody triggered with the runs it triggered nested
+    /// under it, so the newest such roots are read, then their descendants, instead of the hundred
+    /// newest runs of every kind. </summary>
     public async Task<List<PipelineRunDto>> GetRecentRunsAsync(int groupCount, List<int>? accessibleProjectIds, List<int>? accessiblePipelineIds, CancellationToken ct)
     {
         var accessible = FilterRunsByAccess(db.PipelineRuns.AsNoTracking(), accessibleProjectIds, accessiblePipelineIds);
@@ -84,7 +83,8 @@ public class MonitoringRepository(AppDbContext db) : IMonitoringRepository
             .ThenByDescending(r => r.Id)
             .Select(PipelineRunListRows.Projection)
             .ToListAsync(ct).ConfigureAwait(false);
-        var hydrated = runs.Select(PipelineRunListRows.HydrateWarnings).ToList();
+        var hydrated = await PipelineAdvisorySteps.ApplyToListAsync(
+            db, runs.Select(PipelineRunListRows.HydrateWarnings).ToList(), ct).ConfigureAwait(false);
         var graded = await PipelineRunGradeAggregation.ApplyAsync(db, hydrated, ct).ConfigureAwait(false);
         return await PipelineRunRepositoryLinks.ApplyAsync(db, graded, ct).ConfigureAwait(false);
     }
@@ -141,7 +141,7 @@ public class MonitoringRepository(AppDbContext db) : IMonitoringRepository
             .OrderByDescending(p => p.UpdatedAt)
             .Take(count)
             .ToListAsync(ct).ConfigureAwait(false);
-        // R-480: the dashboard tile only counts the pipelines; their YAML is not loaded for that.
+        // The dashboard tile only counts the pipelines; their YAML is not loaded for that.
         await ProjectPipelineSummaries.AttachAsync(db, projects, withLastRun: false, ct).ConfigureAwait(false);
         return projects;
     }

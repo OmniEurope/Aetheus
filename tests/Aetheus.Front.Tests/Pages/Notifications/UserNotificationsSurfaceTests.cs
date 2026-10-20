@@ -6,10 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Notifications;
 
-/// <summary>
-/// R-112 to R-115: the bell, the menu entry and /notifications read one source (UserNotificationsFeed),
-/// the page shows exactly what the API returned, and marking everything read goes through the API.
-/// </summary>
+/// <summary>Verifies that the bell, menu and notifications page share UserNotificationsFeed,
+/// display API data and mark all notifications read through the API.</summary>
 public sealed class UserNotificationsSurfaceTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -26,8 +24,7 @@ public sealed class UserNotificationsSurfaceTests : BunitContext
     [Fact]
     public async Task Page_HeaderFilters_AreSentAsColumnFilters()
     {
-        // Recette R-224: the status is a list of delivery states (no more free-text guessing), read a
-        // yes/no, the event a list read from the API and the date a range, all applied by the endpoint.
+        // The endpoint applies delivery-state, read-state, event and date-range filters.
         _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/notifications/me?", [Delivery(1, "one")]);
         var page = Render<NotificationsInbox>();
         var grid = page.FindComponent<AetheusDataGrid<NotificationDeliveryDto>>();
@@ -77,11 +74,8 @@ public sealed class UserNotificationsSurfaceTests : BunitContext
         Assert.Equal(3, Services.GetRequiredService<UserNotificationsFeed>().UnreadCount);
     }
 
-    /// <summary>
-    /// Recette R2-106: the header bell lost its number while the task count beside it still showed. The
-    /// count was kept only when the newest deliveries could be read too; a list answering with an error
-    /// (or a body that does not parse) left the bell at zero although the count had been read.
-    /// </summary>
+    /// <summary>The unread count remains available when the delivery list request fails or its
+    /// response cannot be parsed.</summary>
     [Theory]
     [InlineData("error")]
     [InlineData("unparsable")]
@@ -173,26 +167,29 @@ public sealed class UserNotificationsSurfaceTests : BunitContext
     [Fact]
     public async Task R461_ABurstOfPushes_IsServedByOneRefresh()
     {
+        // The coalescing window runs on a simulated clock: the burst lands inside it however slow the
+        // machine is, and the window closes when the clock is moved.
+        var clock = new ObservedFakeClock(DateTimeOffset.UnixEpoch);
+        Services.AddSingleton<TimeProvider>(clock);
+        var window = TimeSpan.FromMilliseconds(UserNotificationsFeed.PushCoalesceMilliseconds);
         var feed = Services.GetRequiredService<UserNotificationsFeed>();
         _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/notifications/me?", [Delivery(1, "one")]);
         await feed.EnsureStartedAsync();
         _unread = 5;
+        var changed = new StateSignal();
+        feed.OnChanged += changed.Pulse;
 
         feed.RefreshFromPush();
         feed.RefreshFromPush();
         feed.RefreshFromPush();
 
-        await WaitUntilAsync(() => feed.UnreadCount == 5);
-        await Task.Delay(UserNotificationsFeed.PushCoalesceMilliseconds + 200, Xunit.TestContext.Current.CancellationToken);
+        Assert.Equal(1, clock.Pending(window));
+        clock.Advance(window);
+        await changed.WhenAsync(() => feed.UnreadCount == 5, "the coalesced refresh");
+        // The one window closed and no other is open: no further refresh can come.
+        Assert.Equal(1, clock.Armed(window));
+        Assert.Equal(0, clock.Pending(window));
         Assert.Equal(2, _handler.Requests.Count(request => request.Url.Contains("api/notifications/me/unread-count", StringComparison.Ordinal)));
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (!condition() && DateTime.UtcNow < deadline)
-            await Task.Delay(50, Xunit.TestContext.Current.CancellationToken);
-        Assert.True(condition());
     }
 
     [Fact]
@@ -215,7 +212,7 @@ public sealed class UserNotificationsSurfaceTests : BunitContext
     [Fact]
     public void OpeningAnUnreadNotification_MarksItRead_AndUpdatesTheCount()
     {
-        // Recette R-314: opening a notification reads it; its count follows, with no toast.
+        // Opening a notification reads it; its count follows, with no toast.
         _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/notifications/me?", [Delivery(7, "unread one")]);
         _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/notifications/me/7/read", _ =>
         {
@@ -272,7 +269,7 @@ public sealed class UserNotificationsSurfaceTests : BunitContext
         _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/notifications/me?", [Delivery(1, "one")]);
 
         var page = Render<NotificationsInbox>();
-        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(RowEventIsolation.ClickableRows)));
 
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(page.FindAll(RowEventIsolation.ClickableRows)) >= 1);
     }

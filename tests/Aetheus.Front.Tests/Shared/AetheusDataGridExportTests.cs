@@ -8,13 +8,9 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Shared;
 
-/// <summary>
-/// Recette R2-124 (second decision of 2026-10-05): a list has no export bar by default; the tables worth handing
-/// to an AI opt into OE's bar under the table, Markdown only, and the file holds every row the grid's filters select, read page after page, not the rows on screen.
-/// The shared <see cref="AetheusDataGrid{TItem}"/> carries it by default: the title and the header lines
-/// come from the page's breadcrumb and address, and a grid fed by LoadData reads its export through the
-/// page's <see cref="AetheusDataGrid{TItem}.ExportRead"/>.
-/// </summary>
+/// <summary>Markdown export includes every filtered row through paged <see
+/// cref="AetheusDataGrid{TItem}.ExportRead"/> requests, with header metadata derived from the
+/// page.</summary>
 public sealed class AetheusDataGridExportTests : BunitContext
 {
     private const int Total = 250;

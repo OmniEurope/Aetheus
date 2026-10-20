@@ -19,20 +19,9 @@ public static class PipelineRunGateProducer
     private const string StatusSuffix = "_GATE_STATUS";
     private const string FailedTestsSuffix = "_FAILED_TESTS";
 
-    /// <summary>The seal's test keys and the status each one is graded from
-    /// (deploy/scripts/generate-candidate-assurance-contract.mjs, its <c>tests</c> object).</summary>
-    private static readonly Dictionary<string, string> StatusVariables = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["unit"] = "UNIT_TEST_GATE_STATUS",
-        ["analyzers"] = "ANALYZER_TEST_GATE_STATUS",
-        ["currentIntegration"] = "QA_CURRENT_INTEGRATION_GATE_STATUS",
-        ["currentE2E"] = "QA_CURRENT_E2E_GATE_STATUS",
-        ["previousSmoke"] = "QA_PREVIOUS_SMOKE_GATE_STATUS",
-        ["previousIntegration"] = "QA_PREVIOUS_INTEGRATION_GATE_STATUS",
-        ["previousE2E"] = "QA_PREVIOUS_E2E_GATE_STATUS",
-        ["agentCompatibility"] = "QA_AGENT_COMPATIBILITY_GATE_STATUS",
-        ["performance"] = "QA_PERFORMANCE_GATE_STATUS"
-    };
+    /// <summary>The seal's test keys and the status each one is graded from, the list the back-end also
+    /// rejects a run on (recette R1-80).</summary>
+    private static IReadOnlyDictionary<string, string> StatusVariables => PipelineControlVerdict.TestGateStatusVariables;
 
     /// <param name="RunId">The run the producing step belongs to.</param>
     /// <param name="PipelineName">That run's pipeline.</param>
@@ -52,8 +41,7 @@ public static class PipelineRunGateProducer
             : statusVariable) + FailedTestsSuffix;
 
     /// <summary>A status that is set and is not 0: the suite found something.</summary>
-    public static bool IsFindings(string? value) =>
-        !string.IsNullOrWhiteSpace(value) && value.Trim() != "0";
+    public static bool IsFindings(string? value) => PipelineControlVerdict.IsFindings(value);
 
     /// <summary>A step that succeeded while publishing a non-zero gate status: green, but it holds
     /// findings, and the timeline should not draw it as plainly green.</summary>

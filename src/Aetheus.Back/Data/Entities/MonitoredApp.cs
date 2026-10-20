@@ -49,13 +49,12 @@ public class MonitoredApp
     public string? PreviousIngestKeyHash { get; set; }
     public DateTime? PreviousIngestKeyValidUntil { get; set; }
 
-    /// <summary>
-    /// Recette R2-013: the key that was previous before the last deployment rotation. Blue-green runs
-    /// two colours of the application, and each holds the key of the run that started it: when a new
-    /// run rotates, the active colour holds the previous key and the idle colour, still running until
-    /// that run replaces it, holds the one before. Only a deployment rotation keeps it, with the
-    /// deadline it received when it stopped being current; a manual rotation or a revocation clears it.
-    /// </summary>
+    /// <summary> The key that was previous before the last deployment rotation. Blue-green runs two
+    /// colours of the application, and each holds the key of the run that started it: when a new
+    /// run rotates, the active colour holds the previous key and the idle colour, still running
+    /// until that run replaces it, holds the one before. Only a deployment rotation keeps it, with
+    /// the deadline it received when it stopped being current; a manual rotation or a revocation
+    /// clears it. </summary>
     public string? SecondPreviousIngestKeyHash { get; set; }
     public DateTime? SecondPreviousIngestKeyValidUntil { get; set; }
 

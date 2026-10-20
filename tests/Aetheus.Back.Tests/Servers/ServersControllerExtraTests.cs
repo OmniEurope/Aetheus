@@ -24,7 +24,7 @@ public class ServersControllerExtraTests
         _sut = new ServersController(_lifecycle, Substitute.For<IServerRetirementService>(),
             Substitute.For<IServerHeartbeatService>(), _services,
             Substitute.For<IServerAgentContactService>(), _diagnostic,
-            Substitute.For<IAgentUpdateService>(), _authz, Substitute.For<IAuthService>(),
+            Substitute.For<IAgentUpdateService>(), _authz, Substitute.For<IAuthService>(), TimeProvider.System,
             Substitute.For<ILogger<ServersController>>());
         _sut.ControllerContext = new ControllerContext
         {

@@ -3,11 +3,10 @@ using OmniEurope.Performance;
 
 namespace Aetheus.Back.Components.SystemLogs;
 
-/// <summary>
-/// R-181: the administration Performance page reloads when new API timings were recorded, instead of
-/// waiting for a Refresh click. Every API request is a sample, so the push is coalesced: the first
-/// sample after a quiet spell is announced at once, and the samples of the next
-/// <see cref="MinimumSpacing"/> are folded into one later announcement. Nothing is sent while no API
+/// <summary> The administration Performance page reloads when new API timings were recorded,
+/// instead of waiting for a Refresh click. Every API request is a sample, so the push is coalesced:
+/// the first sample after a quiet spell is announced at once, and the samples of the next <see
+/// cref="MinimumSpacing"/> are folded into one later announcement. Nothing is sent while no API
 /// request arrives. The broadcast rides the admin hub (Admin only), the same audience as the report
 /// endpoint; it carries no timing, the page fetches the report through the authorized API.
 /// </summary>

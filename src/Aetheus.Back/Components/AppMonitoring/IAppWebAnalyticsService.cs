@@ -12,6 +12,7 @@ public interface IAppWebAnalyticsService
         CancellationToken ct = default);
     Task<AppWebAnalyticsSummaryDto?> GetSummaryAsync(int appId, int days, CancellationToken ct = default);
 
-    /// <summary>Recette R2-007: rolls every app whose audience data reached its budget; returns the rows removed.</summary>
+    /// <summary>Rolls every app whose audience data reached its budget; returns the rows
+    /// removed.</summary>
     Task<int> RollStorageAsync(CancellationToken ct = default);
 }

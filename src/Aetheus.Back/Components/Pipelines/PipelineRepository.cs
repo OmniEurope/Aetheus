@@ -25,12 +25,19 @@ public sealed class PipelineRepository(
     private readonly PipelineServerResolver _resolver = new(db);
     private readonly PipelineCoverageRepository _coverage = new(db);
     private readonly PipelineLifecycleRepository _lifecycle = new(db, timeProvider);
+    private readonly PipelineAutoTriggerRepository _autoTriggers = new(db);
+    private readonly PipelineApprovalRepository _approvals = new(db);
+    private readonly PipelineArtifactRepository _artifacts = new(db);
+    private readonly PipelineRunLookupRepository _runLookup = new(db);
     private readonly IPipelineRunLineageReader _runLineage = runLineage;
     private readonly PipelineDependencyGraphRepository _dependencyGraph = new(db);
     private readonly PipelineTemplateRepository _templates = new(db);
     private readonly PipelineTaskQueueRepository _taskQueue = new(db);
     private readonly PipelineRunDetailRepository _runDetail = new(db);
-    private readonly ProjectReleaseNumberRepository _releaseNumbers = new(db);
+    private readonly ProjectReleaseNumberRepository _releaseNumbers = new(db, timeProvider);
+    private readonly PipelineEnvironmentRepository _environments = new(db);
+    private readonly PipelineRunRetentionRepository _retention = new(db);
+    private readonly PipelineProjectOwnerRepository _projectOwners = new(db);
 
     // --- Core: pipelines, runs, steps, templates, artifacts, approvals ---
     public Task<(List<Pipeline> Items, int TotalCount)> GetPipelinesPagedAsync(string? search, PipelineTriggerType? triggerType, int page, int pageSize, List<int>? accessibleIds = null, CancellationToken ct = default)
@@ -79,14 +86,14 @@ public sealed class PipelineRepository(
     public Task<int> ReserveNextBuildNumberAsync(int pipelineId, CancellationToken ct = default)
         => _core.ReserveNextBuildNumberAsync(pipelineId, ct);
 
-    public Task<int?> AllocateNextReleaseNumberAsync(int projectId, CancellationToken ct = default)
-        => _releaseNumbers.AllocateNextAsync(projectId, ct);
+    public Task<int?> AllocateNextReleaseNumberAsync(int projectId, string series, CancellationToken ct = default)
+        => _releaseNumbers.AllocateNextAsync(projectId, series, ct);
 
-    public Task<int?> GetLatestReleaseNumberAsync(int projectId, CancellationToken ct = default)
-        => _releaseNumbers.GetLatestAsync(projectId, ct);
+    public Task<int?> GetLatestReleaseNumberAsync(int projectId, string series, CancellationToken ct = default)
+        => _releaseNumbers.GetLatestAsync(projectId, series, ct);
 
-    public Task<int?> GetRunReleaseNumberAsync(int runId, CancellationToken ct = default)
-        => _releaseNumbers.GetRunReleaseNumberAsync(runId, ct);
+    public Task<ReleaseNumberAssignment?> GetRunReleaseAsync(int runId, CancellationToken ct = default)
+        => _releaseNumbers.GetRunReleaseAsync(runId, ct);
 
     public void TrackPipelineStepRun(PipelineStepRun stepRun)
         => _core.TrackPipelineStepRun(stepRun);
@@ -181,7 +188,7 @@ public sealed class PipelineRepository(
         => _lifecycle.GetStuckRunningTriggerStepsAsync(startedBefore, ct);
 
     public Task<Dictionary<int, PipelineStatus>> GetRunStatusesByIdsAsync(IReadOnlyCollection<int> runIds, CancellationToken ct = default)
-        => _lifecycle.GetRunStatusesByIdsAsync(runIds, ct);
+        => _runLookup.GetRunStatusesByIdsAsync(runIds, ct);
 
     public Task<bool> DidStagesAllSucceedAsync(int runId, IReadOnlyCollection<string> stageNames, CancellationToken ct = default)
         => _lifecycle.DidStagesAllSucceedAsync(runId, stageNames, ct);
@@ -282,42 +289,42 @@ public sealed class PipelineRepository(
         => _lifecycle.ResetFailedStepRunsAsync(runId, ct);
 
     public Task<List<PipelineArtifact>> GetArtifactsAsync(int runId, CancellationToken ct = default)
-        => _core.GetArtifactsAsync(runId, ct);
+        => _artifacts.GetArtifactsAsync(runId, ct);
 
     public Task AddArtifactAsync(PipelineArtifact artifact, CancellationToken ct = default)
-        => _core.AddArtifactAsync(artifact, ct);
+        => _artifacts.AddArtifactAsync(artifact, ct);
 
     public Task<List<PipelineApproval>> GetApprovalsAsync(int runId, CancellationToken ct = default)
-        => _core.GetApprovalsAsync(runId, ct);
+        => _approvals.GetApprovalsAsync(runId, ct);
 
     public Task<PipelineApproval?> FindApprovalAsync(int approvalId, CancellationToken ct = default)
-        => _core.FindApprovalAsync(approvalId, ct);
+        => _approvals.FindApprovalAsync(approvalId, ct);
 
     public Task<List<PendingApprovalDto>> GetPendingApprovalsAsync(
         List<int>? accessiblePipelineIds, CancellationToken ct = default)
-        => _lifecycle.GetPendingApprovalsAsync(accessiblePipelineIds, ct);
+        => _approvals.GetPendingApprovalsAsync(accessiblePipelineIds, ct);
 
     public Task<List<int>> GetExpiredPendingApprovalIdsAsync(DateTime now, CancellationToken ct = default)
-        => _lifecycle.GetExpiredPendingApprovalIdsAsync(now, ct);
+        => _approvals.GetExpiredPendingApprovalIdsAsync(now, ct);
 
     public Task<List<StrandedApprovalRun>> GetStrandedApprovalRunsAsync(CancellationToken ct = default)
-        => _lifecycle.GetStrandedApprovalRunsAsync(ct);
+        => _approvals.GetStrandedApprovalRunsAsync(ct);
 
     public Task<int> CloseApprovalsOfEndedRunsAsync(int? runId, DateTime now, string reason, CancellationToken ct = default)
-        => _lifecycle.CloseApprovalsOfEndedRunsAsync(runId, now, reason, ct);
+        => _approvals.CloseApprovalsOfEndedRunsAsync(runId, now, reason, ct);
 
     public Task<string?> FindPublishedReleaseVersionByRunIdAsync(int pipelineRunId, CancellationToken ct = default)
         => _lifecycle.FindPublishedReleaseVersionByRunIdAsync(pipelineRunId, ct);
 
     public Task<PipelineApproval?> TryResolveApprovalAsync(int approvalId, ApprovalStatus decision, DateTime resolvedAt,
         int? resolvedByUserId, string? comments, CancellationToken ct = default)
-        => _lifecycle.TryResolveApprovalAsync(approvalId, decision, resolvedAt, resolvedByUserId, comments, ct);
+        => _approvals.TryResolveApprovalAsync(approvalId, decision, resolvedAt, resolvedByUserId, comments, ct);
 
     public Task AddApprovalAsync(PipelineApproval approval, CancellationToken ct = default)
-        => _core.AddApprovalAsync(approval, ct);
+        => _approvals.AddApprovalAsync(approval, ct);
 
     public Task<Data.Entities.Environment?> FindEnvironmentByNameAsync(string name, int? projectId, CancellationToken ct = default)
-        => _core.FindEnvironmentByNameAsync(name, projectId, ct);
+        => _environments.FindEnvironmentByNameAsync(name, projectId, ct);
 
     public Task<int?> GetRunProjectIdAsync(int runId, CancellationToken ct = default)
         => _core.GetRunProjectIdAsync(runId, ct);
@@ -348,22 +355,22 @@ public sealed class PipelineRepository(
         => _templates.GetPipelineYamlDefinitionsByOrganizationAsync(organizationId, ct);
 
     public Task<List<TestResult>> GetTestResultsAsync(int runId, CancellationToken ct = default)
-        => _core.GetTestResultsAsync(runId, ct);
+        => _coverage.GetTestResultsAsync(runId, ct);
 
     public Task AddTestResultsAsync(IEnumerable<TestResult> results, CancellationToken ct = default)
-        => _core.AddTestResultsAsync(results, ct);
+        => _coverage.AddTestResultsAsync(results, ct);
 
     public Task<List<PipelineStepRun>> GetFailedStepRunsInStageAsync(int runId, string stageName, CancellationToken ct = default)
         => _core.GetFailedStepRunsInStageAsync(runId, stageName, ct);
 
     public Task<List<EnvironmentCheck>> GetEnvironmentChecksAsync(int environmentId, CancellationToken ct = default)
-        => _core.GetEnvironmentChecksAsync(environmentId, ct);
+        => _environments.GetEnvironmentChecksAsync(environmentId, ct);
 
     public Task<bool> IsStepRetryEligibleAsync(int pipelineRunId, int stepRunId, CancellationToken ct = default)
         => _lifecycle.IsStepRetryEligibleAsync(pipelineRunId, stepRunId, ct);
 
     public Task<int?> GetPipelineIdForRunAsync(int runId, CancellationToken ct = default)
-        => _core.GetPipelineIdForRunAsync(runId, ct);
+        => _runLookup.GetPipelineIdForRunAsync(runId, ct);
 
     public Task<bool> IsServerAssignedToRunAsync(int runId, int serverId, CancellationToken ct = default)
         => _core.IsServerAssignedToRunAsync(runId, serverId, ct);
@@ -372,10 +379,10 @@ public sealed class PipelineRepository(
         => _core.FindRunningStageNameAsync(runId, serverId, ct);
 
     public Task<int?> GetPipelineIdForApprovalAsync(int approvalId, CancellationToken ct = default)
-        => _core.GetPipelineIdForApprovalAsync(approvalId, ct);
+        => _approvals.GetPipelineIdForApprovalAsync(approvalId, ct);
 
     public Task<int?> GetPipelineIdForArtifactAsync(int artifactId, CancellationToken ct = default)
-        => _core.GetPipelineIdForArtifactAsync(artifactId, ct);
+        => _artifacts.GetPipelineIdForArtifactAsync(artifactId, ct);
 
     public Task SaveChangesAsync(CancellationToken ct = default)
         => _core.SaveChangesAsync(ct);
@@ -439,6 +446,9 @@ public sealed class PipelineRepository(
         int? projectId, int? environmentId, int? projectServerId, CancellationToken ct = default)
         => _resolver.GetPipelineOwnerOrganizationIdAsync(projectId, environmentId, projectServerId, ct);
 
+    public Task<int?> GetAiRunnerProfileOrganizationIdAsync(int profileId, CancellationToken ct = default)
+        => _resolver.GetAiRunnerProfileOrganizationIdAsync(profileId, ct);
+
     public Task<int?> GetPipelineProjectIdAsync(Pipeline pipeline, CancellationToken ct = default)
         => _resolver.GetPipelineProjectIdAsync(pipeline, ct);
 
@@ -456,11 +466,14 @@ public sealed class PipelineRepository(
     public Task<string?> GetProjectReleasePatternAsync(int projectId, CancellationToken ct = default)
         => _resolver.GetProjectReleasePatternAsync(projectId, ct);
 
+    public Task<string?> GetProjectNameAsync(int projectId, CancellationToken ct = default)
+        => _resolver.GetProjectNameAsync(projectId, ct);
+
     public Task<string?> GetProjectOwnerUsernameAsync(int projectId, CancellationToken ct = default)
-        => _resolver.GetProjectOwnerUsernameAsync(projectId, ct);
+        => _projectOwners.GetProjectOwnerUsernameAsync(projectId, ct);
 
     public Task<bool> IsActiveUsernameAsync(string username, CancellationToken ct = default)
-        => _resolver.IsActiveUsernameAsync(username, ct);
+        => _projectOwners.IsActiveUsernameAsync(username, ct);
 
     public Task<List<int>> FindServerIdsByAgentAsync(string? agent, CancellationToken ct = default)
         => _resolver.FindServerIdsByAgentAsync(agent, ct);
@@ -511,31 +524,31 @@ public sealed class PipelineRepository(
     public Task AddRunMetricsAsync(IEnumerable<RunMetric> metrics, CancellationToken ct = default)
         => _coverage.AddRunMetricsAsync(metrics, ct);
 
-    // --- Lifecycle (retention, triggers, active-run checks) ---
+    // --- Lifecycle (retention, active-run checks) and automatic triggers ---
     public Task<int> DeleteRunsOlderThanAsync(DateTime cutoff, CancellationToken ct = default)
-        => _lifecycle.DeleteRunsOlderThanAsync(cutoff, ct);
+        => _retention.DeleteRunsOlderThanAsync(cutoff, ct);
 
     public Task<List<Pipeline>> GetWebhookTriggeredPipelinesWithProjectAsync(CancellationToken ct = default)
-        => _lifecycle.GetWebhookTriggeredPipelinesWithProjectAsync(ct);
+        => _autoTriggers.GetWebhookTriggeredPipelinesWithProjectAsync(ct);
 
     public Task<List<Pipeline>> GetWebhookTriggeredPipelinesForProjectAsync(int projectId, CancellationToken ct = default)
-        => _lifecycle.GetWebhookTriggeredPipelinesForProjectAsync(projectId, ct);
+        => _autoTriggers.GetWebhookTriggeredPipelinesForProjectAsync(projectId, ct);
 
     public Task<List<Pipeline>> GetScheduledPipelinesAsync(CancellationToken ct = default)
-        => _lifecycle.GetScheduledPipelinesAsync(ct);
+        => _autoTriggers.GetScheduledPipelinesAsync(ct);
 
     public Task<bool> HasActiveRunAsync(int pipelineId, CancellationToken ct = default)
-        => _lifecycle.HasActiveRunAsync(pipelineId, ct);
+        => _autoTriggers.HasActiveRunAsync(pipelineId, ct);
 
     public Task<bool> LockPipelineForWebhookAsync(int pipelineId, CancellationToken ct = default)
-        => _lifecycle.LockPipelineForWebhookAsync(pipelineId, ct);
+        => _autoTriggers.LockPipelineForWebhookAsync(pipelineId, ct);
 
     public Task<List<int>> GetActiveRunIdsAsync(int pipelineId, CancellationToken ct = default)
-        => _lifecycle.GetActiveRunIdsAsync(pipelineId, ct);
+        => _autoTriggers.GetActiveRunIdsAsync(pipelineId, ct);
 
     public Task<List<int>> GetAllActiveRunIdsAsync(CancellationToken ct = default)
         => _lifecycle.GetAllActiveRunIdsAsync(ct);
 
     public Task<HashSet<int>> GetPipelineIdsWithActiveRunsAsync(CancellationToken ct = default)
-        => _lifecycle.GetPipelineIdsWithActiveRunsAsync(ct);
+        => _autoTriggers.GetPipelineIdsWithActiveRunsAsync(ct);
 }

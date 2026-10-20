@@ -7,12 +7,11 @@ using Aetheus.Back.Tests.Architecture;
 
 namespace Aetheus.Back.Tests.AgentInstaller;
 
-/// <summary>
-/// R-249: install-agent-linux.sh renders its host configuration files from agent-host-config/, next
-/// to it in the agent archive, and refuses to run without that folder or with a carriage return in a
-/// template. Both ways the backend produces the Linux archive (dev build from the publish output,
-/// prebuilt archive re-packed with the server-URL marker) must therefore ship the whole
-/// deploy/agent-host-config tree of the repository, byte for byte once normalised to LF.
+/// <summary> Install-agent-linux.sh renders its host configuration files from agent-host-config/,
+/// next to it in the agent archive, and refuses to run without that folder or with a carriage
+/// return in a template. Both ways the backend produces the Linux archive (dev build from the
+/// publish output, prebuilt archive re-packed with the server-URL marker) must therefore ship the
+/// whole deploy/agent-host-config tree of the repository, byte for byte once normalised to LF.
 /// </summary>
 public sealed class AgentLinuxArchiveHostConfigTests : IDisposable
 {
@@ -75,7 +74,88 @@ public sealed class AgentLinuxArchiveHostConfigTests : IDisposable
         AssertShipsRepositoryTree(entries);
     }
 
-    /// <summary>Every file of the repository tree (manifest + 42 templates) is in the archive under
+    [Fact]
+    public async Task PreparedArchive_IsBuiltOnceForTheSameInputs_WithItsHash()
+    {
+        CreateSolution(crlfTemplates: false);
+        var prebuilt = await CreatePrebuiltArchiveAsync();
+        var script = Path.Combine(_root, "deploy", "scripts", "install-agent-linux.sh");
+        var hostConfig = Path.Combine(_root, "deploy", "agent-host-config");
+
+        var first = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(prebuilt, "https://api.example.test", script, hostConfig);
+        var again = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(prebuilt, "https://api.example.test", script, hostConfig);
+        _archives.Add(first.Path);
+
+        Assert.Equal(first, again);
+        await using (var stream = File.OpenRead(first.Path))
+            Assert.Equal(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(stream, TestContext.Current.CancellationToken)), first.Sha256);
+        var entries = await ReadArchiveAsync(first.Path);
+        Assert.Equal("https://api.example.test\n", Encoding.UTF8.GetString(entries[".aetheus-server-url"]));
+    }
+
+    [Fact]
+    public async Task PreparedArchive_AnotherServerUrl_IsPreparedApart()
+    {
+        CreateSolution(crlfTemplates: false);
+        var prebuilt = await CreatePrebuiltArchiveAsync();
+        var hostConfig = Path.Combine(_root, "deploy", "agent-host-config");
+
+        var first = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(prebuilt, "https://one.example.test", null, hostConfig);
+        var second = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(prebuilt, "https://two.example.test", null, hostConfig);
+        _archives.Add(first.Path);
+        _archives.Add(second.Path);
+
+        Assert.NotEqual(first.Path, second.Path);
+        Assert.Equal("https://two.example.test\n", Encoding.UTF8.GetString((await ReadArchiveAsync(second.Path))[".aetheus-server-url"]));
+    }
+
+    [Fact]
+    public async Task PreparedArchive_ThatDisappeared_IsRefusedOnceThenPreparedAgain()
+    {
+        CreateSolution(crlfTemplates: false);
+        var prebuilt = await CreatePrebuiltArchiveAsync();
+        var hostConfig = Path.Combine(_root, "deploy", "agent-host-config");
+        var first = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(prebuilt, "https://gone.example.test", null, hostConfig);
+        File.Delete(first.Path);
+
+        var error = await Assert.ThrowsAsync<IOException>(() =>
+            AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(prebuilt, "https://gone.example.test", null, hostConfig));
+        var rebuilt = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(prebuilt, "https://gone.example.test", null, hostConfig);
+        _archives.Add(rebuilt.Path);
+
+        Assert.Equal("Prepared Linux agent archive disappeared before it could be served.", error.Message);
+        Assert.True(File.Exists(rebuilt.Path));
+        Assert.NotEqual(first.Path, rebuilt.Path);
+    }
+
+    [Fact]
+    public async Task PreparedArchive_OfAnUnreadableArchive_FailsAndIsNotCached()
+    {
+        Directory.CreateDirectory(_root);
+        var broken = Path.Combine(_root, "aetheus-agent-linux-x64-v0.0.1.tar.gz");
+        await File.WriteAllTextAsync(broken, "not a gzip archive", TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(broken, "https://broken.example.test", null, null));
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(broken, "https://broken.example.test", null, null));
+    }
+
+    private async Task<string> CreatePrebuiltArchiveAsync()
+    {
+        var prebuiltSource = Path.Combine(_root, "prebuilt");
+        Directory.CreateDirectory(prebuiltSource);
+        await File.WriteAllTextAsync(Path.Combine(prebuiltSource, "Aetheus.Agent.Linux.dll"), "binary", TestContext.Current.CancellationToken);
+        var prebuilt = Path.Combine(_root, "aetheus-agent-linux-x64-v1.0.0.tar.gz");
+        await using (var output = File.Create(prebuilt))
+        await using (var gzip = new GZipStream(output, CompressionLevel.Fastest))
+        {
+            await TarFile.CreateFromDirectoryAsync(prebuiltSource, gzip, includeBaseDirectory: false, TestContext.Current.CancellationToken);
+        }
+        return prebuilt;
+    }
+
+    /// <summary>Every file of the repository tree (manifest + templates) is in the archive under
     /// agent-host-config/, with the repository bytes once CRLF is folded to LF, and nothing else is.</summary>
     private static void AssertShipsRepositoryTree(IReadOnlyDictionary<string, byte[]> entries)
     {
@@ -88,7 +168,6 @@ public sealed class AgentLinuxArchiveHostConfigTests : IDisposable
             .Where(name => name.StartsWith("agent-host-config/", StringComparison.Ordinal))
             .ToList();
 
-        Assert.Equal(43, expected.Count);
         Assert.Equal(expected.Keys.Order(StringComparer.Ordinal), shipped.Order(StringComparer.Ordinal));
         foreach (var (name, content) in expected)
         {

@@ -26,13 +26,9 @@ internal sealed class PipelineTemplateEditorCoordinator(ApiClient api)
             : await api.PipelineTemplates.ResolvePipelineTemplateAsync(summary.Id, version, values);
     }
 
-    /// <summary>
-    /// Recette R-490: the values the template is resolved with, its own defaults overridden by the
-    /// defaults the pipeline declares for the same parameters. The call used to send nothing, so a
-    /// template with a required parameter answered 400 ("Parameter 'revision' is required.") even when
-    /// the pipeline extending it gave that parameter a value. Null when a required parameter has no
-    /// value from either side: there is nothing to resolve yet, and no request is sent.
-    /// </summary>
+    /// <summary>Pipeline parameter defaults override the template's defaults during resolution. A
+    /// missing required value suppresses the request because the template cannot yet be
+    /// resolved.</summary>
     internal static Dictionary<string, string>? ParameterValues(string? templateYaml, string? pipelineYaml)
     {
         var serializer = new YamlSerializationService();
@@ -41,7 +37,10 @@ internal sealed class PipelineTemplateEditorCoordinator(ApiClient api)
         foreach (var parameter in declared.Where(parameter => parameter.Default is not null))
             values[parameter.Name] = parameter.Default!;
         var overrides = pipelineYaml is null ? [] : serializer.Parse(pipelineYaml)?.Parameters ?? [];
-        foreach (var parameter in overrides.Where(parameter => parameter.Default is not null))
+        // R1-84: the back refuses a parameter the template does not declare (HTTP 400), so a stale key
+        // left in the pipeline YAML after a template change is dropped here, never sent.
+        var declaredNames = declared.Select(parameter => parameter.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var parameter in overrides.Where(parameter => parameter.Default is not null && declaredNames.Contains(parameter.Name)))
             values[parameter.Name] = parameter.Default!;
         return declared.Any(parameter => parameter.Required && !values.ContainsKey(parameter.Name)) ? null : values;
     }

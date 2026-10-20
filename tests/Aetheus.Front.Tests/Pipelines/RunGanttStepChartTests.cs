@@ -3,11 +3,9 @@ using Aetheus.Front.Components.Pipelines;
 
 namespace Aetheus.Front.Tests.Pipelines;
 
-/// <summary>
-/// Recette R-160: a stage unfolded into its steps, on the same axis as the stage bars. The cases that
-/// matter are the ones where a step bar could lie: a step that never started, one still running, and
-/// the legs of a matrix step that would otherwise read as one step drawn twice.
-/// </summary>
+/// <summary> A stage unfolded into its steps, on the same axis as the stage bars. The cases that
+/// matter are the ones where a step bar could lie: a step that never started, one still running,
+/// and the legs of a matrix step that would otherwise read as one step drawn twice. </summary>
 public sealed class RunGanttStepChartTests
 {
     private static readonly DateTime Origin = new(2026, 9, 8, 10, 0, 0, DateTimeKind.Utc);

@@ -27,7 +27,7 @@ public class TeamspeakRepository(AppDbContext db) : ITeamspeakRepository
             query = query.Where(channel => EF.Functions.ILike(channel.Name, pattern));
         }
 
-        // Recette R-210: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = TeamspeakListQuery.ChannelColumns.ApplyFilters(query, filters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -60,7 +60,7 @@ public class TeamspeakRepository(AppDbContext db) : ITeamspeakRepository
                 EF.Functions.ILike(client.Platform, pattern));
         }
 
-        // Recette R-210: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = TeamspeakListQuery.ClientColumns.ApplyFilters(query, filters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -96,7 +96,7 @@ public class TeamspeakRepository(AppDbContext db) : ITeamspeakRepository
                 EF.Functions.ILike(ban.Reason, pattern));
         }
 
-        // Recette R-210: the header filters, after the server scope and before the count.
+        // The header filters, after the server scope and before the count.
         query = TeamspeakListQuery.BanColumns.ApplyFilters(query, filters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);

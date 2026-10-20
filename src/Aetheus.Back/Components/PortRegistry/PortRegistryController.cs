@@ -52,11 +52,9 @@ public class PortRegistryController(
         return Ok(await service.SetPortRangeAsync(serverId, range, ct));
     }
 
-    /// <summary>
-    /// Hands out free ports and reserves them in one go. Write on the server, because it writes
-    /// reservations another project will then be refused; the library-scoped allocation of lot 5 has
-    /// its own, narrower rule.
-    /// </summary>
+    /// <summary>Allocates and reserves free ports under server write permission because
+    /// reservations exclude other projects. Library-scoped allocation has its own narrower
+    /// authorization rule.</summary>
     [HttpPost("allocate")]
     public async Task<ActionResult<List<int>>> Allocate(
         int serverId, [FromBody] AllocatePortsRequest request, CancellationToken ct)

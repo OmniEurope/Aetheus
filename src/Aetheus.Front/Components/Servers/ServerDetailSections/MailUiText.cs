@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>
-/// PLAN-005: turns the stable codes the backend and the agent emit (verdicts, diagnostic keys, detail
-/// codes, collector findings <c>code|parameter</c>) into localised text, so no raw code reaches the user.
-/// Unknown codes are shown verbatim rather than hidden.
-/// </summary>
+/// <summary>Translates backend and agent codes into localized text while preserving unknown codes
+/// verbatim rather than hiding them.</summary>
 public static class MailUiText
 {
     private static readonly Dictionary<string, string> s_diagnosticKeys = new(StringComparer.Ordinal)
@@ -72,7 +69,7 @@ public static class MailUiText
     /// <summary>Label of a diagnostics row; <c>mx:&lt;domain&gt;</c> rows carry the domain.</summary>
     public static string DiagnosticLabel(IStringLocalizer<AppStrings> l, string key)
     {
-        // Recette R2-090: SPF, DKIM and DMARC lines carry their domain like the MX line.
+        // SPF, DKIM and DMARC lines carry their domain like the MX line.
         foreach (var (prefix, resource) in s_domainKeys)
         {
             if (key.StartsWith(prefix, StringComparison.Ordinal))

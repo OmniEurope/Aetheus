@@ -42,9 +42,9 @@ public sealed class QualityGatePolicyEditorSaveTests : BunitContext
             .Add(component => component.CanEdit, true)
             .Add(component => component.InitialPolicies, new List<AnalysisPolicyDto> { Local() }));
         BunitTestHelper.Interactive(this);
-        cut.WaitForState(() => cut.Markup.Contains("No cycles"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("No cycles"));
         cut.Find("button[title='Edit']").Click();
-        cut.WaitForState(() => cut.FindAll("form").Count > 0, TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.FindAll("form").Count > 0);
         // The validators read the DOM, not the pre-populated model, so the required fields have to
         // be typed for Submit to fire at all. Same values the rule already carries.
         cut.Find("input#PolicyName").Input("No cycles");
@@ -78,8 +78,7 @@ public sealed class QualityGatePolicyEditorSaveTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "PUT" && r.Url.Contains("/policies/20", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "PUT" && r.Url.Contains("/policies/20", StringComparison.Ordinal)));
         Assert.DoesNotContain(_handler.Requests, r =>
             r.Method == "POST" && r.Url.EndsWith("/policies", StringComparison.Ordinal));
     }
@@ -96,8 +95,7 @@ public sealed class QualityGatePolicyEditorSaveTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Url.Contains("projects/4/policies", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Url.Contains("projects/4/policies", StringComparison.Ordinal)));
         Assert.DoesNotContain(_handler.Requests, r =>
             r.Url.Contains("policies/global", StringComparison.Ordinal));
     }
@@ -114,8 +112,7 @@ public sealed class QualityGatePolicyEditorSaveTests : BunitContext
 
         cut.WaitForAssertion(
             () => Assert.Contains(_handler.Requests, r =>
-                r.Method == "GET" && r.Url.Contains("projects/4/policies", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(3));
+                r.Method == "GET" && r.Url.Contains("projects/4/policies", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -128,8 +125,7 @@ public sealed class QualityGatePolicyEditorSaveTests : BunitContext
 
         // The PUT must actually have been attempted, otherwise this assertion is vacuous.
         cut.WaitForAssertion(
-            () => Assert.Contains(_handler.Requests, r => r.Method == "PUT"),
-            TimeSpan.FromSeconds(3));
+            () => Assert.Contains(_handler.Requests, r => r.Method == "PUT"));
         Assert.NotEmpty(cut.FindAll("form"));
     }
 

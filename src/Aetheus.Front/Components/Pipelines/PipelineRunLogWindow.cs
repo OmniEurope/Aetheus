@@ -2,23 +2,10 @@
 
 namespace Aetheus.Front.Components.Pipelines;
 
-/// <summary>
-/// The step logs the run page holds in memory, one list per task (<see cref="Lines"/>, read by the log
-/// pane, the failed-step cards and the result tabs).
-/// <para>
-/// FRONT-010: a running step's live stream used to append every line for as long as the page stayed
-/// open. Each task now keeps at most <see cref="LiveWindow"/> lines beyond what the reader explicitly
-/// loaded; older ones are dropped from memory, never from the server, and the task is then marked as
-/// having earlier lines (<see cref="HasEarlierLines"/>). Lines are told apart by their persisted id, so a
-/// line both streamed and read again in a snapshot or a page is kept once.
-/// </para>
-/// <para>
-/// Recette R2-104: the pane showed only the tail of a step's log (113 lines in run 2551). A list built
-/// from streamed lines alone looked like a loaded log, so the history was never read; and a snapshot
-/// kept only its last 5,000 lines without saying so. <see cref="HasSnapshot"/> now says whether the
-/// history was read, and <see cref="LoadCompleteAsync"/> reads the complete log, page by page.
-/// </para>
-/// </summary>
+/// <summary>Each task retains at most <see cref="LiveWindow"/> streamed lines beyond explicitly
+/// loaded history, deduplicated by persisted ID. <see cref="HasSnapshot"/> distinguishes loaded
+/// history from a live tail, while <see cref="LoadCompleteAsync"/> retrieves the full log in
+/// pages.</summary>
 internal sealed class PipelineRunLogWindow
 {
     /// <summary>The lines a task keeps in memory beyond what the reader explicitly loaded.</summary>

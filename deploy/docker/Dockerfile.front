@@ -3,23 +3,13 @@
 # =============================================================================
 # syntax=docker/dockerfile:1.7
 #
-# Runtime only. Nothing is compiled here any more: the pipeline has already built the solution in
-# Release, and re-publishing the Blazor WebAssembly site plus its static host from a cold obj/ inside
-# this image compiled the same sources a second time, for several minutes, on every run.
-# deploy/scripts/publish-application.sh produces both on the host, into .pipeline-publish/:
-#   .pipeline-publish/frontend/wwwroot   the published site
-#   .pipeline-publish/static-server/     the ASP.NET host that serves it
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.12@sha256:6a94333d37514e385650a3c81a55e5350b67253dbe136e9cf17e499c35606a8c AS runtime
+# Consumes the frontend and static-server outputs produced by deploy/scripts/publish-application.sh
+# under .pipeline-publish, without rebuilding inside the image.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.13@sha256:d5633778c754e89a386882eddf8dbee6942447a8a4b8267c19cf1e1158d0b0ac AS runtime
 WORKDIR /app
 
-# curl is required by the compose healthcheck on this service, exactly as in Dockerfile.back. Without
-# a healthcheck, `docker compose up --wait` treats the container as ready the moment it is running,
-# and the blue-green deploy then probed a front whose server had not started listening yet: run 2218
-# died on `curl (7)` less than a second after the container came up. It sits before the COPY of the
-# publish on purpose: after it, every new publish invalidated this layer and apt ran again on each
-# build (release-fast 2355: 11.6 s, uncached).
-# openssl and libssl3t64 are named so apt takes the security candidate: the base image can lag the
-# Ubuntu fix (recette R2-028, CVE-2026-84782: aspnet:10.0.12 still ships 3.0.13-0ubuntu3.15).
+# Installs curl for readiness checks and the current OpenSSL security packages before copying build
+# output, keeping this layer reusable across application builds. See docs/self-deploy-guide.md.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl openssl libssl3t64 \
     && rm -rf /var/lib/apt/lists/*

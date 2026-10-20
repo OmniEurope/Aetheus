@@ -14,8 +14,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R-224: the column maps of the AI, analysis portfolio, backups, git, service connections,
+/// <summary> The column maps of the AI, analysis portfolio, backups, git, service connections,
 /// plugins, pipeline fleet and notification administration grids. Each list is filtered through its
 /// repository (in-memory database) so the proof covers the wiring, filter applied before the count,
 /// not only the map; the git lists read from git and the fleet row are filtered in memory.
@@ -42,8 +41,8 @@ public sealed class GridColumnMapsTests : IDisposable
     [Fact]
     public async Task AiProfilesAndTasks_AreFilteredBeforeTheCount()
     {
-        var claude = new AiRunnerProfile { Name = "reviewer", Binary = "claude", SendsDataExternally = true };
-        var local = new AiRunnerProfile { Name = "local", Binary = "ollama" };
+        var claude = new AiRunnerProfile { Name = "reviewer", Model = "claude-sonnet-5-5", SendsDataExternally = true };
+        var local = new AiRunnerProfile { Name = "local", Model = "llama-4" };
         _db.AiRunnerProfiles.AddRange(claude, local);
         _db.AiTaskDefinitions.AddRange(
             new AiTaskDefinition { Name = "nightly", Profile = claude, Enabled = true },
@@ -53,7 +52,7 @@ public sealed class GridColumnMapsTests : IDisposable
         var repo = new AiTaskRepository(_db);
 
         var (profiles, profileTotal) = await repo.GetProfilesPageAsync(null, 1, 10, Ct,
-            [In("Binary", "CLAUDE"), Is("SendsDataExternally", "True")]);
+            [In("Model", "CLAUDE-SONNET-5-5"), Is("SendsDataExternally", "True")]);
         var (tasks, taskTotal) = await repo.GetDefinitionsPageAsync(null, 1, 10, null, null, null, null, Ct,
             [In("ProfileName", "local"), Is("Enabled", "True")]);
 

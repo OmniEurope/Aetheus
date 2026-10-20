@@ -12,7 +12,7 @@ public partial class PackageFeedEditDialog : EntityEditDialogBase
     internal static int SupportedCreationTypeCount => _types.Count;
 
     private static bool IsCreationSupported(PackageFeedType type)
-        => type is PackageFeedType.NuGet or PackageFeedType.Npm or PackageFeedType.PyPI;
+        => type is PackageFeedType.NuGet or PackageFeedType.Npm or PackageFeedType.PyPI or PackageFeedType.Maven;
 
     // Prefill the upstream URL with the public registry default for the chosen type (editable).
     private void OnTypeChanged() => _model.UpstreamUrl = _model.FeedType switch
@@ -20,6 +20,7 @@ public partial class PackageFeedEditDialog : EntityEditDialogBase
         PackageFeedType.NuGet => PackageRegistryDefaults.NuGet,
         PackageFeedType.Npm => PackageRegistryDefaults.Npm,
         PackageFeedType.PyPI => PackageRegistryDefaults.PyPi,
+        PackageFeedType.Maven => PackageRegistryDefaults.Maven,
         _ => _model.UpstreamUrl
     };
 

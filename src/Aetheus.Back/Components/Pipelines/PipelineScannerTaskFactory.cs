@@ -127,10 +127,9 @@ public sealed class PipelineScannerTaskFactory(
     /// </summary>
     internal const string UpstreamTemplateVariable = "UPSTREAM_PIPELINE_TEMPLATE";
 
-    /// <summary>Scanner steps of a pipeline triggered by the candidate need the exact manifest this
-    /// backend embeds. Shared with the launch preflight so both answer the same question.
-    /// Recette R2-121: a candidate is aetheus-candidate, or any project's pipeline extending the
-    /// shipped application-candidate template (portfolio-candidate).</summary>
+    /// <summary>Candidate-triggered scanners require the backend's exact embedded manifest. The
+    /// shared preflight rule recognizes the self-deploy candidate and pipelines extending the
+    /// shipped candidate template.</summary>
     internal static bool RequiresCandidateScannerManifest(string? upstreamPipeline, string? upstreamTemplate) =>
         string.Equals(upstreamPipeline, "aetheus-candidate", StringComparison.OrdinalIgnoreCase)
         || DeliveryTemplateNames.Is(upstreamTemplate, DeliveryTemplateNames.Candidate);
@@ -167,8 +166,8 @@ public sealed class PipelineScannerTaskFactory(
             ["AETHEUS_SCANNER_ENVIRONMENT_NAME"] = stageDef.Environment ?? string.Empty,
             ["AETHEUS_SCANNER_ACTIVE"] = stepDef.Active ? "true" : "false",
             ["AETHEUS_SCANNER_API_SPECIFICATION_URL"] = resolvedStep.ApiSpecificationUrl ?? string.Empty,
-            // R2-099: the list a single step scans in sequence. The single URL above stays empty with a
-            // list, so an agent that predates the list refuses the scan instead of scanning one part.
+            // The list is scanned sequentially; leaving the single URL empty makes agents without
+            // list support refuse instead of scanning only part.
             ["AETHEUS_SCANNER_API_SPECIFICATION_URLS"] = string.Join('\n', resolvedStep.ApiSpecificationUrls),
             ["AETHEUS_SCANNER_API_SPECIFICATION_FORMAT"] = resolvedStep.ApiSpecificationFormat ?? string.Empty
         };

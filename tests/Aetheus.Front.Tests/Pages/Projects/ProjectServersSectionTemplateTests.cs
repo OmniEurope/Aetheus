@@ -32,6 +32,10 @@ public class ProjectServersSectionTemplateTests : BunitContext
         answer.SetResult(new PaginatedResult<ProjectServerDto> { Items = [], TotalCount = 0 });
 
         // One settled render carries all three, so the asserts never read a half-updated markup.
+        // Loaded-machine ceiling: the grid mounts only once the section's page has arrived, then reads the
+        // first page itself (a second request) before it shows its empty state, so the wait spans two
+        // answers and their thread-pool hops; the failures left here stopped at "Check count" 0 to 4, on
+        // that second answer, never on a wrong state.
         cut.WaitForAssertion(() =>
         {
             Assert.Empty(cut.FindComponents<AetheusLoader>());
@@ -45,7 +49,7 @@ public class ProjectServersSectionTemplateTests : BunitContext
     {
         _handler.SetPaginatedJsonResponse("api/projects/1/servers", new List<ProjectServerDto>());
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         // No servers → a contextual empty state provides the direct add-server action.
         Assert.Contains("NoProjectServers", cut.Markup);
         Assert.Contains("AddServer", cut.Markup);
@@ -61,7 +65,7 @@ public class ProjectServersSectionTemplateTests : BunitContext
                 ServerStatus = ServerStatus.Online }
         });
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("prod-web"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("prod-web"));
         Assert.Contains("prod-web", cut.Markup);
     }
 
@@ -75,7 +79,7 @@ public class ProjectServersSectionTemplateTests : BunitContext
                 ServerStatus = null }
         });
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("ext-host"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("ext-host"));
         Assert.Contains("ext-host", cut.Markup);
     }
 
@@ -90,7 +94,7 @@ public class ProjectServersSectionTemplateTests : BunitContext
                 ServerStatus = ServerStatus.Offline }
         });
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("unlinked-server"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("unlinked-server"));
         Assert.Contains("unlinked-server", cut.Markup);
     }
 
@@ -105,7 +109,7 @@ public class ProjectServersSectionTemplateTests : BunitContext
                 DisplayName = "ext-srv", Host = "ext.example.com", Port = 80, ServerStatus = null }
         });
         var cut = Render<ProjectServersSection>(p => p.Add(x => x.ProjectId, 1));
-        cut.WaitForState(() => cut.Markup.Contains("agent-srv"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("agent-srv"));
         Assert.Contains("agent-srv", cut.Markup);
         Assert.Contains("ext-srv", cut.Markup);
     }

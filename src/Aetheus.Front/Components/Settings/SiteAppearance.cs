@@ -3,13 +3,8 @@ using System.Globalization;
 
 namespace Aetheus.Front.Components.Settings;
 
-/// <summary>
-/// Recette R-232 / R-390: the theme, palette, font and scales of the whole site. Themes, palettes and
-/// fonts are those of the OmniEurope.Blazor catalogue; what the site stores is their names, and the
-/// application's <c>OmniThemeScope</c> resolves and paints their tokens (STD-SHELL). No theme is OE's first
-/// one, Essentiel, which the shipped stylesheet already draws (user decision 2026-09-29: no separate
-/// "Aetheus" theme).
-/// </summary>
+/// <summary>Reads the appearance values Aetheus stored before OE kept them (R1-66 migration to
+/// OmniAppearanceState): catalogue names and scales. An unset theme uses the OE default, Essentiel.</summary>
 internal static class SiteAppearance
 {
     /// <summary>The lowest and highest level of the text size, density and control size scales; 5 is as drawn.</summary>
@@ -32,6 +27,17 @@ internal static class SiteAppearance
         ? null
         : OmniThemeFonts.All.FirstOrDefault(font => string.Equals(font.Name, name, StringComparison.Ordinal));
 
+    /// <summary>
+    /// The former stored mode: <c>system</c> is resolved by the browser on each paint. An unknown or
+    /// absent value reads as dark, the application's default.
+    /// </summary>
+    public static OmniAppearance ParseAppearance(string? stored) => stored switch
+    {
+        "light" => OmniAppearance.Light,
+        "system" => OmniAppearance.System,
+        _ => OmniAppearance.Dark
+    };
+
     /// <summary>The stored density; anything unknown reads as the shipped one.</summary>
     public static OmniDensity ParseDensity(string? stored) => stored switch
     {
@@ -40,18 +46,8 @@ internal static class SiteAppearance
         _ => OmniDensity.Comfortable
     };
 
-    public static string StoredDensity(OmniDensity density) => density switch
-    {
-        OmniDensity.Compact => "compact",
-        OmniDensity.Spacious => "spacious",
-        _ => "comfortable"
-    };
-
     /// <summary>A stored text size or control size level; anything missing or out of range is as drawn.</summary>
     public static int ParseLevel(string? stored) =>
         int.TryParse(stored, NumberStyles.None, CultureInfo.InvariantCulture, out var level)
         && level is >= MinimumLevel and <= MaximumLevel ? level : DefaultLevel;
-
-    public static string StoredLevel(int level) =>
-        Math.Clamp(level, MinimumLevel, MaximumLevel).ToString(CultureInfo.InvariantCulture);
 }

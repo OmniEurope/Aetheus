@@ -61,50 +61,26 @@ public sealed class PipelineTriggerStepCoordinator(
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
-        async Task FailAsync(string reason)
-        {
-            MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError, reason, now);
-            await repo.AppendRunWarningsAsync(runId, [$"Trigger step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
-        }
-
         // Neighbour of BACK-022: what this step hands the child is persisted with the child run
         // (AdditionalVariablesJson, ParametersJson). It is substituted without the secrets, so a secret or an
         // alias of one travels as its reference, which the child resolves from its own vault and classifies
         // as a secret, or refuses at launch when it cannot provide it. Never its clear value.
         var forwardable = WithoutSecrets(legVars, secretKeys);
-        var targetName = SubstituteVariables(stepDef.Pipeline ?? string.Empty, forwardable).Trim();
-        if (string.IsNullOrWhiteSpace(targetName))
+        var (resolved, targetError) = await ResolveTriggerTargetAsync(runId, stepDef, forwardable, ct).ConfigureAwait(false);
+        if (resolved is null)
         {
-            await FailAsync("missing 'pipeline' name to trigger.").ConfigureAwait(false);
+            await FailTriggerStepAsync(runId, stepRun, targetError!, now, ct).ConfigureAwait(false);
             return;
         }
-
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-        var projectId = run?.Pipeline is null ? null : await repo.GetPipelineProjectIdAsync(run.Pipeline, ct).ConfigureAwait(false);
-        if (projectId is not { } pid)
-        {
-            await FailAsync("trigger is only supported for project-owned pipelines.").ConfigureAwait(false);
-            return;
-        }
-
-        var target = await repo.FindPipelineByNameAndProjectAsync(targetName, pid, ct).ConfigureAwait(false);
-        if (target is null)
-        {
-            target = await MaterializeMissingTriggerTargetAsync(run!, pid, targetName, ct).ConfigureAwait(false);
-            if (target is null)
-            {
-                await FailAsync($"pipeline '{targetName}' not found in the project or at the immutable run revision.").ConfigureAwait(false);
-                return;
-            }
-        }
+        var (run, target, targetName) = resolved;
 
         // Cycle guard mirrors the on_success handler: refuse if the target is already in the lineage
         // (immediate A→A or deeper A→B→A) or the chain has grown past the safety depth.
-        var chain = new List<int>(PipelineUpstreamChain.Read(run!.AdditionalVariablesJson)) { run.PipelineId };
+        var chain = new List<int>(PipelineUpstreamChain.Read(run.AdditionalVariablesJson)) { run.PipelineId };
         var chainError = ValidateTriggerChain(chain, target.Id, targetName);
         if (chainError is not null)
         {
-            await FailAsync(chainError).ConfigureAwait(false);
+            await FailTriggerStepAsync(runId, stepRun, chainError, now, ct).ConfigureAwait(false);
             return;
         }
 
@@ -115,22 +91,15 @@ public sealed class PipelineTriggerStepCoordinator(
         var sourceError = ApplyTriggerSourceContext(stepDef, run, forwardable, vars);
         if (sourceError is not null)
         {
-            await FailAsync(sourceError).ConfigureAwait(false);
+            await FailTriggerStepAsync(runId, stepRun, sourceError, now, ct).ConfigureAwait(false);
             return;
         }
 
-        var (preparation, prepareError) = await PrepareTriggeredRunAsync(target.Id, targetName, vars, parameters, ct)
+        var (preparation, prepareError) = await PrepareAuthorizedRunAsync(target, targetName, vars, parameters, ct)
             .ConfigureAwait(false);
-        if (prepareError is not null)
+        if (preparation is null)
         {
-            await FailAsync(prepareError).ConfigureAwait(false);
-            return;
-        }
-        if (preparation is null
-            || !await ChainedRunAuthorizedAsync(preparation, target.Name, target.CreatedByUsername, ct).ConfigureAwait(false))
-        {
-            var ownerLabel = string.IsNullOrWhiteSpace(target.CreatedByUsername) ? "(none)" : target.CreatedByUsername;
-            await FailAsync($"owner '{ownerLabel}' of pipeline '{targetName}' lacks Server.Admin on its target servers.").ConfigureAwait(false);
+            await FailTriggerStepAsync(runId, stepRun, prepareError!, now, ct).ConfigureAwait(false);
             return;
         }
 
@@ -139,12 +108,14 @@ public sealed class PipelineTriggerStepCoordinator(
         if (reusedCheckpoint)
             return;
 
+        // A "run to end" run tests everything, its triggered children included. Only that flag differs
+        // from the preparation authorized above.
         var (child, startError) = await StartChildRunAsync(
-            launcher, preparation, vars, parameters, targetName,
+            launcher, run.RunToEnd ? preparation with { RunToEnd = true } : preparation, vars, parameters, targetName,
             BuildTriggerStepIdempotencyKey(runId, stepRun.Id), ct).ConfigureAwait(false);
         if (startError is not null)
         {
-            await FailAsync(startError).ConfigureAwait(false);
+            await FailTriggerStepAsync(runId, stepRun, startError, now, ct).ConfigureAwait(false);
             return;
         }
 
@@ -153,6 +124,52 @@ public sealed class PipelineTriggerStepCoordinator(
         stepRun.StartedAt ??= now;
         stepRun.TriggeredRunId = child!.Id;
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    private async Task FailTriggerStepAsync(int runId, PipelineStepRun stepRun, string reason, DateTime now, CancellationToken ct)
+    {
+        MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError, reason, now);
+        await repo.AppendRunWarningsAsync(runId, [$"Trigger step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+    }
+
+    private sealed record TriggerTarget(PipelineRun Run, Pipeline Target, string Name);
+
+    /// <summary>The pipeline the step names, in the parent's project, or materialized from the run's
+    /// immutable revision; otherwise why the step fails.</summary>
+    private async Task<(TriggerTarget? Target, string? Error)> ResolveTriggerTargetAsync(
+        int runId, PipelineStepDefinition stepDef, Dictionary<string, string> forwardable, CancellationToken ct)
+    {
+        var targetName = SubstituteVariables(stepDef.Pipeline ?? string.Empty, forwardable).Trim();
+        if (string.IsNullOrWhiteSpace(targetName))
+            return (null, "missing 'pipeline' name to trigger.");
+
+        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
+        var projectId = run?.Pipeline is null ? null : await repo.GetPipelineProjectIdAsync(run.Pipeline, ct).ConfigureAwait(false);
+        if (projectId is not { } pid)
+            return (null, "trigger is only supported for project-owned pipelines.");
+
+        var target = await repo.FindPipelineByNameAndProjectAsync(targetName, pid, ct).ConfigureAwait(false)
+            ?? await MaterializeMissingTriggerTargetAsync(run!, pid, targetName, ct).ConfigureAwait(false);
+        return target is null
+            ? (null, $"pipeline '{targetName}' not found in the project or at the immutable run revision.")
+            : (new TriggerTarget(run!, target, targetName), null);
+    }
+
+    /// <summary>The child's preparation once its owner is authorized on the targets it produces, or why
+    /// the step fails.</summary>
+    private async Task<(PipelineRunPreparation? Preparation, string? Error)> PrepareAuthorizedRunAsync(
+        Pipeline target, string targetName, Dictionary<string, string> vars,
+        Dictionary<string, string> parameters, CancellationToken ct)
+    {
+        var (preparation, prepareError) = await PrepareTriggeredRunAsync(target.Id, targetName, vars, parameters, ct)
+            .ConfigureAwait(false);
+        if (prepareError is not null)
+            return (null, prepareError);
+        if (preparation is not null
+            && await ChainedRunAuthorizedAsync(preparation, target.Name, target.CreatedByUsername, ct).ConfigureAwait(false))
+            return (preparation, null);
+        var ownerLabel = string.IsNullOrWhiteSpace(target.CreatedByUsername) ? "(none)" : target.CreatedByUsername;
+        return (null, $"owner '{ownerLabel}' of pipeline '{targetName}' lacks Server.Admin on its target servers.");
     }
 
     /// <summary>
@@ -330,10 +347,8 @@ public sealed class PipelineTriggerStepCoordinator(
         return target;
     }
 
-    /// <summary>The parent context a trigger-step child receives. Written after the step's own
-    /// variables, so a definition cannot claim another parent or another origin. BUILD_TRIGGEREDBY
-    /// otherwise reads the child definition's static `trigger:`, "manual" for every chained child
-    /// (PLAN-007 lot 7).</summary>
+    /// <summary>Parent context is written after step variables so definitions cannot forge their
+    /// parent or initiating origin.</summary>
     internal static void ApplyUpstreamContext(
         Dictionary<string, string> vars, string parentPipelineName, int parentRunId, IReadOnlyCollection<int> chain,
         string? parentTemplateName = null)

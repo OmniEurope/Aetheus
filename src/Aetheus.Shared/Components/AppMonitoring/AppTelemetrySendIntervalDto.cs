@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.AppMonitoring;
 
-/// <summary>
-/// How often a supervised application sends its metrics: the interval Aetheus hands to its
-/// <c>Aetheus.Telemetry</c> package (« Conservation des données » of its project, PLAN-013 lot 4), and
-/// the interval its recent samples actually show. A package older than 1.1.0 does not read the
-/// server's interval and keeps its own, which only the observed interval reveals.
-/// </summary>
+/// <summary>Reports both the configured project telemetry interval and the interval observed in
+/// samples. Packages predating 1.1.0 retain their own interval instead of reading server
+/// configuration.</summary>
 public sealed record AppTelemetrySendIntervalDto
 {
     /// <summary>The interval the server hands to the package, in seconds.</summary>

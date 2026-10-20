@@ -20,8 +20,9 @@ public partial class ReleaseStatusBadge
     [Parameter, EditorRequired] public ReleaseStatus Status { get; set; }
     [Parameter] public string? Class { get; set; }
 
-    /// <summary>Only Superseded and Deployed carry an explanation (D38); the others read for themselves.</summary>
-    private string? Help => Status is ReleaseStatus.Superseded or ReleaseStatus.Deployed
+    /// <summary>Only Superseded, Deployed (D38) and Archived (D2: what was deleted, what stays) carry an
+    /// explanation; the others read for themselves.</summary>
+    private string? Help => Status is ReleaseStatus.Superseded or ReleaseStatus.Deployed or ReleaseStatus.Archived
         ? L[$"ReleaseStatusHelp_{Status}"].Value
         : null;
 }

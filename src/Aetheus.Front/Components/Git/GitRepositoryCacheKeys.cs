@@ -6,7 +6,7 @@ namespace Aetheus.Front.Components.Git;
 /// through the generic RevalidateAsync, which would swallow their custom error state.</para></summary>
 internal static class GitRepositoryCacheKeys
 {
-    /// <summary>R2-004: the grid always walks every ref; what narrows it (message, branches, authors,
+    /// <summary>The grid always walks every ref; what narrows it (message, branches, authors,
     /// dates) are its column filters, which the caller appends to the key.</summary>
     public static string Commits(int repoId, int page, int pageSize) =>
         $"git-commits:{repoId}:{page}:{pageSize}";

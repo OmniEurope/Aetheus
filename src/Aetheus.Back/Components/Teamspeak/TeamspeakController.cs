@@ -26,7 +26,7 @@ public class TeamspeakController(ITeamspeakService teamspeakService, IResourceAu
         return Ok(await teamspeakService.GetClientsAsync(serverId, request, ct));
     }
 
-    // Recette R-210: the platforms the clients grid's checkable Platform filter offers.
+    // The platforms the clients grid's checkable Platform filter offers.
     [HttpGet("filter-values")]
     public async Task<ActionResult<TeamspeakFilterValuesDto>> GetFilterValues(int serverId, CancellationToken ct)
     {

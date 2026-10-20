@@ -33,14 +33,26 @@ public class ServerTimeoutServiceTests
                 Arg.Any<int>(), Arg.Any<DateTime>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 6, 16, 12, 0, 0, TimeSpan.Zero));
+
+        // External probe (PLAN-010 lot 1): the host answers with a refused connect, no network involved.
+        var prober = Substitute.For<ITcpReachabilityProber>();
+        prober.ConnectAsync(Arg.Any<System.Net.IPAddress>(), Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(TcpProbeOutcome.Refused);
+        var reachabilityRepo = Substitute.For<IServerReachabilityRepository>();
+        reachabilityRepo.GetOfflineServersDueForProbeAsync(Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
         var services = new ServiceCollection();
         services.AddScoped(_ => serverRepo);
         services.AddScoped(_ => hubContext);
         services.AddScoped(_ => events);
+        services.AddScoped(_ => new ServerReachabilityProbe(
+            prober, reachabilityRepo, Options.Create(new ServerReachabilityProbeOptions()), clock,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ServerReachabilityProbe>.Instance));
         var sp = services.BuildServiceProvider();
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
 
-        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 6, 16, 12, 0, 0, TimeSpan.Zero));
         var sut = new ServerTimeoutService(scopeFactory, Substitute.For<ILogger<ServerTimeoutService>>(),
             Options.Create(new BackgroundServicesOptions()), clock);
         return (sut, serverRepo, clientProxy, events);
@@ -64,6 +76,44 @@ public class ServerTimeoutServiceTests
             1, staleServer.LastHeartbeat, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
         await proxy.Received(1).SendCoreAsync("ServerOffline", Arg.Is<object?[]>(a => (int)a[0]! == 1), Arg.Any<CancellationToken>());
         events.Received(1).Publish(Arg.Is<ServerWentOfflineEvent>(e => e.ServerId == 1));
+    }
+
+    [Fact]
+    public async Task CheckServerTimeouts_OfflineEventCarriesExternalProbeResult()
+    {
+        // PLAN-010 lot 1: the alert must say which case it is, so the probe runs before the event.
+        var staleServer = new Aetheus.Back.Data.Entities.Server
+        {
+            Id = 3,
+            Name = "vps",
+            IpAddress = "203.0.113.5",
+            Status = ServerStatus.Online,
+            LastHeartbeat = new DateTime(2026, 6, 16, 11, 55, 0, DateTimeKind.Utc)
+        };
+        var (sut, _, _, events) = BuildSut(staleServer);
+
+        await sut.CheckServerTimeouts(TestContext.Current.CancellationToken);
+
+        events.Received(1).Publish(Arg.Is<ServerWentOfflineEvent>(e =>
+            e.ServerId == 3 && e.Reachability == ServerReachability.HostReachable));
+    }
+
+    [Fact]
+    public async Task CheckServerTimeouts_ServerWithoutAddress_EventSaysUnknown()
+    {
+        var staleServer = new Aetheus.Back.Data.Entities.Server
+        {
+            Id = 4,
+            Name = "no-address",
+            Status = ServerStatus.Online,
+            LastHeartbeat = new DateTime(2026, 6, 16, 11, 55, 0, DateTimeKind.Utc)
+        };
+        var (sut, _, _, events) = BuildSut(staleServer);
+
+        await sut.CheckServerTimeouts(TestContext.Current.CancellationToken);
+
+        events.Received(1).Publish(Arg.Is<ServerWentOfflineEvent>(e =>
+            e.ServerId == 4 && e.Reachability == ServerReachability.UnknownNoAddress));
     }
 
     [Fact]

@@ -91,10 +91,10 @@ public sealed class PipelineArtifactTaskFactory(
     {
         if (stepDefinition.AllowMissing && IsOptionalProducerArtifactUnavailable(stepDefinition, error))
         {
-            // Recette R2-097: an optional artifact that does not exist yet (a first successful nightly
-            // has no earlier evidence) is the expected case the step was declared for, not a run-level
-            // warning. The step says it, in its own status; the steps that grade the comparison record
-            // it as unavailable.
+            // An optional artifact that does not exist yet (a first successful nightly has no
+            // earlier evidence) is the expected case the step was declared for, not a run-level
+            // warning. The step says it, in its own status; the steps that grade the comparison
+            // record it as unavailable.
             await CompleteMissingRestoreArtifactAsync(
                 runId, server, stepRun,
                 $"Nothing to restore: the optional artifact '{stepDefinition.Artifact}' of {stepDefinition.ArtifactSourcePipeline} does not exist yet, so there is nothing to compare with ({error?.TrimEnd('.')}). The checks that read it record it as unavailable.",
@@ -326,7 +326,11 @@ public sealed class PipelineArtifactTaskFactory(
             return (null, "the source run belongs to another project.");
         if (!string.Equals(sourceRun?.CommitHash, context.Run.CommitHash, StringComparison.OrdinalIgnoreCase))
             return (null, "the source run belongs to another source commit.");
-        if (sourceRun?.Status != PipelineStatus.Success)
+        // A Rejected source ran every control to the end and sealed what it found (recette R1-80): its
+        // artifacts are complete, and what it found travels in its outputs. Only this lineage lookup
+        // (the run this very pipeline triggered) accepts it; the same-commit and latest-successful
+        // lookups above and below stay Success-only.
+        if (sourceRun?.Status is not (PipelineStatus.Success or PipelineStatus.Rejected))
             return (null, "the source run did not succeed; its optional producer artifact is unavailable.");
         var artifact = await artifactRepo.FindRunArtifactByNameAsync(
             sourceRunId, artifactName, ct).ConfigureAwait(false);

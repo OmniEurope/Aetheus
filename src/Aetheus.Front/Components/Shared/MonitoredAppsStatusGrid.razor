@@ -1,14 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 @namespace Aetheus.Front.Components.Shared
-@*
-    Every monitored application visible to the caller, one line each: name, status, people online,
-    project, last event received, and since when the status holds. Shared by the dashboard tile and
-    the "Supervision" page (PLAN-003 lot 28), so the two cannot drift apart.
-*@
-@* Recette R-268 / R-432: loads exactly like the other dashboard tiles (PipelineRunsGrid, AetheusDataGrid):
-   the page's load reaches OE through Busy, which keeps the headers and draws its loading bar on the table
-   only; with no row yet the body waits empty under the bar instead of announcing an empty list. *@
+@* Share the monitored-application rows between dashboard and supervision so visibility, status and
+   last-event details remain consistent. *@
+@* Pass page-owned loading through Busy so the table keeps its headers and existing rows while data
+   loads instead of announcing an empty result prematurely. *@
 <div class="aetheus-grid-host">
 <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["MonitoredApps"])" ExportFields="@ExportContext.Fields()" Items="@(Applications ?? Array.Empty<MonitoredAppStatusDto>())" TItem="MonitoredAppStatusDto" KeyOf="@(row => row.Id)" NewRowHighlight="@NewRowHighlight"
     ShowLoadingBar="true" Busy="@IsLoading"
@@ -41,23 +37,6 @@
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="ProjectName" Title="@L["Project"]" MinWidth="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
-        @if (ShowLastEvent)
-        {
-            @* PLAN-003 lot 28: what told "collected, then stopped on 28/08" apart from "never
-               configured" was a date buried in one project's Telemetry tab. *@
-            <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="LastEventAt" Value="@LocalLastEventAt" Title="@L["LastEventReceived"]" Width="11rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true">
-                <Template Context="app">
-                    @if (app.LastEventAt is { } lastEvent)
-                    {
-                        <span title="@lastEvent.ToLocalTime().ToString("F")">@lastEvent.ToLocalTime().ToString("g")</span>
-                    }
-                    else
-                    {
-                        <span class="omni-u-text-muted">@L["NeverReceived"]</span>
-                    }
-                </Template>
-            </OmniDataGridColumn>
-        }
         <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="LastStatusChangeAt" Title="@L["Since"]" FormatString="{0:g}" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
     </Columns>
 </OmniDataGrid>

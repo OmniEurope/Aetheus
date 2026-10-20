@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
+using Aetheus.Back.Components.Monitoring;
 using Aetheus.Back.Components.Pipelines.Events;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
@@ -29,11 +30,9 @@ public interface IPipelineRunScheduler
     Task AdvanceStageAsync(
         int pipelineRunId, string completedStageName, IPipelineChildRunLauncher launcher, CancellationToken ct);
 
-    /// <summary>
-    /// PLAN-003 2.7: a stage whose own confirmation was refused or ran out fails like a failed step, so
-    /// its <c>failed()</c> handlers (the blue-green Rollback) run instead of the run just closing.
-    /// Returns false when the run was not waiting on it, or the stage has nothing left to fail.
-    /// </summary>
+    /// <summary>Refused or expired stage confirmation fails that stage so its <c>failed()</c>
+    /// handlers can execute. No transition occurs unless the run is waiting on that
+    /// stage.</summary>
     Task<bool> FailUnconfirmedStageAsync(
         int pipelineRunId, string stageName, IPipelineChildRunLauncher launcher, CancellationToken ct);
 
@@ -139,17 +138,21 @@ public sealed class PipelineRunScheduler(
             async lockToken =>
             {
                 using var runLock = await RunAdvanceLock.Shared.AcquireAsync(step.PipelineRunId, lockToken).ConfigureAwait(false);
-                var status = childStatus == PipelineStatus.Success
+                // Recette R1-80: a Rejected child ran every control to the end; what it found travels
+                // up in its outputs (the parent is rejected in turn), and the trigger step itself is
+                // not a failure, so the parent goes on with its own controls (R2-146) up to its seal.
+                var childCompleted = childStatus is PipelineStatus.Success or PipelineStatus.Rejected;
+                var status = childCompleted
                     ? TaskExecutionStatus.Success
                     : TaskExecutionStatus.Failed;
-                var exitCode = childStatus == PipelineStatus.Success ? 0 : 1;
+                var exitCode = childCompleted ? 0 : 1;
                 var outputsJson = childOutputs.Count == 0
                     ? null
                     : JsonSerializer.Serialize(childOutputs);
-                var failureCode = childStatus == PipelineStatus.Success
+                var failureCode = childCompleted
                     ? null
                     : TaskFailureCodes.ToolError;
-                var failureReason = childStatus == PipelineStatus.Success
+                var failureReason = childCompleted
                     ? null
                     : $"Triggered run {step.TriggeredRunId} completed with status {childStatus}.";
                 resolved = await repo.TryResolveTriggeredStepAsync(
@@ -275,6 +278,13 @@ public sealed class PipelineRunScheduler(
         int pipelineRunId, string warning, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         await repo.AppendRunWarningsAsync(pipelineRunId, [warning], ct).ConfigureAwait(false);
+        // "Run to end": the missing artifact fails the run (HasFailedArtifactCollectionAsync keeps it
+        // from ending Success) but stops nothing else; a step that needs the artifact fails by itself.
+        if ((await repo.GetPipelineRunWithPipelineAsync(pipelineRunId, ct).ConfigureAwait(false))?.RunToEnd == true)
+        {
+            await AdvanceToNextStageOrCompleteAsync(pipelineRunId, launcher, ct).ConfigureAwait(false);
+            return;
+        }
         if (await TryContinueWithFailureHandlersAsync(pipelineRunId, launcher, ct).ConfigureAwait(false))
             return;
         var blockedSteps = (await repo.GetPendingStepRunsAsync(pipelineRunId, ct).ConfigureAwait(false))
@@ -322,19 +332,9 @@ public sealed class PipelineRunScheduler(
         return true;
     }
 
-    /// <summary>
-    /// The terminal status of a run whose steps have all settled (PLAN-003 D13).
-    ///
-    /// A run whose only failures carried <c>continue_on_error</c> used to finish green, which said
-    /// the opposite of what happened: something broke, it was just allowed not to stop the run.
-    /// That is <see cref="PipelineStatus.Partial"/> - finished, nothing blocking broke, but not a
-    /// success either. It matters beyond the badge: PipelineRunCompletedDownstreamHandler chains
-    /// only on Success, so a Partial deliberately stops an <c>on_success</c> chain instead of
-    /// handing the next pipeline a result nobody vouched for.
-    /// </summary>
-    /// Recette R2-146: when every step settled without a blocking failure but the run's own verdict
-    /// refused the result (the assurance seal of a candidate), the run is
-    /// <see cref="PipelineStatus.Rejected"/>: the controls ran to the end, the result is not delivered.
+    /// <summary>Allowed non-advisory failures produce <see cref="PipelineStatus.Partial"/>, which
+    /// stops success-only downstream chains. A completed run whose own assurance verdict refuses
+    /// delivery becomes <see cref="PipelineStatus.Rejected"/>.</summary>
     internal static PipelineStatus DecideFinalStatus(
         bool cancelled, bool blockingFailure, bool swallowedFailure, bool rolledBack = false, bool rejected = false)
     {
@@ -344,36 +344,30 @@ public sealed class PipelineRunScheduler(
         return swallowedFailure ? PipelineStatus.Partial : PipelineStatus.Success;
     }
 
-    /// <summary>
-    /// R-14: the stages that undo a deployment - a failure handler (<c>condition: failed()</c>) that
-    /// runs a <c>bluegreen-rollback</c> step. Recognised by that step rather than by a name, so a
-    /// failure handler that only notifies never turns a failed run into a rolled-back one.
+    /// <summary> The stages that undo a deployment - a failure handler (<c>condition: failed()</c>)
+    /// that runs a <c>bluegreen-rollback</c> step or declares <c>deployment_role: rollback</c> (R-14).
+    /// Recognised by that rather than by a name, so a failure handler that only notifies never turns a
+    /// failed run into a rolled-back one.
     /// </summary>
     internal static List<string> RollbackStageNames(PipelineYamlDefinition definition) =>
-        StagesRunning(definition, "bluegreen-rollback", failureHandlersOnly: true);
+        [.. YamlParsingHelper.FlattenJobs(definition).Where(PipelineDeploymentStages.IsRollback).Select(stage => stage.Name)];
 
-    /// <summary>The stages that start the new colour (a <c>bluegreen-up</c> step).</summary>
+    /// <summary>The stages that start the new colour (a <c>bluegreen-up</c> step, or
+    /// <c>deployment_role: start</c>).</summary>
     internal static List<string> StartStageNames(PipelineYamlDefinition definition) =>
-        StagesRunning(definition, "bluegreen-up", failureHandlersOnly: false);
+        [.. YamlParsingHelper.FlattenJobs(definition).Where(PipelineDeploymentStages.IsStart).Select(stage => stage.Name)];
 
-    private static List<string> StagesRunning(PipelineYamlDefinition definition, string stepType, bool failureHandlersOnly) =>
-        [.. YamlParsingHelper.FlattenJobs(definition)
-            .Where(stage => !failureHandlersOnly
-                || string.Equals(stage.Condition?.Trim(), "failed()", StringComparison.OrdinalIgnoreCase))
-            .Where(stage => stage.Steps.Any(step => string.Equals(step.Type, stepType, StringComparison.OrdinalIgnoreCase)))
-            .Select(stage => stage.Name)];
-
-    /// <summary>The output a candidate's assurance seal publishes; "false" refuses the result (R2-146).</summary>
-    internal const string DeployableVerdictVariable = "CANDIDATE_DEPLOYABLE";
-
-    // Recette R2-146: the run sealed its own result as not deployable.
-    private async Task<bool> WasRejectedAsync(int pipelineRunId, CancellationToken ct)
+    // Recette R2-146 / R1-80: the run sealed its own result as not deployable, or one of its controls
+    // ran its suite and found failures (a required test gate published non-zero, possibly by a child
+    // run whose outputs its trigger step carries). An advisory step never refuses anything.
+    private async Task<bool> WasRejectedAsync(int pipelineRunId, PipelineYamlDefinition definition, CancellationToken ct)
     {
+        var advisoryKeys = AdvisoryStepKeys(definition);
         var outputs = await repo.GetSuccessfulStepOutputsAsync(pipelineRunId, ct).ConfigureAwait(false) ?? [];
         return outputs
-            .SelectMany(output => PipelineRunHelpers.DeserializeResolvedVariables(output.OutputVariablesJson))
-            .Any(variable => string.Equals(variable.Key, DeployableVerdictVariable, StringComparison.OrdinalIgnoreCase)
-                && bool.TryParse(variable.Value, out var deployable) && !deployable);
+            .Where(output => !IsAdvisory(advisoryKeys, output.StageName, output.StepName, matrixLeg: null))
+            .Any(output => PipelineControlVerdict.RejectsResult(
+                PipelineRunHelpers.DeserializeResolvedVariables(output.OutputVariablesJson)));
     }
 
     /// <summary>
@@ -394,13 +388,10 @@ public sealed class PipelineRunScheduler(
     /// The AI steps declared <c>advisory: true</c> in the run's YAML snapshot, as stage/step keys. Their
     /// step runs carry <c>ContinueOnError</c> so dependents still run; this is what keeps their failure
     /// out of the run status too, since an opinion that could not be given is not a partial delivery.
-    /// Read from the snapshot rather than persisted on the step: the snapshot is immutable per run.
+    /// The rule itself is <see cref="PipelineAdvisorySteps"/>, shared with the run lists.
     /// </summary>
     internal static HashSet<string> AdvisoryStepKeys(PipelineYamlDefinition definition) =>
-        [.. YamlParsingHelper.FlattenJobs(definition)
-            .SelectMany(stage => stage.Steps
-                .Where(step => step.Advisory && string.Equals(step.Type, "ai", StringComparison.OrdinalIgnoreCase))
-                .Select(step => AdvisoryKey(stage.Name, step.Name)))];
+        PipelineAdvisorySteps.Keys(definition);
 
     /// <summary>True when a swallowed failure is not an advisory step's (the matrix leg suffix of a
     /// step name is ignored, as the dispatcher does).</summary>
@@ -409,12 +400,9 @@ public sealed class PipelineRunScheduler(
         continuableFailures.Any(step => !IsAdvisory(advisoryKeys, step.StageName, step.StepName, step.MatrixLeg));
 
     /// <summary>True when the step (stage + name, matrix leg suffix ignored) is in
-    /// <see cref="AdvisoryStepKeys"/>. The one test the run status and the run view both use.</summary>
+    /// <see cref="AdvisoryStepKeys"/>. The one test the run status and the run views all use.</summary>
     internal static bool IsAdvisory(IReadOnlySet<string> advisoryKeys, string stageName, string stepName, string? matrixLeg) =>
-        advisoryKeys.Contains(AdvisoryKey(
-            stageName, matrixLeg is null ? stepName : stepName.Replace($" [{matrixLeg}]", string.Empty)));
-
-    private static string AdvisoryKey(string stageName, string stepName) => $"{stageName}\u001f{stepName}";
+        PipelineAdvisorySteps.IsAdvisory(advisoryKeys, stageName, stepName, matrixLeg);
 
     private static bool HasNonContinuableFailures(List<PipelineStepRun> failedSteps)
     {
@@ -452,9 +440,8 @@ public sealed class PipelineRunScheduler(
     }
 
 
-    // Retry / resume dispatch WITH the same per-step secret scoping as the first dispatch: resolve the
-    // secret-key set so each step's task env carries only the secrets it references, instead of the full
-    // secret set. (Previously these paths re-injected every secret into every step - over-exposure.)
+    // Retries and resumes use the same per-step secret scoping as initial dispatch, exposing only
+    // referenced secrets.
     public async Task DispatchNextStageWithScopedSecretsAsync(
         PipelineRun run, PipelineYamlDefinition definition,
         IPipelineChildRunLauncher launcher, CancellationToken ct)
@@ -497,16 +484,19 @@ public sealed class PipelineRunScheduler(
             var pendingSteps = await repo.GetPendingStepRunsAsync(pipelineRunId, ct).ConfigureAwait(false);
             if (pendingSteps.Count == 0)
             {
+                var continuableFailures =
+                    await repo.GetContinuableFailedStepsInRunAsync(pipelineRunId, ct).ConfigureAwait(false) ?? [];
+                // A step that only went on because of "run to end" fails the run all the same: the
+                // mode tests everything, it never turns a failure into a Partial or a Success.
                 var blockingFailure = await repo.HasAnyFailedStepInRunAsync(pipelineRunId, ct).ConfigureAwait(false)
+                    || continuableFailures.Any(step => step.ContinueOnErrorForced)
                     || await repo.HasFailedArtifactCollectionAsync(pipelineRunId, ct).ConfigureAwait(false);
                 var finalStatus = DecideFinalStatus(
                     cancelled: HasCancellationRequest(run.AdditionalVariablesJson),
                     blockingFailure: blockingFailure,
-                    swallowedFailure: HasNonAdvisoryFailure(
-                        await repo.GetContinuableFailedStepsInRunAsync(pipelineRunId, ct).ConfigureAwait(false) ?? [],
-                        AdvisoryStepKeys(definition)),
+                    swallowedFailure: HasNonAdvisoryFailure(continuableFailures, AdvisoryStepKeys(definition)),
                     rolledBack: blockingFailure && await WasRolledBackAsync(pipelineRunId, definition, ct).ConfigureAwait(false),
-                    rejected: !blockingFailure && await WasRejectedAsync(pipelineRunId, ct).ConfigureAwait(false));
+                    rejected: !blockingFailure && await WasRejectedAsync(pipelineRunId, definition, ct).ConfigureAwait(false));
                 await finalizer.CompleteRunAsync(pipelineRunId, finalStatus, ct).ConfigureAwait(false);
                 if (finalStatus == PipelineStatus.Success)
                     await pipelineHub.Clients.Groups(HubGroups.PipelineRunUpdates(pipelineRunId, run.Pipeline.Id)).SendAsync("PipelineRunCompleted", pipelineRunId, PipelineStatus.Success, ct).ConfigureAwait(false);
@@ -553,12 +543,22 @@ public sealed class PipelineRunScheduler(
 
         var resolvedVars = await ResolveFullVariablesForRunAsync(run, definition, ct).ConfigureAwait(false);
         InjectStageSystemVariables(resolvedVars, stageName, server);
+        repo.TrackTask(BuildArtifactCollectionTask(runId, stageDef, server, resolvedVars));
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        logger.LogInformation("Dispatched artifact collection task for run {RunId} stage {Stage}", runId, stageName);
+        return true;
+    }
+
+    private ServerTask BuildArtifactCollectionTask(
+        int runId, PipelineStageDefinition stageDef, Server server, Dictionary<string, string> resolvedVars)
+    {
         var isWindows = OsTypeHelper.IsWindows(server.OsType, server.OsDescription);
         if (isWindows && resolvedVars.TryGetValue("WORKSPACE", out var ws) && !ws.Contains(":\\"))
             resolvedVars["WORKSPACE"] = PipelineCommandBuilder.GetDefaultWorkspace(runId, isWindows: true);
-        var workspace = resolvedVars.GetValueOrDefault("WORKSPACE", "");
-        if (stageDef.Isolation?.IsContainer == true)
-            workspace = PipelineSystemTaskFactory.ContainerWorkspace;
+        var isContainer = stageDef.Isolation?.IsContainer == true;
+        var workspace = isContainer
+            ? PipelineSystemTaskFactory.ContainerWorkspace
+            : resolvedVars.GetValueOrDefault("WORKSPACE", "");
 
         var resolvedPatterns = stageDef.Artifacts
             .Select(p => SubstituteVariables(p, resolvedVars))
@@ -570,26 +570,21 @@ public sealed class PipelineRunScheduler(
             // breaking the pipelines and retained releases that restore its output by name.
             ["AETHEUS_ARTIFACT_NAME"] = StageArtifactName(stageDef),
             ["AETHEUS_RUN_ID"] = runId.ToString(),
-            ["AETHEUS_STAGE_NAME"] = stageName,
+            ["AETHEUS_STAGE_NAME"] = stageDef.Name,
             ["AETHEUS_WORKING_DIR"] = workspace,
-            ["AETHEUS_WORKSPACE_MODE"] =
-                stageDef.Isolation?.IsContainer == true ? "container" : "process"
+            ["AETHEUS_WORKSPACE_MODE"] = isContainer ? "container" : "process"
         };
 
-        var task = new ServerTask
+        return new ServerTask
         {
             ServerId = server.Id,
-            Name = PipelineRunStatusRepository.StageArtifactCollectionTaskName(stageName),
+            Name = PipelineRunStatusRepository.StageArtifactCollectionTaskName(stageDef.Name),
             Command = JsonSerializer.Serialize(resolvedPatterns),
             PipelineRunId = runId,
             EnvironmentVariables = TaskEnvProtection.Protect(encryption, JsonSerializer.Serialize(artifactVars)),
             TimeoutSeconds = PipelineCommandBuilder.ArtifactCollectionTimeoutSeconds,
             Operation = OperationKind.PipelineCollectArtifacts
         };
-        repo.TrackTask(task);
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
-        logger.LogInformation("Dispatched artifact collection task for run {RunId} stage {Stage}", runId, stageName);
-        return true;
     }
 
     // The collection is recorded as failed on the producer, never silently dropped: the run page shows

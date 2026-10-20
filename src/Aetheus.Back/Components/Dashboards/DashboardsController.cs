@@ -3,12 +3,8 @@ using System.Security.Claims;
 
 namespace Aetheus.Back.Components.Dashboards;
 
-/// <summary>
-/// The caller's own dashboards. An identity without a user row (the deployment identity,
-/// NameIdentifier "bootstrap") is signed in but owns none: it lists an empty set, finds nothing and
-/// may not create or change one (403). It used to get 401, which the front reads as a rejected
-/// session and signs out on, as the notification endpoints did for deploy-prod 2442 and 2443.
-/// </summary>
+/// <summary>An authenticated deployment identity without a user row owns no dashboards: reads
+/// return an empty result and writes return 403 without rejecting the session.</summary>
 [ApiController]
 [Route("api/dashboards")]
 [Authorize]

@@ -14,6 +14,7 @@ internal sealed class AgentUpdateRequestConfiguration : IEntityTypeConfiguration
         builder.Property(request => request.ConfirmedSessionId).HasMaxLength(64);
         builder.Property(request => request.RequestedBy).HasMaxLength(256);
         builder.Property(request => request.ExpectedCapabilitiesJson).HasMaxLength(8192);
+        builder.Property(request => request.EnableCapabilities).HasMaxLength(128);
         builder.Property(request => request.FailureCode).HasMaxLength(64);
         builder.Property(request => request.FailureDiagnostic).HasMaxLength(1000);
         builder.HasIndex(request => new { request.ServerId, request.TargetVersion })

@@ -4,23 +4,28 @@ using Microsoft.Extensions.Logging;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-public class PipelineArtifactService(IPipelineRepository repo, TimeProvider timeProvider, ILogger<PipelineArtifactService> logger) : IPipelineArtifactService
+public class PipelineArtifactService(
+    IPipelineQualityResultRepository repo,
+    IPipelineArtifactRepository artifactRepo,
+    IPipelineRunLookupReader runs,
+    TimeProvider timeProvider,
+    ILogger<PipelineArtifactService> logger) : IPipelineArtifactService
 {
     public async Task<List<PipelineArtifactDto>> GetArtifactsAsync(int runId, CancellationToken ct = default)
     {
-        var artifacts = await repo.GetArtifactsAsync(runId, ct).ConfigureAwait(false);
+        var artifacts = await artifactRepo.GetArtifactsAsync(runId, ct).ConfigureAwait(false);
         return artifacts.Select(PipelineArtifactMapper.ToStandaloneDto).ToList();
     }
 
     public async Task<PipelineArtifactDto?> PublishArtifactAsync(int runId, PublishArtifactRequest request, CancellationToken ct = default)
     {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-        if (run is null) return null;
+        var pipelineId = await runs.GetPipelineIdForRunAsync(runId, ct).ConfigureAwait(false);
+        if (pipelineId is null) return null;
 
         var artifact = new PipelineArtifact
         {
             PipelineRunId = runId,
-            PipelineId = run.PipelineId,
+            PipelineId = pipelineId.Value,
             Name = request.Name,
             FilePath = request.FilePath,
             SizeBytes = request.SizeBytes,
@@ -28,7 +33,7 @@ public class PipelineArtifactService(IPipelineRepository repo, TimeProvider time
             StepName = request.StepName
         };
 
-        await repo.AddArtifactAsync(artifact, ct).ConfigureAwait(false);
+        await artifactRepo.AddArtifactAsync(artifact, ct).ConfigureAwait(false);
 
         return new PipelineArtifactDto
         {
@@ -69,8 +74,8 @@ public class PipelineArtifactService(IPipelineRepository repo, TimeProvider time
     public async Task<PipelineTestResultSummaryDto?> PublishTestResultsAsync(
         int runId, PublishTestResultsRequest request, CancellationToken ct = default)
     {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-        if (run is null) return null;
+        var pipelineId = await runs.GetPipelineIdForRunAsync(runId, ct).ConfigureAwait(false);
+        if (pipelineId is null) return null;
 
         var testResults = TestResultParser.Parse(request.XmlContent, request.Format, runId, request.StageName, request.StepName, logger);
         if (testResults.Count == 0) return null;
@@ -96,12 +101,10 @@ public class PipelineArtifactService(IPipelineRepository repo, TimeProvider time
         return CoverageSummaryMapper.Map(CoverageSummaryMapper.SelectCanonical(results));
     }
 
-    /// <summary>
-    /// Recette R-210: the header filters of the coverage-by-assembly grid. The assemblies are built in
-    /// memory from the run's coverage reports, so the map runs over that list. The rate and line columns
-    /// show a percentage and a covered/valid pair, not the stored numbers, so the grid does not offer a
-    /// filter on them.
-    /// </summary>
+    /// <summary> The header filters of the coverage-by-assembly grid. The assemblies are built in
+    /// memory from the run's coverage reports, so the map runs over that list. The rate and line
+    /// columns show a percentage and a covered/valid pair, not the stored numbers, so the grid does
+    /// not offer a filter on them. </summary>
     internal static readonly GridQueryMap<CoverageAssemblyDto> CoverageAssemblyColumns = new GridQueryMap<CoverageAssemblyDto>()
         .Text("Name", assembly => assembly.Name);
 
@@ -132,8 +135,8 @@ public class PipelineArtifactService(IPipelineRepository repo, TimeProvider time
     public async Task<PipelineCoverageSummaryDto?> PublishCoverageAsync(
         int runId, PublishCoverageRequest request, CancellationToken ct = default)
     {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-        if (run is null) return null;
+        var pipelineId = await runs.GetPipelineIdForRunAsync(runId, ct).ConfigureAwait(false);
+        if (pipelineId is null) return null;
 
         var result = CoverageResultParser.Parse(request.XmlContent, runId, request.StageName, request.StepName, logger);
         if (result is null) return null;
@@ -206,8 +209,8 @@ public class PipelineArtifactService(IPipelineRepository repo, TimeProvider time
 
     public async Task<bool> PublishComplexityAsync(int runId, PublishComplexityRequest request, CancellationToken ct = default)
     {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-        if (run is null) return false;
+        var pipelineId = await runs.GetPipelineIdForRunAsync(runId, ct).ConfigureAwait(false);
+        if (pipelineId is null) return false;
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var metrics = new List<RunMetric>
@@ -270,8 +273,8 @@ public class PipelineArtifactService(IPipelineRepository repo, TimeProvider time
     public async Task<PipelineLintSummaryDto?> PublishLintAsync(
         int runId, PublishLintRequest request, CancellationToken ct = default)
     {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-        if (run is null) return null;
+        var pipelineId = await runs.GetPipelineIdForRunAsync(runId, ct).ConfigureAwait(false);
+        if (pipelineId is null) return null;
 
         var result = LintResultParser.Parse(request.SarifContent, runId, request.StageName, request.StepName, logger);
         if (result is null) return null;

@@ -7,8 +7,8 @@
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <EnableAetheusTelemetry Condition="'$(EnableAetheusTelemetry)' == ''">false</EnableAetheusTelemetry>
     <EnableAetheusWebAnalytics Condition="'$(EnableAetheusWebAnalytics)' == ''">false</EnableAetheusWebAnalytics>
-    <AetheusTelemetryVersion Condition="'$(AetheusTelemetryVersion)' == ''">1.1.0</AetheusTelemetryVersion>
-    <AetheusWebAnalyticsVersion Condition="'$(AetheusWebAnalyticsVersion)' == ''">1.0.0</AetheusWebAnalyticsVersion>
+    <AetheusTelemetryVersion Condition="'$(AetheusTelemetryVersion)' == ''">1.2.0</AetheusTelemetryVersion>
+    <AetheusWebAnalyticsVersion Condition="'$(AetheusWebAnalyticsVersion)' == ''">1.1.0</AetheusWebAnalyticsVersion>
     <DefineConstants Condition="'$(EnableAetheusTelemetry)' == 'true'">$(DefineConstants);AETHEUS_TELEMETRY</DefineConstants>
     <DefineConstants Condition="'$(EnableAetheusWebAnalytics)' == 'true'">$(DefineConstants);AETHEUS_WEB_ANALYTICS</DefineConstants>
   </PropertyGroup>

@@ -167,8 +167,8 @@ public sealed class AnalysisController(
         return Ok(await runResults.GetRunResultAsync(runId, ct));
     }
 
-    /// <summary>Recette R-485: one page of the findings a run and the runs it triggered observed, with
-    /// the counts of the whole set. Every run of the set must be readable.</summary>
+    /// <summary>One page of the findings a run and the runs it triggered observed, with the counts
+    /// of the whole set. Every run of the set must be readable.</summary>
     [HttpGet("runs/findings")]
     public async Task<ActionResult<AnalysisRunFindingsPageDto>> GetRunFindings(
         [FromQuery] AnalysisRunFindingsRequest request,
@@ -205,7 +205,8 @@ public sealed class AnalysisController(
         return Ok(await service.GetPortfolioAsync(accessibleIds, request, ct));
     }
 
-    /// <summary>Recette R-224: the organizations, projects and scanners the portfolio's column filters offer.</summary>
+    /// <summary>The organizations, projects and scanners the portfolio's column filters
+    /// offer.</summary>
     [HttpGet("portfolio/filter-values")]
     public async Task<ActionResult<AnalysisPortfolioFilterValuesDto>> GetPortfolioFilterValues(CancellationToken ct)
     {
@@ -436,8 +437,8 @@ public sealed class AnalysisController(
         return CreatedAtAction(nameof(GetFindingDecisions), new { findingId }, decision);
     }
 
-    /// <summary>Recette R2-027: reverts the active decision of the finding (kept in its history,
-    /// audited); the finding is open again. The same permission as deciding.</summary>
+    /// <summary>Reverts the active decision of the finding (kept in its history, audited); the
+    /// finding is open again. The same permission as deciding.</summary>
     [HttpDelete("findings/{findingId:int}/decisions/active")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

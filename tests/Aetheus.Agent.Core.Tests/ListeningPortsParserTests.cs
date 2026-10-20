@@ -3,12 +3,8 @@ using Aetheus.Agent.Core.Collectors;
 
 namespace Aetheus.Agent.Core.Tests;
 
-/// <summary>
-/// PLAN-005 lot 2. The parsing is where a port observation is right or wrong, so it is exercised
-/// against real captured output rather than through a process launch. A misparsed line does not fail
-/// loudly: it silently reports the wrong port as occupied, which is exactly the lie the registry exists
-/// to prevent.
-/// </summary>
+/// <summary>Use captured command output to verify listening-port parsing independently of process
+/// execution, because a misparsed line can incorrectly reserve a port.</summary>
 public class ListeningPortsParserTests
 {
     private const string SsOutput = """

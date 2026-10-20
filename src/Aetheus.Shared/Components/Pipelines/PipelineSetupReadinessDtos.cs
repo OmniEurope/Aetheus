@@ -56,11 +56,8 @@ public sealed record PipelineSetupReadinessCheckDto
     public List<string> Items { get; init; } = [];
 }
 
-/// <summary>
-/// PLAN-003 lot 30 / D22: what the one-click "create what the templates require" produced. Every
-/// library and vault is created in the project with its keys and EMPTY values: the operator types the
-/// values afterwards. Nothing here is a value copied from another project.
-/// </summary>
+/// <summary>Describes libraries and vaults created for template requirements, with keys but empty
+/// values for the operator to fill. No value is copied from another project.</summary>
 public sealed record PipelineRequirementsProvisionResultDto
 {
     public List<ProvisionedRequirementDto> Libraries { get; init; } = [];
@@ -82,9 +79,8 @@ public sealed record ProvisionedRequirementDto
     public string? KeysCopiedFrom { get; init; }
 }
 
-/// <summary>
-/// PLAN-003 lot 30: a library or vault the project's existing pipelines declare in <c>requires:</c>
-/// and the project does not have. Drives the "Getting started" library step and the overview warning.
+/// <summary> A library or vault the project's existing pipelines declare in <c>requires:</c> and
+/// the project does not have. Drives the "Getting started" library step and the overview warning.
 /// </summary>
 public sealed record UnmetRequirementDto
 {

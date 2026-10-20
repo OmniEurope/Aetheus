@@ -6,8 +6,8 @@
 {
     <OmniCard Class="run-overview-card run-source-tile">
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.FolderOpen" Class="run-tile-icon" /> @L["SourceRepository"]</OmniText>
-        @* Recette R-149: repository and branch fill the value slot, the commit the
-           footer, all with the same label-left, value-right sub-row. *@
+        @* Repository and branch fill the value slot, the commit the footer, all with the same
+           label-left, value-right sub-row. *@
         <div class="run-tile-main run-tile-main-rows">
             @if (RepositoryHref is not null)
             {
@@ -29,7 +29,7 @@
             {
                 <span class="run-tile-subrow">
                     <span class="run-tile-sublabel"><OmniIcon Name="OmniIconName.GitCommit" Class="run-tile-icon" /> @L["Commit"]</span>
-                    @* R-373: CommitHref is null only for a run with neither repository nor project. *@
+                    @* CommitHref is null only for a run with neither repository nor project. *@
                     <ShortId Value="@CommitSha" Href="@CommitHref" Copyable="false" Class="cross-link-sha run-tile-value" />
                 </span>
             }

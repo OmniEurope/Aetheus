@@ -8,9 +8,8 @@ using NSubstitute.ExceptionExtensions;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// Recette R1-17: the mailbox service behind a fake IMAP/SMTP connector (no mail server is reached here).
-/// </summary>
+/// <summary> The mailbox service behind a fake IMAP/SMTP connector (no mail server is reached
+/// here). </summary>
 public sealed class MailboxServiceTests
 {
     private const string Password = "typed-mailbox-password";

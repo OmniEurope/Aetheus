@@ -1,16 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-# Render a versioned environment template (deploy/env/*.env.sample) to standard output (R-248).
-#
-#   render-env-sample.sh SAMPLE
-#
-# The template names every key, in order; this script only resolves the placeholders it declares,
-# so the repository holds the shape of the file and the host alone holds its secrets. Each
-# non-comment line is KEY=VALUE, and VALUE is either a literal copied as is or exactly one of:
-#   #{PUBLIC_API_URL}# #{PUBLIC_APP_URL}# #{APP_VERSION}#   the run value of that name, non-empty
-#   #{SECRET_HEX_<N>}#                                      `openssl rand -hex <N>`, generated here
-# Anything else that looks like a placeholder, a duplicate key, a malformed line or an empty result
-# fails the whole render: the caller writes nothing rather than a partial environment.
+# Render only the versioned environment template's declared placeholders so the repository owns the
+# file's shape and the host owns its secrets; reject malformed or incomplete output before writing
+# an environment. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 set -eu
 
 fail() {

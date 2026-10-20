@@ -73,8 +73,8 @@ public enum OperationKind
     /// </summary>
     ServiceInstall = 210,
 
-    /// <summary>S-FEAT-W8KN: uninstall an OS package - <c>sudo -n /usr/bin/apt-get purge -y &lt;pkg&gt;</c> (recette R2-031).
-    /// Same allow-list and sudoers drop-in as <see cref="ServiceInstall"/>.</summary>
+    /// <summary>Uninstall an OS package with sudo apt-get purge under the same allow-list and exact
+    /// sudoers grant as <see cref="ServiceInstall"/>.</summary>
     ServiceUninstall = 211,
 
     /// <summary>
@@ -87,6 +87,14 @@ public enum OperationKind
     /// server-management module's patch-manage capability.
     /// </summary>
     SystemPackageUpgrade = 212,
+
+    /// <summary>Recette R3-59: the read-only list of every package installed on the host, read by the agent
+    /// itself without privilege (<c>dpkg-query -W</c>, or <c>rpm -qa</c> where dpkg is absent). One
+    /// <c>PACKAGE name version</c> line each, then <c>TOTAL n</c> (<see
+    /// cref="Aetheus.Shared.Components.Servers.InstalledPackages"/>). Nothing is installed or removed:
+    /// uninstalling an arbitrary package stays refused (no sudo rule without a fixed list). Target
+    /// <c>"-"</c>. Gated by the <c>package.inventory</c> software capability, not by the package grant.</summary>
+    PackageInventory = 213,
 
     // Apache
     ApacheReload = 300,
@@ -176,13 +184,13 @@ public enum OperationKind
     /// --cert-name &lt;name&gt; --delete-after-revoke</c>. Target is the certificate name.</summary>
     CertbotRevoke = 324,
 
-    CertbotNormalize = 325,    // PLAN-007: certbot reconfigure --webroot on each off-convention lineage. Target unused.
-    CertbotRenewalCheck = 326, // PLAN-007: certbot renew --dry-run, outcome kept for the collector. Target unused.
+    CertbotNormalize = 325,    // Reconfigure off-convention Certbot lineages to webroot; target is unused.
+    CertbotRenewalCheck = 326, // Rehearse Certbot renewal with dry-run and retain the result for collection; target is unused.
 
     // RKHunter (items #10.2/#10.3) - same controlled-sudo recipe as Apache. Target unused.
-    RkhunterScan = 350,        // sudo /usr/bin/rkhunter --check --skip-keypress --nocolors --report-warnings-only
-    RkhunterUpdate = 351,      // sudo /usr/bin/rkhunter --update --nocolors
-    RkhunterPropupd = 352,     // sudo /usr/bin/rkhunter --propupd --nocolors
+    RkhunterScan = 350,        // sudo aetheus-rkhunter check (helper runs rkhunter --check --skip-keypress --nocolors --report-warnings-only)
+    RkhunterUpdate = 351,      // sudo aetheus-rkhunter update (rkhunter --update --nocolors)
+    RkhunterPropupd = 352,     // sudo aetheus-rkhunter propupd (rkhunter --propupd --nocolors)
 
     // Agent self-management
     /// <summary>
@@ -193,9 +201,8 @@ public enum OperationKind
     /// </summary>
     AgentSelfUpdate = 400,
 
-    // Mail service control + queue + config check. PLAN-005: all routed through the root-owned
-    // mail-manage helper (service / queue-flush / queue-list / check); the former direct
-    // `sudo systemctl ... postfix.service` argv never matched the service-control sudoers grant.
+    // Route mail service, queue and configuration operations through the root-owned mail-manage
+    // helper.
     MailStartPostfix = 500,
     MailStopPostfix = 501,
     MailRestartPostfix = 502,
@@ -267,7 +274,7 @@ public enum OperationKind
     /// rides in <c>AETHEUS_MAIL_DKIM_SELECTOR</c>.</summary>
     MailDkimRead = 521,
 
-    // PLAN-005 - mail-manage helper version 2. Same aetheus-mail grant; the helper re-validates.
+    // Mail helper operations use the aetheus-mail grant and helper-side validation.
     /// <summary>Point Postfix and Dovecot at <c>/etc/letsencrypt/live/&lt;hostname&gt;</c> and install the
     /// renewal reload hook (<c>mail-manage install-cert</c>). Target is the mail hostname.</summary>
     MailInstallCertificate = 522,
@@ -297,17 +304,44 @@ public enum OperationKind
     /// <summary>Report the Maildir size of every virtual mailbox (<c>QUOTA email kib</c> lines). Target <c>"-"</c>.</summary>
     MailQuotaReport = 529,
 
-    /// <summary>Erase the whole mail stack (<c>mail-manage purge</c>, helper version 3): services, packages,
-    /// configuration, mailboxes, DKIM keys and the ownership marker, so it can be configured again from
-    /// scratch ("Réinstaller la messagerie", recette R2-083 / R2-088). Target <c>"-"</c>.</summary>
+    /// <summary>Purge the mail stack services, packages, configuration, mailboxes, DKIM keys and
+    /// ownership marker through mail-manage purge; target is "-".</summary>
     MailPurge = 530,
 
-    /// <summary>Recette R2-080: whether the server can open an outbound SMTP connection (TCP port 25), a
-    /// prerequisite of sending mail that many hosting providers block. The agent connects to the target
-    /// host on port 25 itself (no helper, no privilege), reads the greeting and prints one
-    /// <c>CHECK outbound-25</c> line. Target is the host name to reach. Outside the mail-manage range on
-    /// purpose: it needs only an agent recent enough to publish <c>mail.outbound-probe</c>.</summary>
+    /// <summary>Whether the server can open an outbound SMTP connection (TCP port 25), a
+    /// prerequisite of sending mail that many hosting providers block. The agent connects to the
+    /// target host on port 25 itself (no helper, no privilege), reads the greeting and prints one
+    /// <c>CHECK outbound-25</c> line. Target is the host name to reach. Outside the mail-manage
+    /// range on purpose: it needs only an agent recent enough to publish
+    /// <c>mail.outbound-probe</c>.</summary>
     MailOutboundProbe = 531,
+
+    /// <summary>Recette R1-41: (re)creates the Dovecot master user Aetheus opens mailboxes with
+    /// (<c>mail-manage master-set</c>, helper version 4): its hashed password in
+    /// <c>/etc/dovecot/master-users</c>, the master passdb and <c>auth_master_user_separator</c>, then a
+    /// Dovecot reload. Target <c>"-"</c>; the password travels in <c>AETHEUS_MAIL_MASTER_PASSWORD</c>
+    /// (stdin). Same mail-manage capability as the other mail kinds.</summary>
+    MailMasterAccess = 532,
+
+    /// <summary>Recette R3-23 / R3-26: the read-only check that nothing of a mail stack is left after an
+    /// uninstall or a reinstall: the mail packages dpkg still knows (installed or with configuration files
+    /// left, <c>rc</c>), the configuration and data directories, the Aetheus ownership marker, and the mail
+    /// ports still listening. The agent reads them itself (no helper, no privilege) and prints one
+    /// <c>LEFTOVER kind name detail</c> line each, then <c>CLEAN yes|no</c>. Target <c>"-"</c>. Gated by the
+    /// <c>mail.leftovers-check</c> software capability, like <see cref="MailOutboundProbe"/>.</summary>
+    MailLeftoversCheck = 533,
+
+    /// <summary>DEP-005: writes the mailbox quota Aetheus stores (MiB, 0 = unlimited) on the account's
+    /// Dovecot users-file line (<c>mail-manage set-quota</c>), where the Dovecot quota plugin enforces it
+    /// on IMAP APPEND and LMTP delivery. Target is the address; the quota travels in
+    /// <c>AETHEUS_MAIL_QUOTA_MB</c>. Same mail-manage capability as the other mail kinds.</summary>
+    MailSetQuota = 534,
+
+    /// <summary>Applies the shorter Postfix retry timings (<c>minimal_backoff_time</c> 60s,
+    /// <c>maximal_backoff_time</c> 900s, <c>queue_run_delay</c> 60s) on an already provisioned host through
+    /// <c>mail-manage retry-tuning</c>. Target <c>"-"</c>; the values are fixed in the helper, never an input.
+    /// Same mail-manage capability as the other mail kinds.</summary>
+    MailRetryTuning = 535,
 
     // Portsentry (service control + status + unblock)
     PortsentryStart = 550,
@@ -353,9 +387,8 @@ public enum OperationKind
     /// first allows the admin SSH port so the default-deny policy can't lock the operator out.</summary>
     FirewallSetEnabled = 563,
 
-    // Port observation (PLAN-005 lot 2) - reads which TCP ports are listening on the host and reports
-    // them to the registry. Unprivileged: `ss -ltnH` on Linux, `Get-NetTCPConnection -State Listen` on
-    // Windows, both argv-only. No target; the operation always scans the whole host.
+    // Observe host TCP listeners without privilege and report them to the registry. Use ss or
+    // Get-NetTCPConnection through argv-only execution; no target is required.
     /// <summary>Scan the host's listening TCP ports on demand and report them as <c>Observed</c>
     /// reservations. Target is empty. Requires the <c>ports.observe</c> capability.</summary>
     PortsObserve = 570,
@@ -511,13 +544,9 @@ public enum OperationKind
     /// </summary>
     BlueGreenRetire = 618,
 
-    /// <summary>
-    /// PLAN-003 2.7: put traffic back on the colour kept in reserve by the last commit (N-1), in
-    /// seconds: no restart, no migration, only the recorded upstream configuration and a reload. The
-    /// colour it leaves becomes the reserve in turn, so the operation can be undone the same way.
-    /// Refused when no reserve is recorded, when a transaction is open, or when the reserve colour no
-    /// longer answers its readiness probe. Target is the Compose project.
-    /// </summary>
+    /// <summary>Restore the recorded reserve upstream configuration without restart or migration
+    /// and make the departed colour the reserve. Refuse absent reserves, open transactions or
+    /// failed readiness; target is the Compose project.</summary>
     BlueGreenRevert = 619,
 
     // App backups (ADR-024 4.3) - dump a managed app's DB + archive its files into a retained artifact,
@@ -540,43 +569,29 @@ public enum OperationKind
     /// the backup/project/server relationship; never by the scheduler.</summary>
     BackupRestore = 622,
 
-    /// <summary>
-    /// PLAN-006 lot 11.3: run one .NET test project, collect its TRX and optional Cobertura evidence,
-    /// and publish a classified gate status.
-    ///
-    /// The classification is the reason this is typed rather than a shell step: a suite that RAN and
-    /// reported failures is a finding the assurance contract grades, while a suite that produced no
-    /// usable TRX is a technical failure of the run itself. Every project that wrote that rule in
-    /// YAML got it subtly wrong, because the natural shell form (<c>dotnet test || exit</c>) collapses
-    /// both cases into one.
-    ///
-    /// The target is the test project path, relative to the workspace. Everything else travels in
-    /// <c>AETHEUS_DOTNET_TEST_*</c> environment variables. Handled by
-    /// <c>PipelineDotnetTestOperationExecutor</c> in <c>Aetheus.Agent.Core</c>.
-    /// </summary>
+    /// <summary>Execute the target .NET test project and classify TRX evidence as clean, findings
+    /// or technical failure through PipelineDotnetTestOperationExecutor. Additional inputs use
+    /// AETHEUS_DOTNET_TEST_* environment variables.</summary>
     PipelineDotnetTest = 623,
 
-    /// <summary>
-    /// PLAN-006 lot 11.3: aggregate statuses published by earlier steps into one verdict, publish it,
-    /// and optionally fail the run on it.
-    ///
-    /// The rule that makes this worth typing is the absent case: a status nobody published must read
-    /// as a failure, never as a pass. Written in shell the default falls the other way round, because
-    /// an unset variable expands to the empty string and every naive comparison against "0" then
-    /// depends on quoting. A gate that passes because its input never arrived is the worst possible
-    /// failure of a gate.
-    ///
-    /// The target is unused; the statuses and the policy travel in <c>AETHEUS_GATE_*</c> environment
-    /// variables. Handled by <c>PipelineGateStatusOperationExecutor</c> in <c>Aetheus.Agent.Core</c>.
-    /// </summary>
+    /// <summary>Aggregate gate statuses with missing evidence treated as failure through
+    /// PipelineGateStatusOperationExecutor. AETHEUS_GATE_* supplies statuses and policy; target is
+    /// unused.</summary>
     PipelineGateStatus = 624,
 
-    /// <summary>
-    /// PLAN-003 2.4: publish the score of a Stryker mutation run as the metric
-    /// <c>reliability.mutation.score</c>. <c>Command</c> is a JSON array of glob patterns matching
-    /// exactly one <c>mutation-report.json</c>. Handled by <c>PipelineMutationPublisher</c>.
-    /// </summary>
+    /// <summary>Publish reliability.mutation.score through PipelineMutationPublisher from exactly
+    /// one mutation report selected by the JSON glob array in Command.</summary>
     PipelinePublishMutation = 625,
+
+    /// <summary>Run a build-level function of PipelineFunctionCatalog (a <c>type: aetheus</c> step).
+    /// Target is the function name, which must be a Build entry of the catalog; the <c>with:</c>
+    /// values travel in AETHEUS_FUNCTION_PARAMETERS_JSON.</summary>
+    PipelineFunction = 626,
+
+    /// <summary>Run a deployment-level function of PipelineFunctionCatalog. Same contract as
+    /// <see cref="PipelineFunction"/>, but the target must be a Deployment entry and the task sits
+    /// behind the deployment.functions grant.</summary>
+    PipelineDeploymentFunction = 627,
 
     // Cron (Phase 3) - typed save/delete via the aetheus-cron-apply sudo helper. The helper is the
     // security boundary: root-owned, agent-non-writable, re-validates every field, and can ONLY write

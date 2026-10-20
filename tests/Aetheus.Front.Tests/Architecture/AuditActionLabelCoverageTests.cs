@@ -5,15 +5,9 @@ using System.Xml.Linq;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R-452: the audit log showed raw resource keys (<c>AuditAction_DeletedSecret</c>) because
-/// only 17 of the actions the backend writes had a label. This guard reads every audit action the
-/// backend passes to <c>IAuditService.LogAsync</c> (the literal ones, the literal branches of a
-/// conditional, and the <c>$"Prefix{value}"</c> families expanded over their enum) and requires an
-/// <c>AuditAction_{action}</c> label in both cultures. A new interpolated family fails until it is
-/// expanded below, so no action slips through as a key. An action held in a variable is not read;
-/// the page spells such an action out rather than showing a key.
-/// </summary>
+/// <summary>Audit action literals and supported interpolated families require labels in both
+/// cultures. Unsupported families fail the guard; variable-held actions remain outside this source
+/// scan.</summary>
 public sealed class AuditActionLabelCoverageTests
 {
     private static readonly Regex LogCall = new(@"\b\w*[Aa]udit\w*\s*\.\s*LogAsync\s*\(", RegexOptions.Compiled);

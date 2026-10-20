@@ -4,7 +4,8 @@ using Microsoft.Extensions.Configuration;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>R-464: the HTTPS redirection runs only where the middleware could find a port to redirect to.</summary>
+/// <summary>The HTTPS redirection runs only where the middleware could find a port to redirect
+/// to.</summary>
 public sealed class HttpsPortConfigurationTests
 {
     private static IConfiguration Configuration(params (string Key, string Value)[] values) =>

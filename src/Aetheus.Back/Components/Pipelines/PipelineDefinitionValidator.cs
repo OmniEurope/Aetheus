@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Shared.Components.Pipelines;
 
 namespace Aetheus.Back.Components.Pipelines;
 
@@ -11,7 +12,7 @@ internal static class PipelineDefinitionValidator
         "restore-backup", "scanner", "analysis-gate", "publish-observability", "ai", "smoke",
         "dotnet-test", "gate-status", "mutation",
         "bluegreen-migrate", "bluegreen-up", "bluegreen-switch", "bluegreen-commit", "bluegreen-rollback",
-        "bluegreen-retire", "bluegreen-revert", "advance-branch"
+        "bluegreen-retire", "bluegreen-revert", "advance-branch", PipelineFunctionCatalog.StepType
     };
 
     internal static bool IsKnownStepType(string type) => KnownTypedStepTypes.Contains(type);
@@ -21,16 +22,41 @@ internal static class PipelineDefinitionValidator
         ICollection<string> errors,
         ICollection<string> warnings)
     {
-        if (definition.VariableLibraries.Any(string.IsNullOrWhiteSpace))
-            errors.Add("Variable library names cannot be empty.");
-        if (definition.Vaults.Any(string.IsNullOrWhiteSpace))
-            errors.Add("Vault names cannot be empty.");
+        ValidateResourceNames(definition, errors);
         if (definition.Branches.Any(string.IsNullOrWhiteSpace))
             errors.Add("Branch filter entries cannot be empty.");
         if (!string.IsNullOrWhiteSpace(definition.SourceBranch)
             && !PipelineBranchValidator.IsValid(definition.SourceBranch))
             errors.Add("The configured source_branch is invalid.");
         ValidateSource(definition.Source, errors);
+        ValidateWebhookFilters(definition, errors, warnings);
+        ValidateReleaseNumber(definition, errors);
+        if (definition.Stages.Count == 0)
+            errors.Add("Pipeline must have at least one stage.");
+    }
+
+    // Library and vault names: never empty, and only the expressions a run can resolve.
+    private static void ValidateResourceNames(PipelineYamlDefinition definition, ICollection<string> errors)
+    {
+        if (definition.VariableLibraries.Any(string.IsNullOrWhiteSpace))
+            errors.Add("Variable library names cannot be empty.");
+        if (definition.Vaults.Any(string.IsNullOrWhiteSpace))
+            errors.Add("Vault names cannot be empty.");
+        // R3-67: `${{ project.slug }}` is the one expression a library or vault name may carry; any
+        // other would reach the lookup as written and never match a resource.
+        if (definition.VariableLibraries.Concat(definition.Vaults)
+                .Concat(definition.Requires?.Libraries ?? [])
+                .Concat(definition.Requires?.Vaults ?? [])
+                .Any(PipelineProjectResourceNames.HasUnsupportedExpression))
+            errors.Add($"Library and vault names accept only the {PipelineProjectResourceNames.SlugExpression} and ${{{{ parameters.<name> }}}} expressions.");
+    }
+
+    // Branch, supersede and path filters only mean something for the webhook trigger.
+    private static void ValidateWebhookFilters(
+        PipelineYamlDefinition definition,
+        ICollection<string> errors,
+        ICollection<string> warnings)
+    {
         if (definition.Branches.Count > 0
             && !string.Equals(definition.Trigger, "webhook", StringComparison.OrdinalIgnoreCase))
             warnings.Add("`branches:` filter only applies to the webhook trigger; it will be ignored for this trigger type.");
@@ -42,38 +68,46 @@ internal static class PipelineDefinitionValidator
         if (definition.PathsIgnore.Count > 0
             && !string.Equals(definition.Trigger, "webhook", StringComparison.OrdinalIgnoreCase))
             warnings.Add("`paths_ignore:` only applies to the webhook trigger; it will be ignored for this trigger type.");
-        ValidateReleaseNumber(definition, errors);
-        if (definition.Stages.Count == 0)
-            errors.Add("Pipeline must have at least one stage.");
     }
 
-    // Recette R2-110: release_number: takes one mode. Its own method so ValidateDefinitionBasics stays
-    // under the grade-A cyclomatic threshold.
+    // The release-number setting accepts one mode.
     private static void ValidateReleaseNumber(PipelineYamlDefinition definition, ICollection<string> errors)
     {
         if (definition.ReleaseNumber is not null && !PipelineReleaseNumbers.Allocates(definition))
             errors.Add(PipelineReleaseNumbers.InvalidModeMessage);
     }
 
-    // Recette R-534: the source: block names a repository of the project by its slug. Whether that
-    // repository exists is a fact of the installation, checked when a run is prepared.
+    // The source: block names a repository of the project by its slug. Whether that repository
+    // exists is a fact of the installation, checked when a run is prepared.
     private static void ValidateSource(PipelineSourceDefinition? source, ICollection<string> errors)
     {
         if (source is null) return;
-        var repository = source.Repository.Trim();
+        ValidateSourceRepository(source.Repository.Trim(), errors);
+        if (!string.IsNullOrWhiteSpace(source.Branch) && !PipelineBranchValidator.IsValid(source.Branch.Trim()))
+            errors.Add("The configured source.branch is invalid.");
+        ValidateSourceMatchBranch(source, errors);
+        ValidateSourceMatchExcludeFile(source, errors);
+    }
+
+    private static void ValidateSourceRepository(string repository, ICollection<string> errors)
+    {
         if (repository.Length == 0)
             errors.Add("source.repository is required: the slug of a repository attached to the project.");
         else if (repository.Length > 200 || repository.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')))
             errors.Add("source.repository must be a repository slug (letters, digits, '-', '_', '.').");
-        if (!string.IsNullOrWhiteSpace(source.Branch) && !PipelineBranchValidator.IsValid(source.Branch.Trim()))
-            errors.Add("The configured source.branch is invalid.");
-        if (!string.IsNullOrWhiteSpace(source.MatchBranch))
-        {
-            if (!source.MustMatchDefinition)
-                errors.Add("source.match_branch is only read when source.must_match_definition is true.");
-            if (!PipelineBranchValidator.IsValid(source.MatchBranch.Trim()))
-                errors.Add("The configured source.match_branch is invalid.");
-        }
+    }
+
+    private static void ValidateSourceMatchBranch(PipelineSourceDefinition source, ICollection<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(source.MatchBranch)) return;
+        if (!source.MustMatchDefinition)
+            errors.Add("source.match_branch is only read when source.must_match_definition is true.");
+        if (!PipelineBranchValidator.IsValid(source.MatchBranch.Trim()))
+            errors.Add("The configured source.match_branch is invalid.");
+    }
+
+    private static void ValidateSourceMatchExcludeFile(PipelineSourceDefinition source, ICollection<string> errors)
+    {
         if (string.IsNullOrWhiteSpace(source.MatchExcludeFile)) return;
         if (!source.MustMatchDefinition)
             errors.Add("source.match_exclude_file is only read when source.must_match_definition is true.");
@@ -81,6 +115,18 @@ internal static class PipelineDefinitionValidator
         if (!path.StartsWith(".pipeline/configs/", StringComparison.Ordinal)
             || path.Split('/').Any(segment => segment is "." or ".."))
             errors.Add("source.match_exclude_file must be a file under .pipeline/configs/.");
+    }
+
+    /// <summary>Recette R-14: <c>deployment_role</c> is <c>start</c> or <c>rollback</c>, and a rollback stage is a
+    /// failure handler, or the run would judge as undone a deployment nothing undid.</summary>
+    private static void ValidateDeploymentRole(PipelineStageDefinition stage, List<string> errors)
+    {
+        if (stage.DeploymentRole is not { } role) return;
+        if (!PipelineDeploymentRoles.All.Contains(role.Trim(), StringComparer.OrdinalIgnoreCase))
+            errors.Add($"Stage '{stage.Name}': deployment_role must be one of {string.Join(", ", PipelineDeploymentRoles.All)}.");
+        else if (string.Equals(role.Trim(), PipelineDeploymentRoles.Rollback, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(stage.Condition?.Trim(), "failed()", StringComparison.OrdinalIgnoreCase))
+            errors.Add($"Stage '{stage.Name}': deployment_role: rollback requires condition: failed().");
     }
 
     internal static void ValidateStages(
@@ -94,10 +140,11 @@ internal static class PipelineDefinitionValidator
                 errors.Add("Stage name cannot be empty.");
             if (OsTypeHelper.IsUnrecognized(stage.Os))
                 warnings.Add($"Stage '{stage.Name}' has an unrecognized os '{stage.Os}' - expected 'linux' or 'windows'; it will be ignored (no OS constraint).");
-            // PLAN-003 2.7: a window longer than a day is not a confirmation any more. Recette R-370: the
-            // pipeline's own approval no longer needs an environment to be recorded against.
+            // Stage confirmation windows are limited to a day and can exist independently of an
+            // environment.
             if (stage.ApprovalTimeoutMinutes is { } minutes && minutes is < 1 or > 1440)
                 errors.Add($"Stage '{stage.Name}': approval_timeout_minutes must be between 1 and 1440.");
+            ValidateDeploymentRole(stage, errors);
             if (stage.Jobs.Count > 0)
                 ValidateJobs(stage, errors, warnings);
             else
@@ -120,7 +167,7 @@ internal static class PipelineDefinitionValidator
         var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var stage in YamlParsingHelper.FlattenJobs(definition))
         {
-            // A stage's own bundle, then each artifacts step (PLAN-003 4.5): one namespace for both.
+            // Stage bundles and artifact steps share one artifact-name namespace.
             var publishers = stage.Steps
                 .Where(step => IsArtifactsStep(step) && !string.IsNullOrWhiteSpace(step.ArtifactName))
                 .Select(step => (Name: step.ArtifactName!.Trim(), Owner: $"step '{step.Name}' of stage '{stage.Name}'"));
@@ -143,11 +190,8 @@ internal static class PipelineDefinitionValidator
     private static bool IsArtifactsStep(PipelineStepDefinition step) =>
         string.Equals(step.Type, "artifacts", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// PLAN-003 4.5: an artifacts step names what it publishes and which files. It collects from the
-    /// agent's workspace, so it is refused in a container-isolated stage, whose files live in the
-    /// step containers rather than in that workspace.
-    /// </summary>
+    /// <summary>Artifact steps collect named files from the agent workspace, so container-isolated
+    /// stages cannot use them.</summary>
     private static void ValidateArtifactsStep(List<string> errors, PipelineStepDefinition step, PipelineStageDefinition stage, string context)
     {
         if (!IsArtifactsStep(step))
@@ -234,9 +278,9 @@ internal static class PipelineDefinitionValidator
     {
         if (string.IsNullOrWhiteSpace(step.Name))
             errors.Add($"Step name cannot be empty in {context}.");
-        // Recette R2-041: a type this backend does not know yet (written for a newer one) is a warning,
-        // not an invalid definition, so adding a step type never blocks the delivery that brings it.
-        // The step itself fails visibly if it ever runs here (PipelineStepTaskDispatcher).
+        // A type this backend does not know yet (written for a newer one) is a warning, not an
+        // invalid definition, so adding a step type never blocks the delivery that brings it. The
+        // step itself fails visibly if it ever runs here (PipelineStepTaskDispatcher).
         if (!string.IsNullOrWhiteSpace(step.Type) && !IsKnownStepType(step.Type))
             warnings.Add($"Step '{step.Name}' in {context} uses the unknown type '{step.Type}'; it fails if it runs on this backend.");
         else if (string.IsNullOrWhiteSpace(step.Shell) && !step.Checkout && string.IsNullOrWhiteSpace(step.Type))
@@ -245,6 +289,7 @@ internal static class PipelineDefinitionValidator
             errors.Add($"Step '{step.Name}' retry_count cannot be negative.");
         WarnAboutInlineLogic(warnings, step, context);
         PipelineAiStepValidator.Validate(errors, step, context);
+        PipelineFunctionStepValidator.Validate(errors, step, context);
         PipelineStepAnalysisValidator.Validate(errors, step, context, environment);
         if (string.Equals(step.Type, "coverage", StringComparison.OrdinalIgnoreCase)
             && step.MinCoverage is > 0)
@@ -435,8 +480,8 @@ internal static class PipelineDefinitionValidator
             errors.Add($"Step '{step.Name}' in {context} requires a valid source_branch when inherit_source is false.");
     }
 
-    // Recette R2-001: the branch is required. A literal name is checked here; one built from a variable
-    // is checked when the step runs, where the backend refuses a name git would not take.
+    // The branch is required. A literal name is checked here; one built from a variable is checked
+    // when the step runs, where the backend refuses a name git would not take.
     private static void ValidateAdvanceBranchStep(
         ICollection<string> errors,
         PipelineStepDefinition step,
@@ -456,7 +501,7 @@ internal static class PipelineDefinitionValidator
             errors.Add($"Step '{step.Name}' in {context} names an invalid branch '{branch}'.");
     }
 
-    private static bool IsSafeApacheDestinationPattern(string value)
+    internal static bool IsSafeApacheDestinationPattern(string value)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 220
             || value.Contains('/') || value.Contains('\\') || value.Contains("..", StringComparison.Ordinal))

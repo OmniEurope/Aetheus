@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Who cancels a run and why (recette R2-103): written to the audit log and kept on the run, so the run
+/// <summary> Who cancels a run and why : written to the audit log and kept on the run, so the run
 /// page can say who stopped it. <see cref="By"/> is a user name, or <see cref="SystemAuthor"/> when
-/// Aetheus cancels on its own (latest-wins replacement, cancellation recovery).
-/// </summary>
+/// Aetheus cancels on its own (latest-wins replacement, cancellation recovery). </summary>
 public sealed record PipelineRunCancellation(string By, string Reason)
 {
     public const string SystemAuthor = "system";

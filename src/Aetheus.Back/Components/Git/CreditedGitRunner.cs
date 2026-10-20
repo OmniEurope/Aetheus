@@ -21,7 +21,11 @@ public readonly record struct CreditedGitResult(int ExitCode, string Output, str
 /// <c>http.extraHeader</c> Authorization; SSH uses an ephemeral private-key file (0600) with a pinned
 /// <c>known_hosts</c> and <c>StrictHostKeyChecking=yes</c> (we never disable host verification).
 /// </summary>
-public sealed class CreditedGitRunner(ILogger<CreditedGitRunner> logger)
+/// <remarks>
+/// <c>tempRoot</c> overrides the directory holding the ephemeral credential files (default: the system
+/// temp directory); tests pass a private directory so they never observe other processes.
+/// </remarks>
+public sealed class CreditedGitRunner(ILogger<CreditedGitRunner> logger, string? tempRoot = null)
 {
     private static readonly TimeSpan DefaultTimeout = BackendRuntimeDefaults.GitLongRunningTimeout;
 
@@ -85,7 +89,7 @@ public sealed class CreditedGitRunner(ILogger<CreditedGitRunner> logger)
         }
     }
 
-    private static void ApplyCredential(
+    private void ApplyCredential(
         ProcessStartInfo psi, GitCredentialPayload? credential,
         List<string> tempPaths, List<string> secretsToMask)
     {
@@ -131,9 +135,9 @@ public sealed class CreditedGitRunner(ILogger<CreditedGitRunner> logger)
         }
     }
 
-    private static string WriteTempFile(string content, List<string> tempPaths, bool restrictPermissions)
+    private string WriteTempFile(string content, List<string> tempPaths, bool restrictPermissions)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"prom-git-{Guid.NewGuid():N}");
+        var path = Path.Combine(tempRoot ?? Path.GetTempPath(), $"prom-git-{Guid.NewGuid():N}");
         File.WriteAllText(path, content.Replace("\r\n", "\n"));
         tempPaths.Add(path);
 

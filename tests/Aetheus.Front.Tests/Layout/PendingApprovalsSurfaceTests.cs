@@ -6,8 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Layout;
 
-/// <summary>PLAN-007 lot 7: an approval waiting for a decision shows in the top bar and on the home
-/// page without opening the run, and nothing shows when nothing waits.</summary>
+/// <summary>An approval waiting for a decision shows in the top bar and on the home page without
+/// opening the run, and nothing shows when nothing waits.</summary>
 public sealed class PendingApprovalsSurfaceTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;

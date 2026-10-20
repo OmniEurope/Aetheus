@@ -17,6 +17,12 @@ public sealed class AetheusAgentOptions
     public int MaxConcurrentTasks { get; set; } = AgentRuntimeDefaults.MaximumConcurrentTasks;
     public string WorkDirectory { get; set; } = Path.Combine(AppContext.BaseDirectory, "data");
     public string PluginDirectory { get; set; } = Path.Combine(AppContext.BaseDirectory, "plugins");
+
+    /// <summary>Where the agent release ships the <c>aetheus-fn</c> executables (one per Linux C
+    /// library: <c>linux-x64/aetheus-fn</c> and <c>linux-musl-x64/aetheus-fn</c>). A <c>type: aetheus</c>
+    /// step of a container-isolated stage mounts this directory read-only and runs its function inside
+    /// the step container.</summary>
+    public string FunctionsDirectory { get; set; } = Path.Combine(AppContext.BaseDirectory, "aetheus-fn");
     public int LogRetentionDays { get; set; } = AgentRuntimeDefaults.LogRetentionDays;
     public bool AllowInsecureCerts { get; set; }
 
@@ -29,8 +35,8 @@ public sealed class AetheusAgentOptions
     public int MinTimeoutSeconds { get; set; } = AgentRuntimeDefaults.MinimumTaskTimeoutSeconds;
     public int MaxTimeoutSeconds { get; set; } = AgentRuntimeDefaults.MaximumTaskTimeoutSeconds;
 
-    // DEPV: deploy tuning, previously hard-coded in DeployLayout. An operator on a disk-constrained
-    // box or with large self-contained artifacts can adjust these via the agent config section.
+    // Exposes deployment tuning through agent configuration for constrained disks and large
+    // artifacts.
     /// <summary>Recent release dirs kept per app after a successful deploy (the rest are pruned).</summary>
     public int DeployReleasesToKeep { get; set; } = AgentRuntimeDefaults.DeployReleasesToKeep;
     /// <summary>Free-space floor (MiB) required on top of the unpacked-payload estimate before extracting.</summary>
@@ -64,12 +70,11 @@ public sealed class AetheusAgentOptions
         // Index refresh / upgrade of already-installed packages - these never pull an arbitrary new
         // package, so they stay general.
         @"^apt(-get)?\s+(update|upgrade)(\s|$)",
-        // Shell install is restricted to the managed-service catalogue (defence-in-depth: the agent-side
-        // guardrail so a shell task can NOT apt-install an arbitrary package). KEEP THIS LIST IN LOCKSTEP
-        // with WellKnownManageableServices in src/Aetheus.Back/Components/Shared/ServerDataMapper.cs.
-        // No shell uninstall is allow-listed: install/uninstall from the UI run as the typed
-        // ServiceInstall/ServiceUninstall operations (`sudo -n apt-get install|purge`, PackageOperationExecutor),
-        // and nothing emits a shell `apt-get remove` any more (recette R2-031).
+        // Restricts shell installation to the managed-service catalogue; keep this list aligned
+        // with WellKnownManageableServices in
+        // src/Aetheus.Back/Components/Shared/ServerDataMapper.cs. UI installation and removal use
+        // typed ServiceInstall/ServiceUninstall operations, and shell uninstallation is not
+        // allow-listed.
         @"^apt-get\s+install\s+-y\s+(nginx|apache2|docker|fail2ban|rkhunter|ufw|portsentry|postfix|dovecot|mysql|mariadb|postgresql|redis-server|mongod)$",
         @"^yum\s+(install|update)\s",
         @"^rkhunter\s+--check\s+--skip-keypress\s+--nocolors$",

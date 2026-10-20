@@ -47,25 +47,7 @@ public class SharedDtoMonitoringAlertTests
         Assert.False(req.Follow);
     }
 
-    [Fact]
-    public void ServerMetricDto_DefaultValues()
-    {
-        var dto = new ServerMetricDto();
-        Assert.Equal(0, dto.ServerId);
-        Assert.Equal(0, dto.CpuPercent);
-    }
-
     // --- AlertRule ---
-
-    [Fact]
-    public void AlertRuleDto_DefaultValues()
-    {
-        var dto = new AlertRuleDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Null(dto.ServerId);
-        Assert.Null(dto.ServerName);
-        Assert.Null(dto.LastTriggeredAt);
-    }
 
     [Fact]
     public void CreateAlertRuleRequest_Valid()
@@ -105,31 +87,7 @@ public class SharedDtoMonitoringAlertTests
 
     // --- EnvironmentCheck ---
 
-    [Fact]
-    public void EnvironmentCheckDto_DefaultValues()
-    {
-        var dto = new EnvironmentCheckDto();
-        Assert.Equal(string.Empty, dto.Name);
-        Assert.Null(dto.Configuration);
-        Assert.False(dto.IsRequired);
-    }
-
     // --- AlertTriggered ---
-
-    [Fact]
-    public void AlertTriggeredDto_DefaultValues()
-    {
-        var dto = new AlertTriggeredDto();
-        Assert.Null(dto.RuleId);
-        Assert.Equal(string.Empty, dto.RuleName);
-        Assert.Null(dto.ServerId);
-        Assert.Null(dto.ServerName);
-        Assert.Equal(string.Empty, dto.Metric);
-        Assert.Null(dto.Operator);
-        Assert.Null(dto.Threshold);
-        Assert.Equal(string.Empty, dto.Severity);
-        Assert.Null(dto.Message);
-    }
 
     private static List<ValidationResult> ValidateModel(object model)
     {

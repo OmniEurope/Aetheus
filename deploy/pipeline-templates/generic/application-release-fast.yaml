@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: EUPL-1.2
+# Builds and deploys directly, without a candidate, with the project's fast release commands: shell written
+# in its pipeline in APPLICATION_RELEASE_FAST_COMMANDS (run with `sh -eu -c` from the workspace). Nothing
+# is required in its repository (ADR-050, recette R3-64); without commands the step fails and says so.
 name: application-release-fast-template
 trigger: manual
 variables:
@@ -6,6 +9,14 @@ variables:
   APPLICATION_HAS_BACKEND: "true"
   APPLICATION_HAS_DATABASE: "false"
   APPLICATION_ROLLBACK_ENABLED: "true"
+  APPLICATION_RELEASE_FAST_COMMANDS: ""
+
+# Recette R3-67: the libraries a production deployment reads, named like the platform's own
+# (`<project>.share`, `<project>.prod`): `${{ project.slug }}` is the project's slug, so the setup wizard creates
+# them in the project under the name its runs read.
+variable_libraries:
+  - "${{ project.slug }}.share"
+  - "${{ project.slug }}.prod"
 
 stages:
   - name: FastRelease
@@ -13,14 +24,17 @@ stages:
     execution_role: deploy
     os: linux
     steps:
-      - name: Run project fast release adapter
+      - name: Run project fast release commands
         working_directory: "$(WORKSPACE)"
         shell: |
           set -eu
-          test -f .pipeline/scripts/release-fast.sh
+          if test -z "${APPLICATION_RELEASE_FAST_COMMANDS:-}"; then
+            echo "No fast release command declared: set APPLICATION_RELEASE_FAST_COMMANDS in this pipeline." >&2
+            exit 1
+          fi
           APPLICATION_HAS_FRONTEND="$(APPLICATION_HAS_FRONTEND)" \
           APPLICATION_HAS_BACKEND="$(APPLICATION_HAS_BACKEND)" \
           APPLICATION_HAS_DATABASE="$(APPLICATION_HAS_DATABASE)" \
           APPLICATION_ROLLBACK_ENABLED="$(APPLICATION_ROLLBACK_ENABLED)" \
-            sh .pipeline/scripts/release-fast.sh
+            sh -eu -c "$APPLICATION_RELEASE_FAST_COMMANDS"
         timeout_seconds: 7200

@@ -34,7 +34,6 @@ public sealed class AnalysisPolicyEngineTests
     [InlineData("duplication.percentage", 5.1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
     [InlineData("complexity.cyclomatic.average", 10.1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
     [InlineData("complexity.cyclomatic.maximum", 25.1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
-    [InlineData("complexity.methods.high", 1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
     [InlineData("architecture.cycles", 1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
     public async Task EvaluateAsync_DefaultAbsoluteQualityThresholdAppliesVersionedBehavior(
         string key,
@@ -47,6 +46,54 @@ public sealed class AnalysisPolicyEngineTests
         Assert.Equal(expectedStatus, evaluation.Status);
         Assert.Equal(expectedStatus == AnalysisGateStatus.Warning ? 1 : 0, evaluation.WarningCount);
         Assert.Equal(expectedStatus == AnalysisGateStatus.Blocked ? 1 : 0, evaluation.BlockerCount);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_ComplexMethodsAboveThePreviousCountWarnsOnceAndNamesBothNumbers()
+    {
+        var metric = Metric("complexity.methods.high", 319, AnalysisMetricDirection.LowerIsBetter);
+        metric.BaselineValue = 318;
+        var report = Report(AnalysisCategory.CodeQuality, metric);
+
+        var evaluation = await new AnalysisPolicyEngine(Repository()).EvaluateAsync(
+            report, Context(), Now, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisGateStatus.Warning, evaluation.Status);
+        // One alert: the policy naming the metric replaces the catch-all degradation one.
+        Assert.Equal(1, evaluation.WarningCount);
+        var violation = Assert.Single(AnalysisGateViolationParser.Parse(
+            [new AnalysisEvaluationSnapshot(report.Id, evaluation.PolicySnapshotJson)]));
+        Assert.Equal("quality.complexity.high-methods", violation.PolicyKey);
+        Assert.Equal("Degraded", violation.Operator);
+        Assert.Equal("319", violation.ObservedValue);
+        Assert.Equal("318", violation.Threshold);
+    }
+
+    [Theory]
+    [InlineData(318, 318)]
+    [InlineData(300, 318)]
+    [InlineData(0, 318)]
+    public async Task EvaluateAsync_ComplexMethodsEqualOrBelowThePreviousCountDoNotAlert(double value, double baseline)
+    {
+        var metric = Metric("complexity.methods.high", value, AnalysisMetricDirection.LowerIsBetter);
+        metric.BaselineValue = baseline;
+
+        var evaluation = await EvaluateAsync(AnalysisCategory.CodeQuality, metric);
+
+        Assert.Equal(AnalysisGateStatus.Passed, evaluation.Status);
+        Assert.Equal(0, evaluation.WarningCount);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_ComplexMethodsWithoutAPreviousAnalysisDoNotAlert()
+    {
+        // The first analysis has nothing to be worse than: its count becomes the baseline.
+        var evaluation = await EvaluateAsync(
+            AnalysisCategory.CodeQuality,
+            Metric("complexity.methods.high", 318, AnalysisMetricDirection.LowerIsBetter));
+
+        Assert.Equal(AnalysisGateStatus.Passed, evaluation.Status);
+        Assert.Equal(0, evaluation.WarningCount);
     }
 
     [Fact]
@@ -347,6 +394,65 @@ public sealed class AnalysisPolicyEngineTests
         Enabled = true,
         Version = 1
     };
+
+    [Theory]
+    [InlineData(AnalysisPolicyOperator.GreaterThan, 10.0, 11.0, null, AnalysisMetricDirection.LowerIsBetter, 1)]
+    [InlineData(AnalysisPolicyOperator.GreaterThan, 10.0, 10.0, null, AnalysisMetricDirection.LowerIsBetter, 0)]
+    [InlineData(AnalysisPolicyOperator.GreaterThanOrEqual, 10.0, 10.0, null, AnalysisMetricDirection.LowerIsBetter, 1)]
+    [InlineData(AnalysisPolicyOperator.GreaterThanOrEqual, 10.0, 9.0, null, AnalysisMetricDirection.LowerIsBetter, 0)]
+    [InlineData(AnalysisPolicyOperator.LessThan, 10.0, 9.0, null, AnalysisMetricDirection.HigherIsBetter, 1)]
+    [InlineData(AnalysisPolicyOperator.LessThanOrEqual, 10.0, 10.0, null, AnalysisMetricDirection.HigherIsBetter, 1)]
+    [InlineData(AnalysisPolicyOperator.LessThanOrEqual, 10.0, 11.0, null, AnalysisMetricDirection.HigherIsBetter, 0)]
+    [InlineData(AnalysisPolicyOperator.Equals, 10.0, 10.0000001, null, AnalysisMetricDirection.Informational, 1)]
+    [InlineData(AnalysisPolicyOperator.Equals, 10.0, 10.1, null, AnalysisMetricDirection.Informational, 0)]
+    [InlineData(AnalysisPolicyOperator.Changed, 2.0, 13.0, 10.0, AnalysisMetricDirection.Informational, 1)]
+    [InlineData(AnalysisPolicyOperator.Changed, -2.0, 8.0, 10.0, AnalysisMetricDirection.Informational, 1)]
+    [InlineData(AnalysisPolicyOperator.Changed, 2.0, 11.0, 10.0, AnalysisMetricDirection.Informational, 0)]
+    [InlineData(AnalysisPolicyOperator.Changed, 2.0, 13.0, null, AnalysisMetricDirection.Informational, 0)]
+    [InlineData(AnalysisPolicyOperator.Degraded, 0.0, 9.0, 10.0, AnalysisMetricDirection.HigherIsBetter, 1)]
+    [InlineData(AnalysisPolicyOperator.Degraded, 0.0, 11.0, 10.0, AnalysisMetricDirection.HigherIsBetter, 0)]
+    [InlineData(AnalysisPolicyOperator.Degraded, 0.0, 11.0, 10.0, AnalysisMetricDirection.LowerIsBetter, 1)]
+    [InlineData(AnalysisPolicyOperator.Degraded, 0.0, 9.0, 10.0, AnalysisMetricDirection.LowerIsBetter, 0)]
+    [InlineData(AnalysisPolicyOperator.Degraded, 0.0, 9.0, 10.0, AnalysisMetricDirection.Informational, 0)]
+    [InlineData(AnalysisPolicyOperator.Degraded, 0.0, 9.0, null, AnalysisMetricDirection.HigherIsBetter, 0)]
+    [InlineData((AnalysisPolicyOperator)99, 0.0, 9.0, 10.0, AnalysisMetricDirection.HigherIsBetter, 0)]
+    [InlineData(null, 10.0, 11.0, null, AnalysisMetricDirection.LowerIsBetter, 0)]
+    public async Task EvaluateAsync_ExplicitMetricPolicyBlocksOnlyWhenItsOperatorMatches(
+        AnalysisPolicyOperator? policyOperator,
+        double threshold,
+        double value,
+        double? baseline,
+        AnalysisMetricDirection direction,
+        int expectedBlockers)
+    {
+        var repository = Repository();
+        var policy = BlockingMetricPolicy("custom.score", AnalysisPolicyOperator.GreaterThan, threshold);
+        policy.Operator = policyOperator;
+        repository.GetApplicablePoliciesAsync(1, 2, Arg.Any<CancellationToken>()).Returns([policy]);
+        var metric = Metric("custom.score", value, direction);
+        metric.BaselineValue = baseline;
+
+        var evaluation = await new AnalysisPolicyEngine(repository).EvaluateAsync(
+            Report(AnalysisCategory.CodeQuality, metric), Context(), Now, TestContext.Current.CancellationToken);
+
+        Assert.Equal(expectedBlockers, evaluation.BlockerCount);
+        Assert.Equal(expectedBlockers == 1, evaluation.Status == AnalysisGateStatus.Blocked);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_MetricPolicyWithoutThresholdNeverBlocks()
+    {
+        var repository = Repository();
+        var policy = BlockingMetricPolicy("custom.score", AnalysisPolicyOperator.GreaterThan, 0);
+        policy.Threshold = null;
+        repository.GetApplicablePoliciesAsync(1, 2, Arg.Any<CancellationToken>()).Returns([policy]);
+
+        var evaluation = await new AnalysisPolicyEngine(repository).EvaluateAsync(
+            Report(AnalysisCategory.CodeQuality, Metric("custom.score", 50, AnalysisMetricDirection.LowerIsBetter)),
+            Context(), Now, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, evaluation.BlockerCount);
+    }
 
     private static Task<AnalysisEvaluation> EvaluateAsync(AnalysisCategory category, object item)
     {

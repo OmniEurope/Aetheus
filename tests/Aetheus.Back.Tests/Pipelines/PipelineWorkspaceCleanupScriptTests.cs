@@ -6,10 +6,8 @@ using Aetheus.Tests.Shared;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// BACK-017: the Linux workspace cleanup runs for real in bash. It used to print "Workspace cleaned
-/// successfully" whatever <c>rm -rf</c> did; it now retries, then fails with what is left over.
-/// </summary>
+/// <summary>Executes workspace cleanup in Bash and verifies that exhausted retries report failure
+/// with the remaining files.</summary>
 [SupportedOSPlatform("linux")]
 public class PipelineWorkspaceCleanupScriptTests
 {

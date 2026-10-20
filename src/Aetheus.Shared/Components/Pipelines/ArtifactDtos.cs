@@ -66,11 +66,9 @@ public sealed record ProjectArtifactsRequest : PaginationRequest
     public int? PipelineId { get; init; }
 }
 
-/// <summary>
-/// Recette R-210: the values the project artifacts grid's checkable column filters offer. The grid is
-/// loaded page by page, so the names present across the project's artifacts come from the API rather
-/// than from the rows on screen.
-/// </summary>
+/// <summary> The values the project artifacts grid's checkable column filters offer. The grid is
+/// loaded page by page, so the names present across the project's artifacts come from the API
+/// rather than from the rows on screen. </summary>
 public sealed record ProjectArtifactFilterValuesDto
 {
     public List<string> PipelineNames { get; init; } = [];

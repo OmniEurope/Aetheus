@@ -5,11 +5,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Recette R1-21 on a real PostgreSQL: a commit written by Aetheus marks the repository not empty in
-/// one UPDATE of its row, and leaves the caller's other pending changes unsaved (a pipeline being
-/// saved or rolled back in the same unit of work is not flushed by it).
-/// </summary>
+/// <summary>A recorded commit updates the repository's nonempty flag on PostgreSQL without flushing
+/// unrelated tracked changes.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class GitCommitRecorderIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

@@ -6,6 +6,7 @@ public partial class ServerLogsSection
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
+    [Inject] private OmniDialogService Dialog { get; set; } = default!;
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
@@ -16,7 +17,7 @@ public partial class ServerLogsSection
     private bool _loading;
     private bool _loadFailed;
 
-    // Recette R-210: the level filter lists the translated levels, built once for a stable delegate.
+    // The level filter lists the translated levels, built once for a stable delegate.
     private Func<string, string>? _levelText;
     private Func<string, string> LevelText => _levelText ??= GridFilterText.ForEnum<TaskLogLevel>(L);
 
@@ -35,11 +36,8 @@ public partial class ServerLogsSection
         }
     }
 
-    /// <summary>
-    /// Recette R-210 / R-224: every block the grid asks for goes to the API with the header filters and
-    /// the sort, so the count and the rows describe the whole log of the server.
-    /// </summary>
-    /// <summary>Recette R2-124: one page of the export, with the grid's sort and column filters.</summary>
+    /// <summary>Reads an export page with the same sorting and column filters as the
+    /// grid.</summary>
     private Task<PaginatedResult<TaskLogDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(defaultPageSize: 50);
@@ -78,6 +76,9 @@ public partial class ServerLogsSection
             if (ServerId == serverId) _loading = false;
         }
     }
+
+    // Recette R3-35: clicking a line opens that exact entry.
+    private Task OpenEntryAsync(TaskLogDto log) => Logs.LogEntryDialog.OpenAsync(Dialog, L, log.Message);
 
     private static OmniTone GetLevelBadge(TaskLogLevel level) => DisplayFormatting.TaskLogBadge(level);
 }

@@ -10,11 +10,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>
-/// R2-004 / R2-005: the commits grid's column filters pass an explicit allow-list before they become git
-/// arguments. R2-003: the archive route streams a zip under read access, refuses an option-like ref and
-/// says 404 for an unknown repository or ref.
-/// </summary>
+/// <summary>Validate commit filters before constructing Git arguments. Archive requests require
+/// Read, reject option-like refs and return 404 for unknown repositories or refs.</summary>
 public class GitCommitListQueryAndArchiveRouteTests
 {
     private static GridFilter Filter(string field, GridFilterOperator op, string? value,
@@ -120,7 +117,7 @@ public class GitCommitListQueryAndArchiveRouteTests
         Assert.Throws<BadRequestException>(() => GitCommitListQuery.Parse([Filter("CommitDate", GridFilterOperator.GreaterThanOrEqual, "yesterday")]));
     }
 
-    // ── R2-003: the archive route ───────────────────────────────────
+    // Archive route.
 
     private readonly IGitLightService _service = Substitute.For<IGitLightService>();
     private readonly IGitLightRepository _repos = Substitute.For<IGitLightRepository>();

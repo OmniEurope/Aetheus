@@ -2,8 +2,8 @@
 
 namespace Aetheus.Back.Tests.SharedDtos;
 
-/// <summary>PLAN-005: the machine lines printed by the mail-manage helper (formats proven in
-/// tests/mail-stack/scenario.sh against real Postfix, Dovecot, OpenDKIM and rspamd).</summary>
+/// <summary>Parses machine-readable mail-manage output; tests/mail-stack/scenario.sh separately
+/// exercises its producers against the mail services.</summary>
 public sealed class MailTaskOutputParserTests
 {
     // Line captured verbatim from `mail-manage queue-list` on Debian 12 by tests/mail-stack (2026-09-14).

@@ -20,7 +20,7 @@ internal sealed class BackupRepository(AppDbContext db) : IBackupRepository
             query = query.Where(p => p.Name.Contains(search)
                 || (p.Project != null && p.Project.Name.Contains(search))
                 || (p.Server != null && p.Server.Name.Contains(search)));
-        // Recette R-224: the grid's column header filters, after the scope and before the count.
+        // The grid's column header filters, after the scope and before the count.
         query = BackupListQuery.PolicyColumns.ApplyFilters(query, columnFilters);
 
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
@@ -105,7 +105,7 @@ internal sealed class BackupRepository(AppDbContext db) : IBackupRepository
         var query = db.BackupRuns.AsNoTracking().Where(r => r.BackupPolicyId == policyId);
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(r => r.Message != null && r.Message.Contains(search));
-        // Recette R-224: the run grid's column header filters, before the count.
+        // The run grid's column header filters, before the count.
         query = BackupListQuery.RunColumns.ApplyFilters(query, columnFilters);
 
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);

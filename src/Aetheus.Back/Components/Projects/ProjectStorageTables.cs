@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 5: the tables a project's usage is counted in, and the bytes per row used when the
-/// database size measurement (lot 1) does not name the table. The fallbacks come from the production
-/// measurement of 2026-10-04 (recette R2-114): table size divided by its estimated rows; the log value,
-/// whose row count was not measured, is a rounded guess.
-/// </summary>
+/// <summary>Defines storage tables and fallback bytes-per-row estimates when database size
+/// measurements omit a table. Fallbacks approximate measured size per estimated row; the log value
+/// is a rounded estimate.</summary>
 internal static class ProjectStorageTables
 {
     public const string MetricSamples = "AppMetricSamples";

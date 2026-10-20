@@ -3,11 +3,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
-/// <summary>
-/// Executes a <c>type: advance-branch</c> step (recette R2-001): the backend fast-forwards the step's
-/// <c>branch</c> onto the commit of the release the run deploys, and completes or fails the step with a
-/// readable reason. No agent task is created, like a <c>type: trigger</c> step.
-/// </summary>
+/// <summary> Executes a <c>type: advance-branch</c> step : the backend fast-forwards the step's
+/// <c>branch</c> onto the commit of the release the run deploys, and completes or fails the step
+/// with a readable reason. No agent task is created, like a <c>type: trigger</c> step. </summary>
 public interface IPipelineBranchAdvanceStep
 {
     /// <summary>Advances the branch and marks <paramref name="stepRun"/> Success or Failed.</summary>

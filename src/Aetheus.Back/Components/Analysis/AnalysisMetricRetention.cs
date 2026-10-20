@@ -3,14 +3,9 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Analysis;
 
-/// <summary>
-/// PLAN-013 lot 3 (recette R2-115): the metrics of a report that are written to <c>AnalysisMetrics</c>.
-/// Every project total (no file, no symbol) is kept. Per-file and per-symbol rows are kept only when they
-/// are among the <see cref="WorstPerKey"/> worst of their key, when they made a policy warn or block, or
-/// when they are the lowest or highest value of their key. The report is graded and gated on all of its
-/// metrics before this selection, and the kept extremes mean a grading rule's minimum or maximum read
-/// back from the stored rows is the same as the one the grade was computed from.
-/// </summary>
+/// <summary>Grade and gate all metrics before retaining project totals, worst-per-key rows,
+/// policy-flagged rows and per-key extrema. Keeping extrema preserves minimum and maximum grading
+/// results when stored metrics are read back.</summary>
 internal static class AnalysisMetricRetention
 {
     public const int WorstPerKey = 50;

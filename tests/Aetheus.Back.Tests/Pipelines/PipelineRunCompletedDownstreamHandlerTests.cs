@@ -58,8 +58,7 @@ public sealed class PipelineRunCompletedDownstreamHandlerTests
     [InlineData(PipelineStatus.Cancelled)]
     public async Task Does_not_trigger_downstream_for_a_non_success(PipelineStatus status)
     {
-        // PLAN-003 D13: a Partial run finished, but something failed inside it. Handing its output
-        // to the next pipeline would propagate a result nobody vouched for.
+        // Partial outcomes do not trigger success-only downstream pipelines.
         Arrange(runPipelineId: 1, additionalVarsJson: "{}", targetB: new Pipeline { Id = 2, Name = "B" });
 
         await _sut.HandleAsync(new PipelineRunCompletedEvent(99, status), ct: TestContext.Current.CancellationToken);
@@ -71,7 +70,7 @@ public sealed class PipelineRunCompletedDownstreamHandlerTests
     [Fact]
     public async Task Labels_the_downstream_run_with_the_run_that_started_it()
     {
-        // PLAN-007 lot 7: without this the child reads the static trigger of its own definition.
+        // Without this the child reads the static trigger of its own definition.
         Arrange(runPipelineId: 1, additionalVarsJson: "{}", targetB: new Pipeline { Id = 2, Name = "B" });
 
         await _sut.HandleAsync(new PipelineRunCompletedEvent(99, PipelineStatus.Success), ct: TestContext.Current.CancellationToken);

@@ -25,15 +25,13 @@ public partial class ServerPatchSection
 
     private OmniDataGrid<PendingUpdateDto>? _grid;
 
-    // Recette R-210: the security column filters on yes or no.
+    // The security column filters on yes or no.
     private Func<string, string>? _yesNoText;
     private Func<string, string> YesNoText => _yesNoText ??= GridFilterText.YesNo(L);
 
-    /// <summary>
-    /// Reads the pending updates. <paramref name="live"/> is the task-completion path: the grid stays on
-    /// screen (no loader) and is told before the new list arrives, so the updates it did not hold read
-    /// bold (recette R-227).
-    /// </summary>
+    /// <summary> Reads the pending updates. <paramref name="live"/> is the task-completion path:
+    /// the grid stays on screen (no loader) and is told before the new list arrives, so the updates
+    /// it did not hold read bold. </summary>
     private async Task LoadAsync(bool live = false)
     {
         if (!live) _loading = true;

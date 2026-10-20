@@ -64,7 +64,7 @@ public class VariableLibraryEditDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // New-library mode (Id=0) loads the project list but must never fetch a library detail.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/projects"));
@@ -76,7 +76,7 @@ public class VariableLibraryEditDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         typeof(VariableLibraryEdit).GetProperty("ProjectId")!.SetValue(cut.Instance, (int?)1);
         var method = typeof(VariableLibraryEdit).GetMethod("OnParametersSetAsync",
@@ -92,7 +92,7 @@ public class VariableLibraryEditDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         typeof(VariableLibraryEdit).GetProperty("EnvironmentId")!.SetValue(cut.Instance, (int?)5);
         var method = typeof(VariableLibraryEdit).GetMethod("OnParametersSetAsync",
@@ -108,7 +108,7 @@ public class VariableLibraryEditDeepTests : BunitContext
     {
         SetupProjects();
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         typeof(VariableLibraryEdit).GetProperty("ProjectServerId")!.SetValue(cut.Instance, (int?)7);
         var method = typeof(VariableLibraryEdit).GetMethod("OnParametersSetAsync",
@@ -127,7 +127,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupProjects();
         SetupLibrary(1);
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
         var detail = (VariableLibraryDetailDto?)typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(detail);
     }
@@ -169,7 +169,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupProjects();
         SetupLibrary(1);
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // Mutate the loaded detail to detect whether the same-Id call reloads (it must not).
         var detailField = typeof(VariableLibraryEdit).GetField("_detail", Priv)!;
@@ -192,7 +192,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupProjects();
         _handler.SetJsonResponse("api/variable-libraries", new VariableLibraryDetailDto { Id = 99, Name = "New" });
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var model = typeof(VariableLibraryEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
         model.GetType().GetProperty("Name")!.SetValue(model, "New Library");
@@ -215,7 +215,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupLibrary(1);
         _handler.SetJsonResponse("api/variable-libraries/1", MakeDetail(1));
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         var method = typeof(VariableLibraryEdit).GetMethod("OnSubmit", Priv)!;
@@ -233,7 +233,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupLibrary(1);
         _handler.SetResponse(HttpMethod.Put, "api/variable-libraries/1", System.Net.HttpStatusCode.Conflict);
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var method = typeof(VariableLibraryEdit).GetMethod("OnSubmit", Priv)!;
         await cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
@@ -250,7 +250,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupLibrary(1);
         _handler.SetResponse(HttpMethod.Delete, "api/variable-libraries/1", System.Net.HttpStatusCode.Conflict);
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         var dialog = Services.GetRequiredService<OmniDialogService>();
         var method = typeof(VariableLibraryEdit).GetMethod("OnDelete", Priv)!;
@@ -272,7 +272,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupProjects();
         _handler.SetRawResponse("api/variable-libraries", "{");
         var cut = Render<VariableLibraryEdit>(parameters => parameters.Add(component => component.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
         var method = typeof(VariableLibraryEdit).GetMethod("OnSubmit", Priv)!;
 
         await Assert.ThrowsAsync<System.Text.Json.JsonException>(() =>
@@ -287,7 +287,7 @@ public class VariableLibraryEditDeepTests : BunitContext
     {
         _handler.SetResponse(HttpMethod.Get, "api/projects", System.Net.HttpStatusCode.ServiceUnavailable);
         var cut = Render<VariableLibraryEdit>(parameters => parameters.Add(component => component.Id, 0));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
         Assert.Contains("LoadError", cut.Markup, StringComparison.Ordinal);
 
         SetupProjects();
@@ -312,7 +312,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupProjects();
         SetupLibrary(1);
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         SetFormValue(cut.Instance, "_newEntry", "Key", "   ");
@@ -333,7 +333,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupLibrary(1);
         _handler.SetJsonResponse("api/variable-libraries/1/entries", new VariableEntryDto { Id = 50, Key = "MY_KEY" });
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         SetFormValue(cut.Instance, "_newEntry", "Key", "MY_KEY");
@@ -354,7 +354,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupProjects();
         SetupLibrary(1);
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var entry = new VariableEntryDto { Id = 10, Key = "MY_KEY", Value = "MY_VAL" };
         var method = typeof(VariableLibraryEdit).GetMethod("EditEntry", Priv)!;
@@ -373,7 +373,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupLibrary(1);
         _handler.SetJsonResponse("api/variable-libraries/1/entries/10", new VariableEntryDto { Id = 10, Key = "K" });
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         var notif = Services.GetRequiredService<OmniOverlayService>();
         var entry = new VariableEntryDto { Id = 10, Key = "K", Value = "V" };
@@ -395,7 +395,7 @@ public class VariableLibraryEditDeepTests : BunitContext
             "api/variable-libraries/1/entries/10",
             System.Net.HttpStatusCode.Conflict);
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
         var entry = new VariableEntryDto { Id = 10, Key = "K", Value = "V" };
         var method = typeof(VariableLibraryEdit).GetMethod("OnEntryUpdate", Priv)!;
 
@@ -417,7 +417,7 @@ public class VariableLibraryEditDeepTests : BunitContext
             "api/variable-libraries/1/entries/10",
             System.Net.HttpStatusCode.Conflict);
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
         var dialog = Services.GetRequiredService<OmniDialogService>();
         var method = typeof(VariableLibraryEdit).GetMethod("DeleteEntry", Priv)!;
 
@@ -439,7 +439,7 @@ public class VariableLibraryEditDeepTests : BunitContext
         SetupProjects();
         SetupLibrary(1);
         var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 
         // Clear the loaded detail, then ReloadDetail must re-fetch it from the API.
         typeof(VariableLibraryEdit).GetField("_detail", Priv)!.SetValue(cut.Instance, null);
@@ -449,5 +449,24 @@ public class VariableLibraryEditDeepTests : BunitContext
         var detail = (VariableLibraryDetailDto?)typeof(VariableLibraryEdit).GetField("_detail", Priv)!.GetValue(cut.Instance);
         Assert.NotNull(detail);
         Assert.Equal("My Library", detail!.Name);
+    }
+
+    [Fact]
+    public async Task TheEntriesExport_ReadsTheRequestedPageOfThisLibrary()
+    {
+        SetupProjects();
+        SetupLibrary();
+        _handler.SetPaginatedJsonResponse("api/variable-libraries/1/entries",
+            new List<VariableEntryDto> { new() { Id = 10, Key = "DB_URL", Value = "postgres://localhost" } });
+        var cut = Render<VariableLibraryEdit>(p => p.Add(x => x.Id, 1));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindComponents<AetheusDataGrid<VariableEntryDto>>()));
+        var grid = cut.FindComponent<AetheusDataGrid<VariableEntryDto>>().Instance;
+
+        var page = await cut.InvokeAsync(() => grid.ExportRead!(new GridLoadArgs { Skip = 25, Top = 25 }));
+
+        Assert.Equal("DB_URL", Assert.Single(page.Items).Key);
+        var url = _handler.Requests.Last(r => r.Url.Contains("api/variable-libraries/1/entries?", StringComparison.Ordinal)).Url;
+        Assert.Contains("page=2", url, StringComparison.Ordinal);
+        Assert.Contains("pageSize=25", url, StringComparison.Ordinal);
     }
 }

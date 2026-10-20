@@ -1,0 +1,12 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R3-49 (R3-41: one main action, the rest in a menu): the menu next to Add in the Accounts tab.
+   "Client mail" (connection settings), "Purger" (deletes the Aetheus rows of mailboxes the server no longer
+   reports) and, for an administrator, "Préparer l'accès administrateur" (recette R1-41 / R3-50). *@
+<OmniOverflowMenu Label="@L["MoreActions"]" Class="mail-accounts-menu">
+    <OmniMenuItem OnClick="@OpenClientHelpAsync"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("help")" /></Icon><ChildContent>@L["MailClientHelpButton"]</ChildContent></OmniMenuItem>
+    <OmniMenuItem Tone="OmniTone.Danger" Disabled="@_busy" OnClick="@PurgeMissingAsync"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["MailAccountsPurge"]</ChildContent></OmniMenuItem>
+    @if (IsAdministrator)
+    {
+        <OmniMenuItem Disabled="@(!CanManage || _busy)" OnClick="@PrepareMasterAccessAsync"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("admin_panel_settings")" /></Icon><ChildContent>@L["MailMasterAccessPrepare"]</ChildContent></OmniMenuItem>
+    }
+</OmniOverflowMenu>

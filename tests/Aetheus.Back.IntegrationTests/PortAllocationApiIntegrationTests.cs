@@ -9,12 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-003 lot 24: allocating ports into a library, over real HTTP. The service-level test swaps the
-/// audit and the change notifier for substitutes; this one keeps every collaborator the host wires,
-/// including what runs after the commit, where the unexplained "An unexpected error occurred" (a 500
-/// on an allocation whose entries were written) came from. Four keys, as in the report.
-/// </summary>
+/// <summary>Exercises port allocation over HTTP with all host-wired collaborators, including
+/// post-commit audit and change notification.</summary>
 [Collection(ApiSmokeCollection.Name)]
 public sealed class PortAllocationApiIntegrationTests(ApiSmokeFixture fixture)
 {

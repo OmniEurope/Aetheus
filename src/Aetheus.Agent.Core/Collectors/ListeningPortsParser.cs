@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Agent.Core.Collectors;
 
-/// <summary>
-/// PLAN-005 lot 2: turns the host's listening-socket listing into ports. Pure text, no process
-/// launching, so the parsing is testable against captured output from both platforms.
-/// </summary>
+/// <summary> Turns the host's listening-socket listing into ports. Pure text, no process launching,
+/// so the parsing is testable against captured output from both platforms. </summary>
 public static class ListeningPortsParser
 {
     /// <summary>

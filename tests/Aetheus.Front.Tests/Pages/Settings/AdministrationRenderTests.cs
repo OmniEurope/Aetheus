@@ -14,7 +14,7 @@ public class AdministrationRenderTests : BunitContext
     public void Renders_AdminUser_ShowsAdminPage()
     {
         var cut = Render<Administration>();
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // The admin landing page renders its navigation tiles linking to the admin sub-pages.
         Assert.Contains("href=\"/admin/users\"", cut.Markup);

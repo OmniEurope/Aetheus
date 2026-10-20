@@ -6,6 +6,7 @@ namespace Aetheus.Front.Components.Pipelines;
 public partial class VisualPipelineEditor : IAsyncDisposable
 {
     [Inject] private IJSRuntime Js { get; set; } = default!;
+    [Inject] private IUserPreferences Preferences { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private YamlSerializationService YamlService { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -184,7 +185,7 @@ public partial class VisualPipelineEditor : IAsyncDisposable
     private string StructureSignature() =>
         string.Concat(DisplayStages.Select(s => s.Name.Length.ToString() + ":" + s.Name));
 
-    private VisualPipelineLayoutStore LayoutStore => _layoutStore ??= new VisualPipelineLayoutStore(Js);
+    private VisualPipelineLayoutStore LayoutStore => _layoutStore ??= new VisualPipelineLayoutStore(Preferences);
     private VisualPipelineLayoutStore? _layoutStore;
 
     private async Task LoadPersistedPositionsAsync()

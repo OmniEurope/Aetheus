@@ -92,9 +92,8 @@ public class ApacheServiceTests
 
         await _sut.ExecuteActionAsync(1, request, ct: TestContext.Current.CancellationToken);
 
-        // Items #5.2/#6: Start/Stop/Restart/Reload/TestConfig now route through typed
-        // operations (Executor.Operation, OperationKind.ApacheStart) via the controlled-sudo
-        // recipe, no longer raw shell.
+        // Apache lifecycle and configuration actions use typed operations through controlled sudo
+        // escalation (ADR-004).
         await _repoMock.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
             t.ServerId == 1 && t.Executor == ExecutorType.Operation
             && t.Operation == OperationKind.ApacheStart && t.Status == TaskExecutionStatus.Pending),

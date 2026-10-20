@@ -63,8 +63,8 @@ internal static class GitAiCloneToken
         {
             return null;
         }
-        // Recette R-464: accepted under either configured secret, as the run clone tokens are, so a
-        // blue-green switch to a dedicated RunTokenKey does not refuse what the other colour minted.
+        // Accepted under either configured secret, as the run clone tokens are, so a blue-green
+        // switch to a dedicated RunTokenKey does not refuse what the other colour minted.
         foreach (var secret in GitCloneTokenSecrets.Validation(configuration))
         {
             if (CryptographicOperations.FixedTimeEquals(presented, Compute(secret, definitionId, projectId, expiry)))

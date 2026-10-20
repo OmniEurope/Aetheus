@@ -197,7 +197,9 @@ public sealed class UserNotificationService(
         return deliveries.Count;
     }
 
-    public async Task<int> RecordProjectEventAsync(string eventType, string jsonPayload, CancellationToken ct = default)
+    public async Task<int> RecordProjectEventAsync(
+        string eventType, string jsonPayload, CancellationToken ct = default, string? emailOptInEventType = null,
+        string? emailOnceMarker = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
         var projectId = ReadProjectId(jsonPayload);
@@ -238,18 +240,58 @@ public sealed class UserNotificationService(
 
         if (deliveries.Count > 0)
         {
-            await EmailDeliveriesAsync(deliveries, addresses, ct).ConfigureAwait(false);
+            if (descriptor.SentByEmail)
+                await EmailOptedInDeliveriesAsync(deliveries, addresses, emailOptInEventType, emailOnceMarker, ct).ConfigureAwait(false);
             await repo.AddDeliveriesAsync(deliveries, ct).ConfigureAwait(false);
             await PushChangedAsync([.. deliveries.Select(delivery => delivery.RecipientUserId)], ct).ConfigureAwait(false);
         }
         return deliveries.Count;
     }
 
-    /// <summary>
-    /// Recette R1-16: every notification also leaves by e-mail to the recipient's account address, and
-    /// its row records the real outcome: Sent once the SMTP server accepted it, Failed with the server's
-    /// text, NotConfigured with the reason when no sender or no address exists.
+    /// <summary> Recette R1-77: without an opt-in event type every delivery is e-mailed. With one, only the
+    /// recipients who enabled that preference (off unless they saved it on) are; the others keep their in-app
+    /// delivery, recorded as NotConfigured with the reason, so a child pipeline result never mails by default.
+    /// With a once-marker, a recipient already e-mailed this result (a retried run ending the same way again)
+    /// is not e-mailed a second time; their in-app delivery says so.
     /// </summary>
+    private async Task EmailOptedInDeliveriesAsync(
+        IReadOnlyList<NotificationDelivery> deliveries, IReadOnlyList<string?> addresses, string? optInEventType,
+        string? onceMarker, CancellationToken ct)
+    {
+        var descriptor = optInEventType is null ? null : NotificationEventTypes.Find(optInEventType);
+        var alreadyEmailed = onceMarker is null || deliveries.Count == 0
+            ? []
+            : await repo.GetRecipientsAlreadyEmailedAsync(
+                deliveries[0].EventType, onceMarker, [.. deliveries.Select(delivery => delivery.RecipientUserId)], ct).ConfigureAwait(false);
+        var mailed = new List<NotificationDelivery>();
+        var mailedAddresses = new List<string?>();
+        for (var i = 0; i < deliveries.Count; i++)
+        {
+            if (optInEventType is not null)
+            {
+                var saved = await repo.GetPreferencesAsync(deliveries[i].RecipientUserId, ct).ConfigureAwait(false);
+                var preference = saved.FirstOrDefault(item => item.EventType == optInEventType);
+                if (!(preference?.IsEnabled ?? descriptor?.DefaultEnabled ?? false))
+                {
+                    deliveries[i].ErrorMessage = $"E-mail not sent: the recipient did not enable '{optInEventType}'.";
+                    continue;
+                }
+            }
+            if (alreadyEmailed.Contains(deliveries[i].RecipientUserId))
+            {
+                deliveries[i].ErrorMessage = "E-mail not sent: this result was already e-mailed to the recipient.";
+                continue;
+            }
+            mailed.Add(deliveries[i]);
+            mailedAddresses.Add(addresses[i]);
+        }
+
+        await EmailDeliveriesAsync(mailed, mailedAddresses, ct).ConfigureAwait(false);
+    }
+
+    /// <summary> Every notification also leaves by e-mail to the recipient's account address, and
+    /// its row records the real outcome: Sent once the SMTP server accepted it, Failed with the
+    /// server's text, NotConfigured with the reason when no sender or no address exists. </summary>
     private async Task EmailDeliveriesAsync(
         IReadOnlyList<NotificationDelivery> deliveries, IReadOnlyList<string?> addresses, CancellationToken ct)
     {
@@ -277,9 +319,8 @@ public sealed class UserNotificationService(
     private static string Bound(string message) =>
         message.Length <= ErrorMessageMaxLength ? message : message[..ErrorMessageMaxLength];
 
-    /// <summary>
-    /// Recette R-182: tells the recipients' open tabs that their notifications changed. Best effort:
-    /// the row is saved already, and a tab that misses the push still catches up on its next poll.
+    /// <summary> Tells the recipients' open tabs that their notifications changed. Best effort: the
+    /// row is saved already, and a tab that misses the push still catches up on its next poll.
     /// </summary>
     private async Task PushChangedAsync(IReadOnlyCollection<int> userIds, CancellationToken ct)
     {

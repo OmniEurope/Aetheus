@@ -2,16 +2,9 @@
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// PLAN-003 2.7: returns an unconfirmed deployment to the previous colour when its confirmation
-/// window runs out, without the backend. See <see cref="BlueGreenConfirmation"/> for why the host has
-/// to do this itself: the backend that would approve or roll back may be the broken one.
-///
-/// Acts only on a transaction still recorded as SWITCHED for the revision the switch armed; anything
-/// else (committed, rolled back, another deployment since) disarms the stale watch and does nothing.
-/// What it did is left in the state directory (<c>auto-reverted</c>) and in the agent log, so the
-/// return is visible even though no run recorded it.
-/// </summary>
+/// <summary>Revert only an unconfirmed SWITCHED transaction matching the armed revision when its
+/// host-side deadline expires; disarm stale watches otherwise. Record the outcome in auto-reverted
+/// and the agent log independently of backend availability.</summary>
 public sealed class BlueGreenConfirmationWatchdog(
     IShellRunner shell,
     IOptions<AetheusAgentOptions> options,

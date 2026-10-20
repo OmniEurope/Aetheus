@@ -12,13 +12,12 @@ public readonly record struct AppUptimeWindowCounts(
     int Up90d,
     int Total90d);
 
-/// <summary>Recette R-441: the fleet server whose enabled Apache virtual host serves a probe URL host.</summary>
+/// <summary>The fleet server whose enabled Apache virtual host serves a probe URL host.</summary>
 public readonly record struct AppHostingServer(int ServerId, string ServerName);
 
 public interface IAppMonitoringRepository
 {
-    /// <summary>
-    /// Recette R-441: maps each lower-case host name to the one fleet server of the project's
+    /// <summary> Maps each lower-case host name to the one fleet server of the project's
     /// organization that serves it through an enabled Apache virtual host. A host served by several
     /// servers, or by none, is left out: the hosting server is then unknown rather than guessed.
     /// </summary>
@@ -68,8 +67,8 @@ public interface IAppMonitoringRepository
         CancellationToken ct = default);
     Task<long> GetTelemetryStorageBytesAsync(CancellationToken ct = default);
 
-    /// <summary>Recette R-468: the audience aggregates of the current day, week and month, added up over
-    /// the given applications; one entry per period that has any.</summary>
+    /// <summary>The audience aggregates of the current day, week and month, added up over the given
+    /// applications; one entry per period that has any.</summary>
     Task<List<AppAudiencePeriodTotal>> GetAudienceTotalsAsync(
         IReadOnlyCollection<int> appIds,
         DateOnly todayUtc,
@@ -114,7 +113,8 @@ public interface IAppMonitoringRepository
     Task<MonitoredApp?> GetDeployTargetAppAsync(int projectId, int? environmentId, CancellationToken ct = default);
 
     // --- retention ---
-    /// <summary>R2-020: rolls up one completed hour, application by application; a no-op for the rolled-up ones.</summary>
+    /// <summary>Rolls up one completed hour, application by application; a no-op for the rolled-up
+    /// ones.</summary>
     Task<int> AggregateHourAsync(DateTime hourUtc, CancellationToken ct = default);
     Task<int> PurgeRawOlderThanAsync(DateTime cutoff, CancellationToken ct = default);
     Task<int> PurgeHourlyOlderThanAsync(DateTime cutoff, CancellationToken ct = default);

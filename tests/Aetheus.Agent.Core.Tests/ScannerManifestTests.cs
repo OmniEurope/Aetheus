@@ -81,8 +81,8 @@ public sealed class ScannerManifestTests
         Assert.Equal("/home/aetheus-runtime", jscpd.TemporaryHomeDirectory);
         Assert.Equal("/home/aetheus-runtime", jscpd.HomeDirectory);
         Assert.Equal(134_217_728, jscpd.MaxTemporaryHomeBytes);
-        // Recette R2-120: jscpd 5 replaces the repository's configured lists with any list given on
-        // the command line, so the manifest passes none and the repository's .jscpd.json applies.
+        // Jscpd 5 replaces the repository's configured lists with any list given on the command
+        // line, so the manifest passes none and the repository's.jscpd.json applies.
         Assert.DoesNotContain(jscpd.Arguments, argument =>
             argument is "--ignore-pattern" or "--ignore" or "-i" or "--config" or "-c");
         var gitleaksHistory = Assert.Single(manifest.Scanners, scanner => scanner.Key == "gitleaks-history");
@@ -94,8 +94,8 @@ public sealed class ScannerManifestTests
         Assert.Contains(".claude", OptionValues(ruff, "--exclude"));
         Assert.Contains("node_modules", OptionValues(ruff, "--exclude"));
         Assert.Contains(".analysis-*", OptionValues(ruff, "--exclude"));
-        // Recette R2-055: the OpenGrep rule corpus is vulnerable and incomplete on purpose (#1094 F821,
-        // #1112 NoPackage). Ruff resolves a relative pattern against its working directory, which the
+        // The OpenGrep rule corpus is vulnerable and incomplete on purpose (#1094 F821, #1112
+        // NoPackage). Ruff resolves a relative pattern against its working directory, which the
         // scanner container does not set, so the path is absolute.
         Assert.Contains("/src/tests/security-rules", OptionValues(ruff, "--exclude"));
         var pmd = Assert.Single(manifest.Scanners, scanner => scanner.Key == "pmd-java");

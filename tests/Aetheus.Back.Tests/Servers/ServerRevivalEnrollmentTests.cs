@@ -10,12 +10,8 @@ using static Aetheus.Back.Tests.Servers.RetiredServerScenario;
 
 namespace Aetheus.Back.Tests.Servers;
 
-/// <summary>
-/// PLAN-004 R-11: reinstalling the agent on a retired machine revives the same server (same id,
-/// links, settings) instead of enrolling a new one. The machine identity hash is matched first,
-/// inside the token's organization; the hostname rule is the fallback for older agents; an
-/// admin's pipeline-runner choice survives any re-enrollment.
-/// </summary>
+/// <summary>Re-enrollment preserves server identity, links and administrator settings, preferring
+/// machine identity within the token organisation and falling back to hostname.</summary>
 public sealed class ServerRevivalEnrollmentTests
 {
     private readonly RetiredServerScenario _scenario = new();

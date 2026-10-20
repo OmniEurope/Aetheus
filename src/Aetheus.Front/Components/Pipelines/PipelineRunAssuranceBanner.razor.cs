@@ -8,4 +8,7 @@ public partial class PipelineRunAssuranceBanner
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
     [Parameter] public PipelineRunAssuranceVerdict.Verdict? Verdict { get; set; }
+
+    /// <summary>Recette R1-79: the run on screen, which the log links keep.</summary>
+    [Parameter] public int? ViewingRunId { get; set; }
 }

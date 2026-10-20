@@ -5,14 +5,10 @@ using Aetheus.Back.Components.Notifications;
 
 namespace Aetheus.Back.Components.Projects;
 
-/// <summary>
-/// PLAN-013 lot 5 (recette R2-115): each project has a storage budget (200 MB by default). Its usage is
-/// its rows in the detail tables times the bytes per row the database size measurement of Aetheus itself
-/// gives (lot 1), or fixed estimates. At 80 % the project's followers are alerted once; over the budget,
-/// the oldest detail goes first (telemetry samples, logs, then the detail of the oldest analysis report
-/// that may lose it) until the usage is back to 90 %. Grades, totals, hourly aggregates, the newest
-/// report of each scanner and the reports of a retained release are never touched.
-/// </summary>
+/// <summary>Estimate project storage from detail-row counts and measured or fallback row sizes;
+/// alert followers once at 80% of the budget and, when exceeded, purge oldest telemetry, logs, then
+/// eligible analysis details down to 90%. Preserve grades, totals, hourly aggregates, each scanner
+/// latest report and retained-release reports.</summary>
 public sealed class ProjectStorageBudgetService(
     IProjectStorageRepository repository,
     IAnalysisDetailRetentionRepository analysisDetail,

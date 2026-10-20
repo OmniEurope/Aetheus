@@ -120,13 +120,8 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
         Assert.DoesNotContain("AETHEUS_BG_STATE_DIR", context.ComposeEnvironment.Keys);
     }
 
-    /// <summary>
-    /// Rendering the upstream file IS the switch, and a surviving placeholder must stop the write
-    /// rather than reach the web server. The versioned templates in the repository spell the colour
-    /// <c>#{ACTIVE_COLOR}#</c>, which the shell renderer they were written for substitutes; accepting
-    /// only <c>#{COLOR}#</c> made every one of them unrenderable, so the first native switch would
-    /// have refused to write instead of moving traffic.
-    /// </summary>
+    /// <summary>Render the template ACTIVE_COLOR placeholder and reject unresolved placeholders
+    /// before writing the upstream file, since that write controls traffic.</summary>
     [Theory]
     [InlineData("port #{FRONT_PORT}# / #{BACK_PORT}# colour #{COLOR}#", "port 10031 / 10032 colour green")]
     [InlineData("port #{FRONT_PORT}# / #{BACK_PORT}# colour #{ACTIVE_COLOR}#", "port 10031 / 10032 colour green")]
@@ -269,12 +264,9 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
     // Everything above pins what the steps refuse. These pin what they actually do, because the
     // counters of green input-validation tests proved nothing about the cutover itself.
 
-    /// <summary>
-    /// The window this closes: the switch reloads the web server before it records SWITCHED, so an
-    /// interruption in between leaves traffic possibly already moved with the journal on PREPARED.
-    /// Answering "nothing to undo" there reported success without restoring anything AND left a
-    /// journal that TryOpen then refused to replace, freezing the environment for good.
-    /// </summary>
+    /// <summary>A PREPARED journal can still accompany switched traffic if interruption occurred
+    /// between reload and recording SWITCHED. Rollback must restore traffic and close the journal
+    /// rather than report nothing to undo.</summary>
     [Fact]
     public async Task Rollback_OnAnInterruptedSwitch_RestoresAndClearsInsteadOfClaimingNothingToUndo()
     {
@@ -430,12 +422,8 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
         Assert.Contains(log, line => line.Contains("No open deployment transaction", StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// Recette R2-092 (aetheus-demo #2534, #2551): the run failed before "Prepare demo host" wrote its
-    /// env file, and the rollback failed on "Environment file is missing" although this run had
-    /// switched nothing. Without a context the journal decides: no open transaction is a success that
-    /// says so, without Docker ever being contacted.
-    /// </summary>
+    /// <summary>Without deployment context, consult the journal: no open transaction completes
+    /// without contacting Docker.</summary>
     [Fact]
     public async Task R2092_RollbackOfARunThatNeverPreparedTheHost_SucceedsAndSaysNothingWasSwitched()
     {
@@ -452,7 +440,7 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
         await shell.DidNotReceiveWithAnyArgs().RunExecAsync(default!, default!, CancellationToken.None);
     }
 
-    /// <summary>R2-092, the other half: a switched transaction the rollback cannot reach still fails.</summary>
+    /// <summary>Fail when a switched transaction cannot be reached for rollback.</summary>
     [Fact]
     public async Task R2092_RollbackWithAnOpenTransaction_AndNoEnvFile_StillFails()
     {
@@ -486,6 +474,52 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
         var env = BaseEnvironment();
         env["AETHEUS_BG_ENV_FILE"] = Path.Combine(_root, ".demo-state", ".env");
         return env;
+    }
+
+    [Fact]
+    public async Task Rollback_WithoutTheUpstreamTargets_RefusesToRestoreTraffic()
+    {
+        var env = BaseEnvironment();
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", env, out var context, out _));
+        var journal = new BlueGreenJournal(context!);
+        Assert.True(journal.TryOpen("blue", "green", "rev-1", out _));
+        var shell = new FakeShell();
+        var log = new List<string>();
+
+        var result = await CreateExecutor(shell, HttpStatusCode.OK).ExecuteAsync(
+            OperationKind.BlueGreenRollback, "aetheus-demo", env, 60,
+            (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Contains("AETHEUS_BG_UPSTREAM_CONF and AETHEUS_BG_RELOAD_HELPER are required to restore traffic.", log);
+        Assert.Equal(BlueGreenJournal.Prepared, journal.State);
+    }
+
+    [Fact]
+    public async Task Rollback_ToAPreviousColourThatIsNotReady_LeavesTrafficAndTheJournal()
+    {
+        var env = BaseEnvironment();
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", env, out var context, out _));
+        var journal = new BlueGreenJournal(context!);
+        Assert.True(journal.TryOpen("blue", "green", "rev-1", out _));
+        journal.MarkSwitched();
+        var confPath = Path.Combine(_root, "upstream.conf");
+        await File.WriteAllTextAsync(confPath, "server 127.0.0.1:10031;\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(context!.JournalDir, "upstream.before"), "server 127.0.0.1:10029;\n",
+            TestContext.Current.CancellationToken);
+        env["AETHEUS_BG_UPSTREAM_CONF"] = confPath;
+        env["AETHEUS_BG_RELOAD_HELPER"] = "/usr/local/bin/reload";
+        var log = new List<string>();
+
+        var result = await CreateExecutor(new FakeShell(), HttpStatusCode.ServiceUnavailable).ExecuteAsync(
+            OperationKind.BlueGreenRollback, "aetheus-demo", env, 1,
+            (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(log, line => line.Contains("The previous blue colour did not become ready; traffic was NOT moved back.", StringComparison.Ordinal));
+        Assert.Equal("server 127.0.0.1:10031;\n", await File.ReadAllTextAsync(confPath, TestContext.Current.CancellationToken));
+        Assert.Equal(BlueGreenJournal.Switched, journal.State);
     }
 
     // A state nobody wrote means the journal is corrupt; guessing what to restore from it would be

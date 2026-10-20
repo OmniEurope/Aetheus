@@ -16,7 +16,8 @@ public partial class Settings : IDisposable
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private IConfiguration Configuration { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
-    [Inject] private SiteAppearanceState Appearance { get; set; } = default!;
+    [Inject] private OmniAppearanceState Appearance { get; set; } = default!;
+    [Inject] private IUserPreferences Preferences { get; set; } = default!;
 
     private string _displayName = string.Empty;
     private string _language = "en";
@@ -47,13 +48,23 @@ public partial class Settings : IDisposable
     // BreadcrumbService clears the breadcrumb and OnInitializedAsync does NOT re-run (same component,
     // route-param change). Re-set the (static) breadcrumb in OnParametersSet so it survives every tab
     // click - the central query-only guard in BreadcrumbService only covers UrlSyncedTabs pages.
-    protected override void OnParametersSet() =>
+    protected override void OnParametersSet()
+    {
         Breadcrumb.Set(new BreadcrumbItem(L["Settings"]));
+        // Recette R1-55: Back and Forward change only the {Tab} parameter of this same component, so the
+        // selected tab follows it here, not only once at initialization.
+        _selectedTabIndex = TabIndexOf(Tab);
+    }
+
+    private static int TabIndexOf(string? tab)
+    {
+        var index = Array.FindIndex(TabNames, name => name.Equals(tab, StringComparison.OrdinalIgnoreCase));
+        return index < 0 ? 0 : index;
+    }
 
     protected override async Task OnInitializedAsync()
     {
-        _selectedTabIndex = Array.FindIndex(TabNames, t => t.Equals(Tab, StringComparison.OrdinalIgnoreCase));
-        if (_selectedTabIndex < 0) _selectedTabIndex = 0;
+        _selectedTabIndex = TabIndexOf(Tab);
 
         _languages =
         [
@@ -71,12 +82,12 @@ public partial class Settings : IDisposable
         catch (HttpRequestException) { /* graceful degradation */ }
         _version = Configuration["App:Version"] ?? "dev";
 
-        // The display name is a client-side preference persisted in localStorage (no server profile
-        // store). Notification preferences are server-side (NotificationPreferencesPanel, R-116).
+        // Display name is stored in browser localStorage; NotificationPreferencesPanel stores
+        // notification preferences on the server.
         var storedName = await JS.InvokeAsync<string>("localStorage.getItem", StorageKeys.DisplayName);
         _displayName = string.IsNullOrWhiteSpace(storedName) ? (Auth.Username ?? string.Empty) : storedName;
 
-        // Recette R-448: the look is read from the one source the Theme window shares.
+        // The look is read from the one source the Theme window shares.
         Appearance.Changed += OnAppearanceChanged;
         await Appearance.LoadAsync();
 
@@ -96,9 +107,10 @@ public partial class Settings : IDisposable
     {
         var index = Array.FindIndex(TabNames, name => name.Equals(key, StringComparison.Ordinal));
         if (index < 0) return;
+        if (index == _selectedTabIndex) return;
         _selectedTabIndex = index;
-        if (index >= 0 && index < TabNames.Length)
-            Navigation.NavigateTo($"/settings/{TabNames[index]}", replace: true);
+        // Recette R1-55: a real history entry per tab, so Back and Forward walk the tabs visited.
+        Navigation.NavigateTo($"/settings/{TabNames[index]}");
         // Settings navigates its tabs by PATH, so each tab click is a real path change and
         // BreadcrumbService (registered after the Router) clears the breadcrumb in the async tail of the
         // navigation - AFTER the routed OnParametersSet has re-set it, and after a synchronous re-set
@@ -117,6 +129,8 @@ public partial class Settings : IDisposable
     {
         _language = value?.ToString() ?? "en";
         await JS.InvokeVoidAsync("localStorage.setItem", StorageKeys.Lang, _language);
+        // R1-66: the language is the user's, on every device; the browser key is its boot cache.
+        await Preferences.SetAsync(PreferenceKeys.Language, _language);
         await JS.InvokeVoidAsync("Aetheus.setLang", _language);
         Toast.Success("Saved", "AppearanceSaved");
         Navigation.NavigateTo(Navigation.Uri, forceLoad: true);

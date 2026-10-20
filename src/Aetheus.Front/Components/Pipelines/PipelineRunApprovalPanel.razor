@@ -6,22 +6,21 @@
 *@
 @if (Approval?.Pending is not null)
 {
-    @* Recette R2-095: on a phone the title, the text and the buttons ran past the banner. The banner
-       text wraps, the buttons wrap, and below phone width Approve and Reject show their icon alone
-       (named by Label, explained by their tooltip); Comment keeps its text. *@
+    @* Banner text and actions wrap on narrow screens; Approve and Reject retain accessible labels
+       when only icons are visible. *@
     <OmniAlert Severity="OmniSeverity.Warning" Title="@BannerTitle" Class="omni-u-mt-sm run-approval-banner">
-        @* R-370: the pipeline's own approval and the environment's are told apart. *@
+        @* The pipeline's own approval and the environment's are told apart. *@
         <div>@(Approval.Pending.Scope == ApprovalScope.Pipeline
                   ? string.Format(L["PipelineApprovalRequiredDetail"], Approval.Pending.StageName)
                   : string.Format(L["ApprovalRequiredDetail"], Approval.Pending.StageName, Approval.Pending.EnvironmentName))</div>
         @if (!string.IsNullOrWhiteSpace(Approval.EnvironmentInstructions))
         {
-            @* Recette R1-24: the environment's approval instructions, named as such for the approver. *@
+            @* The environment's approval instructions, named as such for the approver. *@
             <div class="omni-u-mt-sm approval-instructions"><span class="approval-instructions-label">@L["ApprovalInstructionsForApprover"]</span> @Approval.EnvironmentInstructions</div>
         }
-        @* Recette R2-021: a newer Aetheus was deployed than the one this page runs. The approval that
-           confirms a production switch is answered from the new version, after checking it works:
-           the decision is offered again once the page is reloaded. *@
+        @* A newer Aetheus was deployed than the one this page runs. The approval that confirms a
+           production switch is answered from the new version, after checking it works: the
+           decision is offered again once the page is reloaded. *@
         @if (VersionState.NewVersionAvailable)
         {
             <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Small" Align="OmniAlignment.Start" Class="omni-u-mt-md approval-reload-first">
@@ -32,7 +31,7 @@
         else
         {
         <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Small" Class="omni-u-mt-md role-edit-stack">
-            @* Recette R2-046: the comment field appears on request; Approve and Reject stay the two decisions. *@
+            @* The comment field appears on request; Approve and Reject both stay visible (user decision, 2026-10-17). *@
             @if (CommentOpen)
             {
                 <OmniTextArea aria-label="@L["ApprovalCommentsOptional"]" @bind-Value="Approval.Comments" Placeholder="@L["ApprovalCommentsOptional"]" Rows="2" Class="omni-u-w-100 approval-comment" />

@@ -3,17 +3,9 @@ using System.Net.Http;
 
 namespace Aetheus.Front.Components.Notifications;
 
-/// <summary>
-/// R-115: the single source of the current user's notifications in the browser. The header bell, the
-/// menu badge and the /notifications page all read <see cref="UnreadCount"/> from here and listen to
-/// <see cref="OnChanged"/>, so they can never disagree. A singleton for the session, like
-/// <c>PendingApprovalsService</c>.
-///
-/// Refresh: the backend pushes <c>NotificationsChanged</c> on <c>/hubs/user</c> for every delivery
-/// recorded or read (R-182, wired in <c>UserNotificationService</c>), which reloads this feed at
-/// once. The feed also reloads after every mark-read action here, and a slow <see cref="PollInterval"/>
-/// catch-up remains only for pushes missed while the hub was disconnected.
-/// </summary>
+/// <summary>Shares the current user notification count and change event between the bell, menu and
+/// inbox. Server pushes and mark-read actions reload the feed; polling catches up after missed
+/// pushes.</summary>
 public sealed class UserNotificationsFeed : IDisposable
 {
     public static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
@@ -23,11 +15,12 @@ public sealed class UserNotificationsFeed : IDisposable
     private readonly AuthStateProvider _auth;
     private readonly TimeProvider _time;
     private readonly ILogger<UserNotificationsFeed> _logger;
-    /// <summary>R-461: pushes arriving within this window after the first one are served by one refresh.</summary>
+    /// <summary>Pushes arriving within this window after the first one are served by one
+    /// refresh.</summary>
     public const int PushCoalesceMilliseconds = 1000;
 
     private readonly object _gate = new();
-    private readonly TrailingReloadCoalescer _pushRefresh = new(PushCoalesceMilliseconds);
+    private readonly TrailingReloadCoalescer _pushRefresh;
     private ITimer? _poll;
     private Task _startup = Task.CompletedTask;
     // FRONT-005: bumped whenever the signed-in identity changes (sign-out, another account). An answer
@@ -40,6 +33,8 @@ public sealed class UserNotificationsFeed : IDisposable
         _api = api;
         _auth = auth;
         _time = time;
+        _pushRefresh = new TrailingReloadCoalescer(PushCoalesceMilliseconds,
+            (milliseconds, ct) => Task.Delay(TimeSpan.FromMilliseconds(milliseconds), time, ct));
         _logger = logger;
         _authUser = CurrentUser();
         _auth.OnAuthStateChanged += OnAuthStateChanged;
@@ -52,11 +47,8 @@ public sealed class UserNotificationsFeed : IDisposable
 
     public event Action? OnChanged;
 
-    /// <summary>
-    /// Loads the count and starts the poll on the first call. Safe to call from every view: R-461, the
-    /// bell and the menu entry both start the feed when the layout loads, and used to send the pair of
-    /// requests twice; a later call now waits for the first load instead of sending its own.
-    /// </summary>
+    /// <summary>Load the count and start polling on the first call. Concurrent callers await that
+    /// same initial load rather than sending duplicate requests.</summary>
     public async Task EnsureStartedAsync()
     {
         if (!_auth.IsAuthenticated) return;
@@ -73,20 +65,12 @@ public sealed class UserNotificationsFeed : IDisposable
         await load.ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// R-461: a <c>NotificationsChanged</c> push. A burst of pushes (several deliveries recorded at once)
-    /// is served by one refresh at the end of <see cref="PushCoalesceMilliseconds"/>, not one pair of
-    /// requests per push. Returns at once, so the hub's message loop is never held.
-    /// </summary>
+    /// <summary>Coalesce notification pushes into one refresh per window without holding the hub
+    /// message loop.</summary>
     public void RefreshFromPush() => _ = _pushRefresh.RequestBestEffortAsync(RefreshAsync, CancellationToken.None);
 
-    /// <summary>
-    /// Reloads the count and the newest deliveries. Recette R2-106: the two are read and kept
-    /// independently. The count used to be set only once both answers were in, so a list that could not
-    /// be read (an error answer, a body that does not parse, a timeout) left the bell without its number
-    /// while the count itself had been read fine; and a failure other than an HTTP error escaped the
-    /// first load, which every later view of the bell then re-threw.
-    /// </summary>
+    /// <summary>Read and retain the count and newest deliveries independently so a failed list
+    /// request cannot hide a successfully retrieved count.</summary>
     public async Task RefreshAsync()
     {
         if (!_auth.IsAuthenticated) return;

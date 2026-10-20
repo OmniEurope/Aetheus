@@ -31,8 +31,8 @@ public partial class RoleAssignmentPicker : IAsyncDisposable
         _pageSize = args.Top ?? 25;
         _page = ((args.Skip ?? 0) / _pageSize) + 1;
         (_sortBy, _sortDescending) = ResolveSort(args);
-        // Recette R-210: the Role header filter is a real column filter (its operator honoured) sent to
-        // the roles API, no longer folded into the free-text search that also matched descriptions.
+        // Send the Role header value and operator as a column filter to the roles API, distinct
+        // from free-text search.
         _headerFilters = args.Filters;
         _columnFilters = args.ToApiFilters();
         await LoadPageAsync();
@@ -99,8 +99,8 @@ public partial class RoleAssignmentPicker : IAsyncDisposable
         await ResetGridAsync();
     }
 
-    // Recette R-327: the grid scrolls (remote virtualization) and only shows what it fetched itself, so a
-    // new search or view reloads it from its first row through its own loader.
+    // The grid scrolls (remote virtualization) and only shows what it fetched itself, so a new
+    // search or view reloads it from its first row through its own loader.
     private Task ResetGridAsync()
     {
         _page = 1;

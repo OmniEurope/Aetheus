@@ -15,7 +15,7 @@ public interface INotificationService
     Task<PaginatedResult<NotificationRuleDto>> GetRulesAsync(
         PaginationRequest request, CancellationToken ct = default);
 
-    /// <summary>Recette R-224: the values the rules grid's checkable column filters offer.</summary>
+    /// <summary>The values the rules grid's checkable column filters offer.</summary>
     Task<NotificationAdminFilterValuesDto> GetRuleFilterValuesAsync(CancellationToken ct = default);
     Task<NotificationRuleDto> CreateRuleAsync(CreateNotificationRuleRequest request, CancellationToken ct = default);
     Task<NotificationRuleDto?> UpdateRuleAsync(int id, UpdateNotificationRuleRequest request, CancellationToken ct = default);

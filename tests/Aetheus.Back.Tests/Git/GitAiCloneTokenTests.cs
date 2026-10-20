@@ -4,8 +4,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace Aetheus.Back.Tests.Git;
 
-/// <summary>
-/// Recette R-464: the autonomous AI clone token follows the run clone token's key rules, so wiring a
+/// <summary> The autonomous AI clone token follows the run clone token's key rules, so wiring a
 /// dedicated <c>GitLight:RunTokenKey</c> cannot break the AI checkouts of either blue-green colour.
 /// </summary>
 public class GitAiCloneTokenTests

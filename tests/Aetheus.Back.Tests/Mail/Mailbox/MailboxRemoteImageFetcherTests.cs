@@ -8,7 +8,7 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-17: "show images" fetches only raster images, bounded, through the SSRF guard.</summary>
+/// <summary>"show images" fetches only raster images, bounded, through the SSRF guard.</summary>
 public sealed class MailboxRemoteImageFetcherTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

@@ -190,6 +190,93 @@ public class PipelineServiceTests
         await _auditMock.Received(1).LogAsync("Created", "Pipeline", Arg.Any<int?>(), "New Pipeline", Arg.Any<CancellationToken>());
     }
 
+    // --- Pipeline AI runner profile: must belong to the pipeline's organization ---
+
+    [Fact]
+    public async Task CreatePipelineAsync_WithAProfileOfTheSameOrganization_StoresIt()
+    {
+        _repoMock.GetAiRunnerProfileOrganizationIdAsync(11, Arg.Any<CancellationToken>()).Returns(4);
+        _repoMock.GetPipelineOwnerOrganizationIdAsync(7, null, null, Arg.Any<CancellationToken>()).Returns(4);
+
+        var result = await _sut.CreatePipelineAsync(new CreatePipelineRequest
+        {
+            Name = "P",
+            ProjectId = 7,
+            AiRunnerProfileId = 11,
+            YamlDefinition = "name: p\ntrigger: manual\nstages: []"
+        }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(11, result.AiRunnerProfileId);
+        await _repoMock.Received(1).AddPipelineAsync(
+            Arg.Is<Pipeline>(p => p.AiRunnerProfileId == 11), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreatePipelineAsync_WithAProfileOfAnotherOrganization_IsRefused_BeforeAnyWrite()
+    {
+        _repoMock.GetAiRunnerProfileOrganizationIdAsync(11, Arg.Any<CancellationToken>()).Returns(5);
+        _repoMock.GetPipelineOwnerOrganizationIdAsync(7, null, null, Arg.Any<CancellationToken>()).Returns(4);
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => _sut.CreatePipelineAsync(new CreatePipelineRequest
+        {
+            Name = "P",
+            ProjectId = 7,
+            AiRunnerProfileId = 11,
+            YamlDefinition = "name: p\ntrigger: manual\nstages: []"
+        }, ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("same organization", exception.Message, StringComparison.Ordinal);
+        await _repoMock.DidNotReceive().AddPipelineAsync(Arg.Any<Pipeline>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdatePipelineAsync_WithAMissingProfile_IsRefused_BeforeTheGitWrite()
+    {
+        _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Pipeline { Id = 1, Name = "Old", ProjectId = 7, Runs = [] });
+        _repoMock.GetAiRunnerProfileOrganizationIdAsync(404, Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => _sut.UpdatePipelineAsync(1, new UpdatePipelineRequest
+        {
+            Name = "New",
+            ProjectId = 7,
+            AiRunnerProfileId = 404,
+            YamlDefinition = "name: p\ntrigger: manual\nstages: []"
+        }, ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("AI runner profile not found", exception.Message, StringComparison.Ordinal);
+        await _pipelineGitMock.DidNotReceive().ApplyProjectPipelineChangeAsync(
+            Arg.Any<PipelineGitDefinitionLocation?>(), Arg.Any<PipelineGitDefinitionLocation?>(),
+            Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _repoMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdatePipelineAsync_SetsAndClearsTheProfile()
+    {
+        var existing = new Pipeline { Id = 1, Name = "Old", Runs = [] };
+        _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(existing);
+        _repoMock.GetAiRunnerProfileOrganizationIdAsync(11, Arg.Any<CancellationToken>()).Returns(4);
+        _repoMock.GetPipelineOwnerOrganizationIdAsync(null, null, null, Arg.Any<CancellationToken>()).Returns(4);
+        var yaml = "name: p\ntrigger: manual\nstages: []";
+
+        await _sut.UpdatePipelineAsync(1, new UpdatePipelineRequest
+        {
+            Name = "Old",
+            AiRunnerProfileId = 11,
+            YamlDefinition = yaml
+        }, ct: TestContext.Current.CancellationToken);
+        Assert.Equal(11, existing.AiRunnerProfileId);
+
+        await _sut.UpdatePipelineAsync(1, new UpdatePipelineRequest
+        {
+            Name = "Old",
+            AiRunnerProfileId = null,
+            YamlDefinition = yaml
+        }, ct: TestContext.Current.CancellationToken);
+        Assert.Null(existing.AiRunnerProfileId);
+    }
+
     // --- Phase 5 git-first: a failed commit to the project's internal repo aborts the write ---
 
     [Fact]
@@ -1311,9 +1398,7 @@ public class PipelineServiceTests
         Assert.Contains(result.Errors, e => e.Contains("shell") || e.Contains("checkout"));
     }
 
-    // Recette R2-041: an unknown key no longer refuses the definition (a backend must read a YAML written
-    // for the next version); it is accepted and named in a warning. These three tests asserted the former
-    // strict refusal and were turned around deliberately.
+    // Unsupported keys are accepted with explicit warnings for forward compatibility.
     [Fact]
     public void ValidateYamlStrict_UnknownTopLevelProperty_IsAcceptedWithAWarning()
     {

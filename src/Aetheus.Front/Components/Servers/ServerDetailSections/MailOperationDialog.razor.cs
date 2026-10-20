@@ -11,6 +11,8 @@ public partial class MailOperationDialog
     [Parameter] public int ServerId { get; set; }
     [Parameter] public IReadOnlyList<MailDomainDto> Domains { get; set; } = [];
     [Parameter] public MailDnsRecordsDto? DnsRecords { get; set; }
+    /// <summary>Recette R3-47: the mail accounts of the server, offered as the sender of the delivery test.</summary>
+    [Parameter] public IReadOnlyList<MailAccountDto> Accounts { get; set; } = [];
 
     private MailDialogModel _model = new();
     private string SubmitText => Mode switch
@@ -31,7 +33,8 @@ public partial class MailOperationDialog
 
     private string DkimRecordLabel => DnsRecords is null ? string.Empty : $"DKIM (TXT {DnsRecords.DkimSelector}._domainkey.{DnsRecords.Domain})";
 
-    /// <summary>Recette R1-15: the domains a new account name can be completed with, shown after the field as "@domain".</summary>
+    /// <summary>The domains a new account name can be completed with, shown after the field as
+    /// "@domain".</summary>
     internal IReadOnlyList<OmniOption<string>> AccountDomainOptions => Domains.ToOptions(item => item.Name, item => $"@{item.Name}");
 
     /// <summary>Why the DKIM record is missing from the list, or null when it is there.</summary>
@@ -42,20 +45,59 @@ public partial class MailOperationDialog
         _ => null
     };
 
-    // R-511: OmniDialog listens to the keyboard, so every key press re-renders the dialog and hands it the
-    // same parameters again. Copying the model there wiped what had just been typed: it is copied once.
+    // Copy the model only once because keyboard-driven dialog renders resend the same parameters
+    // and must not reset typed input.
     protected override void OnInitialized()
     {
         _model = Model.Clone();
         _model.L = L;
-        // Recette R1-15: a name alone is completed with the first domain until the user picks another.
+        // A name alone is completed with the first domain until the user picks another.
         if (Mode == MailDialogMode.AddAccount && Domains.Count > 0
             && !Domains.Any(domain => string.Equals(domain.Name, _model.Domain, StringComparison.OrdinalIgnoreCase)))
             _model.Domain = Domains[0].Name;
+        if (Mode == MailDialogMode.TestDelivery)
+            _model.Source = PreselectedSender();
+    }
+
+    /// <summary>Recette R3-47: the existing accounts the delivery test can be sent from (the active ones).</summary>
+    internal IReadOnlyList<OmniOption<string>> SenderOptions =>
+        Accounts.Where(a => a.IsActive).ToOptions(a => a.Email, a => a.Email);
+
+    /// <summary>
+    /// Recette R3-47: the active accounts of the server whose address contains the text typed, offered as
+    /// recipients; any other address stays accepted as typed (<c>AllowFreeText</c>).
+    /// </summary>
+    internal Task<IReadOnlyList<OmniOption<string>>> SearchRecipientsAsync(string text, CancellationToken ct)
+    {
+        var typed = text.Trim();
+        IReadOnlyList<OmniOption<string>> matches = SenderOptions
+            .Where(o => typed.Length == 0 || o.Value.Contains(typed, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return Task.FromResult(matches);
+    }
+
+    /// <summary>
+    /// The administration account (admin or postmaster) when the server has one, else the sender already
+    /// given when it is a known account, else the first account; the typed value is kept when there is no account.
+    /// </summary>
+    private string PreselectedSender()
+    {
+        var emails = SenderOptions.Select(o => o.Value).ToList();
+        if (emails.Count == 0) return _model.Source;
+        return emails.FirstOrDefault(e => IsAdministrationAddress(e))
+            ?? emails.FirstOrDefault(e => string.Equals(e, _model.Source, StringComparison.OrdinalIgnoreCase))
+            ?? emails[0];
+    }
+
+    private static bool IsAdministrationAddress(string email)
+    {
+        var local = email.Split('@')[0];
+        return local.Equals("admin", StringComparison.OrdinalIgnoreCase)
+            || local.Equals("postmaster", StringComparison.OrdinalIgnoreCase);
     }
 
     protected override void OnParametersSet() => _model.Mode = Mode;
-    // R2-085: a second submit (Enter, then a click) must not close a second time: Close pops whatever
+    // A second submit (Enter, then a click) must not close a second time: Close pops whatever
     // dialog is on top, the one underneath included.
     private bool _closed;
     private void Submit(MailDialogModel model)
@@ -98,22 +140,17 @@ public sealed class MailDialogModel : IValidatableObject
     public bool IsSpam { get; set; } = true;
     [StringLength(MailValidation.MaxLearnMessageLength)] public string RawMessage { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Recette R1-5: the texts of the validation messages. OE's validator shows an <see cref="IValidatableObject"/>
-    /// message as it is, so a resource key returned here reached the user raw (<c>MailEmailInvalid</c>). Every
-    /// message is read through this localizer, which the form showing the model sets; a model validated without
-    /// one fails loudly instead of answering keys.
-    /// </summary>
+    /// <summary>Validation messages require the form localizer because <see
+    /// cref="IValidatableObject"/> messages are displayed directly. Missing localization fails
+    /// explicitly instead of exposing resource keys.</summary>
     internal IStringLocalizer L
     {
         get => _localizer ?? throw new InvalidOperationException($"{nameof(MailDialogModel)}.{nameof(L)} must be set before the model is validated.");
         set => _localizer = value;
     }
 
-    /// <summary>
-    /// Recette R1-15: the address of a new account. A name alone (<c>contact</c>) is completed with
-    /// <see cref="Domain"/>; an address typed in full is kept as it is.
-    /// </summary>
+    /// <summary> The address of a new account. A name alone (<c>contact</c>) is completed with <see
+    /// cref="Domain"/>; an address typed in full is kept as it is. </summary>
     internal string AccountAddress
     {
         get
@@ -123,7 +160,8 @@ public sealed class MailDialogModel : IValidatableObject
         }
     }
 
-    /// <summary>Recette R1-6: the Let's Encrypt contact is optional; blank means none (the back then registers without one).</summary>
+    /// <summary>The Let's Encrypt contact is optional; blank means none (the back then registers
+    /// without one).</summary>
     internal string? AcmeEmail => string.IsNullOrWhiteSpace(Email) ? null : Email.Trim();
 
     public MailDialogModel Clone() => (MailDialogModel)MemberwiseClone();
@@ -146,12 +184,12 @@ public sealed class MailDialogModel : IValidatableObject
                 yield return new ValidationResult(L["Required"], [nameof(Domain)]);
             else if (!DomainValidator.IsValid(Domain))
                 yield return new ValidationResult(L["MailDomainInvalid"], [nameof(Domain)]);
-            // Recette R2-060: the helper refuses a selector it cannot put in a DNS name (mail-setup).
+            // The helper refuses a selector it cannot put in a DNS name (mail-setup).
             if (!MailValidation.IsValidDkimSelector(DkimSelector))
                 yield return new ValidationResult(L["MailDkimSelectorInvalid"], [nameof(DkimSelector)]);
         }
-        // Recette R2-060: mail-setup takes a full name only (a dot and an extension); a bare host name was
-        // refused by the agent after the whole wizard.
+        // Mail setup requires a fully qualified hostname so the wizard rejects names the agent
+        // cannot accept.
         if (Mode == MailDialogMode.Setup && !DomainValidator.IsValid(Hostname))
             yield return new ValidationResult(L["MailHostnameInvalid"], [nameof(Hostname)]);
     }
@@ -166,7 +204,7 @@ public sealed class MailDialogModel : IValidatableObject
         }
         if (Mode == MailDialogMode.Setup && !EmailValidator.IsValid(Email))
             yield return new ValidationResult(L["MailEmailInvalid"], [nameof(Email)]);
-        // Recette R1-15: the back creates the account only for an address its own rule accepts.
+        // The back creates the account only for an address its own rule accepts.
         if (Mode == MailDialogMode.AddAccount && !MailValidation.IsValidEmail(AccountAddress))
             yield return new ValidationResult(L["MailAccountAddressInvalid"], [nameof(Email)]);
         if (!MailValidation.IsValidPassword(Password))
@@ -176,7 +214,7 @@ public sealed class MailDialogModel : IValidatableObject
 
     private IEnumerable<ValidationResult> ValidateStackOperations() => Mode switch
     {
-        // Recette R1-6: blank is accepted (no Let's Encrypt contact); anything typed must be an address.
+        // Blank is accepted (no Let's Encrypt contact); anything typed must be an address.
         MailDialogMode.RequestCertificate => AcmeEmail is null || MailValidation.IsValidEmail(AcmeEmail)
             ? [] : [new ValidationResult(L["MailEmailInvalid"], [nameof(Email)])],
         MailDialogMode.SpamThresholds => MailValidation.AreSpamThresholdsOrdered(GreylistScore, AddHeaderScore, RejectScore)

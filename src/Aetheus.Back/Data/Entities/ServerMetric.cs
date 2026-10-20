@@ -10,6 +10,13 @@ public class ServerMetric
     public double MemoryTotalMb { get; set; }
     public double DiskUsedGb { get; set; }
     public double DiskTotalGb { get; set; }
+    /// <summary>Fullest inode table, in percent; null when the agent did not measure it.</summary>
+    public double? InodeUsedPercent { get; set; }
+    /// <summary>Agent clock offset against the backend's, in milliseconds (positive = agent ahead);
+    /// null when the heartbeat carried no usable clock sample.</summary>
+    public double? ClockOffsetMs { get; set; }
+    /// <summary>Half the round trip of the measured exchange: the true offset lies within it.</summary>
+    public double? ClockOffsetUncertaintyMs { get; set; }
     public bool BuildCacheAvailable { get; set; }
     public bool DockerInventoryAvailable { get; set; }
     public long BuildCacheBytes { get; set; }

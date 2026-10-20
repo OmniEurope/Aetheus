@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Globalization;
+using Aetheus.Back.Components.Notifications.MailTemplates;
 using Aetheus.Back.Services.Email;
+using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Back.Components.DailyRecap;
 
@@ -15,6 +17,7 @@ internal sealed class DailyRecapService(
     IDailyRecapRepository repo,
     DailyRecapCollector collector,
     IEmailSender sender,
+    IMailTemplateRenderer templates,
     IAuditService audit,
     TimeProvider timeProvider,
     IConfiguration configuration,
@@ -167,7 +170,11 @@ internal sealed class DailyRecapService(
     {
         var report = await collector.CollectAsync(day, timeZone, settings.Sections, Now, ct).ConfigureAwait(false);
         var document = DailyRecapComposer.Compose(report, new DailyRecapText(settings.Culture), FrontOrigin);
-        return (document.Subject, DailyRecapHtmlRenderer.Render(document, settings.Culture.Name), DailyRecapTextRenderer.Render(document));
+        // One mail for every recipient: the recap's own language, the platform's default colours.
+        var style = new MailRecipientStyle(MailTemplateLanguages.Normalize(settings.Culture.Name), OmniMailTheme.Default);
+        var mail = await templates.RenderAsync(MailTemplateKind.DailyRecap,
+            DailyRecapHtmlRenderer.Data(document), style, ct).ConfigureAwait(false);
+        return (mail.Subject, mail.Html, mail.Text);
     }
 
     /// <summary>The settings page refuses an unknown zone; a host without timezone data falls back to UTC, and says so.</summary>
@@ -185,8 +192,8 @@ internal sealed class DailyRecapService(
 
     private DateTime Now => timeProvider.GetUtcNow().UtcDateTime;
 
-    /// <summary>The front the host allows through CORS: Cors:FrontendUrl, else the first Cors:Origins entry
-    /// (FRONT_URL in the blue-green compose files).</summary>
+    /// <summary>The first Cors:Origins entry (FRONT_URL in the blue-green compose files),
+    /// else Cors:FrontendUrl for local launches.</summary>
     private string? FrontOrigin =>
-        configuration["Cors:FrontendUrl"] is { Length: > 0 } front ? front : configuration["Cors:Origins:0"];
+        configuration["Cors:Origins:0"] is { Length: > 0 } front ? front : configuration["Cors:FrontendUrl"];
 }

@@ -2,11 +2,8 @@
 
 namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
-/// <summary>
-/// Recette R-181 follow-up: while a service log viewer is open with auto-refresh on, the last lines are
-/// read again every 30 s (one short journalctl snapshot on the agent) instead of holding a journalctl -f
-/// session renewed every minute. Nothing runs once the viewer is closed or the page left.
-/// </summary>
+/// <summary>While the viewer is open and auto-refresh enabled, fetch a short journal snapshot every
+/// 30 seconds. Closing the viewer or leaving the page stops the work.</summary>
 internal sealed class ServiceLogAutoRefresh(Func<Task> tick) : IDisposable
 {
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(30);

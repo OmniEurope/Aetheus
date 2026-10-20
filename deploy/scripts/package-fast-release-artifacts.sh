@@ -29,18 +29,14 @@ printf '%s\n' "$COMMIT" > "$PACKAGE_DIR/source-commit"
 printf '%s\n' 4 > "$PACKAGE_DIR/qa-rollback-contract"
 
 NODE="$(sh deploy/scripts/ensure-node-runtime.sh)"
-# The delivery contract seals a digest over this manifest's exact bytes, so the two packagers must
-# produce it identically. This used to be a heredoc reimplementing what CI's packager calls, which
-# meant a change to the shape had two places to reach and only one of them was tested; the second
-# copy could then seal a different digest for the same commit. One implementation, with its tests.
+# Use the same manifest writer in both packagers so the sealed digest covers identical bytes for the
+# same integration inputs. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 "$NODE" deploy/scripts/write-integration-manifest.mjs \
   "$COMMIT" "$PACKAGE_DIR/integration-manifest.json"
 
-# The two archives are written and verified in parallel, each with pigz when the host has it: gzip is
-# single-threaded and this step took about 90 s of release-fast 2355 in series. Same gzip format and
-# level, so every consumer reads them unchanged; -n keeps the name and time out of the header. A failed
-# save (now visible: it no longer hides at the head of a pipe), compression or test fails the step:
-# each job reports its own status and both are waited for.
+# Export and verify both archives concurrently, using pigz when available and deterministic gzip
+# headers; wait for both jobs and propagate any export, compression or verification failure. See
+# docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
 if command -v pigz >/dev/null 2>&1; then GZIP_TOOL=pigz; else GZIP_TOOL=gzip; fi
 save_and_verify() {
   docker save "$1" > "$2.tar"

@@ -109,7 +109,7 @@ public class UrlSyncedTabsTests : BunitContext
         Assert.Equal(1, Index(c));
     }
 
-    /// <summary>R-120: nested inside the pipelines hub, the URL carries the hub's slug (?tab=used). It
+    /// <summary>Nested inside the pipelines hub, the URL carries the hub's slug (?tab=used). It
     /// names no tab of the inner set, so the inner set's remembered tab still applies.</summary>
     [Fact]
     public void InitialProgrammaticSelectedIndex_IsHonoured_WhenUrlTabBelongsToAnotherTabSet()

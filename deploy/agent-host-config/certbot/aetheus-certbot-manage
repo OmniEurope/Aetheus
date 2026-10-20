@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-License-Identifier: EUPL-1.2
+# aetheus-certbot-helper-version: 1
 # Aetheus Agent certbot-manage helper - root-owned, invoked via /etc/sudoers.d/aetheus-certbot.
 # Args: $1 = verb (renew|renew-all|delete|revoke|normalize|renewal-check), $2 = cert lineage name
 # (only for renew, delete and revoke).
@@ -28,6 +30,8 @@ renewal_webroots() {
         /^[[:space:]]*webroot_path[[:space:]]*=/ { print $2 }
     ' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '\r' | grep -v '^$' | sort -u
 }
+# Prints the helper version before anything else, so it answers on a host where certbot is missing too.
+[ "${1:-}" != "version" ] || { echo "aetheus-certbot-helper-version: 1"; exit 0; }
 command -v certbot >/dev/null 2>&1 || { echo "certbot not installed" >&2; exit 1; }
 verb="${1:-}"
 case "$verb" in
@@ -67,8 +71,26 @@ case "$verb" in
     mkdir -p "$STATE_DIR"
     chmod 755 "$STATE_DIR"
     rc=0
-    certbot renew --dry-run --non-interactive || rc=$?
-    printf 'checked_at=%s\nexit_code=%s\n' "$(date +%s)" "$rc" > "$STATE_DIR/renewal-check.tmp"
+    # Recette R3-56: certbot's output is kept (and still printed, for the journal) so each lineage that
+    # fails the rehearsal is recorded with its reason, one "failed=<name><TAB><reason>" line, for the page.
+    log="$(mktemp)"
+    certbot renew --dry-run --non-interactive >"$log" 2>&1 || rc=$?
+    cat "$log"
+    {
+        printf 'checked_at=%s\nexit_code=%s\n' "$(date +%s)" "$rc"
+        tr -d '\r' < "$log" | awk '
+            /^Failed to renew certificate [^ ]+ with error: / {
+                reason = substr($0, index($0, " with error: ") + 13)
+                printf "failed=%s\t%s\n", $5, substr(reason, 1, 500)
+                next
+            }
+            /^Attempting to renew cert \(/ && index($0, "produced an unexpected error: ") {
+                name = $0; sub(/^Attempting to renew cert \(/, "", name); sub(/\).*/, "", name)
+                reason = substr($0, index($0, "produced an unexpected error: ") + 30)
+                printf "failed=%s\t%s\n", name, substr(reason, 1, 500)
+            }'
+    } > "$STATE_DIR/renewal-check.tmp"
+    rm -f "$log"
     chmod 644 "$STATE_DIR/renewal-check.tmp"
     mv -f "$STATE_DIR/renewal-check.tmp" "$STATE_DIR/renewal-check"
     exit "$rc" ;;

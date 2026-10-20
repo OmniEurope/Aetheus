@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>
-/// Recette R-370 / R-104: who asked for an approval. Both can apply to the same run and are decided
-/// separately: approving one never satisfies the other.
-/// </summary>
+/// <summary> Who asked for an approval. Both can apply to the same run and are decided separately:
+/// approving one never satisfies the other. </summary>
 public enum ApprovalScope
 {
     /// <summary>The target environment's own policy (<c>RequireApproval</c>): one decision per run

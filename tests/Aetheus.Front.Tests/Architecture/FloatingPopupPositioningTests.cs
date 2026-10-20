@@ -59,21 +59,15 @@ public class FloatingPopupPositioningTests
         Assert.Contains("position: absolute", rule.Groups["body"].Value, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Recette R-325: on a phone the run's actions menu left the window on the left. The run header now
-    /// uses OE's OmniOverflowMenu, whose script (omni-focus.js, placeOverflowMenu) measures the menu and
-    /// clamps it between both window edges, flipping above the trigger when there is no room below; it
-    /// needs no CSS anchor positioning, so Firefox and older Safari are covered too. That only holds while
-    /// the run header keeps that menu and no Aetheus rule moves its popup: a left, an inset, a transform
-    /// or an anchor rule here would override the coordinates the script sets.
-    /// </summary>
+    /// <summary>OE's overflow-menu script owns viewport-clamped positioning. Application CSS must
+    /// not override those coordinates or require CSS anchor positioning.</summary>
     [Fact]
     public void RunActionsMenu_IsTheOeOverflowMenu_AndAppCssNeverMovesItsPopup()
     {
         var header = File.ReadAllText(Path.Combine(
             RepositoryScan.Root, "src", "Aetheus.Front", "Components", "Pipelines", "PipelineRunHeader.razor"));
-        // Recette R-395: the run's "..." menu is the page header's own (OmniPageHeader.MenuContent), which
-        // OE draws as its OmniOverflowMenu.
+        // The run's "..." menu is the page header's own (OmniPageHeader.MenuContent), which OE
+        // draws as its OmniOverflowMenu.
         Assert.Contains("<MenuContent>", header, StringComparison.Ordinal);
         Assert.DoesNotContain("OmniPopover", header, StringComparison.Ordinal);
 
@@ -99,7 +93,7 @@ public class FloatingPopupPositioningTests
         var css = Regex.Replace(File.ReadAllText(Path.Combine(
             RepositoryScan.Root, "src", "Aetheus.Front", "wwwroot", "css", "app.css")), @"/\*.*?\*/", string.Empty, RegexOptions.Singleline);
 
-        // Recette R-395: the frame is OmniPageHeader's; no app.css rule on it may clip what hangs below it.
+        // The page-header frame must not clip overflowing menus.
         var frames = Regex.Matches(css, @"(?<selector>[^{}]*omni-page-header__(?:frame|row)[^{}]*)\{(?<body>[^}]*)\}")
             .Select(rule => rule.Groups["body"].Value)
             .ToList();

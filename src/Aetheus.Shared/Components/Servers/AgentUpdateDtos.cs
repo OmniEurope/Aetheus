@@ -26,6 +26,19 @@ public sealed record AgentUpdateResponse
 }
 
 /// <summary>
+/// Body of the "update the agent and enable capabilities" action (R3-58). Each entry must be one of
+/// <see cref="AgentEnableableCapabilities.Whitelist"/>; the backend refuses anything else with a 400.
+/// </summary>
+public sealed record AgentEnableCapabilitiesRequest
+{
+    [Required]
+    [MinLength(1)]
+    [MaxLength(8)]
+    [MaxItemStringLength(32)]
+    public List<string> Capabilities { get; init; } = [];
+}
+
+/// <summary>
 /// Result of queuing an agent self-update across every server the caller can administer.
 /// </summary>
 public sealed record AgentUpdateAllResponse

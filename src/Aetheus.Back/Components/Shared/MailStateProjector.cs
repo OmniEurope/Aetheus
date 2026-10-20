@@ -4,10 +4,8 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Shared;
 
-/// <summary>
-/// PLAN-005: maps the heartbeat mail section to the persisted <see cref="MailState"/> row and back to the
-/// server-detail DTO, so the heartbeat ingestion and the read path cannot drift apart field by field.
-/// </summary>
+/// <summary>Map heartbeat mail state consistently between persistence and server-detail
+/// DTOs.</summary>
 internal static class MailStateProjector
 {
     public static MailState? ToState(int serverId, MailDataDto mail) => mail.IsInstalled ? new MailState
@@ -35,7 +33,8 @@ internal static class MailStateProjector
         SpamRejectScore = mail.SpamFilter.RejectScore,
         SpamAddHeaderScore = mail.SpamFilter.AddHeaderScore,
         SpamGreylistScore = mail.SpamFilter.GreylistScore,
-        DiagnosticsJson = mail.Diagnostics.Count == 0 ? null : JsonSerializer.Serialize(mail.Diagnostics)
+        DiagnosticsJson = mail.Diagnostics.Count == 0 ? null : JsonSerializer.Serialize(mail.Diagnostics),
+        DeliveryJson = mail.Delivery.IsEmpty ? null : JsonSerializer.Serialize(mail.Delivery)
     } : null;
 
     public static MailDataDto ToDto(MailState? state) => state is null ? new MailDataDto() : new MailDataDto
@@ -71,6 +70,9 @@ internal static class MailStateProjector
         },
         Diagnostics = string.IsNullOrEmpty(state.DiagnosticsJson)
             ? []
-            : JsonSerializer.Deserialize<List<string>>(state.DiagnosticsJson) ?? []
+            : JsonSerializer.Deserialize<List<string>>(state.DiagnosticsJson) ?? [],
+        Delivery = string.IsNullOrEmpty(state.DeliveryJson)
+            ? new MailDeliveryStateDto()
+            : JsonSerializer.Deserialize<MailDeliveryStateDto>(state.DeliveryJson) ?? new MailDeliveryStateDto()
     };
 }

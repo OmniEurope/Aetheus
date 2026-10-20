@@ -27,6 +27,13 @@ public sealed record ClientErrorLogRequest
     [System.ComponentModel.DataAnnotations.StringLength(MaxStackTraceLength)]
     public string? StackTrace { get; init; }
 
+    /// <summary>The system log level the report is written at: <see cref="ClientErrorLogLevels.Error"/>
+    /// or <see cref="ClientErrorLogLevels.Warning"/>, matched exactly. Null (a client that predates the
+    /// field) is an error, as every report was before (recette R1-89).</summary>
+    [System.ComponentModel.DataAnnotations.StringLength(16)]
+    [System.ComponentModel.DataAnnotations.AllowedValues(null, ClientErrorLogLevels.Error, ClientErrorLogLevels.Warning)]
+    public string? Level { get; init; }
+
     /// <summary>Drops the query string and the fragment: either can carry a token or text the user
     /// typed, and the route alone names the screen.</summary>
     public static string PathWithoutQuery(string path)

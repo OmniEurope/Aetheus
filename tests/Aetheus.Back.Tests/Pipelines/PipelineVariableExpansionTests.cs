@@ -3,13 +3,8 @@ using Aetheus.Back.Components.Pipelines;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// D-02: variables used to be expanded once, before the run, so a <c>variables:</c> value could never
-/// reference what a previous stage publishes - aetheus-deploy-prod left BG_BROWSER_IMAGE empty and
-/// repeated the tag in the step text for exactly that reason. The outputs are injected before every
-/// dispatch pass; these tests pin that the declared values are expanded again at that point, and that
-/// widening the expansion did not widen what it may touch.
-/// </summary>
+/// <summary>Verifies that each dispatch re-expands declared variables against published stage
+/// outputs without expanding unrelated values.</summary>
 public class PipelineVariableExpansionTests
 {
     private static StepOutputProjection Output(string json, string stage = "Prepare", string step = "prepare")
@@ -130,11 +125,8 @@ public class PipelineVariableExpansionTests
         Assert.Equal("$(NEVER_PROVIDED:-kept-as-typed)", variables["SECRET"]);
     }
 
-    /// <summary>
-    /// BACK-022: an alias receives the secret's clear value at resolution. It used to stay public, so it
-    /// was persisted with the run's variables, exported to every step and substituted into commands as
-    /// text. It is now a secret like the one it copies, transitively, and still carries the value.
-    /// </summary>
+    /// <summary>Aliases inherit secret classification transitively while retaining their resolved
+    /// values, preventing public persistence and unrestricted propagation.</summary>
     [Fact]
     public void Resolution_ClassifiesEveryAliasOfASecretAsSecret()
     {

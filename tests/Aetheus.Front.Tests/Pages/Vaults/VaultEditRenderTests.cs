@@ -47,7 +47,7 @@ public class VaultEditRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Contains("DB_PASSWORD"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("DB_PASSWORD"));
 
         // The loaded vault's secret keys are rendered in the grid (never their values).
         Assert.Contains("DB_PASSWORD", cut.Markup);
@@ -60,7 +60,7 @@ public class VaultEditRenderTests : BunitContext
         _handler.SetJsonResponse("api/projects", BuildProjects());
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         // New-vault mode loads the project list but must never fetch a vault detail.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/projects"));
@@ -73,7 +73,7 @@ public class VaultEditRenderTests : BunitContext
         _handler.SetJsonResponse("api/projects", BuildProjects());
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var isNew = (bool)typeof(VaultEdit)
             .GetProperty("_isNew", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -87,7 +87,7 @@ public class VaultEditRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var isNew = (bool)typeof(VaultEdit)
             .GetProperty("_isNew", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -101,7 +101,7 @@ public class VaultEditRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         await cut.InvokeAsync(() => InvokeFormSubmitAsync(cut.Instance, "AddSecret", "_newSecret"));
 
@@ -117,7 +117,7 @@ public class VaultEditRenderTests : BunitContext
         _handler.SetJsonResponse("api/vaults/1/export-keys", new List<string> { "DB_PASSWORD", "API_KEY" });
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var method = typeof(VaultEdit).GetMethod("ExportKeys", BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
@@ -147,7 +147,7 @@ public class VaultEditRenderTests : BunitContext
         SetupStubs();
 
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Length > 50, TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Length > 50);
 
         var method = typeof(VaultEdit).GetMethod("CopyKeyReference", BindingFlags.NonPublic | BindingFlags.Instance)!;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, ["DB_PASSWORD"])!);

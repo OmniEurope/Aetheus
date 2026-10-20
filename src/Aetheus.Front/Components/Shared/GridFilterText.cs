@@ -2,11 +2,8 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Recette R-210: what a column's checkable or closed header filter shows for each value. The value the
-/// filter keeps and sends stays the raw one (an enum member name, <c>True</c>); only its text changes.
-/// A page builds each function once and keeps it, so the column sees the same delegate on every render.
-/// </summary>
+/// <summary>Localize only the displayed filter label while keeping raw values unchanged for the
+/// API; retain each function instance so grid renders see stable delegates.</summary>
 public static class GridFilterText
 {
     /// <summary>The two values of a yes/no column, in the order the filter lists them.</summary>
@@ -20,11 +17,9 @@ public static class GridFilterText
                 ? text.Value
                 : value;
 
-    /// <summary>
-    /// Recette R-312: the operators of a number column, equality first. OE's Number filter also offers
-    /// "contains" on the figure as shown, which the API's number columns (GridQueryMap.Number) refuse;
-    /// the same list everywhere keeps local and remote grids alike.
-    /// </summary>
+    /// <summary> The operators of a number column, equality first. OE's Number filter also offers
+    /// "contains" on the figure as shown, which the API's number columns (GridQueryMap.Number)
+    /// refuse; the same list everywhere keeps local and remote grids alike. </summary>
     public static IReadOnlyList<OmniDataGridFilterOperator> NumberOperators { get; } =
     [
         OmniDataGridFilterOperator.Equals,

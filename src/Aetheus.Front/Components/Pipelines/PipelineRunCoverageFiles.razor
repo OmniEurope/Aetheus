@@ -3,8 +3,8 @@
 
 @if (_files.Count > 0)
 {
-    @* Recette R-428: the per-file table read as a flat list of thousands of paths. The
-       files are a tree instead, each project with its figures, opened on its files. *@
+    @* Coverage files are grouped under projects with aggregate figures so large reports remain
+       navigable. *@
     <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["CoverageByProject"]</OmniText>
     <OmniTree TValue="string" Label="@L["CoverageByProject"]" Class="coverage-project-tree">
         @foreach (var project in _projects)

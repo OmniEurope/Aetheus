@@ -10,10 +10,8 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Aetheus.Back.Components.Tasks;
 
-// IDomainEventDispatcher is REQUIRED, not optional. It used to default to null while an
-// IPipelineTaskCompletionPort carried the orchestration call; now the events ARE the orchestration
-// call, so a null dispatcher would silently strand every run mid-stage while every task reported
-// success.
+// The dispatcher is required because task-completion events advance pipeline runs; omitting it
+// would strand orchestration while tasks report success (ADR-039).
 public class TaskService(ITaskRepository repo, ILogService logService, IHubContext<PipelineHub> pipelineHub, IHubContext<ServerHub> serverHub, IAuditService audit, TimeProvider timeProvider, IEncryptionService encryption, IArtifactService artifactService, ITaskQueueNotifier taskQueueNotifier, ILogger<TaskService> logger, IDomainEventDispatcher domainEvents) : ITaskService
 {
     public Task<PaginatedResult<ServerTaskDto>> GetTasksAsync(TaskPaginationRequest request, CancellationToken ct = default)

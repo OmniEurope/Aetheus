@@ -9,10 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>
-/// Recette R1-18 / R1-31 / R1-33: the setup wizard's second step asks the type of what the pipelines
-/// build and check, and the type decides the pipelines proposed and the variables written.
-/// </summary>
+/// <summary> The setup wizard's second step asks the type of what the pipelines build and check,
+/// and the type decides the pipelines proposed and the variables written. </summary>
 public sealed class PipelineSetupArchitectureTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -32,7 +30,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         Assert.Contains("PipelineArchitectureQuestion", cut.Markup, StringComparison.Ordinal);
     }
 
-    /// <summary>R1-31 decision: no type name for the one-project case, a yes/no question with no default.</summary>
+    /// <summary>The one-project application shape is a yes/no choice without a default.</summary>
     [Fact]
     public async Task Application_AsksWhetherTheServerServesTheInterface_WithNoDefaultAnswer()
     {
@@ -113,7 +111,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         });
     }
 
-    /// <summary>R1-33: an external repository gets the one pipeline that needs no file in it.</summary>
+    /// <summary>An external repository gets the one pipeline that needs no file in it.</summary>
     [Fact]
     public async Task External_ProposesAndCreatesOnlyTheMinimalSecurityPipeline()
     {
@@ -212,7 +210,8 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
             Assert.Equal(architecture, PipelineSetupArchitecture.FromSlug(PipelineSetupArchitecture.Slug(architecture)));
     }
 
-    /// <summary>R1-18: the technology is a list that only holds what is implemented: .NET alone today.</summary>
+    /// <summary>The technology is a list that only holds what is implemented:.NET alone
+    /// today.</summary>
     [Fact]
     public void Stacks_OfferOnlyWhatIsImplemented()
     {
@@ -222,7 +221,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         Assert.Null(PipelineSetupStack.Find("node"));
     }
 
-    /// <summary>R1-31: the step is named after what is built and checked, and the one-project case is the
+    /// <summary>The step is named after what is built and checked, and the one-project case is the
     /// question the user chose, never a type name.</summary>
     [Theory]
     [InlineData("AppStrings.resx", "Pipeline architecture", "Is the interface served by the same project as the server? (e.g. Blazor Server)")]

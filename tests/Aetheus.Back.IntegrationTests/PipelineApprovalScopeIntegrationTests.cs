@@ -7,12 +7,8 @@ using Environment = Aetheus.Back.Data.Entities.Environment;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// Recette R-370, on a real PostgreSQL with the migrations applied: a pipeline approval without
-/// environment is stored (EnvironmentId is nullable), the pending list and the run's approvals still
-/// show it, and the expiry sweep, which used to reach approvals through an inner join on the
-/// environment, still expires it after its own delay.
-/// </summary>
+/// <summary>Environment-less approvals remain stored, listed and expired on their own delay under
+/// the migrated PostgreSQL schema.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class PipelineApprovalScopeIntegrationTests(PostgresFixture fixture)
 {
@@ -66,7 +62,7 @@ public sealed class PipelineApprovalScopeIntegrationTests(PostgresFixture fixtur
         }
 
         await using var db = new AppDbContext(options);
-        var lifecycle = new PipelineLifecycleRepository(db, TimeProvider.System);
+        var lifecycle = new PipelineApprovalRepository(db);
 
         var expired = await lifecycle.GetExpiredPendingApprovalIdsAsync(now, ct);
         Assert.Equal([pipelineApprovalId], expired);

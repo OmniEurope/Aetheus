@@ -34,3 +34,17 @@ nouvelle session rend atomiquement la demande `Confirmed`, la tâche `Success`
 et libère la réservation. Une tâche terminale avant handoff, une mauvaise
 version ou l’expiration de confirmation terminent la demande en échec et
 libèrent également la réservation.
+
+## Tâche qu'aucun agent ne peut réclamer
+
+Le claim (`TaskRepository.ClaimPendingTasksAsync`) ignore sans bruit une tâche dont
+l'opération exige une capacité ou un protocole que l'agent du serveur ne déclare pas.
+Il n'existe aucune politique de mise à jour automatique d'agent (une mise à jour est
+toujours l'action d'un opérateur) : attendre ne ferait que rejouer l'attente. Le
+coordinateur échoue donc la tâche (`TaskFailureCodes.AgentIncompatible`) avec une
+raison en français (agent, version, capacité manquante, version cible, action
+« Mettre à jour »), règle l'étape de pipeline et prévient le run. Garde-fous : tâche
+plus ancienne que `AgentUpdateCoordinatorService.UnexecutableTaskGrace`, serveur en
+ligne avec un bail de polling actif, serveur non réservé par une mise à jour en cours
+(le travail fencé reprend avec le nouvel agent). Diagnostic : `AgentContractDiagnosis`,
+qui réutilise le test du claim (`AgentCapabilities.IsDeclared`).

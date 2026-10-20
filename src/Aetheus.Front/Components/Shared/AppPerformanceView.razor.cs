@@ -10,8 +10,8 @@ public partial class AppPerformanceView
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
-    /// <summary>Recette R-476: nearest-rank percentiles are requests that happened, so under this many
-    /// calls the 95th (then the 99th) is the slowest call itself.</summary>
+    /// <summary>Nearest-rank percentiles are requests that happened, so under this many calls the
+    /// 95th (then the 99th) is the slowest call itself.</summary>
     internal const int P95MinimumCalls = 20;
     internal const int P99MinimumCalls = 100;
 
@@ -53,14 +53,14 @@ public partial class AppPerformanceView
         }
     }
 
-    /// <summary>Recette R2-010: the date the application last sent its figures, the value of the first tile.</summary>
+    /// <summary>Expose the last time the application sent its figures so the summary can show their
+    /// freshness.</summary>
     private string LastSentText => _report?.MeasuredAt is { } measuredAt
         ? measuredAt.ToString("g", CultureInfo.CurrentCulture)
         : L["Never"];
 
-    /// <summary>The figures are the application's own window as of its last export: the tile's detail
-    /// says, when the package says it (1.0.0, R-476), since when the requests are counted, the window
-    /// restarting with the application.</summary>
+    /// <summary>Describe the application's measurement window as of its last export when the
+    /// package supplies it, since counts restart with the application.</summary>
     private string WindowText => _report switch
     {
         { MeasuredAt: { } measuredAt, WindowSince: { } since } => string.Format(
@@ -91,11 +91,11 @@ public partial class AppPerformanceView
 
     private string ExportTitle => AppTelemetryMarkdownExport.Title(L["AppPerformanceExportTitle"], AppId, AppName);
 
-    /// <summary>Recette R-474: the header of the export, everything the tab shows above the table.</summary>
+    /// <summary>The header of the export, everything the tab shows above the table.</summary>
     private IReadOnlyList<OmniTableExportField> ExportFields => AppTelemetryMarkdownExport.PerformanceFields(
         AppId, AppName, _report ?? new AppPerformanceReportDto(), key => L[key].Value);
 
-    /// <summary>Recette R2-036: <c>aetheus-performance</c>, then OE's generation time and the extension.</summary>
+    /// <summary><c>aetheus-performance</c>, then OE's generation time and the extension.</summary>
     private string ExportFileName => ExportFileNames.Stem(AppName, $"app-{AppId}", "performance");
 
     private string RoutesCountText => (_report?.Routes.Count ?? 0).ToString("N0", CultureInfo.CurrentCulture);

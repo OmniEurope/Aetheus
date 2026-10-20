@@ -1,8 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @using static Aetheus.Front.Components.Pipelines.PipelineRunFormatting
 
-@* Recette R-363: the top-level tree scrolls sideways inside its frame when its labels need more
-   width than the panel gives; each row's durations sit in .run-tl-times, pinned to the right edge. *@
+@* The top-level tree scrolls sideways inside its frame when its labels need more width than the
+   panel gives; each row's durations sit in.run-tl-times, pinned to the right edge. *@
 <div class="@(Depth == 0 ? "run-tree-scroll" : null)">
 <div class="run-tree@(Depth > 0 ? " run-tree-nested" : "")">
     @foreach (var stage in _stages)
@@ -39,8 +39,7 @@
                             <a class="run-tl-chip" href="@ChildRunHref(childId)" title="@L["OpenChildRun"]" @onclick:stopPropagation="true"><OmniIcon Name="OmniIconName.Graph" Class="run-tl-chip-icon" />@triggerChip</a>
                         }
                         <span class="run-tl-name run-tl-name-grow run-tl-desc">@triggerDesc</span>
-                        @* Lot 12.1: collapsed, this row used to say only "running". The stage actually
-                           executing is one or more levels below it. *@
+                        @* Collapsed rows expose the active stage nested below them. *@
                         @if (!open && CurrentChildStage(childId) is { Length: > 0 } childStage)
                         {
                             <span class="run-tl-current-stage" title="@L["ChildCurrentStage"]">
@@ -81,20 +80,21 @@
                 var nameClass = "run-tl-name run-tl-name-grow" + (stage.IsSystem ? " run-tl-system" : "");
                 <div class="@stepClass" @onclick="() => OnSelectStep.InvokeAsync(step)" role="button" tabindex="0" title="@label" @onkeydown="@(async e => { if (e.Key == "Enter" || e.Key == " ") await OnSelectStep.InvokeAsync(step); })">
                     <StepStatusBadge Step="@step" Class="run-status-badge" />
-                    <span class="@nameClass">@label</span>
                     @* Candidate 2634: a suite whose tests failed publishes a gate status of 1 and stays
-                       green, so the step that made the candidate F read as a plain success. *@
-                    @if (PipelineRunGateProducer.HasGateFindings(step))
+                       green, so the step that made the candidate F read as a plain success. Recette R1-81:
+                       next to the status, before the name, so the pinned duration block on the right of a
+                       scrolling row can no longer paint over it as it did after the name. *@
+                    @if (PipelineRunGateProducer.HasGateFindings(step) && !step.IsRejected)
                     {
                         <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal" Class="run-tl-gate-findings" title="@L["StepGateFindingsHint"]">@L["StepGateFindings"]</OmniBadge>
                     }
-                    @* A one-step stage renders no header. It used to carry a "skipped" chip here beside a
-                       badge reading "Annulé"; since R-246 the badge itself reads "Skipped", with its icon
-                       and the condition as tooltip, so the chip would only repeat it. *@
+                    <span class="@nameClass">@label</span>
+                    @* A one-step stage needs no separate header or skipped chip because its badge
+                       carries the status, icon and condition tooltip. *@
                     <span class="run-tl-times">
                         <span class="run-tl-dur"><PipelineRunLiveDuration StartedAt="step.StartedAt" CompletedAt="step.CompletedAt" IsRunning="@(step.Status == TaskExecutionStatus.Running)" /></span>
-                        @* PLAN-003 lot 20 / D26: duration only, plus the usual duration while running.
-                           CPU, memory and I/O live in the progression columns above. *@
+                        @* Step rows show duration and the running estimate; resource measurements
+                           belong in the progression columns. *@
                         @if (UsualDuration(step) is { } usual)
                         {
                             <span class="run-tl-prev-dur" title="@L["StepUsualDurationHint"]">@L["StepUsualDuration", usual]</span>

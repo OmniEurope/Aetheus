@@ -330,6 +330,96 @@ public class BackupOperationExecutorTests
         }
     }
 
+    [Theory]
+    [InlineData(BackupConstants.RunIdEnvVar)]
+    [InlineData(BackupConstants.PolicyIdEnvVar)]
+    public async Task BackupExecute_WithoutItsRunOrPolicyId_FailsWithoutReporting(string missing)
+    {
+        using var fixture = new BackupExecutorFixture();
+        var environment = fixture.BackupEnvironment(fixture.CreateSource("data"), runId: 5, policyId: 3);
+        environment.Remove(missing);
+
+        var result = await fixture.Executor.ExecuteSupportedPlatformAsync(
+            OperationKind.BackupExecute, environment, 30, fixture.CaptureOutput, TestContext.Current.CancellationToken);
+
+        Assert.Equal(-1, result.ExitCode);
+        Assert.Contains("Missing backup run/policy id", fixture.Output);
+        await fixture.Api.DidNotReceive().ReportBackupResultAsync(
+            Arg.Any<int>(), Arg.Any<BackupExecuteResultDto>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BackupExecute_WithNothingToBackUp_ReportsTheFailure()
+    {
+        using var fixture = new BackupExecutorFixture();
+        var environment = fixture.BackupEnvironment(fixture.CreateSource("data"), runId: 6, policyId: 3);
+        environment[BackupConstants.FilePathsEnvVar] = "[]";
+
+        var result = await fixture.Executor.ExecuteSupportedPlatformAsync(
+            OperationKind.BackupExecute, environment, 30, fixture.CaptureOutput, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("Backup failed: No database or file paths are configured.", fixture.Output);
+        await fixture.Api.Received(1).ReportBackupResultAsync(
+            6,
+            Arg.Is<BackupExecuteResultDto>(report => !report.Success && report.Message == "No database or file paths are configured."),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BackupExecute_MySql_DumpsWithThePasswordInTheEnvironment_BundlesTheDump_AndRemovesThePartialFile()
+    {
+        using var fixture = new BackupExecutorFixture();
+        var environment = fixture.DatabaseBackupEnvironment(BackupDbEngine.MySql, runId: 8, policyId: 4);
+        var partial = Path.Combine(fixture.BackupRoot, "4", "backup-8.sql.partial");
+        (string FileName, IReadOnlyList<string> Argv, (string Key, string Value)? Environment)? dump = null;
+        fixture.Executor.ProcessInvoker = (fileName, argv, extra, _, _, _, _) =>
+        {
+            dump = (fileName, argv, extra);
+            File.WriteAllText(partial, "-- mysql dump");
+            return Task.FromResult(new ExecutorResult(0, false));
+        };
+
+        var result = await fixture.Executor.ExecuteSupportedPlatformAsync(
+            OperationKind.BackupExecute, environment, 30, fixture.CaptureOutput, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.NotNull(dump);
+        Assert.Equal("mysqldump", dump.Value.FileName);
+        Assert.Contains("--result-file=" + partial, dump.Value.Argv);
+        Assert.Equal(("MYSQL_PWD", "secret"), dump.Value.Environment);
+        Assert.False(File.Exists(partial));
+        Assert.True(File.Exists(Path.Combine(fixture.BackupRoot, "4", "backup-8.aetheus-backup")));
+        await fixture.Api.Received(1).ReportBackupResultAsync(
+            8, Arg.Is<BackupExecuteResultDto>(report => report.Success), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BackupExecute_AFailedPostgresDump_IsReportedWithItsExitCode_AndNoArchiveIsWritten()
+    {
+        using var fixture = new BackupExecutorFixture();
+        var environment = fixture.DatabaseBackupEnvironment(BackupDbEngine.Postgres, runId: 9, policyId: 4);
+        var partial = Path.Combine(fixture.BackupRoot, "4", "backup-9.dump.partial");
+        fixture.Executor.ProcessInvoker = (fileName, argv, extra, _, _, _, _) =>
+        {
+            Assert.Equal("pg_dump", fileName);
+            Assert.Equal(("PGPASSWORD", "secret"), extra);
+            File.WriteAllText(partial, "half a dump");
+            return Task.FromResult(new ExecutorResult(3, false));
+        };
+
+        var result = await fixture.Executor.ExecuteSupportedPlatformAsync(
+            OperationKind.BackupExecute, environment, 30, fixture.CaptureOutput, TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, result.ExitCode);
+        Assert.False(File.Exists(partial));
+        Assert.False(File.Exists(Path.Combine(fixture.BackupRoot, "4", "backup-9.aetheus-backup")));
+        await fixture.Api.Received(1).ReportBackupResultAsync(
+            9,
+            Arg.Is<BackupExecuteResultDto>(report => !report.Success && report.Message == "Dump failed (exit 3)."),
+            Arg.Any<CancellationToken>());
+    }
+
     private sealed class BackupExecutorFixture : IDisposable
     {
         internal BackupExecutorFixture()
@@ -396,6 +486,18 @@ public class BackupOperationExecutorTests
             [BackupConstants.EngineEnvVar] = BackupDbEngine.None.ToString(),
             [BackupConstants.RunIdEnvVar] = runId.ToString(),
             [BackupConstants.ArchivePathEnvVar] = archive
+        };
+
+        internal Dictionary<string, string> DatabaseBackupEnvironment(BackupDbEngine engine, int runId, int policyId) => new()
+        {
+            [BackupConstants.EngineEnvVar] = engine.ToString(),
+            [BackupConstants.RunIdEnvVar] = runId.ToString(),
+            [BackupConstants.PolicyIdEnvVar] = policyId.ToString(),
+            [BackupConstants.DbHostEnvVar] = "db.local",
+            [BackupConstants.DbPortEnvVar] = "3306",
+            [BackupConstants.DbNameEnvVar] = "shop",
+            [BackupConstants.DbUserEnvVar] = "backup-user",
+            [BackupConstants.DbPasswordEnvVar] = "secret"
         };
 
         internal Dictionary<string, string> DatabaseRestoreEnvironment(string archive) => new()

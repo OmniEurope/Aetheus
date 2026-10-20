@@ -53,6 +53,95 @@ public sealed class ObservabilityPackagePublicationBehaviorTests
         harness.AssertTemporaryArtifactsRemoved();
     }
 
+    // PLAN-002 C8: each package is published under its own version. Before, one set-wide
+    // PACKAGE_VERSION reached every package, and a browser candidate attested 0.1.0 went through the
+    // preflight under the Telemetry version 1.2.0 (exit 0). It is now refused before any registry call.
+    [Theory]
+    [InlineData("1.2.0", 2)]
+    [InlineData("0.1.0", 0)]
+    public async Task Publication_AcceptsOnlyTheVersionTheCandidateAttests(string packageVersion, int expectedExitCode)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"aetheus-publish-version-{Guid.NewGuid():N}");
+        var output = Path.Combine(root, ".package-candidate", "web-analytics-browser");
+        var fakeBin = Path.Combine(root, "bin");
+        Directory.CreateDirectory(output);
+        Directory.CreateDirectory(fakeBin);
+        try
+        {
+            const string packageName = "aetheus-web-analytics-0.1.0.tgz";
+            var packageBytes = "per-package version fixture"u8.ToArray();
+            await File.WriteAllBytesAsync(
+                Path.Combine(output, packageName), packageBytes, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(
+                Path.Combine(output, "SHA256SUMS"),
+                $"{Convert.ToHexStringLower(SHA256.HashData(packageBytes))}  {packageName}\n",
+                TestContext.Current.CancellationToken);
+            await WriteProvenanceAsync(output, "web-analytics-browser", "0.1.0");
+            var curlCalls = Path.Combine(root, "curl-calls");
+            var fakeCurl = Path.Combine(fakeBin, "curl");
+            await File.WriteAllTextAsync(
+                fakeCurl,
+                """
+                #!/bin/sh
+                DESTINATION=""
+                while [ "$#" -gt 0 ]; do
+                  if [ "$1" = "--output" ]; then shift; DESTINATION="$1"; fi
+                  shift
+                done
+                printf 'call\n' >> "$FAKE_CURL_CALLS"
+                if [ -n "$DESTINATION" ]; then : > "$DESTINATION"; fi
+                printf '404'
+                """.ReplaceLineEndings("\n"),
+                TestContext.Current.CancellationToken);
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(
+                    fakeCurl, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            var startInfo = new ProcessStartInfo(
+                OperatingSystem.IsWindows() ? @"C:\Program Files\Git\bin\bash.exe" : "/bin/sh")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            startInfo.ArgumentList.Add(ToShellPath(
+                Path.Combine(Root, "deploy", "scripts", "publish-observability-package.sh")));
+            startInfo.ArgumentList.Add("web-analytics-browser");
+            startInfo.Environment["WORKSPACE"] = ToShellPath(root);
+            startInfo.Environment["PACKAGE_VERSION"] = packageVersion;
+            startInfo.Environment["AETHEUS_PACKAGE_BASE_URL"] = "https://packages.invalid";
+            startInfo.Environment["AETHEUS_PACKAGE_TOKEN"] = "aeth_pat_version+/=";
+            startInfo.Environment["AETHEUS_PUBLISH_PREFLIGHT_ONLY"] = "true";
+            startInfo.Environment["CURL"] = ToShellPath(fakeCurl);
+            startInfo.Environment["FAKE_CURL_CALLS"] = ToShellPath(curlCalls);
+            using var process = Process.Start(startInfo)!;
+            var standardOutput = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+            var standardError = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(
+                process.ExitCode == expectedExitCode,
+                $"ExitCode={process.ExitCode} stdout={await standardOutput} stderr={await standardError}");
+            Assert.Equal(expectedExitCode == 0, File.Exists(curlCalls));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    // Same layout as the child pipeline's JSON.stringify(provenance, null, 2).
+    private static Task WriteProvenanceAsync(string output, string kind, string version) =>
+        File.WriteAllTextAsync(
+            Path.Combine(output, "provenance.json"),
+            $"{{\n  \"schema\": 1,\n  \"packageKind\": \"{kind}\",\n  \"packageVersion\": \"{version}\",\n  \"artifacts\": []\n}}\n",
+            TestContext.Current.CancellationToken);
+
+    private static string ToShellPath(string path) =>
+        OperatingSystem.IsWindows()
+            ? "/" + char.ToLowerInvariant(path[0]) + path[2..].Replace('\\', '/')
+            : path;
+
     private static string FindRepoRoot() => Aetheus.Back.Tests.Architecture.RepositoryScan.Root;
 
     private sealed class PublicationHarness : IAsyncDisposable
@@ -97,6 +186,7 @@ public sealed class ObservabilityPackagePublicationBehaviorTests
                 Path.Combine(output, packageName),
                 packageBytes,
                 TestContext.Current.CancellationToken);
+            await WriteProvenanceAsync(output, kind, version);
             var digest = Convert.ToHexString(SHA256.HashData(packageBytes)).ToLowerInvariant();
             await File.WriteAllTextAsync(
                 Path.Combine(output, "SHA256SUMS"),

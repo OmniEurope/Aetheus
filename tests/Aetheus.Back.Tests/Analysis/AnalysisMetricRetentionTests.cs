@@ -4,7 +4,7 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Tests.Analysis;
 
-/// <summary>PLAN-013 lot 3: which metrics of a report reach <c>AnalysisMetrics</c>.</summary>
+/// <summary>Which metrics of a report reach <c>AnalysisMetrics</c>.</summary>
 public sealed class AnalysisMetricRetentionTests
 {
     private static readonly HashSet<AnalysisMetric> None = new(ReferenceEqualityComparer.Instance);

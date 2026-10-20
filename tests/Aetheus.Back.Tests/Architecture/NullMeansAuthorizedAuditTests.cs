@@ -37,10 +37,8 @@ public sealed partial class NullMeansAuthorizedAuditTests
         // to hold Read on. The item itself is already gated by the unconditional Pipeline/Read above.
         "src/Aetheus.Back/Components/Pipelines/PipelineFleetController.cs:GetFleetItem",
 
-        // The CreatePipeline entry this list used to carry as a KNOWN OPEN GAP was removed on 2026-09-06,
-        // closed rather than justified: the controller no longer matches at all, because the whole owner
-        // triple now goes through PipelineOwnerAuthorization.CanOwnAsync, which decides each null branch
-        // explicitly instead of short-circuiting past the authorization call.
+        // Pipeline owner authorization checks each nullable owner branch explicitly through
+        // PipelineOwnerAuthorization.CanOwnAsync.
     };
 
     /// <summary>A null-tolerant pattern match: <c>x is { } name</c>.</summary>

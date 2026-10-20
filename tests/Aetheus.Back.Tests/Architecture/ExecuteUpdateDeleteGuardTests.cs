@@ -75,12 +75,9 @@ public class ExecuteUpdateDeleteGuardTests
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Recette R2-107 (one method per kind of span, under the grade-A cyclomatic threshold): the index
-    /// after the comment (<c>/* */</c>, <c>//</c> and <c>///</c>) or string literal starting at
-    /// <paramref name="i"/>, their line breaks kept in <paramref name="sb"/>; <paramref name="i"/> itself
-    /// when none starts there; -1 for a block comment that never ends (the rest of the source is dropped).
-    /// </summary>
+    /// <summary>Skips a comment or literal while preserving line breaks in <paramref name="sb"/>;
+    /// returns the unchanged <paramref name="i"/> when no span starts there, or -1 for an
+    /// unterminated block.</summary>
     private static int SkipCommentOrString(string source, int i, StringBuilder sb)
     {
         if (string.CompareOrdinal(source, i, "/*", 0, 2) == 0)

@@ -18,9 +18,10 @@ internal static class ContainerWorkspaceMaterializer
         string preparedWorkspace,
         string fallbackWorkspace,
         ILogger logger,
+        WorkspaceSyncPlatform platform,
         CancellationToken cancellationToken)
     {
-        if (OperatingSystem.IsWindows()
+        if (platform.IsWindows
             || string.Equals(
                 Path.GetFullPath(preparedWorkspace),
                 Path.GetFullPath(fallbackWorkspace),
@@ -53,6 +54,7 @@ internal static class ContainerWorkspaceMaterializer
             var copy = await CopyTreeAsync(
                 preparedWorkspace,
                 fallbackWorkspace,
+                platform.CopyProgram,
                 cancellationToken,
                 excludeProtectedMetadata: isInitialized).ConfigureAwait(false);
             if (!copy.IsSuccess)
@@ -79,9 +81,10 @@ internal static class ContainerWorkspaceMaterializer
         int workspaceKey,
         string containerWorkspace,
         string preparedWorkspace,
+        WorkspaceSyncPlatform platform,
         CancellationToken cancellationToken)
     {
-        if (OperatingSystem.IsWindows()
+        if (platform.IsWindows
             || string.Equals(
                 Path.GetFullPath(containerWorkspace),
                 Path.GetFullPath(preparedWorkspace),
@@ -100,6 +103,7 @@ internal static class ContainerWorkspaceMaterializer
             var copy = await CopyTreeAsync(
                 containerWorkspace,
                 preparedWorkspace,
+                platform.CopyProgram,
                 cancellationToken,
                 excludeProtectedMetadata: true).ConfigureAwait(false);
             return copy.IsSuccess
@@ -119,6 +123,7 @@ internal static class ContainerWorkspaceMaterializer
     private static async Task<WorkspaceMaterialization> CopyTreeAsync(
         string source,
         string destination,
+        string copyProgram,
         CancellationToken cancellationToken,
         bool excludeProtectedMetadata = false)
     {
@@ -130,7 +135,7 @@ internal static class ContainerWorkspaceMaterializer
 
             var psi = new ProcessStartInfo
             {
-                FileName = "cp",
+                FileName = copyProgram,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -209,8 +214,17 @@ internal static class ContainerWorkspaceMaterializer
         }
     }
 
-    internal static bool IsProtectedSyncEntry(string entry) =>
-        Path.GetFileName(entry) is GitMetadataDirectory or ReadyMarker;
+    // The step scripts are protected too: every container step of a run writes its /w/.prom-step-*.sh into
+    // the one shared daemon-visible workspace after its own refresh, while a concurrent step may refresh
+    // that same directory. A refresh that does not know a script would delete it as stale before the
+    // container opens it ("can't open '/w/.prom-step-*.sh'"), and a publication would copy it into the
+    // checkout.
+    internal static bool IsProtectedSyncEntry(string entry)
+    {
+        var name = Path.GetFileName(entry);
+        return name is GitMetadataDirectory or ReadyMarker
+            || ContainerRunExecutor.IsShellSafeScriptName(name);
+    }
 
     private static bool IsSymbolicLink(string path) => new DirectoryInfo(path).LinkTarget is not null;
 
@@ -310,4 +324,15 @@ internal sealed record WorkspaceMaterialization(
 
     internal static WorkspaceMaterialization Failure(string workspace, string reason) =>
         new(false, workspace, reason);
+}
+
+/// <summary>
+/// How a container workspace is synchronized: on Windows nothing is copied and the prepared workspace is
+/// used as is; elsewhere every top-level entry is copied with <see cref="CopyProgram"/> run as
+/// <c>&lt;program&gt; -a &lt;entry&gt; &lt;destination&gt;</c>. <see cref="Current"/> is the agent's own platform and
+/// <c>cp</c>; tests replace both to run the synchronization on any platform.
+/// </summary>
+internal sealed record WorkspaceSyncPlatform(bool IsWindows, string CopyProgram)
+{
+    internal static WorkspaceSyncPlatform Current { get; } = new(OperatingSystem.IsWindows(), "cp");
 }

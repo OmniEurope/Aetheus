@@ -9,16 +9,18 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests;
 
-/// <summary>Recette R1-17: the mailbox endpoints follow the mail page's rights and key the password to the caller.</summary>
+/// <summary>The mailbox endpoints follow the mail page's rights and key the password to the
+/// caller.</summary>
 public sealed class MailboxControllerTests
 {
     private readonly IMailboxService _service = Substitute.For<IMailboxService>();
+    private readonly IMailboxAdministratorAccess _administratorAccess = Substitute.For<IMailboxAdministratorAccess>();
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
     private readonly MailboxController _sut;
 
     public MailboxControllerTests()
     {
-        _sut = new MailboxController(_service, _authz);
+        _sut = new MailboxController(_service, _administratorAccess, _authz);
         SignIn("1");
     }
 
@@ -129,5 +131,83 @@ public sealed class MailboxControllerTests
 
         Assert.Equal("application/octet-stream", file.ContentType);
         Assert.Equal("page.html", file.FileDownloadName);
+    }
+
+    // --- Recette R1-41 / R3-50: opening without the password, administrators only ---
+
+    private void SignInAs(string userId, params string[] roles)
+    {
+        var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, userId) };
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        _sut.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test")) }
+        };
+    }
+
+    [Fact]
+    public async Task A_non_administrator_cannot_open_without_password_even_with_server_rights()
+    {
+        Allow(Permission.Read);
+        Allow(Permission.Write);
+
+        Assert.IsType<ForbidResult>((await _sut.OpenAsAdministrator(7, 3, Ct)).Result);
+
+        Assert.Empty(_administratorAccess.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task An_administrator_without_read_on_the_server_is_forbidden()
+    {
+        SignInAs("1", "Admin");
+
+        Assert.IsType<ForbidResult>((await _sut.OpenAsAdministrator(7, 3, Ct)).Result);
+
+        Assert.Empty(_administratorAccess.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task An_administrator_opens_under_their_own_key()
+    {
+        SignInAs("1", "Admin");
+        Allow(Permission.Read);
+        _administratorAccess.OpenAsync(Arg.Any<MailboxCredentialKey>(), true, Arg.Any<CancellationToken>())
+            .Returns(new MailboxAccessDto { IsUnlocked = true, OpenedAsAdministrator = true });
+
+        var result = await _sut.OpenAsAdministrator(7, 3, Ct);
+
+        Assert.True(Assert.IsType<MailboxAccessDto>(Assert.IsType<OkObjectResult>(result.Result).Value).OpenedAsAdministrator);
+        await _administratorAccess.Received(1).OpenAsync(new MailboxCredentialKey("test:1", 7, 3), true, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Only_an_administrator_is_offered_the_opening_without_password()
+    {
+        Allow(Permission.Read);
+        _service.GetAccessAsync(Arg.Any<MailboxCredentialKey>(), Arg.Any<CancellationToken>()).Returns(new MailboxAccessDto());
+        _administratorAccess.IsPreparedAsync(7, Arg.Any<CancellationToken>()).Returns(true);
+
+        var asUser = Assert.IsType<MailboxAccessDto>(Assert.IsType<OkObjectResult>((await _sut.GetAccess(7, 3, Ct)).Result).Value);
+        SignInAs("1", "Admin");
+        var asAdmin = Assert.IsType<MailboxAccessDto>(Assert.IsType<OkObjectResult>((await _sut.GetAccess(7, 3, Ct)).Result).Value);
+
+        Assert.False(asUser.CanOpenAsAdministrator);
+        Assert.True(asAdmin.CanOpenAsAdministrator);
+    }
+
+    [Fact]
+    public async Task The_mailbox_directory_lists_only_the_servers_the_reader_can_read()
+    {
+        var directory = new MailboxDirectoryController(_service, _authz) { ControllerContext = _sut.ControllerContext };
+        _authz.GetAccessibleResourceIdsAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, Permission.Read, Arg.Any<CancellationToken>())
+            .Returns(new List<int> { 7 });
+        var request = new PaginationRequest();
+        _service.ListDirectoryAsync(Arg.Any<IReadOnlyCollection<int>?>(), request, Arg.Any<CancellationToken>())
+            .Returns(new PaginatedResult<MailboxDirectoryEntryDto>());
+
+        Assert.IsType<OkObjectResult>((await directory.List(request, Ct)).Result);
+
+        await _service.Received(1).ListDirectoryAsync(
+            Arg.Is<IReadOnlyCollection<int>?>(ids => ids != null && ids.SequenceEqual(new[] { 7 })), request, Arg.Any<CancellationToken>());
     }
 }

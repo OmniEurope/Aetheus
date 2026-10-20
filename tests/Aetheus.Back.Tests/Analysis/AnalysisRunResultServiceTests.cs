@@ -7,8 +7,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Analysis;
 
-/// <summary>Recette R-485: a finished run's result is computed once per stamp and reused; any change
-/// of the stamp (a decision, a later scan, a report) recomputes it; a run still going is never cached;
+/// <summary>A finished run's result is computed once per stamp and reused; any change of the stamp
+/// (a decision, a later scan, a report) recomputes it; a run still going is never cached;
 /// Dependency-Track is applied on every read, outside the cache.</summary>
 public sealed class AnalysisRunResultServiceTests : IDisposable
 {

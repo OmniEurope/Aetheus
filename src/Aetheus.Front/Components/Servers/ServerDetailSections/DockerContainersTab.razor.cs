@@ -35,6 +35,8 @@ public partial class DockerContainersTab
     /// deploy, image build and delete, container shell); without it they are not offered.</summary>
     [Parameter] public bool CanAdmin { get; set; }
 
+    private ServerTaskFollower? _follower;
+
     /// <summary>False until the parent's first inventory load lands; drives the skeleton rows.</summary>
     [Parameter] public bool InitialLoaded { get; set; }
 
@@ -45,7 +47,7 @@ public partial class DockerContainersTab
 
     private string _containerSearch = string.Empty;
 
-    // Recette R-227: each heartbeat brings a new container list; containers that were not there read bold.
+    // Each heartbeat brings a new container list; containers that were not there read bold.
     private OmniDataGrid<DockerContainerDto>? _grid;
     private readonly LiveGridRows _liveRows = new();
 
@@ -98,6 +100,14 @@ public partial class DockerContainersTab
     private string ContainerGroupLabel(object? value, int count) =>
         $"{(string.IsNullOrEmpty(value?.ToString()) ? L["NoProject"].Value : value)} ({count})";
 
+    /// <summary>PLAN-010 lot 1: containers whose host access their Aetheus role does not explain.</summary>
+    private int UnexpectedRiskCount => Server.Docker.Containers.Count(c =>
+        c.SecurityInspected && DockerContainerSecurity.UnexpectedRisks(c) != DockerContainerRisks.None);
+
+    /// <summary>Containers listed but none inspected (an agent without the collection): unknown, never clean.</summary>
+    private bool RisksUnknown => Server.Docker.Containers.Count > 0
+        && !Server.Docker.Containers.Any(c => c.SecurityInspected);
+
     private List<DockerContainerDto> FilteredContainers => Server.Docker.Containers
         .Where(c => string.IsNullOrWhiteSpace(_containerSearch)
             || c.Name.Contains(_containerSearch, StringComparison.OrdinalIgnoreCase)
@@ -147,6 +157,8 @@ public partial class DockerContainersTab
         if (BlockedByOfflineAgent()) return;
         _dockerActionTarget = containerId;
         var request = new DockerActionRequest { ContainerId = containerId, Action = action };
+        // Recette R3-37: the follower shows what becomes of the task, in place of a lone "sent" toast.
+        _follower?.Expect($"{action} {containerId[..Math.Min(12, containerId.Length)]}");
         var success = await Api.ServerTools.ExecuteDockerActionAsync(ServerId, request);
         if (success)
         {
@@ -154,6 +166,7 @@ public partial class DockerContainersTab
         }
         else
         {
+            _follower?.Forget();
             Toast.Error("Docker", "DockerActionFailed", action);
         }
         _dockerActionTarget = null;
@@ -171,11 +184,18 @@ public partial class DockerContainersTab
         if (targets.Count == 0) return;
 
         _projectActionTarget = project;
+        // Recette R3-37: one follower line for the whole project, one task per container, named by the
+        // backend "Docker {Action} - {first 12 characters of the container id}".
+        string TaskName(DockerContainerDto container) =>
+            $"Docker {action} - {container.ContainerId[..Math.Min(12, container.ContainerId.Length)]}";
+        _follower?.ExpectGroup($"{action} {(string.IsNullOrEmpty(project) ? L["NoProject"].Value : project)}",
+            targets.Select(TaskName));
         var ok = 0;
         foreach (var c in targets)
         {
             var req = new DockerActionRequest { ContainerId = c.ContainerId, Action = action };
             if (await Api.ServerTools.ExecuteDockerActionAsync(ServerId, req)) ok++;
+            else _follower?.Drop(TaskName(c));
         }
         _projectActionTarget = null;
 
@@ -244,6 +264,7 @@ public partial class DockerContainersTab
             CpuLimit = limits.CpuLimit,
             MemoryLimitMb = limits.MemoryLimitMb
         };
+        _follower?.Expect(L["ResourceLimits"]);
         var success = await Api.ServerTools.UpdateDockerResourceLimitsAsync(ServerId, request);
         if (success)
         {
@@ -251,6 +272,7 @@ public partial class DockerContainersTab
         }
         else
         {
+            _follower?.Forget();
             Toast.Error("Docker", "ResourceLimitsFailed");
         }
     }
@@ -278,8 +300,7 @@ public partial class DockerContainersTab
         return $"docker-project-accent-{Math.Abs(hash) % 8}";
     }
 
-    // internal, not private: these three are pure functions with no UI trigger, so the tests used to
-    // reach them by reflection (A360-10). InternalsVisibleTo makes that unnecessary.
+    // Internal visibility allows direct tests of these pure functions through InternalsVisibleTo.
     internal static OmniTone GetContainerBadge(string state) => state switch
     {
         "running" => OmniTone.Success,
@@ -300,6 +321,10 @@ public partial class DockerContainersTab
             _ => "docker-mem-bar docker-mem-green"
         };
     }
+
+    // Recette R3-35: clicking a container inspects it, when its Inspect button would be enabled (agent online).
+    private Task InspectFromRowAsync(DockerContainerDto container) =>
+        AgentOffline ? Task.CompletedTask : RequestInspectAsync(container.ContainerId);
 
     private async Task RequestInspectAsync(string containerId)
     {
@@ -445,13 +470,5 @@ public partial class DockerContainersTab
             Toast.Error("Docker", "DockerBrowseFailed");
             _browseContainerId = null;
         }
-    }
-
-    private async Task BrowseParentAsync()
-    {
-        if (_browsePath == "/") return;
-        var lastSlash = _browsePath.TrimEnd('/').LastIndexOf('/');
-        _browsePath = lastSlash <= 0 ? "/" : _browsePath[..lastSlash];
-        await BrowsePathAsync();
     }
 }

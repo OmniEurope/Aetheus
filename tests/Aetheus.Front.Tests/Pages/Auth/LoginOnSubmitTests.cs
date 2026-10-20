@@ -153,7 +153,7 @@ public class LoginOnSubmitTests : BunitContext
     [Fact]
     public void PasswordField_HasASingleRevealToggle_ThatRevealsTheField()
     {
-        // Recette R-002: the page used to add its own eye beside the package's one, two buttons.
+        // Use only the package password reveal control.
         var cut = Render<Login>();
         var toggles = cut.FindAll("button[aria-controls='Password']");
         Assert.Single(toggles);

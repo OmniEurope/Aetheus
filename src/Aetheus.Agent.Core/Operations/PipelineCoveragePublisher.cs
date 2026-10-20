@@ -240,57 +240,86 @@ internal static class PipelineCoveragePublisher
         xml = rawXml;
         covered = 0;
         valid = 0;
+        XElement? root;
         try
         {
-            using var text = new StringReader(rawXml);
-            using var reader = XmlReader.Create(text, new XmlReaderSettings
-            {
-                // Cobertura (including NYC/Istanbul) commonly emits the standard external SYSTEM
-                // doctype. Ignore the declaration while keeping resolution disabled. Internal
-                // entity references consequently remain undefined and are rejected below.
-                DtdProcessing = DtdProcessing.Ignore,
-                XmlResolver = null,
-                MaxCharactersInDocument = 100 * 1024 * 1024
-            });
-            var document = XDocument.Load(reader, LoadOptions.None);
-            var root = document.Root;
-            if (root?.Name.LocalName == "coverage")
-                return long.TryParse(root.Attribute("lines-covered")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out covered)
-                    && long.TryParse(root.Attribute("lines-valid")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out valid)
-                    && valid > 0 && covered >= 0 && covered <= valid;
-            if (root?.Name.LocalName != "report") return false;
-
-            var lineCounter = root.Elements().FirstOrDefault(element => element.Name.LocalName == "counter"
-                && string.Equals(element.Attribute("type")?.Value, "LINE", StringComparison.OrdinalIgnoreCase));
-            if (lineCounter is null
-                || !long.TryParse(lineCounter.Attribute("covered")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out covered)
-                || !long.TryParse(lineCounter.Attribute("missed")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var missed)
-                || covered < 0 || missed < 0 || covered + missed <= 0) return false;
-            valid = covered + missed;
-            var packages = new XElement("packages", root.Elements().Where(element => element.Name.LocalName == "package")
-                .Select(package => new XElement("package",
-                    new XAttribute("name", package.Attribute("name")?.Value ?? string.Empty),
-                    new XElement("classes", package.Elements().Where(element => element.Name.LocalName == "sourcefile")
-                        .Select(source => new XElement("class",
-                            new XAttribute("name", source.Attribute("name")?.Value ?? string.Empty),
-                            new XAttribute("filename", JoinPath(package.Attribute("name")?.Value, source.Attribute("name")?.Value)),
-                            new XElement("lines", source.Elements().Where(element => element.Name.LocalName == "line")
-                                .Select(line => new XElement("line",
-                                    new XAttribute("number", line.Attribute("nr")?.Value ?? "0"),
-                                    new XAttribute("hits", HasCoveredInstructions(line) ? "1" : "0"))))))))));
-            var normalized = new XDocument(new XElement("coverage",
-                new XAttribute("lines-covered", covered),
-                new XAttribute("lines-valid", valid),
-                new XAttribute("line-rate", ((double)covered / valid).ToString("0.########", CultureInfo.InvariantCulture)),
-                packages));
-            xml = normalized.ToString(SaveOptions.DisableFormatting);
-            return true;
+            root = LoadCoverageDocument(rawXml).Root;
         }
         catch (System.Xml.XmlException)
         {
             return false;
         }
+        if (root?.Name.LocalName == "coverage")
+            return TryReadCoberturaTotals(root, out covered, out valid);
+        if (root?.Name.LocalName != "report"
+            || !TryReadJacocoLineTotals(root, out covered, out valid)) return false;
+        xml = ConvertJacocoToCobertura(root, covered, valid);
+        return true;
     }
+
+    private static XDocument LoadCoverageDocument(string rawXml)
+    {
+        using var text = new StringReader(rawXml);
+        using var reader = XmlReader.Create(text, new XmlReaderSettings
+        {
+            // Cobertura (including NYC/Istanbul) commonly emits the standard external SYSTEM
+            // doctype. Ignore the declaration while keeping resolution disabled. Internal
+            // entity references consequently remain undefined and are rejected below.
+            DtdProcessing = DtdProcessing.Ignore,
+            XmlResolver = null,
+            MaxCharactersInDocument = 100 * 1024 * 1024
+        });
+        return XDocument.Load(reader, LoadOptions.None);
+    }
+
+    private static bool TryReadCoberturaTotals(XElement root, out long covered, out long valid)
+    {
+        valid = 0;
+        return long.TryParse(root.Attribute("lines-covered")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out covered)
+            && long.TryParse(root.Attribute("lines-valid")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out valid)
+            && valid > 0 && covered >= 0 && covered <= valid;
+    }
+
+    private static bool TryReadJacocoLineTotals(XElement root, out long covered, out long valid)
+    {
+        covered = 0;
+        valid = 0;
+        var lineCounter = root.Elements().FirstOrDefault(element => element.Name.LocalName == "counter"
+            && string.Equals(element.Attribute("type")?.Value, "LINE", StringComparison.OrdinalIgnoreCase));
+        if (lineCounter is null
+            || !long.TryParse(lineCounter.Attribute("covered")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out covered)
+            || !long.TryParse(lineCounter.Attribute("missed")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var missed)
+            || covered < 0 || missed < 0 || covered + missed <= 0) return false;
+        valid = covered + missed;
+        return true;
+    }
+
+    private static string ConvertJacocoToCobertura(XElement root, long covered, long valid)
+    {
+        var packages = new XElement("packages", root.Elements().Where(element => element.Name.LocalName == "package")
+            .Select(ToCoberturaPackage));
+        var normalized = new XDocument(new XElement("coverage",
+            new XAttribute("lines-covered", covered),
+            new XAttribute("lines-valid", valid),
+            new XAttribute("line-rate", ((double)covered / valid).ToString("0.########", CultureInfo.InvariantCulture)),
+            packages));
+        return normalized.ToString(SaveOptions.DisableFormatting);
+    }
+
+    private static XElement ToCoberturaPackage(XElement package) =>
+        new("package",
+            new XAttribute("name", package.Attribute("name")?.Value ?? string.Empty),
+            new XElement("classes", package.Elements().Where(element => element.Name.LocalName == "sourcefile")
+                .Select(source => ToCoberturaClass(package, source))));
+
+    private static XElement ToCoberturaClass(XElement package, XElement source) =>
+        new("class",
+            new XAttribute("name", source.Attribute("name")?.Value ?? string.Empty),
+            new XAttribute("filename", JoinPath(package.Attribute("name")?.Value, source.Attribute("name")?.Value)),
+            new XElement("lines", source.Elements().Where(element => element.Name.LocalName == "line")
+                .Select(line => new XElement("line",
+                    new XAttribute("number", line.Attribute("nr")?.Value ?? "0"),
+                    new XAttribute("hits", HasCoveredInstructions(line) ? "1" : "0")))));
 
     private static bool HasCoveredInstructions(XElement line) =>
         int.TryParse(line.Attribute("ci")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var covered)

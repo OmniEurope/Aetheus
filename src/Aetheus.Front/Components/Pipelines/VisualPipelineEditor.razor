@@ -74,7 +74,10 @@ else
                         Class="w-rem-10 fs-13" />
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnUndo" Disabled="@(!CanUndo)" title="@L["Undo"]" Label="@L["Undo"]"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></OmniButton>
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnRedo" Disabled="@(!CanRedo)" title="@L["Redo"]" Label="@L["Redo"]"><OmniIcon Name="OmniIconName.ArrowUUpRight" /></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnAutoLayout" title="@L["AutoLayout"]"><OmniIcon Name="OmniIconName.Sparkle" /> <span>@L["Arrange"]</span></OmniButton>
+        @* STD-BTN detection 11: Add visible, the other actions in the menu (the icon-only view controls stay in the toolbar). *@
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem OnClick="@OnAutoLayout" title="@L["AutoLayout"]"><Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon><ChildContent>@L["Arrange"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnZoomIn" title="@L["ZoomIn"]"><OmniIcon Name="OmniIconName.MagnifyingGlassPlus" /></OmniButton>
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnZoomOut" title="@L["ZoomOut"]"><OmniIcon Name="OmniIconName.MagnifyingGlassMinus" /></OmniButton>
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnFitView" title="@L["FitScreen"]"><OmniIcon Name="OmniIconName.FrameCorners" /></OmniButton>

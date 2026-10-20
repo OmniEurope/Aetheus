@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Reflection;
+using System.Text.Json;
 using Bunit;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages;
 
+/// <summary>
+/// The dashboard editor driven through its markup: the widget rows, their buttons, the drag events
+/// and the Save request the faked API receives. No private member of the page is read (RFL-1).
+/// </summary>
 public class DashboardEditTests : BunitContext
 {
+    private const string WidgetRow = "[role=listitem]";
+
     private readonly BunitTestHelper.TestHandler _handler;
 
     public DashboardEditTests()
@@ -44,20 +51,77 @@ public class DashboardEditTests : BunitContext
     {
         _handler.SetJsonResponse($"api/dashboards/{id}", MakeDashboard(id));
         _handler.SetJsonResponse($"api/dashboards/{id}/update", MakeDashboard(id));
+        return RenderLoaded(id);
+    }
+
+    private IRenderedComponent<DashboardEdit> RenderLoaded(int id)
+    {
         var cut = Render<DashboardEdit>(p => p.Add(x => x.Id, id));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-spinner"), TimeSpan.FromSeconds(2));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(WidgetRow)));
         return cut;
+    }
+
+    private static List<string> Titles(IRenderedComponent<DashboardEdit> cut) =>
+        cut.FindAll($"{WidgetRow} input[aria-label=WidgetTitle]").Select(input => input.GetAttribute("value") ?? "").ToList();
+
+    private static AngleSharp.Dom.IElement Row(IRenderedComponent<DashboardEdit> cut, int index) => cut.FindAll(WidgetRow)[index];
+
+    /// <summary>A widget row's action: Settings is the visible button, the others are entries of the row's
+    /// "More actions" menu (STD-BTN detection 11), opened here the way a user does.</summary>
+    private static AngleSharp.Dom.IElement RowButton(IRenderedComponent<DashboardEdit> cut, int index, string label)
+    {
+        AngleSharp.Dom.IElement? MenuEntry() => Row(cut, index).QuerySelectorAll(".omni-menu__item")
+            .SingleOrDefault(item => item.TextContent.Trim() == label);
+
+        var visible = Row(cut, index).QuerySelectorAll("button:not(.omni-menu__item)")
+            .SingleOrDefault(button => button.TextContent.Trim() == label);
+        if (visible is not null) return visible;
+        if (MenuEntry() is { } open) return open;
+        Row(cut, index).QuerySelector(".omni-overflow-menu__trigger")!.Click();
+        return MenuEntry() ?? throw new InvalidOperationException($"No row action {label}.");
+    }
+
+    private static Task ClickAsync(AngleSharp.Dom.IElement element) => element.ClickAsync(new MouseEventArgs());
+
+    private static AngleSharp.Dom.IElement SaveButton(IRenderedComponent<DashboardEdit> cut) =>
+        cut.FindAll("button").Single(button => button.TextContent.Trim() == "SaveDashboard");
+
+    /// <summary>Saves and returns what the page sent: the dashboard name and the widgets as (title, row).</summary>
+    private async Task<(string? Name, List<(string Title, int Row)> Widgets)> SaveAndReadRequestAsync(IRenderedComponent<DashboardEdit> cut)
+    {
+        var before = _handler.RequestDetails.Count;
+        await ClickAsync(SaveButton(cut));
+        var put = Assert.Single(_handler.RequestDetails.Skip(before), request => request.Method == "PUT");
+        using var json = JsonDocument.Parse(put.Body!);
+        string? name = null;
+        List<(string, int)> widgets = [];
+        foreach (var property in json.RootElement.EnumerateObject())
+        {
+            if (property.Name.Equals("name", StringComparison.OrdinalIgnoreCase))
+                name = property.Value.GetString();
+            if (!property.Name.Equals("widgets", StringComparison.OrdinalIgnoreCase)) continue;
+            foreach (var widget in property.Value.EnumerateArray())
+            {
+                string title = "";
+                var row = -1;
+                foreach (var field in widget.EnumerateObject())
+                {
+                    if (field.Name.Equals("title", StringComparison.OrdinalIgnoreCase)) title = field.Value.GetString()!;
+                    if (field.Name.Equals("row", StringComparison.OrdinalIgnoreCase)) row = field.Value.GetInt32();
+                }
+                widgets.Add((title, row));
+            }
+        }
+        return (name, widgets);
     }
 
     [Fact]
     public void Renders_DashboardEditPage_WithData()
     {
         var cut = RenderDashboard();
-        // OnInitializedAsync maps the loaded dashboard into _name and the _widgets editor list.
-        var name = (string)typeof(DashboardEdit).GetField("_name", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Equal("Main Dashboard", name);
-        Assert.Equal(2, widgets.Count);
+        // OnInitializedAsync maps the loaded dashboard into the name field and the widget editor list.
+        Assert.Equal("Main Dashboard", cut.Find("input#oe-formfield-pages-dashboard-dashboardedit-1").GetAttribute("value"));
+        Assert.Equal(["Servers", "Pipelines"], Titles(cut));
     }
 
     [Fact]
@@ -85,174 +149,136 @@ public class DashboardEditTests : BunitContext
     }
 
     [Fact]
-    public void AddWidget_IncreasesCount()
+    public async Task AddWidget_IncreasesCount()
     {
         var cut = RenderDashboard();
-        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var initialCount = widgets.Count;
+        var initialCount = cut.FindAll(WidgetRow).Count;
 
-        var method = typeof(DashboardEdit).GetMethod("AddWidget", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, []);
+        await ClickAsync(cut.FindMenuItem("AddWidget")!);
 
-        widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Equal(initialCount + 1, widgets.Count);
+        Assert.Equal(initialCount + 1, cut.FindAll(WidgetRow).Count);
+        Assert.Equal("WidgetDefaultName 3", Titles(cut).Last());
     }
 
     [Fact]
-    public void RemoveWidget_DecreasesCount()
+    public async Task RemoveWidget_DecreasesCount()
     {
         var cut = RenderDashboard();
-        var widgetsList = typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var firstWidget = ((System.Collections.IList)widgetsList)[0];
 
-        var method = typeof(DashboardEdit).GetMethod("RemoveWidget", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, [firstWidget]);
+        await ClickAsync(RowButton(cut, 0, "Delete"));
 
-        var count = ((System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!).Count;
-        Assert.Equal(1, count);
+        Assert.Single(cut.FindAll(WidgetRow));
+        Assert.Equal(["Pipelines"], Titles(cut));
     }
 
     [Fact]
-    public void OnDragStart_SetsDragIndex()
+    public async Task OnDragStart_SetsDragIndex()
     {
         var cut = RenderDashboard();
-        var method = typeof(DashboardEdit).GetMethod("OnDragStart", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, [0]);
 
-        var dragIndex = typeof(DashboardEdit).GetField("_dragIndex", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
-        Assert.Equal(0, (int?)dragIndex);
+        await Row(cut, 0).TriggerEventAsync("ondragstart", new DragEventArgs());
+
+        // The dragged row is the one framed with the accent border.
+        Assert.Contains("omni-u-border-accent", Row(cut, 0).InnerHtml);
+        Assert.DoesNotContain("omni-u-border-accent", Row(cut, 1).InnerHtml);
     }
 
     [Fact]
-    public void OnDragEnd_ClearsDragIndex()
+    public async Task OnDragEnd_ClearsDragIndex()
     {
         var cut = RenderDashboard();
-        typeof(DashboardEdit).GetField("_dragIndex", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, (int?)1);
+        await Row(cut, 1).TriggerEventAsync("ondragstart", new DragEventArgs());
+        Assert.Contains("omni-u-border-accent", Row(cut, 1).InnerHtml);
 
-        var method = typeof(DashboardEdit).GetMethod("OnDragEnd", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, []);
+        await Row(cut, 1).TriggerEventAsync("ondragend", new DragEventArgs());
 
-        var dragIndex = typeof(DashboardEdit).GetField("_dragIndex", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
-        Assert.Null(dragIndex);
+        Assert.DoesNotContain("omni-u-border-accent", cut.Markup);
     }
 
     [Fact]
-    public void OnDrop_ReordersWidgets()
+    public async Task OnDrop_ReordersWidgets()
     {
         var cut = RenderDashboard();
-        typeof(DashboardEdit).GetField("_dragIndex", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, (int?)0);
+        await Row(cut, 0).TriggerEventAsync("ondragstart", new DragEventArgs());
 
-        var method = typeof(DashboardEdit).GetMethod("OnDrop", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, [1]);
+        await Row(cut, 1).TriggerEventAsync("ondrop", new DragEventArgs());
 
         // FRONTTEST-006: the dragged widget (Servers) now follows Pipelines, and the rows follow the
-        // new order; resetting the drag alone would leave both untouched.
-        Assert.Equal([("Pipelines", 0), ("Servers", 1)], TitlesAndRows(cut));
-        var dragIndex = typeof(DashboardEdit).GetField("_dragIndex", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
-        Assert.Null(dragIndex);
-    }
-
-    private static List<(string Title, int Row)> TitlesAndRows(IRenderedComponent<DashboardEdit> cut)
-    {
-        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        return widgets.Cast<object>()
-            .Select(widget => ((string)widget.GetType().GetProperty("Title")!.GetValue(widget)!,
-                (int)widget.GetType().GetProperty("Row")!.GetValue(widget)!))
-            .ToList();
+        // new order (read from the saved request); resetting the drag alone would leave both untouched.
+        Assert.Equal(["Pipelines", "Servers"], Titles(cut));
+        Assert.DoesNotContain("omni-u-border-accent", cut.Markup);
+        var saved = await SaveAndReadRequestAsync(cut);
+        Assert.Equal([("Pipelines", 0), ("Servers", 1)], saved.Widgets);
     }
 
     [Fact]
-    public void OnDrop_NullDragIndex_LeavesTheOrderUnchanged()
+    public async Task OnDrop_NullDragIndex_LeavesTheOrderUnchanged()
     {
         var cut = RenderDashboard();
-        typeof(DashboardEdit).GetField("_dragIndex", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, null);
 
-        var widgetsBefore = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var first = widgetsBefore[0];
-        var second = widgetsBefore[1];
+        await Row(cut, 0).TriggerEventAsync("ondrop", new DragEventArgs());
 
-        var method = typeof(DashboardEdit).GetMethod("OnDrop", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, [0]);
-
-        // A null drag index makes OnDrop short-circuit - the widget order is left untouched.
-        var widgetsAfter = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Same(first, widgetsAfter[0]);
-        Assert.Same(second, widgetsAfter[1]);
+        // Nothing is being dragged, so a drop short-circuits - the widget order is left untouched.
+        Assert.Equal(["Servers", "Pipelines"], Titles(cut));
     }
 
     [Fact]
-    public void MoveUp_FirstWidget_LeavesTheOrderUnchanged()
+    public async Task MoveUp_FirstWidget_LeavesTheOrderUnchanged()
     {
         var cut = RenderDashboard();
-        var widgets = typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var firstWidget = ((System.Collections.IList)widgets)[0];
 
-        var method = typeof(DashboardEdit).GetMethod("MoveUp", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, [firstWidget]);
+        // The first widget cannot go up: its button is disabled and a click changes nothing.
+        Assert.True(RowButton(cut, 0, "MoveUp").HasAttribute("disabled"));
+        await ClickAsync(RowButton(cut, 0, "MoveUp"));
 
-        // First widget should still be at index 0
-        var afterWidgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Same(firstWidget, afterWidgets[0]);
+        Assert.Equal(["Servers", "Pipelines"], Titles(cut));
     }
 
     [Fact]
-    public void MoveDown_LastWidget_LeavesTheOrderUnchanged()
+    public async Task MoveDown_LastWidget_LeavesTheOrderUnchanged()
     {
         var cut = RenderDashboard();
-        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var lastWidget = widgets[widgets.Count - 1];
 
-        var method = typeof(DashboardEdit).GetMethod("MoveDown", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, [lastWidget]);
+        Assert.True(RowButton(cut, 1, "MoveDown").HasAttribute("disabled"));
+        await ClickAsync(RowButton(cut, 1, "MoveDown"));
 
-        var afterWidgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Same(lastWidget, afterWidgets[afterWidgets.Count - 1]);
+        Assert.Equal(["Servers", "Pipelines"], Titles(cut));
     }
 
     [Fact]
-    public void MoveUp_SecondWidget_SwapsWithFirst()
+    public async Task MoveUp_SecondWidget_SwapsWithFirst()
     {
         var cut = RenderDashboard();
-        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var secondWidget = widgets[1];
 
-        var method = typeof(DashboardEdit).GetMethod("MoveUp", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, [secondWidget]);
+        await ClickAsync(RowButton(cut, 1, "MoveUp"));
 
-        var afterWidgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Same(secondWidget, afterWidgets[0]);
+        Assert.Equal(["Pipelines", "Servers"], Titles(cut));
     }
 
     [Fact]
-    public void MoveDown_FirstWidget_SwapsWithSecond()
+    public async Task MoveDown_FirstWidget_SwapsWithSecond()
     {
         var cut = RenderDashboard();
-        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var firstWidget = widgets[0];
 
-        var method = typeof(DashboardEdit).GetMethod("MoveDown", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, [firstWidget]);
+        await ClickAsync(RowButton(cut, 0, "MoveDown"));
 
-        var afterWidgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Same(firstWidget, afterWidgets[1]);
+        Assert.Equal(["Pipelines", "Servers"], Titles(cut));
     }
 
     [Fact]
-    public void ToggleConfig_TogglesShowConfig()
+    public async Task ToggleConfig_TogglesShowConfig()
     {
         var cut = RenderDashboard();
-        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        var widget = widgets[0]!;
+        Assert.Empty(Row(cut, 0).QuerySelectorAll("textarea"));
 
-        var method = typeof(DashboardEdit).GetMethod("ToggleConfig", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(cut.Instance, [widget]);
+        await ClickAsync(RowButton(cut, 0, "Settings"));
 
-        var showConfig = (bool)widget.GetType().GetProperty("ShowConfig")!.GetValue(widget)!;
-        Assert.True(showConfig);
+        Assert.Single(Row(cut, 0).QuerySelectorAll("textarea"));
+        Assert.Empty(Row(cut, 1).QuerySelectorAll("textarea"));
 
-        method.Invoke(cut.Instance, [widget]);
-        showConfig = (bool)widget.GetType().GetProperty("ShowConfig")!.GetValue(widget)!;
-        Assert.False(showConfig);
+        await ClickAsync(RowButton(cut, 0, "Settings"));
+
+        Assert.Empty(Row(cut, 0).QuerySelectorAll("textarea"));
     }
 
     [Theory]
@@ -265,60 +291,63 @@ public class DashboardEditTests : BunitContext
     [InlineData(DashboardWidgetType.Custom, "widgets")]
     public void GetWidgetIcon_ReturnsExpectedIcon(DashboardWidgetType type, string expectedIcon)
     {
-        var method = typeof(DashboardEdit).GetMethod("GetWidgetIcon", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var result = (string)method.Invoke(null, [type])!;
-        Assert.Equal(expectedIcon, result);
+        _handler.SetJsonResponse("api/dashboards/1", MakeDashboard(1) with
+        {
+            Widgets = [new DashboardWidgetDto { Id = 1, WidgetType = type, Title = "Only", Row = 0, Column = 0, Width = 1, Height = 1, IsVisible = true }]
+        });
+        var cut = RenderLoaded(1);
+
+        // The widget's card shows its type's icon (second icon of the card, after the drag handle).
+        var card = cut.FindComponents<OmniCard>()[1];
+        Assert.Equal(MaterialIconMap.Resolve(expectedIcon), card.FindComponents<OmniIcon>()[1].Instance.Name);
     }
 
     [Fact]
     public async Task SaveDashboard_EmptyName_ShowsWarning()
     {
         var cut = RenderDashboard();
-        typeof(DashboardEdit).GetField("_name", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, "");
+        cut.Find("input#oe-formfield-pages-dashboard-dashboardedit-1").Input("");
 
         var requestsBefore = _handler.Requests.Count;
-        var method = typeof(DashboardEdit).GetMethod("SaveDashboard", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await (Task)method.Invoke(cut.Instance, [])!;
+        await ClickAsync(SaveButton(cut));
 
-        // Empty name short-circuits before _saving is ever set: no update request is sent.
-        var saving = (bool)typeof(DashboardEdit).GetField("_saving", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.False(saving);
+        // Empty name short-circuits before the save starts: no update request is sent, the page is
+        // not left busy, and the user is told a field is required.
         Assert.DoesNotContain(_handler.Requests.Skip(requestsBefore), r => r.Method == "PUT" || r.Method == "POST");
+        Assert.DoesNotContain("btn-busy", SaveButton(cut).ClassName);
+        Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniEurope.Blazor.Components.OmniSeverity.Warning && toast.Detail == "RequiredFields");
     }
 
     [Fact]
     public async Task SaveDashboard_WithValidName_Saves()
     {
-        var dashboard = MakeDashboard();
-        _handler.SetJsonResponse("api/dashboards/1", dashboard);
         var cut = RenderDashboard();
+        cut.Find("input#oe-formfield-pages-dashboard-dashboardedit-1").Input("Updated Dashboard");
 
-        typeof(DashboardEdit).GetField("_name", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, "Updated Dashboard");
-
-        var method = typeof(DashboardEdit).GetMethod("SaveDashboard", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await (Task)method.Invoke(cut.Instance, [])!;
+        var saved = await SaveAndReadRequestAsync(cut);
 
         // A valid name drives a real PUT to the dashboard's id endpoint (the load only GETs it).
         Assert.Contains(_handler.Requests, r => r.Method == "PUT" && r.Url.Contains("api/dashboards/1"));
+        Assert.Equal("Updated Dashboard", saved.Name);
     }
 
     [Fact]
-    public void RecalculateRows_SetsSequentialRows()
+    public async Task RecalculateRows_SetsSequentialRows()
     {
-        // FRONTTEST-006: the fixture already holds rows 0 and 1, so start from rows that are NOT
-        // sequential (7 and 3); only a real reindexing turns them into 0 and 1.
+        // FRONTTEST-006: the fixture holds rows that are NOT sequential (7 and 3); only a real
+        // reindexing, which every move triggers, turns them into 0 and 1. The widgets load in row order
+        // (Pipelines, then Servers).
         _handler.SetJsonResponse("api/dashboards/1", MakeDashboard(1) with
         {
             Widgets = [.. MakeDashboard(1).Widgets.Select(widget => widget with { Row = widget.Id == 1 ? 7 : 3 })]
         });
-        var cut = Render<DashboardEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForAssertion(() => Assert.Equal(2, TitlesAndRows(cut).Count), TimeSpan.FromSeconds(2));
-        Assert.DoesNotContain(TitlesAndRows(cut), widget => widget.Row is 0 or 1);
-        var method = typeof(DashboardEdit).GetMethod("RecalculateRows", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var cut = RenderLoaded(1);
+        Assert.Equal(["Pipelines", "Servers"], Titles(cut));
 
-        method.Invoke(cut.Instance, []);
+        await ClickAsync(RowButton(cut, 0, "MoveDown"));
 
-        Assert.Equal([0, 1], TitlesAndRows(cut).Select(widget => widget.Row));
+        var saved = await SaveAndReadRequestAsync(cut);
+        Assert.Equal([("Servers", 0), ("Pipelines", 1)], saved.Widgets);
     }
 
     [Fact]
@@ -345,11 +374,10 @@ public class DashboardEditTests : BunitContext
             ]
         };
         _handler.SetJsonResponse("api/dashboards/2", dashboard);
-        var cut = Render<DashboardEdit>(p => p.Add(x => x.Id, 2));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-spinner"), TimeSpan.FromSeconds(2));
+        var cut = RenderLoaded(2);
 
-        // All five widgets from the stub are mapped into the editor list.
-        var widgets = (System.Collections.IList)typeof(DashboardEdit).GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Equal(5, widgets.Count);
+        // All five widgets from the stub are mapped into the editor list; the preview shows the four visible ones.
+        Assert.Equal(["Servers", "Pipelines", "Runs", "Tasks", "Custom"], Titles(cut));
+        Assert.Equal(4, cut.FindAll(".dashboard-widget-preview").Count);
     }
 }

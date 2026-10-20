@@ -6,11 +6,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Aetheus.Front.Tests.Pages;
 
-/// <summary>
-/// Recette R2-100: "ObjectDisposedException - CancellationTokenSource_Disposed" reached the error boundary
-/// when a page was left during a refresh. PipelinesList and PipelineRunLoadSession were fixed first; these
-/// are the four remaining screens, each driven into the moment its disposed source used to be read again.
-/// </summary>
+/// <summary>Exercise page disposal during refresh to verify resumed work does not access a disposed
+/// cancellation source.</summary>
 public sealed class LeftPageDisposedLifetimeTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -34,8 +31,10 @@ public sealed class LeftPageDisposedLifetimeTests : BunitContext
         await cut.InvokeAsync(() => cut.Instance.DisposeAsync().AsTask());
         var openedBeforeLeaving = Hubs.Created.Count;
         dashboard.SetResult(new DashboardOverviewDto { Servers = [], RecentRuns = [] });
-        await WaitUntilAsync(() => _handler.Requests.Any(r => r.Url.Contains("appmonitoring/summary", StringComparison.Ordinal)));
-        await Task.Delay(200, Xunit.TestContext.Current.CancellationToken);
+        // The load ends right after the summary (where the hubs used to be opened): the render that
+        // follows the end of the initialisation is the first to show the summary as loaded.
+        await cut.WhenRenderedAsync(() => !cut.FindComponent<MonitoredAppsStatusGrid>().Instance.IsLoading);
+        Assert.Contains(_handler.Requests.ToList(), r => r.Url.Contains("appmonitoring/summary", StringComparison.Ordinal));
 
         // Before the fix the resumed load opened the three hubs after the page was gone; their first
         // event read the disposed lifetime's Token and threw ObjectDisposedException.
@@ -53,7 +52,7 @@ public sealed class LeftPageDisposedLifetimeTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/projects/1/quality-trend", new ProjectQualityTrendDto());
         _handler.SetJsonResponse("api/analysis/projects/1/summary", new AnalysisProjectSummaryDto());
         var cut = Render<ProjectQualitySection>(p => p.Add(c => c.ProjectId, 1));
-        cut.WaitForState(() => Hubs.Created.Any(created => created.Path == "entities"), TimeSpan.FromSeconds(3));
+        await Hubs.WhenCreatedAsync("entities");
         var hub = Hubs.Hub("entities");
         // A first report arms the quiet-period debounce.
         await HubHandlerInvoker.InvokeAsync(hub, "EntityChanged", ResourceType.Project, 1, "Updated");
@@ -69,6 +68,8 @@ public sealed class LeftPageDisposedLifetimeTests : BunitContext
     public async Task MonacoEditor_ChangeSentWhileTheEditorIsBeingDisposed_DoesNotReadTheDisposedLifetime()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
+        var clock = new ObservedFakeClock(new DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero));
+        Services.AddSingleton<TimeProvider>(clock);
         var published = new List<string>();
         var cut = Render<MonacoEditor>(p => p
             .Add(x => x.Value, string.Empty)
@@ -79,8 +80,10 @@ public sealed class LeftPageDisposedLifetimeTests : BunitContext
         // The JS editor is disposed last: a keystroke still reaches .NET in between. Before the fix it read
         // the disposed lifetime's Token to link the debounce source: ObjectDisposedException.
         await cut.Instance.OnYamlChanged("late");
-        await Task.Delay(100, Xunit.TestContext.Current.CancellationToken);
 
+        // No debounce was started for the late change: no delay is armed that the clock could end.
+        Assert.Equal(0, clock.Armed(TimeSpan.FromMilliseconds(50)));
+        clock.Advance(TimeSpan.FromMilliseconds(50));
         Assert.Empty(published);
     }
 
@@ -88,8 +91,8 @@ public sealed class LeftPageDisposedLifetimeTests : BunitContext
     public async Task PipelineRunLiveConnection_StoppedQueuePoll_DoesNotReadTheDisposedLifetime()
     {
         var logger = new WarningRecorder();
-        // Run on the renderer's single-threaded context, as in the browser: the poll resumes only after
-        // DisposeAsync has disposed the reload's lifetime, which is when it used to read it again.
+        // Run on the renderer context so polling resumes after DisposeAsync has disposed the reload
+        // lifetime.
         await Renderer.Dispatcher.InvokeAsync(async () =>
         {
             var connection = new PipelineRunLiveConnection(Hubs, logger, 1, () => [],
@@ -122,14 +125,6 @@ public sealed class LeftPageDisposedLifetimeTests : BunitContext
         // The run page checks this before opening its live connection: a load resumed after the page was
         // left opened one that nothing disposed, whose queue poll then ran on a disposed page.
         Assert.False(session.IsCurrent(generation));
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (!condition() && DateTime.UtcNow < deadline)
-            await Task.Delay(20, Xunit.TestContext.Current.CancellationToken);
-        Assert.True(condition(), "The awaited request was never sent.");
     }
 
     private sealed class WarningRecorder : ILogger

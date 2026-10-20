@@ -51,6 +51,8 @@ internal static class ScannerContainerProcessBuilder
             resolvedArguments.Insert(1, TrivyDatabaseFreshness.SkipUpdateArgument);
         if (JscpdRepositoryConfiguration.Applies(scanner))
             resolvedArguments.AddRange(JscpdRepositoryConfiguration.AdditionalArguments(sourceDirectory));
+        if (GitleaksRepositoryConfiguration.Applies(scanner))
+            GitleaksRepositoryConfiguration.DropAbsentConfiguration(resolvedArguments, sourceDirectory);
         AddEntrypoint(args, scanner);
         foreach (var argument in resolvedArguments) args.Add(argument);
         return psi;

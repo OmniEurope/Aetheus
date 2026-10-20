@@ -2,11 +2,10 @@
 
 namespace Aetheus.Back.Components.Git;
 
-/// <summary>
-/// Recette R-224: the values the git grids' checkable column filters offer. The grids are loaded page by
-/// page, so the candidates are read across the whole scope: the default branches of the repositories the
-/// caller can read, and, for one repository, the authors of its recent commits and of its pull requests.
-/// </summary>
+/// <summary> The values the git grids' checkable column filters offer. The grids are loaded page by
+/// page, so the candidates are read across the whole scope: the default branches of the
+/// repositories the caller can read, and, for one repository, the authors of its recent commits and
+/// of its pull requests. </summary>
 public sealed class GitFilterValuesService(
     IGitLightRepository lightRepo,
     IGitRepository gitRepo,
@@ -30,7 +29,7 @@ public sealed class GitFilterValuesService(
         if (entity is null) return new GitRepositoryDetailFilterValuesDto();
         var diskPath = light.ResolveDiskPath(entity.ProjectId, entity.Slug);
         var commitAuthors = await cli.GetCommitAuthorsAsync(diskPath, ct).ConfigureAwait(false);
-        // R2-005: every branch, not the first block the Branches tab shows.
+        // Every branch, not the first block the Branches tab shows.
         var branches = await cli.GetBranchesAsync(diskPath, entity.DefaultBranch, ct).ConfigureAwait(false);
         var prAuthors = entity.GitConnectionId is { } connectionId
             ? await gitRepo.GetPullRequestAuthorsAsync(connectionId, ct).ConfigureAwait(false)

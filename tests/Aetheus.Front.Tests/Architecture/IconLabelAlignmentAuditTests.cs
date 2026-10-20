@@ -3,18 +3,8 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Recette R-339: an icon beside its label sits on the middle of the text, wherever Aetheus composes
-/// the pair. OE centres its own compositions (buttons, badges, menu items) and <c>.omni-icon</c> is
-/// <c>vertical-align: middle</c> in running text; what goes wrong is an Aetheus flex row that holds an
-/// icon among its direct children and does not centre them. Two such rows exist in the markup:
-/// <list type="bullet">
-/// <item>a horizontal <c>OmniStack</c>, whose default alignment is Stretch: the icon's box stays at the
-/// top of the row while the text line is taller, so the icon reads above the middle;</item>
-/// <item>an element whose own app.css class makes it a row aligned on the baseline or the start edge,
-/// as the run tiles were (<c>align-items: baseline</c>).</item>
-/// </list>
-/// </summary>
+/// <summary>Application-composed icon-label rows center icons vertically; OE owns alignment inside
+/// its own controls.</summary>
 public sealed class IconLabelAlignmentAuditTests
 {
     private static readonly string FrontRoot = Path.Combine(RepositoryScan.Root, "src", "Aetheus.Front");
@@ -87,15 +77,8 @@ public sealed class IconLabelAlignmentAuditTests
             + "start edge; centre it (align-items: center, recette R-339):\n  " + string.Join("\n  ", offenders));
     }
 
-    /// <summary>
-    /// Recette R-339 (project card star): a centred row centres each child's MARGIN box, so a negative
-    /// margin on one vertical side only moves the child off the middle by half of it. The favourite
-    /// star (<c>margin: -0.375rem -0.375rem 0 0</c>) sat 3 px above the project name that way. The rule:
-    /// an element that is, or directly holds, an icon or an icon button, placed in a centred flex row,
-    /// never carries an app.css class whose top and bottom margins differ while one of them is negative.
-    /// Both sides negative and equal (to tuck a button into a corner without growing the row) stays
-    /// centred and passes.
-    /// </summary>
+    /// <summary>In centered flex rows, asymmetric negative vertical margins offset icon margin
+    /// boxes. Equal top and bottom negative margins preserve centering.</summary>
     [Fact]
     public void NoIconInACentredRowCarriesAnAsymmetricNegativeVerticalMargin()
     {
@@ -247,7 +230,7 @@ public sealed class IconLabelAlignmentAuditTests
         return all;
     }
 
-    /// <summary>A closing tag closes every element opened since its own (recette R2-107: out of <see cref="Parse"/>).</summary>
+    /// <summary>A closing tag closes every element opened since its matching opener.</summary>
     private static void CloseUpTo(Stack<Element> open, string name)
     {
         while (open.Count > 0)

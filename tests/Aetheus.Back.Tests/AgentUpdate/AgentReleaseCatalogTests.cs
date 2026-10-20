@@ -84,6 +84,66 @@ public sealed class AgentReleaseCatalogTests : IDisposable
         Assert.Contains("manifest is required", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ProductionStartup_RejectsAnArchiveWithoutRequiredFields()
+    {
+        var archive = WriteArchive("incomplete archive");
+        WriteManifest(archive with { Platform = string.Empty });
+        var catalog = CreateCatalog();
+
+        await Assert.ThrowsAsync<System.ComponentModel.DataAnnotations.ValidationException>(
+            () => catalog.StartAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData("../escape.tar.gz", null, null, "must not contain a path")]
+    [InlineData(null, "macos", null, "Unsupported agent archive platform: macos")]
+    [InlineData(null, null, "riscv", "Unsupported agent archive architecture: riscv")]
+    public async Task ProductionStartup_RejectsAnArchiveOutsideTheSupportedShape(
+        string? fileName, string? platform, string? architecture, string expectedMessage)
+    {
+        var archive = WriteArchive("shaped archive");
+        WriteManifest(archive with
+        {
+            FileName = fileName ?? archive.FileName,
+            Platform = platform ?? archive.Platform,
+            Architecture = architecture ?? archive.Architecture
+        });
+        var catalog = CreateCatalog();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => catalog.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProductionStartup_RejectsAMissingArchiveFile()
+    {
+        var archive = WriteArchive("vanished archive");
+        WriteManifest(archive);
+        File.Delete(Path.Combine(_root, "wwwroot", "downloads", "releases", "1.0.0", archive.FileName));
+        var catalog = CreateCatalog();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => catalog.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("archive is missing", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProductionStartup_RejectsASizeMismatch()
+    {
+        var archive = WriteArchive("truncated archive");
+        WriteManifest(archive with { SizeBytes = archive.SizeBytes + 1 });
+        var catalog = CreateCatalog();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => catalog.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("size mismatch", exception.Message, StringComparison.Ordinal);
+    }
+
     private AgentReleaseArchiveDto WriteArchive(string content)
     {
         var releaseDirectory = Path.Combine(

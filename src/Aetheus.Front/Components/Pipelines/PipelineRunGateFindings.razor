@@ -1,38 +1,69 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
 <OmniCard Class="analysis-run-gate-overview analysis-run-gate-page omni-u-mt-md omni-u-p-md">
+    @* Recette R1-62: the title row carries the actions (Quality blue, Export grey), then the grade and its
+       first cause, the counts, the families, and the findings. *@
     <div class="analysis-run-gate-heading">
         <OmniIcon Name="OmniIconName.ShieldCheck" />
         <div>
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["AnalysisGateTab"]</OmniHeading>
         </div>
-        @* PLAN-003 lot 22: the word is dropped when the letter carries the same verdict. *@
+        @* The letter carries the verdict without a redundant word. *@
         @if (PipelineRunGatePresentation.ShowsStatusWord(Gate))
         {
             <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineRunGatePresentation.GateStyle(Gate.Status)">@L[PipelineRunGatePresentation.StatusKey(Gate.Status)]</OmniBadge>
         }
-        @if (PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is { } grade)
-        {
-            <GradeBadge Value="@grade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge analysis-run-gate-grade" />
-        }
+        <div class="analysis-run-gate-actions">
+            @* STD-BTN detection 11: Open project quality visible, the other actions in the menu; Export is the
+               visible action when the run has no project. *@
+            @if (ProjectId is int projectId)
+            {
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenProjectQuality(projectId))" title="@L["AnalysisOpenProjectQuality"]"><OmniIcon Name="OmniIconName.OpenExternal" /> <span>@L["AnalysisOpenProjectQuality"]</span></OmniButton>
+                <OmniOverflowMenu Label="@L["MoreActions"]">
+                    <OmniMenuItem OnClick="ExportAllAiPromptAsync" Disabled="@(ListedCount == 0 || _exporting)" title="@L["AnalysisExportAllAiPrompt"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["AnalysisExport"]</ChildContent></OmniMenuItem>
+                </OmniOverflowMenu>
+            }
+            else
+            {
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ExportAllAiPromptAsync" Disabled="@(ListedCount == 0)" Busy="@_exporting" title="@L["AnalysisExportAllAiPrompt"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["AnalysisExport"]</span></OmniButton>
+            }
+        </div>
     </div>
     @if (PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade))
     {
         <OmniAlert Severity="OmniSeverity.Warning" Title="@L["GateSealedGradeTitle"]" Class="omni-u-mb-md">
             <div>@string.Format(L["GateSealedGradeDetail"], Gate.Grade?.OverallGrade?.ToString() ?? "-")</div>
-            <PipelineRunBlockingTests Tests="BlockingTests" />
+            <PipelineRunBlockingTests Tests="BlockingTests" ViewingRunId="@Gate.PipelineRunId" />
         </OmniAlert>
     }
-    @* Recette R2-052: what the letter is made of. A B over "0 findings" came from a measure (coverage,
-       duplication, complexity, a cycle) the tab did not show. *@
-    <AnalysisGradeBreakdown Grade="@Gate.Grade"
-                            SealBlockedByTests="@(PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade) && BlockingTests.Count > 0)" />
     <div class="analysis-run-gate-toolbar omni-u-mb-md">
+        @* Recette R1-60: one tile for the grade the run shows, and beside it the single measure that sets
+           it (the first in display order); the full breakdown stays below. *@
+        @if (PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is { } grade)
+        {
+            <div class="analysis-run-gate-headline">
+                <GradeBadge Value="@grade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge analysis-run-gate-grade" />
+                <div class="analysis-run-gate-cause">
+                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["GateGrade"]</OmniText>
+                    @if (PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade) && BlockingTests.Count > 0)
+                    {
+                        <OmniText Element="OmniTextElement.Strong">@L["GateFirstCauseBlockingTests"]</OmniText>
+                    }
+                    else if (AnalysisGradeBreakdown.FirstLimitingMeasure(Gate.Grade) is { } cause)
+                    {
+                        <OmniText Element="OmniTextElement.Strong">@($"{AnalysisGradeBreakdown.MeasureLabel(L, cause.Key)} : {AnalysisGradeBreakdown.MeasureText(cause)}")</OmniText>
+                        @if (cause.DistanceToNextGrade.HasValue && cause.NextGrade.HasValue && !cause.WeightedFindingScore)
+                        {
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["AnalysisDistanceToGrade", cause.DistanceToNextGrade.Value.ToString("0.##"), cause.NextGrade.Value]</OmniText>
+                        }
+                    }
+                </div>
+            </div>
+        }
         @* The OE key-figure tile: value over its label, the label wraps, so a narrow column keeps
            both inside the tile (a side-by-side nowrap pair spilled out of it at 375 px). *@
-        @* Recette R2-137: findings and new findings only; a report is an analysis result, not a finding,
-           so its count left the tiles. Recette R2-138: the rule alerts tile shows only when the list
-           below names each alert it counts. *@
+        @* Tiles count findings separately from reports; a rule-alert count is shown only with the
+           corresponding alert list. *@
         <div class="analysis-run-gate-metrics">
             <OmniStatTile Value="@($"{Gate.FindingCount}")" Label="@L["AnalysisGateFindings"]" />
             <OmniStatTile Value="@($"{Gate.NewFindingCount}")" Label="@L["AnalysisGateNewFindings"]" />
@@ -41,28 +72,26 @@
                 <OmniStatTile Value="@($"{Gate.Violations.Count}")" Label="@L["AnalysisGateViolations"]" />
             }
         </div>
-        <div class="analysis-run-gate-actions">
-            @if (ProjectId is { } projectId)
-            {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenProjectQuality(projectId))" title="@L["AnalysisOpenProjectQuality"]"><OmniIcon Name="OmniIconName.OpenExternal" /> <span>@L["AnalysisOpenProjectQuality"]</span></OmniButton>
-            }
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ExportAllAiPromptAsync" Disabled="@(ListedCount == 0)" Busy="@_exporting" title="@L["AnalysisExportAllAiPrompt"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["AnalysisExport"]</span></OmniButton>
-        </div>
     </div>
+    @* Recette R2-052: what the letter is made of. A B over "0 findings" came from a measure (coverage,
+       duplication, complexity, a cycle) the tab did not show. *@
+    <AnalysisGradeBreakdown Grade="@Gate.Grade"
+                            SealBlockedByTests="@(PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade) && BlockingTests.Count > 0)" />
     @* Recette R2-138: an alert is a policy rule a measure crossed (dependency cycles, complex methods, a
-       new medium finding), not a finding: the tile counted them and nothing on the page named them. *@
+       new medium finding), not a finding. Recette R1-63: said in words, with why it is not in the list. *@
     @if (Gate.Violations.Count > 0)
     {
+        <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted" Class="omni-u-mt-md omni-u-mb-xs">@L["AnalysisGateViolationsExplained"]</OmniText>
         <OmniDataList TItem="AnalysisRunGateViolationDto" Items="@Gate.Violations" Class="analysis-run-gate-violations omni-u-mb-md">
             <ItemTemplate Context="violation">
                 <div class="analysis-run-gate-violation">
                     <OmniBadge Tone="@(violation.Outcome == "Block" ? OmniTone.Danger : OmniTone.Warning)">@L[violation.Outcome == "Block" ? "AnalysisGateViolationBlock" : "AnalysisGateViolationWarn"]</OmniBadge>
-                    <span>@ViolationText(violation)</span>
+                    <span>@ViolationLabel(violation)</span>
                 </div>
             </ItemTemplate>
         </OmniDataList>
     }
-    @* R-527: the findings already decided on are hidden until asked for; the switch says how many. *@
+    @* The findings already decided on are hidden until asked for; the switch says how many. *@
     @if (Gate.DecidedFindingCount > 0)
     {
         <OmniSwitch TValue="bool" @bind-Value="_showDecided" @bind-Value:after="ShowDecidedChangedAsync" Class="omni-u-mb-sm analysis-run-gate-decided-switch">@string.Format(L["AnalysisGateShowDecided"], Gate.DecidedFindingCount)</OmniSwitch>
@@ -73,11 +102,11 @@
     }
     else
     {
-        @* Recette R-502: the columns of every findings list (AnalysisFindingColumns), over this run's
-           findings; a click on the row opens the finding, as on the project's Quality page. *@
-        @* R-500: FullHeight lets OE size the grid to what is left under it, inside the card. *@
-        @* Recette R-485: the findings of the run and the runs it triggered, read from the server page
-           by page, filtered and sorted there, like the project's Quality list. *@
+        @* The columns of every findings list (AnalysisFindingColumns), over this run's findings; a
+           click on the row opens the finding, as on the project's Quality page. *@
+        @* FullHeight lets OE size the grid to what is left under it, inside the card. *@
+        @* The findings of the run and the runs it triggered, read from the server page by page,
+           filtered and sorted there, like the project's Quality list. *@
         <AetheusDataGrid ShowFooterBar="true" @ref="_grid" Data="@_rows" Count="@_total" TItem="AnalysisFindingDto" KeyProperty="Id" LoadData="LoadAsync" ExportRead="@ReadExportAsync" RowClick="OpenFinding"
                          AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" PageSize="25"
                          Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<AnalysisFindingDto>(_rows, _total))"

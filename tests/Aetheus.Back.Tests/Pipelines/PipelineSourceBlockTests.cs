@@ -9,10 +9,8 @@ using NSubstitute;
 
 namespace Aetheus.Back.Tests.Pipelines;
 
-/// <summary>
-/// Recette R-534: a pipeline definition may take its workspace from another repository of its project
-/// (<c>source:</c> block) while the definition keeps its own repository and revision.
-/// </summary>
+/// <summary> A pipeline definition may take its workspace from another repository of its project
+/// (<c>source:</c> block) while the definition keeps its own repository and revision. </summary>
 public sealed class PipelineSourceBlockTests
 {
     private const string DefinitionCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -46,11 +44,8 @@ public sealed class PipelineSourceBlockTests
         Assert.Equal("develop", definition.SourceBranch);
     }
 
-    /// <summary>
-    /// Recette R2-041 turned this test around deliberately: the reader no longer refuses a key it does
-    /// not know (a YAML written for a newer backend must still run). The key is skipped and named in a
-    /// warning, which is what the editor and the run show.
-    /// </summary>
+    /// <summary>Unknown YAML keys are skipped and reported as warnings so newer definitions remain
+    /// readable without silently ignoring unsupported content.</summary>
     [Fact]
     public void AnUnknownKeyInsideTheSourceBlock_IsSkipped_AndNamedInAWarning()
     {

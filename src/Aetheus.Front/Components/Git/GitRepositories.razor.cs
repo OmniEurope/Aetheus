@@ -17,6 +17,8 @@ public partial class GitRepositories : IAsyncDisposable
 
     private HubConnection? _hub;
     private CancellationTokenSource? _loadCts;
+    // Cancelled when the page is left, so a realtime connection still starting stops with it.
+    private readonly CancellationTokenSource _lifetime = new();
     private int _loadGeneration;
     private AetheusDataGrid<GitLightRepoDto>? _grid;
     private readonly HashSet<int> _joinedRepositoryIds = [];
@@ -42,7 +44,7 @@ public partial class GitRepositories : IAsyncDisposable
     private bool _sortDescending;
     private bool _createDialogOpened;
 
-    // Recette R-224: the grid's header filters, sent with every page request, and the values they offer.
+    // The grid's header filters, sent with every page request, and the values they offer.
     private List<GridFilter> _columnFilters = [];
     private GitRepositoryFilterValuesDto _filterValues = new();
     private (bool Loaded, int? ProjectId) _filterValuesScope;
@@ -67,9 +69,9 @@ public partial class GitRepositories : IAsyncDisposable
         // - stranding "New Repository" as permanently disabled.
         Permissions.OnPermissionsChanged += OnPermissionsChanged;
         RefreshCanWrite();
-        // Recette R-294: the grid starts its own first load at the first render, which happens at the
-        // first await below. The project scope is set before it, so that load is the right one and the
-        // only one; OnParametersSetAsync then finds the project already applied.
+        // The grid starts its own first load at the first render, which happens at the first await
+        // below. The project scope is set before it, so that load is the right one and the only
+        // one; OnParametersSetAsync then finds the project already applied.
         _lastAppliedProjectId = ProjectId;
         ApplyProjectFilterFromQuery();
         var requestedScope = _projectFilter;
@@ -100,10 +102,14 @@ public partial class GitRepositories : IAsyncDisposable
 
     private async Task ConnectHub()
     {
+        // Left while the page was still loading: DisposeAsync has run, and a hub created now would
+        // never be disposed. IsCancellationRequested stays readable after the source is disposed.
+        if (_lifetime.IsCancellationRequested) return;
+        var lifetime = _lifetime.Token;
         try
         {
             _hub = HubFactory.Create("git");
-            // Recette R-226: live events refresh the rows in place (page, sort and filters kept).
+            // Live events refresh the rows in place (page, sort and filters kept).
             _hub.On<int>("RepositoryChanged", _ => InvokeAsync(LiveRefreshAsync));
             _hub.On<int>("CommitsChanged", _ => InvokeAsync(LiveRefreshAsync));
             _hub.On<int>("BranchesChanged", _ => InvokeAsync(LiveRefreshAsync));
@@ -113,14 +119,23 @@ public partial class GitRepositories : IAsyncDisposable
                 _joinedRepositoryIds.Clear();
                 await LiveRefreshAsync();
             }));
-            await _hub.StartAsync();
+            await _hub.StartAsync(lifetime);
             await JoinVisibleRepositoryGroupsAsync();
         }
         // Hub unavailable (server down/restarting, negotiation rejected, or navigation
         // cancelled the connect) - the page works without real-time updates. Silent by
         // design: pages have no ILogger by convention.
-        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
+        // A server that negotiates but whose transports all fail is reported as an AggregateException.
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException
+            or AggregateException)
         {
+        }
+        // The page was left while the connection was starting and DisposeAsync stopped it half-way:
+        // whatever that start reports belongs to no page any more, and must not reach the error
+        // boundary, which would show it on the page the user went to.
+        catch (Exception ex) when (lifetime.IsCancellationRequested)
+        {
+            Logger.LogDebug(ex, "Git repositories live connection stopped because the page was left");
         }
     }
 
@@ -209,12 +224,8 @@ public partial class GitRepositories : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Recette R-185: the grid is virtualized and pulls its rows through <see cref="OnLoadDataAsync"/>.
-    /// A load the page starts itself (first load, hub event, filter change) raced the grid's own: the
-    /// grid's was dropped as stale and handed back the previous, empty list, so the header said
-    /// "3 in total" over an empty grid. Every page-side refresh now goes through the grid.
-    /// </summary>
+    /// <summary>Page-side refreshes go through the virtualized grid's loader so competing requests
+    /// cannot replace its current block with stale rows.</summary>
     private async Task RefreshGridAsync()
     {
         if (_grid is not null)
@@ -224,7 +235,7 @@ public partial class GitRepositories : IAsyncDisposable
         StateHasChanged();
     }
 
-    /// <summary>Recette R-226: a live change fetches the grid's current page again without the loader.</summary>
+    /// <summary>A live change fetches the grid's current page again without the loader.</summary>
     private async Task LiveRefreshAsync()
     {
         if (_grid is not null)
@@ -234,7 +245,7 @@ public partial class GitRepositories : IAsyncDisposable
         StateHasChanged();
     }
 
-    /// <summary>Recette R-224: the default branches offered by the column filter, in the list's scope.</summary>
+    /// <summary>The default branches offered by the column filter, in the list's scope.</summary>
     private async Task LoadFilterValuesAsync()
     {
         if (_filterValuesScope == (true, _projectFilter)) return;
@@ -249,7 +260,8 @@ public partial class GitRepositories : IAsyncDisposable
         }
     }
 
-    /// <summary>Recette R2-124: one page of the export, with the project filter, search, sort and column filters of the grid.</summary>
+    /// <summary>One page of the export, with the project filter, search, sort and column filters of
+    /// the grid.</summary>
     internal Task<PaginatedResult<GitLightRepoDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
@@ -274,14 +286,14 @@ public partial class GitRepositories : IAsyncDisposable
 
     private bool _firstLoadDone;
 
-    // Recette R-318: the project's internal repositories, then its external repository.
+    // The project's internal repositories, then its external repository.
     private static readonly IReadOnlyList<string> RepositoryTabSlugs = ["internal", "external"];
     private int _repositoryTab;
 
     private bool ShowsExternalTab => _projectFilter.HasValue && _repositoryTab == 1;
 
-    /// <summary>Recette R-296: the public repository a project is built from, when it has one and no
-    /// internal repository; the empty state then links to it rather than reading "no repository".</summary>
+    /// <summary>The public repository a project is built from, when it has one and no internal
+    /// repository; the empty state then links to it rather than reading "no repository".</summary>
     private string? ExternalRepositoryUrl => _projectFilter is { } projectId
         && _projects.FirstOrDefault(project => project.Id == projectId)?.RepositoryUrl is { Length: > 0 } url
         ? url
@@ -351,8 +363,8 @@ public partial class GitRepositories : IAsyncDisposable
         await ResetAndReloadAsync();
     }
 
-    /// <summary>Recette R-185: inside a project the trail names it (Projects / project / Git), which
-    /// also replaces the generic page description on the second header line.</summary>
+    /// <summary>Inside a project the trail names it (Projects / project / Git), which also replaces
+    /// the generic page description on the second header line.</summary>
     private void SetTrail()
     {
         if (ProjectId is not { } projectId || _projects.FirstOrDefault(project => project.Id == projectId) is not { } project)
@@ -402,6 +414,9 @@ public partial class GitRepositories : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Disposed once: a second call would Cancel() the already disposed lifetime.
+        if (_lifetime.IsCancellationRequested) return;
+        _lifetime.Cancel();
         Interlocked.Increment(ref _loadGeneration);
         var cts = Interlocked.Exchange(ref _loadCts, null);
         cts?.Cancel();
@@ -415,9 +430,10 @@ public partial class GitRepositories : IAsyncDisposable
             catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException) { }
         }
         _joinedRepositoryIds.Clear();
+        _lifetime.Dispose();
     }
 
-    /// <summary>Recette R2-124: the export writes the state the badge shows.</summary>
+    /// <summary>The export writes the state the badge shows.</summary>
     private Func<GitLightRepoDto, object?> StatusExport => _statusExport ??= repository => L[repository.IsEmpty ? "Empty" : "Active"].Value;
     private Func<GitLightRepoDto, object?>? _statusExport;
 }

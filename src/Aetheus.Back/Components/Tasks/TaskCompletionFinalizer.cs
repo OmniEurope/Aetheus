@@ -57,6 +57,19 @@ internal sealed class TaskCompletionFinalizer(
                     await domainEvents
                         .DispatchStrictAsync(new PipelineStepTaskMetricsCollectedEvent(pipelineRunId, metrics), ct)
                         .ConfigureAwait(false);
+
+                // Recette R1-43: the expand/contract verdict of a blue-green migrate step, kept
+                // against the run so it outlives the step log.
+                var gateVerdicts = TaskMigrationGateParser.Parse(
+                    logOutput,
+                    pipelineRunId,
+                    stepRun.StageName,
+                    stepRun.StepName,
+                    stepRun.CompletedAt.Value);
+                if (gateVerdicts.Count > 0)
+                    await domainEvents
+                        .DispatchStrictAsync(new PipelineStepMigrationGateReportedEvent(pipelineRunId, gateVerdicts), ct)
+                        .ConfigureAwait(false);
             }
         }
         return stepRun;

@@ -1,8 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.VariableLibraries
-@* PLAN-005 lot 5 - hands a library free ports instead of leaving an operator to invent them and
-   discover the collision at `docker up`. The keys carry the PORT_ prefix because that prefix is the
-   only thing the pipeline preflight guard reads. *@
+@* Allocate free ports with PORT_ keys so the pipeline preflight guard can recognize them. *@
 <OmniStack Gap="OmniSpacing.Large">
     <OmniText Element="OmniTextElement.Paragraph">@L["PortAllocateLibraryHint"]</OmniText>
 

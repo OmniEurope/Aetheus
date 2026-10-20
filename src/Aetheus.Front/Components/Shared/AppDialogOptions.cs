@@ -6,11 +6,8 @@ public sealed record AppDialogOptions
 {
     public AppDialogWidth Width { get; init; } = AppDialogWidth.Default;
 
-    /// <summary>
-    /// Whether a click on the backdrop closes the dialog. False by default, so a click
-    /// beside a form does not throw its input away (PLAN-008 verification, E, G1). The close button
-    /// and Escape still close it.
-    /// </summary>
+    /// <summary>Keep backdrop dismissal disabled by default so a click beside a form does not
+    /// discard input; the close button and Escape remain available.</summary>
     public bool CloseOnBackdropClick { get; init; }
 
     /// <summary>
@@ -26,13 +23,9 @@ public sealed record AppDialogOptions
 
     public bool Resizable { get; init; }
 
-    /// <summary>
-    /// Recette R-406: what the dialog is for, given to OE's <see cref="OmniDialog.Intent"/> (the intention mark
-    /// before the title; since OE 1.4.0 the header and the footer stay neutral, recette R2-029).
-    /// <see cref="OmniTone.Accent"/> by default: a
-    /// dialog opened with a component is a form or a detail; a question goes through
-    /// <see cref="AppDialogs.ConfirmAsync"/>, where OE derives it from the action (warning when destructive).
-    /// </summary>
+    /// <summary>Supply the dialog's intent independently of its neutral header and footer so
+    /// purpose is visible without styling the whole frame; component dialogs default to Accent and
+    /// confirmations derive intent from their action.</summary>
     public OmniTone Intent { get; init; } = OmniTone.Accent;
 
     internal string? HeightClass { get; init; }

@@ -56,7 +56,7 @@ public class UsersTests : BunitContext
     [Fact]
     public void Renders_AtMostThreeRoleBadges_WithOverflowCount()
     {
-        // Recette R-210: the page reads the role names its Roles header filter offers.
+        // The page reads the role names its Roles header filter offers.
         _handler.SetJsonResponse("api/users/roles", new List<string> { "Admin", "Contributor", "Reader", "Ops" });
         _handler.SetJsonResponse("api/users", new PaginatedResult<UserDto>
         {
@@ -76,7 +76,7 @@ public class UsersTests : BunitContext
         });
 
         var cut = Render<UsersPage>();
-        cut.WaitForState(() => cut.Markup.Contains("many-roles"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("many-roles"));
 
         Assert.Contains("Admin", cut.Markup);
         Assert.Contains("Contributor", cut.Markup);
@@ -94,7 +94,7 @@ public class UsersTests : BunitContext
             new RoleDto { Id = 2, Name = "User" }
         ]);
         var cut = Render<UserEdit>();
-        cut.WaitForState(() => cut.Markup.Contains("Admin"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => cut.Markup.Contains("Admin"));
 
         // New-user mode renders the empty create form and a server-paged role selector.
         Assert.NotEmpty(cut.FindAll("input"));
@@ -122,7 +122,7 @@ public class UsersTests : BunitContext
         });
 
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => cut.Markup.Contains("admin"), TimeSpan.FromSeconds(3));
+        cut.WaitForState(() => cut.Markup.Contains("admin"));
 
         Assert.Contains("admin", cut.Markup);
     }

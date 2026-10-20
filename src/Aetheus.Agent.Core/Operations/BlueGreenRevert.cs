@@ -2,17 +2,9 @@
 
 namespace Aetheus.Agent.Core.Operations;
 
-/// <summary>
-/// PLAN-003 2.7, "Revenir à N-1": puts traffic back on the reserve colour the last commit kept
-/// running. Nothing is started, stopped or migrated - the schema is expand/contract, so the previous
-/// release can serve it - only the configuration that served the reserve is put back and reloaded.
-/// The colour it leaves becomes the reserve in turn, so the same operation undoes it.
-///
-/// Refused, with the reason, when there is nothing safe to return to: no reserve recorded, an open
-/// deployment transaction (a cutover in flight owns the environment), or a reserve colour that no
-/// longer answers its readiness probe. Moving traffic to a colour that cannot serve would turn a
-/// quick return into an outage.
-/// </summary>
+/// <summary>Restore and reload the exact reserve configuration without starting, stopping or
+/// migrating services; the departed colour becomes the new reserve. Refuse when no reserve exists,
+/// another deployment owns an open transaction or reserve readiness fails.</summary>
 internal sealed class BlueGreenRevert(IShellRunner shell)
 {
     /// <summary>How long the reserve gets to answer: it is supposed to be running already.</summary>

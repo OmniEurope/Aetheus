@@ -16,8 +16,8 @@ internal sealed class ServerConfiguration : IEntityTypeConfiguration<Server>
         builder.Property(e => e.AgentCapabilitiesJson).HasMaxLength(8192);
         builder.Property(e => e.AgentSessionFencingToken).HasDefaultValue(0L);
         builder.HasIndex(e => e.OrganizationId);
-        // PLAN-004 R-11: enrollment matches a reinstalled machine by this hash within its organization.
-        // Not unique: cloned images can share a machine-id, and a hash is evidence, not a key.
+        // Index machine fingerprints within organisations without enforcing uniqueness because
+        // cloned images can share an identity.
         builder.Property(e => e.MachineIdHash).HasMaxLength(64);
         builder.HasIndex(e => new { e.OrganizationId, e.MachineIdHash });
         // A retired server keeps its row and links but disappears from every query that does not

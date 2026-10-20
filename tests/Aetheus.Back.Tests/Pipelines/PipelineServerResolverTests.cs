@@ -19,6 +19,7 @@ public sealed class PipelineServerResolverTests : IDisposable
 
     private readonly AppDbContext _db;
     private readonly PipelineServerResolver _resolver;
+    private readonly PipelineProjectOwnerRepository _projectOwners;
 
     public PipelineServerResolverTests()
     {
@@ -27,6 +28,7 @@ public sealed class PipelineServerResolverTests : IDisposable
             .Options;
         _db = new AppDbContext(options);
         _resolver = new PipelineServerResolver(_db);
+        _projectOwners = new PipelineProjectOwnerRepository(_db);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -426,6 +428,17 @@ public sealed class PipelineServerResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task GetAiRunnerProfileOrganizationIdAsync_ReturnsTheOwningOrganization_OrNullWhenMissing()
+    {
+        _db.AiRunnerProfiles.Add(new AiRunnerProfile { Id = 5, OrganizationId = 7, Name = "Claude" });
+        await SaveAsync();
+        _db.ChangeTracker.Clear();
+
+        Assert.Equal(7, await _resolver.GetAiRunnerProfileOrganizationIdAsync(5, Ct));
+        Assert.Null(await _resolver.GetAiRunnerProfileOrganizationIdAsync(404, Ct));
+    }
+
+    [Fact]
     public async Task GetPipelineProjectIdAsync_ResolvesTheProjectDirectlyOrThroughTheOwner()
     {
         _db.Environments.Add(new Environment { Id = 20, Name = "staging", ProjectId = 10 });
@@ -483,6 +496,16 @@ public sealed class PipelineServerResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task GetProjectNameAsync_ReadsTheNameOrNothing()
+    {
+        _db.Projects.Add(new Project { Id = 10, Name = "Mon Aetheus", OrganizationId = 7 });
+        await SaveAsync();
+
+        Assert.Equal("Mon Aetheus", await _resolver.GetProjectNameAsync(10, Ct));
+        Assert.Null(await _resolver.GetProjectNameAsync(404, Ct));
+    }
+
+    [Fact]
     public async Task GetProjectOwnerUsernameAsync_ResolvesTheLowestOwnerOfTheOwningOrganization()
     {
         _db.Projects.Add(new Project { Id = 10, Name = "aetheus", OrganizationId = 7 });
@@ -497,8 +520,8 @@ public sealed class PipelineServerResolverTests : IDisposable
         await SaveAsync();
         _db.ChangeTracker.Clear();
 
-        Assert.Equal("second-owner", await _resolver.GetProjectOwnerUsernameAsync(10, Ct));
-        Assert.Null(await _resolver.GetProjectOwnerUsernameAsync(404, Ct));
+        Assert.Equal("second-owner", await _projectOwners.GetProjectOwnerUsernameAsync(10, Ct));
+        Assert.Null(await _projectOwners.GetProjectOwnerUsernameAsync(404, Ct));
     }
 
     [Fact]
@@ -511,7 +534,7 @@ public sealed class PipelineServerResolverTests : IDisposable
         await SaveAsync();
         _db.ChangeTracker.Clear();
 
-        Assert.Null(await _resolver.GetProjectOwnerUsernameAsync(10, Ct));
+        Assert.Null(await _projectOwners.GetProjectOwnerUsernameAsync(10, Ct));
     }
 
     [Fact]
@@ -522,10 +545,10 @@ public sealed class PipelineServerResolverTests : IDisposable
             new User { Id = 2, Username = "disabled", PasswordHash = "x", IsActive = false });
         await SaveAsync();
 
-        Assert.True(await _resolver.IsActiveUsernameAsync("alive", Ct));
-        Assert.False(await _resolver.IsActiveUsernameAsync("disabled", Ct));
-        Assert.False(await _resolver.IsActiveUsernameAsync("absent", Ct));
-        Assert.False(await _resolver.IsActiveUsernameAsync("   ", Ct));
+        Assert.True(await _projectOwners.IsActiveUsernameAsync("alive", Ct));
+        Assert.False(await _projectOwners.IsActiveUsernameAsync("disabled", Ct));
+        Assert.False(await _projectOwners.IsActiveUsernameAsync("absent", Ct));
+        Assert.False(await _projectOwners.IsActiveUsernameAsync("   ", Ct));
     }
 
     private static PipelineStepRun Step(

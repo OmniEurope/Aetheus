@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Back.Components.AppMonitoring;
 
-/// <summary>
-/// PLAN-013 lot 4: the « Conservation des données » values each monitored application applies, read from
-/// its project.
-/// </summary>
+/// <summary> The « Conservation des données » values each monitored application applies, read from
+/// its project. </summary>
 public interface IAppDataRetentionRepository
 {
     Task<IReadOnlyList<AppDataRetention>> GetAllAsync(CancellationToken ct = default);

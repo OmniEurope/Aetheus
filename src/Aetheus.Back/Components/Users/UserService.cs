@@ -10,6 +10,8 @@ namespace Aetheus.Back.Components.Users;
 
 public class UserService(IUserRepository repo, IHttpContextAccessor httpContextAccessor, IAuditService audit, IResourceAuthorizationService authz, IMemoryCache cache, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IDomainEventDispatcher domainEvents) : IUserService
 {
+    private readonly UserPipelineOwnershipGuard _pipelineOwnership = new(repo, audit, domainEvents);
+
     public async Task<PaginatedResult<UserDto>> GetUsersAsync(PaginationRequest request, CancellationToken ct = default)
     {
         var (page, pageSize) = request.Normalize();
@@ -92,23 +94,62 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         if (user is null) return null;
         var normalized = (request.Username ?? string.Empty).Trim().ToLowerInvariant();
         await EnsureUsernameAvailableAsync(id, user.Username, normalized, ct).ConfigureAwait(false);
-        user.Username = normalized;
-        user.Email = request.Email;
+        // Every refusal is decided before the entity changes, because the pipeline transfer below
+        // saves its own changes and must not carry a half-applied update of this user with it.
         var deactivating = user.IsActive && !request.IsActive;
-        user.IsActive = request.IsActive;
-        user.MustChangePassword = request.MustChangePassword;
-        user.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
         var requestedRolesList = request.Roles ?? [];
         var roleChange = DescribeRoleChange(user, requestedRolesList);
+        // AUD-05: a change that can remove an active administrator holds the administrator-set lock
+        // until its commit, so two such changes never both pass the "last administrator" count.
+        await using var administratorSet = roleChange.WasAdmin && (roleChange.LosingAdmin || deactivating)
+            ? await repo.LockAdministratorSetAsync(ct).ConfigureAwait(false)
+            : null;
         await EnsureSecurityChangeAllowedAsync(user, roleChange, deactivating, ct).ConfigureAwait(false);
-        if (roleChange.HasChanged)
-            await ApplyRolesAsync(user, requestedRolesList, ct).ConfigureAwait(false);
-        if (roleChange.HasChanged || deactivating) RotateSecurityStamp(user);
+        var previousUsername = user.Username;
+        var renamed = !string.Equals(previousUsername, normalized, StringComparison.Ordinal);
+        var forcedChangeArmed = !user.MustChangePassword && request.MustChangePassword;
+        if (deactivating)
+            await _pipelineOwnership.EnsureOwnedPipelinesHandledAsync(
+                user.Id, user.Username, request.TransferPipelinesToUsername, request.ForceWithOwnedPipelines,
+                "Deactivated", ct).ConfigureAwait(false);
+        await ApplyUpdateAsync(
+            user, request, normalized, requestedRolesList, roleChange,
+            endsSessions: deactivating || renamed || forcedChangeArmed, ct).ConfigureAwait(false);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        InvalidateIdentityCaches(user, previousUsername, renamed, forcedChangeArmed);
         await PublishUserUpdateAsync(user, roleChange.HasChanged, deactivating, ct).ConfigureAwait(false);
         if (deactivating)
             await EndSessionAsync(user.Id, UserSessionEndReasons.Deactivated, ct).ConfigureAwait(false);
         return MapToDto(user);
+    }
+
+    private async Task ApplyUpdateAsync(
+        User user, UpdateUserRequest request, string normalizedUsername, List<string> requestedRoles,
+        RoleChange roleChange, bool endsSessions, CancellationToken ct)
+    {
+        user.Username = normalizedUsername;
+        user.Email = request.Email;
+        user.IsActive = request.IsActive;
+        user.MustChangePassword = request.MustChangePassword;
+        user.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
+        if (roleChange.HasChanged)
+            await ApplyRolesAsync(user, requestedRoles, ct).ConfigureAwait(false);
+        // AUD-02 and AUD-03: a rename or a newly required password change also ends the sessions in
+        // flight, as a role change or a deactivation does. The old tokens carry the old name, or lack the
+        // forced-change claim the middleware enforces; the rotated stamp refuses them and a refresh mints
+        // tokens from the current row.
+        if (roleChange.HasChanged || endsSessions) RotateSecurityStamp(user);
+    }
+
+    // A rename drops the cached stamp and both names' role caches; a newly forced password change drops
+    // the cached stamp so the rotated one is read at once.
+    private void InvalidateIdentityCaches(User user, string previousUsername, bool renamed, bool forcedChangeArmed)
+    {
+        if (!renamed && !forcedChangeArmed) return;
+        cache.Remove($"sec-stamp:{user.Id}");
+        if (!renamed) return;
+        authz.InvalidateRoleCache(previousUsername);
+        authz.InvalidateRoleCache(user.Username);
     }
 
     private async Task EnsureUsernameAvailableAsync(
@@ -180,7 +221,8 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
                 user.Id, PermissionChangeReasons.Roles, ct).ConfigureAwait(false);
     }
 
-    public async Task<bool> DeleteUserAsync(int id, CancellationToken ct = default)
+    public async Task<bool> DeleteUserAsync(
+        int id, CancellationToken ct = default, string? transferPipelinesTo = null, bool forceWithOwnedPipelines = false)
     {
         var user = await repo.FindUserAsync(id, ct).ConfigureAwait(false);
         if (user is null) return false;
@@ -192,12 +234,20 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
 
         // F-13: prevent removal of the last active admin.
         var userDetail = await repo.GetUserDetailAsync(id, ct).ConfigureAwait(false);
-        if (userDetail is not null && userDetail.IsActive && userDetail.UserRoles.Any(ur => ur.Role.Name == "Admin"))
+        var removesAdministrator = userDetail is not null && userDetail.IsActive
+            && userDetail.UserRoles.Any(ur => ur.Role.Name == "Admin");
+        await using var administratorSet = removesAdministrator
+            ? await repo.LockAdministratorSetAsync(ct).ConfigureAwait(false)
+            : null;
+        if (removesAdministrator)
         {
             var admins = await repo.CountActiveAdminsAsync(ct).ConfigureAwait(false);
             if (admins <= 1)
                 throw new BadRequestException("Cannot delete the last active administrator.");
         }
+
+        await _pipelineOwnership.EnsureOwnedPipelinesHandledAsync(
+            user.Id, user.Username, transferPipelinesTo, forceWithOwnedPipelines, "Deleted", ct).ConfigureAwait(false);
 
         var name = user.Username;
         await repo.RemoveUserAsync(user, ct).ConfigureAwait(false);
@@ -207,8 +257,8 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         return true;
     }
 
-    // Recette R1-37: tells the modules holding per-user state in memory (the typed mailbox passwords)
-    // that this user's session is over. In-process and awaited, so it is done when the request returns.
+    // Tells the modules holding per-user state in memory (the typed mailbox passwords) that this
+    // user's session is over. In-process and awaited, so it is done when the request returns.
     private Task EndSessionAsync(int userId, string reason, CancellationToken ct) =>
         domainEvents.DispatchAsync(new UserSessionEndedEvent(userId, reason), ct);
 
@@ -219,34 +269,14 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         var user = await repo.FindUserAsync(id, ct).ConfigureAwait(false);
         if (user is null) return false;
 
-        // Determine if the caller is acting on themselves or on another user.
-        // No HttpContext (e.g. background worker, integration tests) is treated as a system reset
-        // and bypasses the self-service current-password check.
-        var caller = httpContextAccessor.HttpContext?.User;
-        var callerName = caller?.FindFirstValue(ClaimTypes.Name);
-        var isSelf = callerName is not null && string.Equals(callerName, user.Username, StringComparison.Ordinal);
-        var isAdmin = caller?.IsInRole("Admin") == true;
-        var isSystem = caller is null;
-
-        // Self-service changes always require the current password.
-        // Admin / system-driven resets are allowed without it.
-        if (isSelf)
-        {
-            if (string.IsNullOrEmpty(request.CurrentPassword) ||
-                !BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
-                return false;
-        }
-        else if (!isAdmin && !isSystem)
-        {
-            return false;
-        }
+        var (allowed, isSelf, isAdmin) = AuthorizePasswordChange(user, request);
+        if (!allowed) return false;
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.SecurityStamp = Guid.NewGuid().ToString("N");
         user.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
-        // A self-service change satisfies a pending forced-change requirement: clear the flag so the
-        // next login no longer routes the user onto the mandatory change-password screen. An admin
-        // resetting another user's password re-arms it (S-FEAT-UE4K) so that user must pick their own.
+        // A self-service password change clears the forced-change requirement. An administrator
+        // resetting another user's password sets it so the user must choose their own password.
         if (isSelf)
             user.MustChangePassword = false;
         else if (isAdmin)
@@ -256,7 +286,36 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         var revokedTokens = isSelf
             ? 0
             : await repo.RevokePersonalAccessTokensAsync(user.Id, user.UpdatedAt, ct).ConfigureAwait(false);
+        // AUD-01: every refresh token ends with the old password, the holder's own included; otherwise
+        // a refresh token taken before the change mints a valid access token with the new stamp.
+        await repo.RevokeRefreshTokensAsync(user.Id, user.UpdatedAt, ct).ConfigureAwait(false);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        await AfterPasswordChangeAsync(user, isSelf, revokedTokens, ct).ConfigureAwait(false);
+        return true;
+    }
+
+    // Determine if the caller is acting on themselves or on another user.
+    // No HttpContext (e.g. background worker, integration tests) is treated as a system reset
+    // and bypasses the self-service current-password check.
+    // Self-service changes always require the current password.
+    // Admin / system-driven resets are allowed without it.
+    private (bool Allowed, bool IsSelf, bool IsAdmin) AuthorizePasswordChange(User user, ChangeUserPasswordRequest request)
+    {
+        var caller = httpContextAccessor.HttpContext?.User;
+        var callerName = caller?.FindFirstValue(ClaimTypes.Name);
+        var isSelf = callerName is not null && string.Equals(callerName, user.Username, StringComparison.Ordinal);
+        var isAdmin = caller?.IsInRole("Admin") == true;
+        var isSystem = caller is null;
+
+        var allowed = isSelf
+            ? !string.IsNullOrEmpty(request.CurrentPassword)
+                && BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash)
+            : isAdmin || isSystem;
+        return (allowed, isSelf, isAdmin);
+    }
+
+    private async Task AfterPasswordChangeAsync(User user, bool isSelf, int revokedTokens, CancellationToken ct)
+    {
         // Evict AFTER the commit (challenge TOCTOU, same class as UpdateUser/Assign/Unassign): evicting
         // before the write lets a concurrent read re-cache the pre-rotation security stamp / role set for
         // the TTL, defeating the revocation the security-stamp rotation is meant to force.
@@ -271,7 +330,6 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         // refuses: its logout call cannot reach the server, so the session end is announced here.
         if (isSelf)
             await EndSessionAsync(user.Id, UserSessionEndReasons.PasswordChanged, ct).ConfigureAwait(false);
-        return true;
     }
 
     public async Task<bool> ChangeOwnPasswordAsync(ChangeUserPasswordRequest request, CancellationToken ct = default)
@@ -318,7 +376,11 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         if (target is null) return false;
 
         // Mirror DeleteUserAsync's F-13 guard: never leave the platform without an active admin.
-        if (user.IsActive && string.Equals(target.Role.Name, "Admin", StringComparison.Ordinal))
+        var removesAdministrator = user.IsActive && string.Equals(target.Role.Name, "Admin", StringComparison.Ordinal);
+        await using var administratorSet = removesAdministrator
+            ? await repo.LockAdministratorSetAsync(ct).ConfigureAwait(false)
+            : null;
+        if (removesAdministrator)
         {
             var admins = await repo.CountActiveAdminsAsync(ct).ConfigureAwait(false);
             if (admins <= 1)

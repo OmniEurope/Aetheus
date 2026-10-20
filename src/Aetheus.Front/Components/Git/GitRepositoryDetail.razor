@@ -22,8 +22,7 @@ else
             }
         </Badges>
         <Actions>
-            @* R2-003 (2026-10-01): the repository as a zip, its default branch. Secondary: browsing is the
-               page's purpose, the download an extra (STD-BTN). *@
+            @* Default-branch ZIP download is secondary to repository browsing. *@
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadArchiveAsync" Busy="@_downloadingArchive" Disabled="@_repo.IsEmpty"><OmniIcon Name="OmniIconName.Download" /> <span>@L["DownloadZip"]</span></OmniButton>
         </Actions>
     </OmniPageHeader>
@@ -33,13 +32,14 @@ else
     }
     @if (!string.IsNullOrEmpty(_repo.CloneUrl))
     {
-        @* Recette R2-002 (OE 1.4.0): one read-only field with OE's Copy button welded to its end; the
-           button shows a check after a copy, and only a refused copy adds a toast. *@
+        @* The read-only clone field owns copy feedback; only a refused copy adds a warning toast. *@
         <OmniTextBox Value="@_repo.CloneUrl" ReadOnly="true" Copyable="true" OnCopy="@OnCloneUrlCopied"
                      Class="clone-url-input omni-u-mt-sm" aria-label="@L["CloneUrl"]" ValueExpression="@(() => _repo.CloneUrl)"/>
     }
 
-    <UrlSyncedTabs Slugs="@TabSlugs" @bind-SelectedIndex="_selectedTab" class="omni-u-mt-lg">
+    @* Keyed by repository: the grids of the previous repository, and the loads they still have in flight,
+       go with it instead of holding back the rows of the next one (FRONT-003). *@
+    <UrlSyncedTabs @key="Id" Slugs="@TabSlugs" @bind-SelectedIndex="_selectedTab" class="omni-u-mt-lg">
         <Tabs>
             <OmniTabsItem Key="commits" Title="@L["Commits"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("history"))" /></Icon><ChildContent>
                 @if (_commits.Error)
@@ -63,18 +63,10 @@ else
                         Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<GitLightCommitDto>(_commits.Items, _commits.TotalCount))"
                         AutoLoad="false" EmptyText="@L["NoCommitsFound"]"
                         RowClick="@(c => Nav.NavigateTo($"/git-repositories/{Id}/commits/{c.Sha}"))">
-                        @* Commits are the one grid on this page that cannot honour a column sort: the page
-                           comes from a git revision walk paged by offset, so its order is the walk's
-                           (topological, newest first), and re-ordering it would mean reading the whole
-                           history per page. The columns say so rather than offering an order that never
-                           arrives; the other five grids here do sort server-side.
-                           R2-004 (2026-10-01): the filters live in the columns, the toolbar above the grid is
-                           gone. The back maps each one to git: Message to a literal case-insensitive --grep
-                           (contains only), Branch to the refs the walk starts from (none ticked walks every
-                           ref), Author to --author (R-224), Date to --since/--until. git filters dates on the
-                           committer date, so the Date column shows that date. The SHA opens the commit page and
-                           offers no filter. A ?search= link pre-fills the Message filter, visible and removable.
-                           R2-005: the Branch column is the ref git reached the commit through (--source). *@
+                        @* Commit paging preserves Git's topological revision order and maps
+                           message, branch, author and date filters to Git arguments. The date is
+                           the committer date, Branch identifies the traversed source ref and
+                           search links initialize the visible Message filter. *@
                         <Columns>
                             <OmniDataGridColumn Frozen="true" TItem="GitLightCommitDto" Property="ShortSha" Title="@L["Commit"]" Width="100px" Sortable="false" Filterable="false" >
                                 <Template Context="c">
@@ -295,7 +287,7 @@ else
                             <Template Context="pr">
                                 @if (pr.Status == PullRequestStatus.Open)
                                 {
-                                    @* R2-037 (2026-10-01): Fusionner is the row's main action, blue by the user's choice (R-533). *@
+                                    @* Merge is the row's primary action. *@
                                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => MergePr(pr))" Disabled="@(!_canWrite)" title="@L["Merge"]" Label="@L["Merge"]"><OmniIcon Name="OmniIconName.GitMerge" /></OmniButton>
                                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ClosePr(pr))" Disabled="@(!_canWrite)" title="@L["Close"]" Label="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
                                 }
@@ -362,9 +354,8 @@ else
                                     aria-label="@($"{L["PreventForcePush"]}: {r.Pattern}")" />
                             </Template>
                         </OmniDataGridColumn>
-                        @* Decision D13 (BACK-013): who may move the branch. Enforced by the smart HTTP push guard
-                           (direct pushes) and the advance-branch step (pipelines); it replaces the set-aside
-                           "require a pull request" switch of recette R2-042. *@
+                        @* Branch-movement permissions are enforced both by direct-push
+                           authorization and pipeline branch advancement. *@
                         <OmniDataGridColumn TItem="BranchProtectionRuleDto" Property="ProtectionLevel" Title="@L["BranchProtectionLevel"]" Width="240px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@_grids.ProtectionLevelText(L)" >
                             <Template Context="r">
                                 <OmniDropDown TValue="BranchProtectionLevel" Value="@r.ProtectionLevel" ValueChanged="@((BranchProtectionLevel v) => UpdateProtectionRule(r, protectionLevel: v))"

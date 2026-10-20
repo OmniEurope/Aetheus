@@ -26,7 +26,8 @@ public sealed class IngestService(
     TimeProvider timeProvider,
     ILogger<IngestService> logger,
     IAppTelemetryChangePublisher telemetryChanges,
-    IngestKeyRejectionLog rejections) : IIngestService
+    IngestKeyRejectionLog rejections,
+    IHttpContextAccessor? httpContext = null) : IIngestService
 {
     // Volume bounds (audit F-MON-06 + S-TECH-VOLM). PG growth is capped on five axes: metric-name
     // cardinality per app (MaxMetricNamesPerApp), points per request (MaxPointsPerRequest), the accepted
@@ -57,11 +58,11 @@ public sealed class IngestService(
 
     public async Task<int?> ResolveAppIdAsync(string ingestKey, CancellationToken ct = default)
     {
-        // Recette R2-013: every refusal is reported to the deduplicated warning, the request line itself
-        // being left to debug by RequestErrorLoggingMiddleware.
+        // Every refusal is reported to the deduplicated warning, the request line itself being left
+        // to debug by RequestErrorLoggingMiddleware.
         if (string.IsNullOrWhiteSpace(ingestKey))
         {
-            rejections.Record(null);
+            rejections.Record(null, RequestOrigin());
             return null;
         }
 
@@ -71,7 +72,7 @@ public sealed class IngestService(
         {
             if (cached.AppId > 0)
                 return cached.AppId;
-            rejections.Record(hash); // -1 = negative-cached miss
+            rejections.Record(hash, RequestOrigin()); // -1 = negative-cached miss
             return null;
         }
 
@@ -102,8 +103,25 @@ public sealed class IngestService(
                 options);
         }
         if (resolution is null)
-            rejections.Record(hash);
+            rejections.Record(hash, RequestOrigin());
         return resolution?.AppId;
+    }
+
+    internal const int MaxOriginUserAgentLength = 120;
+
+    /// <summary>Name the sender of the refused request: forwarded client address, user agent and path. The
+    /// OTLP body is not read before the key resolves, so the emitter's <c>service.name</c> is not known here.</summary>
+    private string? RequestOrigin()
+    {
+        var request = httpContext?.HttpContext?.Request;
+        if (request is null)
+            return null;
+        var address = httpContext!.HttpContext!.Connection.RemoteIpAddress?.ToString() ?? "unknown-address";
+        var agent = request.Headers.UserAgent.ToString();
+        if (agent.Length > MaxOriginUserAgentLength)
+            agent = agent[..MaxOriginUserAgentLength];
+        agent = new string(agent.Where(c => !char.IsControl(c)).ToArray());
+        return $"{address} (user-agent \"{agent}\", path {request.Path})";
     }
 
     internal int TrackedNegativeKeyCount => negativeKeyCacheEntries.Count;
@@ -144,10 +162,8 @@ public sealed class IngestService(
             gate.Release();
         }
 
-        // Recette R-478: the alerts go out once the app's lock is released. Dispatching them (channels,
-        // per-user notifications, AI tasks) under the lock made every later batch of the app wait behind
-        // it. The breach itself is recorded under the lock, so a concurrent batch still sees it and does
-        // not alert a second time.
+        // Record the breach under the application lock, then dispatch alerts after releasing it.
+        // Concurrent batches see the recorded breach without waiting for notification delivery.
         foreach (var alert in result.Alerts)
             await notificationService.SendEventAsync(MetricThresholdEvent, alert, ct).ConfigureAwait(false);
         return result.Outcome;
@@ -211,7 +227,7 @@ public sealed class IngestService(
             await metricRepo.AddSamplesAsync(samples, ct).ConfigureAwait(false);
         if (newNames.Count > 0)
         {
-            // R-477: a name goes to the names table the first time it is seen, which is what the metric
+            // A name goes to the names table the first time it is seen, which is what the metric
             // explorer and this cache's next refill read, instead of a DISTINCT over the samples.
             await metricRepo.AddMetricNamesAsync(appId, newNames, ct).ConfigureAwait(false);
             cache.Set(MetricNamesCacheKey(appId), existingNames, MetricNamesCacheLifetime);
@@ -225,14 +241,9 @@ public sealed class IngestService(
         return (new IngestOutcome(samples.Count, dropped), alerts);
     }
 
-    /// <summary>
-    /// R-458: how long an app's metric-name set is trusted before it is read again. Since R-477 the
-    /// read is the app's rows of the names table (one per name), no longer a DISTINCT over 30 days of
-    /// samples. The set only grows through this ingestion (which writes it back), so one read an hour
-    /// is enough; what a longer life can cost is bounded: names the other blue-green colour added in
-    /// the meantime are unseen here, so the name cap may be passed by what that colour added within
-    /// the hour.
-    /// </summary>
+    /// <summary>Cache metric names for one hour and update the set during ingestion. Names added by
+    /// another backend can remain unseen until refill, so cross-replica additions can temporarily
+    /// exceed the name cap.</summary>
     internal static readonly TimeSpan MetricNamesCacheLifetime = TimeSpan.FromHours(1);
 
     private static string MetricNamesCacheKey(int appId) => $"metric-names:{appId}";
@@ -296,7 +307,7 @@ public sealed class IngestService(
         if (loggedErrors.Count > 0)
             await errorRepo.UpsertErrorsAsync(appId, loggedErrors, ct).ConfigureAwait(false);
         await appRepo.TouchIngestAsync(appId, dropped, now, ct).ConfigureAwait(false);
-        // R-181: the open Logs tab reloads on this push instead of a Refresh click.
+        // The open Logs tab reloads on this push instead of a Refresh click.
         if (logs.Count > 0)
             await telemetryChanges.PublishAsync(appId, ct).ConfigureAwait(false);
         return new IngestOutcome(logs.Count, dropped);
@@ -305,12 +316,8 @@ public sealed class IngestService(
     /// <summary>OTLP severity number from which a log record is an error (ERROR and FATAL).</summary>
     private const int ErrorSeverityNumber = 17;
 
-    /// <summary>
-    /// Recette R-491: an exception logged outside any span (a background service's failed sweep, say)
-    /// never reached the Errors tab, which was fed by traces alone; production logged one every hour and
-    /// the tab showed none. A record at error level that carries an exception opens or feeds an error
-    /// group: its exception type, grouped by the logger that wrote it, with the log line as its message.
-    /// </summary>
+    /// <summary>Create or update an error group for error-level logs carrying an exception even
+    /// without a span, grouping by exception type and logger.</summary>
     private static AppErrorUpsert? LoggedError(ParsedLogRecord record, DateTime at)
     {
         if (record.SeverityNumber < ErrorSeverityNumber || string.IsNullOrWhiteSpace(record.ExceptionType))
@@ -342,16 +349,14 @@ public sealed class IngestService(
 
         var groups = upserts.Count > 0 ? await errorRepo.UpsertErrorsAsync(appId, upserts, ct).ConfigureAwait(false) : 0;
         await appRepo.TouchIngestAsync(appId, dropped, now, ct).ConfigureAwait(false);
-        // R-181: the open Errors tab reloads on this push instead of a Refresh click.
+        // The open Errors tab reloads on this push instead of a Refresh click.
         if (upserts.Count > 0)
             await telemetryChanges.PublishAsync(appId, ct).ConfigureAwait(false);
         return new IngestOutcome(groups, dropped);
     }
 
-    /// <summary>
-    /// Records the breaches and recoveries of the batch under the app's lock and returns the alerts to
-    /// send once it is released (recette R-478).
-    /// </summary>
+    /// <summary> Records the breaches and recoveries of the batch under the app's lock and returns
+    /// the alerts to send once it is released. </summary>
     private async Task<List<object>> EvaluateThresholdsAsync(int appId, Dictionary<string, (double Min, double Max)> extremesByMetric, DateTime now, CancellationToken ct)
     {
         var alerts = new List<object>();

@@ -18,11 +18,12 @@ public class ReleasesControllerTests
     private readonly IConfiguration _configMock = Substitute.For<IConfiguration>();
     private readonly IPipelineRunService _pipelineRunService = Substitute.For<IPipelineRunService>();
     private readonly IReleaseDeploymentAnnouncer _announcer = Substitute.For<IReleaseDeploymentAnnouncer>();
+    private readonly IReleaseStatusRestoreService _statusRestore = Substitute.For<IReleaseStatusRestoreService>();
     private readonly ReleasesController _sut;
 
     public ReleasesControllerTests()
     {
-        _sut = new ReleasesController(_serviceMock, _authzMock, _configMock, _pipelineRunService, _announcer);
+        _sut = new ReleasesController(_serviceMock, _authzMock, _configMock, _pipelineRunService, _announcer, _statusRestore);
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -47,7 +48,7 @@ public class ReleasesControllerTests
             TestContext.Current.CancellationToken);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
-        // R-520: the release step's deployment is announced, with the run and the agent that recorded it.
+        // The release step's deployment is announced, with the run and the agent that recorded it.
         await _announcer.Received(1).AnnounceAsync(9, 42, 7, Arg.Any<CancellationToken>());
     }
 
@@ -245,6 +246,67 @@ public class ReleasesControllerTests
             Arg.Any<int>(), Arg.Any<TriggerReleaseBuildRequest>(), Arg.Any<PipelineRunPreparation>(), Arg.Any<CancellationToken>());
     }
 
+    private const string ReleaseCommit = "0123456789abcdef0123456789abcdef01234567";
+
+    [Fact]
+    public async Task RelaunchFromCommit_ArchivedRelease_PreparesTheRunAtItsCommit_AndLaunchesIt()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 10, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _serviceMock.GetReleaseAsync(1, Arg.Any<CancellationToken>()).Returns(new ReleaseDto
+        {
+            Id = 1,
+            Status = ReleaseStatus.Archived,
+            CommitHash = ReleaseCommit,
+            BranchName = "main"
+        });
+        var pinned = new PipelineRunPreparation { PipelineId = 10, YamlSnapshot = "name: p", TargetServerIds = [], CommitHash = ReleaseCommit };
+        _pipelineRunService.PrepareRunAtCommitAsync(10, "main", ReleaseCommit, Arg.Any<CancellationToken>()).Returns(pinned);
+        _pipelineRunService.ResolveRunParametersAsync(
+                Arg.Any<PipelineRunPreparation>(), Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<PipelineRunPreparation>(0));
+        _serviceMock.RelaunchFromCommitAsync(1, Arg.Any<TriggerReleaseBuildRequest>(), Arg.Any<PipelineRunPreparation>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineRunDto { Id = 77 });
+
+        var result = await _sut.RelaunchFromCommit(1, new TriggerReleaseBuildRequest { PipelineId = 10 }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(77, Assert.IsType<PipelineRunDto>(Assert.IsType<AcceptedResult>(result.Result).Value).Id);
+        await _pipelineRunService.DidNotReceive().PrepareRunAsync(Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await _serviceMock.Received(1).RelaunchFromCommitAsync(1, Arg.Any<TriggerReleaseBuildRequest>(),
+            Arg.Is<PipelineRunPreparation>(p => ReferenceEquals(p, pinned)), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(ReleaseStatus.Published, ReleaseCommit)]
+    [InlineData(ReleaseStatus.Archived, null)]
+    [InlineData(ReleaseStatus.Archived, "abc1234")]
+    public async Task RelaunchFromCommit_NotArchivedOrWithoutAFullCommit_IsRefusedBeforeAnyLaunch(ReleaseStatus status, string? commit)
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _serviceMock.GetReleaseAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new ReleaseDto { Id = 1, Status = status, CommitHash = commit });
+
+        var result = await _sut.RelaunchFromCommit(1, new TriggerReleaseBuildRequest { PipelineId = 10 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await _pipelineRunService.DidNotReceive().PrepareRunAtCommitAsync(
+            Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _serviceMock.DidNotReceive().RelaunchFromCommitAsync(
+            Arg.Any<int>(), Arg.Any<TriggerReleaseBuildRequest>(), Arg.Any<PipelineRunPreparation>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RelaunchFromCommit_WithoutReleaseWrite_ReturnsForbid()
+    {
+        var result = await _sut.RelaunchFromCommit(1, new TriggerReleaseBuildRequest { PipelineId = 10 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _serviceMock.DidNotReceive().GetReleaseAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task TriggerBuild_WithoutPipelineWrite_ReturnsForbidBeforeLaunch()
     {
@@ -333,7 +395,7 @@ public class ReleasesControllerTests
 
         var result = await _sut.Webhook(TestContext.Current.CancellationToken);
 
-        // R2-120: a webhook that is not configured answers 404 with the ApiError body, never 503.
+        // A webhook that is not configured answers 404 with the ApiError body, never 503.
         var status = Assert.IsType<NotFoundObjectResult>(result);
         Assert.Equal(StatusCodes.Status404NotFound, status.StatusCode);
         Assert.IsType<Aetheus.Shared.Components.Shared.ApiError>(status.Value);
@@ -405,5 +467,65 @@ public class ReleasesControllerTests
         var result = await _sut.GetServerReleases(1, new PaginationRequest(), TestContext.Current.CancellationToken);
 
         Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    // ---------- R-13: restore a release status ----------
+
+    private static readonly RestoreReleaseStatusRequest RestoreToDeployed =
+        new() { Status = ReleaseStatus.Deployed, Reason = "production still serves it" };
+
+    private void GrantRestore(bool releaseWrite, bool projectAdmin)
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 9, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(releaseWrite);
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 5, Permission.Admin, Arg.Any<CancellationToken>())
+            .Returns(projectAdmin);
+        _serviceMock.GetReleaseAsync(9, Arg.Any<CancellationToken>()).Returns(new ReleaseDto { Id = 9, ProjectId = 5, Status = ReleaseStatus.Failed });
+    }
+
+    [Fact]
+    public async Task R_13_RestoreStatus_WithReleaseWriteAndProjectAdmin_RestoresTheStatus()
+    {
+        GrantRestore(releaseWrite: true, projectAdmin: true);
+        _statusRestore.RestoreAsync(9, RestoreToDeployed, Arg.Any<CancellationToken>())
+            .Returns(new ReleaseDto { Id = 9, ProjectId = 5, Status = ReleaseStatus.Deployed });
+
+        var result = await _sut.RestoreStatus(9, RestoreToDeployed, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(ReleaseStatus.Deployed, Assert.IsType<ReleaseDto>(ok.Value).Status);
+    }
+
+    [Fact]
+    public async Task R_13_RestoreStatus_WithoutProjectAdmin_IsForbiddenAndChangesNothing()
+    {
+        GrantRestore(releaseWrite: true, projectAdmin: false);
+
+        var result = await _sut.RestoreStatus(9, RestoreToDeployed, CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _statusRestore.DidNotReceiveWithAnyArgs().RestoreAsync(default, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task R_13_RestoreStatus_WithoutReleaseWrite_IsForbiddenAndChangesNothing()
+    {
+        GrantRestore(releaseWrite: false, projectAdmin: true);
+
+        var result = await _sut.RestoreStatus(9, RestoreToDeployed, CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _statusRestore.DidNotReceiveWithAnyArgs().RestoreAsync(default, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task R_13_RestoreStatus_OfAnUnknownRelease_IsNotFound()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 9, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var result = await _sut.RestoreStatus(9, RestoreToDeployed, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
     }
 }

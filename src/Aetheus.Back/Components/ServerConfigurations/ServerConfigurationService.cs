@@ -457,7 +457,7 @@ public partial class ServerConfigurationService(IServerConfigurationRepository r
         }
     }
 
-    private static string BuildDockerRunCommand(ServerConfigContainer container)
+    internal static string BuildDockerRunCommand(ServerConfigContainer container)
     {
         // Defense-in-depth (audit-360 C-1): re-validate every interpolated field against the
         // SAME allow-list regexes ValidateConfigurationAsync applies, so the builder cannot emit
@@ -489,10 +489,12 @@ public partial class ServerConfigurationService(IServerConfigurationRepository r
             parts.Add($"-v {volume}");
         }
 
-        foreach (var (key, value) in container.Env)
+        foreach (var (key, yamlValue) in container.Env)
         {
             if (!EnvKeyRegex().IsMatch(key))
                 throw new BadRequestException($"Container '{container.Name}' has invalid env key '{key}'.");
+            // YAML deserializes a key written without a value (`KEY:`) to null; the import accepts it as empty.
+            var value = yamlValue ?? string.Empty;
             if (ShellMetaInValueRegex().IsMatch(value))
                 throw new BadRequestException($"Container '{container.Name}' env '{key}' contains shell metacharacters.");
             // Single-quote the value so an embedded space cannot word-split into a stray docker-run

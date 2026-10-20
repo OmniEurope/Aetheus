@@ -42,7 +42,7 @@ else if (_repo is not null)
             }
             else
             {
-                @* Recette R-534: beside the project's repository, the mirror is a source a pipeline names. *@
+                @* Beside the project's repository, the mirror is a source a pipeline names. *@
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["ExternalRepoAdditionalSourceHint"]</OmniText>
                 <OmniCodeBlock Code="@PipelineSourceYaml" Title="@L["ExternalRepoPipelineYaml"]" Language="yaml" />
             }
@@ -50,7 +50,10 @@ else if (_repo is not null)
             {
                 <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-sm">
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SyncNowAsync" Class="@(_syncing ? "btn-busy" : null)" Busy="@(_syncing)"><OmniIcon Name="OmniIconName.Sync" /> <span>@L["SyncNow"]</span></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DetachAsync"><OmniIcon Name="OmniIconName.LinkBreak" /> <span>@L["Detach"]</span></OmniButton>
+                    @* STD-BTN detection 11: Sync now visible, the other actions in the menu. *@
+                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@DetachAsync"><Icon><OmniIcon Name="OmniIconName.LinkBreak" /></Icon><ChildContent>@L["Detach"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
                 </OmniStack>
             }
         </OmniStack>
@@ -103,7 +106,7 @@ else if (_canWrite)
                         </ChildContent></OmniFormField>
                     </OmniColumn>
                     <OmniColumn Span="12" MediumSpan="4">
-                        <OmniFormField For="oe-pages-projects-projectdetailsections-projectexternalreposection-8" Class="omni-u-w-100" Description="@L["ExternalRepoTokenHint"]"><LabelContent>@L["Token"]</LabelContent><ChildContent>
+                        <OmniFormField For="oe-pages-projects-projectdetailsections-projectexternalreposection-8" Class="omni-u-w-100" Help="@L["ExternalRepoTokenHint"]"><LabelContent>@L["Token"]</LabelContent><ChildContent>
                             <OmniPassword @bind-Value="_model.Token" Id="oe-pages-projects-projectdetailsections-projectexternalreposection-8" />
                         </ChildContent></OmniFormField>
                     </OmniColumn>

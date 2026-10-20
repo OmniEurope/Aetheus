@@ -45,13 +45,13 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<PortsentryBlockedIpDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/servers/{serverId}/portsentry/blocked", query), filters), JsonOptions.Web) ?? new();
     }
 
 
-    /// <summary>Recette R-210: the protocols the blocked IPs grid's Protocol filter offers.</summary>
+    /// <summary>The protocols the blocked IPs grid's Protocol filter offers.</summary>
     public async Task<PortsentryFilterValuesDto> GetPortsentryFilterValuesAsync(int serverId, CancellationToken ct = default) =>
         await GetJsonAsync<PortsentryFilterValuesDto>($"api/servers/{serverId}/portsentry/filter-values", ct).ConfigureAwait(false) ?? new();
 
@@ -61,7 +61,7 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-210 / R-224: the grid's column header filters.
+        // The grid's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<PortsentryWhitelistIpDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString($"api/servers/{serverId}/portsentry/whitelist", query), filters), JsonOptions.Web) ?? new();
     }
@@ -136,7 +136,7 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
     {
         var query = PageQuery(page, pageSize, search, sortBy, sortDescending);
         query["projectId"] = projectId?.ToString();
-        // Recette R-224: the policies grid's column header filters.
+        // The policies grid's column header filters.
         return await GetJsonAsync<PaginatedResult<BackupPolicyDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/backups", query), filters), ct).ConfigureAwait(false) ?? new();
     }
@@ -173,7 +173,7 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
         IReadOnlyList<GridFilter>? filters = null)
     {
         var query = PageQuery(page, pageSize, search, sortBy, sortDescending);
-        // Recette R-224: the run grid's column header filters.
+        // The run grid's column header filters.
         return await GetJsonAsync<PaginatedResult<BackupRunDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString($"api/backups/{policyId}/runs", query), filters), ct).ConfigureAwait(false) ?? new();
     }
@@ -250,7 +250,7 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
     }
 
 
-    /// <summary>PLAN-003 lot 27 / D27: the API's own timings over the instance's last 24 hours.</summary>
+    /// <summary>Read the API instance's own timings over the last 24 hours.</summary>
     public Task<ApiPerformanceReportDto?> GetApiPerformanceAsync(CancellationToken ct = default) =>
         Http.GetFromJsonAsync<ApiPerformanceReportDto>("api/admin/performance", JsonOptions.Web, ct);
 
@@ -275,7 +275,7 @@ public sealed class SecurityApi(HttpClient http) : ApiClientBase(http)
             query["sortBy"] = sortBy;
             query["sortDescending"] = sortDescending ? "true" : "false";
         }
-        // Recette R-453: the virtualized grid's header filters, applied by the API to the whole log.
+        // The virtualized grid's header filters, applied by the API to the whole log.
         return await Http.GetFromJsonAsync<PaginatedResult<SystemLogEntryDto>>(
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/system-logs/entries", query), filters),
             JsonOptions.Web) ?? new();

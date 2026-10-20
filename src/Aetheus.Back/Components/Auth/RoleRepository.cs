@@ -27,7 +27,7 @@ public class RoleRepository(AppDbContext db) : IRoleRepository
                 (role.Description != null && EF.Functions.ILike(role.Description, pattern)));
         }
 
-        // Recette R-210: the header filters, before the count.
+        // The header filters, before the count.
         query = RoleListQuery.Columns.ApplyFilters(query, filters);
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
@@ -226,7 +226,7 @@ public class RoleRepository(AppDbContext db) : IRoleRepository
         var query = db.Users
             .AsNoTracking()
             .Where(user => user.UserRoles.Any(userRole => userRole.RoleId == roleId));
-        // Recette R-210: the header filters, before PageUsersAsync counts the page.
+        // The header filters, before PageUsersAsync counts the page.
         query = RoleListQuery.UserColumns.ApplyFilters(query, filters);
         return PageUsersAsync(query, search, page, pageSize, sortBy, sortDescending, ct);
     }

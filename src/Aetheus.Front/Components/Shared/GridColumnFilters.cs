@@ -6,13 +6,9 @@ using ApiGridFilterOperator = Aetheus.Shared.Components.Shared.GridFilterOperato
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Recette R-210 / R-211 / R-224: the header filters of a server-paged grid, sent to the API as the
-/// generic column filters of PLAN-008 lot 12 (<c>Filters[i].Field</c>, <c>.Operator</c>, <c>.Value</c>...).
-/// The field is the column key, which the endpoint checks against its own allow-list. A checkable list
-/// travels as <see cref="ApiGridFilterOperator.In"/> with its values joined by the unit separator, a
-/// date range as its two resolved bounds.
-/// </summary>
+/// <summary>Send grid column filters through the generic API contract so endpoints can enforce
+/// their field allow-list; encode checked values with the unit separator and date ranges as
+/// resolved bounds.</summary>
 public static class GridColumnFilters
 {
     /// <summary>The grid's header filters as API column filters, the columns in <paramref name="except"/>

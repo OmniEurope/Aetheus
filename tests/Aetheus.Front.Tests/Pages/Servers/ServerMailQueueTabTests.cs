@@ -6,8 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
 
-/// <summary>PLAN-005 lot 6: the queue tab parses the <c>postqueue -j</c> output of its own task and deletes
-/// one message only after confirmation.</summary>
+/// <summary>The queue tab parses the <c>postqueue -j</c> output of its own task and deletes one
+/// message only after confirmation.</summary>
 public sealed class ServerMailQueueTabTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;

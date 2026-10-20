@@ -14,11 +14,9 @@ public sealed record MonitoredAppDto
     public int? ServerId { get; init; }
     public string? ServerName { get; init; }
 
-    /// <summary>
-    /// Recette R-441: for an app without <see cref="ServerId"/> (probed by the backend), the fleet
+    /// <summary> For an app without <see cref="ServerId"/> (probed by the backend), the fleet
     /// server whose Apache virtual host serves the probe URL's host; null when none or several do.
-    /// Informative only, the probe still runs from the backend.
-    /// </summary>
+    /// Informative only, the probe still runs from the backend. </summary>
     public MonitoredAppHostingServerDto? HostingServer { get; init; }
 
     public string Name { get; init; } = string.Empty;
@@ -47,7 +45,7 @@ public sealed record MonitoredAppDto
     public DateTime? LastIngestAt { get; init; }
 }
 
-/// <summary>Recette R-441: the fleet server deduced to host a backend-probed application.</summary>
+/// <summary>The fleet server deduced to host a backend-probed application.</summary>
 public sealed record MonitoredAppHostingServerDto
 {
     public int ServerId { get; init; }
@@ -409,16 +407,14 @@ public sealed record AppMonitoringSummaryDto
     public IReadOnlyList<MonitoredAppStatusDto> Applications { get; init; } = [];
     /// <summary>Backward-compatible subset retained for clients that only surface unhealthy applications.</summary>
     public IReadOnlyList<MonitoredAppStatusDto> Troubled { get; init; } = [];
-    /// <summary>Recette R-468: the audience of every application visible to the caller, added up. Null
-    /// when none of them measures its audience.</summary>
+    /// <summary>The audience of every application visible to the caller, added up. Null when none
+    /// of them measures its audience.</summary>
     public AppAudienceTotalsDto? Audience { get; init; }
 }
 
-/// <summary>
-/// Recette R-468: the audience figures of several applications added up. A sum, not a number of people:
-/// the visitor pseudonyms are derived per application, so someone who visits two applications counts
-/// once in each.
-/// </summary>
+/// <summary> The audience figures of several applications added up. A sum, not a number of people:
+/// the visitor pseudonyms are derived per application, so someone who visits two applications
+/// counts once in each. </summary>
 public sealed record AppAudienceTotalsDto
 {
     /// <summary>Applications that measure their audience and are counted here.</summary>
@@ -445,8 +441,8 @@ public sealed record MonitoredAppStatusDto
     /// <summary>Distinct sessions seen in the active window; null when web analytics is unavailable.</summary>
     public int? OnlineVisitorCount { get; init; }
 
-    /// <summary>PLAN-003 lot 28: the latest telemetry of any kind received from the app (OTLP or web
-    /// analytics); null when nothing ever arrived. It is what tells "collected, then stopped" apart
-    /// from "never configured".</summary>
+    /// <summary>The latest telemetry of any kind received from the app (OTLP or web analytics);
+    /// null when nothing ever arrived. It is what tells "collected, then stopped" apart from "never
+    /// configured".</summary>
     public DateTime? LastEventAt { get; init; }
 }

@@ -2,12 +2,8 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Recette R2-124 / R-473: where the rows of an exported table come from, said at the head of the file.
-/// The title is the page's breadcrumb (<c>Projets &gt; Aetheus &gt; Qualité</c>), followed by the name of
-/// the table when the page holds several; the header lines name the application and the address of the
-/// page. Read each time the grid renders, so the names the page loaded after its first render are in it.
-/// </summary>
+/// <summary>Derive export context from the current breadcrumb, table name and page address so files
+/// identify their source; reread it on render to include names loaded asynchronously.</summary>
 public sealed class GridExportContext(
     BreadcrumbService breadcrumb,
     NavigationManager navigation,
@@ -27,12 +23,9 @@ public sealed class GridExportContext(
         return parts.Count > 0 ? string.Join(" > ", parts) : Text("GridExportUntitled");
     }
 
-    /// <summary>
-    /// The file name without date nor extension (OE appends both, recette R2-036): the breadcrumb past its
-    /// first item, the module every page of it shares, then <paramref name="tableName"/>, as
-    /// <see cref="ExportFileNames.Slug"/> writes it (<c>aetheus-qualite-findings</c>). Null when nothing is
-    /// left, so OE derives the name from the title.
-    /// </summary>
+    /// <summary>Derive a slug from the breadcrumb below the module and the table name so exported
+    /// files remain identifiable; leave date and extension to OE and return null when no specific
+    /// name exists.</summary>
     public string? FileName(string? tableName = null)
     {
         var parts = breadcrumb.Items

@@ -19,7 +19,7 @@ public partial class Alerts : IAsyncDisposable
     private AetheusDataGrid<AlertRuleDto>? _rulesGrid;
     private bool _loading = true;
 
-    // Recette R-210: header filter texts, built once so the columns see the same delegate on every render.
+    // Header filter texts, built once so the columns see the same delegate on every render.
     private Func<string, string>? _severityText;
     private Func<string, string>? _metricText;
     private Func<string, string>? _enabledText;
@@ -28,6 +28,9 @@ public partial class Alerts : IAsyncDisposable
     private Func<string, string> EnabledText => _enabledText ??= value =>
         bool.TryParse(value, out var enabled) ? L[enabled ? "Active" : "Disabled"].Value : value;
     private HubConnection? _hubConnection;
+    // Bound to the page: leaving it cancels a hub start that does not answer instead of holding the
+    // disposal until the HTTP timeout.
+    private readonly CancellationTokenSource _lifetime = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -38,11 +41,15 @@ public partial class Alerts : IAsyncDisposable
         try { _alerts = await Api.Monitoring.GetAlertRulesAsync(); }
         catch (HttpRequestException) { _alerts = []; }
         _loading = false;
+        // The rules are drawn as soon as they are read: the hub below only refreshes them, and
+        // ComponentBase would otherwise hold this render until the hub has started or failed (a
+        // negotiate that never answers kept the grid loading).
+        StateHasChanged();
         await ConnectToHub();
     }
 
-    // Recette R-227: the grid takes note of the rows it holds before the new list lands, so the
-    // alert that just fired reads bold for a few seconds.
+    // The grid takes note of the rows it holds before the new list lands, so the alert that just
+    // fired reads bold for a few seconds.
     private void OnRecentAlertsChanged() => InvokeAsync(async () =>
     {
         if (_recentGrid is not null) await _recentGrid.Refresh();
@@ -74,8 +81,8 @@ public partial class Alerts : IAsyncDisposable
                 await _hubConnection.InvokeAsync("JoinAlertGroup");
                 await ReloadFromHubAsync();
             }));
-            await _hubConnection.StartAsync();
-            await _hubConnection.InvokeAsync("JoinAlertGroup");
+            await _hubConnection.StartAsync(_lifetime.Token);
+            await _hubConnection.InvokeAsync("JoinAlertGroup", _lifetime.Token);
         }
         catch { /* Hub unavailable - degrade to static */ }
     }
@@ -85,7 +92,7 @@ public partial class Alerts : IAsyncDisposable
         try
         {
             var alerts = await Api.Monitoring.GetAlertRulesAsync();
-            // Recette R-227: before the rows change, so a rule created elsewhere reads bold.
+            // Before the rows change, so a rule created elsewhere reads bold.
             if (_rulesGrid is not null) await _rulesGrid.Refresh();
             _alerts = alerts;
         }
@@ -134,6 +141,8 @@ public partial class Alerts : IAsyncDisposable
         MetricType.Disk => OmniTone.Danger,
         MetricType.DiskFree => OmniTone.Danger,
         MetricType.BuildCache => OmniTone.Warning,
+        MetricType.Inodes => OmniTone.Danger,
+        MetricType.ClockOffset => OmniTone.Warning,
         _ => OmniTone.Neutral
     };
 
@@ -147,6 +156,9 @@ public partial class Alerts : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Disposed once: a second call would cancel the already disposed lifetime.
+        if (_lifetime.IsCancellationRequested) return;
+        await _lifetime.CancelAsync();
         AlertNotify.OnChange -= OnRecentAlertsChanged;
         if (_hubConnection is not null)
         {
@@ -154,8 +166,9 @@ public partial class Alerts : IAsyncDisposable
             await _hubConnection.DisposeAsync();
             _hubConnection = null;
         }
+        _lifetime.Dispose();
     }
 
-    /// <summary>Recette R2-124: the export writes the threshold as the cell does.</summary>
+    /// <summary>The export writes the threshold as the cell does.</summary>
     private static readonly Func<AlertRuleDto, object?> ThresholdExport = alert => $"{alert.Operator} {AlertThresholdUnit.Format(alert.Metric, alert.Threshold)}";
 }

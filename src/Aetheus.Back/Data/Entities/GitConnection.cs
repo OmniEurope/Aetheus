@@ -15,8 +15,7 @@ public class GitConnection
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
-    // External-Git parity (always on since recette R-295). Base URL for self-hosted providers
-    // (e.g. https://gitea.example.com); null for the SaaS defaults (github.com / gitlab.com).
+    // Overrides the provider base URL for self-hosted repositories; null selects the SaaS default.
     public string? BaseUrl { get; set; }
 
     // Server-side "credited mirror" - a bare `git clone --mirror` refreshed by fetch.

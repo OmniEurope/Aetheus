@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 namespace Aetheus.Shared.Components.Auth;
 
-/// <summary>
-/// PLAN-005 lot 9 / D48: why <c>POST api/auth/token/refresh</c> refused a refresh token, sent as the
-/// machine code of its 401 so the client can say which of the five refusals ended a session. A code,
-/// never a detail: nothing here tells a caller more than "this token will not work".
-/// </summary>
+/// <summary>Machine-readable rejection codes for <c>POST api/auth/token/refresh</c> let clients
+/// explain why a session ended without disclosing token details.</summary>
 public static class RefreshRejectionCodes
 {
     /// <summary>No such token: never issued here, purged, or the database was restored or reset.</summary>
@@ -21,10 +18,8 @@ public static class RefreshRejectionCodes
     public const string UserInactive = "user_inactive";
 }
 
-/// <summary>
-/// PLAN-005 lot 9 / D48: every reason a client can end a session without being asked to, as reported
-/// to <c>POST api/auth/session-ended</c>. The refresh refusals, plus what only the client can see.
-/// </summary>
+/// <summary>Reasons for an unsolicited client session end, reported to <c>POST
+/// api/auth/session-ended</c>. Includes refresh rejections and client-observed failures.</summary>
 public static class SessionEndReasons
 {
     /// <summary>The refresh endpoint refused without a code this client knows (a 400 or 403, an older server).</summary>

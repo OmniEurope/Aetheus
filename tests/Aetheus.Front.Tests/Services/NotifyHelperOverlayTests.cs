@@ -8,12 +8,9 @@ using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests;
 
-/// <summary>
-/// PLAN-008 lot 11: what NotifyHelper hands the real <see cref="OmniOverlayService"/>. The time each
-/// severity stays (5 s, 7 s, 10 s, proved on a clock moved by hand), the summary and detail mapped
-/// onto the notification's title and message, the error report under a correlation id, the logs link
-/// of an administrator, and no cap of three any more (accepted loss, verification section D).
-/// </summary>
+/// <summary>Exercise notifications through the real OmniOverlayService with controlled clock
+/// advancement for severity durations, mapped text, correlation ids and administrator log
+/// links.</summary>
 public sealed class NotifyHelperOverlayTests : BunitContext
 {
     private readonly FakeTimeProvider _clock = new();
@@ -33,7 +30,9 @@ public sealed class NotifyHelperOverlayTests : BunitContext
     [InlineData(OmniSeverity.Danger, 10)]
     public async Task EachSeverity_StaysItsDuration_ThenGoes(OmniSeverity severity, int seconds)
     {
-        _sut.Notify(severity, "Title", "Message");
+        // Raised off any synchronization context, so the expiry that the clock completes runs to its end
+        // inside Advance instead of being posted to the test runner's context and awaited by polling.
+        await Task.Run(() => _sut.Notify(severity, "Title", "Message"), Xunit.TestContext.Current.CancellationToken);
 
         Assert.Equal(TimeSpan.FromSeconds(seconds), Assert.Single(_overlay.Notifications).Duration);
 
@@ -41,7 +40,6 @@ public sealed class NotifyHelperOverlayTests : BunitContext
         Assert.Single(_overlay.Notifications);
 
         _clock.Advance(TimeSpan.FromMilliseconds(100));
-        await WaitUntilAsync(() => _overlay.Notifications.Count == 0);
         Assert.Empty(_overlay.Notifications);
     }
 
@@ -120,7 +118,7 @@ public sealed class NotifyHelperOverlayTests : BunitContext
 
         helper.Error("SaveFailedTitle", "SaveFailed");
 
-        await WaitUntilAsync(() => handler.RequestDetails.ToList().Any(request => request.Url.Contains("api/client-errors")));
+        await handler.WhenRequestedAsync(request => request.Url.Contains("api/client-errors", StringComparison.Ordinal), 1, "the error report");
         var report = handler.RequestDetails.ToList().Single(request => request.Url.Contains("api/client-errors"));
         Assert.Equal("POST", report.Method);
         using var body = JsonDocument.Parse(report.Body!);
@@ -148,12 +146,5 @@ public sealed class NotifyHelperOverlayTests : BunitContext
     {
         handler = BunitTestHelper.RegisterServices(this, isAdmin: isAdmin);
         return Services.GetRequiredService<NotifyHelper>();
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (!condition() && DateTime.UtcNow < deadline)
-            await Task.Delay(10);
     }
 }

@@ -7,13 +7,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.IntegrationTests;
 
-/// <summary>
-/// PLAN-013 lot 2 on PostgreSQL: the per-file and per-symbol metrics and the components of a report older
-/// than 30 days are deleted in batches, the project totals, the report and its grade stay; a retained
-/// release (one that still has an artifact) keeps its reports' detail, by run or by commit after its run
-/// was deleted; a release whose artifacts are gone does not; the newest report of a scanner and a recent
-/// report keep theirs.
-/// </summary>
+/// <summary>On PostgreSQL, expired report detail is purged while totals, grades, current reports
+/// and artifact-retained release evidence remain. Release retention resolves by run or commit when
+/// the run is absent.</summary>
 [Collection(PostgresCollection.Name)]
 public sealed class AnalysisDetailRetentionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture)
 {

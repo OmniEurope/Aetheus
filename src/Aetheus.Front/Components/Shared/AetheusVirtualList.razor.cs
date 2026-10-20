@@ -2,12 +2,8 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>
-/// Renders only the rows a viewport can show, like Blazor's <c>Virtualize</c>, without the style
-/// attribute that component puts on its spacers. The two spacers are sized through the CSSOM
-/// (<c>Aetheus.sizeVirtualSpacer</c>), so the production policy can keep refusing
-/// <c>style-src-attr 'unsafe-inline'</c> (PLAN-008 lot 44).
-/// </summary>
+/// <summary>Size virtual spacers through Aetheus.sizeVirtualSpacer so only visible rows render
+/// while the production CSP continues to refuse inline style attributes.</summary>
 public partial class AetheusVirtualList<TItem> : IAsyncDisposable
 {
     [Inject] private IJSRuntime JS { get; set; } = default!;

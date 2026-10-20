@@ -80,8 +80,7 @@ public sealed record AddPortsentryWhitelistRequest
     public string Description { get; init; } = string.Empty;
 }
 
-/// <summary>
-/// Recette R-210: the values the blocked IPs grid's checkable Protocol filter offers. The grid is loaded
+/// <summary> The values the blocked IPs grid's checkable Protocol filter offers. The grid is loaded
 /// page by page, so the protocols present across every blocked IP of the server come from the API.
 /// </summary>
 public sealed record PortsentryFilterValuesDto

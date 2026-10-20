@@ -52,7 +52,7 @@ public class UserEditTests : BunitContext
     {
         SetupRoles("Admin", "Viewer");
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, null));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // New-user mode pages through available roles but never fetches a user detail.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/roles"));
@@ -64,7 +64,7 @@ public class UserEditTests : BunitContext
     {
         SetupMocks();
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // The existing user is fetched and its username is mapped into the form model.
         Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/users/1"));
@@ -100,7 +100,7 @@ public class UserEditTests : BunitContext
         });
 
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 2));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // Both assigned roles are loaded into the form model.
         var model = typeof(UserEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
@@ -127,7 +127,7 @@ public class UserEditTests : BunitContext
         });
 
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 3));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         // The inactive flag is carried into the form model.
         var model = typeof(UserEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
@@ -280,7 +280,7 @@ public class UserEditTests : BunitContext
     {
         SetupMocks();
         var cut = Render<UserEdit>(parameters => parameters.Add(component => component.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         var activeToggle = cut.FindComponents<OmniSwitch<bool>>()
             .Single(toggle => toggle.Find("button").TextContent.Contains("Active", StringComparison.Ordinal));
         var dialog = Services.GetRequiredService<OmniDialogService>();
@@ -294,21 +294,99 @@ public class UserEditTests : BunitContext
             .GetAttribute("aria-checked"));
     }
 
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.InternalServerError)]
+    [InlineData(System.Net.HttpStatusCode.NotFound)]
+    public async Task MustChangePasswordToggle_ARefusedSave_PutsTheSwitchBack(System.Net.HttpStatusCode status)
+    {
+        SetupMocks();
+        _handler.SetResponse(HttpMethod.Put, "api/users/1", status);
+        var cut = Render<UserEdit>(parameters => parameters.Add(component => component.Id, 1));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
+        var mustChange = cut.FindComponents<OmniSwitch<bool>>()
+            .Single(toggle => toggle.Find("button").TextContent.Contains("MustChangePassword", StringComparison.Ordinal));
+
+        await cut.InvokeAsync(() => mustChange.Instance.ValueChanged.InvokeAsync(true));
+
+        Assert.Contains(_handler.Requests, request => request.Method == "PUT" && request.Url.Contains("api/users/1", StringComparison.Ordinal));
+        Assert.Equal("false", cut.FindAll("button.omni-switch")
+            .Single(toggle => toggle.TextContent.Contains("MustChangePassword", StringComparison.Ordinal))
+            .GetAttribute("aria-checked"));
+        Assert.DoesNotContain(Services.Toasts(), toast => toast.Severity == OmniSeverity.Success);
+    }
+
     [Fact]
     public async Task ActiveToggle_DeactivationConfirmed_UpdatesImmediately()
     {
         SetupMocks();
         var cut = Render<UserEdit>(parameters => parameters.Add(component => component.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         var dialog = Services.GetRequiredService<OmniDialogService>();
         var activeToggle = cut.FindComponents<OmniSwitch<bool>>()
             .Single(toggle => toggle.Find("button").TextContent.Contains("Active", StringComparison.Ordinal));
         var change = cut.InvokeAsync(() => activeToggle.Instance.ValueChanged.InvokeAsync(false));
-        await cut.InvokeAsync(() => dialog.Close(true));
+        await cut.InvokeAsync(() => dialog.Close(new UserPipelineHandover(null, false)));
         await change;
 
         Assert.Contains(_handler.Requests, request =>
             request.Method == "PUT" && request.Url.Contains("api/users/1", StringComparison.Ordinal));
+    }
+
+    /// <summary>The deactivation names who takes the user's pipelines over, in the same
+    /// request.</summary>
+    [Fact]
+    public async Task ActiveToggle_DeactivationWithPipelineHandover_SendsTheTransferTarget()
+    {
+        SetupMocks();
+        var cut = Render<UserEdit>(parameters => parameters.Add(component => component.Id, 1));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
+        var dialog = Services.GetRequiredService<OmniDialogService>();
+        var activeToggle = cut.FindComponents<OmniSwitch<bool>>()
+            .Single(toggle => toggle.Find("button").TextContent.Contains("Active", StringComparison.Ordinal));
+        var change = cut.InvokeAsync(() => activeToggle.Instance.ValueChanged.InvokeAsync(false));
+        await cut.InvokeAsync(() => dialog.Close(new UserPipelineHandover("root", false)));
+        await change;
+
+        Assert.Contains(_handler.RequestDetails, request =>
+            request.Method == "PUT" && request.Url.Contains("api/users/1", StringComparison.Ordinal)
+            && request.Body!.Contains("\"transferPipelinesToUsername\":\"root\"", StringComparison.Ordinal)
+            && request.Body.Contains("\"isActive\":false", StringComparison.Ordinal));
+    }
+
+    /// <summary>A dismissed deactivation dialog changes nothing.</summary>
+    [Fact]
+    public async Task ActiveToggle_DeactivationDismissed_SendsNothing()
+    {
+        SetupMocks();
+        var cut = Render<UserEdit>(parameters => parameters.Add(component => component.Id, 1));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
+        var dialog = Services.GetRequiredService<OmniDialogService>();
+        var activeToggle = cut.FindComponents<OmniSwitch<bool>>()
+            .Single(toggle => toggle.Find("button").TextContent.Contains("Active", StringComparison.Ordinal));
+        var change = cut.InvokeAsync(() => activeToggle.Instance.ValueChanged.InvokeAsync(false));
+        await cut.InvokeAsync(() => dialog.Close());
+        await change;
+
+        Assert.DoesNotContain(_handler.Requests, request => request.Method == "PUT");
+    }
+
+    /// <summary>The deletion forced past owned pipelines says so to the API.</summary>
+    [Fact]
+    public async Task OnDelete_ForcedHandover_SendsForce()
+    {
+        SetupMocks();
+        _handler.SetResponse(HttpMethod.Delete, "api/users/1", System.Net.HttpStatusCode.NoContent);
+        var cut = Render<UserEdit>(parameters => parameters.Add(component => component.Id, 1));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
+        var dialog = Services.GetRequiredService<OmniDialogService>();
+        var method = typeof(UserEdit).GetMethod("OnDelete", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        var task = cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
+        await cut.InvokeAsync(() => dialog.Close(new UserPipelineHandover(null, true)));
+        await task;
+
+        Assert.Contains(_handler.Requests, request =>
+            request.Method == "DELETE" && request.Url.EndsWith("api/users/1?force=true", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -347,13 +425,13 @@ public class UserEditTests : BunitContext
         SetupMocks();
         _handler.SetResponse(HttpMethod.Delete, "api/users/1", System.Net.HttpStatusCode.Conflict);
         var cut = Render<UserEdit>(parameters => parameters.Add(component => component.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         var dialog = Services.GetRequiredService<OmniDialogService>();
         var method = typeof(UserEdit).GetMethod("OnDelete", BindingFlags.NonPublic | BindingFlags.Instance)!;
 
         var task = cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
-        await cut.InvokeAsync(() => dialog.Close(true));
+        await cut.InvokeAsync(() => dialog.Close(new UserPipelineHandover(null, false)));
         await task;
 
         Assert.Contains(_handler.Requests, request =>
@@ -399,7 +477,7 @@ public class UserEditTests : BunitContext
         await cut.InvokeAsync(() => InvokeFormSubmitAsync(cut.Instance, "OnChangePassword", "_passwordChange"));
         var dialog = Services.GetRequiredService<OmniDialogService>();
         var delete = cut.InvokeAsync(() => (Task)typeof(UserEdit).GetMethod("OnDelete", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(cut.Instance, [])!);
-        await cut.InvokeAsync(() => dialog.Close(true));
+        await cut.InvokeAsync(() => dialog.Close(new UserPipelineHandover(null, false)));
         await delete;
 
         Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.EndsWith("api/users/2/change-password", StringComparison.Ordinal));
@@ -443,7 +521,7 @@ public class UserEditTests : BunitContext
 
         cut.Render(p => p.Add(x => x.Id, 2));
         cut.WaitForAssertion(() => Assert.Equal("bob", DisplayedUser(cut)?.Username));
-        await cut.InvokeAsync(() => dialog.Close(true));
+        await cut.InvokeAsync(() => dialog.Close(new UserPipelineHandover(null, false)));
         await delete;
 
         Assert.DoesNotContain(_handler.Requests, r => r.Method == "DELETE");
@@ -470,7 +548,7 @@ public class UserEditTests : BunitContext
         SetupMocks();
         Services.GetRequiredService<NavigationManager>().NavigateTo("/users/1?tab=security");
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         cut.Find("input[type='password']").Input("short");
         BunitTestHelper.Interactive(this);
 
@@ -487,7 +565,7 @@ public class UserEditTests : BunitContext
         SetupMocks();
         Services.GetRequiredService<NavigationManager>().NavigateTo("/users/1?tab=security");
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"), TimeSpan.FromSeconds(2));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
         cut.WaitForState(() => cut.FindAll("input[type='password']").Count == 1);
 
         var password = cut.Find("input[type='password']");
@@ -537,8 +615,7 @@ public class UserEditTests : BunitContext
 
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 4));
         cut.WaitForState(() =>
-            typeof(UserEdit).GetField("_effectivePermissions", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance) is not null,
-            TimeSpan.FromSeconds(2));
+            typeof(UserEdit).GetField("_effectivePermissions", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance) is not null);
 
         // All three stubbed effective permissions are loaded for the permission table.
         var perms = (List<EffectivePermissionDto>?)typeof(UserEdit)
@@ -560,9 +637,9 @@ public class UserEditTests : BunitContext
         });
 
         var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[role='tab']")), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[role='tab']")));
         cut.FindAll("[role='tab']").First(tab => tab.TextContent.Trim() == "Organizations").Click();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(RowEventIsolation.ClickableRows)));
 
         // The organization link, the role list and the remove button.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);

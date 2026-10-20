@@ -3,21 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Aetheus.Front.Tests.Architecture;
 
-/// <summary>
-/// Keeps presentation in app.css. An inline <c>style="..."</c> cannot be themed, is not reachable by
-/// the dark palette, and is invisible to every other audit the project runs.
-///
-/// This guard matches the HTML attribute only. It deliberately does NOT match the library's typed
-/// parameters - <c>ButtonStyle=</c>, <c>TextStyle=</c>, <c>OmniTone=</c>, <c>AlertStyle=</c> and
-/// friends - which are enum bindings, not CSS. That distinction matters: a naive
-/// <c>grep 'Style="'</c> reports ~1810 hits on this codebase and every one but four is a component
-/// parameter. The phase-10 plan was written against that inflated number.
-///
-/// Since PLAN-008 lot 44 there is no exemption left: the last case, a per-node coordinate, now rides
-/// as a data attribute and is applied through the CSSOM (<c>Aetheus.applyNodePositions</c>), the one
-/// path a strict <c>style-src-attr</c> leaves open. A style attribute in markup would put
-/// <c>'unsafe-inline'</c> back into the production policy, so the list below stays empty.
-/// </summary>
+/// <summary>Presentation belongs in app.css, with runtime coordinates applied through CSSOM rather
+/// than inline style attributes. The scan distinguishes HTML style attributes from typed component
+/// parameters and permits no inline-style exemption.</summary>
 public class InlineStyleAuditTests
 {
     /// <summary>
@@ -76,11 +64,8 @@ public class InlineStyleAuditTests
             + "something:" + Environment.NewLine + string.Join(Environment.NewLine, stale));
     }
 
-    /// <summary>
-    /// The per-node coordinates that used to justify the only inline style now travel as data
-    /// attributes and are applied through the CSSOM. Both halves are checked: the markup carries the
-    /// attributes, and the script that reads them uses <c>setProperty</c>, never <c>setAttribute</c>.
-    /// </summary>
+    /// <summary>Checks that node coordinates travel through data attributes and CSSOM setProperty
+    /// rather than setAttribute.</summary>
     [Fact]
     public void NodeCoordinates_AreAppliedThroughTheCssom()
     {
